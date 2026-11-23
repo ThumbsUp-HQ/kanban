@@ -31,6 +31,7 @@ from kanban.api.v1.schemas.comments import (
     ReactionSummary,
 )
 from kanban.content import ContentNormalizeError, normalize_to_markdown
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
 from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
 from kanban.security.scrubber import scrub_text
@@ -251,6 +252,14 @@ async def create_comment(
     """Create a top-level comment or depth-1 reply, enforce mention access, and emit activity."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.COMMENT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_COMMENT.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     project = await session.get(Project, issue.project_id)
     if project is None:  # pragma: no cover
@@ -406,6 +415,14 @@ async def list_comments(
     """List top-level comments with nested depth-1 replies using keyset pagination."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.VIEW)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_VIEW.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     project = await session.get(Project, issue.project_id)
     if project is None:  # pragma: no cover
@@ -721,6 +738,15 @@ async def add_reaction(
             detail="Caller requires COMMENT capability on the issue to add reactions.",
         )
 
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_COMMENT.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
+
     normalized_emoji = _normalize_emoji(emoji)
 
     # Upsert reaction
@@ -779,6 +805,15 @@ async def delete_reaction(
             title="Insufficient Capability",
             detail="Caller requires COMMENT capability on the issue to remove reactions.",
         )
+
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_COMMENT.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     normalized_emoji = _normalize_emoji(emoji)
 

@@ -1,0 +1,36 @@
+=== Ruff Check ===
+All checks passed!
+=== Ruff Format Check ===
+863 files already formatted
+=== Import Linter ===
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1118 files, 4147 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
+mcp forbidden from importing database KEPT (51 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+=== Migration Check ===
+OK: All 72 migrations valid. Single head: p6_12_granular_rbac_roles
+=== Web Typecheck ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb/kanban/web
+> tsc -b --noEmit
+
+=== Check No Dashes ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

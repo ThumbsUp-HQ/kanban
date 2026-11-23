@@ -24,6 +24,7 @@ from kanban.api.v1.schemas.assignees import (
     PrincipalSummary,
 )
 from kanban.content import normalize_plain_text
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -310,6 +311,14 @@ async def add_assignee(
     """Assign an eligible project viewer or free-text label to an issue."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_ASSIGNEES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     total_count = (
         await session.execute(
@@ -347,6 +356,14 @@ async def remove_assignee(
     """Remove an assignee from an issue (requires EDIT on issue)."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_ASSIGNEES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     row = (
         await session.execute(

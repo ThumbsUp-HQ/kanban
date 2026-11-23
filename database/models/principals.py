@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     Computed,
     DateTime,
     ForeignKey,
@@ -235,5 +236,109 @@ class UserPreference(Base):
     avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
     avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+
+class RbacRoleModel(Base):
+    """Custom and system RBAC role definition (S3.2, KAN-83)."""
+
+    __tablename__ = "rbac_roles"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "slug", name="uq_rbac_roles_workspace_slug"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    slug: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    color_hex: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    system_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    scope_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'workspace'")
+    )
+    base_capability_mask: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+
+class RbacRolePermission(Base):
+    """Granular permission grant on an RBAC role (S3.2, KAN-83)."""
+
+    __tablename__ = "rbac_role_permissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "role_id",
+            "project_id",
+            "permission_key",
+            name="uq_rbac_role_permissions_unique",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
+    )
+    permission_key: Mapped[str] = mapped_column(String, nullable=False)
+    effect: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'ALLOW'"))
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+
+
+class PrincipalRoleLabel(Base):
+    """Multi-role label assignment on a principal (S3.2, KAN-83)."""
+
+    __tablename__ = "principal_role_labels"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "principal_id",
+            "role_id",
+            "project_id",
+            name="uq_principal_role_labels_unique",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    principal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
+    )
+    assigned_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )

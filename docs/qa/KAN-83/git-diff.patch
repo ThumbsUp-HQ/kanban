@@ -1,0 +1,1561 @@
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 8e32fb61..2ef84cf1 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -64,6 +64,9 @@ from database.models.principals import (
+     Principal,
+     PrincipalGroupClosure,
+     PrincipalGroupEdge,
++    PrincipalRoleLabel,
++    RbacRoleModel,
++    RbacRolePermission,
+     ResourceAclEntry,
+     RoleBinding,
+     User,
+@@ -166,6 +169,7 @@ __all__ = [
+     "Principal",
+     "PrincipalGroupClosure",
+     "PrincipalGroupEdge",
++    "PrincipalRoleLabel",
+     "Project",
+     "ProjectLabel",
+     "ProjectModuleDefault",
+@@ -173,6 +177,8 @@ __all__ = [
+     "ProjectRepoBinding",
+     "RateLimitBucket",
+     "RbacRole",
++    "RbacRoleModel",
++    "RbacRolePermission",
+     "RecoveryCode",
+     "RemoteRunner",
+     "RemoteRunnerEnrollmentToken",
+diff --git a/database/models/principals.py b/database/models/principals.py
+index c83d3023..a31b0507 100644
+--- a/database/models/principals.py
++++ b/database/models/principals.py
+@@ -4,6 +4,7 @@ import uuid
+ from datetime import datetime
+ 
+ from sqlalchemy import (
++    Boolean,
+     Computed,
+     DateTime,
+     ForeignKey,
+@@ -237,3 +238,107 @@ class UserPreference(Base):
+     updated_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+     )
++
++
++class RbacRoleModel(Base):
++    """Custom and system RBAC role definition (S3.2, KAN-83)."""
++
++    __tablename__ = "rbac_roles"
++    __table_args__ = (
++        UniqueConstraint("workspace_id", "slug", name="uq_rbac_roles_workspace_slug"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    slug: Mapped[str] = mapped_column(String, nullable=False)
++    name: Mapped[str] = mapped_column(String, nullable=False)
++    color_hex: Mapped[str] = mapped_column(String, nullable=False)
++    description: Mapped[str | None] = mapped_column(String, nullable=True)
++    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
++    system_role: Mapped[str | None] = mapped_column(String, nullable=True)
++    scope_tier: Mapped[str] = mapped_column(
++        String, nullable=False, server_default=text("'workspace'")
++    )
++    base_capability_mask: Mapped[int] = mapped_column(
++        Integer, nullable=False, server_default=text("0")
++    )
++    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++
++
++class RbacRolePermission(Base):
++    """Granular permission grant on an RBAC role (S3.2, KAN-83)."""
++
++    __tablename__ = "rbac_role_permissions"
++    __table_args__ = (
++        UniqueConstraint(
++            "workspace_id",
++            "role_id",
++            "project_id",
++            "permission_key",
++            name="uq_rbac_role_permissions_unique",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    role_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
++    )
++    permission_key: Mapped[str] = mapped_column(String, nullable=False)
++    effect: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'ALLOW'"))
++    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
++
++
++class PrincipalRoleLabel(Base):
++    """Multi-role label assignment on a principal (S3.2, KAN-83)."""
++
++    __tablename__ = "principal_role_labels"
++    __table_args__ = (
++        UniqueConstraint(
++            "workspace_id",
++            "principal_id",
++            "role_id",
++            "project_id",
++            name="uq_principal_role_labels_unique",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
++    )
++    principal_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("principals.id", ondelete="CASCADE"), nullable=False
++    )
++    role_id: Mapped[uuid.UUID] = mapped_column(
++        ForeignKey("rbac_roles.id", ondelete="CASCADE"), nullable=False
++    )
++    project_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
++    )
++    assigned_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("principals.id", ondelete="SET NULL"), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
++    )
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 3686ee47..7f08edec 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -19,6 +19,7 @@ from kanban.api.v1.admin.principals import router as admin_principals_router
+ from kanban.api.v1.admin.project_blueprint import (
+     router as admin_project_blueprint_router,
+ )
++from kanban.api.v1.admin.rbac import router as admin_rbac_router
+ from kanban.api.v1.admin.webhooks import router as admin_webhooks_router
+ from kanban.api.v1.admin.workspace_settings import (
+     router as admin_workspace_settings_router,
+@@ -147,6 +148,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(admin_webhooks_router)
+     v1.include_router(admin_project_blueprint_router)
+     v1.include_router(admin_principals_router)
++    v1.include_router(admin_rbac_router)
+     v1.include_router(admin_acl_router)
+     v1.include_router(oauth_v1_router)
+     v1.include_router(subscriptions_router)
+diff --git a/kanban/api/v1/admin/principals.py b/kanban/api/v1/admin/principals.py
+index 898059b0..086e8a08 100644
+--- a/kanban/api/v1/admin/principals.py
++++ b/kanban/api/v1/admin/principals.py
+@@ -9,12 +9,15 @@ from __future__ import annotations
+ 
+ import logging
+ import uuid  # noqa: TC003
++from datetime import datetime  # noqa: TC003
+ from typing import Annotated, Literal, Self
+ 
+ from fastapi import APIRouter, Depends, Query, status
+ from pydantic import BaseModel, ConfigDict, Field, model_validator
++from sqlalchemy import delete, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from database.models import PrincipalRoleLabel, RbacRoleModel, RbacRolePermission
+ from kanban.admin import principal_service
+ from kanban.api.deps import PrincipalContext, get_rls_session
+ from kanban.api.problems import FieldError, ProblemException
+@@ -411,3 +414,281 @@ async def unbind_role_endpoint(
+         scope_type=body.scope_type,
+         project_id=body.scope_id,
+     )
++
++
++class PrincipalRoleLabelItem(BaseModel):
++    """Assigned role label for a principal."""
++
++    id: uuid.UUID
++    workspace_id: uuid.UUID
++    principal_id: uuid.UUID
++    role_id: uuid.UUID
++    role_slug: str
++    role_name: str
++    color_hex: str
++    scope_tier: str
++    project_id: uuid.UUID | None = None
++    created_at: datetime
++
++
++class AssignRoleLabelRequest(BaseModel):
++    """Payload to assign a single role label to a principal."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    role_id: uuid.UUID
++    project_id: uuid.UUID | None = None
++
++
++class BatchSetRoleLabelsRequest(BaseModel):
++    """Payload to replace all role labels on a principal."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    role_ids: list[uuid.UUID]
++    project_id: uuid.UUID | None = None
++
++
++async def _is_server_admin_caller(session: AsyncSession, caller: PrincipalContext) -> bool:
++    if getattr(caller, "is_server_admin", False):
++        return True
++    try:
++        stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++        res = await session.execute(stmt)
++        return bool(res.scalar_one())
++    except Exception:  # noqa: BLE001
++        return False
++
++
++async def _check_role_label_escalation(
++    session: AsyncSession, caller: PrincipalContext, role: RbacRoleModel
++) -> None:
++    is_server_admin = await _is_server_admin_caller(session, caller)
++    is_sys_or_server_role = role.slug == "system-admin" or role.system_role == "SERVER_ADMIN"
++    if is_sys_or_server_role and not is_server_admin:
++        raise ProblemException(
++            code="ROLE_ESCALATION_DENIED",
++            status=status.HTTP_403_FORBIDDEN,
++            title="Role Escalation Denied",
++            detail="Binding or unbinding a role with workspace permissions requires SERVER_ADMIN.",
++        )
++    stmt = select(RbacRolePermission.id).where(
++        RbacRolePermission.role_id == role.id,
++        RbacRolePermission.permission_key.like("workspace:%"),
++        RbacRolePermission.effect == "ALLOW",
++    )
++    if (await session.execute(stmt)).first() is not None and not is_server_admin:
++        raise ProblemException(
++            code="ROLE_ESCALATION_DENIED",
++            status=status.HTTP_403_FORBIDDEN,
++            title="Role Escalation Denied",
++            detail="Binding or unbinding a role with workspace permissions requires SERVER_ADMIN.",
++        )
++
++
++@router.get(
++    "/admin/principals/{principal_id}/role-labels",
++    response_model=list[PrincipalRoleLabelItem],
++    summary="List assigned role labels for principal",
++)
++async def list_principal_role_labels_endpoint(
++    principal_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++    project_id: Annotated[uuid.UUID | None, Query()] = None,
++) -> list[PrincipalRoleLabelItem]:
++    """List all custom and built-in role labels attached to a user, group, or agent."""
++    stmt = (
++        select(PrincipalRoleLabel, RbacRoleModel)
++        .join(RbacRoleModel, RbacRoleModel.id == PrincipalRoleLabel.role_id)
++        .where(
++            PrincipalRoleLabel.principal_id == principal_id,
++            PrincipalRoleLabel.workspace_id == caller.workspace_id,
++            (
++                PrincipalRoleLabel.project_id.is_(None)
++                if project_id is None
++                else (
++                    PrincipalRoleLabel.project_id.is_(None)
++                    | (PrincipalRoleLabel.project_id == project_id)
++                )
++            ),
++        )
++        .order_by(PrincipalRoleLabel.created_at.asc())
++    )
++    rows = (await session.execute(stmt)).all()
++    return [
++        PrincipalRoleLabelItem(
++            id=label.id,
++            workspace_id=label.workspace_id,
++            principal_id=label.principal_id,
++            role_id=label.role_id,
++            role_slug=role.slug,
++            role_name=role.name,
++            color_hex=role.color_hex,
++            scope_tier=role.scope_tier,
++            project_id=label.project_id,
++            created_at=label.created_at,
++        )
++        for label, role in rows
++    ]
++
++
++@router.post(
++    "/admin/principals/{principal_id}/role-labels",
++    response_model=PrincipalRoleLabelItem,
++    status_code=status.HTTP_201_CREATED,
++    summary="Assign role label to principal",
++)
++async def assign_principal_role_label_endpoint(
++    principal_id: uuid.UUID,
++    body: AssignRoleLabelRequest,
++    caller: Caller,
++    session: Session,
++) -> PrincipalRoleLabelItem:
++    """Attach a role label to a principal (Rule 1)."""
++    role = await session.get(RbacRoleModel, body.role_id)
++    if role is None or role.workspace_id != caller.workspace_id:
++        raise ProblemException(
++            code="NOT_FOUND",
++            status=status.HTTP_404_NOT_FOUND,
++            title="Not Found",
++            detail="RBAC role not found.",
++        )
++
++    await _check_role_label_escalation(session, caller, role)
++
++    label = PrincipalRoleLabel(
++        workspace_id=caller.workspace_id,
++        principal_id=principal_id,
++        role_id=body.role_id,
++        project_id=body.project_id,
++        assigned_by_id=caller.principal_id,
++    )
++    session.add(label)
++    await session.commit()
++    await session.refresh(label)
++
++    return PrincipalRoleLabelItem(
++        id=label.id,
++        workspace_id=label.workspace_id,
++        principal_id=label.principal_id,
++        role_id=label.role_id,
++        role_slug=role.slug,
++        role_name=role.name,
++        color_hex=role.color_hex,
++        scope_tier=role.scope_tier,
++        project_id=label.project_id,
++        created_at=label.created_at,
++    )
++
++
++@router.put(
++    "/admin/principals/{principal_id}/role-labels",
++    response_model=list[PrincipalRoleLabelItem],
++    summary="Batch set role labels for principal",
++)
++async def batch_set_principal_role_labels_endpoint(
++    principal_id: uuid.UUID,
++    body: BatchSetRoleLabelsRequest,
++    caller: Caller,
++    session: Session,
++) -> list[PrincipalRoleLabelItem]:
++    """Batch replace all role labels on a principal (multi-role chip picker support)."""
++    # Fetch existing labels
++    cur_labels = (
++        (
++            await session.execute(
++                select(PrincipalRoleLabel).where(
++                    PrincipalRoleLabel.principal_id == principal_id,
++                    PrincipalRoleLabel.workspace_id == caller.workspace_id,
++                    (
++                        PrincipalRoleLabel.project_id.is_(None)
++                        if body.project_id is None
++                        else PrincipalRoleLabel.project_id == body.project_id
++                    ),
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    cur_role_ids = {lbl.role_id for lbl in cur_labels}
++    new_role_ids = set(body.role_ids)
++
++    # Check escalation on all changed roles
++    changed_ids = cur_role_ids ^ new_role_ids
++    if changed_ids:
++        roles_stmt = select(RbacRoleModel).where(
++            RbacRoleModel.id.in_(changed_ids),
++            RbacRoleModel.workspace_id == caller.workspace_id,
++        )
++        for r in (await session.execute(roles_stmt)).scalars().all():
++            await _check_role_label_escalation(session, caller, r)
++
++    # Delete removed
++    to_delete = cur_role_ids - new_role_ids
++    if to_delete:
++        await session.execute(
++            delete(PrincipalRoleLabel).where(
++                PrincipalRoleLabel.principal_id == principal_id,
++                PrincipalRoleLabel.workspace_id == caller.workspace_id,
++                PrincipalRoleLabel.role_id.in_(to_delete),
++                (
++                    PrincipalRoleLabel.project_id.is_(None)
++                    if body.project_id is None
++                    else PrincipalRoleLabel.project_id == body.project_id
++                ),
++            )
++        )
++
++    # Add new
++    to_add = new_role_ids - cur_role_ids
++    for r_id in to_add:
++        session.add(
++            PrincipalRoleLabel(
++                workspace_id=caller.workspace_id,
++                principal_id=principal_id,
++                role_id=r_id,
++                project_id=body.project_id,
++                assigned_by_id=caller.principal_id,
++            )
++        )
++
++    await session.commit()
++
++    # Return refreshed list
++    return await list_principal_role_labels_endpoint(
++        principal_id, caller, session, project_id=body.project_id
++    )
++
++
++@router.delete(
++    "/admin/principals/{principal_id}/role-labels/{role_id}",
++    summary="Remove a role label from principal",
++)
++async def remove_principal_role_label_endpoint(
++    principal_id: uuid.UUID,
++    role_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++    project_id: Annotated[uuid.UUID | None, Query()] = None,
++) -> dict[str, object]:
++    """Detach a role label from a principal (Rule 1)."""
++    role = await session.get(RbacRoleModel, role_id)
++    if role is not None and role.workspace_id == caller.workspace_id:
++        await _check_role_label_escalation(session, caller, role)
++
++    await session.execute(
++        delete(PrincipalRoleLabel).where(
++            PrincipalRoleLabel.principal_id == principal_id,
++            PrincipalRoleLabel.workspace_id == caller.workspace_id,
++            PrincipalRoleLabel.role_id == role_id,
++            (
++                PrincipalRoleLabel.project_id.is_(None)
++                if project_id is None
++                else PrincipalRoleLabel.project_id == project_id
++            ),
++        )
++    )
++    await session.commit()
++    return {"status": "deleted", "principal_id": str(principal_id), "role_id": str(role_id)}
+diff --git a/kanban/api/v1/attachments.py b/kanban/api/v1/attachments.py
+index c600dacf..2d17bab6 100644
+--- a/kanban/api/v1/attachments.py
++++ b/kanban/api/v1/attachments.py
+@@ -29,6 +29,7 @@ from kanban.attachments.sniff import (
+     sanitize_content_disposition_filename,
+ )
+ from kanban.attachments.storage import LocalFilesystemBlobStore
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+ from kanban.security.ratelimit import ATTACHMENT_UPLOAD_PRINCIPAL
+ from kanban.security.ratelimit.decorator import rate_limited
+@@ -192,7 +193,15 @@ async def _verify_upload_permissions(
+     project_id: uuid.UUID,
+     target_issue_id: uuid.UUID | None,
+ ) -> None:
+-    """Enforce VIEW and COMMENT/EDIT permissions on project and optional issue."""
++    """Enforce upload permissions on project and optional issue."""
++    await require_permissions(
++        session,
++        caller,
++        caller.workspace_id,
++        {GranularPermission.FIELD_ATTACH_FILES.value},
++        project_id=project_id,
++        object_readable=True,
++    )
+     caps = await evaluate_capabilities(session, caller, project_id)
+     if not (caps & (Capability.COMMENT | Capability.EDIT)):
+         raise ProblemException(
+@@ -238,9 +247,11 @@ async def upload_attachment(
+ ) -> AttachmentResponse:
+     """Stream and validate attachment upload with decompression-bomb guards and metadata strip."""
+     project = await get_project_or_404(session, caller, project_ref)
++    await _verify_upload_permissions(session, caller, project.id, None)
+     body_bytes = await _read_stream_payload(request)
+     raw_fn, decl_ct, target_issue_id, raw_bytes = _parse_upload_body(request, body_bytes)
+-    await _verify_upload_permissions(session, caller, project.id, target_issue_id)
++    if target_issue_id is not None:
++        await _verify_upload_permissions(session, caller, project.id, target_issue_id)
+ 
+     service = get_attachment_service(request)
+     result = await service.upload_attachment(
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index fa215577..4c38da2e 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -294,6 +294,14 @@ class IssueResponse(BaseModel):
+     capabilities: list[str] = Field(
+         description="Effective capabilities held by the calling principal on this issue"
+     )
++    editable_fields: list[str] = Field(
++        default_factory=list,
++        description="List of issue field names caller has granular permission to modify",
++    )
++    issue_permissions: list[str] = Field(
++        default_factory=list,
++        description="List of granular issue permissions caller holds on this issue",
++    )
+     created_at: datetime = Field(description="Issue creation timestamp")
+     updated_at: datetime = Field(description="Issue last updated timestamp")
+     archived_at: datetime | None = Field(
+diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
+index 4929c433..665a57b9 100644
+--- a/kanban/api/v1/workspaces.py
++++ b/kanban/api/v1/workspaces.py
+@@ -20,6 +20,7 @@ from database.models.workspace_settings import WorkspaceSettings
+ from kanban.admin import principal_service
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import FieldError, ProblemException
++from kanban.auth.mfa.policy import require_admin_aal2
+ from kanban.auth.sessions.cookies import (
+     FALLBACK_SESSION_COOKIE_NAME,
+     SESSION_COOKIE_NAME,
+@@ -32,6 +33,7 @@ from kanban.auth.sessions.csrf import (
+     FALLBACK_CSRF_COOKIE_NAME,
+     build_clear_fallback_csrf_cookie_header,
+ )
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ 
+ if TYPE_CHECKING:
+     from kanban.auth.sessions.service import SessionService
+@@ -185,6 +187,9 @@ async def create_workspace_endpoint(
+     request: Request,
+ ) -> WorkspaceResponse:
+     """Create a new workspace, auto-initialize settings, and assign WORKSPACE_ADMIN."""
++    await require_permissions(
++        session, caller, caller.workspace_id, {GranularPermission.WORKSPACE_CREATE.value}
++    )
+     session_factory = getattr(request.app.state, "session_factory", None)
+     if session_factory is None:
+         raise ProblemException(
+@@ -388,6 +393,7 @@ class UpdateWorkspaceRequest(BaseModel):
+     "/{workspace_id}",
+     response_model=WorkspaceResponse,
+     summary="Update workspace name or slug",
++    dependencies=[Depends(require_admin_aal2)],
+ )
+ async def update_workspace_endpoint(
+     workspace_id: uuid.UUID,
+@@ -396,20 +402,12 @@ async def update_workspace_endpoint(
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> WorkspaceResponse:
+     """Update workspace name or slug. Requires WORKSPACE_ADMIN or SERVER_ADMIN."""
+-    admin_check = await session.execute(
+-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+-    )
+-    if not bool(admin_check.scalar_one()):
+-        raise ProblemException(
+-            code="INSUFFICIENT_CAPABILITY",
+-            status=status.HTTP_403_FORBIDDEN,
+-            title="Insufficient Capability",
+-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+-        )
+-
+     target_id = (
+         caller.workspace_id if str(workspace_id) == str(caller.workspace_id) else workspace_id
+     )
++    await require_permissions(
++        session, caller, target_id, {GranularPermission.WORKSPACE_EDIT_SETTINGS.value}
++    )
+     ws_stmt = select(Workspace).where(Workspace.id == target_id)
+     ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+     if ws is None:
+@@ -498,6 +496,7 @@ class WorkspaceRoleBindingRequest(BaseModel):
+ @router.post(
+     "/{workspace_id}/role-bindings",
+     summary="Bind RBAC role to principal in workspace",
++    dependencies=[Depends(require_admin_aal2)],
+ )
+ async def bind_workspace_role_endpoint(
+     workspace_id: uuid.UUID,
+@@ -506,16 +505,9 @@ async def bind_workspace_role_endpoint(
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> dict[str, object]:
+     """Bind role to principal at workspace scope."""
+-    admin_check = await session.execute(
+-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++    await require_permissions(
++        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
+     )
+-    if not bool(admin_check.scalar_one()):
+-        raise ProblemException(
+-            code="INSUFFICIENT_CAPABILITY",
+-            status=status.HTTP_403_FORBIDDEN,
+-            title="Insufficient Capability",
+-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+-        )
+     res = await principal_service.bind_role(
+         session,
+         workspace_id,
+@@ -532,6 +524,7 @@ async def bind_workspace_role_endpoint(
+ @router.delete(
+     "/{workspace_id}/role-bindings",
+     summary="Unbind RBAC role from principal in workspace",
++    dependencies=[Depends(require_admin_aal2)],
+ )
+ async def unbind_workspace_role_endpoint(
+     workspace_id: uuid.UUID,
+@@ -540,16 +533,9 @@ async def unbind_workspace_role_endpoint(
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> dict[str, object]:
+     """Unbind role from principal at workspace scope."""
+-    admin_check = await session.execute(
+-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
++    await require_permissions(
++        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
+     )
+-    if not bool(admin_check.scalar_one()):
+-        raise ProblemException(
+-            code="INSUFFICIENT_CAPABILITY",
+-            status=status.HTTP_403_FORBIDDEN,
+-            title="Insufficient Capability",
+-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+-        )
+     res = await principal_service.unbind_role(
+         session,
+         workspace_id,
+diff --git a/kanban/services/assignees.py b/kanban/services/assignees.py
+index 337b3493..ad60fce7 100644
+--- a/kanban/services/assignees.py
++++ b/kanban/services/assignees.py
+@@ -24,6 +24,7 @@ from kanban.api.v1.schemas.assignees import (
+     PrincipalSummary,
+ )
+ from kanban.content import normalize_plain_text
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -310,6 +311,14 @@ async def add_assignee(
+     """Assign an eligible project viewer or free-text label to an issue."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_ASSIGNEES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     total_count = (
+         await session.execute(
+@@ -347,6 +356,14 @@ async def remove_assignee(
+     """Remove an assignee from an issue (requires EDIT on issue)."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_ASSIGNEES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     row = (
+         await session.execute(
+diff --git a/kanban/services/comments.py b/kanban/services/comments.py
+index 671743f5..79744d55 100644
+--- a/kanban/services/comments.py
++++ b/kanban/services/comments.py
+@@ -31,6 +31,7 @@ from kanban.api.v1.schemas.comments import (
+     ReactionSummary,
+ )
+ from kanban.content import ContentNormalizeError, normalize_to_markdown
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+ from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
+ from kanban.security.scrubber import scrub_text
+@@ -251,6 +252,14 @@ async def create_comment(
+     """Create a top-level comment or depth-1 reply, enforce mention access, and emit activity."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.COMMENT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_COMMENT.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     project = await session.get(Project, issue.project_id)
+     if project is None:  # pragma: no cover
+@@ -406,6 +415,14 @@ async def list_comments(
+     """List top-level comments with nested depth-1 replies using keyset pagination."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.VIEW)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_VIEW.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     project = await session.get(Project, issue.project_id)
+     if project is None:  # pragma: no cover
+@@ -721,6 +738,15 @@ async def add_reaction(
+             detail="Caller requires COMMENT capability on the issue to add reactions.",
+         )
+ 
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_COMMENT.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
++
+     normalized_emoji = _normalize_emoji(emoji)
+ 
+     # Upsert reaction
+@@ -780,6 +806,15 @@ async def delete_reaction(
+             detail="Caller requires COMMENT capability on the issue to remove reactions.",
+         )
+ 
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_COMMENT.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
++
+     normalized_emoji = _normalize_emoji(emoji)
+ 
+     del_stmt = delete(CommentReaction).where(
+diff --git a/kanban/services/cycles.py b/kanban/services/cycles.py
+index 6898f713..8e0827cc 100644
+--- a/kanban/services/cycles.py
++++ b/kanban/services/cycles.py
+@@ -21,6 +21,7 @@ from kanban.api.v1.schemas.cycles import (
+     CycleRolloverRequest,
+     CycleRolloverResponse,
+ )
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -651,6 +652,14 @@ async def add_issue_to_cycle(
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+ 
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_CYCLE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     if issue.project_id != cycle.project_id:
+         raise ProblemException(
+@@ -717,6 +726,14 @@ async def remove_issue_from_cycle(
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+ 
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_CYCLE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     if issue.cycle_id != cycle.id:
+         raise ProblemException(
+diff --git a/kanban/services/issue_archive.py b/kanban/services/issue_archive.py
+index ace50081..ee51e2d5 100644
+--- a/kanban/services/issue_archive.py
++++ b/kanban/services/issue_archive.py
+@@ -11,6 +11,7 @@ from sqlalchemy import select
+ from database.models import Issue as IssueModel
+ from database.models import ObjectRecord, Project, WorkflowState
+ from kanban.api.problems import ProblemException, not_found
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -46,6 +47,14 @@ async def archive_issue(
+     """
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_ARCHIVE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     obj = await session.get(ObjectRecord, issue.id)
+     if obj is None:  # pragma: no cover
+@@ -138,6 +147,14 @@ async def unarchive_issue(
+     """
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_ARCHIVE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     obj = await session.get(ObjectRecord, issue.id)
+     if obj is None or obj.archived_at is None:
+diff --git a/kanban/services/issue_copy.py b/kanban/services/issue_copy.py
+index 0d89bbf6..d6b22a76 100644
+--- a/kanban/services/issue_copy.py
++++ b/kanban/services/issue_copy.py
+@@ -24,6 +24,7 @@ from kanban.api.v1.schemas.issue_copy import (
+ )
+ from kanban.api.v1.schemas.links import LinkCreateRequest
+ from kanban.content import ContentNormalizeError, normalize_to_markdown
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -116,6 +117,14 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
+     """
+     # 1. Resolve source issue through caller access checks
+     source_issue = await resolve_issue_ref(session, caller, issue_ref)
++    await require_permissions(
++        session,
++        caller,
++        source_issue.workspace_id,
++        {GranularPermission.ISSUE_COPY.value},
++        project_id=source_issue.project_id,
++        object_readable=True,
++    )
+     caps = await evaluate_capabilities(session, caller, source_issue.id)
+     if Capability.VIEW not in caps:
+         not_found()
+diff --git a/kanban/services/issue_delete.py b/kanban/services/issue_delete.py
+index 25a12884..58da0eb8 100644
+--- a/kanban/services/issue_delete.py
++++ b/kanban/services/issue_delete.py
+@@ -28,6 +28,7 @@ from kanban.api.v1.schemas.issue_delete import (
+     TrashedObjectList,
+ )
+ from kanban.api.v1.schemas.issues import IssueResponse, PrioritySummary, StateSummary
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import (
+     Capability,
+     capabilities_to_names,
+@@ -215,6 +216,14 @@ async def trash_issue(
+ 
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.DELETE)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_DELETE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     blast = await compute_blast_radius(session, issue.id, for_update=True)
+     if blast_hash_header.strip().lower() != blast.blast_hash.lower():
+@@ -371,6 +380,14 @@ async def restore_issue(
+     """Restore a soft-deleted issue from trash back to active state."""
+     issue = await resolve_issue_ref(session, caller, issue_ref, include_deleted=True)
+     await require_capability(session, caller, issue.id, Capability.DELETE)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.ISSUE_DELETE.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     obj = await session.get(ObjectRecord, issue.id)
+     if obj is None or obj.deleted_at is None:
+diff --git a/kanban/services/issue_move.py b/kanban/services/issue_move.py
+index ccf64eaa..00d6e11c 100644
+--- a/kanban/services/issue_move.py
++++ b/kanban/services/issue_move.py
+@@ -11,6 +11,7 @@ from database.models import Issue, ObjectRecord, Project, WorkflowState
+ from kanban.api.problems import ProblemException
+ from kanban.api.v1.schemas.issue_move import IssueMoveRequest, IssueMoveResponse, WipWarning
+ from kanban.content.normalize import normalize_plain_text
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import REBALANCE_THRESHOLD_LEN, midpoint_rank
+@@ -33,10 +34,12 @@ MAX_OVERRIDE_REASON_LEN: Final[int] = 500
+ REQUIRED_AAL2_LEVEL: Final[int] = 2
+ 
+ 
+-async def _verify_move_permissions(
++async def _verify_move_permissions(  # noqa: PLR0913
+     session: AsyncSession,
+     caller: PrincipalContext,
+     issue_id: uuid.UUID,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
+     *,
+     is_cross_column: bool,
+ ) -> None:
+@@ -44,6 +47,26 @@ async def _verify_move_permissions(
+     await require_capability(session, caller, issue_id, Capability.EDIT)
+     if is_cross_column:
+         await require_capability(session, caller, issue_id, Capability.TRANSITION)
++        await require_permissions(
++            session,
++            caller,
++            workspace_id,
++            {
++                GranularPermission.FIELD_MODIFY_STATE.value,
++                GranularPermission.ISSUE_TRANSITION.value,
++            },
++            project_id=project_id,
++            object_readable=True,
++        )
++    else:
++        await require_permissions(
++            session,
++            caller,
++            workspace_id,
++            {GranularPermission.ISSUE_MOVE_RANK.value},
++            project_id=project_id,
++            object_readable=True,
++        )
+ 
+ 
+ async def _lock_and_validate_target_state(
+@@ -269,7 +292,14 @@ async def move_issue(
+     is_cross_column = target_state_id != issue.state_id
+ 
+     # 1. Authorization checks
+-    await _verify_move_permissions(session, caller, issue.id, is_cross_column=is_cross_column)
++    await _verify_move_permissions(
++        session,
++        caller,
++        issue.id,
++        issue.workspace_id,
++        issue.project_id,
++        is_cross_column=is_cross_column,
++    )
+ 
+     # 2. State validation and locking
+     target_state = await _lock_and_validate_target_state(session, issue.project_id, target_state_id)
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index fcd06799..66491300 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -111,6 +111,12 @@ from kanban.security.access_manifest import (
+     _ManifestContext,
+     build_access_manifest,
+ )
++from kanban.security.granular_permissions import (
++    FIELD_PERMISSION_PROPERTY_MAP,
++    GranularPermission,
++    evaluate_granular_permissions,
++    require_permissions,
++)
+ from kanban.security.permissions import (
+     Capability,
+     capabilities_to_names,
+@@ -746,6 +752,18 @@ async def serialize_issue(
+     pending_gate = await resolve_pending_gate(session, issue)
+     latest_gate_verdict = await resolve_latest_gate_verdict(session, issue)
+ 
++    granular_perms = await evaluate_granular_permissions(
++        session, caller, issue.workspace_id, issue.project_id
++    )
++    issue_perms_list = sorted([p for p in granular_perms if p.startswith("issue:")])
++    editable_fields_list = sorted(
++        [
++            FIELD_PERMISSION_PROPERTY_MAP[p]
++            for p in granular_perms
++            if p in FIELD_PERMISSION_PROPERTY_MAP
++        ]
++    )
++
+     res = IssueResponse(
+         id=issue.id,
+         object_id=issue.id,
+@@ -776,6 +794,8 @@ async def serialize_issue(
+         provenance=provenance,
+         access_manifest=manifest,
+         capabilities=caps_names,
++        editable_fields=editable_fields_list,
++        issue_permissions=issue_perms_list,
+         created_at=issue_created_at,
+         updated_at=issue_updated_at,
+         archived_at=archived_at,
+@@ -1860,6 +1880,37 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+         required |= Capability.TRANSITION
+     await require_capability(session, caller, issue.id, required)
+ 
++    granular_required: set[str] = set()
++    if "summary" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_SUMMARY.value)
++    if "description_markdown" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_DESCRIPTION.value)
++    if "priority" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_PRIORITY.value)
++    if "state" in body.model_fields_set or "state_id" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_STATE.value)
++        granular_required.add(GranularPermission.ISSUE_TRANSITION.value)
++    if "start_date" in body.model_fields_set or "due_date" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_DATES.value)
++    if "cycle_id" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_CYCLE.value)
++    if "parent" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_PARENT.value)
++    if "label_ids" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_LABELS.value)
++    if "module_ids" in body.model_fields_set:
++        granular_required.add(GranularPermission.FIELD_MODIFY_MODULES.value)
++
++    if granular_required:
++        await require_permissions(
++            session,
++            caller,
++            issue.workspace_id,
++            granular_required,
++            project_id=issue.project_id,
++            object_readable=True,
++        )
++
+     current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+     current_serialized = await serialize_issue(session, caller, issue)
+     current_etag = current_serialized.etag or f'"{current_sha256_hex}"'
+diff --git a/kanban/services/links.py b/kanban/services/links.py
+index 3a1a2cfc..d571343c 100644
+--- a/kanban/services/links.py
++++ b/kanban/services/links.py
+@@ -23,6 +23,7 @@ from kanban.api.v1.schemas.links import (
+     RestrictedEndpointOut,
+     UnrestrictedEndpointOut,
+ )
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.object_ref import resolve_object_ref
+@@ -219,7 +220,7 @@ async def _assert_link_matrix_allowed(
+         )
+ 
+ 
+-async def create_object_link(
++async def create_object_link(  # noqa: C901
+     session: AsyncSession,
+     caller: PrincipalContext,
+     source: ObjectRecord,
+@@ -240,6 +241,16 @@ async def create_object_link(
+             detail=None,
+         )
+ 
++    if str(source.object_type).lower() == "issue":
++        await require_permissions(
++            session,
++            caller,
++            source.workspace_id,
++            {GranularPermission.ISSUE_LINK.value},
++            project_id=source.project_id,
++            object_readable=True,
++        )
++
+     # 2. Resolve target through caller's RLS session
+     target = await resolve_object_ref(session, req.target)
+     if target is None or target.workspace_id != source.workspace_id:
+@@ -388,6 +399,16 @@ async def delete_object_link(
+             detail=None,
+         )
+ 
++    if str(source_rec.object_type).lower() == "issue":
++        await require_permissions(
++            session,
++            caller,
++            source_rec.workspace_id,
++            {GranularPermission.ISSUE_LINK.value},
++            project_id=source_rec.project_id,
++            object_readable=True,
++        )
++
+     # 4. Guard: Flagged invalid links require audited purge (S12.3, KB-P1-16)
+     if link.link_state == "FLAGGED_INVALID":
+         raise ProblemException(
+diff --git a/kanban/services/modules.py b/kanban/services/modules.py
+index dcb70c2b..85ff2619 100644
+--- a/kanban/services/modules.py
++++ b/kanban/services/modules.py
+@@ -20,6 +20,7 @@ from kanban.api.v1.schemas.modules import (
+     ModulePatch,
+     ModuleResponse,
+ )
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -456,6 +457,22 @@ async def update_issue_modules(
+ 
+     require_modules_enabled(project)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_MODULES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_MODULES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     if len(module_ids) > MAX_MODULES_PER_ISSUE:
+         raise ProblemException(
+@@ -545,6 +562,14 @@ async def add_issue_to_module(
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     mod, _project = await get_module_or_404(session, caller, module_id)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_MODULES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     if mod.project_id != issue.project_id:
+         raise ProblemException(
+@@ -612,6 +637,14 @@ async def remove_issue_from_module(
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     _, _project = await get_module_or_404(session, caller, module_id)
+     await require_capability(session, caller, issue.id, Capability.EDIT)
++    await require_permissions(
++        session,
++        caller,
++        issue.workspace_id,
++        {GranularPermission.FIELD_MODIFY_MODULES.value},
++        project_id=issue.project_id,
++        object_readable=True,
++    )
+ 
+     await session.execute(
+         delete(IssueModule).where(
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index 07166e63..50a91b00 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -28,6 +28,8 @@ import {
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
++import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import './adminAuth.css';
+ 
+ interface CurrentUserResponse {
+@@ -108,7 +110,7 @@ export function AuthStudioPage(): JSX.Element {
+   const [accessDenied, setAccessDenied] = useState(false);
+ 
+   // Studio tab state
+-  const [activeTab, setActiveTab] = useState<'cards' | 'users'>('cards');
++  const [activeTab, setActiveTab] = useState<'cards' | 'users' | 'roles'>('cards');
+ 
+   // Cards state
+   const [cards, setCards] = useState<AdminAuthCard[]>([]);
+@@ -707,6 +709,18 @@ export function AuthStudioPage(): JSX.Element {
+         >
+           Users &amp; Permissions
+         </button>
++        <button
++          type="button"
++          role="tab"
++          id="tab-roles"
++          data-testid="tab-roles"
++          aria-selected={activeTab === 'roles'}
++          aria-controls="panel-roles"
++          className={`auth-tab-btn ${activeTab === 'roles' ? 'auth-tab-btn--active' : ''}`}
++          onClick={() => { setActiveTab('roles'); }}
++        >
++          Roles &amp; Permissions
++        </button>
+       </div>
+ 
+       {activeTab === 'users' && (
+@@ -728,6 +742,12 @@ export function AuthStudioPage(): JSX.Element {
+         </div>
+       )}
+ 
++      {activeTab === 'roles' && (
++        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
++          <RbacPolicyBuilder isServerAdmin={true} />
++        </div>
++      )}
++
+       {/* LOCKOUT_PREVENTED Alert Banner */}
+       {lockoutError ? (
+         <LockoutPreventedBanner
+@@ -900,6 +920,7 @@ export function AuthStudioPage(): JSX.Element {
+                             <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
+                             <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
+                           </select>
++                          <RoleLabelPicker principalId={u.id} />
+                         </td>
+                         <td className="auth-users-td">
+                           {(() => {
+@@ -939,6 +960,12 @@ export function AuthStudioPage(): JSX.Element {
+         </div>
+       )}
+ 
++      {activeTab === 'roles' && (
++        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
++          <RbacPolicyBuilder isServerAdmin={true} />
++        </div>
++      )}
++
+       {/* Create / Edit Drawer */}
+       <AuthCardEditorDrawer
+         key={editingCard ? editingCard.id : (isDrawerOpen ? 'open-new' : 'closed')}
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+index 01cad48d..39c6f363 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.tsx
+@@ -26,6 +26,7 @@ import { CreatedByRow } from './CreatedByRow';
+ import { DatesCycleModulesRows } from './DatesCycleModulesRows';
+ import { ParentLabelsRows } from './ParentLabelsRows';
+ import { CustomFieldsRailSection } from '../custom-fields/CustomFieldsRailSection';
++import { canModifyIssueField, hasIssuePermission } from '../drawer/permissions';
+ import './PropertiesRail.css';
+ 
+ export interface PropertiesRailProps {
+@@ -59,8 +60,13 @@ export function PropertiesRail({
+       : (currentIssue.key.includes('-') ? (currentIssue.key.split('-')[0] ?? '') : '');
+   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
+   const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+-  const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
++  const canTransition = hasIssuePermission(currentIssue, 'issue:transition') || canModifyIssueField(currentIssue, 'state');
+   const isAdmin = capabilities.includes('ADMIN');
++  const canEditPriority = canModifyIssueField(currentIssue, 'priority');
++  const canEditAssignees = canModifyIssueField(currentIssue, 'assignees');
++  const canEditDatesCycles = canModifyIssueField(currentIssue, 'dates') || canModifyIssueField(currentIssue, 'cycle_id') || canModifyIssueField(currentIssue, 'modules') || canEdit;
++  const canEditParentLabels = canModifyIssueField(currentIssue, 'parent_id') || canModifyIssueField(currentIssue, 'label_ids') || canEdit;
++  const canEditCustomFields = canModifyIssueField(currentIssue, 'custom_fields') && canEdit;
+ 
+   const modulesEnabled =
+     (metadata?.modules_enabled ?? initialMetadata?.modules_enabled) !== false;
+@@ -250,7 +256,7 @@ export function PropertiesRail({
+         issue={currentIssue}
+         projectStates={metadata?.states}
+         projectPriorities={priorities}
+-        canEdit={canEdit}
++        canEdit={canEditPriority}
+         canTransition={canTransition}
+         onStateChange={handleStateChange}
+         onPriorityChange={handlePriorityChange}
+@@ -259,7 +265,7 @@ export function PropertiesRail({
+       <AssigneesRow
+         issue={currentIssue}
+         projectKey={projectKey}
+-        canEdit={canEdit}
++        canEdit={canEditAssignees}
+         onAddAssignee={handleAddAssignee}
+         onRemoveAssignee={handleRemoveAssignee}
+         fetchSuggestions={fetchAssigneeSuggestions}
+@@ -276,7 +282,7 @@ export function PropertiesRail({
+         modulesEnabled={modulesEnabled}
+         projectModules={modules}
+         projectCycles={cycles}
+-        canEdit={canEdit}
++        canEdit={canEditDatesCycles}
+         onUpdateDates={handleUpdateDates}
+         onUpdateModules={handleUpdateModules}
+         onUpdateCycle={handleUpdateCycle}
+@@ -285,7 +291,7 @@ export function PropertiesRail({
+       <ParentLabelsRows
+         issue={currentIssue}
+         projectLabels={labels}
+-        canEdit={canEdit}
++        canEdit={canEditParentLabels}
+         onUpdateParent={handleUpdateParent}
+         onUpdateLabels={handleUpdateLabels}
+         onCreateLabel={handleCreateLabel}
+@@ -296,7 +302,7 @@ export function PropertiesRail({
+         <CustomFieldsRailSection
+           projectKey={projectKey}
+           issueKey={currentIssue.key}
+-          canEdit={canEdit}
++          canEdit={canEditCustomFields}
+         />
+       </div>
+     </aside>
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index f7c94fa5..ab461ffb 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -32,6 +32,7 @@ import { StateBadge } from '../../components/state/StateBadge';
+ import * as railApi from '../drawer-rail/railApi';
+ import { SummaryField } from './SummaryField';
+ import { useFocusTrap } from './useFocusTrap';
++import { canModifyIssueField, hasIssuePermission } from './permissions';
+ import {
+   ensureCsrfToken,
+   fetchProjectStates,
+@@ -923,10 +924,15 @@ function IssueSurfaceContent({
+ 
+     const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
+     const canTransition =
++      hasIssuePermission(currentIssue, 'issue:transition') ||
+       capabilities.includes('TRANSITION') ||
+       capabilities.includes('EDIT') ||
+       capabilities.includes('ADMIN');
+-    const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
++    const canEdit =
++      canModifyIssueField(currentIssue, 'description') &&
++      (capabilities.includes('EDIT') || capabilities.includes('ADMIN'));
++    const canComment = hasIssuePermission(currentIssue, 'issue:comment');
++    const canAttach = hasIssuePermission(currentIssue, 'field:attach_files');
+ 
+     const headerStates = (() => {
+       if (projectStates.length > 0) {
+diff --git a/kanban/web/src/features/drawer/SummaryField.tsx b/kanban/web/src/features/drawer/SummaryField.tsx
+index 89e4321f..861259c6 100644
+--- a/kanban/web/src/features/drawer/SummaryField.tsx
++++ b/kanban/web/src/features/drawer/SummaryField.tsx
+@@ -14,6 +14,7 @@ import { ApiProblem } from '../../api/problem';
+ import { qk } from '../../api/queryKeys';
+ import { useOptimisticMutation } from '../../api/optimistic';
+ import type { IssueDetail } from './slots';
++import { canModifyIssueField } from './permissions';
+ import './SummaryField.css';
+ 
+ export interface SummaryFieldProps {
+@@ -201,7 +202,7 @@ export function SummaryField({ issue, descriptionFocusRef }: SummaryFieldProps):
+       ) : (
+         <h1 id={`issue-summary-${issue.key}`} className="summary-field__heading">
+           <span className="summary-field__display-text">{issue.summary}</span>
+-          {(issue.capabilities ? (issue.capabilities.includes('EDIT') || issue.capabilities.includes('ADMIN')) : true) && (
++          {canModifyIssueField(issue, 'summary') && (
+             <button
+               ref={editButtonRef}
+               type="button"
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 3bee86a1..62fd5e4a 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -26,6 +26,8 @@ import { DeleteAuditModal } from './DeleteAuditModal';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
++import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import './ProjectSettingsPage.css';
+ 
+ export interface ProjectDetail {
+@@ -153,6 +155,7 @@ type SettingsTab =
+   | 'priorities'
+   | 'labels'
+   | 'members'
++  | 'roles'
+   | 'integrations'
+   | 'trash'
+   | 'danger';
+@@ -1372,6 +1375,14 @@ export function ProjectSettingsPage(): JSX.Element {
+         >
+           Members & Access
+         </button>
++        <button
++          type="button"
++          data-testid="tab-roles"
++          className={`kb-settings-tab ${activeTab === 'roles' ? 'kb-settings-tab-active' : ''}`}
++          onClick={() => { handleTabSwitch('roles'); }}
++        >
++          Roles &amp; Permissions
++        </button>
+         <button
+           type="button"
+           data-testid="tab-integrations"
+@@ -2331,6 +2342,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                       >
+                         {m.role}
+                       </span>
++                      <RoleLabelPicker principalId={m.principal_id} />
+                     </td>
+                     <td>
+                       <button
+@@ -2351,6 +2363,16 @@ export function ProjectSettingsPage(): JSX.Element {
+         )}
+ 
+         {/* 6. Automation & Integrations Tab */}
++        {activeTab === 'roles' && (
++          <div className="kb-settings-section" data-testid="project-roles-section">
++            <RbacPolicyBuilder
++              projectId={project?.id}
++              isServerAdmin={isServerAdmin}
++              initialRoleTier="project admin"
++            />
++          </div>
++        )}
++
+         {activeTab === 'integrations' && (
+           <div className="kb-integrations-grid" data-testid="integrations-section">
+             <Link
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index 0edeef9e..4f685b1f 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -19,6 +19,8 @@ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
++import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import './ProjectSettingsPage.css';
+ 
+ interface WorkspaceSettingsData {
+@@ -55,7 +57,7 @@ export function formatHandle(handle?: string | null): string {
+   return clean ? `@${clean}` : '';
+ }
+ 
+-export type WorkspaceTab = 'general' | 'members' | 'groups' | 'trash';
++export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'trash';
+ 
+ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
+   if (!hash) return null;
+@@ -63,6 +65,7 @@ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
+   if (clean === 'tab-general' || clean === 'general') return 'general';
+   if (clean === 'tab-members' || clean === 'members') return 'members';
+   if (clean === 'tab-groups' || clean === 'groups') return 'groups';
++  if (clean === 'tab-roles' || clean === 'roles') return 'roles';
+   if (clean === 'tab-trash' || clean === 'trash') return 'trash';
+   return null;
+ }
+@@ -158,7 +161,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       window.location.hash = targetHash;
+     }
+   };
+-  const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
++  const [settings, setSettings] = useState<WorkspaceSettingsData | null>(null);
+   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+@@ -852,6 +855,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             >
+               Groups & Governance
+             </button>
++            <button
++              type="button"
++              role="tab"
++              id="tab-roles"
++              aria-selected={activeTab === 'roles'}
++              data-testid="tab-roles"
++              className={`kb-settings-tab ${activeTab === 'roles' ? 'kb-settings-tab-active' : ''}`}
++              onClick={() => { handleTabChange('roles'); }}
++            >
++              Roles &amp; Permissions
++            </button>
+           </>
+         )}
+         <button
+@@ -1198,6 +1212,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                               <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER</option>
+                               <option value="WORKSPACE_GUEST">WORKSPACE_GUEST</option>
+                             </select>
++                            <RoleLabelPicker principalId={p.id} />
+                           </td>
+                           <td>
+                             <button
+@@ -1419,6 +1434,15 @@ export function WorkspaceSettingsPage(): JSX.Element {
+           </div>
+         )}
+ 
++        {activeTab === 'roles' && (
++          <div className="kb-roles-section" data-testid="workspace-roles-section">
++            <RbacPolicyBuilder
++              isServerAdmin={Boolean(currentUser?.is_server_admin)}
++              workspaceId={settings?.workspace_id ?? settings?.id}
++            />
++          </div>
++        )}
++
+         {activeTab === 'trash' && (
+           <div className="kb-members-section" data-testid="workspace-trash-studio">
+             <div className="kb-settings-header">
+diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
+index fbfaa7bf..c716f8ea 100644
+--- a/kanban/workflows/engine.py
++++ b/kanban/workflows/engine.py
+@@ -27,6 +27,7 @@ from database.models.workflow import (
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.content.normalize import normalize_to_markdown
+ from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError, WasmRunLimits
++from kanban.security.granular_permissions import GranularPermission, require_permissions
+ from kanban.security.permissions import Capability, evaluate_capabilities
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -192,6 +193,18 @@ class TransitionEngine:
+         if Capability.VIEW not in caps or Capability.TRANSITION not in caps:
+             not_found()
+ 
++        await require_permissions(
++            session,
++            actor,
++            issue.workspace_id,
++            {
++                GranularPermission.ISSUE_TRANSITION.value,
++                GranularPermission.FIELD_MODIFY_STATE.value,
++            },
++            project_id=issue.project_id,
++            object_readable=True,
++        )
++
+         # Lock issue row
+         locked_stmt = select(Issue).where(Issue.id == issue.id).with_for_update()
+         locked_issue = (await session.execute(locked_stmt)).scalar_one_or_none()

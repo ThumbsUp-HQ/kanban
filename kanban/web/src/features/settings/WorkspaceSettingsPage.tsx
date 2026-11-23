@@ -19,6 +19,8 @@ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import './ProjectSettingsPage.css';
 
 interface WorkspaceSettingsData {
@@ -55,7 +57,7 @@ export function formatHandle(handle?: string | null): string {
   return clean ? `@${clean}` : '';
 }
 
-export type WorkspaceTab = 'general' | 'members' | 'groups' | 'trash';
+export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'trash';
 
 export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (!hash) return null;
@@ -63,6 +65,7 @@ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (clean === 'tab-general' || clean === 'general') return 'general';
   if (clean === 'tab-members' || clean === 'members') return 'members';
   if (clean === 'tab-groups' || clean === 'groups') return 'groups';
+  if (clean === 'tab-roles' || clean === 'roles') return 'roles';
   if (clean === 'tab-trash' || clean === 'trash') return 'trash';
   return null;
 }
@@ -158,7 +161,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       window.location.hash = targetHash;
     }
   };
-  const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
+  const [settings, setSettings] = useState<WorkspaceSettingsData | null>(null);
   const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -852,6 +855,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
             >
               Groups & Governance
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-roles"
+              aria-selected={activeTab === 'roles'}
+              data-testid="tab-roles"
+              className={`kb-settings-tab ${activeTab === 'roles' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('roles'); }}
+            >
+              Roles &amp; Permissions
+            </button>
           </>
         )}
         <button
@@ -1198,6 +1212,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER</option>
                               <option value="WORKSPACE_GUEST">WORKSPACE_GUEST</option>
                             </select>
+                            <RoleLabelPicker principalId={p.id} />
                           </td>
                           <td>
                             <button
@@ -1416,6 +1431,15 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'roles' && (
+          <div className="kb-roles-section" data-testid="workspace-roles-section">
+            <RbacPolicyBuilder
+              isServerAdmin={Boolean(currentUser?.is_server_admin)}
+              workspaceId={settings?.workspace_id ?? settings?.id}
+            />
           </div>
         )}
 

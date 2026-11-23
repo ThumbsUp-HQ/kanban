@@ -20,6 +20,7 @@ from kanban.api.v1.schemas.modules import (
     ModulePatch,
     ModuleResponse,
 )
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -456,6 +457,22 @@ async def update_issue_modules(
 
     require_modules_enabled(project)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_MODULES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_MODULES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     if len(module_ids) > MAX_MODULES_PER_ISSUE:
         raise ProblemException(
@@ -545,6 +562,14 @@ async def add_issue_to_module(
     issue = await resolve_issue_ref(session, caller, issue_ref)
     mod, _project = await get_module_or_404(session, caller, module_id)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_MODULES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     if mod.project_id != issue.project_id:
         raise ProblemException(
@@ -612,6 +637,14 @@ async def remove_issue_from_module(
     issue = await resolve_issue_ref(session, caller, issue_ref)
     _, _project = await get_module_or_404(session, caller, module_id)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_MODULES.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     await session.execute(
         delete(IssueModule).where(

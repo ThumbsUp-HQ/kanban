@@ -23,6 +23,7 @@ from kanban.api.v1.schemas.links import (
     RestrictedEndpointOut,
     UnrestrictedEndpointOut,
 )
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.object_ref import resolve_object_ref
@@ -219,7 +220,7 @@ async def _assert_link_matrix_allowed(
         )
 
 
-async def create_object_link(
+async def create_object_link(  # noqa: C901
     session: AsyncSession,
     caller: PrincipalContext,
     source: ObjectRecord,
@@ -238,6 +239,16 @@ async def create_object_link(
             status=403,
             title="Insufficient Capability",
             detail=None,
+        )
+
+    if str(source.object_type).lower() == "issue":
+        await require_permissions(
+            session,
+            caller,
+            source.workspace_id,
+            {GranularPermission.ISSUE_LINK.value},
+            project_id=source.project_id,
+            object_readable=True,
         )
 
     # 2. Resolve target through caller's RLS session
@@ -386,6 +397,16 @@ async def delete_object_link(
             status=403,
             title="Insufficient Capability",
             detail=None,
+        )
+
+    if str(source_rec.object_type).lower() == "issue":
+        await require_permissions(
+            session,
+            caller,
+            source_rec.workspace_id,
+            {GranularPermission.ISSUE_LINK.value},
+            project_id=source_rec.project_id,
+            object_readable=True,
         )
 
     # 4. Guard: Flagged invalid links require audited purge (S12.3, KB-P1-16)
