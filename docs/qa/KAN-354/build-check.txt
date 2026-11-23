@@ -1,0 +1,43 @@
+=== Sync Wiki Bundle ===
+Successfully synchronized 34 wiki chapters into kanban/web/src/features/docs-center/wikiManifest.ts (539941 bytes, 71 images copied to kanban/web/public/docs-images).
+
+=== Documentation Taxonomy Audit ===
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+
+=== Dash Check ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan351-355-e50d33ba/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== Frontend Vitest Images Test ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan351-355-e50d33ba/kanban/web
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (9 tests) 132ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  05:30:54
+   Duration  1.15s (environment 68%, import 14%, tests 14%, transform 3%, worker 1%)
+
+
+=== Frontend Build (pnpm build) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan351-355-e50d33ba/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 753 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-D1cQF5CD.css            538.51 kB │ gzip:  75.47 kB
+dist/assets/index-DbvPsdts.js           2,764.50 kB │ gzip: 768.11 kB
+
+✓ built in 1.23s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

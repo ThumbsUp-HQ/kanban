@@ -179,6 +179,20 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
         "configuration": "configuration-value-reference",
         "studio-config": "studio-configuration-reference",
         "studio-configuration": "studio-configuration-reference",
+        "diagnostics": "admin-diagnostics-and-link-inspector-studio",
+        "link-inspector": "admin-diagnostics-and-link-inspector-studio",
+        "migration": "multi-source-migration-and-key-alias-redirects",
+        "migrations": "multi-source-migration-and-key-alias-redirects",
+        "importers": "multi-source-migration-and-key-alias-redirects",
+        "service-auth": "zero-trust-service-auth-and-workload-oidc",
+        "workload-oidc": "zero-trust-service-auth-and-workload-oidc",
+        "flow": "statistical-flow-telemetry-and-lean-analytics",
+        "flow-telemetry": "statistical-flow-telemetry-and-lean-analytics",
+        "analytics": "statistical-flow-telemetry-and-lean-analytics",
+        "lease": "agent-lease-fencing-workpads-and-push-protection",
+        "leases": "agent-lease-fencing-workpads-and-push-protection",
+        "workpad": "agent-lease-fencing-workpads-and-push-protection",
+        "push-protection": "agent-lease-fencing-workpads-and-push-protection",
     }
     for alias, target in slug_aliases.items():
         if target in chapter_anchors and alias not in chapter_anchors:

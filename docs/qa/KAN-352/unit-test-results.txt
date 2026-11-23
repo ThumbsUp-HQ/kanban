@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan351-355-e50d33ba/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan351-355-e50d33ba
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 4 items
+
+kanban/tests/test_docs_migration_guide.py::test_migration_guide_taxonomy PASSED [ 25%]
+kanban/tests/test_docs_migration_guide.py::test_migration_guide_markdown_content PASSED [ 50%]
+kanban/tests/test_docs_migration_guide.py::test_migration_guide_no_forbidden_dashes PASSED [ 75%]
+kanban/tests/test_docs_migration_guide.py::test_migration_guide_sections_and_anchors PASSED [100%]
+
+============================== 4 passed in 0.05s ===============================
