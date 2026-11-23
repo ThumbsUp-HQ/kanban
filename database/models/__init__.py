@@ -35,6 +35,7 @@ from database.models.embeddings import ObjectEmbedding
 from database.models.import_mapping import ImportEntityMapping
 from database.models.issue_alias import IssueKeyAlias
 from database.models.issue_lease import IssueLease
+from database.models.issue_workpad import IssueWorkpad
 from database.models.issues import (
     CommentReaction,
     Issue,
@@ -141,6 +142,7 @@ __all__ = [
     "IssueLease",
     "IssueModule",
     "IssueSubscription",
+    "IssueWorkpad",
     "LdapGroupMapping",
     "LinkKind",
     "LinkTypeMatrix",

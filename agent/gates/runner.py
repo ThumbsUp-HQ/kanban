@@ -438,11 +438,21 @@ class GateWorkerRunner:
                             live_provider = None
 
                         if live_provider is not None:
+                            from agent.budget import BudgetEnforcer  # noqa: PLC0415
                             from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
 
-                            live_harness = InAppSdkHarness(provider=live_provider, session=session)
+                            budget_enforcer = BudgetEnforcer(session=session)
+                            live_harness = InAppSdkHarness(
+                                provider=live_provider,
+                                budget_enforcer=budget_enforcer,
+                                session=session,
+                            )
                             self.registry.register("in_app_sdk", live_harness)
                             agent_dict["provider"] = live_provider
+                            agent_dict["provider_config_id"] = provider_row.id
+                            agent_dict["workspace_id"] = ws_id
+                            if execution is not None and execution.project_id is not None:
+                                agent_dict["project_id"] = execution.project_id
 
             return exec_dict, issue_dict, agent_dict, None, None
 

@@ -80,11 +80,43 @@ ATTACHMENT_UPLOAD_PRINCIPAL = RateLimitPolicy(
     fail_mode="closed",
 )
 
+ISSUE_WORKFLOW_RATE_LIMIT = RateLimitPolicy(
+    name="issue_workflow_rate_limit",
+    limit=60,
+    window_seconds=60,
+    fail_mode="closed",
+)
+
+ISSUE_COMMENTS_RATE_LIMIT = RateLimitPolicy(
+    name="issue_comments_rate_limit",
+    limit=60,
+    window_seconds=60,
+    fail_mode="closed",
+)
+
+ISSUE_WORKPAD_RATE_LIMIT = RateLimitPolicy(
+    name="issue_workpad_rate_limit",
+    limit=60,
+    window_seconds=60,
+    fail_mode="closed",
+)
+
+MCP_TOOLS_CALL_RATE_LIMIT = RateLimitPolicy(
+    name="mcp_tools_call_rate_limit",
+    limit=120,
+    window_seconds=60,
+    fail_mode="closed",
+)
+
 __all__ = [
     "ATTACHMENT_UPLOAD_PRINCIPAL",
     "AUTH_LOGIN_ACCOUNT",
     "AUTH_LOGIN_IP",
     "AUTH_MFA_VERIFY",
+    "ISSUE_COMMENTS_RATE_LIMIT",
+    "ISSUE_WORKFLOW_RATE_LIMIT",
+    "ISSUE_WORKPAD_RATE_LIMIT",
+    "MCP_TOOLS_CALL_RATE_LIMIT",
     "MEDIA_PROXY_PRINCIPAL",
     "SETUP_CLAIM_IP",
     "SLIDING_WINDOW_LUA",

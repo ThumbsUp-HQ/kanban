@@ -326,6 +326,24 @@ async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[dict[st
     return [_compact_single_activity(it) for it in raw_items if isinstance(it, dict)]
 
 
+async def _load_workpad(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] | None:
+    """Load agent workpad slot for issue, returning None if empty or not found."""
+    if ctx.client is None:
+        return None
+    try:
+        res = await ctx.client.request(
+            "GET",
+            f"/api/v1/issues/{issue_key}/workpad",
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+    except KbMcpError:
+        return None
+    if not isinstance(res, dict):
+        return None
+    return res
+
+
 def _extract_labels(raw_labels: object) -> list[str]:
     if not isinstance(raw_labels, list):
         return []
@@ -459,9 +477,11 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
 
     comments: list[Any] | None = None
     activity: list[Any] | None = None
+    workpad: dict[str, Any] | None = None
     if lod == "full":
         comments = await _load_comments(issue_key, comments_limit, ctx)
         activity = await _load_activity(issue_key, ctx)
+        workpad = await _load_workpad(issue_key, ctx)
 
     labels_list = _extract_labels(issue_data.get("labels"))
 
@@ -503,6 +523,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         "comments": comments,
         "activity": activity,
         "provenance": issue_data.get("provenance"),
+        "workpad": workpad,
     }
     if children_list is not None:
         normalized_issue["children"] = children_list

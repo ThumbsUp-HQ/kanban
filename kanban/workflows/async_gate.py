@@ -445,6 +445,11 @@ class GateCoordinator:
 
         # 4. Handle REJECT verdict
         if decision.decision == "reject":
+            max_rework = getattr(hook, "max_rework_attempts", 3) or 3
+            issue.rework_rejection_streak = (issue.rework_rejection_streak or 0) + 1
+            if issue.rework_rejection_streak >= max_rework:
+                issue.rework_tripped_at = now
+
             duration_us = int(decision.latency_ms * 1000)
             reason_preview = format_reason_preview(decision.reason_markdown)
 
@@ -751,6 +756,12 @@ class GateCoordinator:
 
         issue.state_id = execution.to_state_id
         issue.pending_transition_exec_id = None
+
+        # Reset rework circuit breaker on successful human transition
+        invoking_principal = await session.get(Principal, execution.invoking_principal_id)
+        if invoking_principal is not None and invoking_principal.principal_type == "USER":
+            issue.rework_rejection_streak = 0
+            issue.rework_tripped_at = None
 
         execution.status = "approved"
         execution.verdict_json = {

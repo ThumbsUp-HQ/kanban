@@ -74,6 +74,16 @@ export interface IssueDetail {
   labels?: ProjectLabel[] | string[] | undefined;
   pending_gate?: PendingGateInfo | null | undefined;
   latest_gate_verdict?: LatestGateVerdict | null | undefined;
+  rework_rejection_streak?: number | null | undefined;
+  rework_tripped_at?: string | null | undefined;
+  workpad?: {
+    id?: string;
+    principal_id?: string;
+    body_markdown: string;
+    body_sha256?: string;
+    revision: number;
+    updated_at?: string;
+  } | null | undefined;
   [key: string]: unknown;
 }
 
@@ -84,6 +94,7 @@ export interface IssueSurfaceSlots {
   rail?: ComponentType<{ issue: IssueDetail }>;
   description?: ComponentType<{ issue: IssueDetail; focusRef: RefObject<HTMLElement | null> }>;
   activity?: ComponentType<{ issue: IssueDetail }>;
+  workpad?: ComponentType<{ issue: IssueDetail }>;
 }
 
 export const IssueSurfaceSlotsContext = createContext<IssueSurfaceSlots>({});

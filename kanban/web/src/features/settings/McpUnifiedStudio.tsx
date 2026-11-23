@@ -109,7 +109,7 @@ export function WorkloadFederationSection({
     try {
       const data = (await apiFetch(
         'GET',
-        '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
+        '/api/v1/admin/workload-identities',
       )) as WorkloadIdentityPolicyItem[] | undefined;
       setPolicies(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -201,7 +201,7 @@ export function WorkloadFederationSection({
           };
           await apiFetch(
             'POST',
-            '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
+            '/api/v1/admin/workload-identities',
             { body: payload },
           );
         }

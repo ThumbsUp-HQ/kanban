@@ -6,13 +6,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
 from database.models.spine import ObjectRecord
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.issues.lease_service import (
     DEFAULT_LEASE_TTL_SECONDS,
@@ -20,6 +21,8 @@ from kanban.issues.lease_service import (
     release_issue_lease,
 )
 from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
+from kanban.security.permissions import Capability, require_capability
+from kanban.security.ratelimit import ISSUE_WORKFLOW_RATE_LIMIT, rate_limited
 from kanban.security.read_taint import TaintGuard, get_taint_guard
 from kanban.services import issues as svc
 
@@ -27,6 +30,12 @@ router = APIRouter(tags=["issue-workflow"])
 
 Caller = Annotated[PrincipalContext, Depends(get_principal)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
+
+
+async def _principal_rate_key(request: Request) -> list[str]:
+    """Extract authenticated principal ID for rate limiting."""
+    caller = await get_principal(request)
+    return [str(caller.principal_id)]
 
 
 class BeginWorkRequest(BaseModel):
@@ -37,6 +46,7 @@ class BeginWorkRequest(BaseModel):
     plan_markdown: Annotated[str, Field(min_length=1, max_length=65536)]
     ttl_seconds: Annotated[int | None, Field(ge=60, le=7200)] = None
     fencing_token: int | None = None
+    use_workpad: bool = True
 
 
 class TransitionTicketRequest(BaseModel):
@@ -75,6 +85,7 @@ class LeaseHeartbeatRequest(BaseModel):
 @router.post(
     "/issues/{issue_key}/begin-work",
     summary="Atomically assign caller, attach active cycle, move to started state, and post plan",
+    dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
 async def api_begin_work(  # noqa: PLR0913, PLR0917
     issue_key: str,
@@ -99,6 +110,7 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
             if_match=if_match,
             ttl_seconds=body.ttl_seconds or DEFAULT_LEASE_TTL_SECONDS,
             fencing_token=body.fencing_token,
+            use_workpad=body.use_workpad,
         )
 
         if gate_hold is not None:
@@ -151,6 +163,7 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
 @router.post(
     "/issues/{issue_key}/transition",
     summary="Transition issue to intermediate workflow state",
+    dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
 async def api_transition_ticket(  # noqa: PLR0913, PLR0917
     issue_key: str,
@@ -219,6 +232,7 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
 @router.post(
     "/issues/{issue_key}/complete-work",
     summary="Verify blockers and QA gate, transition to completed, and log proof",
+    dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
 async def api_complete_work(  # noqa: PLR0913, PLR0917
     issue_key: str,
@@ -348,4 +362,40 @@ async def api_release_lease(
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={"released": released, "issue_key": issue_key},
+        )
+
+
+@router.post(
+    "/issues/{issue_key}/reset-rework-breaker",
+    summary="Reset tripped rework loop circuit breaker",
+    dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
+)
+async def api_reset_rework_breaker(
+    issue_key: str,
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Reset tripped rework breaker for an issue. Only human users may invoke this."""
+    async with timing_floor(floor_ms=25.0):
+        if caller.is_agent_or_mcp_caller:
+            raise ProblemException(
+                code="FORBIDDEN_AGENT",
+                status=403,
+                title="Forbidden Agent Action",
+                detail="Only human users can reset the rework loop circuit breaker",
+            )
+        issue = await svc.get_issue_or_404(session, caller, issue_key)
+        await require_capability(session, caller, issue.id, Capability.EDIT | Capability.TRANSITION)
+        issue.rework_rejection_streak = 0
+        issue.rework_tripped_at = None
+        await session.flush()
+        await session.commit()
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "status": "reset",
+                "issue_key": issue_key,
+                "rework_rejection_streak": 0,
+                "rework_tripped_at": None,
+            },
         )

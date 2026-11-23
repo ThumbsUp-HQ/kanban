@@ -240,12 +240,29 @@ class InAppSdkHarness:
         # Token budget reservation
         reservation: Reservation | None = None
         if self.budget_enforcer is not None:
-            dummy_ws = UUID("00000000-0000-0000-0000-000000000001")
-            dummy_cfg = UUID("00000000-0000-0000-0000-000000000002")
+            raw_ws = (
+                getattr(agent_def, "workspace_id", None)
+                or agent_dict.get("workspace_id")
+                or getattr(ctx, "workspace_id", None)
+            )
+            raw_proj = (
+                getattr(agent_def, "project_id", None)
+                or agent_dict.get("project_id")
+                or getattr(ctx, "project_id", None)
+            )
+            raw_cfg = (
+                getattr(agent_def, "provider_config_id", None)
+                or agent_dict.get("provider_config_id")
+                or getattr(ctx, "provider_config_id", None)
+            )
+            ws_id = UUID(str(raw_ws)) if raw_ws else UUID("00000000-0000-0000-0000-000000000001")
+            proj_id = UUID(str(raw_proj)) if raw_proj else None
+            cfg_id = UUID(str(raw_cfg)) if raw_cfg else UUID("00000000-0000-0000-0000-000000000002")
+
             reservation = await self.budget_enforcer.reserve(
-                dummy_ws,
-                None,
-                dummy_cfg,
+                ws_id,
+                proj_id,
+                cfg_id,
                 estimate_tokens=DEFAULT_ESTIMATE_TOKENS,
                 session=self.session,
             )

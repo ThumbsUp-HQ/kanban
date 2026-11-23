@@ -17,6 +17,7 @@ from mcp.surfaces.agent.transition_ticket import (
     transition_ticket,
 )
 from mcp.surfaces.agent.update_ticket import UPDATE_TICKET_SCHEMA, update_ticket
+from mcp.surfaces.agent.workpad import UPDATE_WORKPAD_SCHEMA, update_workpad
 
 __all__ = [
     "ADD_COMMENT_SCHEMA",
@@ -28,6 +29,7 @@ __all__ = [
     "SEARCH_TICKETS_SCHEMA",
     "TRANSITION_TICKET_SCHEMA",
     "UPDATE_TICKET_SCHEMA",
+    "UPDATE_WORKPAD_SCHEMA",
     "add_comment",
     "begin_work",
     "complete_work",
@@ -38,6 +40,7 @@ __all__ = [
     "search_tickets",
     "transition_ticket",
     "update_ticket",
+    "update_workpad",
 ]
 
 
@@ -126,6 +129,15 @@ def create_agent_registry() -> ToolRegistry:
             input_schema=LINK_OBJECTS_SCHEMA,
             surface=Surface.AGENT,
             handler=link_objects,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="update_workpad",
+            description="Update workpad.",
+            input_schema=UPDATE_WORKPAD_SCHEMA,
+            surface=Surface.AGENT,
+            handler=update_workpad,
         )
     )
     return registry
