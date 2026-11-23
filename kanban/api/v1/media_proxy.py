@@ -44,11 +44,15 @@ async def get_media_proxy(
     request: Request,
     u: Annotated[str, Query(description="Target external HTTPS image URL")],
     sig: Annotated[str, Query(description="HMAC-SHA256 signature for media URL")],
+    exp: Annotated[
+        int | None,
+        Query(description="Expiration timestamp (UNIX epoch seconds)"),
+    ] = None,
 ) -> Response:
     """Retrieve external Markdown image over DNS-pinned cookieless socket.
 
     Requires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.
-    Validates HMAC signature before URL parsing or DNS lookup.
+    Validates HMAC signature and expiration before URL parsing or DNS lookup.
     """
     caller: PrincipalContext = getattr(
         request.state, "caller_principal", None
@@ -58,9 +62,9 @@ async def get_media_proxy(
     if key_mat is None:
         key_mat = load_key_material()
 
-    # S5.4: Validate HMAC signature BEFORE URL parsing or DNS lookup
-    if not verify_media_proxy_url(u, sig, key_mat):
-        msg = "Missing or invalid HMAC signature for media proxy URL"
+    # S5.4: Validate HMAC signature and expiration BEFORE URL parsing or DNS lookup
+    if exp is None or not verify_media_proxy_url(u, sig, key_mat, exp=exp):
+        msg = "Missing, expired, or invalid HMAC signature for media proxy URL"
         raise ProblemException(
             code="INVALID_SIGNATURE",
             status=403,

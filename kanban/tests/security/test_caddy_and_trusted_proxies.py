@@ -81,8 +81,8 @@ def test_caddyfile_dedicated_8444_runner_mtls_listener() -> None:
     # Verify TLS client authentication required
     assert "mode require" in content, "Missing mode require in client_auth"
 
-    # Verify route restriction: forwards /api/v1/runners/ws
-    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in content
+    # Verify route restriction: forwards /api/v1/agent-runners/ws (KAN-324)
+    assert "@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*" in content
 
     # Verify reverse_proxy to kanban-api:8000 with client cert headers
     assert "reverse_proxy kanban-api:8000" in content

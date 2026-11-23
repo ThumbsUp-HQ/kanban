@@ -1,0 +1,54 @@
+diff --git a/deploy/caddy/Caddyfile b/deploy/caddy/Caddyfile
+index b1c9adee..559b4639 100644
+--- a/deploy/caddy/Caddyfile
++++ b/deploy/caddy/Caddyfile
+@@ -101,7 +101,7 @@
+ 		}
+ 	}
+ 
+-	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
++	@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*
+ 	handle @runner_ws {
+ 		reverse_proxy kanban-api:8000 {
+ 			flush_interval -1
+diff --git a/kanban/standalone/compose_export.py b/kanban/standalone/compose_export.py
+index 98a47c6c..300f78a4 100644
+--- a/kanban/standalone/compose_export.py
++++ b/kanban/standalone/compose_export.py
+@@ -380,7 +380,7 @@ def _get_caddyfile_content(domain: str) -> str:
+ 		}}
+ 	}}
+ 
+-	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
++	@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*
+ 	handle @runner_ws {{
+ 		reverse_proxy kanban-api:8000 {{
+ 			flush_interval -1
+diff --git a/kanban/tests/security/test_caddy_and_trusted_proxies.py b/kanban/tests/security/test_caddy_and_trusted_proxies.py
+index 503bfba7..080df0ac 100644
+--- a/kanban/tests/security/test_caddy_and_trusted_proxies.py
++++ b/kanban/tests/security/test_caddy_and_trusted_proxies.py
+@@ -81,8 +81,8 @@ def test_caddyfile_dedicated_8444_runner_mtls_listener() -> None:
+     # Verify TLS client authentication required
+     assert "mode require" in content, "Missing mode require in client_auth"
+ 
+-    # Verify route restriction: forwards /api/v1/runners/ws
+-    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in content
++    # Verify route restriction: forwards /api/v1/agent-runners/ws (KAN-324)
++    assert "@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*" in content
+ 
+     # Verify reverse_proxy to kanban-api:8000 with client cert headers
+     assert "reverse_proxy kanban-api:8000" in content
+diff --git a/kanban/tests/standalone/test_compose_export.py b/kanban/tests/standalone/test_compose_export.py
+index 5896db01..e2756173 100644
+--- a/kanban/tests/standalone/test_compose_export.py
++++ b/kanban/tests/standalone/test_compose_export.py
+@@ -119,7 +119,7 @@ def test_compose_export_with_keyring_carryover(tmp_path: Path) -> None:  # noqa:
+     # Action 2: Dedicated :8444 runner mTLS block
+     assert ":8444 {" in caddy_content
+     assert "mode require" in caddy_content
+-    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in caddy_content
++    assert "@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*" in caddy_content
+     assert "X-Client-Cert-Pem {http.request.tls.client.certificate_pem}" in caddy_content
+     assert "X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}" in caddy_content
+ 

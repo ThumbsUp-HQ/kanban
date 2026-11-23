@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from cryptography.exceptions import InvalidTag
@@ -127,6 +128,14 @@ class StaticKekProvider:
         """Construct StaticKekProvider from security KeyMaterial configuration."""
         keys = {km.master_kek_kid: km.master_kek}
         return cls(keys=keys, current=km.master_kek_kid)
+
+    @classmethod
+    def from_keyring_file(cls, path: Path | str) -> StaticKekProvider:
+        """Construct StaticKekProvider by loading strictly permissioned keyring file."""
+        from kanban.security.keys import _load_from_keyring_file  # noqa: PLC0415
+
+        km = _load_from_keyring_file(Path(path))
+        return cls.from_key_material(km)
 
 
 @dataclass(frozen=True)

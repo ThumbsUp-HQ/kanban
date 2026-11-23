@@ -7,6 +7,7 @@ from __future__ import annotations
 import ipaddress
 import uuid
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from PIL import Image
@@ -206,12 +207,14 @@ async def test_stride_row2_media_proxy_ssrf_and_airgap() -> None:
     valid_signed_url = sign_media_proxy_url(media_url, km)
     assert "/api/v1/media-proxy" in valid_signed_url
 
-    # Extract signature and verify
-    sig = valid_signed_url.split("&sig=")[-1]
-    assert verify_media_proxy_url(media_url, sig, km) is True
+    # Extract expiration and signature and verify (KAN-325)
+    parsed_qs = parse_qs(urlsplit(valid_signed_url).query)
+    exp = int(parsed_qs["exp"][0])
+    sig = parsed_qs["sig"][0]
+    assert verify_media_proxy_url(media_url, sig, km, exp=exp) is True
     # Tampered signature or URL rejected
-    assert verify_media_proxy_url(media_url, "tampered_sig_invalid", km) is False
-    assert verify_media_proxy_url("https://evil.com/fake.jpg", sig, km) is False
+    assert verify_media_proxy_url(media_url, "tampered_sig_invalid", km, exp=exp) is False
+    assert verify_media_proxy_url("https://evil.com/fake.jpg", sig, km, exp=exp) is False
 
     # Validate scheme and host check
     with pytest.raises(ProblemException) as exc_scheme:

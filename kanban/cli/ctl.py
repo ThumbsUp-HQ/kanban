@@ -7,6 +7,7 @@ with centralized argument validation and strict secret hygiene.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -22,9 +23,19 @@ from kanban.cli.ops import (
 )
 from kanban.cli.verify_cutover import register_cutover_subparsers
 from kanban.logging import configure_logging
+from kanban.security.keys import load_key_material
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
+
+    from kanban.security.keys import KeyMaterial
+
+
+def load_ctl_keyring(keyring_path: str | Path | None = None) -> KeyMaterial:
+    """Load platform cryptographic keyring for kanban-ctl with 0600 permissions."""
+    target = keyring_path or os.environ.get("KANBAN_KEYRING_FILE", "/etc/kanban/keys.json")
+    return load_key_material(target)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

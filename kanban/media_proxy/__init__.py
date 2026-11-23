@@ -15,6 +15,8 @@ from kanban.media_proxy.placeholder import (
 )
 from kanban.media_proxy.service import MediaProxyService
 from kanban.media_proxy.signing import (
+    DEFAULT_MEDIA_PROXY_TTL_SECONDS,
+    MAX_MEDIA_PROXY_TTL_SECONDS,
     sign_media_proxy_url,
     validate_external_image_url,
     verify_media_proxy_url,
@@ -29,6 +31,8 @@ from kanban.media_proxy.ssrf import (
 __all__ = [
     "AIR_GAP_PLACEHOLDER_PNG",
     "AIR_GAP_STATUS_HEADER",
+    "DEFAULT_MEDIA_PROXY_TTL_SECONDS",
+    "MAX_MEDIA_PROXY_TTL_SECONDS",
     "MAX_PROXY_BYTES",
     "AirGapChecker",
     "AsyncHostResolver",

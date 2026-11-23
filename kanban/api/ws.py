@@ -206,6 +206,9 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
         websocket.app.state.realtime_hub = hub
         await hub.start()
 
+    mcp_session_id = websocket.headers.get("x-kb-mcp-session") or websocket.query_params.get(
+        "mcp_session"
+    )
     conn = WebSocketConnection(
         id=uuid.uuid4(),
         websocket=websocket,
@@ -213,6 +216,7 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
         principal_id=principal_id,
         session_id=session_id,
         token_sha256=token_sha256,
+        mcp_session_id=mcp_session_id,
     )
 
     # 4. Enforce connection limit (max 16 per principal)

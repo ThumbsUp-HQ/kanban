@@ -6,8 +6,10 @@ import base64
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -15,6 +17,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 _PURPOSE_REGEX = re.compile(r"^[a-z0-9][a-z0-9./-]{2,63}$")
 KEY_LENGTH_BYTES = 32
 MIN_ROOT_KEY_BYTES = 16
+MAX_KEYRING_FILE_BYTES: Final[int] = 65536
 REQUIRED_KEYRING_KEYS = ("MASTER_KEK", "KB_AUTH_PEPPER", "SESSION_HMAC_KEY")
 
 
@@ -74,8 +77,8 @@ def _decode_b64url_key(value: object, name: str) -> bytes:
     return raw
 
 
-def _load_from_keyring_file(target_path: Path) -> KeyMaterial:
-    """Load key material from a strictly-permissioned JSON file."""
+def _validate_file_attributes(target_path: Path) -> os.stat_result:
+    """Validate existence, symlink policy, size, and mode bits of keyring file."""
     if not target_path.exists():
         msg = f"Keyring file does not exist: {target_path}"
         raise KeyMaterialError(msg)
@@ -88,10 +91,75 @@ def _load_from_keyring_file(target_path: Path) -> KeyMaterial:
         msg = f"Keyring target must be a regular file: {target_path}"
         raise KeyMaterialError(msg)
 
-    mode = target_path.stat().st_mode
+    st = target_path.stat()
+    if st.st_size > MAX_KEYRING_FILE_BYTES:
+        msg = (
+            f"Keyring file exceeds maximum allowed size of {MAX_KEYRING_FILE_BYTES} "
+            f"bytes ({st.st_size} bytes)"
+        )
+        raise KeyMaterialError(msg)
+
+    mode = st.st_mode
+    if bool(mode & 0o111):
+        msg = f"Keyring file must not have execute permissions: mode is {oct(mode)}"
+        raise KeyMaterialError(msg)
+
     if bool(mode & 0o077):
         msg = f"Keyring file permissions {oct(mode)} too permissive; must be mode 0600 or stricter"
         raise KeyMaterialError(msg)
+
+    return st
+
+
+def _validate_posix_ownership_and_parent(target_path: Path, st: os.stat_result) -> None:
+    """Validate POSIX UID ownership and parent directory permissions."""
+    if sys.platform == "win32" or not hasattr(os, "getuid"):
+        return
+
+    current_uid = os.getuid()
+    if current_uid == 0:
+        if st.st_uid != 0:
+            msg = (
+                "Root process cannot load keyring file owned by non-root "
+                f"UID {st.st_uid} (must be UID 0)"
+            )
+            raise KeyMaterialError(msg)
+    elif st.st_uid not in (current_uid, 0):
+        msg = (
+            f"Keyring file owner mismatch: owned by UID {st.st_uid}, "
+            f"but current UID is {current_uid}"
+        )
+        raise KeyMaterialError(msg)
+
+    if target_path.parent.exists():
+        parent_st = target_path.parent.stat()
+        if bool(parent_st.st_mode & 0o002) and not bool(parent_st.st_mode & 0o1000):
+            msg = (
+                f"Parent directory {target_path.parent} is world-writable "
+                "without sticky bit (insecure directory)"
+            )
+            raise KeyMaterialError(msg)
+
+
+def validate_keyring_file_permissions(target_path: Path) -> None:
+    """Validate strict permissions (0600 or 0400), ownership, and integrity of a keyring file.
+
+    Enforces:
+    - Target exists, is a regular file, and is NOT a symlink.
+    - File size does not exceed MAX_KEYRING_FILE_BYTES (64 KiB).
+    - File permissions: no execute bits (0o111), no group or other permissions (0o077).
+      Allowed file modes are 0600 (read/write by owner) or 0400 (read-only by owner).
+    - POSIX ownership: if running as root (UID 0), file must be owned by UID 0.
+      If running as non-root, file must be owned by current UID or UID 0.
+    - Parent directory permissions: parent must not be world-writable without sticky bit.
+    """
+    st = _validate_file_attributes(target_path)
+    _validate_posix_ownership_and_parent(target_path, st)
+
+
+def _load_from_keyring_file(target_path: Path) -> KeyMaterial:
+    """Load key material from a strictly-permissioned JSON file."""
+    validate_keyring_file_permissions(target_path)
 
     try:
         content = target_path.read_text(encoding="utf-8")

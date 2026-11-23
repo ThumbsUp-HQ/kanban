@@ -380,7 +380,7 @@ def _get_caddyfile_content(domain: str) -> str:
 		}}
 	}}
 
-	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
+	@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*
 	handle @runner_ws {{
 		reverse_proxy kanban-api:8000 {{
 			flush_interval -1
