@@ -12,6 +12,7 @@ import {
   type SbomComponent,
   type SystemAboutData,
 } from './aboutApi';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './AboutPage.css';
 
 export function AboutPage(): JSX.Element {
@@ -182,27 +183,41 @@ export function AboutPage(): JSX.Element {
             <code className="kb-about-meta-value" data-testid="about-meta-version">{version}</code>
           </div>
           <div className="kb-about-meta-item">
+            <span className="kb-about-meta-label">Release Channel:</span>
+            <span className="kb-about-meta-value" data-testid="about-release-channel">Stable</span>
+          </div>
+          <div className="kb-about-meta-item">
             <span className="kb-about-meta-label">Build / Git Commit:</span>
             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
           </div>
-          {data.build_timestamp && (
-            <div className="kb-about-meta-item">
-              <span className="kb-about-meta-label">Build Timestamp:</span>
-              <span className="kb-about-meta-value">{data.build_timestamp}</span>
+        </div>
+        <div style={{ marginTop: '0.75rem' }}>
+          <AdvancedSection
+            title="Advanced Technical Details"
+            summary="OpenAPI bundle hash, frontend distribution integrity hashes, and compiler build timestamps"
+            testId="about-advanced-technical-details"
+          >
+            <div className="kb-about-metadata-grid" style={{ marginTop: '0.5rem' }}>
+              {data.build_timestamp && (
+                <div className="kb-about-meta-item">
+                  <span className="kb-about-meta-label">Build Timestamp:</span>
+                  <span className="kb-about-meta-value" data-testid="about-build-timestamp">{data.build_timestamp}</span>
+                </div>
+              )}
+              {data.openapi_bundle_hash && (
+                <div className="kb-about-meta-item">
+                  <span className="kb-about-meta-label">OpenAPI Bundle Hash:</span>
+                  <code className="kb-about-meta-value" data-testid="about-openapi-bundle-hash">{data.openapi_bundle_hash}</code>
+                </div>
+              )}
+              {data.frontend_bundle_hash && (
+                <div className="kb-about-meta-item">
+                  <span className="kb-about-meta-label">Frontend Bundle Hash:</span>
+                  <code className="kb-about-meta-value" data-testid="about-frontend-bundle-hash">{data.frontend_bundle_hash}</code>
+                </div>
+              )}
             </div>
-          )}
-          {data.openapi_bundle_hash && (
-            <div className="kb-about-meta-item">
-              <span className="kb-about-meta-label">OpenAPI Bundle Hash:</span>
-              <code className="kb-about-meta-value">{data.openapi_bundle_hash}</code>
-            </div>
-          )}
-          {data.frontend_bundle_hash && (
-            <div className="kb-about-meta-item">
-              <span className="kb-about-meta-label">Frontend Bundle Hash:</span>
-              <code className="kb-about-meta-value">{data.frontend_bundle_hash}</code>
-            </div>
-          )}
+          </AdvancedSection>
         </div>
       </section>
 

@@ -6,11 +6,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StandaloneStatusPanel } from './StandaloneStatusPanel';
-import { ComposeExportTab } from './ComposeExportTab';
-import { HeaderPills } from '../../app/HeaderPills';
-import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
-import type { SystemStatus } from '../../app/useSystemStatus';
+import { StandaloneStatusPanel } from '../StandaloneStatusPanel';
+import { ComposeExportTab } from '../ComposeExportTab';
+import { HeaderPills } from '../../../app/HeaderPills';
+import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
+import type { SystemStatus } from '../../../app/useSystemStatus';
 
 describe('StandaloneStatusPanel', () => {
   let queryClient: QueryClient;
@@ -2598,5 +2598,44 @@ describe('ComposeExportTab', () => {
     await waitFor(() => {
       expect(screen.getByText('Backup verification failed with status 400')).toBeDefined();
     });
+  });
+
+  it('progressively discloses technical details (storage volume, SQLite WAL dials, and sandbox bounds) in AdvancedSection', () => {
+    const testQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const mockStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      data_mount_point: '/var/lib/kanban/data',
+      data_mount_fstype: 'ext4',
+      tier_b_sandbox_available: true,
+    };
+
+    render(
+      <QueryClientProvider client={testQueryClient}>
+        <StandaloneStatusPanel
+          onClose={vi.fn()}
+          initialStatus={mockStatus}
+        />
+      </QueryClientProvider>,
+    );
+
+    // Advanced section is present and collapsed by default
+    const advancedDetails = screen.getByTestId('standalone-advanced-technical-details');
+    expect(advancedDetails).toBeDefined();
+    expect(advancedDetails.hasAttribute('open')).toBe(false);
+
+    // Toggle open
+    const toggle = screen.getByTestId('standalone-advanced-technical-details-toggle');
+    fireEvent.click(toggle);
+
+    expect(advancedDetails.hasAttribute('open')).toBe(true);
+    expect(screen.getByText(/Storage Volume Mount:/i)).toBeDefined();
+    expect(screen.getByText(/PRAGMA \/ WAL Tuning:/i)).toBeDefined();
+    expect(screen.getByText(/PRAGMA journal_mode = WAL/i)).toBeDefined();
+    expect(screen.getByText(/Tier-B nsjail strict cgroups/i)).toBeDefined();
   });
 });

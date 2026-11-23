@@ -12,6 +12,7 @@ import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './runnerStudio.css';
 
 export function RunnerStudioPage(): JSX.Element {
@@ -239,11 +240,6 @@ export function RunnerStudioPage(): JSX.Element {
                   <h3 className="kb-runner-hostname">{r.hostname}</h3>
 
                   <div className="kb-runner-meta-row">
-                    <span>Cert Fingerprint:</span>
-                    <code>{r.client_cert_sha256_hex.slice(0, 16)}...</code>
-                  </div>
-
-                  <div className="kb-runner-meta-row">
                     <span>Cert Expires:</span>
                     <span>{new Date(r.cert_expires_at).toLocaleDateString()}</span>
                   </div>
@@ -256,6 +252,21 @@ export function RunnerStudioPage(): JSX.Element {
                         : 'Never'}
                     </span>
                   </div>
+
+                  <AdvancedSection
+                    title="Advanced Technical Details"
+                    summary="mTLS client certificate fingerprint and cryptographic parameters"
+                    testId={`runner-advanced-details-${r.id}`}
+                  >
+                    <div className="kb-runner-meta-row" style={{ marginTop: '8px' }}>
+                      <span>Full Cert SHA-256:</span>
+                      <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>{r.client_cert_sha256_hex}</code>
+                    </div>
+                    <div className="kb-runner-meta-row">
+                      <span>Cert Fingerprint:</span>
+                      <code>{r.client_cert_sha256_hex.slice(0, 16)}...</code>
+                    </div>
+                  </AdvancedSection>
 
                   {Object.keys(r.capabilities).length > 0 && (
                     <div className="kb-runner-caps-container">

@@ -3,6 +3,7 @@
 
 import React, { useState, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import {
   createAiProvider,
   updateAiProvider,
@@ -66,6 +67,21 @@ function AiProviderEditorContent({
       ? provider.settings.timeout_ms
       : 30000;
   const [timeoutMs, setTimeoutMs] = useState<number>(initialTimeoutMs);
+
+  const initialTemp = typeof provider?.settings.temperature === 'number' ? provider.settings.temperature : 0.7;
+  const [temperature, setTemperature] = useState<number>(initialTemp);
+  const [temperatureModified, setTemperatureModified] = useState<boolean>(false);
+
+  const initialTopP = typeof provider?.settings.top_p === 'number' ? provider.settings.top_p : 1.0;
+  const [topP, setTopP] = useState<number>(initialTopP);
+  const [topPModified, setTopPModified] = useState<boolean>(false);
+
+  const initialMaxTokens = typeof provider?.settings.max_tokens === 'number' ? provider.settings.max_tokens : 4096;
+  const [maxTokens, setMaxTokens] = useState<number>(initialMaxTokens);
+  const [maxTokensModified, setMaxTokensModified] = useState<boolean>(false);
+
+  const initialMtlsCert = typeof provider?.settings.mtls_client_cert_pem === 'string' ? provider.settings.mtls_client_cert_pem : '';
+  const [mtlsCertPem, setMtlsCertPem] = useState<string>(initialMtlsCert);
 
   const normalizeResidencyTier = (rawTier: string | null | undefined): string => {
     if (!rawTier) return airGapMode ? 'local_only' : 'cloud_standard';
@@ -261,6 +277,26 @@ function AiProviderEditorContent({
       setIsSaving(true);
       setError(null);
 
+      const computeSettings = (baseSettings?: Record<string, unknown>) => {
+        const s: Record<string, unknown> = {
+          ...(baseSettings ?? {}),
+          timeout_ms: timeoutMs,
+        };
+        if (temperatureModified || (baseSettings && 'temperature' in baseSettings)) {
+          s.temperature = temperature;
+        }
+        if (topPModified || (baseSettings && 'top_p' in baseSettings)) {
+          s.top_p = topP;
+        }
+        if (maxTokensModified || (baseSettings && 'max_tokens' in baseSettings)) {
+          s.max_tokens = maxTokens;
+        }
+        if (mtlsCertPem.trim()) {
+          s.mtls_client_cert_pem = mtlsCertPem.trim();
+        }
+        return s;
+      };
+
       if (provider) {
         const payload: ProviderConfigUpdate = {
           display_name: displayName.trim(),
@@ -268,10 +304,7 @@ function AiProviderEditorContent({
           residency_tier: residencyTier,
           base_url: baseUrl.trim() || null,
           priority: provider.priority,
-          settings: {
-            ...provider.settings,
-            timeout_ms: timeoutMs,
-          },
+          settings: computeSettings(provider.settings),
         };
 
         if (clearExistingKey) {
@@ -292,9 +325,7 @@ function AiProviderEditorContent({
           priority: nextPriority,
           api_key: apiKey.trim() ? apiKey.trim() : null,
           is_enabled: true,
-          settings: {
-            timeout_ms: timeoutMs,
-          },
+          settings: computeSettings(),
         };
 
         await createAiProvider(payload);
@@ -467,36 +498,7 @@ function AiProviderEditorContent({
           )}
         </div>
 
-        {/* 4. HTTP Base URL */}
-        <div className="kb-form-group">
-          <label htmlFor="provider-base-url-input" className="kb-form-label">
-            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
-          </label>
-          <input
-            id="provider-base-url-input"
-            type="url"
-            className="kb-form-input"
-            value={baseUrl}
-            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
-            placeholder={
-              providerKind === 'ollama'
-                ? 'http://127.0.0.1:11434'
-                : providerKind === 'gemini'
-                  ? 'https://generativelanguage.googleapis.com'
-                  : 'https://api.openai.com/v1'
-            }
-            data-testid="provider-base-url-input"
-          />
-          <span className="kb-form-hint">
-            {providerKind === 'ollama'
-              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
-              : providerKind === 'gemini'
-                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
-                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
-          </span>
-        </div>
-
-        {/* 5. Configurable Cutoff Timeout (ms) */}
+        {/* 4. Configurable Cutoff Timeout (ms) */}
         <div className="kb-form-group">
           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
             Cutoff Timeout (ms)
@@ -635,12 +637,127 @@ function AiProviderEditorContent({
           </span>
         </div>
 
-        {/* 7. Collapsible Advanced Settings */}
-        <details className="kb-advanced-settings" data-testid="advanced-settings-details">
-          <summary className="kb-advanced-settings-summary">
-            Advanced Settings
-          </summary>
-          <div className="kb-advanced-settings-body">
+        {/* 6. Advanced Model & Harness Configuration */}
+        <AdvancedSection
+          title="Advanced Settings"
+          summary="Base URL, temperature, max tokens, mTLS client certificates, and data residency overrides"
+          testId="advanced-settings-details"
+          className="kb-advanced-model-harness-section"
+        >
+          <div data-testid="advanced-model-harness-config">
+            <div className="kb-form-group">
+              <label htmlFor="provider-base-url-input" className="kb-form-label">
+                HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+              </label>
+              <input
+                id="provider-base-url-input"
+                type="url"
+                className="kb-form-input"
+                value={baseUrl}
+                onChange={(e) => { handleBaseUrlChange(e.target.value); }}
+                placeholder={
+                  providerKind === 'ollama'
+                    ? 'http://127.0.0.1:11434'
+                    : providerKind === 'gemini'
+                      ? 'https://generativelanguage.googleapis.com'
+                      : 'https://api.openai.com/v1'
+                }
+                data-testid="provider-base-url-input"
+              />
+              <span className="kb-form-hint">
+                {providerKind === 'ollama'
+                  ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+                  : providerKind === 'gemini'
+                    ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
+                    : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
+              <div className="kb-form-group">
+                <label htmlFor="provider-temperature-input" className="kb-form-label">
+                  Temperature
+                </label>
+                <input
+                  id="provider-temperature-input"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  className="kb-form-input"
+                  value={temperature}
+                  onChange={(e) => {
+                    setTemperature(parseFloat(e.target.value) || 0.7);
+                    setTemperatureModified(true);
+                  }}
+                  data-testid="provider-temperature-input"
+                />
+                <span className="kb-form-hint">Sampling randomness (0.0 to 2.0).</span>
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="provider-top-p-input" className="kb-form-label">
+                  Top-P (Nucleus)
+                </label>
+                <input
+                  id="provider-top-p-input"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  className="kb-form-input"
+                  value={topP}
+                  onChange={(e) => {
+                    setTopP(parseFloat(e.target.value) || 1.0);
+                    setTopPModified(true);
+                  }}
+                  data-testid="provider-top-p-input"
+                />
+                <span className="kb-form-hint">Nucleus threshold (0.0 to 1.0).</span>
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+                  Max Tokens
+                </label>
+                <input
+                  id="provider-max-tokens-input"
+                  type="number"
+                  min="1"
+                  max="128000"
+                  step="128"
+                  className="kb-form-input"
+                  value={maxTokens}
+                  onChange={(e) => {
+                    setMaxTokens(parseInt(e.target.value, 10) || 4096);
+                    setMaxTokensModified(true);
+                  }}
+                  data-testid="provider-max-tokens-input"
+                />
+                <span className="kb-form-hint">Output generation token limit.</span>
+              </div>
+            </div>
+
+            <div className="kb-form-group" style={{ marginTop: '12px' }}>
+              <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
+                mTLS Client Certificate PEM (Optional)
+              </label>
+              <textarea
+                id="provider-mtls-cert-input"
+                className="kb-form-input"
+                style={{ fontFamily: 'monospace', fontSize: '0.8rem', minHeight: '80px' }}
+                placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+                value={mtlsCertPem}
+                onChange={(e) => {
+                  setMtlsCertPem(e.target.value);
+                }}
+                data-testid="provider-mtls-cert-input"
+              />
+              <span className="kb-form-hint">
+                Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways.
+              </span>
+            </div>
+
             <div className="kb-form-group">
               <label htmlFor="provider-residency-select" className="kb-form-label">
                 Data Residency Tier (Override)
@@ -668,7 +785,7 @@ function AiProviderEditorContent({
               </span>
             </div>
           </div>
-        </details>
+        </AdvancedSection>
 
         {testStatus.kind !== 'idle' && testStatus.message && (
           <div

@@ -352,4 +352,38 @@ describe('AboutPage', () => {
     });
     fireEvent.click(copyBtn);
   });
+
+  it('Case 3: renders version and release channel with raw build hashes in AdvancedSection', async () => {
+    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('about-meta-version')).toBeDefined();
+    });
+
+    // Version and Release Channel are visible
+    expect(screen.getByTestId('about-meta-version').textContent).toBe('0.2.1205');
+    expect(screen.getByTestId('about-release-channel').textContent).toBe('Stable');
+    expect(screen.getByTestId('about-git-commit').textContent).toBe('9d5577ad9b50');
+
+    // Advanced technical details section is collapsed by default
+    const advancedSection = screen.getByTestId('about-advanced-technical-details');
+    expect(advancedSection).toBeDefined();
+    expect(advancedSection.hasAttribute('open')).toBe(false);
+
+    // Expand the advanced section
+    const toggle = screen.getByTestId('about-advanced-technical-details-toggle');
+    fireEvent.click(toggle);
+
+    expect(advancedSection.hasAttribute('open')).toBe(true);
+    expect(screen.getByTestId('about-openapi-bundle-hash').textContent).toBe(
+      mockAboutData.openapi_bundle_hash,
+    );
+    expect(screen.getByTestId('about-frontend-bundle-hash').textContent).toBe(
+      mockAboutData.frontend_bundle_hash,
+    );
+    expect(screen.getByTestId('about-build-timestamp').textContent).toBe(
+      mockAboutData.build_timestamp,
+    );
+  });
 });

@@ -2116,5 +2116,52 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
         params: { grant_id: 'app-1' },
       });
     });
+
+    it('Case 1: McpAccessStudio selects capability presets cleanly and reveals raw bitmask/CIDR controls when AdvancedSection is expanded', async () => {
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="workspace" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+      expect(screen.getByTestId('mint-label-input')).not.toBeNull();
+
+      // Capability preset select exists and defaults to Standard Developer Agent (31)
+      const presetSelect = screen.getByTestId<HTMLSelectElement>('capability-preset-select');
+      expect(presetSelect).toBeDefined();
+      expect(presetSelect.value).toBe('31');
+
+      // Switch preset to Read-Only Agent (1)
+      fireEvent.change(presetSelect, { target: { value: '1' } });
+      expect(presetSelect.value).toBe('1');
+
+      // Switch preset to Full Project Agent (255)
+      fireEvent.change(presetSelect, { target: { value: '255' } });
+      expect(presetSelect.value).toBe('255');
+
+      // Advanced section is collapsed by default
+      const advSection = screen.getByTestId('advanced-capability-restrictions');
+      expect(advSection).toBeDefined();
+      expect(advSection.hasAttribute('open')).toBe(false);
+
+      // Expand AdvancedSection
+      const toggle = screen.getByTestId('advanced-capability-restrictions-toggle');
+      fireEvent.click(toggle);
+
+      expect(advSection.hasAttribute('open')).toBe(true);
+
+      // Raw bitmask matrix and CIDR input are revealed
+      expect(screen.getByTestId('capability-bits-grid')).toBeDefined();
+      expect(screen.getByTestId('mint-allowed-cidrs-input')).toBeDefined();
+      expect(screen.getByTestId('tools-selection-grid')).toBeDefined();
+    });
   });
 });

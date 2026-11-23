@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import {
   createAgentDefinition,
   updateAgentDefinition,
@@ -328,26 +329,51 @@ function AgentDefinitionEditorContent({
         )}
 
         {harnessKind === 'cli_pipe' && (
-          <>
-            <div className="kb-form-group">
-              <label htmlFor="agent-cli-binary-select" className="kb-form-label">
-                Allowlisted CLI Binary
-              </label>
-              <select
-                id="agent-cli-binary-select"
-                className="kb-form-select"
-                value={cliBinary}
-                onChange={(e) => { handleCliBinaryChange(e.target.value); }}
-                data-testid="agent-cli-binary-select"
-              >
-                {Object.entries(ALLOWED_CLI_BINARIES).map(([id, path]) => (
-                  <option key={id} value={id}>
-                    {id} ({path})
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="kb-form-group">
+            <label htmlFor="agent-cli-binary-select" className="kb-form-label">
+              Allowlisted CLI Binary
+            </label>
+            <select
+              id="agent-cli-binary-select"
+              className="kb-form-select"
+              value={cliBinary}
+              onChange={(e) => { handleCliBinaryChange(e.target.value); }}
+              data-testid="agent-cli-binary-select"
+            >
+              {Object.entries(ALLOWED_CLI_BINARIES).map(([id, path]) => (
+                <option key={id} value={id}>
+                  {id} ({path})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
+        {harnessKind === 'remote_runner' && (
+          <div className="kb-form-group">
+            <label htmlFor="agent-runner-pool-input" className="kb-form-label">
+              Remote Runner Pool Slug
+            </label>
+            <input
+              id="agent-runner-pool-input"
+              type="text"
+              className="kb-form-input"
+              value={runnerPool}
+              onChange={(e) => { setRunnerPool(e.target.value); }}
+              placeholder="default"
+              required
+              data-testid="agent-runner-pool-input"
+            />
+          </div>
+        )}
+
+        <AdvancedSection
+          title="Advanced Model & Harness Configuration"
+          summary="System prompt instructions, CLI arguments, tool filters, and repository access policy"
+          testId="advanced-model-harness-config"
+          hasErrors={harnessKind === 'cli_pipe' && !cliValidation.valid}
+        >
+          {harnessKind === 'cli_pipe' && (
             <div className="kb-form-group">
               <label htmlFor="agent-cli-args-input" className="kb-form-label">
                 CLI Arguments (enforcing pinned prefix & banned-flag policy)
@@ -376,106 +402,88 @@ function AgentDefinitionEditorContent({
                 </div>
               )}
             </div>
-          </>
-        )}
+          )}
 
-        {harnessKind === 'remote_runner' && (
           <div className="kb-form-group">
-            <label htmlFor="agent-runner-pool-input" className="kb-form-label">
-              Remote Runner Pool Slug
+            <label htmlFor="agent-timeout-input" className="kb-form-label">
+              Timeout (milliseconds, 1000 to 300000)
             </label>
             <input
-              id="agent-runner-pool-input"
-              type="text"
+              id="agent-timeout-input"
+              type="number"
+              min="1000"
+              max="300000"
+              step="1000"
               className="kb-form-input"
-              value={runnerPool}
-              onChange={(e) => { setRunnerPool(e.target.value); }}
-              placeholder="default"
-              required
-              data-testid="agent-runner-pool-input"
+              value={timeoutMs}
+              onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
+              data-testid="agent-timeout-input"
             />
           </div>
-        )}
 
-        <div className="kb-form-group">
-          <label htmlFor="agent-timeout-input" className="kb-form-label">
-            Timeout (milliseconds, 1000 to 300000)
-          </label>
-          <input
-            id="agent-timeout-input"
-            type="number"
-            min="1000"
-            max="300000"
-            step="1000"
-            className="kb-form-input"
-            value={timeoutMs}
-            onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
-            data-testid="agent-timeout-input"
-          />
-        </div>
-
-        <div className="kb-form-group">
-          <label htmlFor="agent-repo-mode-select" className="kb-form-label">
-            Repository Access Mode
-            <FieldHelpHint
-              title="Repository Access Mode"
-              fieldKey="agent_repo_access_mode"
-              docHref="/docs/multi-provider-ai-engine-and-runners#repository-access"
-              summary="Restricts filesystem/git access: None (Zero local egress), Read-Only Bare Git Tools, or Read-Only VFS Mount."
-              validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
-              defaultValue="none"
-            />
-          </label>
-          <select
-            id="agent-repo-mode-select"
-            className="kb-form-select"
-            value={repoAccessMode}
-            onChange={(e) => { setRepoAccessMode(e.target.value as RepoAccessMode); }}
-            data-testid="agent-repo-mode-select"
-          >
-            <option value="none">None (Zero Local Egress)</option>
-            <option value="bare_git_tools">Bare Git Tools (Read-Only)</option>
-            <option value="ro_vfs_mount">Read-Only VFS Mount</option>
-          </select>
-        </div>
-
-        <div className="kb-form-group">
-          <label className="kb-form-label">Allowed MCP Agent Tools</label>
-          <div className="kb-agent-tools-grid">
-            {ALL_MCP_TOOLS.map((tool) => (
-              <label key={tool} className="kb-agent-tool-item">
-                <input
-                  type="checkbox"
-                  checked={selectedTools.includes(tool)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedTools([...selectedTools, tool]);
-                    } else {
-                      setSelectedTools(selectedTools.filter((t) => t !== tool));
-                    }
-                  }}
-                  data-testid={`tool-checkbox-${tool}`}
-                />
-                <code>{tool}</code>
-              </label>
-            ))}
+          <div className="kb-form-group">
+            <label htmlFor="agent-repo-mode-select" className="kb-form-label">
+              Repository Access Mode
+              <FieldHelpHint
+                title="Repository Access Mode"
+                fieldKey="agent_repo_access_mode"
+                docHref="/docs/multi-provider-ai-engine-and-runners#repository-access"
+                summary="Restricts filesystem/git access: None (Zero local egress), Read-Only Bare Git Tools, or Read-Only VFS Mount."
+                validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
+                defaultValue="none"
+              />
+            </label>
+            <select
+              id="agent-repo-mode-select"
+              className="kb-form-select"
+              value={repoAccessMode}
+              onChange={(e) => { setRepoAccessMode(e.target.value as RepoAccessMode); }}
+              data-testid="agent-repo-mode-select"
+            >
+              <option value="none">None (Zero Local Egress)</option>
+              <option value="bare_git_tools">Bare Git Tools (Read-Only)</option>
+              <option value="ro_vfs_mount">Read-Only VFS Mount</option>
+            </select>
           </div>
-        </div>
 
-        <div className="kb-form-group">
-          <label htmlFor="agent-instructions-textarea" className="kb-form-label">
-            System Instructions (Markdown)
-          </label>
-          <textarea
-            id="agent-instructions-textarea"
-            rows={4}
-            className="kb-form-textarea"
-            value={systemInstructions}
-            onChange={(e) => { setSystemInstructions(e.target.value); }}
-            placeholder="System prompt context and rules of engagement..."
-            data-testid="agent-instructions-textarea"
-          />
-        </div>
+          <div className="kb-form-group">
+            <label className="kb-form-label">Allowed MCP Agent Tools</label>
+            <div className="kb-agent-tools-grid">
+              {ALL_MCP_TOOLS.map((tool) => (
+                <label key={tool} className="kb-agent-tool-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedTools.includes(tool)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTools([...selectedTools, tool]);
+                      } else {
+                        setSelectedTools(selectedTools.filter((t) => t !== tool));
+                      }
+                    }}
+                    data-testid={`tool-checkbox-${tool}`}
+                  />
+                  <code>{tool}</code>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="kb-form-group">
+            <label htmlFor="agent-instructions-textarea" className="kb-form-label">
+              System Instructions (Markdown)
+            </label>
+            <textarea
+              id="agent-instructions-textarea"
+              rows={4}
+              className="kb-form-textarea"
+              value={systemInstructions}
+              onChange={(e) => { setSystemInstructions(e.target.value); }}
+              placeholder="System prompt context and rules of engagement..."
+              data-testid="agent-instructions-textarea"
+            />
+          </div>
+        </AdvancedSection>
 
         <div className="kb-modal-footer">
           <button

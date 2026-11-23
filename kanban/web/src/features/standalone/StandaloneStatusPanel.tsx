@@ -19,6 +19,7 @@ import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './StandaloneStatusPanel.css';
 
 export type StandaloneTabId = 'health' | 'backup' | 'compose';
@@ -764,6 +765,33 @@ export function StandaloneStatusPanel({
                     : 'ℹ️ Optional - Not enabled in single-container mode'}
                 </p>
               </div>
+            </div>
+
+            <div style={{ marginTop: '16px' }}>
+              <AdvancedSection
+                title="Advanced Technical Details"
+                summary="Storage mount parameters, SQLite WAL/PRAGMA dials, and runtime sandbox constraints"
+                testId="standalone-advanced-technical-details"
+              >
+                <div style={{ padding: '8px 0', fontSize: '0.825rem', color: 'var(--kb-color-text-secondary)' }}>
+                  <div style={{ marginBottom: '6px' }}>
+                    <strong>Database Storage Engine:</strong>{' '}
+                    <code>{status?.deployment_mode === 'standalone' ? 'SQLite 3.45 (WAL Mode)' : 'PostgreSQL 16 Engine'}</code>
+                  </div>
+                  <div style={{ marginBottom: '6px' }}>
+                    <strong>PRAGMA / WAL Tuning:</strong>{' '}
+                    <code>PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -64000;</code>
+                  </div>
+                  <div style={{ marginBottom: '6px' }}>
+                    <strong>Storage Volume Mount:</strong>{' '}
+                    <code>Mount: {status?.data_mount_point ?? '/var/lib/kanban/data'} | FSType: {status?.data_mount_fstype ?? 'overlayfs'}</code>
+                  </div>
+                  <div>
+                    <strong>Sandboxed Subsystem Bounds:</strong>{' '}
+                    <span>{status?.tier_b_sandbox_available ? 'Tier-B nsjail strict cgroups' : 'Tier-A WebAssembly in-process'}</span>
+                  </div>
+                </div>
+              </AdvancedSection>
             </div>
           </div>
         </div>

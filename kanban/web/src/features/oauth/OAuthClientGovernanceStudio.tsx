@@ -14,6 +14,7 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './OAuthClientGovernanceStudio.css';
 
 export function OAuthClientGovernanceStudio(): JSX.Element {
@@ -27,6 +28,9 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const [registerName, setRegisterName] = useState<string>('');
   const [registerUris, setRegisterUris] = useState<string>('');
   const [registerAuthMethod, setRegisterAuthMethod] = useState<'none' | 'private_key_jwt'>('none');
+  const [registerPkceEnforce, setRegisterPkceEnforce] = useState<boolean>(true);
+  const [registerAccessTokenTtl, setRegisterAccessTokenTtl] = useState<number>(3600);
+  const [registerGrantTypes, setRegisterGrantTypes] = useState<string>('authorization_code,refresh_token');
   const [registerSubmitting, setRegisterSubmitting] = useState<boolean>(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
@@ -111,6 +115,9 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
     setRegisterName('');
     setRegisterUris('');
     setRegisterAuthMethod('none');
+    setRegisterPkceEnforce(true);
+    setRegisterAccessTokenTtl(3600);
+    setRegisterGrantTypes('authorization_code,refresh_token');
     setRegisterError(null);
     setRegisteredClient(null);
     setCopiedClientId(false);
@@ -639,26 +646,88 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                     />
                   </div>
 
-                  <div className="kb-oauth-form-field">
-                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
-                      Token Endpoint Authentication Method
-                    </label>
-                    <select
-                      id="reg-auth-method"
-                      className="kb-oauth-form-select"
-                      data-testid="select-auth-method"
-                      value={registerAuthMethod}
-                      onChange={(e) => {
-                        setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
-                      }}
-                      disabled={registerSubmitting}
-                    >
-                      <option value="none">none (Public client with PKCE S256)</option>
-                      <option value="private_key_jwt">
-                        private_key_jwt (Asymmetric client authentication)
-                      </option>
-                    </select>
-                  </div>
+                  <AdvancedSection
+                    title="Advanced OAuth Parameters"
+                    summary="PKCE S256 enforcement, token lifetimes, and grant type restrictions"
+                    testId="advanced-oauth-parameters"
+                  >
+                    <div className="kb-oauth-form-field">
+                      <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+                        Token Endpoint Authentication Method
+                      </label>
+                      <select
+                        id="reg-auth-method"
+                        className="kb-oauth-form-select"
+                        data-testid="select-auth-method"
+                        value={registerAuthMethod}
+                        onChange={(e) => {
+                          setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
+                        }}
+                        disabled={registerSubmitting}
+                      >
+                        <option value="none">none (Public client with PKCE S256)</option>
+                        <option value="private_key_jwt">
+                          private_key_jwt (Asymmetric client authentication)
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="kb-oauth-form-field">
+                      <label className="kb-oauth-form-label" htmlFor="reg-pkce-toggle">
+                        <input
+                          id="reg-pkce-toggle"
+                          type="checkbox"
+                          data-testid="toggle-pkce-s256"
+                          checked={registerPkceEnforce}
+                          onChange={(e) => {
+                            setRegisterPkceEnforce(e.target.checked);
+                          }}
+                          disabled={registerSubmitting}
+                          style={{ marginRight: '8px' }}
+                        />
+                        Enforce PKCE S256 (RFC 9700 Mandatory)
+                      </label>
+                      <span className="kb-form-hint" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                        Enforces SHA-256 code challenge for authorization code exchange. Plain code verifiers are strictly prohibited.
+                      </span>
+                    </div>
+
+                    <div className="kb-oauth-form-field">
+                      <label htmlFor="reg-access-token-ttl" className="kb-oauth-form-label">
+                        Access Token TTL (seconds)
+                      </label>
+                      <input
+                        id="reg-access-token-ttl"
+                        type="number"
+                        className="kb-oauth-form-input"
+                        data-testid="input-access-token-ttl"
+                        min={60}
+                        max={86400}
+                        value={registerAccessTokenTtl}
+                        onChange={(e) => {
+                          setRegisterAccessTokenTtl(Number(e.target.value) || 3600);
+                        }}
+                        disabled={registerSubmitting}
+                      />
+                    </div>
+
+                    <div className="kb-oauth-form-field">
+                      <label htmlFor="reg-grant-types" className="kb-oauth-form-label">
+                        Allowed Grant Types (comma separated)
+                      </label>
+                      <input
+                        id="reg-grant-types"
+                        type="text"
+                        className="kb-oauth-form-input"
+                        data-testid="input-grant-types"
+                        value={registerGrantTypes}
+                        onChange={(e) => {
+                          setRegisterGrantTypes(e.target.value);
+                        }}
+                        disabled={registerSubmitting}
+                      />
+                    </div>
+                  </AdvancedSection>
                 </div>
 
                 <div className="kb-oauth-modal-footer">
