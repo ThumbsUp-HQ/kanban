@@ -738,4 +738,90 @@ describe('PropertiesRail', () => {
     });
     fireEvent.change(cycleSelect, { target: { value: '' } });
   });
+
+  describe('Progressive Disclosure with AdvancedSection (KB-ADVANCED-DISCLOSURE-02, KAN-368)', () => {
+    it('Required Test Case 1 (Positive / Properties Progressive Disclosure): renders AdvancedSection collapsed by default and reveals CreatedByRow and custom-fields when expanded', () => {
+      render(
+        <PropertiesRail issue={mockIssue} projectMetadata={mockMetadata} />
+      );
+
+      const toggle = screen.getByTestId('properties-rail-advanced-toggle');
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+      const details = screen.getByTestId('properties-rail-advanced');
+      expect(details.hasAttribute('open')).toBe(false);
+
+      // Core triage rows remain outside and visible in DOM
+      expect(screen.getByLabelText(/^state$/i)).toBeDefined();
+      expect(screen.getByLabelText(/^priority$/i)).toBeDefined();
+      expect(screen.getByLabelText(/start date/i)).toBeDefined();
+      expect(screen.getByLabelText(/due date/i)).toBeDefined();
+
+      // Expand advanced section via click
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(details.hasAttribute('open')).toBe(true);
+
+      // Verify CreatedByRow and custom fields inside
+      expect(screen.getByRole('button', { name: 'Change...' })).toBeDefined();
+    });
+
+    it('Required Test Case 2 (Active Overrides Badge & defaultAdvancedOpen): displays badge when provenance is overridden and custom fields exist, supports defaultAdvancedOpen', () => {
+      const issueWithOverrides: IssueDetail = {
+        ...mockIssue,
+        provenance: {
+          created_by: { handle: 'alex' },
+          overridden: true,
+          reason: 'Transferred by administrator',
+        },
+        custom_fields: {
+          security_tier: 'critical',
+          squad: 'platform-infra',
+        },
+        links: [
+          {
+            id: 'link-1',
+            link_type: 'branch',
+            link_state: 'active',
+            label: 'feat/KAN-368',
+          },
+        ],
+      };
+
+      render(
+        <PropertiesRail
+          issue={issueWithOverrides}
+          projectMetadata={mockMetadata}
+          defaultAdvancedOpen={true}
+        />
+      );
+
+      const details = screen.getByTestId('properties-rail-advanced');
+      expect(details.hasAttribute('open')).toBe(true);
+
+      // Overrides count: 2 custom fields + 1 provenance + 1 dev link = 4
+      const badge = screen.getByTestId('advanced-active-badge');
+      expect(badge.textContent).toBe('4 custom settings active');
+    });
+
+    it('Required Test Case 3 (Keyboard Navigation & Toggling): toggles collapsed and expanded state with Enter and Space keys', () => {
+      render(
+        <PropertiesRail issue={mockIssue} projectMetadata={mockMetadata} />
+      );
+
+      const toggle = screen.getByTestId('properties-rail-advanced-toggle');
+      const details = screen.getByTestId('properties-rail-advanced');
+      expect(details.hasAttribute('open')).toBe(false);
+
+      // Press Enter to expand
+      fireEvent.keyDown(toggle, { key: 'Enter' });
+      expect(details.hasAttribute('open')).toBe(true);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+      // Press Space to collapse
+      fireEvent.keyDown(toggle, { key: ' ' });
+      expect(details.hasAttribute('open')).toBe(false);
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    });
+  });
 });
