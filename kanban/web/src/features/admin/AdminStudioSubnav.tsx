@@ -88,6 +88,6 @@ export function AdminStudioSubnav({ activeTab }: AdminStudioSubnavProps): JSX.El
   if (inRouter) {
     return <AdminStudioSubnavWithRouter activeTab={activeTab} />;
   }
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const currentPath = window.location.pathname;
   return <AdminStudioSubnavInner activeTab={activeTab} currentPath={currentPath} inRouter={false} />;
 }
