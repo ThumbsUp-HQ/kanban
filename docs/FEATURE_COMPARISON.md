@@ -17,7 +17,7 @@ A kanban is just a kanban until you start digging deeper. On the surface, every 
 ## 1. Security, Identity, Audit & Deployment
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Permissive FOSS License | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
 | On-Prem Multi-Container | ✅ | ❌ | ✅ | 💰 | ❌ | ❌ | ❌ | 💰 |
 | Single-Container Run | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
@@ -35,7 +35,7 @@ Vibe Kanban and OpenAI Symphony are permissive `Apache-2.0` (`✅`): Vibe Kanban
 ## 2. Agentic Tasks, MCP, AI & Workflow Gates
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | MCP Server | ✅ | 🆓🔌 | 🆓🔌 | 🆓🔌 | ✅ | ❌ | ❌ | ❌ |
 | Low-Token Scoped MCP | ✅ | ❌ | ❌ | ❌ | 🔐 | ❌ | ❌ | ❌ |
 | 2-Stage MCP Delete Gate | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -52,7 +52,7 @@ Jira, Plane, and GitHub ship MCP through separate external connectors or package
 ## 3. Issue Tracker & Kanban Board
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Free Forever Tier | ✅ | 🔐 | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Core Kanban & Issues | ✅ | 🔐 | ✅ | ✅ | 🔐 | ❌ | ✅ | ✅ |
 | Five Native Views | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ❌ | ✅ | ✅ |
@@ -73,7 +73,7 @@ OpenAI Symphony is free `Apache-2.0` software (`✅`), but it is a headless poll
 ## 4. Docs, Stickies, Markdown & Object Graph
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Project Docs / Wiki | ✅ | 💸 | 🔐 | 🔐 | ❌ | ❌ | ❌ | ✅ |
 | Project Stickies | ✅ | 💸 | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | Smart Sticky -> Doc Promo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -89,7 +89,7 @@ Jira splits Docs and Stickies into separate paid Confluence and Whiteboard licen
 ## 5. Orchestration, Provenance & Day-2 Operations
 
 | Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Atomic Agent Lease & Fencing | ✅ | ❌ | ❌ | ❌ | 🔐 | 🔐 | ❌ | ❌ |
 | Prompt-Injection Taint Gate | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Dedicated Agent Workpad Slot | ✅ | ❌ | ❌ | ❌ | 🔐 | 🆓🔌 | ❌ | ❌ |
@@ -110,7 +110,7 @@ OpenAI Symphony tracks single-daemon claims in volatile memory (`🔐`) and reli
 Because `👍kanban` makes deliberate, opinionated trade-offs around **zero-trust security (Priority #0)**, **agent-first MCP ergonomics (Priority #1)**, and **100% canonical Markdown persistence** (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`), there are specific use cases it is **not** designed to fit. First is how the 8 compared platforms handle these 6 non-goal domains, followed by a routing guide showing whether to pair a companion tool alongside `👍kanban` (`🔗 Companion`) or adopt a dedicated system of record instead (`🧭 Dedicated`):
 
 | Non-Goal Use Case | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Arbitrary Binary / DAM Hosting | ❌ | 🔐 | 🔐 | 🔐 | ❌ | ❌ | 🔐 | ✅ |
 | WYSIWYG & Freeform Whiteboards | ❌ | 💸 | ❌ | ❌ | ❌ | ❌ | ✅ | 🔐 |
 | Heavy ERP & Financial Billing | ❌ | 💸 | 💰 | ❌ | ❌ | ❌ | 🔐 | ❌ |
