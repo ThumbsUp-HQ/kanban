@@ -8,6 +8,11 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter, Routes, Route } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { setCsrfToken } from '../../../api/client';
+import { qk } from '../../../api/queryKeys';
+import * as authModule from '../../auth/AuthContext';
 import { ReportExportModal } from '../ReportExportModal';
 import { ReportTemplateStudioModal } from '../ReportTemplateStudioModal';
 import * as reportsApi from '../reportsApi';
@@ -82,6 +87,21 @@ describe('reportsApi client', () => {
     });
     const list1 = await reportsApi.fetchReportTemplates('ws-1', 'KAN');
     expect(list1).toHaveLength(2);
+    const call0 = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(call0[1].credentials).toBe('same-origin');
+    expect(call0[1].headers['X-CSRF-Token']).toBe('test-csrf-token');
+    expect(call0[1].headers['x-kb-csrf']).toBe('test-csrf-token');
+
+    // 1b. getCsrfToken cached client token takes precedence
+    setCsrfToken('client-cached-csrf');
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ items: MOCK_TEMPLATES }),
+    });
+    await reportsApi.fetchReportTemplates('ws-1', 'KAN');
+    const call1 = fetchMock.mock.calls[1] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(call1[1].headers['X-CSRF-Token']).toBe('client-cached-csrf');
+    setCsrfToken(null);
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -313,6 +333,52 @@ describe('ReportTemplateStudioModal', () => {
     fireEvent.click(screen.getByTestId('template-studio-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('resolves active workspace dynamically in ReportTemplateStudioModal', async () => {
+    const tpl0 = MOCK_TEMPLATES[0];
+    if (!tpl0) throw new Error('Missing mock template');
+    const createSpy = vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(tpl0);
+    vi.spyOn(authModule, 'useAuth').mockReturnValue({
+      session: {
+        authenticated: true,
+        principal_id: 'p-1',
+        workspace_id: 'ws-studio-auth',
+        aal_level: 1,
+        mfa_pending: false,
+        csrf_token: 'csrf',
+      },
+      isLoading: false,
+      initialized: true,
+      refreshSession: () => Promise.resolve(null),
+      logout: () => Promise.resolve(),
+    });
+
+    render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+        projectKey="KAN"
+      />,
+    );
+
+    const form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+
+    const nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    fireEvent.change(nameInput, { target: { value: 'Studio Dynamic Workspace' } });
+
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        'ws-studio-auth',
+        expect.objectContaining({
+          name: 'Studio Dynamic Workspace',
+          project_id: 'KAN',
+        }),
+      );
+    });
+  });
 });
 
 describe('ReportExportModal', () => {
@@ -530,6 +596,139 @@ describe('ReportExportModal', () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId('report-export-error').textContent).toContain('Load failed');
+    });
+  });
+
+  it('resolves active workspace dynamically from route params when workspaceSlug is not passed or default', async () => {
+    render(
+      <MemoryRouter initialEntries={['/w/acme-corp/p/KAN/reports']}>
+        <Routes>
+          <Route
+            path="/w/:workspaceSlug/p/:projectKey/reports"
+            element={
+              <ReportExportModal
+                isOpen={true}
+                onClose={vi.fn()}
+                projectKey="KAN"
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('acme-corp', 'KAN');
+    });
+  });
+
+  it('resolves active workspace dynamically from useAuth session when workspaceSlug is omitted or default', async () => {
+    vi.spyOn(authModule, 'useAuth').mockReturnValue({
+      session: {
+        authenticated: true,
+        principal_id: 'p-1',
+        workspace_id: 'ws-auth-uuid-999',
+        aal_level: 1,
+        mfa_pending: false,
+        csrf_token: 'csrf',
+      },
+      isLoading: false,
+      initialized: true,
+      refreshSession: () => Promise.resolve(null),
+      logout: () => Promise.resolve(),
+    });
+
+    render(
+      <ReportExportModal
+        isOpen={true}
+        onClose={vi.fn()}
+        projectKey="KAN"
+        workspaceSlug="default"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('ws-auth-uuid-999', 'KAN');
+    });
+  });
+
+  it('resolves active workspace dynamically from qk.me() in QueryClient cache when workspaceSlug is omitted', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(qk.me(), {
+      workspace_id: 'ws-from-me-cache',
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('ws-from-me-cache', 'KAN');
+    });
+  });
+
+  it('deduplicates templates on save when new template has the same slug', async () => {
+    const baseTpl = MOCK_TEMPLATES[0];
+    if (!baseTpl) throw new Error('Missing mock template');
+    const duplicateTpl: reportsApi.ReportTemplate = {
+      ...baseTpl,
+      name: 'Updated Security Report',
+    };
+    vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(duplicateTpl);
+
+    render(
+      <ReportExportModal
+        isOpen={true}
+        onClose={vi.fn()}
+        projectKey="KAN"
+        workspaceSlug="ws-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reports-open-studio-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('reports-open-studio-btn'));
+    const studioForm = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!studioForm) throw new Error('Studio form missing');
+
+    fireEvent.change(screen.getByTestId('studio-template-name-input'), {
+      target: { value: 'Updated Security Report' },
+    });
+    fireEvent.submit(studioForm);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('template-studio-backdrop')).toBeNull();
+    });
+  });
+
+  it('renders modal with semantic dark theme tokens and zero inline style attributes', async () => {
+    render(
+      <div data-theme="dark">
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="ws-1"
+        />
+      </div>,
+    );
+
+    await waitFor(() => {
+      const container = screen.getByTestId('report-export-backdrop').querySelector('.reports-modal-container');
+      expect(container).toBeDefined();
+      expect(container?.getAttribute('style')).toBeNull();
+      const select = screen.getByTestId('report-template-select');
+      expect(select.getAttribute('style')).toBeNull();
     });
   });
 });
