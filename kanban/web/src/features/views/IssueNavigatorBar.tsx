@@ -29,6 +29,10 @@ import type { ActiveFilters } from './FilterDisplayBar';
 import { ReportExportModal } from '../reports/ReportExportModal';
 import './IssueNavigatorBar.css';
 
+export type NavigatorHeaderMode = '1col' | 'basic-2col' | 'advanced-1line';
+
+export const NAVIGATOR_HEADER_MODE_STORAGE_KEY = 'kb_navigator_header_mode';
+
 export interface IssueNavigatorBarProps {
   projectKey: string;
   issues?: IssueItem[];
@@ -57,6 +61,8 @@ export interface IssueNavigatorBarProps {
   onImport?: () => void;
   onExportReports?: () => void;
   className?: string;
+  headerMode?: NavigatorHeaderMode;
+  onHeaderModeChange?: (mode: NavigatorHeaderMode) => void;
 }
 
 export function IssueNavigatorBar({
@@ -87,7 +93,43 @@ export function IssueNavigatorBar({
   onImport,
   onExportReports,
   className = '',
+  headerMode: propHeaderMode,
+  onHeaderModeChange,
 }: IssueNavigatorBarProps): JSX.Element {
+  const [internalHeaderMode, setInternalHeaderMode] = useState<NavigatorHeaderMode>(() => {
+    if (propHeaderMode) {
+      return propHeaderMode;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = window.localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY);
+        if (stored === '1col' || stored === 'basic-2col' || stored === 'advanced-1line') {
+          return stored;
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return '1col';
+  });
+
+  const effectiveHeaderMode = propHeaderMode ?? internalHeaderMode;
+
+  const handleHeaderModeSelect = useCallback(
+    (nextMode: NavigatorHeaderMode) => {
+      setInternalHeaderMode(nextMode);
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, nextMode);
+        } catch {
+          // ignore storage errors
+        }
+      }
+      onHeaderModeChange?.(nextMode);
+    },
+    [onHeaderModeChange],
+  );
+
   const effectiveStates = useMemo(
     () => resolveEffectiveProjectStates(projectStates),
     [projectStates],
@@ -280,8 +322,9 @@ export function IssueNavigatorBar({
 
   return (
     <div
-      className={`issue-navigator-bar ${className}`}
+      className={`issue-navigator-bar issue-navigator-bar--${effectiveHeaderMode} ${className}`}
       data-testid="issue-navigator-bar"
+      data-header-mode={effectiveHeaderMode}
     >
       {/* Top Search & Mode Row */}
       <div className="navigator-top-row">
@@ -356,6 +399,54 @@ export function IssueNavigatorBar({
             }}
           >
             Query
+          </button>
+        </div>
+
+        {/* Compact Search Header Mode Selector (KAN-377) */}
+        <div
+          className="navigator-header-mode-group"
+          data-testid="navigator-header-mode-selector"
+          role="group"
+          aria-label="Header layout mode"
+        >
+          <button
+            type="button"
+            className={`navigator-header-mode-btn ${effectiveHeaderMode === '1col' ? 'navigator-header-mode-btn--active' : ''}`}
+            data-testid="header-mode-1col-btn"
+            aria-pressed={effectiveHeaderMode === '1col'}
+            title="Search only (1col): Dock search inside list pane so issue detail rises to the top"
+            aria-label="Search only (1-column)"
+            onClick={() => {
+              handleHeaderModeSelect('1col');
+            }}
+          >
+            1-Col
+          </button>
+          <button
+            type="button"
+            className={`navigator-header-mode-btn ${effectiveHeaderMode === 'basic-2col' ? 'navigator-header-mode-btn--active' : ''}`}
+            data-testid="header-mode-basic-2col-btn"
+            aria-pressed={effectiveHeaderMode === 'basic-2col'}
+            title="Basic (2col): 2-column header with basic search and compact filter pills"
+            aria-label="Basic (2-column)"
+            onClick={() => {
+              handleHeaderModeSelect('basic-2col');
+            }}
+          >
+            2-Col
+          </button>
+          <button
+            type="button"
+            className={`navigator-header-mode-btn ${effectiveHeaderMode === 'advanced-1line' ? 'navigator-header-mode-btn--active' : ''}`}
+            data-testid="header-mode-advanced-1line-btn"
+            aria-pressed={effectiveHeaderMode === 'advanced-1line'}
+            title="Advanced (2col 1 line): Collapsed single non-wrapping horizontal line across both columns"
+            aria-label="Advanced (2-column 1-line)"
+            onClick={() => {
+              handleHeaderModeSelect('advanced-1line');
+            }}
+          >
+            1-Line
           </button>
         </div>
 

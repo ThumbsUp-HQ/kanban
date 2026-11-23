@@ -3019,4 +3019,144 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       unmount();
     });
   });
+
+  describe('KAN-377: 3 Space-Preserving Search Header Modes', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      window.history.pushState({}, '', '/projects/KAN/issues');
+    });
+
+    it('docks IssueNavigatorBar inside .kb-split-list-pane above ListView in 1col mode so split detail rises to top', () => {
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      const splitLayout = screen.getByTestId('split-list-layout');
+      expect(splitLayout).toBeDefined();
+
+      const splitPane = splitLayout.querySelector('.kb-split-list-pane');
+      expect(splitPane).toBeDefined();
+
+      const navBarInsidePane = splitPane?.querySelector('[data-testid="issue-navigator-bar"]');
+      expect(navBarInsidePane).toBeDefined();
+      expect(navBarInsidePane?.getAttribute('data-header-mode')).toBe('1col');
+
+      // The top-level workspace should NOT have another IssueNavigatorBar above split-list-layout
+      const allNavBars = screen.getAllByTestId('issue-navigator-bar');
+      expect(allNavBars).toHaveLength(1);
+
+      unmount();
+    });
+
+    it('transitions between 1col, basic-2col, and advanced-1line header modes and persists to localStorage', () => {
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      // 1. Initial 1col mode
+      let navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+
+      // 2. Click 2-Col button
+      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
+      fireEvent.click(col2Btn);
+
+      navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('basic-2col');
+
+      // Verify it is now above .kb-split-layout and NOT inside .kb-split-list-pane
+      const splitPane = document.querySelector('.kb-split-list-pane');
+      expect(splitPane?.querySelector('[data-testid="issue-navigator-bar"]')).toBeNull();
+
+      // 3. Click 1-Line button
+      const line1Btn = screen.getByTestId('header-mode-advanced-1line-btn');
+      fireEvent.click(line1Btn);
+
+      navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('advanced-1line');
+
+      // 4. Click 1-Col button to dock back inside list pane
+      const col1Btn = screen.getByTestId('header-mode-1col-btn');
+      fireEvent.click(col1Btn);
+
+      navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('1col');
+      expect(splitPane?.querySelector('[data-testid="issue-navigator-bar"]')).toBeDefined();
+
+      unmount();
+    });
+
+    it('restores headerMode from localStorage on mount and verifies split issue view rises to top', () => {
+      localStorage.setItem('kb_navigator_header_mode', 'advanced-1line');
+      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-1');
+
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+
+      // Verify split layout has both list pane and split issue surface
+      const splitLayout = screen.getByTestId('split-list-layout');
+      expect(splitLayout.querySelector('.kb-split-list-pane')).toBeDefined();
+      expect(splitLayout.querySelector('[data-testid="issue-surface-root"]')).toBeDefined();
+
+      // Switch to 1col mode and confirm split issue rises to the top (no navigator bar above layout)
+      const col1Btn = screen.getByTestId('header-mode-1col-btn');
+      fireEvent.click(col1Btn);
+
+      const workspace = screen.getByTestId('issues-workspace');
+      // In 1col mode, split-list-layout is the first major layout child in issues-workspace
+      const directChildren = Array.from(workspace.children);
+      const splitLayoutIndex = directChildren.findIndex((el) => el.getAttribute('data-testid') === 'split-list-layout');
+      expect(splitLayoutIndex).toBe(0);
+
+      unmount();
+    });
+
+    it('opens and closes CSV and Report export modals from IssueNavigatorBar in list layout', () => {
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />,
+      );
+
+      // Open and close CSV Export modal
+      fireEvent.click(screen.getByTestId('navigator-export-btn'));
+      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+
+      // Open and close CSV Import modal
+      fireEvent.click(screen.getByTestId('navigator-import-btn'));
+      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+
+      // Open and close Reports modal
+      fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
+      expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
+      fireEvent.click(screen.getByTestId('report-export-close-btn'));
+      expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
+
+      unmount();
+    });
+  });
 });

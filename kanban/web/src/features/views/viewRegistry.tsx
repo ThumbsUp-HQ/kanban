@@ -8,7 +8,11 @@ import { TableView } from '../table/TableView';
 import { CalendarView } from '../calendar/CalendarView';
 import { TimelineView } from '../timeline/TimelineView';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
-import { IssueNavigatorBar } from './IssueNavigatorBar';
+import {
+  IssueNavigatorBar,
+  type NavigatorHeaderMode,
+  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
+} from './IssueNavigatorBar';
 import {
   createActionableStateFilterPreference,
   createAllStatesFilterPreference,
@@ -63,7 +67,10 @@ export {
   QuickFieldPopover,
   StateFilterPopover,
   useIssueKeyboardMap,
+  IssueNavigatorBar,
+  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
 };
+export type { NavigatorHeaderMode };
 
 export type ViewLayout = 'board' | 'list' | 'table' | 'calendar' | 'timeline' | 'grid';
 
@@ -339,6 +346,31 @@ export function IssuesWorkspaceRoute({
     [initialIssues, projectKey, queryClient],
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const [navigatorHeaderMode, setNavigatorHeaderMode] = useState<NavigatorHeaderMode>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = window.localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY);
+        if (stored === '1col' || stored === 'basic-2col' || stored === 'advanced-1line') {
+          return stored;
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return '1col';
+  });
+
+  const handleNavigatorHeaderModeChange = useCallback((mode: NavigatorHeaderMode) => {
+    setNavigatorHeaderMode(mode);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, mode);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, []);
 
   const [peekParam, setPeekParam] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get('peek')
@@ -1243,42 +1275,46 @@ export function IssuesWorkspaceRoute({
         )}
         {/* 1. Filter and Display Bar */}
       {layout === 'list' ? (
-        <IssueNavigatorBar
-          projectKey={projectKey}
-          issues={issues}
-          projectStates={projectStates}
-          modulesEnabled={modulesEnabled}
-          activeFilters={activeFilters}
-          onFiltersChange={setActiveFilters}
-          stateFilter={stateFilterPref}
-          onStateFilterChange={handleUserStateFilterChange}
-          onStatePopoverOpenChange={setIsStatePopoverOpen}
-          hiddenCompletedCount={
-            searchQuery.trim().length > 0 &&
-            !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
-              ? hiddenByStateCount
-              : 0
-          }
-          hiddenExactMatch={hiddenExactSearchMatch}
-          onShowAllStates={handleShowAllStates}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          onSearchSubmit={() => {
-            setActiveFilters((prev) => ({ ...prev }));
-          }}
-          queryMode={queryMode}
-          onQueryModeChange={handleQueryModeChange}
-          favoritesOnly={favoritesOnly}
-          onToggleFavoritesOnly={() => {
-            setFavoritesOnly((prev) => !prev);
-          }}
-          savedViews={savedViews}
-          activeViewId={activeViewId}
-          onSelectSavedView={handleSelectSavedView}
-          onExport={() => { setCsvModalTab('export'); }}
-          onImport={() => { setCsvModalTab('import'); }}
-          onExportReports={() => { setIsReportsModalOpen(true); }}
-        />
+        navigatorHeaderMode !== '1col' ? (
+          <IssueNavigatorBar
+            projectKey={projectKey}
+            issues={issues}
+            projectStates={projectStates}
+            modulesEnabled={modulesEnabled}
+            activeFilters={activeFilters}
+            onFiltersChange={setActiveFilters}
+            stateFilter={stateFilterPref}
+            onStateFilterChange={handleUserStateFilterChange}
+            onStatePopoverOpenChange={setIsStatePopoverOpen}
+            hiddenCompletedCount={
+              searchQuery.trim().length > 0 &&
+              !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
+                ? hiddenByStateCount
+                : 0
+            }
+            hiddenExactMatch={hiddenExactSearchMatch}
+            onShowAllStates={handleShowAllStates}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            onSearchSubmit={() => {
+              setActiveFilters((prev) => ({ ...prev }));
+            }}
+            queryMode={queryMode}
+            onQueryModeChange={handleQueryModeChange}
+            favoritesOnly={favoritesOnly}
+            onToggleFavoritesOnly={() => {
+              setFavoritesOnly((prev) => !prev);
+            }}
+            savedViews={savedViews}
+            activeViewId={activeViewId}
+            onSelectSavedView={handleSelectSavedView}
+            onExport={() => { setCsvModalTab('export'); }}
+            onImport={() => { setCsvModalTab('import'); }}
+            onExportReports={() => { setIsReportsModalOpen(true); }}
+            headerMode={navigatorHeaderMode}
+            onHeaderModeChange={handleNavigatorHeaderModeChange}
+          />
+        ) : null
       ) : (
         <FilterDisplayBar
           activeFilters={activeFilters}
@@ -1349,6 +1385,46 @@ export function IssuesWorkspaceRoute({
       ) : layout === 'list' ? (
         <div className="kb-split-layout" data-testid="split-list-layout">
           <div className="kb-split-list-pane">
+            {navigatorHeaderMode === '1col' && (
+              <IssueNavigatorBar
+                projectKey={projectKey}
+                issues={issues}
+                projectStates={projectStates}
+                modulesEnabled={modulesEnabled}
+                activeFilters={activeFilters}
+                onFiltersChange={setActiveFilters}
+                stateFilter={stateFilterPref}
+                onStateFilterChange={handleUserStateFilterChange}
+                onStatePopoverOpenChange={setIsStatePopoverOpen}
+                hiddenCompletedCount={
+                  searchQuery.trim().length > 0 &&
+                  !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
+                    ? hiddenByStateCount
+                    : 0
+                }
+                hiddenExactMatch={hiddenExactSearchMatch}
+                onShowAllStates={handleShowAllStates}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                onSearchSubmit={() => {
+                  setActiveFilters((prev) => ({ ...prev }));
+                }}
+                queryMode={queryMode}
+                onQueryModeChange={handleQueryModeChange}
+                favoritesOnly={favoritesOnly}
+                onToggleFavoritesOnly={() => {
+                  setFavoritesOnly((prev) => !prev);
+                }}
+                savedViews={savedViews}
+                activeViewId={activeViewId}
+                onSelectSavedView={handleSelectSavedView}
+                onExport={() => { setCsvModalTab('export'); }}
+                onImport={() => { setCsvModalTab('import'); }}
+                onExportReports={() => { setIsReportsModalOpen(true); }}
+                headerMode={navigatorHeaderMode}
+                onHeaderModeChange={handleNavigatorHeaderModeChange}
+              />
+            )}
             <ListView
               issues={sortedRailIssues}
               isLoading={isInitialLoading || issuesQuery.isLoading}

@@ -106,6 +106,47 @@
   transition: all 120ms ease;
 }
 
+.navigator-header-mode-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.navigator-header-mode-btn {
+  background: transparent;
+  color: var(--fg-muted, #94a3b8);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+  white-space: nowrap;
+}
+
+.navigator-header-mode-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.navigator-header-mode-btn--active {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  font-weight: 600;
+}
+
+.navigator-header-mode-btn:focus-visible {
+  outline: 2px solid var(--focus-ring, #6366f1);
+  outline-offset: 1px;
+}
+
 .navigator-filters-toggle {
   display: none;
   align-items: center;
@@ -148,6 +189,7 @@
 
   .navigator-search-btn,
   .navigator-mode-btn,
+  .navigator-header-mode-btn,
   .navigator-fav-toggle {
     min-height: 44px;
     height: 44px;
@@ -589,4 +631,163 @@
 .navigator-saved-views-select:focus-visible {
   outline: 2px solid var(--focus-ring, #6366f1);
   outline-offset: 1px;
+}
+
+/* ==========================================================================
+   Space-Preserving Header Layout Modes (KAN-377)
+   Modes: 1col (Search only), basic-2col, advanced-1line
+   ========================================================================== */
+
+/* 1. Search Only (1col) Mode: Docks inside .kb-split-list-pane above <ListView /> */
+.issue-navigator-bar[data-header-mode="1col"] {
+  padding: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: var(--shadow-sm);
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-top-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2, 8px);
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-search-form {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-search-input,
+.issue-navigator-bar[data-header-mode="1col"] .navigator-query-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-filter-select {
+  font-size: 11px;
+  height: 26px;
+  padding: 0 4px;
+  max-width: 100%;
+  flex: 1 1 calc(50% - 4px);
+  min-width: 80px;
+}
+
+.issue-navigator-bar[data-header-mode="1col"] .navigator-state-trigger,
+.issue-navigator-bar[data-header-mode="1col"] .navigator-fav-toggle,
+.issue-navigator-bar[data-header-mode="1col"] .navigator-reports-btn {
+  font-size: 11px;
+  height: 26px;
+  padding: 0 6px;
+  flex: 1 1 calc(50% - 4px);
+  min-width: 80px;
+}
+
+/* 2. Basic (2col) Mode: Above .kb-split-layout across 2 columns with basic search input and compact filter pills */
+.issue-navigator-bar[data-header-mode="basic-2col"] {
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  margin-bottom: var(--space-3, 12px);
+}
+
+.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-filters-row {
+  gap: var(--space-2, 8px);
+}
+
+.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-filter-select,
+.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-state-trigger,
+.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-fav-toggle,
+.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-reports-btn {
+  border-radius: var(--radius-full, 9999px);
+  padding: 0 10px;
+  background: var(--bg-surface, #1e2025);
+}
+
+/* 3. Advanced (2col 1 line) Mode: Strictly single non-wrapping horizontal line across both columns */
+.issue-navigator-bar[data-header-mode="advanced-1line"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-2, 8px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding: var(--space-1, 4px) var(--space-3, 12px);
+  min-height: 38px;
+  scrollbar-width: thin;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-top-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-2, 8px);
+  flex: 0 0 auto;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-form {
+  flex: 0 1 200px;
+  min-width: 140px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-input,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-query-input {
+  height: 26px;
+  font-size: 11px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-btn {
+  height: 26px;
+  padding: 0 var(--space-2, 8px);
+  font-size: 11px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-mode-btn,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-header-mode-btn,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-csv-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+  height: 24px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-filters-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-2, 8px);
+  flex: 0 0 auto;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-filter-select,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-state-trigger,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-fav-toggle,
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-reports-btn {
+  height: 26px;
+  font-size: 11px;
+  padding: 0 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-saved-views-strip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--space-1, 4px);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  flex-shrink: 0;
 }
