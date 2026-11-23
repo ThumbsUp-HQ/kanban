@@ -1,0 +1,140 @@
+diff --git a/kanban/api/v1/flow_metrics.py b/kanban/api/v1/flow_metrics.py
+index 79bb4ff3..33e446fa 100644
+--- a/kanban/api/v1/flow_metrics.py
++++ b/kanban/api/v1/flow_metrics.py
+@@ -65,6 +65,14 @@ async def get_project_flow_metrics(  # noqa: PLR0913, PLR0917
+             description="Remaining items count for 'When?' Monte Carlo simulation (1 to 10000)",
+         ),
+     ] = 20,
++    trials: Annotated[
++        int,
++        Query(
++            ge=10,
++            le=50000,
++            description="Monte Carlo simulation trials (10 to 50000)",
++        ),
++    ] = 10000,
+     seed: Annotated[
+         int | None,
+         Query(
+@@ -84,4 +92,5 @@ async def get_project_flow_metrics(  # noqa: PLR0913, PLR0917
+             horizon_days=horizon_days,
+             target_items=target_items,
+             seed=seed,
++            trials=trials,
+         )
+diff --git a/kanban/services/flow_metrics.py b/kanban/services/flow_metrics.py
+index 0efcb488..4ca5e4e6 100644
+--- a/kanban/services/flow_metrics.py
++++ b/kanban/services/flow_metrics.py
+@@ -17,6 +17,7 @@ from __future__ import annotations
+ import datetime as dt
+ import math
+ import random
++import time
+ import uuid
+ from collections import Counter
+ from itertools import batched
+@@ -53,7 +54,10 @@ MIN_TARGET_ITEMS: Final[int] = 1
+ MAX_TARGET_ITEMS: Final[int] = 10000
+ MIN_HORIZON_DAYS: Final[int] = 1
+ MAX_HORIZON_DAYS: Final[int] = 366
++MIN_TRIALS: Final[int] = 10
++MAX_TRIALS: Final[int] = 50000
+ MONTE_CARLO_TRIALS: Final[int] = 10000
++DEFAULT_MONTE_CARLO_TIMEOUT_SECONDS: Final[float] = 2.0
+ _MAX_FORECAST_DAYS: Final[int] = 3650
+ 
+ 
+@@ -75,15 +79,33 @@ def _calculate_percentile(data: list[float], p: float) -> float:
+     return round(float(d0 + d1), 2)
+ 
+ 
+-def _simulate_monte_carlo(  # noqa: PLR0913, PLR0917
++def _simulate_monte_carlo(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+     history: list[int],
+     horizon_days: int,
+     target_items: int,
+     today: dt.date,
+     trials: int = MONTE_CARLO_TRIALS,
+     seed: int | None = None,
++    timeout_seconds: float = DEFAULT_MONTE_CARLO_TIMEOUT_SECONDS,
+ ) -> MonteCarloForecast:
+-    """Execute high-speed pure Python 10,000-trial Monte Carlo simulation."""
++    """Execute high-speed pure Python Monte Carlo simulation with bounds and timeout clamping."""
++    if not (MIN_TRIALS <= trials <= MAX_TRIALS):
++        msg = f"trials must be between {MIN_TRIALS} and {MAX_TRIALS} (got {trials})"
++        raise ValueError(msg)
++    if not (MIN_HORIZON_DAYS <= horizon_days <= MAX_HORIZON_DAYS):
++        msg = (
++            f"horizon_days must be between {MIN_HORIZON_DAYS} and {MAX_HORIZON_DAYS} "
++            f"(got {horizon_days})"
++        )
++        raise ValueError(msg)
++    if not (MIN_TARGET_ITEMS <= target_items <= MAX_TARGET_ITEMS):
++        msg = (
++            f"target_items must be between {MIN_TARGET_ITEMS} and {MAX_TARGET_ITEMS} "
++            f"(got {target_items})"
++        )
++        raise ValueError(msg)
++
++    start_time = time.monotonic()
+     rng = random.Random(seed)  # noqa: S311
+     total_history = len(history)
+     avg_throughput = round(sum(history) / total_history, 2) if total_history > 0 else 0.0
+@@ -122,6 +144,10 @@ def _simulate_monte_carlo(  # noqa: PLR0913, PLR0917
+         append_when = when_days.append
+ 
+         for b in batched(pool_samples, chunk_size):
++            if time.monotonic() - start_time > timeout_seconds:
++                while len(when_days) < trials:
++                    append_when(_MAX_FORECAST_DAYS)
++                break
+             cum = 0
+             day = 0
+             for x in b:
+@@ -130,9 +156,12 @@ def _simulate_monte_carlo(  # noqa: PLR0913, PLR0917
+                 if cum >= target_items:
+                     break
+             else:
+-                # Fallback for rare extreme tails
++                # Fallback for rare extreme tails with timeout clamping
+                 rem = target_items - cum
+                 while rem > 0 and day < _MAX_FORECAST_DAYS:
++                    if time.monotonic() - start_time > timeout_seconds:
++                        day = _MAX_FORECAST_DAYS
++                        break
+                     day += 1
+                     rem -= rng.choice(history)
+             append_when(day)
+@@ -186,6 +215,7 @@ async def compute_project_flow_metrics(  # noqa: C901, PLR0912, PLR0913, PLR0915
+     horizon_days: int = 14,
+     target_items: int = 20,
+     seed: int | None = None,
++    trials: int = MONTE_CARLO_TRIALS,
+ ) -> ProjectFlowMetricsResponse:
+     """Compute native statistical flow telemetry metrics under caller RLS session."""
+     if not (MIN_WINDOW_DAYS <= window_days <= MAX_WINDOW_DAYS):
+@@ -209,6 +239,13 @@ async def compute_project_flow_metrics(  # noqa: C901, PLR0912, PLR0913, PLR0915
+             title="Invalid Parameter",
+             detail=f"horizon_days must be between {MIN_HORIZON_DAYS} and {MAX_HORIZON_DAYS}",
+         )
++    if not (MIN_TRIALS <= trials <= MAX_TRIALS):
++        raise ProblemException(
++            code="INVALID_PARAMETER",
++            status=422,
++            title="Invalid Parameter",
++            detail=f"trials must be between {MIN_TRIALS} and {MAX_TRIALS}",
++        )
+ 
+     # RLS Project Check
+     project = await session.get(Project, project_id)
+@@ -589,7 +626,7 @@ async def compute_project_flow_metrics(  # noqa: C901, PLR0912, PLR0913, PLR0915
+         horizon_days=horizon_days,
+         target_items=target_items,
+         today=today,
+-        trials=MONTE_CARLO_TRIALS,
++        trials=trials,
+         seed=seed,
+     )
+ 

@@ -65,6 +65,14 @@ async def get_project_flow_metrics(  # noqa: PLR0913, PLR0917
             description="Remaining items count for 'When?' Monte Carlo simulation (1 to 10000)",
         ),
     ] = 20,
+    trials: Annotated[
+        int,
+        Query(
+            ge=10,
+            le=50000,
+            description="Monte Carlo simulation trials (10 to 50000)",
+        ),
+    ] = 10000,
     seed: Annotated[
         int | None,
         Query(
@@ -84,4 +92,5 @@ async def get_project_flow_metrics(  # noqa: PLR0913, PLR0917
             horizon_days=horizon_days,
             target_items=target_items,
             seed=seed,
+            trials=trials,
         )

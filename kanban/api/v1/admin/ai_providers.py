@@ -9,7 +9,7 @@ import os
 import uuid  # noqa: TC003
 from typing import Annotated, Literal, cast
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,8 @@ from kanban.api.v1.admin.ai_schemas import (
     SavedProviderProbeRequest,
 )
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.security.envelope import KekProvider, StaticKekProvider
+from kanban.security.keys import KeyMaterial  # noqa: TC001
 from kanban.services.activity import ActivityEventType, record_activity
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,41 @@ router = APIRouter(
 
 Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
+
+
+def _get_kek_provider(request: Request) -> KekProvider:
+    """Resolve or construct KekProvider from app state, refusing static fallback."""
+    kek: KekProvider | None = getattr(request.app.state, "kek_provider", None)
+    if kek is not None:
+        return kek
+
+    key_material: KeyMaterial | None = getattr(request.app.state, "key_material", None)
+    if key_material is not None:
+        resolved = StaticKekProvider(
+            {key_material.master_kek_kid: key_material.master_kek},
+            current=key_material.master_kek_kid,
+        )
+        request.app.state.kek_provider = resolved
+        return resolved
+
+    try:
+        from kanban.security.keys import load_key_material  # noqa: PLC0415
+
+        km = load_key_material()
+        loaded = StaticKekProvider(
+            {km.master_kek_kid: km.master_kek},
+            current=km.master_kek_kid,
+        )
+        request.app.state.kek_provider = loaded
+    except Exception as exc:
+        raise ProblemException(
+            code="KEK_PROVIDER_UNAVAILABLE",
+            status=500,
+            title="KEK Provider Unavailable",
+            detail=f"Cryptographic key custody provider unavailable: {exc}",
+        ) from exc
+    else:
+        return loaded
 
 
 def _to_public_config(config: AIProviderConfig) -> ProviderConfigPublic:
@@ -145,12 +182,13 @@ async def _assert_admin_for_scope(
 async def list_providers(
     caller: Caller,
     session: Session,
+    request: Request,
     project_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[ProviderConfigPublic]:
     """List AI provider configurations for workspace or project with API keys omitted."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, project_id)
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         configs = await service.list_configs(
             workspace_id=caller.workspace_id,
             project_id=project_id,
@@ -237,11 +275,12 @@ async def probe_provider_models(
     body: ProviderProbeRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> ProviderProbeResult:
     """Probe models for an unsaved AI provider draft configuration."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, None)
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
         res = await service.probe_provider(
@@ -262,11 +301,12 @@ async def check_provider_connection(
     body: ProviderProbeRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> ProviderProbeResult:
     """Test connectivity, auth, and model listing for an unsaved AI provider configuration."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, None)
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
         res = await service.probe_provider(
@@ -287,6 +327,7 @@ async def probe_saved_provider_models(
     provider_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    request: Request,
     body: SavedProviderProbeRequest | None = None,
 ) -> ProviderProbeResult:
     """Probe models for a saved AI provider configuration using stored envelope key."""
@@ -298,7 +339,7 @@ async def probe_saved_provider_models(
             not_found()
         await _assert_admin_for_scope(session, caller, config.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = (
             body.api_key.get_secret_value()
@@ -324,6 +365,7 @@ async def check_saved_provider_connection(
     provider_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    request: Request,
     body: SavedProviderProbeRequest | None = None,
 ) -> ProviderProbeResult:
     """Test connectivity, auth, and model listing for a saved AI provider configuration."""
@@ -335,7 +377,7 @@ async def check_saved_provider_connection(
             not_found()
         await _assert_admin_for_scope(session, caller, config.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = (
             body.api_key.get_secret_value()
@@ -384,12 +426,13 @@ async def create_provider(
     caller: Caller,
     session: Session,
     response: Response,
+    request: Request,
 ) -> ProviderConfigPublic:
     """Create an AI provider configuration enforcing residency tier, air gap, and custody."""
     async with timing_floor(floor_ms=25.0):
         await _assert_admin_for_scope(session, caller, body.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
 
@@ -452,6 +495,7 @@ async def update_provider(
     body: ProviderConfigUpdate,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> ProviderConfigPublic:
     """Update settings, model allowlist, URL, priority, or credentials on an AI provider."""
     async with timing_floor(floor_ms=25.0):
@@ -471,7 +515,7 @@ async def update_provider(
             else:
                 new_key = body.api_key.get_secret_value()
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
 
         try:
@@ -529,6 +573,7 @@ async def disable_provider(
     provider_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> ProviderConfigPublic:
     """Disable an active AI provider configuration, preventing subsequent completions."""
     async with timing_floor(floor_ms=25.0):
@@ -540,7 +585,7 @@ async def disable_provider(
 
         await _assert_admin_for_scope(session, caller, config.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         disabled = await service.disable_config(provider_id)
 
         await record_activity(
@@ -566,6 +611,7 @@ async def delete_provider(
     provider_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> Response:
     """Delete an AI provider configuration."""
     async with timing_floor(floor_ms=25.0):
@@ -577,7 +623,7 @@ async def delete_provider(
 
         await _assert_admin_for_scope(session, caller, config.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         await service.delete_config(provider_id)
 
         await record_activity(
@@ -604,6 +650,7 @@ async def get_budgets(
     provider_config_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> list[BudgetRecord]:
     """List token consumption ledger records and caps for a provider configuration."""
     async with timing_floor(floor_ms=25.0):
@@ -615,7 +662,7 @@ async def get_budgets(
 
         await _assert_admin_for_scope(session, caller, config.project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         ledgers = await service.get_budgets(
             provider_config_id=provider_config_id,
             project_id=config.project_id,
@@ -641,6 +688,7 @@ async def set_budget(
     body: BudgetSetRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> BudgetRecord:
     """Configure or update maximum token budget limits for an AI provider configuration."""
     async with timing_floor(floor_ms=25.0):
@@ -653,7 +701,7 @@ async def set_budget(
         target_project_id = body.project_id or config.project_id
         await _assert_admin_for_scope(session, caller, target_project_id)
 
-        service = AIProviderConfigService(session)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         try:
             ledger = await service.set_budget(
                 workspace_id=caller.workspace_id,

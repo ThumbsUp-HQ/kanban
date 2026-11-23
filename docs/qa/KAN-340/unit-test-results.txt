@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan337-341-814e49d3/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan337-341-814e49d3
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 4 items
+
+kanban/tests/security/test_scheduled_backup_kek_guard.py::test_case_1_missing_kek_rejects_with_value_error PASSED [ 25%]
+kanban/tests/security/test_scheduled_backup_kek_guard.py::test_case_2_valid_kb_master_kek_b64_accepted PASSED [ 50%]
+kanban/tests/security/test_scheduled_backup_kek_guard.py::test_case_3_explicit_key_source_bypasses_env_var PASSED [ 75%]
+kanban/tests/security/test_scheduled_backup_kek_guard.py::test_case_4_background_loop_logs_error_without_crash PASSED [100%]
+
+============================== 4 passed in 0.05s ===============================

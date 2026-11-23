@@ -8,12 +8,15 @@ import asyncio
 import base64
 import contextlib
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+logger: Final = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,6 +28,7 @@ __all__ = [
     "ChallengeHelloFrame",
     "ChallengeResponseFrame",
     "ConnectedRunner",
+    "CrossRunnerJobForgeryError",
     "HeartbeatFrame",
     "HelloAckFrame",
     "HelloFrame",
@@ -78,6 +82,18 @@ class RunnerAlreadyConnectedError(RemoteRunnerError):
     def __init__(self, code: str = "ALREADY_CONNECTED", detail: str = "") -> None:
         """Initialize with error code ALREADY_CONNECTED and descriptive detail."""
         super().__init__(code, detail or "Runner is already connected")
+
+
+class CrossRunnerJobForgeryError(RemoteRunnerError):
+    """Raised when runner attempts to submit results or events for another runner's job."""
+
+    def __init__(
+        self,
+        code: str = "CROSS_RUNNER_FORGERY_DETECTED",
+        detail: str = "Runner does not own the specified job",
+    ) -> None:
+        """Initialize with error code CROSS_RUNNER_FORGERY_DETECTED and descriptive detail."""
+        super().__init__(code, detail)
 
 
 class RemoteRunnerExecutionError(RemoteRunnerError):
@@ -372,9 +388,27 @@ class RunnerWssHub:
             runner.active_jobs = set(hb.active_jobs)
         elif frame_type == "job.tool_event":
             event = JobToolEventFrame.model_validate(data)
+            owner_runner_id = self._job_to_runner.get(event.job_id)
+            if owner_runner_id is None or owner_runner_id != runner_id:
+                msg = (
+                    f"Cross-runner tool event forgery: runner {runner_id} does not own "
+                    f"job {event.job_id} (assigned to {owner_runner_id})"
+                )
+                logger.warning(msg)
+                err_code = "CROSS_RUNNER_FORGERY_DETECTED"
+                raise CrossRunnerJobForgeryError(err_code, msg)
             self._tool_events.append(event.model_dump())
         elif frame_type == "job.result":
             res = JobResultFrame.model_validate(data)
+            owner_runner_id = self._job_to_runner.get(res.job_id)
+            if owner_runner_id is None or owner_runner_id != runner_id:
+                msg = (
+                    f"Cross-runner result forgery: runner {runner_id} does not own "
+                    f"job {res.job_id} (assigned to {owner_runner_id})"
+                )
+                logger.warning(msg)
+                err_code = "CROSS_RUNNER_FORGERY_DETECTED"
+                raise CrossRunnerJobForgeryError(err_code, msg)
             fut = self._pending_jobs.get(res.job_id)
             if fut and not fut.done():
                 fut.set_result(res.model_dump())
