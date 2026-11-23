@@ -1,0 +1,42 @@
+=== Pytest Unit Tests ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan71-b2c652cd/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan71-b2c652cd
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 19 items
+
+kanban/tests/issues/test_issue_workpad.py::test_workpad_service_crud_and_cas PASSED [  5%]
+kanban/tests/issues/test_issue_workpad.py::test_workpad_service_surrogate_rejection_and_bounds PASSED [ 10%]
+kanban/tests/issues/test_issue_workpad.py::test_workpad_api_endpoints_and_silence PASSED [ 15%]
+kanban/tests/issues/test_issue_workpad.py::test_begin_work_with_use_workpad PASSED [ 21%]
+kanban/tests/workflows/test_rework_circuit_breaker.py::test_rework_circuit_breaker_blocks_agent_transitions PASSED [ 26%]
+kanban/tests/workflows/test_rework_circuit_breaker.py::test_rework_breaker_reset_rejects_agent_caller PASSED [ 31%]
+kanban/tests/workflows/test_rework_circuit_breaker.py::test_human_transition_clears_breaker PASSED [ 36%]
+agent/tests/test_budget_real_wiring.py::test_settle_preserves_strict_cap PASSED [ 42%]
+agent/tests/test_budget_real_wiring.py::test_in_app_sdk_harness_real_budget_wiring PASSED [ 47%]
+mcp/tests/test_mcp_rate_limits.py::test_mcp_tools_call_rate_limiting PASSED [ 52%]
+database/tests/migrations/test_p6_10_issue_workpads_and_rework_breaker_migration.py::test_p6_10_issue_workpads_and_rework_breaker_migration_lifecycle PASSED [ 57%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 63%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 68%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 73%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 78%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 84%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 89%]
+mcp/tests/test_schema_budget.py::test_schema_budget_agent_tools PASSED   [ 94%]
+mcp/tests/test_schema_budget.py::test_schema_budget_docs_tools PASSED    [100%]
+
+============================== 19 passed in 3.75s ==============================
+
+=== Vitest Frontend Unit Tests ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan71-b2c652cd/kanban/web
+
+ ✓ src/features/drawer/IssueSurface.test.tsx (57 tests) 2709ms
+
+ Test Files  1 passed (1)
+      Tests  57 passed (57)
+   Start at  20:13:27
+   Duration  4.10s (tests 69%, environment 17%, import 11%, transform 2%)
+

@@ -8,6 +8,7 @@ import difflib
 import inspect
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -401,7 +402,7 @@ class McpProtocolHandler:
 
         return await self._process_valid_payload(payload, request)
 
-    async def _process_valid_payload(  # noqa: C901, PLR0911, PLR0912
+    async def _process_valid_payload(  # noqa: C901, PLR0911, PLR0912, PLR0915
         self,
         payload: dict[str, Any],
         request: Request,
@@ -509,6 +510,67 @@ class McpProtocolHandler:
             with contextlib.suppress(ValueError):
                 header_aal = int(request.headers["x-kb-aal-level"])
                 auth_context = replace(auth_context, aal_level=header_aal)
+
+        if method == "tools/call":
+            from kanban.security.ratelimit import MCP_TOOLS_CALL_RATE_LIMIT, make_key  # noqa: PLC0415
+            from kanban.security.ratelimit.decorator import build_rate_limiter  # noqa: PLC0415
+
+            active_limiter = None
+            if hasattr(request, "app") and hasattr(request.app, "state"):
+                active_limiter = getattr(request.app.state, "rate_limiter", None)
+            if active_limiter is None:
+                sf = getattr(getattr(request, "app", None), "state", None)
+                sf_obj = getattr(sf, "session_factory", None) if sf else None
+                engine = getattr(sf_obj, "engine", None) if sf_obj else None
+                active_limiter = build_rate_limiter(
+                    getattr(getattr(request, "app", None), "state", None),
+                    engine=engine,
+                )
+
+            key_id = (
+                (current_token_sha256.hex() if current_token_sha256 else None)
+                or session_id
+                or (request.client.host if request.client else "unknown")
+            )
+            km = (
+                getattr(request.app.state, "key_material", None)
+                if hasattr(request, "app") and hasattr(request.app, "state")
+                else None
+            )
+            hmac_k = getattr(km, "session_hmac_key", None) if km else None
+            if hmac_k is None and not (
+                os.environ.get("KANBAN_SESSION_HMAC_KEY") or os.environ.get("KB_SESSION_HMAC_KEY")
+            ):
+                hmac_k = b"\x01" * 32
+            rl_key = make_key(MCP_TOOLS_CALL_RATE_LIMIT, key_id, session_hmac_key=hmac_k)
+            try:
+                rl_decision = await active_limiter.hit(MCP_TOOLS_CALL_RATE_LIMIT, rl_key)
+                if not rl_decision.allowed:
+                    return JSONResponse(
+                        {
+                            "type": "about:blank",
+                            "title": "Rate Limit Exceeded",
+                            "status": 429,
+                            "detail": (
+                                f"Rate limit exceeded for policy '{MCP_TOOLS_CALL_RATE_LIMIT.name}'"
+                            ),
+                            "code": "RATE_LIMITED",
+                        },
+                        status_code=429,
+                        headers={"Retry-After": str(rl_decision.retry_after_seconds)},
+                    )
+            except Exception:  # noqa: BLE001
+                if MCP_TOOLS_CALL_RATE_LIMIT.fail_mode == "closed":
+                    return JSONResponse(
+                        {
+                            "type": "about:blank",
+                            "title": "Rate Limiter Unavailable",
+                            "status": 503,
+                            "detail": "Rate limiting backend is temporarily unavailable",
+                            "code": "RATE_LIMIT_UNAVAILABLE",
+                        },
+                        status_code=503,
+                    )
 
         return await self._dispatch_method(
             method,

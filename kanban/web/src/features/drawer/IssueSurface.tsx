@@ -595,6 +595,7 @@ function IssueSurfaceContent({
   const DescriptionSlot = slots.description;
   const RailSlot = slots.rail;
   const ActivitySlot = slots.activity;
+  const WorkpadSlot = slots.workpad;
 
   const errorStatus =
     error instanceof ApiProblem
@@ -1002,6 +1003,40 @@ function IssueSurfaceContent({
 
     const proseBody = (
       <>
+        {currentIssue.rework_tripped_at && (
+          <div
+            className="surface__rework-tripped-banner"
+            role="alert"
+            data-testid="rework-tripped-banner"
+          >
+            <div className="rework-tripped-banner__message">
+              <span className="rework-tripped-banner__icon">🛑🤖</span>
+              <span>
+                Rework loop limit exceeded. Agent-initiated transitions are paused until human intervention or reset.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="rework-tripped-banner__reset-btn"
+              data-testid="rework-reset-btn"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await apiClient.post('/api/v1/issues/{issue_key}/reset-rework-breaker', {
+                      params: { issue_key: currentIssue.key },
+                    });
+                    void refetch();
+                    window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                  } catch {
+                    // ignore
+                  }
+                })();
+              }}
+            >
+              Reset Circuit Breaker
+            </button>
+          </div>
+        )}
         {conflictError && (
           <div
             className="surface__conflict-banner"
@@ -1301,6 +1336,32 @@ function IssueSurfaceContent({
           </div>
         )}
         {ActivitySlot && <ActivitySlot issue={currentIssue} />}
+        <details className="surface__section split-section" data-testid="split-section-workpad">
+          <summary className="split-section-summary">🤖 Workpad</summary>
+          <div className="split-section-body" data-testid="surface-section-workpad">
+            {WorkpadSlot ? (
+              <WorkpadSlot issue={currentIssue} />
+            ) : (
+              <div className="workpad-container" data-testid="workpad-container">
+                {currentIssue.workpad ? (
+                  <div className="workpad-content" data-testid="workpad-content">
+                    <SafeMarkdownPreview markdown={currentIssue.workpad.body_markdown || '*Empty workpad*'} />
+                    <div className="workpad-meta" data-testid="workpad-meta">
+                      <span>Revision {currentIssue.workpad.revision}</span>
+                      {currentIssue.workpad.updated_at && (
+                        <span> • {new Date(currentIssue.workpad.updated_at).toLocaleString()}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="split-empty-hint" data-testid="workpad-empty-hint">
+                    No agent workpad notes recorded for this issue.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </details>
       </>
     );
 
@@ -1635,6 +1696,40 @@ function IssueSurfaceContent({
               <div className="split-body-grid" data-testid="split-body-grid">
                 {/* Left / Main Column */}
                 <div className="split-main-col">
+                  {currentIssue.rework_tripped_at && (
+                    <div
+                      className="surface__rework-tripped-banner"
+                      role="alert"
+                      data-testid="rework-tripped-banner"
+                    >
+                      <div className="rework-tripped-banner__message">
+                        <span className="rework-tripped-banner__icon">🛑🤖</span>
+                        <span>
+                          Rework loop limit exceeded. Agent-initiated transitions are paused until human intervention or reset.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="rework-tripped-banner__reset-btn"
+                        data-testid="rework-reset-btn"
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              await apiClient.post('/api/v1/issues/{issue_key}/reset-rework-breaker', {
+                                params: { issue_key: currentIssue.key },
+                              });
+                              void refetch();
+                              window.dispatchEvent(new CustomEvent('kb:issue-updated'));
+                            } catch {
+                              // ignore
+                            }
+                          })();
+                        }}
+                      >
+                        Reset Circuit Breaker
+                      </button>
+                    </div>
+                  )}
                   {conflictError && (
                     <div
                       className="surface__conflict-banner"
@@ -1951,6 +2046,34 @@ function IssueSurfaceContent({
                         <ActivitySlot issue={currentIssue} />
                       ) : (
                         <p className="split-empty-hint">No comments or activity yet.</p>
+                      )}
+                    </div>
+                  </details>
+
+                  {/* Section 6: Workpad */}
+                  <details className="split-section" data-testid="split-section-workpad">
+                    <summary className="split-section-summary">🤖 Workpad</summary>
+                    <div className="split-section-body" data-testid="surface-section-workpad">
+                      {WorkpadSlot ? (
+                        <WorkpadSlot issue={currentIssue} />
+                      ) : (
+                        <div className="workpad-container" data-testid="workpad-container">
+                          {currentIssue.workpad ? (
+                            <div className="workpad-content" data-testid="workpad-content">
+                              <SafeMarkdownPreview markdown={currentIssue.workpad.body_markdown || '*Empty workpad*'} />
+                              <div className="workpad-meta" data-testid="workpad-meta">
+                                <span>Revision {currentIssue.workpad.revision}</span>
+                                {currentIssue.workpad.updated_at && (
+                                  <span> • {new Date(currentIssue.workpad.updated_at).toLocaleString()}</span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="split-empty-hint" data-testid="workpad-empty-hint">
+                              No agent workpad notes recorded for this issue.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </details>

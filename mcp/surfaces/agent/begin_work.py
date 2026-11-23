@@ -46,6 +46,10 @@ BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
             "type": "string",
             "enum": ["acquire", "renew"],
         },
+        "use_workpad": {
+            "type": "boolean",
+            "default": True,
+        },
     },
     "required": ["identifier", "plan_markdown"],
     "additionalProperties": False,
@@ -144,6 +148,10 @@ async def begin_work(  # noqa: C901, PLR0912, PLR0915
         payload["fencing_token"] = arguments["fencing_token"]
     if arguments.get("lease_action") is not None:
         payload["lease_action"] = arguments["lease_action"]
+    if arguments.get("use_workpad") is not None:
+        payload["use_workpad"] = arguments["use_workpad"]
+    else:
+        payload["use_workpad"] = True
 
     resp_data = await active_client.request(
         "POST",

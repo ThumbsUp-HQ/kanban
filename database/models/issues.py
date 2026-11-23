@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     LargeBinary,
+    SmallInteger,
     String,
     UniqueConstraint,
     text,
@@ -86,6 +87,12 @@ class Issue(Base):
     board_rank: Mapped[str] = mapped_column(String, nullable=False)
     fencing_token: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     row_version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
+    rework_rejection_streak: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=0, server_default=text("0")
+    )
+    rework_tripped_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     provenance_tier: Mapped[str] = mapped_column(
         String, nullable=False, server_default=text("'trusted_member'")
     )

@@ -18,6 +18,7 @@ from database.models import (
     EffectiveResourceAccess,
     Issue,
     IssueLease,
+    IssueWorkpad,
     LinkKind,
     LtreeType,
     ObjectKind,
@@ -501,3 +502,59 @@ def test_supply_chain_checks() -> None:
     installed = {dist.metadata["Name"].lower() for dist in importlib.metadata.distributions()}
     assert "sqlmodel" not in installed
     assert "sqlalchemy-utils" not in installed
+
+
+@pytest.mark.asyncio
+async def test_issue_workpad_model_roundtrip(db_session: AsyncSession) -> None:
+    """Verify IssueWorkpad ORM insertion and generated SHA-256 computation."""
+    ws_id, u_id, proj_id, state, priority = await _setup_test_project_spine(db_session)
+
+    seq_id = await db_session.scalar(
+        text("SELECT allocate_issue_sequence(:p_id)"), {"p_id": proj_id}
+    )
+    iss_id = uuid.uuid4()
+    iss_obj = ObjectRecord(
+        id=iss_id,
+        object_type=ObjectKind.ISSUE,
+        workspace_id=ws_id,
+        project_id=proj_id,
+        canonical_key=f"CORE-{seq_id}",
+        display_title="Workpad Issue",
+        created_by_id=u_id,
+    )
+    db_session.add(iss_obj)
+    await db_session.flush()
+
+    issue = Issue(
+        id=iss_id,
+        object_type=ObjectKind.ISSUE,
+        workspace_id=ws_id,
+        project_id=proj_id,
+        sequence_id=seq_id,
+        summary="Workpad Issue",
+        description_markdown="Initial issue",
+        state_id=state.id,
+        priority_id=priority.id,
+        created_by_id=u_id,
+        original_created_by_id=u_id,
+        ancestry_path=str(seq_id),
+        board_rank="0|hzzzzz:",
+    )
+    db_session.add(issue)
+    await db_session.flush()
+
+    workpad = IssueWorkpad(
+        workspace_id=ws_id,
+        project_id=proj_id,
+        issue_id=issue.id,
+        principal_id=u_id,
+        body_markdown="# Workpad Notes\nLine 1",
+    )
+    db_session.add(workpad)
+    await db_session.flush()
+
+    res = await db_session.execute(select(IssueWorkpad).where(IssueWorkpad.id == workpad.id))
+    loaded = res.scalar_one()
+    assert loaded.body_markdown == "# Workpad Notes\nLine 1"
+    assert loaded.revision == 1
+    assert loaded.body_sha256 is not None

@@ -2539,5 +2539,97 @@ describe('IssueSurface', () => {
       getSpy.mockRestore();
       unmount();
     });
+
+    it('renders tripped rework banner when rework_tripped_at is set', async () => {
+      const issueWithBreaker = {
+        id: '01932e6b-0000-7000-8000-000000000071',
+        key: 'KAN-71',
+        project_key: 'KAN',
+        summary: 'Breaker Test Issue',
+        description_markdown: 'Breaker test description',
+        rework_tripped_at: '2026-11-22T20:00:00Z',
+        rework_rejection_streak: 3,
+      };
+
+      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithBreaker);
+      const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({ status: 'ok' });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-71']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-71"
+              projectKey="KAN"
+              issuesList={[issueWithBreaker as unknown as IssueItem]}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const banner = await screen.findByTestId('rework-tripped-banner');
+      expect(banner).toBeDefined();
+      expect(screen.getByText(/Rework loop limit exceeded/i)).toBeDefined();
+
+      const resetBtn = screen.getByTestId('rework-reset-btn');
+      fireEvent.click(resetBtn);
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledWith(
+          '/api/v1/issues/{issue_key}/reset-rework-breaker',
+          expect.objectContaining({
+            params: { issue_key: 'KAN-71' },
+          }),
+        );
+      });
+
+      getSpy.mockRestore();
+      postSpy.mockRestore();
+      unmount();
+    });
+
+    it('renders collapsible workpad section with workpad notes and revision', async () => {
+      const issueWithWorkpad = {
+        id: '01932e6b-0000-7000-8000-000000000072',
+        key: 'KAN-72',
+        project_key: 'KAN',
+        summary: 'Workpad Test Issue',
+        description_markdown: 'Workpad test description',
+        workpad: {
+          id: '01932e6b-0000-7000-8000-000000000073',
+          body_markdown: '# Agent Investigation Notes\n- Verified breaker wiring',
+          revision: 2,
+          updated_at: '2026-11-22T20:05:00Z',
+        },
+      };
+
+      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithWorkpad);
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-72']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-72"
+              projectKey="KAN"
+              issuesList={[issueWithWorkpad as unknown as IssueItem]}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const workpadSection = await screen.findByTestId('split-section-workpad');
+      expect(workpadSection).toBeDefined();
+
+      const workpadBody = screen.getByTestId('surface-section-workpad');
+      expect(workpadBody).toBeDefined();
+      expect(screen.getByText(/Agent Investigation Notes/i)).toBeDefined();
+      expect(screen.getByText(/Revision 2/i)).toBeDefined();
+
+      getSpy.mockRestore();
+      unmount();
+    });
   });
 });

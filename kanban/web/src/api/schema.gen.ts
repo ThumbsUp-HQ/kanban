@@ -437,6 +437,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit-ledger/execute-shred": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage 2: Execute audit ledger crypto-shredding under AAL2
+         * @description Consume single-use token and permanently overwrite wrapped DEKs with NULL.
+         */
+        post: operations["api_admin_audit_ledger_execute_shred_api_v1_admin_audit_ledger_execute_shred_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit-ledger/request-shred": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage 1: Request audit ledger crypto-shred blast token under AAL2
+         * @description Compute blast radius and mint single-use confirmation token for crypto-shredding.
+         */
+        post: operations["api_admin_audit_ledger_request_shred_api_v1_admin_audit_ledger_request_shred_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/auth-cards": {
         parameters: {
             query?: never;
@@ -1426,6 +1466,130 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List outbound webhook subscriptions
+         * @description List webhook subscriptions in the workspace.
+         */
+        get: operations["list_subscriptions_api_v1_admin_webhooks_get"];
+        put?: never;
+        /**
+         * Create an outbound webhook subscription
+         * @description Create a new outbound webhook subscription with envelope-encrypted secret.
+         */
+        post: operations["create_subscription_api_v1_admin_webhooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/webhooks/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an outbound webhook subscription
+         * @description Get single outbound webhook subscription.
+         */
+        get: operations["get_subscription_api_v1_admin_webhooks__subscription_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an outbound webhook subscription
+         * @description Delete an outbound webhook subscription.
+         */
+        delete: operations["delete_subscription_api_v1_admin_webhooks__subscription_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an outbound webhook subscription
+         * @description Update outbound webhook subscription settings.
+         */
+        patch: operations["update_subscription_api_v1_admin_webhooks__subscription_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/webhooks/{subscription_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List delivery attempts for a webhook subscription
+         * @description List historical delivery attempts and status for subscription.
+         */
+        get: operations["list_deliveries_api_v1_admin_webhooks__subscription_id__deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/workload-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workload identity federation policies
+         * @description Retrieve workload federation policies visible to administrator.
+         */
+        get: operations["list_workload_policies_api_v1_admin_workload_identities_get"];
+        put?: never;
+        /**
+         * Create workload identity federation policy
+         * @description Create a new workload federation policy bound to caller's workspace.
+         */
+        post: operations["create_workload_policy_api_v1_admin_workload_identities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/workload-identities/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get workload identity federation policy
+         * @description Retrieve single workload policy by ID.
+         */
+        get: operations["get_workload_policy_api_v1_admin_workload_identities__policy_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete workload identity federation policy
+         * @description Delete a workload federation policy and all associated replay records.
+         */
+        delete: operations["delete_workload_policy_api_v1_admin_workload_identities__policy_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update workload identity federation policy
+         * @description Update fields on an existing workload federation policy.
+         */
+        patch: operations["update_workload_policy_api_v1_admin_workload_identities__policy_id__patch"];
         trace?: never;
     };
     "/api/v1/admin/workspace-settings": {
@@ -2725,6 +2889,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/issues/{issue_key}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Release active issue lease held by caller or admin
+         * @description Release active issue claim lease.
+         */
+        delete: operations["api_release_lease_api_v1_issues__issue_key__lease_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/lease/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extend lease expiration for active issue lease held by caller
+         * @description Heartbeat and extend lease TTL on an actively leased issue.
+         */
+        post: operations["api_lease_heartbeat_api_v1_issues__issue_key__lease_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/reset-rework-breaker": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset tripped rework loop circuit breaker
+         * @description Reset tripped rework breaker for an issue. Only human users may invoke this.
+         */
+        post: operations["api_reset_rework_breaker_api_v1_issues__issue_key__reset_rework_breaker_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/issues/{issue_key}/transition": {
         parameters: {
             query?: never;
@@ -2759,6 +2983,30 @@ export interface paths {
          * @description Execute synchronous Tier A validator/mutator transition pipeline and update issue state.
          */
         post: operations["post_issue_transition_api_v1_issues__issue_key__transitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_key}/workpad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieve silent agent workpad slot
+         * @description Retrieve the workpad slot for an issue without emitting notifications.
+         */
+        get: operations["api_get_workpad_api_v1_issues__issue_key__workpad_get"];
+        /**
+         * Update silent agent workpad slot with CAS revision protection
+         * @description Update or create the workpad slot without emitting comments or notifications.
+         */
+        put: operations["api_put_workpad_api_v1_issues__issue_key__workpad_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4804,6 +5052,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get recommended agent skills catalog and onboarding prompt
+         * @description Returns public /llms.txt discovery metadata, skill descriptors, and agent onboarding prompt.
+         */
+        get: operations["get_system_skills_endpoint_api_v1_system_skills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/status": {
         parameters: {
             query?: never;
@@ -4932,6 +5200,26 @@ export interface paths {
          * @description Execute query for a saved view via POST to avoid client URL length limitations.
          */
         post: operations["query_view_issues_post_api_v1_views__view_id__query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/git/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive inbound Git forge webhook
+         * @description Process inbound webhook from GitHub, GitLab, or Forgejo.
+         */
+        post: operations["receive_scm_webhook_api_v1_webhooks_git__provider__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6064,6 +6352,80 @@ export interface components {
             signed_url: string;
         };
         /**
+         * AuditShredExecuteIn
+         * @description Payload for Stage 2 crypto-shred execution.
+         */
+        AuditShredExecuteIn: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Confirm Phrase */
+            confirm_phrase: string;
+            /** Confirmation Token */
+            confirmation_token: string;
+            /** Object Id */
+            object_id?: string | null;
+            /** Reason */
+            reason: string;
+            /** Subject Principal Id */
+            subject_principal_id?: string | null;
+        };
+        /**
+         * AuditShredExecuteOut
+         * @description Response returned by Stage 2 crypto-shred execution.
+         */
+        AuditShredExecuteOut: {
+            /** Records Shredded */
+            records_shredded: number;
+            /** Shred Audit Id */
+            shred_audit_id: string;
+            /** Shredded At */
+            shredded_at: string;
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Type */
+            target_type: string;
+        };
+        /**
+         * AuditShredRequestIn
+         * @description Payload for Stage 1 crypto-shred request.
+         */
+        AuditShredRequestIn: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Object Id */
+            object_id?: string | null;
+            /** Reason */
+            reason: string;
+            /** Subject Principal Id */
+            subject_principal_id?: string | null;
+        };
+        /**
+         * AuditShredRequestOut
+         * @description Response returned by Stage 1 crypto-shred request.
+         */
+        AuditShredRequestOut: {
+            /** Blast Hash */
+            blast_hash: string;
+            /** Confirm Phrase */
+            confirm_phrase: string;
+            /** Confirmation Token */
+            confirmation_token: string;
+            /** Expires In Sec */
+            expires_in_sec: number;
+            /** Records Matched */
+            records_matched: number;
+            /** Records To Shred */
+            records_to_shred: number;
+            /** Stage */
+            stage: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Type */
+            target_type: string;
+        };
+        /**
          * AuthCardAdmin
          * @description Administrative card presentation model.
          *
@@ -6368,8 +6730,17 @@ export interface components {
          * @description Payload for initiating work on an issue.
          */
         BeginWorkRequest: {
+            /** Fencing Token */
+            fencing_token?: number | null;
             /** Plan Markdown */
             plan_markdown: string;
+            /** Ttl Seconds */
+            ttl_seconds?: number | null;
+            /**
+             * Use Workpad
+             * @default true
+             */
+            use_workpad: boolean;
         };
         /**
          * BlastRadiusResponse
@@ -6956,6 +7327,10 @@ export interface components {
          * @description Payload for completing work with verification proof.
          */
         CompleteWorkRequest: {
+            /** Fencing Token */
+            fencing_token?: number | null;
+            /** Lease Action */
+            lease_action?: string | null;
             /** Summary Markdown */
             summary_markdown: string;
             /** To State */
@@ -9338,6 +9713,19 @@ export interface components {
             username: string;
         };
         /**
+         * LeaseHeartbeatRequest
+         * @description Payload for heartbeat renewal of an active issue lease.
+         */
+        LeaseHeartbeatRequest: {
+            /** Fencing Token */
+            fencing_token?: number | null;
+            /**
+             * Ttl Seconds
+             * @default 900
+             */
+            ttl_seconds: number;
+        };
+        /**
          * LinkAuditListResponse
          * @description Paginated list of invalid object link audit records.
          */
@@ -9517,6 +9905,80 @@ export interface components {
              * @default false
              */
             truncated: boolean;
+        };
+        /**
+         * LlmsSkillDescriptor
+         * @description Public metadata model for a single recommended agent skill.
+         */
+        LlmsSkillDescriptor: {
+            /**
+             * Bytes
+             * @description Exact byte size of canonical markdown content
+             */
+            bytes: number;
+            /**
+             * Estimated Tokens
+             * @description Rough token count estimate (~4 chars per token)
+             */
+            estimated_tokens: number;
+            /**
+             * Install Path
+             * @description Recommended local workspace install path
+             */
+            install_path: string;
+            /**
+             * Sha256
+             * @description SHA-256 fingerprint of canonical markdown content
+             */
+            sha256: string;
+            /**
+             * Slug
+             * @description Unique skill slug identifier
+             */
+            slug: string;
+            /**
+             * Summary
+             * @description One-line functional summary
+             */
+            summary: string;
+            /**
+             * Title
+             * @description Human-readable skill title
+             */
+            title: string;
+            /**
+             * Url
+             * @description HTTP endpoint serving canonical markdown
+             */
+            url: string;
+        };
+        /**
+         * LlmsSkillsCatalogResponse
+         * @description Public catalog response listing recommended skills and onboarding prompt.
+         */
+        LlmsSkillsCatalogResponse: {
+            /**
+             * Llms Full Url
+             * @description URL to bundled /llms-full.txt
+             * @default /llms-full.txt
+             */
+            llms_full_url: string;
+            /**
+             * Llms Txt Url
+             * @description URL to compact /llms.txt map
+             * @default /llms.txt
+             */
+            llms_txt_url: string;
+            /**
+             * Onboarding Prompt
+             * @description Canonical 1-click agent onboarding prompt
+             */
+            onboarding_prompt: string;
+            /**
+             * Skills
+             * @description List of recommended skill descriptors
+             */
+            skills: components["schemas"]["LlmsSkillDescriptor"][];
         };
         /**
          * LocalLoginRequest
@@ -11722,6 +12184,16 @@ export interface components {
             type: "USER" | "GROUP" | "AGENT";
         };
         /**
+         * PutIssueWorkpadRequest
+         * @description Payload for updating or creating silent agent workpad slot.
+         */
+        PutIssueWorkpadRequest: {
+            /** Body Markdown */
+            body_markdown: string;
+            /** Revision */
+            revision?: number | null;
+        };
+        /**
          * ReactionSummary
          * @description Aggregated reaction count and caller participation.
          */
@@ -13342,6 +13814,10 @@ export interface components {
         TransitionTicketRequest: {
             /** Comment Markdown */
             comment_markdown?: string | null;
+            /** Fencing Token */
+            fencing_token?: number | null;
+            /** Lease Action */
+            lease_action?: string | null;
             /** To State */
             to_state: string;
             /** Verification Proof */
@@ -14007,6 +14483,139 @@ export interface components {
             nickname: string;
         };
         /**
+         * WebhookDeliveryResponse
+         * @description Response representing an outbound webhook delivery attempt.
+         */
+        WebhookDeliveryResponse: {
+            /** Attempt Count */
+            attempt_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Event Id */
+            event_id: string | null;
+            /** Event Topic */
+            event_topic: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payload Json */
+            payload_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Status Code */
+            status_code: number | null;
+            /**
+             * Subscription Id
+             * Format: uuid
+             */
+            subscription_id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * WebhookSubscriptionCreateRequest
+         * @description Request payload to create a new outbound webhook subscription.
+         */
+        WebhookSubscriptionCreateRequest: {
+            /**
+             * Events
+             * @description List of event topic patterns to subscribe to
+             */
+            events: string[];
+            /**
+             * Is Active
+             * @description Whether subscription is enabled
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Project Id
+             * @description Optional scoped project ID
+             */
+            project_id?: string | null;
+            /**
+             * Secret
+             * @description Optional signing secret
+             */
+            secret?: string | null;
+            /**
+             * Target Url
+             * @description Target HTTP/HTTPS webhook URL
+             */
+            target_url: string;
+        };
+        /**
+         * WebhookSubscriptionResponse
+         * @description Response representing an outbound webhook subscription.
+         */
+        WebhookSubscriptionResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Events */
+            events: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Project Id */
+            project_id: string | null;
+            /** Secret */
+            secret?: string | null;
+            /** Target Url */
+            target_url: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * WebhookSubscriptionUpdateRequest
+         * @description Request payload to update an existing outbound webhook subscription.
+         */
+        WebhookSubscriptionUpdateRequest: {
+            /** Events */
+            events?: string[] | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Secret */
+            secret?: string | null;
+            /** Target Url */
+            target_url?: string | null;
+        };
+        /**
          * WipLimit
          * @description Soft and hard WIP limits for a group bucket.
          */
@@ -14222,6 +14831,142 @@ export interface components {
             timeout_ms?: number | null;
             /** Wasm Module Sha256 */
             wasm_module_sha256?: string | null;
+        };
+        /**
+         * WorkloadPolicyCreateRequest
+         * @description Payload for creating a workload identity policy.
+         */
+        WorkloadPolicyCreateRequest: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 255
+             */
+            capability_mask: number;
+            /** Client Id */
+            client_id: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /** Issuer */
+            issuer: string;
+            /**
+             * Max Ttl Seconds
+             * @default 3600
+             */
+            max_ttl_seconds: number;
+            /** Name */
+            name: string;
+            /** Required Claims Json */
+            required_claims_json?: {
+                [key: string]: unknown;
+            };
+            /** Scopes */
+            scopes?: string[];
+            /** Subject Pattern */
+            subject_pattern: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "agent" | "docs";
+        };
+        /**
+         * WorkloadPolicyResponse
+         * @description Public representation of a workload identity policy.
+         */
+        WorkloadPolicyResponse: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Capability Mask */
+            capability_mask: number;
+            /** Client Id */
+            client_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Id */
+            created_by_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Issuer */
+            issuer: string;
+            /** Max Ttl Seconds */
+            max_ttl_seconds: number;
+            /** Name */
+            name: string;
+            /** Required Claims Json */
+            required_claims_json: {
+                [key: string]: unknown;
+            };
+            /** Scopes */
+            scopes: string[];
+            /** Subject Pattern */
+            subject_pattern: string;
+            /** Surface */
+            surface: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * WorkloadPolicyUpdateRequest
+         * @description Payload for updating an existing workload identity policy.
+         */
+        WorkloadPolicyUpdateRequest: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Capability Mask */
+            capability_mask?: number | null;
+            /** Client Id */
+            client_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Issuer */
+            issuer?: string | null;
+            /** Max Ttl Seconds */
+            max_ttl_seconds?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Required Claims Json */
+            required_claims_json?: {
+                [key: string]: unknown;
+            } | null;
+            /** Scopes */
+            scopes?: string[] | null;
+            /** Subject Pattern */
+            subject_pattern?: string | null;
+            /** Surface */
+            surface?: ("agent" | "docs") | null;
         };
         /**
          * WorkspaceResponse
@@ -15458,6 +16203,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_admin_audit_ledger_execute_shred_api_v1_admin_audit_ledger_execute_shred_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditShredExecuteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditShredExecuteOut"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_admin_audit_ledger_request_shred_api_v1_admin_audit_ledger_request_shred_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditShredRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditShredRequestOut"];
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -17817,6 +18646,456 @@ export interface operations {
             };
             /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
             412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subscriptions_api_v1_admin_webhooks_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscriptionResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_subscription_api_v1_admin_webhooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookSubscriptionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscriptionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_api_v1_admin_webhooks__subscription_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscriptionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_subscription_api_v1_admin_webhooks__subscription_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_subscription_api_v1_admin_webhooks__subscription_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookSubscriptionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSubscriptionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deliveries_api_v1_admin_webhooks__subscription_id__deliveries_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workload_policies_api_v1_admin_workload_identities_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadPolicyResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workload_policy_api_v1_admin_workload_identities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkloadPolicyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadPolicyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workload_policy_api_v1_admin_workload_identities__policy_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadPolicyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_workload_policy_api_v1_admin_workload_identities__policy_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workload_policy_api_v1_admin_workload_identities__policy_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkloadPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkloadPolicyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20935,6 +22214,132 @@ export interface operations {
             };
         };
     };
+    api_release_lease_api_v1_issues__issue_key__lease_delete: {
+        parameters: {
+            query?: {
+                fencing_token?: number | null;
+            };
+            header?: never;
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_lease_heartbeat_api_v1_issues__issue_key__lease_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaseHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_reset_rework_breaker_api_v1_issues__issue_key__reset_rework_breaker_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     api_transition_ticket_api_v1_issues__issue_key__transition_post: {
         parameters: {
             query?: never;
@@ -21023,6 +22428,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PendingGateResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_get_workpad_api_v1_issues__issue_key__workpad_get: {
+        parameters: {
+            query?: {
+                principal_id?: string | null;
+            };
+            header?: never;
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_put_workpad_api_v1_issues__issue_key__workpad_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                issue_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutIssueWorkpadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -23392,7 +24894,7 @@ export interface operations {
             query?: {
                 /** @description Analysis window in calendar days (1 to 366) */
                 window_days?: number;
-                /** @description Forecasting horizon for 'How Many?' Monte Carlo simulation in days (1 to 366) */
+                /** @description Forecasting horizon for 'How Many?' Monte Carlo in days (1 to 366) */
                 horizon_days?: number;
                 /** @description Remaining items count for 'When?' Monte Carlo simulation (1 to 10000) */
                 target_items?: number;
@@ -26435,6 +27937,35 @@ export interface operations {
             };
         };
     };
+    get_system_skills_endpoint_api_v1_system_skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmsSkillsCatalogResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     get_system_status_endpoint_api_v1_system_status_get: {
         parameters: {
             query?: never;
@@ -26784,6 +28315,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ViewQueryResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_scm_webhook_api_v1_webhooks_git__provider__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Unauthorized - authentication required */

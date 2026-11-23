@@ -257,6 +257,19 @@ class TransitionEngine:
                 ),
             )
 
+        # Rework loop circuit breaker guard (Problem 2, KAN-71)
+        if issue.rework_tripped_at is not None and actor.is_agent_or_mcp_caller:
+            raise ProblemException(
+                code="REWORK_LOOP_LIMIT_EXCEEDED",
+                status=409,
+                title="Rework Loop Limit Exceeded",
+                detail=(
+                    "Agent-initiated transitions are blocked because the rework loop limit "
+                    "has been exceeded on this issue. "
+                    "A human user must intervene or reset the breaker."
+                ),
+            )
+
         # 2. Hop depth calculation
         hop_depth = 0
         if parent_execution_id is not None:
@@ -498,6 +511,10 @@ class TransitionEngine:
                 continue
 
             if is_reject:
+                max_rework = getattr(hook, "max_rework_attempts", 3) or 3
+                issue.rework_rejection_streak = (issue.rework_rejection_streak or 0) + 1
+                if issue.rework_rejection_streak >= max_rework:
+                    issue.rework_tripped_at = dt.datetime.now(dt.UTC)
                 raw_reason = str(output_json.get("reason") or "Transition rejected by hook")
                 clean_reason = raw_reason.strip()[:2000]
                 await self._record_invocation(
@@ -610,6 +627,11 @@ class TransitionEngine:
         issue.state_id = target_state.id
         execution.status = "approved"
         execution.completed_at = dt.datetime.now(dt.UTC)
+
+        # Reset rework circuit breaker on successful human transition
+        if not actor.is_agent_or_mcp_caller:
+            issue.rework_rejection_streak = 0
+            issue.rework_tripped_at = None
 
         if comment_markdown:
             norm_comment = normalize_to_markdown(comment_markdown)

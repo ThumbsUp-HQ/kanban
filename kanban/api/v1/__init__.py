@@ -55,6 +55,7 @@ from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issue_provenance import router as issue_provenance_router
 from kanban.api.v1.issue_trees import router as issue_trees_router
 from kanban.api.v1.issue_workflow import router as issue_workflow_router
+from kanban.api.v1.issue_workpad import router as issue_workpad_router
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.links import router as links_router
 from kanban.api.v1.mcp_keys import router as mcp_keys_router
@@ -101,6 +102,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(issues_router)
     v1.include_router(issue_trees_router)
     v1.include_router(issue_workflow_router)
+    v1.include_router(issue_workpad_router)
     v1.include_router(transitions_router)
     v1.include_router(workflow_hooks_router)
     v1.include_router(issue_copy_router)

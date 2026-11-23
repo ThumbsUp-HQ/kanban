@@ -80,6 +80,7 @@ _FULL_ISSUE_KEYS: Final[tuple[str, ...]] = (
     "activity",
     "gate_verdicts",
     "provenance",
+    "workpad",
 )
 
 

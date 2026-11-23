@@ -51,6 +51,10 @@ class WorkflowTransitionHook(Base):
             "wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32",
             name="ck_workflow_transition_hooks_wasm_sha256",
         ),
+        CheckConstraint(
+            "max_rework_attempts BETWEEN 1 AND 20",
+            name="ck_workflow_transition_hooks_max_rework",
+        ),
         Index(
             "wth_lookup",
             "project_id",
@@ -90,6 +94,9 @@ class WorkflowTransitionHook(Base):
         Text, nullable=False, default="fail_closed", server_default=text("'fail_closed'")
     )
     manifest_sha256: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    max_rework_attempts: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=3, server_default=text("3")
+    )
 
 
 class WorkflowTransitionExecution(Base):

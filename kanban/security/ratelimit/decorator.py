@@ -98,7 +98,12 @@ def rate_limited(
     async def dependency(request: Request) -> RateLimitDecision:
         active_limiter = limiter or getattr(request.app.state, "rate_limiter", None)
         if active_limiter is None:
-            active_limiter = build_rate_limiter(getattr(request.app.state, "settings", None))
+            sf = getattr(request.app.state, "session_factory", None)
+            engine = getattr(sf, "engine", None) if sf else None
+            active_limiter = build_rate_limiter(
+                getattr(request.app.state, "settings", None),
+                engine=engine,
+            )
 
         raw_parts = key_func(request)
         if inspect.isawaitable(raw_parts):

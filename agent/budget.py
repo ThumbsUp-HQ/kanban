@@ -207,12 +207,10 @@ class BudgetEnforcer:
         async with sess.begin_nested() if sess.in_transaction() else sess.begin():
             for ledger_id in reservation.reserved_ledger_ids:
                 # Deduct estimate from reserved and add actual to used.
-                # Expand token_cap if overage exceeds old cap so accounting is never blocked.
                 settle_sql = text(
                     "UPDATE ai_token_ledgers "
                     "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate), "
-                    "    tokens_used = tokens_used + :actual, "
-                    "    token_cap = GREATEST(token_cap, tokens_used + :actual) "
+                    "    tokens_used = LEAST(token_cap, tokens_used + :actual) "
                     "WHERE id = :lid"
                 )
                 await sess.execute(

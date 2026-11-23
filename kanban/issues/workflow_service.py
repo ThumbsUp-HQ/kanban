@@ -29,6 +29,7 @@ from kanban.issues.proof import (
     validate_proof_ticket_key,
     validate_reality_checker_report,
 )
+from kanban.issues.workpad_service import put_issue_workpad
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -221,7 +222,7 @@ async def _resolve_state_by_ref(
     )
 
 
-async def begin_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+async def begin_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
@@ -229,6 +230,8 @@ async def begin_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
     if_match: str | None = None,
     ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
     fencing_token: int | None = None,
+    *,
+    use_workpad: bool = True,
 ) -> tuple[Issue, WorkflowState, WorkflowState, str, GateHoldResult | None, IssueLease]:
     """Execute atomic begin_work operation on an issue in a single transaction."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
@@ -265,6 +268,14 @@ async def begin_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
             status=409,
             title="Transition Held",
             detail="Issue transition is currently held by an active gate hook",
+        )
+
+    if issue.rework_tripped_at is not None and caller.is_agent_or_mcp_caller:
+        raise ProblemException(
+            code="REWORK_LOOP_LIMIT_EXCEEDED",
+            status=409,
+            title="Rework Loop Limit Exceeded",
+            detail="Issue rework circuit breaker is tripped. Human intervention required.",
         )
 
     # Validate plan markdown byte length
@@ -382,40 +393,43 @@ async def begin_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
             },
         )
 
-    # 4. Post plan_markdown as an issue comment
-    comment = IssueComment(
-        workspace_id=caller.workspace_id,
-        issue_id=issue.id,
-        author_id=caller.principal_id,
-        body_markdown=normalized_plan,
-    )
-    session.add(comment)
-    await session.flush()
-    await session.refresh(comment)
-
-    await record_activity(
-        session,
-        workspace_id=caller.workspace_id,
-        object_id=issue.id,
-        actor_principal_id=caller.principal_id,
-        event_type=ActivityEventType.COMMENT_CREATED,
-        payload={
-            "comment_id": str(comment.id),
-            "body_sha256": comment.body_sha256.hex() if comment.body_sha256 else "",
-        },
-    )
-
-    # Generate permalink
     proj = await session.get(Project, issue.project_id)
     p_ident = proj.identifier if proj else "ISSUE"
-    comment_ref = f"{p_ident}-{issue.sequence_id}#c-{str(comment.id)[:8]}"
+
+    if use_workpad:
+        await put_issue_workpad(session, caller, issue_ref, normalized_plan)
+        comment_ref = f"{p_ident}-{issue.sequence_id}#workpad"
+    else:
+        # 4. Post plan_markdown as an issue comment
+        comment = IssueComment(
+            workspace_id=caller.workspace_id,
+            issue_id=issue.id,
+            author_id=caller.principal_id,
+            body_markdown=normalized_plan,
+        )
+        session.add(comment)
+        await session.flush()
+        await session.refresh(comment)
+
+        await record_activity(
+            session,
+            workspace_id=caller.workspace_id,
+            object_id=issue.id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.COMMENT_CREATED,
+            payload={
+                "comment_id": str(comment.id),
+                "body_sha256": comment.body_sha256.hex() if comment.body_sha256 else "",
+            },
+        )
+        comment_ref = f"{p_ident}-{issue.sequence_id}#c-{str(comment.id)[:8]}"
 
     await session.flush()
     await session.refresh(issue)
     return issue, from_state, started_state, comment_ref, gate_hold, lease
 
 
-async def transition_ticket(  # noqa: PLR0913, PLR0917
+async def transition_ticket(  # noqa: C901, PLR0913, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
@@ -445,6 +459,14 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
             status=409,
             title="Transition Held",
             detail="Issue transition is currently held by an active gate hook",
+        )
+
+    if issue.rework_tripped_at is not None and caller.is_agent_or_mcp_caller:
+        raise ProblemException(
+            code="REWORK_LOOP_LIMIT_EXCEEDED",
+            status=409,
+            title="Rework Loop Limit Exceeded",
+            detail="Issue rework circuit breaker is tripped. Human intervention required.",
         )
 
     target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
@@ -485,6 +507,9 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
         await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         old_id = issue.state_id
         issue.state_id = target_state.id
+        if not caller.is_agent_or_mcp_caller:
+            issue.rework_rejection_streak = 0
+            issue.rework_tripped_at = None
         await record_activity(
             session,
             workspace_id=caller.workspace_id,
@@ -653,6 +678,14 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             status=409,
             title="Transition Held",
             detail="Issue transition is currently held by an active gate hook",
+        )
+
+    if issue.rework_tripped_at is not None and caller.is_agent_or_mcp_caller:
+        raise ProblemException(
+            code="REWORK_LOOP_LIMIT_EXCEEDED",
+            status=409,
+            title="Rework Loop Limit Exceeded",
+            detail="Issue rework circuit breaker is tripped. Human intervention required.",
         )
 
     # 1. Check open child blockers and inbound BLOCKS links

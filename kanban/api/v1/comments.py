@@ -21,6 +21,7 @@ from kanban.api.v1.schemas.comments import (
     CommentResponse,
     ReactionResponse,
 )
+from kanban.security.ratelimit import ISSUE_COMMENTS_RATE_LIMIT, rate_limited
 from kanban.security.read_taint import (
     TaintGuard,
     TaintRecorder,
@@ -37,6 +38,12 @@ __all__ = [
 
 router: Final[APIRouter] = APIRouter(tags=["comments"])
 comments_router: Final[APIRouter] = router
+
+
+async def _principal_rate_key(request: Request) -> list[str]:
+    """Extract authenticated principal ID for rate limiting."""
+    caller = await get_principal(request)
+    return [str(caller.principal_id)]
 
 
 @router.get(
@@ -94,6 +101,7 @@ async def list_issue_comments(  # noqa: PLR0913, PLR0917
     response_model=CommentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a top-level comment or depth-1 reply on an issue",
+    dependencies=[Depends(rate_limited(ISSUE_COMMENTS_RATE_LIMIT, key_func=_principal_rate_key))],
 )
 async def create_issue_comment(  # noqa: PLR0913, PLR0917
     issue_ref: str,

@@ -21,6 +21,7 @@ EXPECTED_AGENT_TOOL_NAMES: frozenset[str] = frozenset(
         "complete_work",
         "add_comment",
         "link_objects",
+        "update_workpad",
     }
 )
 MAX_AGENT_SCHEMA_BUDGET_TOKENS: int = 2450
