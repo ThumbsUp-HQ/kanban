@@ -1,0 +1,354 @@
+diff --git a/kanban/web/src/editor/mermaid/MermaidBlockView.css b/kanban/web/src/editor/mermaid/MermaidBlockView.css
+index 00257962..bbb61886 100644
+--- a/kanban/web/src/editor/mermaid/MermaidBlockView.css
++++ b/kanban/web/src/editor/mermaid/MermaidBlockView.css
+@@ -33,6 +33,13 @@
+   color: var(--fg-secondary, #4b5563);
+ }
+ 
++.mermaid-block__actions {
++  display: flex;
++  align-items: center;
++  gap: 0.375rem;
++}
++
++.mermaid-block__expand-btn,
+ .mermaid-block__toggle-btn {
+   background: var(--bg-surface, #ffffff);
+   border: 1px solid var(--border-strong, #d1d5db);
+@@ -44,9 +51,19 @@
+   cursor: pointer;
+   white-space: nowrap;
+   flex-shrink: 0;
++  min-height: 28px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
+   transition: background-color 0.15s ease, border-color 0.15s ease;
+ }
+ 
++.mermaid-block__expand-btn {
++  font-size: 0.875rem;
++  padding: 0.25rem 0.5rem;
++}
++
++.mermaid-block__expand-btn:hover,
+ .mermaid-block__toggle-btn:hover {
+   background-color: var(--bg-hover, #f1f3f5);
+   border-color: var(--accent-primary, #1d4ed8);
+diff --git a/kanban/web/src/editor/mermaid/MermaidBlockView.tsx b/kanban/web/src/editor/mermaid/MermaidBlockView.tsx
+index 96ddb67b..27b5806f 100644
+--- a/kanban/web/src/editor/mermaid/MermaidBlockView.tsx
++++ b/kanban/web/src/editor/mermaid/MermaidBlockView.tsx
+@@ -20,6 +20,7 @@ import { createSafeSvgBlobUrl } from '../media/safeSvg';
+ import { readMermaidThemeTokens } from './mermaidTheme';
+ import { mermaidClient, MermaidWorkerClient } from './mermaidClient';
+ import { registerEditorExtension } from '../editorSurfaceFactory';
++import { DocsMobileDiagramViewer } from '../../features/docs/DocsMobileDiagramViewer';
+ import './MermaidBlockView.css';
+ 
+ export interface MermaidBlockViewProps {
+@@ -64,6 +65,7 @@ export function MermaidBlockView({
+   const [fallbackReason, setFallbackReason] = useState<string>('');
+   const [editedSource, setEditedSource] = useState<string | null>(null);
+   const [prevPropSource, setPrevPropSource] = useState<string>(source);
++  const [isMobileViewerOpen, setIsMobileViewerOpen] = useState(false);
+ 
+   if (source !== prevPropSource) {
+     setPrevPropSource(source);
+@@ -200,16 +202,32 @@ export function MermaidBlockView({
+       {/* Top Toolbar with Mode Toggle */}
+       <div className="mermaid-block__toolbar" data-testid={`${testId}-toolbar`}>
+         <span className="mermaid-block__badge">Mermaid</span>
+-        {!readOnly && (
+-          <button
+-            type="button"
+-            className="mermaid-block__toggle-btn"
+-            onClick={handleToggleMode}
+-            data-testid={`${testId}-toggle-btn`}
+-          >
+-            {mode === 'preview' ? 'Edit Mermaid' : 'Preview'}
+-          </button>
+-        )}
++        <div className="mermaid-block__actions">
++          {status === 'success' && blobUrl && (
++            <button
++              type="button"
++              className="mermaid-block__expand-btn"
++              onClick={() => {
++                setIsMobileViewerOpen(true);
++              }}
++              aria-label="Expand in full-screen diagram viewer"
++              title="Expand diagram (pan and zoom)"
++              data-testid={`${testId}-expand-btn`}
++            >
++              ⤢
++            </button>
++          )}
++          {!readOnly && (
++            <button
++              type="button"
++              className="mermaid-block__toggle-btn"
++              onClick={handleToggleMode}
++              data-testid={`${testId}-toggle-btn`}
++            >
++              {mode === 'preview' ? 'Edit Mermaid' : 'Preview'}
++            </button>
++          )}
++        </div>
+       </div>
+ 
+       {/* Fallback Banner for invalid or timed-out diagrams */}
+@@ -237,9 +255,37 @@ export function MermaidBlockView({
+             alt="Mermaid diagram"
+             testId={`${testId}-viewport`}
+           />
++          <button
++            type="button"
++            className="docs-mobile-diagram-tap-hint"
++            data-testid={`${testId}-tap-hint`}
++            onClick={() => {
++              setIsMobileViewerOpen(true);
++            }}
++            aria-label="Tap to expand diagram"
++          >
++            <span className="docs-mobile-diagram-tap-icon" aria-hidden="true">
++              ⤢
++            </span>
++            <span className="docs-mobile-diagram-tap-text">Tap to pan & zoom</span>
++          </button>
+         </div>
+       )}
+ 
++      {/* Full-Screen Touch Pan & Pinch-to-Zoom Mobile Viewer Overlay */}
++      {status === 'success' && blobUrl && (
++        <DocsMobileDiagramViewer
++          isOpen={isMobileViewerOpen}
++          onClose={() => {
++            setIsMobileViewerOpen(false);
++          }}
++          blobUrl={blobUrl}
++          rawSource={currentSource}
++          title="Mermaid Diagram"
++          testId={`${testId}-mobile-viewer`}
++        />
++      )}
++
+       {/* Loading & Deterministic Min-Height Placeholder Container (KANBA-213: CLS <= 0.10) */}
+       {mode === 'preview' && (status === 'rendering' || status === 'idle' || !blobUrl) && status !== 'fallback' && (
+         <div
+diff --git a/kanban/web/src/features/docs-center/DocMarkdownViewer.css b/kanban/web/src/features/docs-center/DocMarkdownViewer.css
+index 343fe384..35c6102f 100644
+--- a/kanban/web/src/features/docs-center/DocMarkdownViewer.css
++++ b/kanban/web/src/features/docs-center/DocMarkdownViewer.css
+@@ -100,10 +100,51 @@
+ .kb-doc-code-block {
+   background: var(--bg-canvas);
+   border: 1px solid var(--border-subtle);
+-  border-radius: 6px;
++  border-radius: var(--radius-md);
+   padding: 1rem;
+   overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++  touch-action: pan-x pan-y;
+   margin: 1.25rem 0;
++  position: relative;
++  background-image:
++    linear-gradient(to right, var(--bg-canvas), rgba(255, 255, 255, 0)),
++    linear-gradient(to left, var(--bg-canvas), rgba(255, 255, 255, 0)),
++    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
++    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
++  background-position: left center, right center, left center, right center;
++  background-repeat: no-repeat;
++  background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
++  background-attachment: local, local, scroll, scroll;
++}
++
++.kb-docs-code-scroll-container {
++  position: relative;
++  width: 100%;
++  overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++}
++
++.kb-docs-code-scroll-container::before,
++.kb-docs-code-scroll-container::after {
++  content: '';
++  position: absolute;
++  top: 0;
++  bottom: 0;
++  width: 16px;
++  pointer-events: none;
++  z-index: 2;
++  opacity: 0.8;
++}
++
++.kb-docs-code-scroll-container::before {
++  left: 0;
++  background: linear-gradient(to right, var(--bg-canvas), transparent);
++}
++
++.kb-docs-code-scroll-container::after {
++  right: 0;
++  background: linear-gradient(to left, var(--bg-canvas), transparent);
+ }
+ 
+ .kb-doc-code {
+@@ -111,6 +152,7 @@
+   font-size: 0.875rem;
+   line-height: 1.5;
+   color: var(--fg-primary);
++  white-space: pre;
+ }
+ 
+ .kb-doc-table-container {
+diff --git a/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx b/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
+index b12692bc..6989ef06 100644
+--- a/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
++++ b/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
+@@ -444,11 +444,13 @@ export function DocMarkdownViewer({
+           );
+         } else {
+           blocks.push(
+-            <pre key={`code-${String(blockIdx++)}`} className="kb-doc-code-block">
+-              <code className={`kb-doc-code ${codeLang ? `language-${codeLang}` : ''}`}>
+-                {codeLines.join('\n')}
+-              </code>
+-            </pre>,
++            <div key={`code-scroll-${String(blockIdx++)}`} className="kb-docs-code-scroll-container">
++              <pre key={`code-${String(blockIdx)}`} className="kb-doc-code-block">
++                <code className={`kb-doc-code ${codeLang ? `language-${codeLang}` : ''}`}>
++                  {codeLines.join('\n')}
++                </code>
++              </pre>
++            </div>,
+           );
+         }
+         inCodeBlock = false;
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.css b/kanban/web/src/features/docs-center/DocsCenterPage.css
+index d4d986fe..3c394b0b 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.css
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.css
+@@ -609,3 +609,52 @@
+     min-height: 44px;
+   }
+ }
++
++/* Wide code block horizontal touch scroll containers with fade edge overflow indicators (KAN-346) */
++.kb-docs-content-wrapper pre,
++.kb-docs-main pre,
++.kb-docs-code-scroll-container {
++  overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++  touch-action: pan-x pan-y;
++  position: relative;
++  background-image:
++    linear-gradient(to right, var(--bg-surface), rgba(255, 255, 255, 0)),
++    linear-gradient(to left, var(--bg-surface), rgba(255, 255, 255, 0)),
++    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
++    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
++  background-position: left center, right center, left center, right center;
++  background-repeat: no-repeat;
++  background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
++  background-attachment: local, local, scroll, scroll;
++}
++
++.kb-docs-code-scroll-container {
++  position: relative;
++  width: 100%;
++  overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++}
++
++.kb-docs-code-scroll-container::before,
++.kb-docs-code-scroll-container::after {
++  content: '';
++  position: absolute;
++  top: 0;
++  bottom: 0;
++  width: 16px;
++  pointer-events: none;
++  z-index: 2;
++  opacity: 0.8;
++}
++
++.kb-docs-code-scroll-container::before {
++  left: 0;
++  background: linear-gradient(to right, var(--bg-canvas), transparent);
++}
++
++.kb-docs-code-scroll-container::after {
++  right: 0;
++  background: linear-gradient(to left, var(--bg-canvas), transparent);
++}
++
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.css b/kanban/web/src/features/docs/DocsWorkspaceView.css
+index ccab01fd..850252e6 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.css
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.css
+@@ -513,19 +513,58 @@
+ 
+ .docs-editor-container pre,
+ .docs-prose pre,
+-.docs-center-pane pre {
+-  white-space: pre-wrap;
+-  word-break: break-word;
+-  overflow-wrap: break-word;
++.docs-center-pane pre,
++.docs-code-scroll-container {
++  overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++  touch-action: pan-x pan-y;
++  position: relative;
++  background-image:
++    linear-gradient(to right, var(--bg-surface), rgba(255, 255, 255, 0)),
++    linear-gradient(to left, var(--bg-surface), rgba(255, 255, 255, 0)),
++    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
++    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
++  background-position: left center, right center, left center, right center;
++  background-repeat: no-repeat;
++  background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
++  background-attachment: local, local, scroll, scroll;
++}
++
++.docs-code-scroll-container {
++  position: relative;
++  width: 100%;
+   overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++}
++
++.docs-code-scroll-container::before,
++.docs-code-scroll-container::after {
++  content: '';
++  position: absolute;
++  top: 0;
++  bottom: 0;
++  width: 16px;
++  pointer-events: none;
++  z-index: 2;
++  opacity: 0.8;
++}
++
++.docs-code-scroll-container::before {
++  left: 0;
++  background: linear-gradient(to right, var(--bg-canvas), transparent);
++}
++
++.docs-code-scroll-container::after {
++  right: 0;
++  background: linear-gradient(to left, var(--bg-canvas), transparent);
+ }
+ 
+ .docs-editor-container pre code,
+ .docs-prose pre code,
+ .docs-center-pane pre code {
+-  white-space: pre-wrap;
+-  word-break: break-word;
+-  overflow-wrap: break-word;
++  white-space: pre;
++  word-break: normal;
++  overflow-wrap: normal;
+ }
+ 
+ .docs-autosave-status {

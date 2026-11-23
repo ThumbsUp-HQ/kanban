@@ -20,6 +20,7 @@ import { createSafeSvgBlobUrl } from '../media/safeSvg';
 import { readMermaidThemeTokens } from './mermaidTheme';
 import { mermaidClient, MermaidWorkerClient } from './mermaidClient';
 import { registerEditorExtension } from '../editorSurfaceFactory';
+import { DocsMobileDiagramViewer } from '../../features/docs/DocsMobileDiagramViewer';
 import './MermaidBlockView.css';
 
 export interface MermaidBlockViewProps {
@@ -64,6 +65,7 @@ export function MermaidBlockView({
   const [fallbackReason, setFallbackReason] = useState<string>('');
   const [editedSource, setEditedSource] = useState<string | null>(null);
   const [prevPropSource, setPrevPropSource] = useState<string>(source);
+  const [isMobileViewerOpen, setIsMobileViewerOpen] = useState(false);
 
   if (source !== prevPropSource) {
     setPrevPropSource(source);
@@ -200,16 +202,32 @@ export function MermaidBlockView({
       {/* Top Toolbar with Mode Toggle */}
       <div className="mermaid-block__toolbar" data-testid={`${testId}-toolbar`}>
         <span className="mermaid-block__badge">Mermaid</span>
-        {!readOnly && (
-          <button
-            type="button"
-            className="mermaid-block__toggle-btn"
-            onClick={handleToggleMode}
-            data-testid={`${testId}-toggle-btn`}
-          >
-            {mode === 'preview' ? 'Edit Mermaid' : 'Preview'}
-          </button>
-        )}
+        <div className="mermaid-block__actions">
+          {status === 'success' && blobUrl && (
+            <button
+              type="button"
+              className="mermaid-block__expand-btn"
+              onClick={() => {
+                setIsMobileViewerOpen(true);
+              }}
+              aria-label="Expand in full-screen diagram viewer"
+              title="Expand diagram (pan and zoom)"
+              data-testid={`${testId}-expand-btn`}
+            >
+              ⤢
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              className="mermaid-block__toggle-btn"
+              onClick={handleToggleMode}
+              data-testid={`${testId}-toggle-btn`}
+            >
+              {mode === 'preview' ? 'Edit Mermaid' : 'Preview'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Fallback Banner for invalid or timed-out diagrams */}
@@ -237,7 +255,35 @@ export function MermaidBlockView({
             alt="Mermaid diagram"
             testId={`${testId}-viewport`}
           />
+          <button
+            type="button"
+            className="docs-mobile-diagram-tap-hint"
+            data-testid={`${testId}-tap-hint`}
+            onClick={() => {
+              setIsMobileViewerOpen(true);
+            }}
+            aria-label="Tap to expand diagram"
+          >
+            <span className="docs-mobile-diagram-tap-icon" aria-hidden="true">
+              ⤢
+            </span>
+            <span className="docs-mobile-diagram-tap-text">Tap to pan & zoom</span>
+          </button>
         </div>
+      )}
+
+      {/* Full-Screen Touch Pan & Pinch-to-Zoom Mobile Viewer Overlay */}
+      {status === 'success' && blobUrl && (
+        <DocsMobileDiagramViewer
+          isOpen={isMobileViewerOpen}
+          onClose={() => {
+            setIsMobileViewerOpen(false);
+          }}
+          blobUrl={blobUrl}
+          rawSource={currentSource}
+          title="Mermaid Diagram"
+          testId={`${testId}-mobile-viewer`}
+        />
       )}
 
       {/* Loading & Deterministic Min-Height Placeholder Container (KANBA-213: CLS <= 0.10) */}

@@ -513,19 +513,58 @@
 
 .docs-editor-container pre,
 .docs-prose pre,
-.docs-center-pane pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: break-word;
+.docs-center-pane pre,
+.docs-code-scroll-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  position: relative;
+  background-image:
+    linear-gradient(to right, var(--bg-surface), rgba(255, 255, 255, 0)),
+    linear-gradient(to left, var(--bg-surface), rgba(255, 255, 255, 0)),
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0));
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.docs-code-scroll-container {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.docs-code-scroll-container::before,
+.docs-code-scroll-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.8;
+}
+
+.docs-code-scroll-container::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-canvas), transparent);
+}
+
+.docs-code-scroll-container::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-canvas), transparent);
 }
 
 .docs-editor-container pre code,
 .docs-prose pre code,
 .docs-center-pane pre code {
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .docs-autosave-status {

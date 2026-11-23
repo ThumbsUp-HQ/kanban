@@ -444,11 +444,13 @@ export function DocMarkdownViewer({
           );
         } else {
           blocks.push(
-            <pre key={`code-${String(blockIdx++)}`} className="kb-doc-code-block">
-              <code className={`kb-doc-code ${codeLang ? `language-${codeLang}` : ''}`}>
-                {codeLines.join('\n')}
-              </code>
-            </pre>,
+            <div key={`code-scroll-${String(blockIdx++)}`} className="kb-docs-code-scroll-container">
+              <pre key={`code-${String(blockIdx)}`} className="kb-doc-code-block">
+                <code className={`kb-doc-code ${codeLang ? `language-${codeLang}` : ''}`}>
+                  {codeLines.join('\n')}
+                </code>
+              </pre>
+            </div>,
           );
         }
         inCodeBlock = false;

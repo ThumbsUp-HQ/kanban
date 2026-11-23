@@ -1,0 +1,240 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+/* ==========================================================================
+   DocsMobileDiagramViewer Styling (KB-MOBILE-DOCS-PAN-ZOOM, KAN-346)
+   Full-screen touch pinch-to-zoom and pan interactive overlay viewer.
+   ========================================================================== */
+
+/* Embedded Diagram Touch Trigger Wrapper */
+.docs-mobile-diagram-trigger-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  outline: none;
+}
+
+.docs-mobile-diagram-trigger-wrap:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* Tap to pan & zoom mobile hint pill */
+.docs-mobile-diagram-tap-hint {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 8px 14px;
+  background: var(--bg-surface-raised);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  z-index: 10;
+  min-height: 44px;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.docs-mobile-diagram-tap-hint:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.docs-mobile-diagram-tap-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+@media (max-width: 1024px), (pointer: coarse) {
+  .docs-mobile-diagram-tap-hint {
+    display: inline-flex;
+  }
+}
+
+/* Full-Screen Overlay Dialog */
+.docs-mobile-diagram-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+  touch-action: none;
+  animation: docsDiagramOverlayFadeIn 150ms ease-out;
+}
+
+@keyframes docsDiagramOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Header Bar */
+.docs-mobile-diagram-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 10;
+  min-height: 52px;
+  gap: 12px;
+}
+
+.docs-mobile-diagram-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.docs-mobile-diagram-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docs-mobile-diagram-swipe-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.docs-mobile-diagram-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Action Buttons (Touch bounds >= 44x44px) */
+.docs-mobile-diagram-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--fg-primary);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  user-select: none;
+}
+
+.docs-mobile-diagram-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.docs-mobile-diagram-btn--readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 54px;
+}
+
+.docs-mobile-diagram-close-btn {
+  color: var(--fg-muted);
+  font-size: 18px;
+}
+
+.docs-mobile-diagram-close-btn:hover {
+  color: var(--fg-primary);
+}
+
+/* Interactive Canvas Area */
+.docs-mobile-diagram-canvas {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.docs-mobile-diagram-canvas:active {
+  cursor: grabbing;
+}
+
+/* Content Container with will-change */
+.docs-mobile-diagram-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+  will-change: transform;
+  transform-origin: center center;
+  transition: none;
+}
+
+.docs-mobile-diagram-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.docs-mobile-diagram-svg {
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.docs-mobile-diagram-svg svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.docs-mobile-diagram-source {
+  padding: 16px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-primary);
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: auto;
+}
