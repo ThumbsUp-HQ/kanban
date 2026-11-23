@@ -148,9 +148,9 @@ export function WorkflowStudioPage({
   // If checking project permissions, show loading
   if (projectQuery.isLoading && propIsAdmin === undefined && !queryNonAdmin) {
     return (
-      <main className="workflow-studio" data-testid="workflow-studio-page">
+      <div className="workflow-studio" data-testid="workflow-studio-page">
         <div className="empty-hooks-cta">Loading project permissions...</div>
-      </main>
+      </div>
     );
   }
 
@@ -273,7 +273,7 @@ export function WorkflowStudioPage({
   };
 
   return (
-    <main className="workflow-studio" data-testid="workflow-studio-page">
+    <div className="workflow-studio" data-testid="workflow-studio-page">
       {/* Studio Header */}
       <header className="workflow-studio-header">
         <h1 className="workflow-studio-title">
@@ -417,6 +417,6 @@ export function WorkflowStudioPage({
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

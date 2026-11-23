@@ -153,7 +153,16 @@ export function LoginPage({
   const hasLocalAdmin = safeCards.some((c) => c.provider_kind === 'LOCAL_ADMIN');
 
   return (
-    <main className="auth-container" data-testid="login-page" aria-labelledby="login-title">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="auth-container"
+      data-testid="login-page"
+      aria-labelledby="login-title"
+    >
+      <a href="#main" className="kb-skip-link">
+        Skip to content
+      </a>
       <div className="auth-panel">
         <header className="auth-header">
           <div className="auth-header-title-row">

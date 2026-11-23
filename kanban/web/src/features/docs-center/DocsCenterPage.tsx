@@ -242,10 +242,28 @@ export function DocsCenterPage(): JSX.Element {
     </div>
   );
 
+  const handleSkipToMain = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    e.preventDefault();
+    const mainEl = document.getElementById('main') ?? contentRef.current;
+    if (mainEl) {
+      mainEl.focus();
+    }
+  };
+
   return (
     <div className="kb-docs-page" data-testid="docs-center-page">
+      {/* Skip to Content Link (A11y) */}
+      <a
+        href="#main"
+        className="kb-skip-link"
+        onClick={handleSkipToMain}
+      >
+        Skip to content
+      </a>
+
       {/* Top Header */}
       <header className="kb-docs-header">
+        <h1 className="sr-only">Kanban Documentation Center</h1>
         <div className="kb-docs-header-row-1">
           <div className="kb-docs-header-left">
             <Link to="/" className="kb-docs-logo" aria-label="Return to Board">
@@ -447,7 +465,13 @@ export function DocsCenterPage(): JSX.Element {
         </nav>
 
         {/* Content Area */}
-        <main className="kb-docs-main" ref={contentRef} data-testid="docs-main-content">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="kb-docs-main"
+          ref={contentRef}
+          data-testid="docs-main-content"
+        >
           <div className="kb-docs-content-wrapper">
             <div className="kb-docs-meta-bar" data-testid="docs-meta-bar">
               <span

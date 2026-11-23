@@ -1,0 +1,401 @@
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index be7b3216..42679c5b 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -317,7 +317,11 @@ export function AppShell({
+   };
+ 
+   if (!isAuthReady) {
+-    return <div className="kb-app-shell" data-testid="app-shell-auth-loading" />;
++    return (
++      <div className="kb-app-shell" data-testid="app-shell-auth-loading">
++        <main id="main" tabIndex={-1} className="kb-main-canvas" aria-label="Loading workspace" />
++      </div>
++    );
+   }
+ 
+   return (
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index e862d05f..dcb9b1c9 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -184,7 +184,7 @@ export function NotFoundView(): JSX.Element {
+ export function RoutePlaceholder({ route }: { route: string }): JSX.Element {
+   return (
+     <section data-testid="route-placeholder" data-route={route}>
+-      <h2>Route: {route}</h2>
++      <h1>Route: {route}</h1>
+     </section>
+   );
+ }
+@@ -650,7 +650,7 @@ export function DraftsWorkspaceView(): JSX.Element {
+                   {new Date(draft.createdAt).toLocaleDateString()}
+                 </span>
+               </div>
+-              <h3 className="draft-card-title">{draft.summary}</h3>
++              <h2 className="draft-card-title">{draft.summary}</h2>
+               {draft.description && (
+                 <p className="draft-card-desc">{draft.description}</p>
+               )}
+@@ -956,7 +956,7 @@ function ProjectCyclesViewInner({
+ 
+       {canCreate && (
+         <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
+-          <h3>Create New Cycle</h3>
++          <h2>Create New Cycle</h2>
+           {errorMsg && (
+             <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
+               {errorMsg}
+@@ -1013,7 +1013,7 @@ function ProjectCyclesViewInner({
+       {editingCycle && (
+         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-cycle-modal-title">
+           <div className="kb-modal" data-testid="edit-cycle-modal">
+-            <h3 id="edit-cycle-modal-title">Edit Cycle</h3>
++            <h2 id="edit-cycle-modal-title">Edit Cycle</h2>
+             {editErrorMsg && (
+               <div className="kb-cycles-error" role="alert" data-testid="edit-cycle-error">
+                 {editErrorMsg}
+@@ -1078,7 +1078,7 @@ function ProjectCyclesViewInner({
+       {completingCycle && (
+         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="complete-cycle-modal-title">
+           <div className="kb-modal" data-testid="complete-cycle-modal">
+-            <h3 id="complete-cycle-modal-title">Complete Cycle ({completingCycle.name})</h3>
++            <h2 id="complete-cycle-modal-title">Complete Cycle ({completingCycle.name})</h2>
+             <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginBottom: 16 }}>
+               Select a target cycle to roll over any unfinished issues, or send them to the backlog.
+             </p>
+@@ -1438,7 +1438,7 @@ function ProjectModulesViewInner({
+ 
+       {canCreate && (
+         <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
+-          <h3>Create New Module</h3>
++          <h2>Create New Module</h2>
+           {errorMsg && (
+             <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
+               {errorMsg}
+@@ -1522,7 +1522,7 @@ function ProjectModulesViewInner({
+       {editingModule && (
+         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-module-modal-title">
+           <div className="kb-modal" data-testid="edit-module-modal">
+-            <h3 id="edit-module-modal-title">Edit Module</h3>
++            <h2 id="edit-module-modal-title">Edit Module</h2>
+             {editErrorMsg && (
+               <div className="kb-modules-error" role="alert" data-testid="edit-module-error">
+                 {editErrorMsg}
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index 8bbe0d70..cba67cf0 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -624,26 +624,26 @@ export function AuthStudioPage(): JSX.Element {
+   // Access denied / non-admin: uniform empty state
+   if (accessDenied) {
+     return (
+-      <main className="auth-studio-page" data-testid="auth-studio-page">
++      <div className="auth-studio-page" data-testid="auth-studio-page">
+         <div className="auth-empty-state" role="alert">
+           <h2>Not found or no access</h2>
+           <p>The requested page does not exist or you do not have permission to view it.</p>
+         </div>
+-      </main>
++      </div>
+     );
+   }
+ 
+   // Loading state
+   if (isUserLoading || isLoadingCards) {
+     return (
+-      <main className="auth-studio-page" data-testid="auth-studio-page">
++      <div className="auth-studio-page" data-testid="auth-studio-page">
+         <p className="auth-card-subtext">Loading Authentication Studio...</p>
+-      </main>
++      </div>
+     );
+   }
+ 
+   return (
+-    <main className="auth-studio-page" data-testid="auth-studio-page">
++    <div className="auth-studio-page" data-testid="auth-studio-page">
+       <AdminStudioSubnav activeTab="auth" />
+       {/* Studio Header */}
+       <header className="auth-studio-header">
+@@ -1252,6 +1252,6 @@ export function AuthStudioPage(): JSX.Element {
+           </div>
+         </div>
+       ) : null}
+-    </main>
++    </div>
+   );
+ }
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+index 5e870448..fed0b812 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+@@ -316,7 +316,7 @@ export function LinkAuditorStudio(): JSX.Element {
+   };
+ 
+   return (
+-    <main
++    <div
+       className="link-auditor-container"
+       data-testid="link-auditor-studio"
+       tabIndex={-1}
+@@ -840,6 +840,6 @@ export function LinkAuditorStudio(): JSX.Element {
+           </div>
+         </>
+       )}
+-    </main>
++    </div>
+   );
+ }
+diff --git a/kanban/web/src/features/auth/LoginPage.tsx b/kanban/web/src/features/auth/LoginPage.tsx
+index bf85a43a..5bb317fe 100644
+--- a/kanban/web/src/features/auth/LoginPage.tsx
++++ b/kanban/web/src/features/auth/LoginPage.tsx
+@@ -153,7 +153,16 @@ export function LoginPage({
+   const hasLocalAdmin = safeCards.some((c) => c.provider_kind === 'LOCAL_ADMIN');
+ 
+   return (
+-    <main className="auth-container" data-testid="login-page" aria-labelledby="login-title">
++    <main
++      id="main"
++      tabIndex={-1}
++      className="auth-container"
++      data-testid="login-page"
++      aria-labelledby="login-title"
++    >
++      <a href="#main" className="kb-skip-link">
++        Skip to content
++      </a>
+       <div className="auth-panel">
+         <header className="auth-header">
+           <div className="auth-header-title-row">
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.tsx b/kanban/web/src/features/auth/SetupClaimPage.tsx
+index 5a719ad1..261fee25 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.tsx
+@@ -376,7 +376,16 @@ export function SetupClaimPage({
+   };
+ 
+   return (
+-    <main className="auth-container" data-testid="setup-claim-page" aria-labelledby="setup-title">
++    <main
++      id="main"
++      tabIndex={-1}
++      className="auth-container"
++      data-testid="setup-claim-page"
++      aria-labelledby="setup-title"
++    >
++      <a href="#main" className="kb-skip-link">
++        Skip to content
++      </a>
+       <div className="auth-panel">
+         <header className="auth-header">
+           <div className="auth-header-title-row">
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index 169e3526..c0d4373a 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -666,7 +666,7 @@ export function CustomFieldDefinitionEditor({
+       </aside>
+ 
+       {/* Main Canvas: Form & Security Controls */}
+-      <main className="custom-fields-editor-main">
++      <section className="custom-fields-editor-main" aria-label="Custom Field Configuration">
+         <div className="custom-fields-editor-main__header">
+           <h2 className="custom-fields-editor-main__title">
+             {selectedField ? `Edit: ${selectedField.name}` : 'New Custom Field Definition'}
+@@ -1385,7 +1385,7 @@ export function CustomFieldDefinitionEditor({
+             }}
+           />
+         )}
+-      </main>
++      </section>
+ 
+       {/* Tamper Confirmation Dialog (S13.2) */}
+       {isTamperConfirmOpen && (
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.tsx b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+index 33450099..58e9975e 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.tsx
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+@@ -242,10 +242,28 @@ export function DocsCenterPage(): JSX.Element {
+     </div>
+   );
+ 
++  const handleSkipToMain = (e: React.MouseEvent<HTMLAnchorElement>): void => {
++    e.preventDefault();
++    const mainEl = document.getElementById('main') ?? contentRef.current;
++    if (mainEl) {
++      mainEl.focus();
++    }
++  };
++
+   return (
+     <div className="kb-docs-page" data-testid="docs-center-page">
++      {/* Skip to Content Link (A11y) */}
++      <a
++        href="#main"
++        className="kb-skip-link"
++        onClick={handleSkipToMain}
++      >
++        Skip to content
++      </a>
++
+       {/* Top Header */}
+       <header className="kb-docs-header">
++        <h1 className="sr-only">Kanban Documentation Center</h1>
+         <div className="kb-docs-header-row-1">
+           <div className="kb-docs-header-left">
+             <Link to="/" className="kb-docs-logo" aria-label="Return to Board">
+@@ -447,7 +465,13 @@ export function DocsCenterPage(): JSX.Element {
+         </nav>
+ 
+         {/* Content Area */}
+-        <main className="kb-docs-main" ref={contentRef} data-testid="docs-main-content">
++        <main
++          id="main"
++          tabIndex={-1}
++          className="kb-docs-main"
++          ref={contentRef}
++          data-testid="docs-main-content"
++        >
+           <div className="kb-docs-content-wrapper">
+             <div className="kb-docs-meta-bar" data-testid="docs-meta-bar">
+               <span
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.tsx b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+index c41632dc..7ddb164b 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.tsx
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+@@ -253,11 +253,11 @@ export function DocsWorkspaceView(): JSX.Element {
+             )}
+           </>
+         ) : (
+-          <main className="docs-center-pane" aria-label="Page Editor">
++          <section className="docs-center-pane" aria-label="Page Editor">
+             <div className="docs-center-pane__empty" data-testid="docs-empty-state">
+               Select a document from the tree or create a new one to begin editing.
+             </div>
+-          </main>
++          </section>
+         )}
+ 
+         {/* Right Pane (Outline & History) */}
+diff --git a/kanban/web/src/features/docs/PageEditorPane.tsx b/kanban/web/src/features/docs/PageEditorPane.tsx
+index 9768a77a..7344e26e 100644
+--- a/kanban/web/src/features/docs/PageEditorPane.tsx
++++ b/kanban/web/src/features/docs/PageEditorPane.tsx
+@@ -259,9 +259,11 @@ function InnerEditorForm({
+   };
+ 
+   const breadcrumbs = page.breadcrumbs;
++  const isInsideMain = typeof document !== 'undefined' && Boolean(document.getElementById('main'));
++  const Container = isInsideMain ? 'section' : 'main';
+ 
+   return (
+-    <main className="docs-center-pane" aria-label="Page Editor" onBlur={handleBlur}>
++    <Container className="docs-center-pane" aria-label="Page Editor" onBlur={handleBlur}>
+       {/* Top Metadata Bar */}
+       <header className="docs-metadata-bar">
+         <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
+@@ -413,7 +415,7 @@ function InnerEditorForm({
+           </div>
+         )}
+       </div>
+-    </main>
++    </Container>
+   );
+ }
+ 
+@@ -437,24 +439,27 @@ export function PageEditorPane({
+     queryFn: () => fetchPage(pageId),
+   });
+ 
++  const isInsideMain = typeof document !== 'undefined' && Boolean(document.getElementById('main'));
++  const Container = isInsideMain ? 'section' : 'main';
++
+   // 403 & 404 security handling
+   if (error) {
+     return (
+-      <main className="docs-center-pane" aria-label="Page Editor">
++      <Container className="docs-center-pane" aria-label="Page Editor">
+         <div className="docs-center-pane__not-found" role="alert" data-testid="page-not-found">
+           Page was not found or you do not have access.
+         </div>
+-      </main>
++      </Container>
+     );
+   }
+ 
+   if (isLoading || !page) {
+     return (
+-      <main className="docs-center-pane" aria-label="Page Editor">
++      <Container className="docs-center-pane" aria-label="Page Editor">
+         <div className="docs-center-pane__loading" data-testid="page-loading">
+           Loading page...
+         </div>
+-      </main>
++      </Container>
+     );
+   }
+ 
+diff --git a/kanban/web/src/features/oauth/DeviceActivatePage.tsx b/kanban/web/src/features/oauth/DeviceActivatePage.tsx
+index 957e5148..ecba590f 100644
+--- a/kanban/web/src/features/oauth/DeviceActivatePage.tsx
++++ b/kanban/web/src/features/oauth/DeviceActivatePage.tsx
+@@ -243,7 +243,15 @@ export function DeviceActivatePage(): JSX.Element {
+   const isAdminTarget = info?.surface === 'admin' || (info?.resource ?? '').includes('/mcp/admin');
+ 
+   return (
+-    <div className="kb-device-activate-layout" data-testid="device-activate-layout">
++    <main
++      id="main"
++      tabIndex={-1}
++      className="kb-device-activate-layout"
++      data-testid="device-activate-layout"
++    >
++      <a href="#main" className="kb-skip-link">
++        Skip to content
++      </a>
+       <div className="kb-device-activate-card">
+         <header className="kb-device-activate-header">
+           <h1 className="kb-device-activate-title">Connect CLI Device</h1>
+@@ -435,6 +443,6 @@ export function DeviceActivatePage(): JSX.Element {
+           </section>
+         )}
+       </div>
+-    </div>
++    </main>
+   );
+ }
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index 3dff41ab..b8ad1df4 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -148,9 +148,9 @@ export function WorkflowStudioPage({
+   // If checking project permissions, show loading
+   if (projectQuery.isLoading && propIsAdmin === undefined && !queryNonAdmin) {
+     return (
+-      <main className="workflow-studio" data-testid="workflow-studio-page">
++      <div className="workflow-studio" data-testid="workflow-studio-page">
+         <div className="empty-hooks-cta">Loading project permissions...</div>
+-      </main>
++      </div>
+     );
+   }
+ 
+@@ -273,7 +273,7 @@ export function WorkflowStudioPage({
+   };
+ 
+   return (
+-    <main className="workflow-studio" data-testid="workflow-studio-page">
++    <div className="workflow-studio" data-testid="workflow-studio-page">
+       {/* Studio Header */}
+       <header className="workflow-studio-header">
+         <h1 className="workflow-studio-title">
+@@ -417,6 +417,6 @@ export function WorkflowStudioPage({
+           </div>
+         </div>
+       )}
+-    </main>
++    </div>
+   );
+ }
