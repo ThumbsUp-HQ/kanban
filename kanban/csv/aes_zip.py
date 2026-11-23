@@ -399,7 +399,10 @@ def extract_winzip_aes256_zip(  # noqa: C901, PLR0912, PLR0915
                     decomp = zlib.decompressobj(wbits=-15)
                     content = decomp.decompress(compressed)
                 else:
-                    msg = f"Unsupported AES-256 password-protected ZIP (method 99) compression method: {extra_method}"
+                    msg = (
+                        "Unsupported AES-256 password-protected ZIP (method 99) "
+                        f"compression method: {extra_method}"
+                    )
                     raise CorruptZipError(msg)
             finally:
                 if aes_key is not None:

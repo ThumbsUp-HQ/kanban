@@ -458,7 +458,6 @@ async def test_report_templates_crud_api(
 
 
 async def test_report_templates_workspace_alias_resolution(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:

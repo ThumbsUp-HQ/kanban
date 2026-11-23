@@ -40,6 +40,7 @@ import pytest
 from sqlalchemy import text
 
 from kanban.api.deps import PrincipalContext
+from kanban.app import create_app
 from kanban.content import ContentNormalizeError
 from kanban.csv.aes_zip import (
     CorruptZipError,
@@ -932,9 +933,7 @@ async def test_process_issue_import_summary_secret(
 
 
 def test_openapi_and_api_zero_winzip_trademark() -> None:
-    """Verify zero user-facing 'WinZip' copy in OpenAPI spec and issue CSV route descriptions (KAN-373)."""
-    from kanban.app import create_app
-
+    """Verify zero user-facing 'WinZip' copy in OpenAPI spec and issue CSV routes (KAN-373)."""
     app = create_app()
     openapi = app.openapi()
 
@@ -969,4 +968,3 @@ def test_openapi_and_api_zero_winzip_trademark() -> None:
     if openapi_file.exists():
         content = openapi_file.read_text(encoding="utf-8")
         assert "winzip" not in content.lower()
-

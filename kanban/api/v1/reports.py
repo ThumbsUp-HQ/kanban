@@ -83,7 +83,7 @@ async def _resolve_workspace_id(
         if caller.is_server_admin or res_uuid == caller.workspace_id:
             return res_uuid
 
-    if workspace_ref.strip().lower() in ("default", "current", "~", "@") and caller.workspace_id:
+    if workspace_ref.strip().lower() in ("default", "current", "~", "@"):
         return caller.workspace_id
 
     raise ProblemException(
