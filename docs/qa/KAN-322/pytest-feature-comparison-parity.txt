@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan322-469244d4/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan322-469244d4
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 7 items
+
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [ 14%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [ 28%]
+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [ 42%]
+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 57%]
+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 71%]
+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 85%]
+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                             Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------------
+kanban/tests/test_feature_comparison_parity.py     104      0     20      3    98%   92->106, 101->92, 198->197
+--------------------------------------------------------------------------------------------
+TOTAL                                              104      0     20      3    98%
+============================== 7 passed in 7.08s ===============================

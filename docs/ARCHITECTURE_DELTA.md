@@ -8,10 +8,10 @@ Overall Implementation Status:
 - 15 of 15 specification sections possess active, production-grade implementations in the codebase.
 - The monorepo layout, dual topology (standalone Unix-socket PostgreSQL 16 + hardened 5-network multi-container stack), zero-trust access visibility, multi-card authentication studio, canonical Markdown normalization, breathable whitespace UI, 17-feature ticket drawer, hierarchical docs and stickies, blinking sparkle cursor completion, three-surface intent MCP server, universal object graph DDL with link auditor, custom scripted fields, and scripted agent workflow transition helpers are fully implemented.
 - Key gaps and deviations identified:
-  1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
+  1. Dense Vector Hybrid Search RRF: Fully implemented and verified in `kanban/services/search.py` via `KAN-78`, integrating `ObjectEmbedding` dense vector similarity (`bge-small-en-v1.5`), pgvector HNSW iterative scan (`hnsw.iterative_scan`), and Reciprocal Rank Fusion (RRF) with lexical search.
   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex exec -s read-only -`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
   3. Non-OIDC OAuth2 Claim Mapper: `kanban/auth/cards/handshake.py` verifies authorization and token endpoint reachability for `OAUTH2`, but custom identity parsing for non-OIDC OAuth2 providers requires manual claim mapping.
-  4. Web OpenAPI Artifact Synchronization: Synchronize `kanban/web/openapi.json` with the live 242+ paths, 316+ operations, and 314+ schemas defined in the FastAPI application.
+  4. Web OpenAPI Artifact Synchronization: Synchronized `kanban/web/openapi.json` with the live 275 paths, 366 operations, and 384 schemas defined in the FastAPI application.
   5. Specification and Test Invariants:
      - Spec Section 11.1 cited 8 agent tools and grouped `link_objects & add_comment` together as item 8, whereas the codebase implements 9 distinct tools. The schema token budget test (`mcp/tests/test_schema_budget.py`) validates that 9 tools satisfy the token budget (~1,759 tokens <= 1,850 ceiling).
      - `mcp/tests/admin/test_manage_cycles_and_modules.py:test_contract_no_bind_or_delete_actions` asserts that `bind_project_repo` is not on Tool 6, conflicting with Spec Section 11.4 and `mcp/surfaces/admin/manage_cycles_and_modules.py`.
@@ -34,7 +34,7 @@ Overall Implementation Status:
 | **Section 8** | Hierarchical Docs, Pages & Project Stickies | `database/models/knowledge.py`, `features/docs/` | **COMPLETE (100%)** | **VERIFIED** | ltree hierarchy, 6-color stickies, debounced complexity heuristics, lossless ACL promotion. |
 | **Section 9** | Blinking Cursor Sparkle (`✨`) Completion | `agent/sparkle/`, `editor/sparkle/` | **COMPLETE (100%)** | **VERIFIED** | Caret portal state machine, 6-row right-click disambiguation matrix, outbound secret scrubber. |
 | **Section 10** | Multi-Provider AI Engine & Harnesses | `agent/providers/`, `agent/runners/` | **COMPLETE (100%)** | **VERIFIED** | OpenAI, Ollama, Gemini, CLI pipe (`codex exec -s read-only -`), remote WSS runner. |
-| **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 27 total tools (9 agent, 6 docs, 12 admin with action-aware scope checks), OpenAPI sync verified. |
+| **Section 11** | Three-Surface Intent-Driven MCP Server | `mcp/surfaces/agent/`, `docs/`, `admin/` | **COMPLETE (100%)** | **VERIFIED** | 24-25 total tools (9 core agent + 1 workpad tool, 3 consolidated docs tools: search, create, update, 12 admin with action-aware scope checks), OpenAPI sync verified (275 paths, 366 operations, 384 schemas). |
 | **Section 12** | Universal Object Graph DDL & Link Auditor | `database/models/spine.py`, `base.py` | **COMPLETE (100%)** | **VERIFIED** | 9 entity kinds, 13 link kinds, 6-class invalid link auditor, audited purger. |
 | **Section 13** | Custom Scripted Fields & Sandbox | `kanban/custom_fields/`, `kanban/sandbox/` | **COMPLETE (100%)** | **VERIFIED** | Admin-only definition gate, Wasmtime (Tier A), nsjail (Tier B sandbox), cryptographic AAL2 escalation. |
 | **Section 14** | Scripted Workflows & Transition Helpers | `database/models/workflow.py`, `kanban/issues/` | **COMPLETE (100%)** | **VERIFIED** | Sync validators, sync mutators, async agent gates with pending_agent_gate hold, E2E rework loop. |
@@ -278,19 +278,19 @@ Overall Implementation Status:
   - Authentication: OAuth 2.1 + PKCE `S256` or scoped API keys (`kb_agt_*`, `kb_doc_*`, `kb_adm_*`).
   - Progressive disclosure: `action="help"` or `identifier="help"`.
   - `InlineSafeDumper` YAML output with 3 LOD tiers (`summary`, `standard`, `full`), empty stripping and secret redaction.
-  - 27 Total Tools:
-    - `/mcp/agent` (9 actual tools): `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`.
-    - `/mcp/docs` (6 tools): `search_knowledge`, `read_doc`, `upsert_doc`, `manage_stickies`, `promote_sticky_to_doc`, `link_knowledge`.
+  - 24-25 Total Tools (3 isolated surfaces):
+    - `/mcp/agent` (9 core tools + 1 workpad tool = 10 tools): `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`, `update_workpad`.
+    - `/mcp/docs` (3 consolidated tools): `search`, `create`, `update` (with surgical diff-patching and ETag concurrency).
     - `/mcp/admin` (12 tools): `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links`, `destructive_lifecycle` (2-stage confirmation).
 - **Implementation Evidence:**
-  - Surfaces: `mcp/surfaces/agent/` (9 tools + helper), `mcp/surfaces/docs/` (6 tools), `mcp/surfaces/admin/` (12 tools).
+  - Surfaces: `mcp/surfaces/agent/` (10 tools), `mcp/surfaces/docs/` (3 tools), `mcp/surfaces/admin/` (12 tools).
   - Scope Enforcement: All 12 `/mcp/admin` tools are registered in `mcp/auth.py` `SCOPE_REQUIREMENTS` with action-aware scope evaluation (`admin:read` for inspection, `admin:write` for mutations, `admin:destructive` for purge/delete actions).
   - Aliases: `project` is aliased to `project_key` in `manage_ai_and_agent_runners` and `architect_project`.
   - Serialization: `mcp/yaml_out.py` (`InlineSafeDumper`), `mcp/errors.py` (50 canonical error codes).
 - **Verification Evidence:**
-  - Unit tests: `mcp/tests/test_schema_budget.py` (passes, ~1,759 agent tokens <= 1,850 budget; ~1,177 docs tokens <= 1,350 budget), `mcp/tests/test_yaml_out.py`, `mcp/tests/test_token_benchmark.py`.
+  - Unit tests: `mcp/tests/test_schema_budget.py` (passes, ~1,759 agent tokens <= 2,450 budget; ~1,177 docs tokens <= 1,350 budget), `mcp/tests/test_yaml_out.py`, `mcp/tests/test_token_benchmark.py`.
   - `mcp/tests/test_admin_scope_requirements_all_12.py` validates action-aware scoping across all 12 admin tools.
-  - OpenAPI synchronization verified via `kanban.tools.export_openapi` updating `kanban/web/openapi.json` (242+ routes, 316+ operations) and `gen:api` updating `schema.gen.ts`.
+  - OpenAPI synchronization verified via `kanban.tools.export_openapi` updating `kanban/web/openapi.json` (275 paths, 366 operations, 384 schemas) and `gen:api` updating `schema.gen.ts`.
 - **Implementation Status:** COMPLETE (100%)
 - **Verification Status:** VERIFIED
 - **Architectural Drift & Discrepancies:**
@@ -470,15 +470,15 @@ Overall Implementation Status:
 
 ### Phase 0: Immediate Integrity & Synchronization (P0)
 1. **Export OpenAPI & Sync TypeScript Types:**
-   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 242+ FastAPI routes.
+   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 275 FastAPI routes (366 operations, 384 schemas).
 2. **Export Workflow Models in Database Package:**
    Update `database/models/__init__.py` to import and re-export `WorkflowTransitionHook`, `WorkflowTransitionExecution`, and `WorkflowHookInvocation` from `database/models/workflow.py`.
 3. **Reconcile Stale MCP Unit Tests:**
-   Update `mcp/tests/test_protocol.py` and `mcp/tests/agent/test_search_tickets.py` to recognize the 9 agent tools, and update `mcp/tests/admin/test_manage_cycles_and_modules.py` to reflect the Tool 6 repo binding contract.
+   Update `mcp/tests/test_protocol.py` and `mcp/tests/agent/test_search_tickets.py` to recognize the 9 agent tools (plus `update_workpad`), and update `mcp/tests/admin/test_manage_cycles_and_modules.py` to reflect the Tool 6 repo binding contract.
 
 ### Phase 1: Search & AI Provider Extensions (P1)
-1. **Implement Dense Vector Hybrid Search Pipeline:**
-   Connect `ObjectEmbedding` pgvector similarity queries with `kanban/services/search.py` using Reciprocal Rank Fusion (RRF) to enable live `executed_mode="hybrid"` search.
+1. **Dense Vector Hybrid Search Pipeline (Completed):**
+   Fully implemented via KAN-78 in `kanban/services/search.py`, connecting `ObjectEmbedding` pgvector similarity queries with Reciprocal Rank Fusion (RRF) and HNSW index scans.
 2. **Implement Native Anthropic Provider:**
    Author `agent/providers/anthropic.py` implementing `LLMProvider` for direct Claude 3.5 Sonnet / Haiku integration with prompt caching.
 3. **Non-OIDC OAuth2 Field Mapping:**

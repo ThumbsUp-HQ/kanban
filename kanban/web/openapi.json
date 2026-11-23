@@ -1400,6 +1400,34 @@
         "title": "ArchiveEligibility",
         "type": "object"
       },
+      "AssignRoleLabelRequest": {
+        "additionalProperties": false,
+        "description": "Payload to assign a single role label to a principal.",
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_id"
+        ],
+        "title": "AssignRoleLabelRequest",
+        "type": "object"
+      },
       "AssigneeCreate": {
         "additionalProperties": false,
         "description": "Request payload for assigning a principal or free-text assignee.",
@@ -2505,6 +2533,70 @@
           "enabled"
         ],
         "title": "BackupScheduleUpdateRequest",
+        "type": "object"
+      },
+      "BatchSetRoleLabelsRequest": {
+        "additionalProperties": false,
+        "description": "Payload to replace all role labels on a principal.",
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "role_ids"
+        ],
+        "title": "BatchSetRoleLabelsRequest",
+        "type": "object"
+      },
+      "BatchUpdatePermissionsRequest": {
+        "additionalProperties": false,
+        "description": "Request payload for toggling a single permission across multiple roles.",
+        "properties": {
+          "granted": {
+            "description": "Whether permission should be enabled or disabled",
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "permission_key": {
+            "description": "Granular permission key",
+            "title": "Permission Key",
+            "type": "string"
+          },
+          "role_ids": {
+            "description": "Roles to update",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Role Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "role_ids",
+          "permission_key",
+          "granted"
+        ],
+        "title": "BatchUpdatePermissionsRequest",
         "type": "object"
       },
       "BeginWorkRequest": {
@@ -3825,6 +3917,93 @@
         "title": "CopiedSubIssueSummary",
         "type": "object"
       },
+      "CreateRbacRoleRequest": {
+        "additionalProperties": false,
+        "description": "Request payload for creating a custom RBAC role.",
+        "properties": {
+          "clone_from_role_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional role ID to copy permissions from",
+            "title": "Clone From Role Id"
+          },
+          "color_hex": {
+            "default": "#3b82f6",
+            "description": "Hex color code for role pill badge",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color Hex",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Role purpose",
+            "title": "Description"
+          },
+          "name": {
+            "description": "Display name for the role",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional project binding",
+            "title": "Project Id"
+          },
+          "scope_tier": {
+            "default": "workspace",
+            "description": "Tier scope of the role",
+            "enum": [
+              "workspace",
+              "project"
+            ],
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL-safe slug",
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateRbacRoleRequest",
+        "type": "object"
+      },
       "CreateWorkspaceRequest": {
         "additionalProperties": false,
         "description": "Payload for creating a new tenant workspace.",
@@ -3883,6 +4062,89 @@
           }
         ],
         "description": "Creator principal summary or masked external collaborator placeholder"
+      },
+      "CsvImportDiffReport": {
+        "description": "Forensic diff and validation report for issue CSV import preview or execution.",
+        "properties": {
+          "created_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Created Keys",
+            "type": "array"
+          },
+          "creates_count": {
+            "default": 0,
+            "title": "Creates Count",
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "error_count": {
+            "default": 0,
+            "title": "Error Count",
+            "type": "integer"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRowError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "to_create": {
+            "default": 0,
+            "title": "To Create",
+            "type": "integer"
+          },
+          "to_update": {
+            "default": 0,
+            "title": "To Update",
+            "type": "integer"
+          },
+          "total_rows": {
+            "default": 0,
+            "title": "Total Rows",
+            "type": "integer"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated Keys",
+            "type": "array"
+          },
+          "updates_count": {
+            "default": 0,
+            "title": "Updates Count",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "title": "CsvImportDiffReport",
+        "type": "object"
       },
       "CustomFieldApprovalApproveRequest": {
         "additionalProperties": false,
@@ -6809,6 +7071,39 @@
         "title": "ImportDiffReport",
         "type": "object"
       },
+      "ImportRowError": {
+        "description": "Validation or integrity error encountered during CSV issue import.",
+        "properties": {
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          },
+          "row": {
+            "default": 0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "row_number": {
+            "default": 0,
+            "title": "Row Number",
+            "type": "integer"
+          }
+        },
+        "title": "ImportRowError",
+        "type": "object"
+      },
       "InboundLinkOut": {
         "additionalProperties": false,
         "description": "Inbound link representation directed from source to queried object.",
@@ -7175,6 +7470,204 @@
           "purge_after"
         ],
         "title": "IssueDeleteResponse",
+        "type": "object"
+      },
+      "IssueExportRequest": {
+        "additionalProperties": false,
+        "description": "Filters and format configuration for issue export.",
+        "properties": {
+          "assignee_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by assignee IDs or handles",
+            "title": "Assignee Ids"
+          },
+          "cycle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by cycle ID",
+            "title": "Cycle Id"
+          },
+          "format": {
+            "default": "csv",
+            "description": "Output format: csv or WinZip AES-256 zip_csv",
+            "enum": [
+              "csv",
+              "zip_csv"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "issue_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Specific issue IDs or keys to export",
+            "title": "Issue Ids"
+          },
+          "label_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by label IDs",
+            "title": "Label Ids"
+          },
+          "module_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by module ID",
+            "title": "Module Id"
+          },
+          "priorities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by priority slugs or IDs",
+            "title": "Priorities"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project ID or identifier scope",
+            "title": "Project Id"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Search query string",
+            "title": "Q"
+          },
+          "sort_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "created_at",
+            "description": "Field to sort by (created_at, board_rank, sequence_id)",
+            "title": "Sort By"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "enum": [
+                  "asc",
+                  "desc"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "asc",
+            "description": "Sort direction",
+            "title": "Sort Dir"
+          },
+          "state_categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by state categories / groups",
+            "title": "State Categories"
+          },
+          "state_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Filter by state IDs",
+            "title": "State Ids"
+          },
+          "zip_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mandatory password when format is zip_csv (>= 12 characters)",
+            "title": "Zip Password"
+          }
+        },
+        "title": "IssueExportRequest",
         "type": "object"
       },
       "IssueList": {
@@ -7737,6 +8230,14 @@
             "description": "Target completion due date (YYYY-MM-DD)",
             "title": "Due Date"
           },
+          "editable_fields": {
+            "description": "List of issue field names caller has granular permission to modify",
+            "items": {
+              "type": "string"
+            },
+            "title": "Editable Fields",
+            "type": "array"
+          },
           "etag": {
             "anyOf": [
               {
@@ -7754,6 +8255,14 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "issue_permissions": {
+            "description": "List of granular issue permissions caller holds on this issue",
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Permissions",
+            "type": "array"
           },
           "key": {
             "description": "Canonical issue key (e.g. KAN-101)",
@@ -12671,6 +13180,77 @@
         "title": "PrincipalAssigneeResponse",
         "type": "object"
       },
+      "PrincipalRoleLabelItem": {
+        "description": "Assigned role label for a principal.",
+        "properties": {
+          "color_hex": {
+            "title": "Color Hex",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "principal_id": {
+            "format": "uuid",
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "role_id": {
+            "format": "uuid",
+            "title": "Role Id",
+            "type": "string"
+          },
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          },
+          "role_slug": {
+            "title": "Role Slug",
+            "type": "string"
+          },
+          "scope_tier": {
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "principal_id",
+          "role_id",
+          "role_slug",
+          "role_name",
+          "color_hex",
+          "scope_tier",
+          "created_at"
+        ],
+        "title": "PrincipalRoleLabelItem",
+        "type": "object"
+      },
       "PrincipalSummary": {
         "additionalProperties": false,
         "description": "Minimal non-leaking principal metadata for assignee responses.",
@@ -14307,6 +14887,114 @@
         "title": "PutIssueWorkpadRequest",
         "type": "object"
       },
+      "RbacRoleResponse": {
+        "description": "Response model for an RBAC role.",
+        "properties": {
+          "base_capability_mask": {
+            "title": "Base Capability Mask",
+            "type": "integer"
+          },
+          "color_hex": {
+            "title": "Color Hex",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_system": {
+            "title": "Is System",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "scope_tier": {
+            "title": "Scope Tier",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "system_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Role"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "slug",
+          "name",
+          "color_hex",
+          "description",
+          "is_system",
+          "system_role",
+          "scope_tier",
+          "base_capability_mask",
+          "project_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RbacRoleResponse",
+        "type": "object"
+      },
       "ReactionSummary": {
         "additionalProperties": false,
         "description": "Aggregated reaction count and caller participation.",
@@ -14781,6 +15469,517 @@
           "created_at"
         ],
         "title": "RepoBindingResponse",
+        "type": "object"
+      },
+      "ReportGenerateRequest": {
+        "additionalProperties": false,
+        "description": "Schema for generating a full multi-format report export.",
+        "properties": {
+          "filter_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Query"
+          },
+          "format": {
+            "default": "PDF",
+            "enum": [
+              "PDF",
+              "XLSX",
+              "CSV",
+              "DOCX",
+              "ODT",
+              "HTML",
+              "MD"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "issue_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Ids"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "template_ref": {
+            "description": "Slug or UUID of template",
+            "title": "Template Ref",
+            "type": "string"
+          },
+          "zip_password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 4,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip Password"
+          }
+        },
+        "required": [
+          "template_ref"
+        ],
+        "title": "ReportGenerateRequest",
+        "type": "object"
+      },
+      "ReportPreviewRequest": {
+        "additionalProperties": false,
+        "description": "Schema for rendering a fast live preview of a report template.",
+        "properties": {
+          "format": {
+            "default": "HTML",
+            "enum": [
+              "HTML",
+              "MD"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "issue_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Ids"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "project_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Ref"
+          },
+          "template_markdown": {
+            "anyOf": [
+              {
+                "maxLength": 131072,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Markdown"
+          },
+          "template_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Ref"
+          }
+        },
+        "title": "ReportPreviewRequest",
+        "type": "object"
+      },
+      "ReportPreviewResponse": {
+        "additionalProperties": false,
+        "description": "Schema for report preview output.",
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "issue_count": {
+            "title": "Issue Count",
+            "type": "integer"
+          },
+          "rendered_content": {
+            "title": "Rendered Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rendered_content",
+          "format",
+          "issue_count"
+        ],
+        "title": "ReportPreviewResponse",
+        "type": "object"
+      },
+      "ReportTemplateCreateRequest": {
+        "additionalProperties": false,
+        "description": "Schema for creating a custom report template.",
+        "properties": {
+          "allowed_formats": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Formats"
+          },
+          "csv_columns_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Columns Json"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters_schema_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters Schema Json"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "slug": {
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^[a-z0-9][a-z0-9-_]+$",
+            "title": "Slug",
+            "type": "string"
+          },
+          "template_markdown": {
+            "maxLength": 131072,
+            "minLength": 1,
+            "title": "Template Markdown",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "template_markdown"
+        ],
+        "title": "ReportTemplateCreateRequest",
+        "type": "object"
+      },
+      "ReportTemplateListResponse": {
+        "additionalProperties": false,
+        "description": "Schema representing a list of report templates.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReportTemplateResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReportTemplateListResponse",
+        "type": "object"
+      },
+      "ReportTemplateResponse": {
+        "additionalProperties": false,
+        "description": "Schema representing a stored or built-in report template.",
+        "properties": {
+          "allowed_formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Formats",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "csv_columns_json": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Csv Columns Json",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters_schema_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Parameters Schema Json"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "template_markdown": {
+            "title": "Template Markdown",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "slug",
+          "name",
+          "is_builtin",
+          "template_markdown",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReportTemplateResponse",
+        "type": "object"
+      },
+      "ReportTemplateUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Schema for updating a custom report template.",
+        "properties": {
+          "allowed_formats": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Formats"
+          },
+          "csv_columns_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Columns Json"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "parameters_schema_json": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters Schema Json"
+          },
+          "template_markdown": {
+            "anyOf": [
+              {
+                "maxLength": 131072,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Markdown"
+          }
+        },
+        "title": "ReportTemplateUpdateRequest",
         "type": "object"
       },
       "RequestProxyCheckInfo": {
@@ -15727,6 +16926,25 @@
           "keyring"
         ],
         "title": "ServicesDiagnosticsInfo",
+        "type": "object"
+      },
+      "SetRolePermissionsRequest": {
+        "additionalProperties": false,
+        "description": "Request payload for setting role permissions.",
+        "properties": {
+          "permissions": {
+            "description": "Complete set of permissions to assign",
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "title": "SetRolePermissionsRequest",
         "type": "object"
       },
       "SetupClaimRequest": {
@@ -17087,6 +18305,64 @@
         "title": "SystemAboutResponse",
         "type": "object"
       },
+      "SystemSettingsResponse": {
+        "additionalProperties": false,
+        "description": "System-level operational and governance settings.",
+        "properties": {
+          "air_gap_mode": {
+            "default": false,
+            "title": "Air Gap Mode",
+            "type": "boolean"
+          },
+          "deployment_mode": {
+            "default": "production",
+            "title": "Deployment Mode",
+            "type": "string"
+          },
+          "enable_issue_export": {
+            "default": true,
+            "title": "Enable Issue Export",
+            "type": "boolean"
+          },
+          "enable_issue_import": {
+            "default": true,
+            "title": "Enable Issue Import",
+            "type": "boolean"
+          }
+        },
+        "title": "SystemSettingsResponse",
+        "type": "object"
+      },
+      "SystemSettingsUpdate": {
+        "additionalProperties": false,
+        "description": "Payload for updating system-level governance settings.",
+        "properties": {
+          "enable_issue_export": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Issue Export"
+          },
+          "enable_issue_import": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Issue Import"
+          }
+        },
+        "title": "SystemSettingsUpdate",
+        "type": "object"
+      },
       "SystemStatusResponse": {
         "additionalProperties": false,
         "description": "Runtime deployment mode, persistence indicator, and infrastructure topology.",
@@ -17421,6 +18697,18 @@
             "minLength": 1,
             "title": "To State",
             "type": "string"
+          },
+          "verification_proof": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Proof"
           }
         },
         "required": [
@@ -18545,6 +19833,51 @@
           "display_name"
         ],
         "title": "UpdateProfileRequest",
+        "type": "object"
+      },
+      "UpdateRbacRoleRequest": {
+        "additionalProperties": false,
+        "description": "Request payload for updating an existing RBAC role.",
+        "properties": {
+          "color_hex": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Hex"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "UpdateRbacRoleRequest",
         "type": "object"
       },
       "UpdateWorkspaceRequest": {
@@ -20696,6 +22029,23 @@
             "title": "Display Name",
             "type": "string"
           },
+          "issue_export_allowed_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Issue Export Allowed Roles",
+            "type": "array"
+          },
+          "issue_export_enabled": {
+            "default": true,
+            "title": "Issue Export Enabled",
+            "type": "boolean"
+          },
+          "issue_import_enabled": {
+            "default": true,
+            "title": "Issue Import Enabled",
+            "type": "boolean"
+          },
           "mcp_key_max_ttl_days": {
             "title": "Mcp Key Max Ttl Days",
             "type": "integer"
@@ -20704,6 +22054,18 @@
             "default": "Workspace",
             "title": "Name",
             "type": "string"
+          },
+          "report_export_allowed_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Report Export Allowed Roles",
+            "type": "array"
+          },
+          "report_export_enabled": {
+            "default": true,
+            "title": "Report Export Enabled",
+            "type": "boolean"
           },
           "session_absolute_timeout_min": {
             "title": "Session Absolute Timeout Min",
@@ -20801,6 +22163,42 @@
             ],
             "title": "Display Name"
           },
+          "issue_export_allowed_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Export Allowed Roles"
+          },
+          "issue_export_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Export Enabled"
+          },
+          "issue_import_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Import Enabled"
+          },
           "mcp_key_max_ttl_days": {
             "anyOf": [
               {
@@ -20826,6 +22224,31 @@
               }
             ],
             "title": "Name"
+          },
+          "report_export_allowed_roles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Export Allowed Roles"
+          },
+          "report_export_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Export Enabled"
           },
           "session_absolute_timeout_min": {
             "anyOf": [
@@ -20906,9 +22329,9 @@
   },
   "info": {
     "title": "\ud83d\udc4dkanban API",
-    "version": "0.2.1259",
-    "x-build-commit": "bb998cc8a9b5",
-    "x-openapi-bundle-hash": "e15ba4f852c9289cbd0af6e2db96db2140e42ffb3a7cf3ce691b20af5a7d14fd"
+    "version": "0.2.1282",
+    "x-build-commit": "b308d37655cb",
+    "x-openapi-bundle-hash": "6c50eea38955944b6c65b81aa0875a15a684ae32bd77963a78474c52cf272376"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -25406,6 +26829,327 @@
         ]
       }
     },
+    "/api/v1/admin/principals/{principal_id}/role-labels": {
+      "get": {
+        "description": "List all custom and built-in role labels attached to a user, group, or agent.",
+        "operationId": "list_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "principal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Principal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PrincipalRoleLabelItem"
+                  },
+                  "title": "Response List Principal Role Labels Endpoint Api V1 Admin Principals  Principal Id  Role Labels Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "List assigned role labels for principal",
+        "tags": [
+          "admin-principals"
+        ]
+      },
+      "post": {
+        "description": "Attach a role label to a principal (Rule 1).",
+        "operationId": "assign_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "principal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Principal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRoleLabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrincipalRoleLabelItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Assign role label to principal",
+        "tags": [
+          "admin-principals"
+        ]
+      },
+      "put": {
+        "description": "Batch replace all role labels on a principal (multi-role chip picker support).",
+        "operationId": "batch_set_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "principal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Principal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSetRoleLabelsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PrincipalRoleLabelItem"
+                  },
+                  "title": "Response Batch Set Principal Role Labels Endpoint Api V1 Admin Principals  Principal Id  Role Labels Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Batch set role labels for principal",
+        "tags": [
+          "admin-principals"
+        ]
+      }
+    },
+    "/api/v1/admin/principals/{principal_id}/role-labels/{role_id}": {
+      "delete": {
+        "description": "Detach a role label from a principal (Rule 1).",
+        "operationId": "remove_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels__role_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "principal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Principal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Principal Role Label Endpoint Api V1 Admin Principals  Principal Id  Role Labels  Role Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Remove a role label from principal",
+        "tags": [
+          "admin-principals"
+        ]
+      }
+    },
     "/api/v1/admin/projects/blueprint:apply": {
       "post": {
         "description": "Atomically apply declarative blueprint changes in a single transaction.",
@@ -25586,6 +27330,474 @@
         "summary": "Get current declarative project blueprint",
         "tags": [
           "admin-project-blueprint"
+        ]
+      }
+    },
+    "/api/v1/admin/rbac/roles": {
+      "get": {
+        "description": "List all system and custom RBAC roles in workspace with their assigned permissions.",
+        "operationId": "list_roles_endpoint_api_v1_admin_rbac_roles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RbacRoleResponse"
+                  },
+                  "title": "Response List Roles Endpoint Api V1 Admin Rbac Roles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "List RBAC roles for workspace",
+        "tags": [
+          "admin-rbac"
+        ]
+      },
+      "post": {
+        "description": "Create a new custom RBAC role (Rule 3).\n\nWORKSPACE_ADMIN and SERVER_ADMIN can create roles.\nIf cloned by WORKSPACE_ADMIN from a role with workspace:* permissions,\nworkspace:* grants are automatically stripped so escalation is prevented.",
+        "operationId": "create_role_endpoint_api_v1_admin_rbac_roles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRbacRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RbacRoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Create a custom RBAC role",
+        "tags": [
+          "admin-rbac"
+        ]
+      }
+    },
+    "/api/v1/admin/rbac/roles/permissions:batch": {
+      "put": {
+        "description": "Toggle a permission key across multiple roles simultaneously (tri-state checkbox support).",
+        "operationId": "batch_update_role_permissions_endpoint_api_v1_admin_rbac_roles_permissions_batch_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchUpdatePermissionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Batch Update Role Permissions Endpoint Api V1 Admin Rbac Roles Permissions Batch Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Batch update a permission across multiple roles",
+        "tags": [
+          "admin-rbac"
+        ]
+      }
+    },
+    "/api/v1/admin/rbac/roles/{role_id}": {
+      "delete": {
+        "description": "Delete a custom RBAC role (Rule 1). Built-in roles cannot be deleted.",
+        "operationId": "delete_role_endpoint_api_v1_admin_rbac_roles__role_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Role Endpoint Api V1 Admin Rbac Roles  Role Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Delete custom RBAC role",
+        "tags": [
+          "admin-rbac"
+        ]
+      },
+      "patch": {
+        "description": "Update role display name, color_hex, or description (Rule 1).",
+        "operationId": "update_role_endpoint_api_v1_admin_rbac_roles__role_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRbacRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RbacRoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update RBAC role attributes",
+        "tags": [
+          "admin-rbac"
+        ]
+      }
+    },
+    "/api/v1/admin/rbac/roles/{role_id}/permissions": {
+      "get": {
+        "description": "Get active permissions assigned to an RBAC role.",
+        "operationId": "get_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Role Permissions Endpoint Api V1 Admin Rbac Roles  Role Id  Permissions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get permissions for a role",
+        "tags": [
+          "admin-rbac"
+        ]
+      },
+      "put": {
+        "description": "Replace all permissions on a role (Rule 1 & Rule 2).",
+        "operationId": "set_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Role Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRolePermissionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Role Permissions Endpoint Api V1 Admin Rbac Roles  Role Id  Permissions Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Replace permissions for a role",
+        "tags": [
+          "admin-rbac"
         ]
       }
     },
@@ -26180,6 +28392,105 @@
         "summary": "Get standalone deployment and persistence status for administrators",
         "tags": [
           "admin-standalone"
+        ]
+      }
+    },
+    "/api/v1/admin/system-settings": {
+      "get": {
+        "description": "Retrieve system-level governance and feature flags.",
+        "operationId": "get_system_settings_api_v1_admin_system_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get system settings (Server Admin + AAL2)",
+        "tags": [
+          "admin-system-settings"
+        ]
+      },
+      "patch": {
+        "description": "Update system-level governance flags.",
+        "operationId": "update_system_settings_api_v1_admin_system_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update system settings (Server Admin + AAL2)",
+        "tags": [
+          "admin-system-settings"
         ]
       }
     },
@@ -37357,6 +39668,202 @@
         ]
       }
     },
+    "/api/v1/projects/{project_ref}/issues/export": {
+      "post": {
+        "description": "Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
+        "operationId": "export_project_issues_api_v1_projects__project_ref__issues_export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_ref",
+            "required": true,
+            "schema": {
+              "title": "Project Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Export issues in project to CSV or WinZip AES-256 ZIP",
+        "tags": [
+          "issue-csv"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_ref}/issues/import": {
+      "post": {
+        "description": "Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project.",
+        "operationId": "import_project_issues_api_v1_projects__project_ref__issues_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_ref",
+            "required": true,
+            "schema": {
+              "title": "Project Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Simulate import and return diff without committing",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Simulate import and return diff without committing",
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvImportDiffReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Import issues from CSV or WinZip AES-256 ZIP into project",
+        "tags": [
+          "issue-csv"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_ref}/issues/import-template.csv": {
+      "get": {
+        "description": "Return pre-populated RFC 4180 CSV template for importing issues into project.",
+        "operationId": "download_project_import_template_api_v1_projects__project_ref__issues_import_template_csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_ref",
+            "required": true,
+            "schema": {
+              "title": "Project Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "Pre-populated CSV template with project states and priorities"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Download project-specific CSV import template",
+        "tags": [
+          "issue-csv"
+        ]
+      }
+    },
     "/api/v1/projects/{project_ref}/issues:query": {
       "post": {
         "description": "Execute an ad-hoc 2D structured query against project issues without saving a view.",
@@ -38498,6 +41005,76 @@
         "summary": "Update a priority",
         "tags": [
           "project-config"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_ref}/reports/generate": {
+      "post": {
+        "description": "Generate multi-format document report export for project issues.",
+        "operationId": "generate_project_report_api_v1_projects__project_ref__reports_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_ref",
+            "required": true,
+            "schema": {
+              "title": "Project Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Generate full report export for project",
+        "tags": [
+          "reports"
         ]
       }
     },
@@ -43122,6 +45699,761 @@
           }
         ],
         "summary": "Switch active workspace session",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/issues/export": {
+      "post": {
+        "description": "Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
+        "operationId": "export_workspace_issues_api_v1_workspaces__workspace_ref__issues_export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Export issues in workspace to CSV or WinZip AES-256 ZIP",
+        "tags": [
+          "issue-csv"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/issues/import-template.csv": {
+      "get": {
+        "description": "Return generic RFC 4180 CSV template for importing issues into workspace.",
+        "operationId": "download_workspace_import_template_api_v1_workspaces__workspace_ref__issues_import_template_csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "Generic workspace issue import template"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Download workspace-generic CSV import template",
+        "tags": [
+          "issue-csv"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/report-templates": {
+      "get": {
+        "description": "List built-in and workspace custom report templates visible to caller.",
+        "operationId": "list_report_templates_api_v1_workspaces__workspace_ref__report_templates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional project scope filter",
+            "in": "query",
+            "name": "project_ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional project scope filter",
+              "title": "Project Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTemplateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "List report templates in workspace",
+        "tags": [
+          "reports"
+        ]
+      },
+      "post": {
+        "description": "Create a new custom report template under workspace.",
+        "operationId": "create_report_template_api_v1_workspaces__workspace_ref__report_templates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportTemplateCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Create custom report template",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/report-templates/{template_ref}": {
+      "delete": {
+        "description": "Delete a custom report template (built-in templates cannot be deleted).",
+        "operationId": "delete_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_ref",
+            "required": true,
+            "schema": {
+              "title": "Template Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Delete custom report template",
+        "tags": [
+          "reports"
+        ]
+      },
+      "get": {
+        "description": "Retrieve full descriptor and markdown of a report template.",
+        "operationId": "get_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_ref",
+            "required": true,
+            "schema": {
+              "title": "Template Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get single report template",
+        "tags": [
+          "reports"
+        ]
+      },
+      "patch": {
+        "description": "Update a custom report template (built-in templates are immutable).",
+        "operationId": "update_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_ref",
+            "required": true,
+            "schema": {
+              "title": "Template Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportTemplateUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update custom report template",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/reports/generate": {
+      "post": {
+        "description": "Generate multi-format document report export for workspace issues.",
+        "operationId": "generate_workspace_report_api_v1_workspaces__workspace_ref__reports_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Generate full report export for workspace",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/reports/preview": {
+      "post": {
+        "description": "Render a live preview of a report against up to 5 matching issues.",
+        "operationId": "preview_report_api_v1_workspaces__workspace_ref__reports_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Render fast live preview of report template",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_ref}/settings": {
+      "get": {
+        "description": "Retrieve workspace settings by slug or UUID.",
+        "operationId": "get_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get workspace settings by workspace slug or ID",
+        "tags": [
+          "workspaces"
+        ]
+      },
+      "patch": {
+        "description": "Update workspace settings by slug or UUID. Requires WORKSPACE_ADMIN or SERVER_ADMIN.",
+        "operationId": "update_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_ref",
+            "required": true,
+            "schema": {
+              "title": "Workspace Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update workspace settings by workspace slug or ID",
         "tags": [
           "workspaces"
         ]
