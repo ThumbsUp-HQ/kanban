@@ -761,9 +761,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2, 8px);
-  padding: 8px var(--space-4, 16px);
+  padding: var(--space-3, 12px);
   background: var(--bg-surface-raised, #24272f);
-  border-bottom: 1px solid var(--border-subtle, #333842);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-md, 6px);
   flex-wrap: wrap;
 }
 
@@ -921,6 +922,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
+}
+
+.split-activity-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: var(--space-3, 12px);
 }
 
 .issue-navigator-position {
