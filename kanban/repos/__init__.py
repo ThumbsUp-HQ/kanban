@@ -12,6 +12,12 @@ from kanban.repos.mirror import (
     MirrorSizeLimitError,
     MirrorTimeoutError,
 )
+from kanban.repos.signature_verifier import (
+    CommitSignatureVerifier,
+    SignatureVerificationResult,
+    verify_commit_signature,
+    verify_tag_signature,
+)
 from kanban.repos.url_policy import (
     RepoUrlRejectedError,
     ValidatedRemoteUrl,
@@ -21,6 +27,7 @@ from kanban.repos.url_policy import (
 )
 
 __all__ = [
+    "CommitSignatureVerifier",
     "ExecGitCommandRunner",
     "FakeGitCommandRunner",
     "GitCommandRunner",
@@ -30,8 +37,11 @@ __all__ = [
     "MirrorSizeLimitError",
     "MirrorTimeoutError",
     "RepoUrlRejectedError",
+    "SignatureVerificationResult",
     "ValidatedRemoteUrl",
     "classify_ip_address",
     "resolve_host_ips",
     "validate_remote_url",
+    "verify_commit_signature",
+    "verify_tag_signature",
 ]

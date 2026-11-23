@@ -37,6 +37,7 @@ class TransitionRequest(BaseModel):
     comment_markdown: Annotated[
         str | None, Field(max_length=65536, description="Optional transition comment")
     ] = None
+    verification_proof: dict[str, Any] | None = None
 
 
 class TransitionResponse(BaseModel):
@@ -112,6 +113,7 @@ async def post_issue_transition(
             actor=caller,
             if_match=if_match,
             comment_markdown=body.comment_markdown,
+            verification_proof=body.verification_proof,
         )
     except ProblemException as exc:
         if session.is_active:

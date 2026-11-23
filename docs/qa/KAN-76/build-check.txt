@@ -1,0 +1,35 @@
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2281 files already formatted
+uv run mypy
+Success: no issues found in 1269 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1119 files, 4134 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
+mcp forbidden from importing database KEPT (51 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan76-5d4f2f85/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 72 migrations valid. Single head: p6_11_git_truststore_and_attestations
+OK: All 72 migrations valid. Single head: p6_11_git_truststore_and_attestations
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan76-5d4f2f85/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
