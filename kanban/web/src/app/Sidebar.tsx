@@ -529,29 +529,32 @@ export function Sidebar({
     };
   }, [isOpen]);
 
-  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(max-width: 1279px)').matches
-      : false,
-  );
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const mqlMatches =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(max-width: 1279px)').matches
+        : false;
+    return mqlMatches || window.innerWidth < 1280;
+  });
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mql = window.matchMedia('(max-width: 1279px)');
+    if (typeof window === 'undefined') return;
+    const mql =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(max-width: 1279px)')
+        : null;
     const handler = (e: MediaQueryListEvent): void => {
-      setIsMobileViewport(e.matches);
+      setIsMobileViewport(e.matches || window.innerWidth < 1280);
     };
-    if (mql.addEventListener) {
-      mql.addEventListener('change', handler);
-    } else if (typeof (mql as unknown as { addListener?: (h: (e: MediaQueryListEvent) => void) => void }).addListener === 'function') {
-      (mql as unknown as { addListener: (h: (e: MediaQueryListEvent) => void) => void }).addListener(handler);
-    }
+    const resizeHandler = (): void => {
+      setIsMobileViewport(Boolean(mql?.matches) || window.innerWidth < 1280);
+    };
+    mql?.addEventListener('change', handler);
+    window.addEventListener('resize', resizeHandler);
     return () => {
-      if (mql.removeEventListener) {
-        mql.removeEventListener('change', handler);
-      } else if (typeof (mql as unknown as { removeListener?: (h: (e: MediaQueryListEvent) => void) => void }).removeListener === 'function') {
-        (mql as unknown as { removeListener: (h: (e: MediaQueryListEvent) => void) => void }).removeListener(handler);
-      }
+      mql?.removeEventListener('change', handler);
+      window.removeEventListener('resize', resizeHandler);
     };
   }, []);
 

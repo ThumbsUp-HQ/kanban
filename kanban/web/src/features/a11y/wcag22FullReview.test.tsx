@@ -153,7 +153,7 @@ describe('WCAG 2.2 AA Full Review and Remediation Suite (KAN-315)', () => {
       expect(hamburgerRef.current?.getAttribute('aria-label')).toBe('Open navigation');
     });
 
-    it('CommandPalette combobox exposes aria-activedescendant that updates with selection', async () => {
+    it('CommandPalette combobox exposes aria-activedescendant that updates with selection', () => {
       const onClose = vi.fn();
       render(
         <QueryClientProvider client={queryClient}>
@@ -178,16 +178,16 @@ describe('WCAG 2.2 AA Full Review and Remediation Suite (KAN-315)', () => {
       expect(combobox.getAttribute('aria-expanded')).toBe('true');
       expect(combobox.getAttribute('aria-autocomplete')).toBe('list');
 
-      const initialActiveId = combobox.getAttribute('aria-activedescendant');
+      const initialActiveId = combobox.getAttribute('aria-activedescendant') ?? '';
       expect(initialActiveId).toBeTruthy();
-      expect(document.getElementById(initialActiveId!)).not.toBeNull();
+      expect(document.getElementById(initialActiveId)).not.toBeNull();
 
       // ArrowDown updates active descendant
       fireEvent.keyDown(combobox, { key: 'ArrowDown' });
-      const nextActiveId = combobox.getAttribute('aria-activedescendant');
+      const nextActiveId = combobox.getAttribute('aria-activedescendant') ?? '';
       expect(nextActiveId).toBeTruthy();
       expect(nextActiveId).not.toBe(initialActiveId);
-      expect(document.getElementById(nextActiveId!)).not.toBeNull();
+      expect(document.getElementById(nextActiveId)).not.toBeNull();
 
       // ArrowUp returns back
       fireEvent.keyDown(combobox, { key: 'ArrowUp' });
@@ -209,9 +209,11 @@ describe('WCAG 2.2 AA Full Review and Remediation Suite (KAN-315)', () => {
         </QueryClientProvider>
       );
 
-      const switcher = container.querySelector('.kb-workspace-switcher') as HTMLButtonElement;
+      const switcher = container.querySelector<HTMLButtonElement>('.kb-workspace-switcher');
       expect(switcher).not.toBeNull();
-      fireEvent.click(switcher);
+      if (switcher) {
+        fireEvent.click(switcher);
+      }
 
       const dropdown = screen.getByRole('menu');
       expect(dropdown).toBeDefined();

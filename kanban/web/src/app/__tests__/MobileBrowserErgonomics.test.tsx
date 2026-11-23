@@ -73,7 +73,7 @@ describe('Mobile & Landscape Browser Ergonomics Suite (KAN-314)', () => {
     expect(firstHeader).toBeDefined();
     const title = firstHeader?.querySelector('.swimlane-column-mobile-title');
     expect(title).not.toBeNull();
-    expect(title?.textContent?.length).toBeGreaterThan(0);
+    expect(title?.textContent.length).toBeGreaterThan(0);
 
     const count = firstHeader?.querySelector('.swimlane-column-mobile-count');
     expect(count).not.toBeNull();
@@ -91,7 +91,7 @@ describe('Mobile & Landscape Browser Ergonomics Suite (KAN-314)', () => {
     vi.useFakeTimers();
 
     // Mock live search returning an item that duplicates a base command key
-    (apiFetch as any).mockResolvedValueOnce({
+    vi.mocked(apiFetch).mockResolvedValueOnce({
       items: [
         {
           id: 'item-dup',
@@ -116,14 +116,16 @@ describe('Mobile & Landscape Browser Ergonomics Suite (KAN-314)', () => {
     const input = screen.getByTestId('command-palette-input');
     // Type query to trigger search
     fireEvent.change(input, { target: { value: 'mcp' } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(250);
+      return Promise.resolve();
     });
 
     // Clear query and advance timer to hit if (!trimmed) active callback
     fireEvent.change(input, { target: { value: '' } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(250);
+      return Promise.resolve();
     });
 
     vi.useRealTimers();

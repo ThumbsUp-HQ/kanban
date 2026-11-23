@@ -4,12 +4,9 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Final
-
-import pytest
 
 from database.models.base import Base
 from kanban.app import create_app
@@ -19,7 +16,9 @@ from mcp.surfaces.docs import build_docs_registry
 
 ROOT_DIR: Final[Path] = Path(__file__).resolve().parents[2]
 DOCS_FC_PATH: Final[Path] = ROOT_DIR / "docs" / "FEATURE_COMPARISON.md"
-WIKI_FC_PATH: Final[Path] = Path("/home/adamoutler/kanban/thumbs-up-kanban.wiki/Feature-Comparison.md")
+WIKI_FC_PATH: Final[Path] = Path(
+    "/home/adamoutler/kanban/thumbs-up-kanban.wiki/Feature-Comparison.md"
+)
 README_PATH: Final[Path] = ROOT_DIR / "README.md"
 DOCS_DELTA_PATH: Final[Path] = ROOT_DIR / "docs" / "ARCHITECTURE_DELTA.md"
 WIKI_DELTA_PATH: Final[Path] = Path(
@@ -73,7 +72,9 @@ def test_feature_comparison_markdown_parity() -> None:
         wiki_lines = WIKI_FC_PATH.read_text(encoding="utf-8").splitlines()
         assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (46 Features)"
         # All lines from line 2 onwards must match with 100% identical content
-        assert docs_lines[1:] == wiki_lines[1:], "Parity mismatch between docs and wiki Feature-Comparison"
+        assert docs_lines[1:] == wiki_lines[1:], (
+            "Parity mismatch between docs and wiki Feature-Comparison"
+        )
     else:
         manifest_text = WIKI_MANIFEST_PATH.read_text(encoding="utf-8")
         assert "# [Informational] Feature Comparison Matrix (46 Features)" in manifest_text
@@ -91,23 +92,31 @@ def test_feature_comparison_tables_and_shipped_status() -> None:
     in_section = False
 
     for line in content.splitlines():
-        if line.startswith("## 1. ") or line.startswith("## 2. ") or line.startswith("## 3. ") or line.startswith("## 4. ") or line.startswith("## 5. "):
+        if line.startswith(("## 1. ", "## 2. ", "## 3. ", "## 4. ", "## 5. ")):
             in_section = True
             continue
         if line.startswith("## 6. "):
             in_section = False
             break
-        if in_section and line.startswith("|") and not line.startswith("| Feature") and not line.startswith("| ---"):
+        if (
+            in_section
+            and line.startswith("|")
+            and not line.startswith(("| Feature", "| ---"))
+        ):
             m = table_row_re.match(line)
             if m:
                 feat_name = m.group(1).strip()
                 status = m.group(2).strip()
                 section_feature_rows.append((feat_name, status))
 
-    assert len(section_feature_rows) == 46, f"Expected 46 feature rows, got {len(section_feature_rows)}"
+    assert len(section_feature_rows) == 46, (
+        f"Expected 46 feature rows, got {len(section_feature_rows)}"
+    )
 
     for feat_name, status in section_feature_rows:
-        assert status == "✅", f"Feature '{feat_name}' has status '{status}', expected '✅' (zero stale 🎯✅ markers allowed)"
+        assert status == "✅", (
+            f"Feature '{feat_name}' has status '{status}', expected '✅'"
+        )
 
 
 def test_shipped_tickets_documented() -> None:
@@ -117,7 +126,9 @@ def test_shipped_tickets_documented() -> None:
     combined = fc_text + "\n" + readme_text
 
     for ticket in SHIPPED_TICKETS:
-        assert ticket in combined, f"Ticket {ticket} is not documented in FEATURE_COMPARISON or README"
+        assert ticket in combined, (
+            f"Ticket {ticket} is not documented in FEATURE_COMPARISON or README"
+        )
 
 
 def test_mcp_tool_counts_and_architecture_delta_parity() -> None:
@@ -139,7 +150,7 @@ def test_mcp_tool_counts_and_architecture_delta_parity() -> None:
     for delta_path in [p for p in (DOCS_DELTA_PATH, WIKI_DELTA_PATH) if p.exists()]:
         text = delta_path.read_text(encoding="utf-8")
         # Ensure delta docs do not claim hybrid search is unexecuted or locked to lexical
-        assert "locking executed_mode=\"lexical\"" not in text
+        assert 'locking executed_mode="lexical"' not in text
         assert "24-25" in text or "24" in text
 
 
@@ -151,7 +162,10 @@ def test_codebase_metrics_parity() -> None:
 
     # Live migrations
     sql_up_files = list((ROOT_DIR / "database" / "migrations" / "sql").glob("*.up.sql"))
-    alembic_files = [f for f in (ROOT_DIR / "database" / "migrations" / "versions").glob("*.py") if not f.name.endswith("__init__.py")]
+    versions_dir = ROOT_DIR / "database" / "migrations" / "versions"
+    alembic_files = [
+        f for f in versions_dir.glob("*.py") if not f.name.endswith("__init__.py")
+    ]
     assert len(sql_up_files) == 76, f"Expected 76 SQL up files, got {len(sql_up_files)}"
     assert len(alembic_files) == 76, f"Expected 76 Alembic versions, got {len(alembic_files)}"
 
@@ -159,8 +173,9 @@ def test_codebase_metrics_parity() -> None:
     app = create_app()
     openapi = app.openapi()
     paths_count = len(openapi.get("paths", {}))
+    http_verbs = {"get", "post", "put", "delete", "patch", "options", "head"}
     ops_count = sum(
-        len([m for m in methods if m.lower() in ["get", "post", "put", "delete", "patch", "options", "head"]])
+        len([m for m in methods if m.lower() in http_verbs])
         for methods in openapi.get("paths", {}).values()
     )
     schemas_count = len(openapi.get("components", {}).get("schemas", {}))

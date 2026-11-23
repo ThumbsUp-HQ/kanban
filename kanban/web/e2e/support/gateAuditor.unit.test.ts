@@ -7,10 +7,18 @@ import {
   FORBIDDEN_MOCK_TOKENS,
   scanForMockTokens,
   assertZeroMockData,
+  scanDomForMockData,
+  scanHorizontalOverflow,
+  scanModalFooterVisibility,
   calculateLuminance,
   calculateContrastRatio,
   parseRgb,
+  scanElementContrast,
   ROLE_DISALLOWED_SELECTORS,
+  assertDisallowedControls,
+  scanLandmarksAndHeadings,
+  scanAccessibleNamesAndAria,
+  scanFocusVisibleIndicators,
   scanMobileTouchTargets,
   scanMobileInputFontSizes,
   scanTopbarOcclusion,
@@ -179,6 +187,200 @@ describe('gateAuditor Meta-Assertion Harness (KANBA-223)', () => {
       const violations = await scanTopbarOcclusion(mockPage, '.kb-topbar');
       expect(violations).toHaveLength(1);
       expect(violations[0]?.occludedPixels).toBe(52);
+    });
+
+    it('executes all DOM scanners inside jsdom via page.evaluate', async () => {
+      const evalPage = {
+        evaluate: vi.fn((fn: (arg?: unknown) => unknown, arg?: unknown) =>
+          Promise.resolve(fn(arg)),
+        ),
+        locator: vi.fn((sel: string) => ({
+          count: vi.fn(() => Promise.resolve(sel.includes('home-create-issue-btn') ? 1 : 0)),
+          first: vi.fn(() => {
+            const el = document.querySelector(sel);
+            return {
+              count: vi.fn(() => Promise.resolve(el ? 1 : 0)),
+              focus: vi.fn(() => Promise.resolve()),
+              evaluate: vi.fn((fn: (e: Element) => unknown) =>
+                Promise.resolve(el ? fn(el) : null),
+              ),
+            };
+          }),
+        })),
+      } as unknown as Page;
+
+      // 1. scanDomForMockData & scanForMockTokens branches
+      expect(scanForMockTokens(null)).toEqual([]);
+      expect(scanForMockTokens(42)).toEqual([]);
+      expect(scanForMockTokens(true)).toEqual([]);
+      expect(parseRgb('')).toBeNull();
+      expect(parseRgb('invalid')).toBeNull();
+      expect(calculateContrastRatio('invalid', 'rgb(0,0,0)')).toBe(21);
+
+      document.body.innerText = 'Welcome Alice Cooper';
+      document.body.innerHTML = `
+        <div id="state-todo" data-testid="mod-1">
+          <a href="/undefined/page">Link</a>
+          <input value="Adam Outler" />
+        </div>
+      `;
+      const mockHits = await scanDomForMockData(evalPage);
+      expect(mockHits.length).toBeGreaterThan(0);
+
+      // 2. scanHorizontalOverflow
+      Object.defineProperty(document.documentElement, 'scrollWidth', { value: 1200, configurable: true });
+      Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+      const wideEl = document.createElement('div');
+      wideEl.id = 'wide';
+      wideEl.className = 'wide-box extra';
+      wideEl.getBoundingClientRect = () => ({ right: 500, left: 0, top: 0, bottom: 50, width: 500, height: 50, x: 0, y: 0, toJSON: () => ({}) });
+      document.body.appendChild(wideEl);
+      const overflowRes = await scanHorizontalOverflow(evalPage, 390);
+      expect(overflowRes.overflows).toBe(true);
+      expect(overflowRes.offendingElements.length).toBeGreaterThan(0);
+      const overflowNoLimit = await scanHorizontalOverflow(evalPage);
+      expect(overflowNoLimit.overflows).toBe(true);
+
+      // 3. scanModalFooterVisibility
+      Object.defineProperty(window, 'innerHeight', { value: 400, configurable: true });
+      document.body.innerHTML = `
+        <div role="dialog" id="m-hidden"></div>
+        <div role="dialog" id="m-nofooter"></div>
+        <div role="dialog" id="m-visible">
+          <footer class="modal-footer">
+            <button id="b-hidden">Hidden</button>
+            <button id="b-oob">Save</button>
+            <button id="b-ok">Cancel</button>
+          </footer>
+        </div>
+      `;
+      const mVisible = document.getElementById('m-visible');
+      const mNoFooter = document.getElementById('m-nofooter');
+      if (mNoFooter) {
+        mNoFooter.getBoundingClientRect = () => ({ width: 200, height: 200, top: 0, left: 0, right: 200, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      if (mVisible) {
+        mVisible.getBoundingClientRect = () => ({ width: 300, height: 300, top: 0, left: 0, right: 300, bottom: 300, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      const bOob = document.getElementById('b-oob');
+      if (bOob) {
+        bOob.getBoundingClientRect = () => ({ width: 80, height: 36, top: -10, left: -10, right: 500, bottom: 500, x: -10, y: -10, toJSON: () => ({}) });
+      }
+      const bOk = document.getElementById('b-ok');
+      if (bOk) {
+        bOk.getBoundingClientRect = () => ({ width: 80, height: 36, top: 10, left: 10, right: 90, bottom: 46, x: 10, y: 10, toJSON: () => ({}) });
+      }
+      const modalViolations = await scanModalFooterVisibility(evalPage);
+      expect(modalViolations.length).toBe(1);
+
+      // 4. scanElementContrast
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.body.innerHTML = `
+        <div id="contrast-root" style="background-color: rgba(0, 0, 0, 0);">
+          <button id="c-low" style="color: rgb(30, 30, 30); font-size: 14px; font-weight: 400;">Low Contrast</button>
+          <h1 id="c-large" style="color: rgb(255, 255, 255); background-color: rgb(10, 10, 10); font-size: 20px; font-weight: 700;">High Contrast</h1>
+          <button id="c-emoji" style="color: rgb(30, 30, 30);">🛡️</button>
+          <button id="c-hidden" style="display: none;">Hidden</button>
+          <div aria-hidden="true"><button id="c-aria-hidden">Ignored</button></div>
+        </div>
+      `;
+      for (const id of ['c-low', 'c-large', 'c-emoji']) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.getBoundingClientRect = () => ({ width: 100, height: 30, top: 0, left: 0, right: 100, bottom: 30, x: 0, y: 0, toJSON: () => ({}) });
+        }
+      }
+      const contrastViolations = await scanElementContrast(evalPage, ['button', 'h1'], '#contrast-root');
+      expect(contrastViolations.length).toBe(1);
+      document.documentElement.removeAttribute('data-theme');
+
+      // 5. assertDisallowedControls
+      const roleViolations = await assertDisallowedControls(evalPage, 'viewer');
+      expect(roleViolations.length).toBe(1);
+
+      // 6. scanLandmarksAndHeadings
+      document.body.innerHTML = `
+        <nav></nav>
+        <nav aria-label="Secondary"></nav>
+        <h2>Skipped H1</h2>
+        <h4>Skipped H3</h4>
+      `;
+      const h2 = document.querySelector('h2');
+      const h4 = document.querySelector('h4');
+      if (h2) {
+        Object.defineProperty(h2, 'offsetParent', { value: document.body, configurable: true });
+      }
+      if (h4) {
+        Object.defineProperty(h4, 'offsetParent', { value: document.body, configurable: true });
+      }
+      const landmarkViolations = await scanLandmarksAndHeadings(evalPage);
+      expect(landmarkViolations.some((v) => v.kind === 'missing-main')).toBe(true);
+      expect(landmarkViolations.some((v) => v.kind === 'unlabelled-nav')).toBe(true);
+      expect(landmarkViolations.some((v) => v.kind === 'missing-h1')).toBe(true);
+      expect(landmarkViolations.some((v) => v.kind === 'skipped-heading')).toBe(true);
+
+      document.body.innerHTML = `<main><h1>Title</h1></main><main></main>`;
+      const multiMainViolations = await scanLandmarksAndHeadings(evalPage);
+      expect(multiMainViolations.some((v) => v.kind === 'multiple-mains')).toBe(true);
+
+      // 7. scanAccessibleNamesAndAria
+      document.body.innerHTML = `
+        <button id="unnamed-btn" class="sr-only"></button>
+        <button id="named-btn" class="sr-only" aria-label="Named"></button>
+        <div role="menu"><button role="radio">Bad Radio</button></div>
+        <div aria-labelledby="missing-id" aria-controls="missing-ctrl" aria-activedescendant="missing-act"></div>
+      `;
+      const ariaViolations = await scanAccessibleNamesAndAria(evalPage);
+      expect(ariaViolations.some((v) => v.kind === 'missing-name')).toBe(true);
+      expect(ariaViolations.some((v) => v.kind === 'invalid-parent-child')).toBe(true);
+      expect(ariaViolations.filter((v) => v.kind === 'broken-reference').length).toBe(3);
+
+      // 8. scanFocusVisibleIndicators
+      document.body.innerHTML = `
+        <input class="kb-palette-input" style="outline-style: none; outline-width: 0px; box-shadow: none;" />
+        <input class="navigator-search-input" style="outline-style: solid; outline-width: 2px;" />
+      `;
+      const focusViolations = await scanFocusVisibleIndicators(evalPage, ['.kb-palette-input', '.navigator-search-input', '.missing']);
+      expect(focusViolations.length).toBe(1);
+
+      // 9. scanMobileTouchTargets, scanMobileInputFontSizes, scanTopbarOcclusion
+      document.body.innerHTML = `
+        <header class="kb-topbar" style="z-index: 100;"></header>
+        <aside class="docs-tree-pane" style="position: fixed; z-index: 50;"></aside>
+        <button id="small-btn">Tiny</button>
+        <button id="ignored-btn" class="ignore-me">Ignored</button>
+        <button id="hidden-btn" style="display: none;">Hidden</button>
+        <div style="display: block;"><a id="inline-link" href="/test" style="display: inline;">Inline</a></div>
+        <input id="small-input" type="text" style="font-size: 12px;" />
+        <input id="hidden-input" type="text" style="display: none; font-size: 12px;" />
+      `;
+      const topbar = document.querySelector('.kb-topbar');
+      if (topbar) {
+        topbar.getBoundingClientRect = () => ({ top: 0, bottom: 52, left: 0, right: 390, width: 390, height: 52, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      const pane = document.querySelector('.docs-tree-pane');
+      if (pane) {
+        pane.getBoundingClientRect = () => ({ top: 10, bottom: 400, left: 0, right: 250, width: 250, height: 390, x: 0, y: 10, toJSON: () => ({}) });
+      }
+      const smallBtn = document.getElementById('small-btn');
+      if (smallBtn) {
+        smallBtn.getBoundingClientRect = () => ({ top: 0, bottom: 20, left: 0, right: 20, width: 20, height: 20, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      const inlineLink = document.getElementById('inline-link');
+      if (inlineLink) {
+        inlineLink.getBoundingClientRect = () => ({ top: 0, bottom: 16, left: 0, right: 40, width: 40, height: 16, x: 0, y: 0, toJSON: () => ({}) });
+      }
+      const smallInput = document.getElementById('small-input');
+      if (smallInput) {
+        smallInput.getBoundingClientRect = () => ({ top: 0, bottom: 30, left: 0, right: 100, width: 100, height: 30, x: 0, y: 0, toJSON: () => ({}) });
+      }
+
+      const touchRes = await scanMobileTouchTargets(evalPage, { minTargetSize: 44, ignoreSelectors: ['.ignore-me'] });
+      expect(touchRes.length).toBe(2);
+      const fontRes = await scanMobileInputFontSizes(evalPage, { minFontSize: 16 });
+      expect(fontRes.length).toBe(1);
+      const occRes = await scanTopbarOcclusion(evalPage);
+      expect(occRes.length).toBe(1);
     });
   });
 });

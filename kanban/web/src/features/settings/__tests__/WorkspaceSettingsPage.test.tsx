@@ -2536,7 +2536,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(screen.queryByTestId('save-trash-retention-btn')).toBeNull();
 
     // Trashed items table and restore button are available
-    expect(screen.getByTestId('trash-items-table')).toBeDefined();
+    expect(await screen.findByTestId('trash-items-table')).toBeDefined();
     expect(screen.getByText('Project Admin Trashed Item')).toBeDefined();
     const restoreBtn = screen.getByTestId('restore-btn-proj-item-1');
     expect(restoreBtn).toBeDefined();

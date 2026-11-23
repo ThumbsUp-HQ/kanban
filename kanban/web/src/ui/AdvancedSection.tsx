@@ -43,22 +43,19 @@ export function AdvancedSection({
   children,
 }: AdvancedSectionProps): JSX.Element {
   const generatedId = useId();
-  const sectionId = id || `kb-adv-${generatedId}`;
+  const sectionId = id ?? `kb-adv-${generatedId}`;
   const contentId = `${sectionId}-content`;
 
   const [internalOpen, setInternalOpen] = useState<boolean>(defaultOpen);
   const isControlled = isOpen !== undefined;
-  const open = isControlled ? isOpen : internalOpen;
+  const open = (isControlled ? isOpen : internalOpen) || hasErrors;
 
-  // Auto-expand if hasErrors is set to true so validation errors are immediately reachable
+  // Notify controlled listener if hasErrors is set to true so validation errors are immediately reachable
   useEffect(() => {
-    if (hasErrors && !open) {
-      if (!isControlled) {
-        setInternalOpen(true);
-      }
+    if (hasErrors) {
       onToggle?.(true);
     }
-  }, [hasErrors, open, isControlled, onToggle]);
+  }, [hasErrors, onToggle]);
 
   const toggle = () => {
     const nextState = !open;
@@ -82,8 +79,8 @@ export function AdvancedSection({
 
   const count = activeOverridesCount ?? activeOverrideCount ?? 0;
   const badgeText =
-    badgeLabel ||
-    `${count} custom ${count === 1 ? 'setting' : 'settings'} active`;
+    badgeLabel ??
+    `${String(count)} custom ${count === 1 ? 'setting' : 'settings'} active`;
 
   return (
     <details

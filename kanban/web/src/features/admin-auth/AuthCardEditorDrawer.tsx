@@ -684,10 +684,10 @@ export function AuthCardEditorDrawer({
   })();
 
   const hasAdvancedErrors = Boolean(
-    fieldErrors.slug ||
-      fieldErrors.buttonSubtext ||
-      fieldErrors.spkiPin ||
-      googleJsonError,
+    (fieldErrors.slug ??
+      fieldErrors.buttonSubtext ??
+      fieldErrors.spkiPin ??
+      googleJsonError),
   );
 
   return (

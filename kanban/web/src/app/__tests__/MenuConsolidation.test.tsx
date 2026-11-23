@@ -213,16 +213,6 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
         </button>
       );
 
-      const mockIssue: IssueDetail = {
-        id: 'iss-test',
-        key: 'KAN-100',
-        project_key: 'KAN',
-        summary: 'Split Mode Test Issue',
-        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
-        priority: { slug: 'high', label: 'High', emoji: '▲' },
-        capabilities: ['VIEW', 'EDIT', 'ADMIN'],
-      };
-
       render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-100']}>

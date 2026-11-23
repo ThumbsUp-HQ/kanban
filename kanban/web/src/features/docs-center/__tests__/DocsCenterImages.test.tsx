@@ -17,7 +17,6 @@ import { WIKI_CHAPTERS } from '../docsService';
 import {
   DocMarkdownViewer,
   resolveSafeDocImageUrl,
-  resolveSafeDocLinkHref,
 } from '../DocMarkdownViewer';
 import { DocsCenterPage } from '../DocsCenterPage';
 

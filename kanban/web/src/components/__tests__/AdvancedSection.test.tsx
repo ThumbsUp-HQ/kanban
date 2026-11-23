@@ -142,7 +142,9 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
           <button
             type="button"
             data-testid="trigger-error"
-            onClick={() => setHasErrors(true)}
+            onClick={() => {
+              setHasErrors(true);
+            }}
           >
             Trigger Error
           </button>

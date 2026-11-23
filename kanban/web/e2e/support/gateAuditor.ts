@@ -534,7 +534,7 @@ export async function scanLandmarksAndHeadings(page: Page): Promise<LandmarkHead
     } else if (mains.length > 1) {
       violations.push({
         kind: 'multiple-mains',
-        message: `Found ${mains.length} simultaneous active <main> landmarks on page`,
+        message: `Found ${String(mains.length)} simultaneous active <main> landmarks on page`,
       });
     }
 
@@ -550,7 +550,7 @@ export async function scanLandmarksAndHeadings(page: Page): Promise<LandmarkHead
         if (!ariaLabel && !ariaLabelledBy && !title) {
           violations.push({
             kind: 'unlabelled-nav',
-            message: `Unlabelled navigation landmark at index ${idx} when multiple navs exist`,
+            message: `Unlabelled navigation landmark at index ${String(idx)} when multiple navs exist`,
             element: nav.tagName.toLowerCase(),
           });
         }
@@ -596,7 +596,7 @@ export async function scanLandmarksAndHeadings(page: Page): Promise<LandmarkHead
         if (previousLevel > 0 && level > previousLevel + 1) {
           violations.push({
             kind: 'skipped-heading',
-            message: `Heading level h${level} skips levels directly after h${previousLevel} ("${(h.textContent ?? '').slice(0, 30)}")`,
+            message: `Heading level h${String(level)} skips levels directly after h${String(previousLevel)} ("${h.textContent.slice(0, 30)}")`,
             element: h.tagName.toLowerCase(),
           });
         }
@@ -636,12 +636,12 @@ export async function scanAccessibleNamesAndAria(page: Page): Promise<AriaViolat
     });
 
     interactives.forEach((el, idx) => {
-      const text = el.textContent?.trim() ?? '';
+      const text = el.textContent.trim();
       const ariaLabel = el.getAttribute('aria-label')?.trim() ?? '';
       const ariaLabelledBy = el.getAttribute('aria-labelledby')?.trim() ?? '';
       const title = el.getAttribute('title')?.trim() ?? '';
-      const placeholder = (el as HTMLInputElement).placeholder?.trim() ?? '';
-      const value = (el as HTMLInputElement).value?.trim() ?? '';
+      const placeholder = ((el as HTMLInputElement).placeholder || '').trim();
+      const value = ((el as HTMLInputElement).value || '').trim();
       const imgAlt = el.querySelector('img')?.getAttribute('alt')?.trim() ?? '';
 
       const hasName = Boolean(
@@ -651,7 +651,7 @@ export async function scanAccessibleNamesAndAria(page: Page): Promise<AriaViolat
       if (!hasName) {
         violations.push({
           kind: 'missing-name',
-          selector: `${el.tagName.toLowerCase()}:nth-of-type(${idx + 1})`,
+          selector: `${el.tagName.toLowerCase()}:nth-of-type(${String(idx + 1)})`,
           message: `Interactive element <${el.tagName.toLowerCase()}> has no accessible name or label`,
         });
       }
@@ -668,7 +668,7 @@ export async function scanAccessibleNamesAndAria(page: Page): Promise<AriaViolat
         violations.push({
           kind: 'invalid-parent-child',
           selector: '[role="menu"]',
-          message: `role="menu" contains ${invalidChildren.length} invalid radiogroup/radio children; must use role="group" and role="menuitemradio"`,
+          message: `role="menu" contains ${String(invalidChildren.length)} invalid radiogroup/radio children; must use role="group" and role="menuitemradio"`,
         });
       }
     });
@@ -816,7 +816,7 @@ export async function scanMobileTouchTargets(
         minAllowed: number;
       }[] = [];
 
-      const root = document.querySelector(containerSel) || document.body;
+      const root = document.querySelector(containerSel) ?? document.body;
       const interactiveElements = root.querySelectorAll<HTMLElement>(
         'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="menuitem"], [role="tab"]'
       );
@@ -845,7 +845,7 @@ export async function scanMobileTouchTargets(
         }
 
         if (rect.width < minSize - 1 || rect.height < minSize - 1) {
-          const text = (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 30);
+          const text = (el.textContent || (el.getAttribute('aria-label') ?? el.tagName)).trim().slice(0, 30);
           const selector = el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${String(idx + 1)})`;
           violations.push({
             selector,
@@ -892,7 +892,7 @@ export async function scanMobileInputFontSizes(
         requiredSize: number;
       }[] = [];
 
-      const root = document.querySelector(containerSel) || document.body;
+      const root = document.querySelector(containerSel) ?? document.body;
       const inputs = root.querySelectorAll<HTMLElement>(
         'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea'
       );

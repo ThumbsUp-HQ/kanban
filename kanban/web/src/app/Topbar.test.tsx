@@ -81,10 +81,10 @@ describe('Topbar', () => {
       avatarBtn.click();
     });
 
-    const themeRadiogroup = screen.getByRole('radiogroup', { name: 'Theme' });
+    const themeRadiogroup = screen.getByRole('group', { name: 'Theme preference' });
     expect(themeRadiogroup).toBeDefined();
 
-    const darkRadio = screen.getByRole('radio', { name: /Dark/ });
+    const darkRadio = screen.getByRole('menuitemradio', { name: /Dark/ });
     act(() => {
       darkRadio.click();
     });
@@ -95,18 +95,18 @@ describe('Topbar', () => {
     act(() => {
       avatarBtn.click();
     });
-    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Theme preference' })).toBeDefined();
 
     act(() => {
       themeRadiogroup.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
-    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Theme preference' })).toBeDefined();
 
     // Click outside to close
     act(() => {
       document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
-    expect(screen.queryByRole('radiogroup', { name: 'Theme' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Theme preference' })).toBeNull();
   });
 
   it('omits layout switcher on non-issues routes or when explicitly disabled', () => {

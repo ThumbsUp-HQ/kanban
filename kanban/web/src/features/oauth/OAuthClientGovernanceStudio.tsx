@@ -2,7 +2,6 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, useCallback, type JSX } from 'react';
-import { Link } from 'react-router';
 import {
   fetchAdminOAuthClients,
   patchAdminOAuthClient,

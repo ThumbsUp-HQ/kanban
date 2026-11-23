@@ -17,7 +17,9 @@ from scripts import sync_wiki_bundle
 def get_wiki_and_public_paths() -> tuple[Path, Path, Path]:
     """Resolve wiki dir, web public images dir, and README path."""
     repo_root = Path(__file__).resolve().parent.parent.parent
-    wiki_dir = Path(os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki"))
+    wiki_dir = Path(
+        os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki")
+    )
     public_images_dir = repo_root / "kanban" / "web" / "public" / "docs-images"
     readme_path = repo_root / "README.md"
     return wiki_dir, public_images_dir, readme_path
@@ -79,7 +81,9 @@ def test_zero_duplicate_numeric_prefix_collisions() -> None:
                 continue
             prefix = m.group(1)
             if prefix in seen_prefixes:
-                duplicates.append(f"Prefix '{prefix}' duplicated by {seen_prefixes[prefix]} and {img.name}")
+                duplicates.append(
+                    f"Prefix '{prefix}' duplicated by {seen_prefixes[prefix]} and {img.name}"
+                )
             else:
                 seen_prefixes[prefix] = img.name
 
@@ -125,8 +129,10 @@ def test_reject_external_image_links_in_wiki() -> None:
 
     for md_file in sorted(wiki_dir.glob("*.md")):
         content = md_file.read_text(encoding="utf-8")
-        for m in external_img_pattern.finditer(content):
-            violations.append(f"{md_file.name}: external image URL '{m.group(1)}'")
+        violations.extend(
+            f"{md_file.name}: external image URL '{m.group(1)}'"
+            for m in external_img_pattern.finditer(content)
+        )
 
     assert not violations, f"External image links violate offline-first policy: {violations}"
 

@@ -771,17 +771,17 @@ describe('Unified MCP Studio (KAN-31)', () => {
     );
     u2();
 
-    // 3. Admin redirect: /admin/mcp
+    // 3. Admin redirect: /admin/mcp-keys -> /admin/mcp
     render(
-      <MemoryRouter initialEntries={['/admin/mcp']}>
+      <MemoryRouter initialEntries={['/admin/mcp-keys?scope=server']}>
         <Routes>
-          <Route path="/admin/mcp" element={<AdminMcpRedirect />} />
-          <Route path="/settings/mcp" element={<RouteInspector />} />
+          <Route path="/admin/mcp-keys" element={<AdminMcpRedirect />} />
+          <Route path="/admin/mcp" element={<RouteInspector />} />
         </Routes>
       </MemoryRouter>,
     );
     expect(screen.getByTestId('resolved-location').textContent).toBe(
-      '/settings/mcp?scope=server',
+      '/admin/mcp?scope=server',
     );
   });
 });
