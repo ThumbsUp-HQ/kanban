@@ -125,7 +125,7 @@ export function AgingWipChart({
                     y1={p50Y}
                     x2={xLeft + colWidth - 4}
                     y2={p50Y}
-                    stroke="rgba(96, 165, 250, 0.7)"
+                    stroke="var(--chart-line-1, rgba(96, 165, 250, 0.7))"
                     strokeDasharray="3 3"
                   />
                 )}
@@ -135,7 +135,7 @@ export function AgingWipChart({
                     y1={p85Y}
                     x2={xLeft + colWidth - 4}
                     y2={p85Y}
-                    stroke="rgba(245, 158, 11, 0.8)"
+                    stroke="var(--warn-fg, rgba(245, 158, 11, 0.8))"
                     strokeDasharray="4 4"
                   />
                 )}
@@ -145,7 +145,7 @@ export function AgingWipChart({
                     y1={p95Y}
                     x2={xLeft + colWidth - 4}
                     y2={p95Y}
-                    stroke="rgba(239, 68, 68, 0.8)"
+                    stroke="var(--danger-fg, rgba(239, 68, 68, 0.8))"
                     strokeDasharray="2 2"
                   />
                 )}
@@ -181,9 +181,10 @@ export function AgingWipChart({
                   cx={colMid}
                   cy={cy}
                   r={isExceeded ? 7 : 5}
-                  fill={isExceeded ? '#dc2626' : '#2563eb'}
+                  fill={isExceeded ? 'var(--danger-fg, #dc2626)' : 'var(--chart-line-1, #2563eb)'}
                   stroke="var(--bg-surface, #ffffff)"
                   strokeWidth={2}
+                  strokeDasharray={isExceeded ? '3 1' : undefined}
                 >
                   <title>
                     {`${iss.issue_key} (${iss.title}): ${String(iss.age_in_current_state_hours)}h in state${
@@ -197,7 +198,7 @@ export function AgingWipChart({
                   fontSize="9"
                   fontFamily="var(--font-mono, monospace)"
                   fontWeight={isExceeded ? '700' : '400'}
-                  fill={isExceeded ? '#dc2626' : 'var(--fg-secondary, #4b5563)'}
+                  fill={isExceeded ? 'var(--danger-fg, #dc2626)' : 'var(--fg-secondary, #4b5563)'}
                 >
                   {iss.issue_key} ({Math.round(iss.age_in_current_state_hours)}h)
                 </text>

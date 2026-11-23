@@ -162,7 +162,7 @@ export function CycleBurndownChart({
             <path
               d={idealPath}
               fill="none"
-              stroke="#94a3b8"
+              stroke="var(--chart-line-2, #94a3b8)"
               strokeWidth="2"
               strokeDasharray="6 4"
             />
@@ -173,7 +173,7 @@ export function CycleBurndownChart({
             <path
               d={remainingPath}
               fill="none"
-              stroke="#2563eb"
+              stroke="var(--chart-line-1, #2563eb)"
               strokeWidth="2.5"
             />
           )}
@@ -185,8 +185,8 @@ export function CycleBurndownChart({
               cx={getX(idx)}
               cy={getY(pt.remaining)}
               r="4"
-              fill="#2563eb"
-              stroke="#ffffff"
+              fill="var(--chart-line-1, #2563eb)"
+              stroke="var(--bg-surface, #ffffff)"
               strokeWidth="1.5"
             >
               <title>{`${pt.date}: ${String(pt.remaining)} remaining of ${String(pt.scope)} scope`}</title>
