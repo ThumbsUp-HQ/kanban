@@ -1150,3 +1150,83 @@
   text-overflow: ellipsis;
   width: 100%;
 }
+
+/* ==========================================================================
+   Compact Landscape Ergonomics (max-height: 540px and orientation: landscape)
+   KB-MOBILE-LANDSCAPE-LAYOUT / KAN-343
+   ========================================================================== */
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .table-scroll-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    contain: inline-size;
+  }
+
+  .issues-table {
+    font-size: 0.75rem;
+  }
+
+  .issues-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    contain: paint;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table thead tr {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .issues-table th {
+    height: 32px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table th.sticky-col {
+    position: sticky;
+    left: 0;
+    top: 0;
+    z-index: 12;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table-body tr {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .issues-table td {
+    height: 32px;
+    min-height: 32px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .issues-table td.sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: var(--bg-surface);
+  }
+
+  .table-key-header {
+    width: 76px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+  }
+
+  .table-priority-cell {
+    gap: 4px;
+    font-size: 0.6875rem;
+  }
+}
+

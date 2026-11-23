@@ -863,3 +863,162 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ==========================================================================
+   Compact Landscape Ergonomics (max-height: 540px and orientation: landscape)
+   KB-MOBILE-LANDSCAPE-LAYOUT / KAN-343
+   ========================================================================== */
+
+@media (max-height: 540px) and (orientation: landscape) {
+  /* Calendar View Compact Landscape */
+  .calendar-view {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .calendar-toolbar {
+    min-height: 32px;
+    margin-bottom: var(--space-2, 8px);
+    gap: var(--space-2, 8px);
+  }
+
+  .calendar-toolbar-btn {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  .calendar-month-heading {
+    font-size: 0.9375rem;
+  }
+
+  .calendar-month-grid {
+    contain: paint;
+  }
+
+  .calendar-weekday-header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding: var(--space-1, 4px) 0;
+    font-size: 0.75rem;
+  }
+
+  .calendar-day-cell {
+    min-height: 48px;
+    padding: var(--space-1, 4px);
+  }
+
+  .calendar-day-header {
+    margin-bottom: 2px;
+  }
+
+  .calendar-day-number {
+    font-size: 0.75rem;
+  }
+
+  .calendar-issue-pill {
+    padding: 1px var(--space-1, 4px);
+    font-size: 0.6875rem;
+    height: 20px;
+  }
+
+  .calendar-agenda-row {
+    min-height: 32px;
+    height: 32px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  /* Timeline View Compact Landscape */
+  .timeline-view {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .timeline-toolbar {
+    min-height: 32px;
+    margin-bottom: var(--space-2, 8px);
+    gap: var(--space-2, 8px);
+  }
+
+  .timeline-zoom-btn {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  .timeline-split-container {
+    max-width: 100%;
+    overflow: hidden;
+    contain: layout paint;
+  }
+
+  .timeline-left-pane {
+    width: 160px;
+    min-width: 160px;
+  }
+
+  .timeline-left-header {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    contain: paint;
+  }
+
+  .timeline-left-row {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 var(--space-2, 8px);
+    gap: var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  .timeline-left-row-key {
+    font-size: 0.75rem;
+  }
+
+  .timeline-left-row-summary {
+    font-size: 0.75rem;
+  }
+
+  .timeline-right-canvas-wrapper {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    contain: layout paint;
+  }
+
+  .timeline-scale-header {
+    height: 32px;
+    min-height: 32px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    contain: paint;
+  }
+
+  .timeline-scale-cell {
+    padding: 4px 4px;
+    font-size: 0.6875rem;
+  }
+
+  .timeline-track-row {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .timeline-bar {
+    height: 22px;
+    font-size: 0.6875rem;
+  }
+}
+

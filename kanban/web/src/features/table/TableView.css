@@ -196,3 +196,124 @@
     box-sizing: border-box;
   }
 }
+
+/* ==========================================================================
+   Compact Landscape Ergonomics (max-height: 540px and orientation: landscape)
+   KB-MOBILE-LANDSCAPE-LAYOUT / KAN-343
+   ========================================================================== */
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .table-view-container {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .table-toolbar {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  .table-scroll-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    contain: inline-size;
+  }
+
+  .issues-table {
+    font-size: 0.75rem;
+  }
+
+  .issues-table thead tr,
+  .table-header-row {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .issues-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    contain: paint;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table th {
+    height: 32px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table th.sticky-col {
+    position: sticky;
+    left: 0;
+    top: 0;
+    z-index: 12;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .issues-table-body tr,
+  .table-row {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .issues-table td {
+    height: 32px;
+    min-height: 32px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .issues-table td.sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: var(--bg-surface);
+  }
+
+  .table-key-header,
+  .issues-table th.table-key-header {
+    width: 76px;
+    min-width: 76px;
+    max-width: 80px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+  }
+
+  .table-inline-select {
+    min-height: 26px;
+    height: 26px;
+    font-size: 0.75rem;
+    padding: 1px 4px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .table-summary-cell,
+  .table-col-header--summary {
+    min-width: 140px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+  }
+
+  .table-state-cell,
+  .table-col-header--state {
+    width: 110px;
+    min-width: 110px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+  }
+
+  .table-priority-cell-wrap,
+  .table-col-header--priority {
+    width: 88px;
+    min-width: 88px;
+    padding: var(--space-1, 4px) var(--space-2, 8px);
+  }
+}
+
