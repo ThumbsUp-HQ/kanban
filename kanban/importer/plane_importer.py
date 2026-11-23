@@ -50,6 +50,7 @@ from kanban.importer.plane_mapper import (
     compute_source_sha256,
     normalize_state_key,
 )
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import allocate_initial_board_rank
 
@@ -978,6 +979,9 @@ class PlaneImporter:
                 clean_issue_name = (
                     normalize_plain_text(issue.name)[:500] if issue.name else ""
                 ) or "(untitled issue)"
+                clean_issue_name = (
+                    enforce_secret_push_protection(clean_issue_name, field="summary") or ""
+                )
 
                 iss_created_at = _parse_iso_datetime(getattr(issue, "created_at", None))
                 iss_updated_at = _parse_iso_datetime(getattr(issue, "updated_at", None))
@@ -1031,6 +1035,10 @@ class PlaneImporter:
                     provenance_line = f"> Imported from `{original_issue_key}`\n\n"
                     if provenance_line not in clean_desc:
                         clean_desc = provenance_line + clean_desc
+
+                clean_desc = (
+                    enforce_secret_push_protection(clean_desc, field="description_markdown") or ""
+                )
 
                 # Resolve state strictly within issue_proj
                 target_state_id = None
@@ -1102,6 +1110,7 @@ class PlaneImporter:
                     start_date=s_date,
                     due_date=t_date,
                     ancestry_path=ancestry,
+                    provenance_tier="imported",
                 )
                 self.session.add(new_issue)
                 await self.session.flush()
@@ -1220,6 +1229,9 @@ class PlaneImporter:
 
                 if not clean_comment.strip():
                     clean_comment = "(empty comment)"
+                clean_comment = (
+                    enforce_secret_push_protection(clean_comment, field="body_markdown") or ""
+                )
 
                 mapped_author_id = (
                     _resolve_principal(comm.actor or comm.created_by) or self.caller.principal_id
@@ -1236,6 +1248,7 @@ class PlaneImporter:
                     body_markdown=clean_comment,
                     parent_comment_id=target_parent_comm,
                     created_at=comm_created_at,
+                    provenance_tier="imported",
                 )
                 self.session.add(new_comment)
                 await self.session.flush()

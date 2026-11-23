@@ -1,0 +1,384 @@
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index 457a0561..f140b923 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -8,7 +8,7 @@ import logging
+ import os
+ from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
+ 
+-from fastapi import APIRouter, Depends
++from fastapi import APIRouter, Depends, status
+ from pydantic import BaseModel, Field
+ from sqlalchemy import text
+ from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
+@@ -157,6 +157,21 @@ async def enroll_totp(
+     )
+ 
+     async with session_factory.session(rls_ctx) as session:
++        # KAN-333: Deny factor overwrite from MFA-pending or non-AAL2 sessions if active
++        has_active = await service.has_active_factor(session, principal.principal_id)
++        if has_active and (
++            getattr(principal, "mfa_pending", False) or principal.aal_level < AAL2_ELEVATED_LEVEL
++        ):
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=status.HTTP_403_FORBIDDEN,
++                title="MFA Factor Overwrite Denied",
++                detail=(
++                    "Cannot overwrite or re-enroll MFA factor from an MFA-pending "
++                    "or un-elevated session when MFA is already active."
++                ),
++            )
++
+         username: str | None = None
+         try:
+             async with session.begin_nested():
+diff --git a/kanban/auth/mfa/totp.py b/kanban/auth/mfa/totp.py
+index b97708c1..6970547f 100644
+--- a/kanban/auth/mfa/totp.py
++++ b/kanban/auth/mfa/totp.py
+@@ -99,13 +99,36 @@ class TotpService:
+         """Initialize service with root KEK provider."""
+         self._kek = kek
+ 
++    async def has_active_factor(
++        self,
++        session: AsyncSession,
++        principal_id: uuid.UUID,
++    ) -> bool:
++        """Check if principal has an active TOTP factor or WebAuthn credentials."""
++        res = await session.execute(
++            text(
++                "SELECT has_active_totp, webauthn_credential_count FROM kb_auth.mfa_status(:p_id)"
++            ),
++            {"p_id": principal_id},
++        )
++        row = res.mappings().first()
++        if not row:
++            return False
++        return bool(row["has_active_totp"] or (row["webauthn_credential_count"] or 0) > 0)
++
+     async def enroll(
+         self,
+         session: AsyncSession,
+         principal_id: uuid.UUID,
+         username: str,
++        *,
++        deny_if_active: bool = False,
+     ) -> tuple[str, str]:
+         """Enroll a new pending TOTP factor. Returns (otpauth_uri, secret_b32)."""
++        if deny_if_active and await self.has_active_factor(session, principal_id):
++            msg = "Cannot enroll or overwrite TOTP factor when MFA is already active"
++            raise ValueError(msg)
++
+         secret = secrets.token_bytes(20)
+         secret_b32 = base64.b32encode(secret).decode("ascii")
+         aad = b"kanban/totp/v1|" + principal_id.bytes
+diff --git a/kanban/tests/security/test_totp_re_enrollment_protection.py b/kanban/tests/security/test_totp_re_enrollment_protection.py
+new file mode 100644
+index 00000000..a4f38807
+--- /dev/null
++++ b/kanban/tests/security/test_totp_re_enrollment_protection.py
+@@ -0,0 +1,302 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security tests for TOTP re-enrollment protection and factor overwrite prevention (KAN-333 / GSF-003)."""
++# ruff: noqa: E501, D103
++
++from __future__ import annotations
++
++import base64
++import time
++import uuid
++from typing import TYPE_CHECKING, Final
++
++import httpx
++import pytest
++from fastapi import FastAPI
++from sqlalchemy import text
++
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.problems import ProblemException, problem_exception_handler
++from kanban.api.request_id import RequestIdMiddleware
++from kanban.api.v1 import build_v1_router
++from kanban.auth.cards.repository import admin_upsert
++from kanban.auth.local.hashing import hash_password_sync
++from kanban.auth.mfa.totp import TotpService, totp_at
++from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
++from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
++from kanban.auth.sessions.resolver import SessionCookieResolver
++from kanban.auth.sessions.service import SessionService
++from kanban.security.envelope import StaticKekProvider
++from kanban.security.keys import KeyMaterial
++from kanban.security.ratelimit.pg import PgRateLimiter
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++PEPPER_KEY: Final[bytes] = b"p" * 32
++SESSION_HMAC_KEY: Final[bytes] = b"s" * 32
++MASTER_KEK: Final[bytes] = b"k" * 32
++
++
++@pytest.fixture
++def key_material() -> KeyMaterial:
++    return KeyMaterial(
++        master_kek=MASTER_KEK,
++        master_kek_kid="kek-v1",
++        auth_pepper=PEPPER_KEY,
++        session_hmac_key=SESSION_HMAC_KEY,
++    )
++
++
++async def _setup_local_admin(
++    factory: RLSSessionFactory,
++    key_material: KeyMaterial,
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Provision a workspace and local admin account."""
++    ws_id = uuid.uuid4()
++    p_id = uuid.uuid4()
++    card_id = uuid.uuid4()
++    username = f"admin-{p_id.hex[:6]}"
++    pw_hash = hash_password_sync("SecureAdminPass123!", key_material.auth_pepper)
++
++    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
++    async with factory.session(ctx) as session:
++        await session.execute(text("RESET SESSION AUTHORIZATION"))
++        await session.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
++            {"id": ws_id, "slug": f"ws-totp-{ws_id.hex[:8]}", "name": "TOTP Security Test WS"},
++        )
++        await session.execute(
++            text(
++                "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Admin User', :pid, :pid)"
++            ),
++            {"ws_id": ws_id, "ckey": f"usr-{p_id.hex[:10]}", "pid": p_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO principals (id, principal_type, workspace_id, display_name) VALUES (:id, 'USER', :ws_id, 'Admin User')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) VALUES (:id, 'user', 'USER', :ws_id, 'admin@sec.example')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type) VALUES (uuidv7(), :ws_id, :pid, 'SERVER_ADMIN', 'server')"
++            ),
++            {"ws_id": ws_id, "pid": p_id},
++        )
++        await admin_upsert(
++            session=session,
++            workspace_id=ws_id,
++            card_id=card_id,
++            provider_kind="LOCAL_ADMIN",
++            slug=f"local-admin-{ws_id.hex[:8]}",
++            display_name="Local Administrator",
++            button_subtext="Username & password",
++            icon_preset="shield",
++            is_enabled=True,
++            sort_rank="0|h00000:",
++        )
++        await session.execute(text("SET LOCAL app.is_setup_claim = 'true'"))
++        await session.execute(
++            text("SELECT kb_auth.local_admin_create(:pid, :username, :hash, 'pepper-v1')"),
++            {"pid": p_id, "username": username, "hash": pw_hash},
++        )
++
++    return ws_id, p_id, card_id
++
++
++def _create_app(
++    factory: RLSSessionFactory,
++    key_material: KeyMaterial,
++) -> tuple[FastAPI, SessionService]:
++    session_service = SessionService(key_material.session_hmac_key)
++    app = FastAPI(title="TOTP Protection Test App")
++    app.state.session_service = session_service
++    app.state.session_factory = factory
++    app.state.key_material = key_material
++    app.state.rate_limiter = PgRateLimiter(factory.engine)
++    app.state.kek_provider = StaticKekProvider(
++        {key_material.master_kek_kid: key_material.master_kek},
++        current=key_material.master_kek_kid,
++    )
++
++    resolver = SessionCookieResolver(session_service, factory)
++    app.state.principal_resolver = resolver
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++
++    v1 = build_v1_router()
++    app.include_router(v1, prefix="/api/v1")
++    app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
++    app.add_middleware(RequestIdMiddleware)
++
++    return app, session_service
++
++
++@pytest.mark.asyncio
++async def test_mfa_pending_session_totp_overwrite_denied_when_active(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that an MFA-pending session cannot overwrite an active TOTP factor (KAN-333/GSF-003)."""
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    ws_id, p_id, _ = await _setup_local_admin(factory, key_material)
++    app, session_service = _create_app(factory, key_material)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        # 1. Issue an MFA-pending session for initial enrollment
++        mfa_pending_session = await session_service.create_after_login(
++            db_session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=1,
++            mfa_pending=True,
++        )
++        client.cookies.set(SESSION_COOKIE_NAME, mfa_pending_session.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, mfa_pending_session.csrf_token)
++
++        # 2. Initial enrollment from mfa_pending session succeeds (since no active factor exists)
++        enroll_res = await client.post(
++            "/api/v1/auth/mfa/totp/enroll",
++            headers={CSRF_HEADER_NAME: mfa_pending_session.csrf_token},
++        )
++        assert enroll_res.status_code == 200
++        enroll_data = enroll_res.json()
++        secret_b32 = enroll_data["secret"]
++
++        # 3. Confirm initial factor to activate it
++        secret_bytes = base64.b32decode(secret_b32)
++        code = totp_at(secret_bytes, int(time.time()))
++        confirm_res = await client.post(
++            "/api/v1/auth/mfa/totp/confirm",
++            json={"code": code},
++            headers={CSRF_HEADER_NAME: mfa_pending_session.csrf_token},
++        )
++        assert confirm_res.status_code == 200
++
++        # 4. Attacker steals password and creates a new MFA-pending session
++        attacker_mfa_pending = await session_service.create_after_login(
++            db_session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=1,
++            mfa_pending=True,
++        )
++        client.cookies.set(SESSION_COOKIE_NAME, attacker_mfa_pending.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, attacker_mfa_pending.csrf_token)
++
++        # 5. Overwrite attempt from mfa_pending session MUST BE DENIED with 403 AAL2_REQUIRED
++        overwrite_res = await client.post(
++            "/api/v1/auth/mfa/totp/enroll",
++            headers={CSRF_HEADER_NAME: attacker_mfa_pending.csrf_token},
++        )
++        assert overwrite_res.status_code == 403
++        err = overwrite_res.json()
++        assert err["code"] == "AAL2_REQUIRED"
++        assert "Cannot overwrite or re-enroll MFA factor" in err["detail"]
++
++        # 6. Compatibility alias /auth/totp/enroll also fails with 403 AAL2_REQUIRED
++        alias_res = await client.post(
++            "/api/v1/auth/totp/enroll",
++            headers={CSRF_HEADER_NAME: attacker_mfa_pending.csrf_token},
++        )
++        assert alias_res.status_code == 403
++        assert alias_res.json()["code"] == "AAL2_REQUIRED"
++
++
++@pytest.mark.asyncio
++async def test_totp_re_enrollment_allowed_from_elevated_aal2_session(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that an elevated AAL2 session is permitted to re-enroll/rotate TOTP factors."""
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    ws_id, p_id, _ = await _setup_local_admin(factory, key_material)
++    app, session_service = _create_app(factory, key_material)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        # 1. First enrollment and confirm
++        first_session = await session_service.create_after_login(
++            db_session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=1,
++            mfa_pending=True,
++        )
++        client.cookies.set(SESSION_COOKIE_NAME, first_session.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, first_session.csrf_token)
++
++        first_enroll = await client.post(
++            "/api/v1/auth/mfa/totp/enroll",
++            headers={CSRF_HEADER_NAME: first_session.csrf_token},
++        )
++        assert first_enroll.status_code == 200
++        sec1 = base64.b32decode(first_enroll.json()["secret"])
++        confirm_res = await client.post(
++            "/api/v1/auth/mfa/totp/confirm",
++            json={"code": totp_at(sec1, int(time.time()))},
++            headers={CSRF_HEADER_NAME: first_session.csrf_token},
++        )
++        assert confirm_res.status_code == 200
++
++        # 2. Elevated AAL2 session
++        aal2_session = await session_service.create_after_login(
++            db_session,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            mfa_pending=False,
++        )
++        client.cookies.set(SESSION_COOKIE_NAME, aal2_session.cookie_val)
++        client.cookies.set(CSRF_COOKIE_NAME, aal2_session.csrf_token)
++
++        # 3. Rotating/re-enrolling factor from AAL2 session succeeds
++        rotate_res = await client.post(
++            "/api/v1/auth/mfa/totp/enroll",
++            headers={CSRF_HEADER_NAME: aal2_session.csrf_token},
++        )
++        assert rotate_res.status_code == 200
++        assert "secret" in rotate_res.json()
++
++
++@pytest.mark.asyncio
++async def test_totp_service_deny_if_active_flag(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that TotpService.enroll(..., deny_if_active=True) raises ValueError when active."""
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    ws_id, p_id, _ = await _setup_local_admin(factory, key_material)
++    kek_provider = StaticKekProvider(
++        {key_material.master_kek_kid: key_material.master_kek},
++        current=key_material.master_kek_kid,
++    )
++    service = TotpService(kek_provider)
++
++    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
++    async with factory.session(ctx) as session:
++        # Check has_active_factor is initially False
++        assert await service.has_active_factor(session, p_id) is False
++
++        # First enrollment succeeds with deny_if_active=True
++        uri, sec_b32 = await service.enroll(session, p_id, "admin", deny_if_active=True)
++        assert uri.startswith("otpauth://")
++
++        # Confirm to activate factor
++        sec_bytes = base64.b32decode(sec_b32)
++        confirmed = await service.confirm(session, p_id, totp_at(sec_bytes, int(time.time())))
++        assert confirmed is True
++
++        # Now has_active_factor is True
++        assert await service.has_active_factor(session, p_id) is True
++
++        # Second enrollment with deny_if_active=True raises ValueError
++        with pytest.raises(ValueError, match="Cannot enroll or overwrite TOTP factor"):
++            await service.enroll(session, p_id, "admin", deny_if_active=True)

@@ -8,7 +8,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
@@ -157,6 +157,21 @@ async def enroll_totp(
     )
 
     async with session_factory.session(rls_ctx) as session:
+        # KAN-333: Deny factor overwrite from MFA-pending or non-AAL2 sessions if active
+        has_active = await service.has_active_factor(session, principal.principal_id)
+        if has_active and (
+            getattr(principal, "mfa_pending", False) or principal.aal_level < AAL2_ELEVATED_LEVEL
+        ):
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=status.HTTP_403_FORBIDDEN,
+                title="MFA Factor Overwrite Denied",
+                detail=(
+                    "Cannot overwrite or re-enroll MFA factor from an MFA-pending "
+                    "or un-elevated session when MFA is already active."
+                ),
+            )
+
         username: str | None = None
         try:
             async with session.begin_nested():

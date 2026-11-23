@@ -1,0 +1,781 @@
+diff --git a/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.down.sql b/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.down.sql
+new file mode 100644
+index 00000000..5b504cc9
+--- /dev/null
++++ b/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.down.sql
+@@ -0,0 +1,162 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Revert module_issues view
++DROP VIEW IF EXISTS module_issues;
++CREATE OR REPLACE VIEW module_issues AS
++SELECT module_id, issue_id, workspace_id, added_at, added_by_id
++FROM issue_modules;
++
++-- 2. Revert user_identities unique constraint
++ALTER TABLE user_identities DROP CONSTRAINT IF EXISTS user_identities_ws_card_subject_uq;
++DO $$
++BEGIN
++    IF NOT EXISTS (
++        SELECT 1 FROM pg_constraint WHERE conname = 'user_identities_auth_card_id_immutable_subject_id_key'
++    ) THEN
++        ALTER TABLE user_identities ADD CONSTRAINT user_identities_auth_card_id_immutable_subject_id_key UNIQUE (auth_card_id, immutable_subject_id);
++    END IF;
++END $$;
++
++-- 3. Revert kb_auth_switch_workspace to p4_18 definition
++CREATE OR REPLACE FUNCTION kb_auth_switch_workspace(
++    p_target_workspace_id UUID,
++    p_caller_principal_id UUID
++)
++RETURNS TABLE (
++    workspace_id UUID,
++    principal_id UUID
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++    v_target_ws workspaces%ROWTYPE;
++    v_target_pid UUID;
++    v_is_server_admin BOOLEAN := FALSE;
++    v_email TEXT;
++    v_display_name TEXT;
++    v_ckey TEXT;
++BEGIN
++    SELECT * INTO v_target_ws FROM workspaces WHERE id = p_target_workspace_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'WORKSPACE_NOT_FOUND';
++    END IF;
++
++    SELECT EXISTS (
++        SELECT 1 FROM role_bindings rb WHERE rb.principal_id = p_caller_principal_id AND rb.role = 'SERVER_ADMIN'
++    ) INTO v_is_server_admin;
++
++    SELECT p.id INTO v_target_pid
++    FROM principals p
++    WHERE p.id = p_caller_principal_id AND p.workspace_id = p_target_workspace_id AND p.status = 'ACTIVE';
++
++    IF v_target_pid IS NULL THEN
++        SELECT u.email, p.display_name INTO v_email, v_display_name
++        FROM users u JOIN principals p ON p.id = u.id
++        WHERE u.id = p_caller_principal_id;
++
++        IF v_email IS NOT NULL THEN
++            SELECT p.id INTO v_target_pid
++            FROM principals p
++            JOIN users u ON u.id = p.id
++            WHERE p.workspace_id = p_target_workspace_id AND lower(u.email) = lower(v_email) AND p.status = 'ACTIVE'
++            LIMIT 1;
++        END IF;
++    END IF;
++
++    IF v_target_pid IS NULL AND v_is_server_admin THEN
++        v_target_pid := uuidv7();
++        IF v_email IS NULL THEN v_email := 'server-admin@local.kanban'; END IF;
++        IF v_display_name IS NULL THEN v_display_name := 'Server Admin'; END IF;
++        v_ckey := 'usr-' || substr(replace(v_target_pid::text, '-', ''), 1, 12);
++
++        PERFORM register_object('user'::object_kind, p_target_workspace_id, NULL, v_ckey, v_display_name, v_target_pid, v_target_pid);
++
++        INSERT INTO principals (id, principal_type, workspace_id, display_name, status)
++        VALUES (v_target_pid, 'USER', p_target_workspace_id, v_display_name, 'ACTIVE');
++
++        INSERT INTO users (id, object_type, principal_type, workspace_id, email)
++        VALUES (v_target_pid, 'user', 'USER', p_target_workspace_id, v_email);
++
++        INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id)
++        VALUES (uuidv7(), p_target_workspace_id, v_target_pid, 'SERVER_ADMIN', 'server', NULL);
++    END IF;
++
++    IF v_target_pid IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'FORBIDDEN_WORKSPACE_SWITCH';
++    END IF;
++
++    RETURN QUERY SELECT p_target_workspace_id, v_target_pid;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_switch_workspace(UUID, UUID) TO kanban_app;
++
++-- 4. Revert kb_auth_list_user_workspaces to p4_21 definition
++CREATE OR REPLACE FUNCTION kb_auth_list_user_workspaces(p_principal_id UUID)
++RETURNS TABLE (
++    id UUID,
++    name TEXT,
++    slug TEXT,
++    role TEXT
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_email TEXT;
++    v_is_server_admin BOOLEAN := FALSE;
++BEGIN
++    SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']) INTO v_is_server_admin;
++
++    IF NOT v_is_server_admin THEN
++        SELECT u.email INTO v_email FROM users u WHERE u.id = p_principal_id;
++        IF v_email IS NOT NULL THEN
++            SELECT EXISTS (
++                SELECT 1
++                FROM role_bindings rb
++                JOIN principals p ON p.id = rb.principal_id
++                JOIN users u ON u.id = p.id
++                WHERE lower(u.email) = lower(v_email)
++                  AND rb.role = 'SERVER_ADMIN'
++                  AND p.status = 'ACTIVE'
++            ) INTO v_is_server_admin;
++        END IF;
++    END IF;
++
++    IF v_is_server_admin THEN
++        RETURN QUERY
++        SELECT w.id, w.name, w.slug, 'SERVER_ADMIN'::TEXT
++        FROM workspaces w
++        ORDER BY w.created_at ASC;
++        RETURN;
++    END IF;
++
++    IF v_email IS NULL THEN
++        SELECT u.email INTO v_email FROM users u WHERE u.id = p_principal_id;
++    END IF;
++
++    IF v_email IS NOT NULL THEN
++        RETURN QUERY
++        SELECT DISTINCT w.id, w.name, w.slug, COALESCE(rb.role::TEXT, 'WORKSPACE_MEMBER')
++        FROM workspaces w
++        JOIN principals p ON p.workspace_id = w.id
++        JOIN users u ON u.id = p.id
++        LEFT JOIN role_bindings rb ON rb.workspace_id = w.id AND rb.principal_id = p.id
++        WHERE lower(u.email) = lower(v_email)
++          AND p.status = 'ACTIVE';
++        RETURN;
++    END IF;
++
++    RETURN QUERY
++    SELECT DISTINCT w.id, w.name, w.slug, COALESCE(rb.role::TEXT, 'WORKSPACE_MEMBER')
++    FROM workspaces w
++    JOIN role_bindings rb ON rb.workspace_id = w.id
++    WHERE rb.principal_id = p_principal_id;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_list_user_workspaces(UUID) TO kanban_app;
+diff --git a/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.up.sql b/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.up.sql
+new file mode 100644
+index 00000000..ef8518a8
+--- /dev/null
++++ b/database/migrations/sql/p6_15_hardened_workspace_switch_and_module_issues.up.sql
+@@ -0,0 +1,198 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Enforce security_invoker on module_issues view (KAN-334 / GSF-023):
++-- Ensures tenant RLS policies on issues and issue_modules are invoked using the query caller's permissions.
++CREATE OR REPLACE VIEW module_issues WITH (security_invoker = true) AS
++SELECT module_id, issue_id, workspace_id, added_at, added_by_id
++FROM issue_modules;
++
++-- 2. Scoped identity uniqueness across workspaces (KAN-329 / GSF-001):
++-- Scope unique constraint to (workspace_id, auth_card_id, immutable_subject_id) so verified IdP accounts
++-- can be linked across workspaces without colliding globally.
++ALTER TABLE user_identities DROP CONSTRAINT IF EXISTS user_identities_auth_card_id_immutable_subject_id_key;
++DO $$
++BEGIN
++    IF NOT EXISTS (
++        SELECT 1 FROM pg_constraint WHERE conname = 'user_identities_ws_card_subject_uq'
++    ) THEN
++        ALTER TABLE user_identities ADD CONSTRAINT user_identities_ws_card_subject_uq UNIQUE (workspace_id, auth_card_id, immutable_subject_id);
++    END IF;
++END $$;
++
++-- 3. Hardened kb_auth_switch_workspace (KAN-329 / GSF-001):
++-- - Eliminates unverified cross-tenant email matching for non-server-admin callers
++-- - Enforces verified identity provenance via user_identities or direct principal membership
++-- - Prevents unverified SERVER_ADMIN elevation by strictly checking caller's own roles
++CREATE OR REPLACE FUNCTION kb_auth_switch_workspace(
++    p_target_workspace_id UUID,
++    p_caller_principal_id UUID
++)
++RETURNS TABLE (
++    workspace_id UUID,
++    principal_id UUID
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++#variable_conflict use_column
++DECLARE
++    v_target_ws workspaces%ROWTYPE;
++    v_target_pid UUID;
++    v_is_server_admin BOOLEAN := FALSE;
++    v_email TEXT;
++    v_display_name TEXT;
++    v_ckey TEXT;
++BEGIN
++    SELECT * INTO v_target_ws FROM workspaces WHERE id = p_target_workspace_id;
++    IF NOT FOUND THEN
++        RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'WORKSPACE_NOT_FOUND';
++    END IF;
++
++    -- Check if caller directly holds SERVER_ADMIN on their own principal or session
++    SELECT (
++        app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++        OR EXISTS (
++            SELECT 1 FROM role_bindings rb
++            WHERE rb.principal_id = p_caller_principal_id AND rb.role = 'SERVER_ADMIN'
++        )
++    ) INTO v_is_server_admin;
++
++    -- 1. Check direct principal match in target workspace
++    SELECT p.id INTO v_target_pid
++    FROM principals p
++    WHERE p.id = p_caller_principal_id
++      AND p.workspace_id = p_target_workspace_id
++      AND p.status = 'ACTIVE';
++
++    -- 1b. Check direct role binding in target workspace
++    IF v_target_pid IS NULL THEN
++        SELECT rb.principal_id INTO v_target_pid
++        FROM role_bindings rb
++        JOIN principals p ON p.id = rb.principal_id
++        WHERE rb.workspace_id = p_target_workspace_id
++          AND rb.principal_id = p_caller_principal_id
++          AND p.status = 'ACTIVE'
++        LIMIT 1;
++    END IF;
++
++    -- 2. Check verified identity provenance match via user_identities (same auth card + subject)
++    IF v_target_pid IS NULL THEN
++        SELECT ui_target.principal_id INTO v_target_pid
++        FROM user_identities ui_caller
++        JOIN user_identities ui_target
++          ON ui_target.auth_card_id = ui_caller.auth_card_id
++         AND ui_target.immutable_subject_id = ui_caller.immutable_subject_id
++        JOIN principals p ON p.id = ui_target.principal_id
++        WHERE ui_caller.principal_id = p_caller_principal_id
++          AND p.workspace_id = p_target_workspace_id
++          AND p.status = 'ACTIVE'
++        LIMIT 1;
++    END IF;
++
++    -- 3. If genuine server admin and no target principal, find or auto-provision
++    IF v_target_pid IS NULL AND v_is_server_admin THEN
++        SELECT u.email, p.display_name INTO v_email, v_display_name
++        FROM users u JOIN principals p ON p.id = u.id
++        WHERE u.id = p_caller_principal_id;
++
++        IF v_email IS NOT NULL THEN
++            SELECT p.id INTO v_target_pid
++            FROM principals p
++            JOIN users u ON u.id = p.id
++            WHERE p.workspace_id = p_target_workspace_id
++              AND lower(u.email) = lower(v_email)
++              AND p.status = 'ACTIVE'
++            LIMIT 1;
++        END IF;
++
++        IF v_target_pid IS NULL THEN
++            v_target_pid := uuidv7();
++            IF v_email IS NULL THEN v_email := 'server-admin@local.kanban'; END IF;
++            IF v_display_name IS NULL THEN v_display_name := 'Server Admin'; END IF;
++            v_ckey := 'usr-' || substr(replace(v_target_pid::text, '-', ''), 1, 12);
++
++            PERFORM register_object('user'::object_kind, p_target_workspace_id, NULL, v_ckey, v_display_name, v_target_pid, v_target_pid);
++
++            INSERT INTO principals (id, principal_type, workspace_id, display_name, status)
++            VALUES (v_target_pid, 'USER', p_target_workspace_id, v_display_name, 'ACTIVE');
++
++            INSERT INTO users (id, object_type, principal_type, workspace_id, email)
++            VALUES (v_target_pid, 'user', 'USER', p_target_workspace_id, v_email);
++
++            INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id)
++            VALUES (uuidv7(), p_target_workspace_id, v_target_pid, 'SERVER_ADMIN', 'server', NULL);
++        END IF;
++    END IF;
++
++    IF v_target_pid IS NULL THEN
++        RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'FORBIDDEN_WORKSPACE_SWITCH';
++    END IF;
++
++    -- If caller is a verified server admin, ensure SERVER_ADMIN role exists on target principal
++    IF v_is_server_admin THEN
++        PERFORM kb_auth_ensure_server_admin_role(p_target_workspace_id, v_target_pid);
++    END IF;
++
++    RETURN QUERY SELECT p_target_workspace_id, v_target_pid;
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_switch_workspace(UUID, UUID) TO kanban_app;
++
++-- 4. Hardened kb_auth_list_user_workspaces (KAN-329 / GSF-001):
++-- - Eliminates unverified email matching for workspace listing
++-- - Lists direct principal workspace memberships, direct role bindings, and verified user_identities memberships
++CREATE OR REPLACE FUNCTION kb_auth_list_user_workspaces(p_principal_id UUID)
++RETURNS TABLE (
++    id UUID,
++    name TEXT,
++    slug TEXT,
++    role TEXT
++)
++LANGUAGE plpgsql
++STABLE
++SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_is_server_admin BOOLEAN := FALSE;
++BEGIN
++    SELECT (
++        app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++        OR EXISTS (
++            SELECT 1 FROM role_bindings rb
++            WHERE rb.principal_id = p_principal_id AND rb.role = 'SERVER_ADMIN'
++        )
++    ) INTO v_is_server_admin;
++
++    IF v_is_server_admin THEN
++        RETURN QUERY
++        SELECT w.id, w.name, w.slug, 'SERVER_ADMIN'::TEXT
++        FROM workspaces w
++        ORDER BY w.created_at ASC;
++        RETURN;
++    END IF;
++
++    RETURN QUERY
++    SELECT DISTINCT w.id, w.name, w.slug, COALESCE(rb.role::TEXT, 'WORKSPACE_MEMBER')
++    FROM workspaces w
++    JOIN principals p ON p.workspace_id = w.id
++    LEFT JOIN role_bindings rb ON rb.workspace_id = w.id AND rb.principal_id = p.id
++    WHERE p.status = 'ACTIVE'
++      AND (
++          p.id = p_principal_id
++          OR rb.principal_id = p_principal_id
++          OR EXISTS (
++              SELECT 1
++              FROM user_identities ui_caller
++              JOIN user_identities ui_target
++                ON ui_target.auth_card_id = ui_caller.auth_card_id
++               AND ui_target.immutable_subject_id = ui_caller.immutable_subject_id
++              WHERE ui_caller.principal_id = p_principal_id
++                AND ui_target.principal_id = p.id
++          )
++      );
++END;
++$$;
++GRANT EXECUTE ON FUNCTION kb_auth_list_user_workspaces(UUID) TO kanban_app;
+diff --git a/database/migrations/versions/p6_15_hardened_workspace_switch_and_module_issues.py b/database/migrations/versions/p6_15_hardened_workspace_switch_and_module_issues.py
+new file mode 100644
+index 00000000..8bdea918
+--- /dev/null
++++ b/database/migrations/versions/p6_15_hardened_workspace_switch_and_module_issues.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Hardened workspace switch and module_issues security invoker.
++
++Revision ID: p6_15_hardened_workspace_switch_and_module_issues
++Revises: p6_12_granular_rbac_roles
++Create Date: 2026-11-23 10:28:13.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p6_15_hardened_workspace_switch_and_module_issues"
++down_revision: str | None = "p6_12_granular_rbac_roles"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p6_15_hardened_workspace_switch_and_module_issues migration."""
++    execute_sql_file("p6_15_hardened_workspace_switch_and_module_issues.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p6_15_hardened_workspace_switch_and_module_issues migration."""
++    execute_sql_file("p6_15_hardened_workspace_switch_and_module_issues.down.sql")
+diff --git a/kanban/tests/api/test_workspaces_api.py b/kanban/tests/api/test_workspaces_api.py
+index 4be25424..a3c7f188 100644
+--- a/kanban/tests/api/test_workspaces_api.py
++++ b/kanban/tests/api/test_workspaces_api.py
+@@ -428,6 +428,54 @@ async def test_case_4_member_cross_workspace_matching_email_and_switching(
+         {"id": uuid.uuid4(), "ws_id": ws2_id, "p_id": ws2_member_id},
+     )
+ 
++    # Link member identity across both workspaces via verified auth_provider_card
++    card_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO auth_provider_cards ("
++            "  id, workspace_id, provider_kind, slug, display_name, is_enabled, sort_rank"
++            ") VALUES ("
++            "  :id, :ws_id, 'OIDC', :slug, 'Corp OIDC', true, '0|h00000:'"
++            ")"
++        ),
++        {"id": card_id, "ws_id": ws_id, "slug": f"card-{uuid.uuid4().hex[:8]}"},
++    )
++    shared_sub = f"sub-{uuid.uuid4().hex[:12]}"
++    await db_session.execute(
++        text(
++            "INSERT INTO user_identities ("
++            "  id, workspace_id, principal_id, auth_card_id, "
++            "  immutable_subject_id, subject_email_at_link"
++            ") VALUES ("
++            "  :id, :ws_id, :p_id, :card_id, :sub, 'member@example.com'"
++            ")"
++        ),
++        {
++            "id": uuid.uuid4(),
++            "ws_id": ws_id,
++            "p_id": member_id,
++            "card_id": card_id,
++            "sub": shared_sub,
++        },
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO user_identities ("
++            "  id, workspace_id, principal_id, auth_card_id, "
++            "  immutable_subject_id, subject_email_at_link"
++            ") VALUES ("
++            "  :id, :ws_id, :p_id, :card_id, :sub, 'member@example.com'"
++            ")"
++        ),
++        {
++            "id": uuid.uuid4(),
++            "ws_id": ws2_id,
++            "p_id": ws2_member_id,
++            "card_id": card_id,
++            "sub": shared_sub,
++        },
++    )
++
+     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+     session_service = SessionService(key_material.session_hmac_key)
+     app = _create_test_app(factory, key_material, session_service)
+diff --git a/kanban/tests/security/test_workspace_switch_isolation.py b/kanban/tests/security/test_workspace_switch_isolation.py
+new file mode 100644
+index 00000000..95600dd5
+--- /dev/null
++++ b/kanban/tests/security/test_workspace_switch_isolation.py
+@@ -0,0 +1,310 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security tests for hardened workspace switching and tenant isolation (KAN-329)."""
++# ruff: noqa: E501, D103
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++from sqlalchemy import text
++
++from database.session import RLSSessionFactory
++from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
++from kanban.auth.sessions.csrf import CSRF_HEADER_NAME
++from kanban.auth.sessions.service import SessionService
++from kanban.security.keys import KeyMaterial
++from kanban.tests.api.test_workspaces_api import (
++    _create_test_app,
++    _login_and_elevate,
++    _setup_workspace_and_principals,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++@pytest.fixture
++def key_material() -> KeyMaterial:
++    return KeyMaterial(
++        master_kek=b"k" * 32,
++        master_kek_kid="kek-v1",
++        auth_pepper=b"p" * 32,
++        session_hmac_key=b"s" * 32,
++    )
++
++
++@pytest.mark.asyncio
++async def test_direct_member_workspace_switch_succeeds(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that a principal directly belonging to a target workspace can switch to it."""
++    ws1_id, _, member_id = await _setup_workspace_and_principals(db_session)
++
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, member_id, ws1_id, aal_level=1
++        )
++        resp = await client.post(
++            f"/api/v1/workspaces/{ws1_id}/switch",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["workspace_id"] == str(ws1_id)
++        assert data["status"] == "switched"
++
++
++@pytest.mark.asyncio
++async def test_verified_user_identities_cross_workspace_switch_succeeds(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that cross-workspace principals linked via user_identities can switch."""
++    ws1_id, _, p1_id = await _setup_workspace_and_principals(db_session)
++
++    ws2_id = uuid.uuid4()
++    p2_id = uuid.uuid4()
++    await db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Ident WS2')"),
++        {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
++    )
++    await db_session.execute(
++        text(
++            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'User WS2', :u_id, :u_id)"
++        ),
++        {"ws_id": ws2_id, "ckey": f"usr-{p2_id.hex[:10]}", "u_id": p2_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
++            "VALUES (:id, 'USER', :ws_id, 'User WS2', 'ACTIVE')"
++        ),
++        {"id": p2_id, "ws_id": ws2_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++            "VALUES (:id, 'user', 'USER', :ws_id, 'shared.user@example.com')"
++        ),
++        {"id": p2_id, "ws_id": ws2_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_MEMBER', 'workspace', NULL)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws2_id, "p_id": p2_id},
++    )
++
++    # Link both via same auth provider card and subject
++    card_id = uuid.uuid4()
++    await db_session.execute(
++        text(
++            "INSERT INTO auth_provider_cards ("
++            "  id, workspace_id, provider_kind, slug, display_name, is_enabled, sort_rank"
++            ") VALUES ("
++            "  :id, :ws_id, 'OIDC', :slug, 'Corp OIDC', true, '0|h00000:'"
++            ")"
++        ),
++        {"id": card_id, "ws_id": ws1_id, "slug": f"card-{uuid.uuid4().hex[:8]}"},
++    )
++    shared_sub = f"sub-{uuid.uuid4().hex[:12]}"
++    await db_session.execute(
++        text(
++            "INSERT INTO user_identities (id, workspace_id, principal_id, auth_card_id, immutable_subject_id) "
++            "VALUES (:id, :ws_id, :p_id, :card_id, :sub)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws1_id, "p_id": p1_id, "card_id": card_id, "sub": shared_sub},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO user_identities (id, workspace_id, principal_id, auth_card_id, immutable_subject_id) "
++            "VALUES (:id, :ws_id, :p_id, :card_id, :sub)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws2_id, "p_id": p2_id, "card_id": card_id, "sub": shared_sub},
++    )
++
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, p1_id, ws1_id, aal_level=1
++        )
++        resp = await client.post(
++            f"/api/v1/workspaces/{ws2_id}/switch",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["workspace_id"] == str(ws2_id)
++        assert data["status"] == "switched"
++
++        # Verify session was updated to p2_id in target workspace
++        session_cookie = resp.cookies.get(SESSION_COOKIE_NAME)
++        assert session_cookie is not None
++        client.cookies.set(SESSION_COOKIE_NAME, session_cookie)
++        resp_session = await client.get("/api/v1/auth/session")
++        assert resp_session.status_code == 200
++        assert resp_session.json()["workspace_id"] == str(ws2_id)
++        assert resp_session.json()["principal_id"] == str(p2_id)
++
++
++@pytest.mark.asyncio
++async def test_unverified_matching_email_cross_tenant_switch_rejected(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that an unverified matching email across tenants is strictly rejected (KAN-329/GSF-001)."""
++    ws1_id, _, attacker_id = await _setup_workspace_and_principals(db_session)
++
++    # Set attacker email to victim's email
++    victim_email = "victim@targetcorp.example"
++    await db_session.execute(
++        text("UPDATE users SET email = :email WHERE id = :id"),
++        {"email": victim_email, "id": attacker_id},
++    )
++
++    # Victim workspace with same email
++    ws2_id = uuid.uuid4()
++    victim_id = uuid.uuid4()
++    await db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Victim WS')"),
++        {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
++    )
++    await db_session.execute(
++        text(
++            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Victim User', :u_id, :u_id)"
++        ),
++        {"ws_id": ws2_id, "ckey": f"usr-{victim_id.hex[:10]}", "u_id": victim_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
++            "VALUES (:id, 'USER', :ws_id, 'Victim User', 'ACTIVE')"
++        ),
++        {"id": victim_id, "ws_id": ws2_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++            "VALUES (:id, 'user', 'USER', :ws_id, :email)"
++        ),
++        {"id": victim_id, "ws_id": ws2_id, "email": victim_email},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws2_id, "p_id": victim_id},
++    )
++
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, attacker_id, ws1_id, aal_level=1
++        )
++        resp = await client.post(
++            f"/api/v1/workspaces/{ws2_id}/switch",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp.status_code == 403
++        assert "FORBIDDEN_WORKSPACE_SWITCH" in resp.text
++
++
++@pytest.mark.asyncio
++async def test_non_admin_with_admin_email_cannot_elevate_server_admin(
++    db_session: AsyncSession,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify that a regular user sharing an email with a server admin in another workspace cannot elevate."""
++    ws1_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
++    admin_email = "superadmin@corp.example"
++    await db_session.execute(
++        text("UPDATE users SET email = :email WHERE id = :id"),
++        {"email": admin_email, "id": admin_id},
++    )
++
++    # Separate workspace where an attacker registers with the server admin's email
++    ws_attacker = uuid.uuid4()
++    attacker_id = uuid.uuid4()
++    await db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Attacker WS')"),
++        {"id": ws_attacker, "slug": f"ws-{ws_attacker.hex[:10]}"},
++    )
++    await db_session.execute(
++        text(
++            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Attacker User', :u_id, :u_id)"
++        ),
++        {"ws_id": ws_attacker, "ckey": f"usr-{attacker_id.hex[:10]}", "u_id": attacker_id},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
++            "VALUES (:id, 'USER', :ws_id, 'Attacker User', 'ACTIVE')"
++        ),
++        {"id": attacker_id, "ws_id": ws_attacker},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++            "VALUES (:id, 'user', 'USER', :ws_id, :email)"
++        ),
++        {"id": attacker_id, "ws_id": ws_attacker, "email": admin_email},
++    )
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_MEMBER', 'workspace', NULL)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws_attacker, "p_id": attacker_id},
++    )
++
++    # Target workspace that attacker attempts to switch into as server admin
++    ws_target = uuid.uuid4()
++    await db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Target WS')"),
++        {"id": ws_target, "slug": f"ws-{ws_target.hex[:10]}"},
++    )
++
++    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    session_service = SessionService(key_material.session_hmac_key)
++    app = _create_test_app(factory, key_material, session_service)
++
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        _, csrf_token = await _login_and_elevate(
++            client, session_service, db_session, attacker_id, ws_attacker, aal_level=1
++        )
++        # Attacker cannot switch into target workspace
++        resp = await client.post(
++            f"/api/v1/workspaces/{ws_target}/switch",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp.status_code == 403
++        assert "FORBIDDEN_WORKSPACE_SWITCH" in resp.text
++
++        # Attacker cannot switch into admin's workspace
++        resp_admin_ws = await client.post(
++            f"/api/v1/workspaces/{ws1_id}/switch",
++            headers={CSRF_HEADER_NAME: csrf_token},
++        )
++        assert resp_admin_ws.status_code == 403
++        assert "FORBIDDEN_WORKSPACE_SWITCH" in resp_admin_ws.text

@@ -41,6 +41,7 @@ from kanban.content.svg_sanitizer import sanitize_svg
 from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
 from kanban.importer.plane_importer import ImportIntegrityError
 from kanban.importer.plane_mapper import ImportDiffReport
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import allocate_initial_board_rank
 
@@ -433,6 +434,7 @@ class JiraImporter:
                 continue
 
             summary = str(fields.get("summary") or "Untitled Jira Issue").strip()
+            summary = enforce_secret_push_protection(summary, field="summary") or ""
 
             raw_desc = fields.get("description")
             if isinstance(raw_desc, dict):
@@ -442,6 +444,9 @@ class JiraImporter:
             else:
                 md_text = ""
             norm_desc = normalize_to_markdown(md_text)
+            norm_desc = (
+                enforce_secret_push_protection(norm_desc, field="description_markdown") or ""
+            )
 
             # Map state
             status_obj = fields.get("status", {})
@@ -538,6 +543,7 @@ class JiraImporter:
                 original_created_by_id=self.caller.principal_id,
                 board_rank=allocate_initial_board_rank(next_seq),
                 ancestry_path=issue_id.hex,
+                provenance_tier="imported",
             )
             self.session.add(new_issue)
             await self.session.flush()
@@ -733,6 +739,7 @@ class JiraImporter:
                 norm_c_md = normalize_to_markdown(c_md)
                 if not norm_c_md.strip():
                     continue
+                norm_c_md = enforce_secret_push_protection(norm_c_md, field="body_markdown") or ""
 
                 c_sha = hashlib.sha256(norm_c_md.encode("utf-8")).digest()
                 c_source_key = ("comment", c_id_raw) if c_id_raw else None
@@ -758,6 +765,7 @@ class JiraImporter:
                     author_id=self.caller.principal_id,
                     body_markdown=norm_c_md,
                     created_at=c_created_at,
+                    provenance_tier="imported",
                 )
                 self.session.add(comment)
                 if c_source_key:

@@ -198,9 +198,13 @@ def is_exempt_token(token: str) -> bool:
         _RE_UUID.match(token)
         or _RE_HEX_DIGEST.match(token)
         or _RE_BASE62_RANK.match(token)
-        or (token.startswith(("http://", "https://")) and "@" not in token)
+        or (token.startswith(("http://", "https://", "/")) and "@" not in token)
     ):
         return True
+    if "/" in token and "@" not in token:
+        parts = token.split("/")
+        if any(_RE_UUID.match(p) or _RE_HEX_DIGEST.match(p) for p in parts):
+            return True
     return token.lower() in _EXEMPT_WORDS
 
 

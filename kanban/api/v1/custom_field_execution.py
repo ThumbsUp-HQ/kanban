@@ -29,6 +29,7 @@ from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
 from kanban.custom_fields.executor import CustomFieldExecutor
 from kanban.custom_fields.service import CustomFieldDefinitionService
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.security.ratelimit.base import RateLimitPolicy
 from kanban.security.ratelimit.pg import PgRateLimiter
 from kanban.services.activity import ActivityEventType, record_activity
@@ -157,6 +158,9 @@ async def upload_wasm_module(
         proj = await get_project_or_404(session, caller, project)
         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
 
+        if body.name:
+            enforce_secret_push_protection(body.name, field="name")
+
         try:
             wasm_bytes = base64.b64decode(body.wasm_base64, validate=True)
         except Exception as ex:
@@ -236,6 +240,9 @@ async def test_execute_custom_field(
     async with timing_floor(floor_ms=25.0):
         proj = await get_project_or_404(session, caller, project)
         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+
+        if body.script_source and not body.script_source.startswith("AGFzbQ"):
+            enforce_secret_push_protection(body.script_source, field="script_source")
 
         if str(body.tier) == "nsjail":
             from kanban.custom_fields.service import assert_tier_available  # noqa: PLC0415

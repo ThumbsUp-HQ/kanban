@@ -23,6 +23,7 @@ from kanban.custom_fields.manifest import (
 )
 from kanban.custom_fields.output_formats import parse_output_format_metadata
 from kanban.security.permissions import Capability, require_capability
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
 from kanban.standalone.export_service import get_standalone_status
@@ -223,6 +224,11 @@ class CustomFieldDefinitionService:
         project = await get_project_or_404(session, caller, project_ref)
         await cls.require_admin_and_aal2(session, caller, project)
 
+        if payload.name:
+            enforce_secret_push_protection(payload.name, field="name")
+        if payload.script_source and not payload.script_source.startswith("AGFzbQ"):
+            enforce_secret_push_protection(payload.script_source, field="script_source")
+
         existing = (
             await session.execute(
                 select(CustomFieldDefinition.id).where(
@@ -385,6 +391,11 @@ class CustomFieldDefinitionService:
             )
         project = await get_project_or_404(session, caller, project_ref)
         await cls.require_admin_and_aal2(session, caller, project)
+
+        if payload.name:
+            enforce_secret_push_protection(payload.name, field="name")
+        if payload.script_source and not payload.script_source.startswith("AGFzbQ"):
+            enforce_secret_push_protection(payload.script_source, field="script_source")
 
         row = await cls._find_definition(session, caller.workspace_id, project.id, field_id)
         if row is None:

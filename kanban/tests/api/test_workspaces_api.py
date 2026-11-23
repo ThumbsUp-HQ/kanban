@@ -428,6 +428,54 @@ async def test_case_4_member_cross_workspace_matching_email_and_switching(
         {"id": uuid.uuid4(), "ws_id": ws2_id, "p_id": ws2_member_id},
     )
 
+    # Link member identity across both workspaces via verified auth_provider_card
+    card_id = uuid.uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO auth_provider_cards ("
+            "  id, workspace_id, provider_kind, slug, display_name, is_enabled, sort_rank"
+            ") VALUES ("
+            "  :id, :ws_id, 'OIDC', :slug, 'Corp OIDC', true, '0|h00000:'"
+            ")"
+        ),
+        {"id": card_id, "ws_id": ws_id, "slug": f"card-{uuid.uuid4().hex[:8]}"},
+    )
+    shared_sub = f"sub-{uuid.uuid4().hex[:12]}"
+    await db_session.execute(
+        text(
+            "INSERT INTO user_identities ("
+            "  id, workspace_id, principal_id, auth_card_id, "
+            "  immutable_subject_id, subject_email_at_link"
+            ") VALUES ("
+            "  :id, :ws_id, :p_id, :card_id, :sub, 'member@example.com'"
+            ")"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "ws_id": ws_id,
+            "p_id": member_id,
+            "card_id": card_id,
+            "sub": shared_sub,
+        },
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO user_identities ("
+            "  id, workspace_id, principal_id, auth_card_id, "
+            "  immutable_subject_id, subject_email_at_link"
+            ") VALUES ("
+            "  :id, :ws_id, :p_id, :card_id, :sub, 'member@example.com'"
+            ")"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "ws_id": ws2_id,
+            "p_id": ws2_member_id,
+            "card_id": card_id,
+            "sub": shared_sub,
+        },
+    )
+
     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
     session_service = SessionService(key_material.session_hmac_key)
     app = _create_test_app(factory, key_material, session_service)
