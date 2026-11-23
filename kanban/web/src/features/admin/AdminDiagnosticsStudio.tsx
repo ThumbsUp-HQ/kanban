@@ -8,6 +8,7 @@ import { apiFetch } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './AdminDiagnosticsStudio.css';
 
 export interface SubsystemHealth {
@@ -822,6 +823,31 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div style={{ marginTop: '16px' }}>
+            <AdvancedSection
+              title="Advanced Technical Details"
+              summary="Raw sanitized JSON configuration dump and internal runtime subsystem metadata"
+              testId="admin-diag-advanced-technical-details"
+            >
+              <div style={{ marginTop: '12px' }}>
+                <pre
+                  data-testid="admin-diag-raw-config-dump"
+                  style={{
+                    maxHeight: '300px',
+                    overflow: 'auto',
+                    background: 'var(--kb-color-bg-subtle, #1e293b)',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {JSON.stringify(diag?.config, null, 2)}
+                </pre>
+              </div>
+            </AdvancedSection>
           </div>
         </section>
       )}

@@ -30,6 +30,7 @@ import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { copyToClipboard } from '../../utils/clipboard';
 import './McpAccessStudio.css';
 
@@ -1386,10 +1387,10 @@ export function McpAccessStudio({
                     }
                   }}
                 >
-                  <option value="1">View Only (1)</option>
+                  <option value="1">Read-Only Agent (1)</option>
                   <option value="3">View + Comment (3)</option>
-                  <option value="31">Standard Member (31)</option>
-                  <option value="255">Full / Admin (255)</option>
+                  <option value="31">Standard Developer Agent (31)</option>
+                  <option value="255">Full Project Agent (255)</option>
                   {![1, 3, 31, 255].includes(capabilityMask) && (
                     <option value="custom">Custom ({capabilityMask})</option>
                   )}
@@ -1399,99 +1400,111 @@ export function McpAccessStudio({
                 </span>
               </div>
 
-              <div className="kb-mcp-form-row">
-                <label className="kb-mcp-form-label">
-                  Granular Capability Bit Toggles:
-                </label>
-                <div className="kb-mcp-tools-grid" data-testid="capability-bits-grid">
-                  {CAPABILITY_BITS.map(({ bit, name }) => {
-                    const isChecked = (capabilityMask & bit) === bit;
-                    return (
-                      <label key={bit} className="kb-mcp-tool-checkbox-label">
-                        <input
-                          type="checkbox"
-                          data-testid={`cap-bit-${String(bit)}`}
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCapabilityMask((prev) => prev | bit);
-                            } else {
-                              setCapabilityMask((prev) => prev & ~bit);
-                            }
-                          }}
-                        />
-                        <span>{name} ({bit})</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="kb-mcp-form-row">
-                <label htmlFor="mint-allowed-cidrs-input" className="kb-mcp-form-label">
-                  Allowed CIDRs (Optional):
-                </label>
-                <input
-                  id="mint-allowed-cidrs-input"
-                  type="text"
-                  className="kb-mcp-form-input"
-                  data-testid="mint-allowed-cidrs-input"
-                  placeholder="e.g. 192.168.1.0/24, 10.0.0.0/8"
-                  value={allowedCidrsInput}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setAllowedCidrsInput(val);
-                    const res = validateCidrInput(val);
-                    setCidrError(res.error ?? null);
-                  }}
-                  aria-invalid={Boolean(cidrError)}
-                  aria-describedby={cidrError ? 'cidr-error-message' : undefined}
-                />
-                {cidrError && (
-                  <div
-                    id="cidr-error-message"
-                    className="kb-mcp-warning-text"
-                    role="alert"
-                    data-testid="cidr-error-message"
-                    style={{ color: '#ef4444', marginTop: '4px' }}
-                  >
-                    {cidrError}
+              <AdvancedSection
+                title="Advanced Capability & Network Restrictions"
+                summary="Granular bitmask permissions, tool-level narrowing, and CIDR ingress restrictions"
+                testId="advanced-capability-restrictions"
+                hasErrors={Boolean(cidrError)}
+                activeOverridesCount={
+                  (allowedCidrsInput.trim() ? 1 : 0) +
+                  (disabledTools.length > 0 ? 1 : 0) +
+                  (![1, 31, 255].includes(capabilityMask) ? 1 : 0)
+                }
+              >
+                <div className="kb-mcp-form-row">
+                  <label className="kb-mcp-form-label">
+                    Granular Capability Bit Toggles:
+                  </label>
+                  <div className="kb-mcp-tools-grid" data-testid="capability-bits-grid">
+                    {CAPABILITY_BITS.map(({ bit, name }) => {
+                      const isChecked = (capabilityMask & bit) === bit;
+                      return (
+                        <label key={bit} className="kb-mcp-tool-checkbox-label">
+                          <input
+                            type="checkbox"
+                            data-testid={`cap-bit-${String(bit)}`}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setCapabilityMask((prev) => prev | bit);
+                              } else {
+                                setCapabilityMask((prev) => prev & ~bit);
+                              }
+                            }}
+                          />
+                          <span>{name} ({bit})</span>
+                        </label>
+                      );
+                    })}
                   </div>
-                )}
-                <span className="kb-mcp-form-hint">
-                  Optional comma-separated IPv4 or IPv6 CIDR blocks restricting source networks.
-                </span>
-              </div>
-
-              <div className="kb-mcp-form-row">
-                <label className="kb-mcp-form-label">
-                  Narrow Tools (Disable specific capabilities):
-                </label>
-                <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
-                  {SURFACE_TOOLS[newKeySurface]
-                    .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
-                    .map((toolName) => {
-                    const isDisabled = disabledTools.includes(toolName);
-                    return (
-                      <label key={toolName} className="kb-mcp-tool-checkbox-label">
-                        <input
-                          type="checkbox"
-                          data-testid={`disable-tool-${toolName}`}
-                          checked={isDisabled}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setDisabledTools([...disabledTools, toolName]);
-                            } else {
-                              setDisabledTools(disabledTools.filter((t) => t !== toolName));
-                            }
-                          }}
-                        />
-                        <span><code>{toolName}</code> (disable)</span>
-                      </label>
-                    );
-                  })}
                 </div>
-              </div>
+
+                <div className="kb-mcp-form-row">
+                  <label htmlFor="mint-allowed-cidrs-input" className="kb-mcp-form-label">
+                    Allowed CIDRs (Optional):
+                  </label>
+                  <input
+                    id="mint-allowed-cidrs-input"
+                    type="text"
+                    className="kb-mcp-form-input"
+                    data-testid="mint-allowed-cidrs-input"
+                    placeholder="e.g. 192.168.1.0/24, 10.0.0.0/8"
+                    value={allowedCidrsInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setAllowedCidrsInput(val);
+                      const res = validateCidrInput(val);
+                      setCidrError(res.error ?? null);
+                    }}
+                    aria-invalid={Boolean(cidrError)}
+                    aria-describedby={cidrError ? 'cidr-error-message' : undefined}
+                  />
+                  {cidrError && (
+                    <div
+                      id="cidr-error-message"
+                      className="kb-mcp-warning-text"
+                      role="alert"
+                      data-testid="cidr-error-message"
+                      style={{ color: '#ef4444', marginTop: '4px' }}
+                    >
+                      {cidrError}
+                    </div>
+                  )}
+                  <span className="kb-mcp-form-hint">
+                    Optional comma-separated IPv4 or IPv6 CIDR blocks restricting source networks.
+                  </span>
+                </div>
+
+                <div className="kb-mcp-form-row">
+                  <label className="kb-mcp-form-label">
+                    Narrow Tools (Disable specific capabilities):
+                  </label>
+                  <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
+                    {SURFACE_TOOLS[newKeySurface]
+                      .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
+                      .map((toolName) => {
+                      const isDisabled = disabledTools.includes(toolName);
+                      return (
+                        <label key={toolName} className="kb-mcp-tool-checkbox-label">
+                          <input
+                            type="checkbox"
+                            data-testid={`disable-tool-${toolName}`}
+                            checked={isDisabled}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setDisabledTools([...disabledTools, toolName]);
+                              } else {
+                                setDisabledTools(disabledTools.filter((t) => t !== toolName));
+                              }
+                            }}
+                          />
+                          <span><code>{toolName}</code> (disable)</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </AdvancedSection>
 
               <div className="kb-mcp-form-actions">
                 <button

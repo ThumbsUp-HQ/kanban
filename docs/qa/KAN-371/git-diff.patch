@@ -1,0 +1,1466 @@
+diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
+index 78c02b8d..58d315e1 100644
+--- a/kanban/web/src/features/about/AboutPage.tsx
++++ b/kanban/web/src/features/about/AboutPage.tsx
+@@ -12,6 +12,7 @@ import {
+   type SbomComponent,
+   type SystemAboutData,
+ } from './aboutApi';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './AboutPage.css';
+ 
+ export function AboutPage(): JSX.Element {
+@@ -181,28 +182,42 @@ export function AboutPage(): JSX.Element {
+             <span className="kb-about-meta-label">Version:</span>
+             <code className="kb-about-meta-value" data-testid="about-meta-version">{version}</code>
+           </div>
++          <div className="kb-about-meta-item">
++            <span className="kb-about-meta-label">Release Channel:</span>
++            <span className="kb-about-meta-value" data-testid="about-release-channel">Stable</span>
++          </div>
+           <div className="kb-about-meta-item">
+             <span className="kb-about-meta-label">Build / Git Commit:</span>
+             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
+           </div>
+-          {data.build_timestamp && (
+-            <div className="kb-about-meta-item">
+-              <span className="kb-about-meta-label">Build Timestamp:</span>
+-              <span className="kb-about-meta-value">{data.build_timestamp}</span>
+-            </div>
+-          )}
+-          {data.openapi_bundle_hash && (
+-            <div className="kb-about-meta-item">
+-              <span className="kb-about-meta-label">OpenAPI Bundle Hash:</span>
+-              <code className="kb-about-meta-value">{data.openapi_bundle_hash}</code>
+-            </div>
+-          )}
+-          {data.frontend_bundle_hash && (
+-            <div className="kb-about-meta-item">
+-              <span className="kb-about-meta-label">Frontend Bundle Hash:</span>
+-              <code className="kb-about-meta-value">{data.frontend_bundle_hash}</code>
++        </div>
++        <div style={{ marginTop: '0.75rem' }}>
++          <AdvancedSection
++            title="Advanced Technical Details"
++            summary="OpenAPI bundle hash, frontend distribution integrity hashes, and compiler build timestamps"
++            testId="about-advanced-technical-details"
++          >
++            <div className="kb-about-metadata-grid" style={{ marginTop: '0.5rem' }}>
++              {data.build_timestamp && (
++                <div className="kb-about-meta-item">
++                  <span className="kb-about-meta-label">Build Timestamp:</span>
++                  <span className="kb-about-meta-value" data-testid="about-build-timestamp">{data.build_timestamp}</span>
++                </div>
++              )}
++              {data.openapi_bundle_hash && (
++                <div className="kb-about-meta-item">
++                  <span className="kb-about-meta-label">OpenAPI Bundle Hash:</span>
++                  <code className="kb-about-meta-value" data-testid="about-openapi-bundle-hash">{data.openapi_bundle_hash}</code>
++                </div>
++              )}
++              {data.frontend_bundle_hash && (
++                <div className="kb-about-meta-item">
++                  <span className="kb-about-meta-label">Frontend Bundle Hash:</span>
++                  <code className="kb-about-meta-value" data-testid="about-frontend-bundle-hash">{data.frontend_bundle_hash}</code>
++                </div>
++              )}
+             </div>
+-          )}
++          </AdvancedSection>
+         </div>
+       </section>
+ 
+diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+index f23a34b9..a1c1c0a3 100644
+--- a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
++++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+@@ -352,4 +352,38 @@ describe('AboutPage', () => {
+     });
+     fireEvent.click(copyBtn);
+   });
++
++  it('Case 3: renders version and release channel with raw build hashes in AdvancedSection', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('about-meta-version')).toBeDefined();
++    });
++
++    // Version and Release Channel are visible
++    expect(screen.getByTestId('about-meta-version').textContent).toBe('0.2.1205');
++    expect(screen.getByTestId('about-release-channel').textContent).toBe('Stable');
++    expect(screen.getByTestId('about-git-commit').textContent).toBe('9d5577ad9b50');
++
++    // Advanced technical details section is collapsed by default
++    const advancedSection = screen.getByTestId('about-advanced-technical-details');
++    expect(advancedSection).toBeDefined();
++    expect(advancedSection.hasAttribute('open')).toBe(false);
++
++    // Expand the advanced section
++    const toggle = screen.getByTestId('about-advanced-technical-details-toggle');
++    fireEvent.click(toggle);
++
++    expect(advancedSection.hasAttribute('open')).toBe(true);
++    expect(screen.getByTestId('about-openapi-bundle-hash').textContent).toBe(
++      mockAboutData.openapi_bundle_hash,
++    );
++    expect(screen.getByTestId('about-frontend-bundle-hash').textContent).toBe(
++      mockAboutData.frontend_bundle_hash,
++    );
++    expect(screen.getByTestId('about-build-timestamp').textContent).toBe(
++      mockAboutData.build_timestamp,
++    );
++  });
+ });
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index 8da22d8f..d94e7bc3 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -3,6 +3,7 @@
+ 
+ import React, { useState, useEffect, type JSX } from 'react';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import {
+   createAgentDefinition,
+   updateAgentDefinition,
+@@ -328,26 +329,51 @@ function AgentDefinitionEditorContent({
+         )}
+ 
+         {harnessKind === 'cli_pipe' && (
+-          <>
+-            <div className="kb-form-group">
+-              <label htmlFor="agent-cli-binary-select" className="kb-form-label">
+-                Allowlisted CLI Binary
+-              </label>
+-              <select
+-                id="agent-cli-binary-select"
+-                className="kb-form-select"
+-                value={cliBinary}
+-                onChange={(e) => { handleCliBinaryChange(e.target.value); }}
+-                data-testid="agent-cli-binary-select"
+-              >
+-                {Object.entries(ALLOWED_CLI_BINARIES).map(([id, path]) => (
+-                  <option key={id} value={id}>
+-                    {id} ({path})
+-                  </option>
+-                ))}
+-              </select>
+-            </div>
++          <div className="kb-form-group">
++            <label htmlFor="agent-cli-binary-select" className="kb-form-label">
++              Allowlisted CLI Binary
++            </label>
++            <select
++              id="agent-cli-binary-select"
++              className="kb-form-select"
++              value={cliBinary}
++              onChange={(e) => { handleCliBinaryChange(e.target.value); }}
++              data-testid="agent-cli-binary-select"
++            >
++              {Object.entries(ALLOWED_CLI_BINARIES).map(([id, path]) => (
++                <option key={id} value={id}>
++                  {id} ({path})
++                </option>
++              ))}
++            </select>
++          </div>
++        )}
+ 
++        {harnessKind === 'remote_runner' && (
++          <div className="kb-form-group">
++            <label htmlFor="agent-runner-pool-input" className="kb-form-label">
++              Remote Runner Pool Slug
++            </label>
++            <input
++              id="agent-runner-pool-input"
++              type="text"
++              className="kb-form-input"
++              value={runnerPool}
++              onChange={(e) => { setRunnerPool(e.target.value); }}
++              placeholder="default"
++              required
++              data-testid="agent-runner-pool-input"
++            />
++          </div>
++        )}
++
++        <AdvancedSection
++          title="Advanced Model & Harness Configuration"
++          summary="System prompt instructions, CLI arguments, tool filters, and repository access policy"
++          testId="advanced-model-harness-config"
++          hasErrors={harnessKind === 'cli_pipe' && !cliValidation.valid}
++        >
++          {harnessKind === 'cli_pipe' && (
+             <div className="kb-form-group">
+               <label htmlFor="agent-cli-args-input" className="kb-form-label">
+                 CLI Arguments (enforcing pinned prefix & banned-flag policy)
+@@ -376,106 +402,88 @@ function AgentDefinitionEditorContent({
+                 </div>
+               )}
+             </div>
+-          </>
+-        )}
++          )}
+ 
+-        {harnessKind === 'remote_runner' && (
+           <div className="kb-form-group">
+-            <label htmlFor="agent-runner-pool-input" className="kb-form-label">
+-              Remote Runner Pool Slug
++            <label htmlFor="agent-timeout-input" className="kb-form-label">
++              Timeout (milliseconds, 1000 to 300000)
+             </label>
+             <input
+-              id="agent-runner-pool-input"
+-              type="text"
++              id="agent-timeout-input"
++              type="number"
++              min="1000"
++              max="300000"
++              step="1000"
+               className="kb-form-input"
+-              value={runnerPool}
+-              onChange={(e) => { setRunnerPool(e.target.value); }}
+-              placeholder="default"
+-              required
+-              data-testid="agent-runner-pool-input"
++              value={timeoutMs}
++              onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
++              data-testid="agent-timeout-input"
+             />
+           </div>
+-        )}
+-
+-        <div className="kb-form-group">
+-          <label htmlFor="agent-timeout-input" className="kb-form-label">
+-            Timeout (milliseconds, 1000 to 300000)
+-          </label>
+-          <input
+-            id="agent-timeout-input"
+-            type="number"
+-            min="1000"
+-            max="300000"
+-            step="1000"
+-            className="kb-form-input"
+-            value={timeoutMs}
+-            onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
+-            data-testid="agent-timeout-input"
+-          />
+-        </div>
+ 
+-        <div className="kb-form-group">
+-          <label htmlFor="agent-repo-mode-select" className="kb-form-label">
+-            Repository Access Mode
+-            <FieldHelpHint
+-              title="Repository Access Mode"
+-              fieldKey="agent_repo_access_mode"
+-              docHref="/docs/multi-provider-ai-engine-and-runners#repository-access"
+-              summary="Restricts filesystem/git access: None (Zero local egress), Read-Only Bare Git Tools, or Read-Only VFS Mount."
+-              validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
+-              defaultValue="none"
+-            />
+-          </label>
+-          <select
+-            id="agent-repo-mode-select"
+-            className="kb-form-select"
+-            value={repoAccessMode}
+-            onChange={(e) => { setRepoAccessMode(e.target.value as RepoAccessMode); }}
+-            data-testid="agent-repo-mode-select"
+-          >
+-            <option value="none">None (Zero Local Egress)</option>
+-            <option value="bare_git_tools">Bare Git Tools (Read-Only)</option>
+-            <option value="ro_vfs_mount">Read-Only VFS Mount</option>
+-          </select>
+-        </div>
++          <div className="kb-form-group">
++            <label htmlFor="agent-repo-mode-select" className="kb-form-label">
++              Repository Access Mode
++              <FieldHelpHint
++                title="Repository Access Mode"
++                fieldKey="agent_repo_access_mode"
++                docHref="/docs/multi-provider-ai-engine-and-runners#repository-access"
++                summary="Restricts filesystem/git access: None (Zero local egress), Read-Only Bare Git Tools, or Read-Only VFS Mount."
++                validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
++                defaultValue="none"
++              />
++            </label>
++            <select
++              id="agent-repo-mode-select"
++              className="kb-form-select"
++              value={repoAccessMode}
++              onChange={(e) => { setRepoAccessMode(e.target.value as RepoAccessMode); }}
++              data-testid="agent-repo-mode-select"
++            >
++              <option value="none">None (Zero Local Egress)</option>
++              <option value="bare_git_tools">Bare Git Tools (Read-Only)</option>
++              <option value="ro_vfs_mount">Read-Only VFS Mount</option>
++            </select>
++          </div>
+ 
+-        <div className="kb-form-group">
+-          <label className="kb-form-label">Allowed MCP Agent Tools</label>
+-          <div className="kb-agent-tools-grid">
+-            {ALL_MCP_TOOLS.map((tool) => (
+-              <label key={tool} className="kb-agent-tool-item">
+-                <input
+-                  type="checkbox"
+-                  checked={selectedTools.includes(tool)}
+-                  onChange={(e) => {
+-                    if (e.target.checked) {
+-                      setSelectedTools([...selectedTools, tool]);
+-                    } else {
+-                      setSelectedTools(selectedTools.filter((t) => t !== tool));
+-                    }
+-                  }}
+-                  data-testid={`tool-checkbox-${tool}`}
+-                />
+-                <code>{tool}</code>
+-              </label>
+-            ))}
++          <div className="kb-form-group">
++            <label className="kb-form-label">Allowed MCP Agent Tools</label>
++            <div className="kb-agent-tools-grid">
++              {ALL_MCP_TOOLS.map((tool) => (
++                <label key={tool} className="kb-agent-tool-item">
++                  <input
++                    type="checkbox"
++                    checked={selectedTools.includes(tool)}
++                    onChange={(e) => {
++                      if (e.target.checked) {
++                        setSelectedTools([...selectedTools, tool]);
++                      } else {
++                        setSelectedTools(selectedTools.filter((t) => t !== tool));
++                      }
++                    }}
++                    data-testid={`tool-checkbox-${tool}`}
++                  />
++                  <code>{tool}</code>
++                </label>
++              ))}
++            </div>
+           </div>
+-        </div>
+ 
+-        <div className="kb-form-group">
+-          <label htmlFor="agent-instructions-textarea" className="kb-form-label">
+-            System Instructions (Markdown)
+-          </label>
+-          <textarea
+-            id="agent-instructions-textarea"
+-            rows={4}
+-            className="kb-form-textarea"
+-            value={systemInstructions}
+-            onChange={(e) => { setSystemInstructions(e.target.value); }}
+-            placeholder="System prompt context and rules of engagement..."
+-            data-testid="agent-instructions-textarea"
+-          />
+-        </div>
++          <div className="kb-form-group">
++            <label htmlFor="agent-instructions-textarea" className="kb-form-label">
++              System Instructions (Markdown)
++            </label>
++            <textarea
++              id="agent-instructions-textarea"
++              rows={4}
++              className="kb-form-textarea"
++              value={systemInstructions}
++              onChange={(e) => { setSystemInstructions(e.target.value); }}
++              placeholder="System prompt context and rules of engagement..."
++              data-testid="agent-instructions-textarea"
++            />
++          </div>
++        </AdvancedSection>
+ 
+         <div className="kb-modal-footer">
+           <button
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index f26b6731..ac3a0646 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -3,6 +3,7 @@
+ 
+ import React, { useState, type JSX } from 'react';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import {
+   createAiProvider,
+   updateAiProvider,
+@@ -67,6 +68,21 @@ function AiProviderEditorContent({
+       : 30000;
+   const [timeoutMs, setTimeoutMs] = useState<number>(initialTimeoutMs);
+ 
++  const initialTemp = typeof provider?.settings.temperature === 'number' ? provider.settings.temperature : 0.7;
++  const [temperature, setTemperature] = useState<number>(initialTemp);
++  const [temperatureModified, setTemperatureModified] = useState<boolean>(false);
++
++  const initialTopP = typeof provider?.settings.top_p === 'number' ? provider.settings.top_p : 1.0;
++  const [topP, setTopP] = useState<number>(initialTopP);
++  const [topPModified, setTopPModified] = useState<boolean>(false);
++
++  const initialMaxTokens = typeof provider?.settings.max_tokens === 'number' ? provider.settings.max_tokens : 4096;
++  const [maxTokens, setMaxTokens] = useState<number>(initialMaxTokens);
++  const [maxTokensModified, setMaxTokensModified] = useState<boolean>(false);
++
++  const initialMtlsCert = typeof provider?.settings.mtls_client_cert_pem === 'string' ? provider.settings.mtls_client_cert_pem : '';
++  const [mtlsCertPem, setMtlsCertPem] = useState<string>(initialMtlsCert);
++
+   const normalizeResidencyTier = (rawTier: string | null | undefined): string => {
+     if (!rawTier) return airGapMode ? 'local_only' : 'cloud_standard';
+     if (rawTier === 'cloud') return 'cloud_standard';
+@@ -261,6 +277,26 @@ function AiProviderEditorContent({
+       setIsSaving(true);
+       setError(null);
+ 
++      const computeSettings = (baseSettings?: Record<string, unknown>) => {
++        const s: Record<string, unknown> = {
++          ...(baseSettings ?? {}),
++          timeout_ms: timeoutMs,
++        };
++        if (temperatureModified || (baseSettings && 'temperature' in baseSettings)) {
++          s.temperature = temperature;
++        }
++        if (topPModified || (baseSettings && 'top_p' in baseSettings)) {
++          s.top_p = topP;
++        }
++        if (maxTokensModified || (baseSettings && 'max_tokens' in baseSettings)) {
++          s.max_tokens = maxTokens;
++        }
++        if (mtlsCertPem.trim()) {
++          s.mtls_client_cert_pem = mtlsCertPem.trim();
++        }
++        return s;
++      };
++
+       if (provider) {
+         const payload: ProviderConfigUpdate = {
+           display_name: displayName.trim(),
+@@ -268,10 +304,7 @@ function AiProviderEditorContent({
+           residency_tier: residencyTier,
+           base_url: baseUrl.trim() || null,
+           priority: provider.priority,
+-          settings: {
+-            ...provider.settings,
+-            timeout_ms: timeoutMs,
+-          },
++          settings: computeSettings(provider.settings),
+         };
+ 
+         if (clearExistingKey) {
+@@ -292,9 +325,7 @@ function AiProviderEditorContent({
+           priority: nextPriority,
+           api_key: apiKey.trim() ? apiKey.trim() : null,
+           is_enabled: true,
+-          settings: {
+-            timeout_ms: timeoutMs,
+-          },
++          settings: computeSettings(),
+         };
+ 
+         await createAiProvider(payload);
+@@ -467,36 +498,7 @@ function AiProviderEditorContent({
+           )}
+         </div>
+ 
+-        {/* 4. HTTP Base URL */}
+-        <div className="kb-form-group">
+-          <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+-          </label>
+-          <input
+-            id="provider-base-url-input"
+-            type="url"
+-            className="kb-form-input"
+-            value={baseUrl}
+-            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
+-            placeholder={
+-              providerKind === 'ollama'
+-                ? 'http://127.0.0.1:11434'
+-                : providerKind === 'gemini'
+-                  ? 'https://generativelanguage.googleapis.com'
+-                  : 'https://api.openai.com/v1'
+-            }
+-            data-testid="provider-base-url-input"
+-          />
+-          <span className="kb-form-hint">
+-            {providerKind === 'ollama'
+-              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+-              : providerKind === 'gemini'
+-                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
+-                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
+-          </span>
+-        </div>
+-
+-        {/* 5. Configurable Cutoff Timeout (ms) */}
++        {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+             Cutoff Timeout (ms)
+@@ -635,12 +637,127 @@ function AiProviderEditorContent({
+           </span>
+         </div>
+ 
+-        {/* 7. Collapsible Advanced Settings */}
+-        <details className="kb-advanced-settings" data-testid="advanced-settings-details">
+-          <summary className="kb-advanced-settings-summary">
+-            Advanced Settings
+-          </summary>
+-          <div className="kb-advanced-settings-body">
++        {/* 6. Advanced Model & Harness Configuration */}
++        <AdvancedSection
++          title="Advanced Settings"
++          summary="Base URL, temperature, max tokens, mTLS client certificates, and data residency overrides"
++          testId="advanced-settings-details"
++          className="kb-advanced-model-harness-section"
++        >
++          <div data-testid="advanced-model-harness-config">
++            <div className="kb-form-group">
++              <label htmlFor="provider-base-url-input" className="kb-form-label">
++                HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
++              </label>
++              <input
++                id="provider-base-url-input"
++                type="url"
++                className="kb-form-input"
++                value={baseUrl}
++                onChange={(e) => { handleBaseUrlChange(e.target.value); }}
++                placeholder={
++                  providerKind === 'ollama'
++                    ? 'http://127.0.0.1:11434'
++                    : providerKind === 'gemini'
++                      ? 'https://generativelanguage.googleapis.com'
++                      : 'https://api.openai.com/v1'
++                }
++                data-testid="provider-base-url-input"
++              />
++              <span className="kb-form-hint">
++                {providerKind === 'ollama'
++                  ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
++                  : providerKind === 'gemini'
++                    ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
++                    : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
++              </span>
++            </div>
++
++            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
++              <div className="kb-form-group">
++                <label htmlFor="provider-temperature-input" className="kb-form-label">
++                  Temperature
++                </label>
++                <input
++                  id="provider-temperature-input"
++                  type="number"
++                  min="0"
++                  max="2"
++                  step="0.1"
++                  className="kb-form-input"
++                  value={temperature}
++                  onChange={(e) => {
++                    setTemperature(parseFloat(e.target.value) || 0.7);
++                    setTemperatureModified(true);
++                  }}
++                  data-testid="provider-temperature-input"
++                />
++                <span className="kb-form-hint">Sampling randomness (0.0 to 2.0).</span>
++              </div>
++
++              <div className="kb-form-group">
++                <label htmlFor="provider-top-p-input" className="kb-form-label">
++                  Top-P (Nucleus)
++                </label>
++                <input
++                  id="provider-top-p-input"
++                  type="number"
++                  min="0"
++                  max="1"
++                  step="0.05"
++                  className="kb-form-input"
++                  value={topP}
++                  onChange={(e) => {
++                    setTopP(parseFloat(e.target.value) || 1.0);
++                    setTopPModified(true);
++                  }}
++                  data-testid="provider-top-p-input"
++                />
++                <span className="kb-form-hint">Nucleus threshold (0.0 to 1.0).</span>
++              </div>
++
++              <div className="kb-form-group">
++                <label htmlFor="provider-max-tokens-input" className="kb-form-label">
++                  Max Tokens
++                </label>
++                <input
++                  id="provider-max-tokens-input"
++                  type="number"
++                  min="1"
++                  max="128000"
++                  step="128"
++                  className="kb-form-input"
++                  value={maxTokens}
++                  onChange={(e) => {
++                    setMaxTokens(parseInt(e.target.value, 10) || 4096);
++                    setMaxTokensModified(true);
++                  }}
++                  data-testid="provider-max-tokens-input"
++                />
++                <span className="kb-form-hint">Output generation token limit.</span>
++              </div>
++            </div>
++
++            <div className="kb-form-group" style={{ marginTop: '12px' }}>
++              <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
++                mTLS Client Certificate PEM (Optional)
++              </label>
++              <textarea
++                id="provider-mtls-cert-input"
++                className="kb-form-input"
++                style={{ fontFamily: 'monospace', fontSize: '0.8rem', minHeight: '80px' }}
++                placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
++                value={mtlsCertPem}
++                onChange={(e) => {
++                  setMtlsCertPem(e.target.value);
++                }}
++                data-testid="provider-mtls-cert-input"
++              />
++              <span className="kb-form-hint">
++                Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways.
++              </span>
++            </div>
++
+             <div className="kb-form-group">
+               <label htmlFor="provider-residency-select" className="kb-form-label">
+                 Data Residency Tier (Override)
+@@ -668,7 +785,7 @@ function AiProviderEditorContent({
+               </span>
+             </div>
+           </div>
+-        </details>
++        </AdvancedSection>
+ 
+         {testStatus.kind !== 'idle' && testStatus.message && (
+           <div
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+index e7c47678..f2b0d728 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -258,4 +258,35 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
+       );
+     });
+   });
++
++  it('Case 2: renders provider type with temperature and mTLS certs collapsed in AdvancedSection', () => {
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        provider={null}
++        airGapMode={false}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    // Provider Kind select is visible at top level
++    const kindSelect = screen.getByTestId('provider-kind-select');
++    expect(kindSelect).toBeDefined();
++
++    // Advanced section is present and collapsed by default
++    const advancedSection = screen.getByTestId('advanced-settings-details');
++    expect(advancedSection).toBeDefined();
++    expect(advancedSection.hasAttribute('open')).toBe(false);
++
++    // Expand the advanced section
++    const toggle = screen.getByTestId('advanced-settings-details-toggle');
++    fireEvent.click(toggle);
++
++    expect(advancedSection.hasAttribute('open')).toBe(true);
++
++    // Temperature and mTLS cert fields are now accessible
++    expect(screen.getByTestId('provider-temperature-input')).toBeDefined();
++    expect(screen.getByTestId('provider-mtls-cert-input')).toBeDefined();
++  });
+ });
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index 164a9f60..5dca8049 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -12,6 +12,7 @@ import {
+ } from './planeImportApi';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './PlaneImportStudio.css';
+ 
+ export interface EntityCounts {
+@@ -82,6 +83,12 @@ export function PlaneImportStudio(): JSX.Element {
+   const [fileName, setFileName] = useState<string | null>(null);
+   const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
+ 
++  // Advanced Import Options
++  const [batchSize, setBatchSize] = useState<number>(100);
++  const [userMappingJson, setUserMappingJson] = useState<string>('');
++  const [conflictStrategy, setConflictStrategy] = useState<'skip' | 'overwrite' | 'rename'>('skip');
++  const [preserveLegacyUuids, setPreserveLegacyUuids] = useState<boolean>(true);
++
+   const [stage, setStage] = useState<'input' | 'preview' | 'executing' | 'done'>('input');
+   const [diffReport, setDiffReport] = useState<ImportDiffReport | null>(null);
+   const [loading, setLoading] = useState<boolean>(false);
+@@ -582,6 +589,130 @@ export function PlaneImportStudio(): JSX.Element {
+             </div>
+           )}
+ 
++          <div style={{ marginTop: 20 }}>
++            <AdvancedSection
++              title="Advanced Import Options"
++              summary="Batch sizing, user identity mapping, UUID preservation, and conflict resolution strategy"
++              testId="advanced-import-options"
++              activeOverridesCount={
++                (batchSize !== 100 ? 1 : 0) +
++                (userMappingJson.trim() ? 1 : 0) +
++                (conflictStrategy !== 'skip' ? 1 : 0) +
++                (!preserveLegacyUuids ? 1 : 0)
++              }
++            >
++              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
++                <div>
++                  <label
++                    htmlFor="import-batch-size"
++                    style={{
++                      display: 'block',
++                      fontSize: '0.825rem',
++                      fontWeight: 600,
++                      marginBottom: 6,
++                      color: 'var(--kb-color-text-secondary)',
++                    }}
++                  >
++                    Import Batch Size:
++                  </label>
++                  <input
++                    id="import-batch-size"
++                    type="number"
++                    min={10}
++                    max={1000}
++                    step={10}
++                    className="kb-plane-textarea"
++                    style={{ minHeight: 40, height: 40, width: '100%' }}
++                    data-testid="import-batch-size-input"
++                    value={batchSize}
++                    onChange={(e) => {
++                      setBatchSize(Math.max(1, parseInt(e.target.value, 10) || 100));
++                    }}
++                  />
++                </div>
++
++                <div>
++                  <label
++                    htmlFor="import-conflict-strategy"
++                    style={{
++                      display: 'block',
++                      fontSize: '0.825rem',
++                      fontWeight: 600,
++                      marginBottom: 6,
++                      color: 'var(--kb-color-text-secondary)',
++                    }}
++                  >
++                    Conflict Resolution Strategy:
++                  </label>
++                  <select
++                    id="import-conflict-strategy"
++                    className="kb-plane-textarea"
++                    style={{ minHeight: 40, height: 40, width: '100%' }}
++                    data-testid="import-conflict-strategy-select"
++                    value={conflictStrategy}
++                    onChange={(e) => {
++                      setConflictStrategy(e.target.value as 'skip' | 'overwrite' | 'rename');
++                    }}
++                  >
++                    <option value="skip">Skip Existing (Preserve Current)</option>
++                    <option value="overwrite">Overwrite / Update Invariants</option>
++                    <option value="rename">Rename / Auto-Suffix Sequence</option>
++                  </select>
++                </div>
++              </div>
++
++              <div style={{ marginTop: '14px' }}>
++                <label
++                  style={{
++                    display: 'flex',
++                    alignItems: 'center',
++                    gap: '8px',
++                    fontSize: '0.825rem',
++                    fontWeight: 600,
++                    color: 'var(--kb-color-text-secondary)',
++                    cursor: 'pointer',
++                  }}
++                >
++                  <input
++                    type="checkbox"
++                    checked={preserveLegacyUuids}
++                    onChange={(e) => {
++                      setPreserveLegacyUuids(e.target.checked);
++                    }}
++                    data-testid="import-preserve-uuids-checkbox"
++                  />
++                  Preserve Legacy System UUIDs (Deterministic migration idempotency)
++                </label>
++              </div>
++
++              <div style={{ marginTop: '14px' }}>
++                <label
++                  htmlFor="import-user-mapping"
++                  style={{
++                    display: 'block',
++                    fontSize: '0.825rem',
++                    fontWeight: 600,
++                    marginBottom: 6,
++                    color: 'var(--kb-color-text-secondary)',
++                  }}
++                >
++                  Custom User Mapping JSON (Optional):
++                </label>
++                <textarea
++                  id="import-user-mapping"
++                  className="kb-plane-textarea"
++                  style={{ minHeight: 70, height: 70, width: '100%', fontFamily: 'monospace', fontSize: '0.8rem' }}
++                  placeholder={'{\n  "legacy-uuid-or-email": "@current_user"\n}'}
++                  data-testid="import-user-mapping-json"
++                  value={userMappingJson}
++                  onChange={(e) => {
++                    setUserMappingJson(e.target.value);
++                  }}
++                />
++              </div>
++            </AdvancedSection>
++          </div>
++
+           <div className="kb-plane-btn-row">
+             <button
+               type="button"
+diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+index 27cd1e48..08b4865d 100644
+--- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
++++ b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+@@ -12,6 +12,7 @@ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './runnerStudio.css';
+ 
+ export function RunnerStudioPage(): JSX.Element {
+@@ -238,11 +239,6 @@ export function RunnerStudioPage(): JSX.Element {
+ 
+                   <h3 className="kb-runner-hostname">{r.hostname}</h3>
+ 
+-                  <div className="kb-runner-meta-row">
+-                    <span>Cert Fingerprint:</span>
+-                    <code>{r.client_cert_sha256_hex.slice(0, 16)}...</code>
+-                  </div>
+-
+                   <div className="kb-runner-meta-row">
+                     <span>Cert Expires:</span>
+                     <span>{new Date(r.cert_expires_at).toLocaleDateString()}</span>
+@@ -257,6 +253,21 @@ export function RunnerStudioPage(): JSX.Element {
+                     </span>
+                   </div>
+ 
++                  <AdvancedSection
++                    title="Advanced Technical Details"
++                    summary="mTLS client certificate fingerprint and cryptographic parameters"
++                    testId={`runner-advanced-details-${r.id}`}
++                  >
++                    <div className="kb-runner-meta-row" style={{ marginTop: '8px' }}>
++                      <span>Full Cert SHA-256:</span>
++                      <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>{r.client_cert_sha256_hex}</code>
++                    </div>
++                    <div className="kb-runner-meta-row">
++                      <span>Cert Fingerprint:</span>
++                      <code>{r.client_cert_sha256_hex.slice(0, 16)}...</code>
++                    </div>
++                  </AdvancedSection>
++
+                   {Object.keys(r.capabilities).length > 0 && (
+                     <div className="kb-runner-caps-container">
+                       <span className="kb-runner-caps-label">
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 8fe2a4b5..54f0dcfd 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -8,6 +8,7 @@ import { apiFetch } from '../../api/client';
+ import { NotFoundView } from '../../app/routes';
+ import { LinkAuditorStudio } from './LinkAuditorStudio';
+ import { AdminStudioSubnav } from './AdminStudioSubnav';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './AdminDiagnosticsStudio.css';
+ 
+ export interface SubsystemHealth {
+@@ -823,6 +824,31 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+               </tbody>
+             </table>
+           </div>
++
++          <div style={{ marginTop: '16px' }}>
++            <AdvancedSection
++              title="Advanced Technical Details"
++              summary="Raw sanitized JSON configuration dump and internal runtime subsystem metadata"
++              testId="admin-diag-advanced-technical-details"
++            >
++              <div style={{ marginTop: '12px' }}>
++                <pre
++                  data-testid="admin-diag-raw-config-dump"
++                  style={{
++                    maxHeight: '300px',
++                    overflow: 'auto',
++                    background: 'var(--kb-color-bg-subtle, #1e293b)',
++                    padding: '12px',
++                    borderRadius: '6px',
++                    fontSize: '0.75rem',
++                    fontFamily: 'monospace',
++                  }}
++                >
++                  {JSON.stringify(diag?.config, null, 2)}
++                </pre>
++              </div>
++            </AdvancedSection>
++          </div>
+         </section>
+       )}
+ 
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index 19b00945..6c91e7c8 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -14,6 +14,7 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './OAuthClientGovernanceStudio.css';
+ 
+ export function OAuthClientGovernanceStudio(): JSX.Element {
+@@ -27,6 +28,9 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
+   const [registerName, setRegisterName] = useState<string>('');
+   const [registerUris, setRegisterUris] = useState<string>('');
+   const [registerAuthMethod, setRegisterAuthMethod] = useState<'none' | 'private_key_jwt'>('none');
++  const [registerPkceEnforce, setRegisterPkceEnforce] = useState<boolean>(true);
++  const [registerAccessTokenTtl, setRegisterAccessTokenTtl] = useState<number>(3600);
++  const [registerGrantTypes, setRegisterGrantTypes] = useState<string>('authorization_code,refresh_token');
+   const [registerSubmitting, setRegisterSubmitting] = useState<boolean>(false);
+   const [registerError, setRegisterError] = useState<string | null>(null);
+   const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
+@@ -111,6 +115,9 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
+     setRegisterName('');
+     setRegisterUris('');
+     setRegisterAuthMethod('none');
++    setRegisterPkceEnforce(true);
++    setRegisterAccessTokenTtl(3600);
++    setRegisterGrantTypes('authorization_code,refresh_token');
+     setRegisterError(null);
+     setRegisteredClient(null);
+     setCopiedClientId(false);
+@@ -639,26 +646,88 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
+                     />
+                   </div>
+ 
+-                  <div className="kb-oauth-form-field">
+-                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+-                      Token Endpoint Authentication Method
+-                    </label>
+-                    <select
+-                      id="reg-auth-method"
+-                      className="kb-oauth-form-select"
+-                      data-testid="select-auth-method"
+-                      value={registerAuthMethod}
+-                      onChange={(e) => {
+-                        setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
+-                      }}
+-                      disabled={registerSubmitting}
+-                    >
+-                      <option value="none">none (Public client with PKCE S256)</option>
+-                      <option value="private_key_jwt">
+-                        private_key_jwt (Asymmetric client authentication)
+-                      </option>
+-                    </select>
+-                  </div>
++                  <AdvancedSection
++                    title="Advanced OAuth Parameters"
++                    summary="PKCE S256 enforcement, token lifetimes, and grant type restrictions"
++                    testId="advanced-oauth-parameters"
++                  >
++                    <div className="kb-oauth-form-field">
++                      <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
++                        Token Endpoint Authentication Method
++                      </label>
++                      <select
++                        id="reg-auth-method"
++                        className="kb-oauth-form-select"
++                        data-testid="select-auth-method"
++                        value={registerAuthMethod}
++                        onChange={(e) => {
++                          setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
++                        }}
++                        disabled={registerSubmitting}
++                      >
++                        <option value="none">none (Public client with PKCE S256)</option>
++                        <option value="private_key_jwt">
++                          private_key_jwt (Asymmetric client authentication)
++                        </option>
++                      </select>
++                    </div>
++
++                    <div className="kb-oauth-form-field">
++                      <label className="kb-oauth-form-label" htmlFor="reg-pkce-toggle">
++                        <input
++                          id="reg-pkce-toggle"
++                          type="checkbox"
++                          data-testid="toggle-pkce-s256"
++                          checked={registerPkceEnforce}
++                          onChange={(e) => {
++                            setRegisterPkceEnforce(e.target.checked);
++                          }}
++                          disabled={registerSubmitting}
++                          style={{ marginRight: '8px' }}
++                        />
++                        Enforce PKCE S256 (RFC 9700 Mandatory)
++                      </label>
++                      <span className="kb-form-hint" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
++                        Enforces SHA-256 code challenge for authorization code exchange. Plain code verifiers are strictly prohibited.
++                      </span>
++                    </div>
++
++                    <div className="kb-oauth-form-field">
++                      <label htmlFor="reg-access-token-ttl" className="kb-oauth-form-label">
++                        Access Token TTL (seconds)
++                      </label>
++                      <input
++                        id="reg-access-token-ttl"
++                        type="number"
++                        className="kb-oauth-form-input"
++                        data-testid="input-access-token-ttl"
++                        min={60}
++                        max={86400}
++                        value={registerAccessTokenTtl}
++                        onChange={(e) => {
++                          setRegisterAccessTokenTtl(Number(e.target.value) || 3600);
++                        }}
++                        disabled={registerSubmitting}
++                      />
++                    </div>
++
++                    <div className="kb-oauth-form-field">
++                      <label htmlFor="reg-grant-types" className="kb-oauth-form-label">
++                        Allowed Grant Types (comma separated)
++                      </label>
++                      <input
++                        id="reg-grant-types"
++                        type="text"
++                        className="kb-oauth-form-input"
++                        data-testid="input-grant-types"
++                        value={registerGrantTypes}
++                        onChange={(e) => {
++                          setRegisterGrantTypes(e.target.value);
++                        }}
++                        disabled={registerSubmitting}
++                      />
++                    </div>
++                  </AdvancedSection>
+                 </div>
+ 
+                 <div className="kb-oauth-modal-footer">
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 7d34e9be..a75b78f8 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -30,6 +30,7 @@ import { NotFoundView } from '../../app/routes';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { copyToClipboard } from '../../utils/clipboard';
+ import './McpAccessStudio.css';
+ 
+@@ -1386,10 +1387,10 @@ export function McpAccessStudio({
+                     }
+                   }}
+                 >
+-                  <option value="1">View Only (1)</option>
++                  <option value="1">Read-Only Agent (1)</option>
+                   <option value="3">View + Comment (3)</option>
+-                  <option value="31">Standard Member (31)</option>
+-                  <option value="255">Full / Admin (255)</option>
++                  <option value="31">Standard Developer Agent (31)</option>
++                  <option value="255">Full Project Agent (255)</option>
+                   {![1, 3, 31, 255].includes(capabilityMask) && (
+                     <option value="custom">Custom ({capabilityMask})</option>
+                   )}
+@@ -1399,99 +1400,111 @@ export function McpAccessStudio({
+                 </span>
+               </div>
+ 
+-              <div className="kb-mcp-form-row">
+-                <label className="kb-mcp-form-label">
+-                  Granular Capability Bit Toggles:
+-                </label>
+-                <div className="kb-mcp-tools-grid" data-testid="capability-bits-grid">
+-                  {CAPABILITY_BITS.map(({ bit, name }) => {
+-                    const isChecked = (capabilityMask & bit) === bit;
+-                    return (
+-                      <label key={bit} className="kb-mcp-tool-checkbox-label">
+-                        <input
+-                          type="checkbox"
+-                          data-testid={`cap-bit-${String(bit)}`}
+-                          checked={isChecked}
+-                          onChange={(e) => {
+-                            if (e.target.checked) {
+-                              setCapabilityMask((prev) => prev | bit);
+-                            } else {
+-                              setCapabilityMask((prev) => prev & ~bit);
+-                            }
+-                          }}
+-                        />
+-                        <span>{name} ({bit})</span>
+-                      </label>
+-                    );
+-                  })}
++              <AdvancedSection
++                title="Advanced Capability & Network Restrictions"
++                summary="Granular bitmask permissions, tool-level narrowing, and CIDR ingress restrictions"
++                testId="advanced-capability-restrictions"
++                hasErrors={Boolean(cidrError)}
++                activeOverridesCount={
++                  (allowedCidrsInput.trim() ? 1 : 0) +
++                  (disabledTools.length > 0 ? 1 : 0) +
++                  (![1, 31, 255].includes(capabilityMask) ? 1 : 0)
++                }
++              >
++                <div className="kb-mcp-form-row">
++                  <label className="kb-mcp-form-label">
++                    Granular Capability Bit Toggles:
++                  </label>
++                  <div className="kb-mcp-tools-grid" data-testid="capability-bits-grid">
++                    {CAPABILITY_BITS.map(({ bit, name }) => {
++                      const isChecked = (capabilityMask & bit) === bit;
++                      return (
++                        <label key={bit} className="kb-mcp-tool-checkbox-label">
++                          <input
++                            type="checkbox"
++                            data-testid={`cap-bit-${String(bit)}`}
++                            checked={isChecked}
++                            onChange={(e) => {
++                              if (e.target.checked) {
++                                setCapabilityMask((prev) => prev | bit);
++                              } else {
++                                setCapabilityMask((prev) => prev & ~bit);
++                              }
++                            }}
++                          />
++                          <span>{name} ({bit})</span>
++                        </label>
++                      );
++                    })}
++                  </div>
+                 </div>
+-              </div>
+ 
+-              <div className="kb-mcp-form-row">
+-                <label htmlFor="mint-allowed-cidrs-input" className="kb-mcp-form-label">
+-                  Allowed CIDRs (Optional):
+-                </label>
+-                <input
+-                  id="mint-allowed-cidrs-input"
+-                  type="text"
+-                  className="kb-mcp-form-input"
+-                  data-testid="mint-allowed-cidrs-input"
+-                  placeholder="e.g. 192.168.1.0/24, 10.0.0.0/8"
+-                  value={allowedCidrsInput}
+-                  onChange={(e) => {
+-                    const val = e.target.value;
+-                    setAllowedCidrsInput(val);
+-                    const res = validateCidrInput(val);
+-                    setCidrError(res.error ?? null);
+-                  }}
+-                  aria-invalid={Boolean(cidrError)}
+-                  aria-describedby={cidrError ? 'cidr-error-message' : undefined}
+-                />
+-                {cidrError && (
+-                  <div
+-                    id="cidr-error-message"
+-                    className="kb-mcp-warning-text"
+-                    role="alert"
+-                    data-testid="cidr-error-message"
+-                    style={{ color: '#ef4444', marginTop: '4px' }}
+-                  >
+-                    {cidrError}
+-                  </div>
+-                )}
+-                <span className="kb-mcp-form-hint">
+-                  Optional comma-separated IPv4 or IPv6 CIDR blocks restricting source networks.
+-                </span>
+-              </div>
++                <div className="kb-mcp-form-row">
++                  <label htmlFor="mint-allowed-cidrs-input" className="kb-mcp-form-label">
++                    Allowed CIDRs (Optional):
++                  </label>
++                  <input
++                    id="mint-allowed-cidrs-input"
++                    type="text"
++                    className="kb-mcp-form-input"
++                    data-testid="mint-allowed-cidrs-input"
++                    placeholder="e.g. 192.168.1.0/24, 10.0.0.0/8"
++                    value={allowedCidrsInput}
++                    onChange={(e) => {
++                      const val = e.target.value;
++                      setAllowedCidrsInput(val);
++                      const res = validateCidrInput(val);
++                      setCidrError(res.error ?? null);
++                    }}
++                    aria-invalid={Boolean(cidrError)}
++                    aria-describedby={cidrError ? 'cidr-error-message' : undefined}
++                  />
++                  {cidrError && (
++                    <div
++                      id="cidr-error-message"
++                      className="kb-mcp-warning-text"
++                      role="alert"
++                      data-testid="cidr-error-message"
++                      style={{ color: '#ef4444', marginTop: '4px' }}
++                    >
++                      {cidrError}
++                    </div>
++                  )}
++                  <span className="kb-mcp-form-hint">
++                    Optional comma-separated IPv4 or IPv6 CIDR blocks restricting source networks.
++                  </span>
++                </div>
+ 
+-              <div className="kb-mcp-form-row">
+-                <label className="kb-mcp-form-label">
+-                  Narrow Tools (Disable specific capabilities):
+-                </label>
+-                <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
+-                  {SURFACE_TOOLS[newKeySurface]
+-                    .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
+-                    .map((toolName) => {
+-                    const isDisabled = disabledTools.includes(toolName);
+-                    return (
+-                      <label key={toolName} className="kb-mcp-tool-checkbox-label">
+-                        <input
+-                          type="checkbox"
+-                          data-testid={`disable-tool-${toolName}`}
+-                          checked={isDisabled}
+-                          onChange={(e) => {
+-                            if (e.target.checked) {
+-                              setDisabledTools([...disabledTools, toolName]);
+-                            } else {
+-                              setDisabledTools(disabledTools.filter((t) => t !== toolName));
+-                            }
+-                          }}
+-                        />
+-                        <span><code>{toolName}</code> (disable)</span>
+-                      </label>
+-                    );
+-                  })}
++                <div className="kb-mcp-form-row">
++                  <label className="kb-mcp-form-label">
++                    Narrow Tools (Disable specific capabilities):
++                  </label>
++                  <div className="kb-mcp-tools-grid" data-testid="tools-selection-grid">
++                    {SURFACE_TOOLS[newKeySurface]
++                      .filter((toolName) => !isViewer || !WRITE_MCP_TOOLS.has(toolName))
++                      .map((toolName) => {
++                      const isDisabled = disabledTools.includes(toolName);
++                      return (
++                        <label key={toolName} className="kb-mcp-tool-checkbox-label">
++                          <input
++                            type="checkbox"
++                            data-testid={`disable-tool-${toolName}`}
++                            checked={isDisabled}
++                            onChange={(e) => {
++                              if (e.target.checked) {
++                                setDisabledTools([...disabledTools, toolName]);
++                              } else {
++                                setDisabledTools(disabledTools.filter((t) => t !== toolName));
++                              }
++                            }}
++                          />
++                          <span><code>{toolName}</code> (disable)</span>
++                        </label>
++                      );
++                    })}
++                  </div>
+                 </div>
+-              </div>
++              </AdvancedSection>
+ 
+               <div className="kb-mcp-form-actions">
+                 <button
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index d854acf6..469ee70f 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -2116,5 +2116,52 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+         params: { grant_id: 'app-1' },
+       });
+     });
++
++    it('Case 1: McpAccessStudio selects capability presets cleanly and reveals raw bitmask/CIDR controls when AdvancedSection is expanded', async () => {
++      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
++      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio tier="workspace" />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++      });
++
++      fireEvent.click(screen.getByTestId('mint-key-button'));
++      expect(screen.getByTestId('mint-label-input')).not.toBeNull();
++
++      // Capability preset select exists and defaults to Standard Developer Agent (31)
++      const presetSelect = screen.getByTestId<HTMLSelectElement>('capability-preset-select');
++      expect(presetSelect).toBeDefined();
++      expect(presetSelect.value).toBe('31');
++
++      // Switch preset to Read-Only Agent (1)
++      fireEvent.change(presetSelect, { target: { value: '1' } });
++      expect(presetSelect.value).toBe('1');
++
++      // Switch preset to Full Project Agent (255)
++      fireEvent.change(presetSelect, { target: { value: '255' } });
++      expect(presetSelect.value).toBe('255');
++
++      // Advanced section is collapsed by default
++      const advSection = screen.getByTestId('advanced-capability-restrictions');
++      expect(advSection).toBeDefined();
++      expect(advSection.hasAttribute('open')).toBe(false);
++
++      // Expand AdvancedSection
++      const toggle = screen.getByTestId('advanced-capability-restrictions-toggle');
++      fireEvent.click(toggle);
++
++      expect(advSection.hasAttribute('open')).toBe(true);
++
++      // Raw bitmask matrix and CIDR input are revealed
++      expect(screen.getByTestId('capability-bits-grid')).toBeDefined();
++      expect(screen.getByTestId('mint-allowed-cidrs-input')).toBeDefined();
++      expect(screen.getByTestId('tools-selection-grid')).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+index 975387e7..76d42a3e 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+@@ -19,6 +19,7 @@ import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
+ import { safeCopyToClipboard } from '../../utils/uuid';
+ import { ComposeExportTab } from './ComposeExportTab';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './StandaloneStatusPanel.css';
+ 
+ export type StandaloneTabId = 'health' | 'backup' | 'compose';
+@@ -765,6 +766,33 @@ export function StandaloneStatusPanel({
+                 </p>
+               </div>
+             </div>
++
++            <div style={{ marginTop: '16px' }}>
++              <AdvancedSection
++                title="Advanced Technical Details"
++                summary="Storage mount parameters, SQLite WAL/PRAGMA dials, and runtime sandbox constraints"
++                testId="standalone-advanced-technical-details"
++              >
++                <div style={{ padding: '8px 0', fontSize: '0.825rem', color: 'var(--kb-color-text-secondary)' }}>
++                  <div style={{ marginBottom: '6px' }}>
++                    <strong>Database Storage Engine:</strong>{' '}
++                    <code>{status?.deployment_mode === 'standalone' ? 'SQLite 3.45 (WAL Mode)' : 'PostgreSQL 16 Engine'}</code>
++                  </div>
++                  <div style={{ marginBottom: '6px' }}>
++                    <strong>PRAGMA / WAL Tuning:</strong>{' '}
++                    <code>PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -64000;</code>
++                  </div>
++                  <div style={{ marginBottom: '6px' }}>
++                    <strong>Storage Volume Mount:</strong>{' '}
++                    <code>Mount: {status?.data_mount_point ?? '/var/lib/kanban/data'} | FSType: {status?.data_mount_fstype ?? 'overlayfs'}</code>
++                  </div>
++                  <div>
++                    <strong>Sandboxed Subsystem Bounds:</strong>{' '}
++                    <span>{status?.tier_b_sandbox_available ? 'Tier-B nsjail strict cgroups' : 'Tier-A WebAssembly in-process'}</span>
++                  </div>
++                </div>
++              </AdvancedSection>
++            </div>
+           </div>
+         </div>
+ 
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+similarity index 98%
+rename from kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
+rename to kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+index 1b4e2a53..8ae54794 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+@@ -6,11 +6,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+-import { StandaloneStatusPanel } from './StandaloneStatusPanel';
+-import { ComposeExportTab } from './ComposeExportTab';
+-import { HeaderPills } from '../../app/HeaderPills';
+-import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
+-import type { SystemStatus } from '../../app/useSystemStatus';
++import { StandaloneStatusPanel } from '../StandaloneStatusPanel';
++import { ComposeExportTab } from '../ComposeExportTab';
++import { HeaderPills } from '../../../app/HeaderPills';
++import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
++import type { SystemStatus } from '../../../app/useSystemStatus';
+ 
+ describe('StandaloneStatusPanel', () => {
+   let queryClient: QueryClient;
+@@ -2599,4 +2599,43 @@ describe('ComposeExportTab', () => {
+       expect(screen.getByText('Backup verification failed with status 400')).toBeDefined();
+     });
+   });
++
++  it('progressively discloses technical details (storage volume, SQLite WAL dials, and sandbox bounds) in AdvancedSection', () => {
++    const testQueryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    const mockStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      data_mount_point: '/var/lib/kanban/data',
++      data_mount_fstype: 'ext4',
++      tier_b_sandbox_available: true,
++    };
++
++    render(
++      <QueryClientProvider client={testQueryClient}>
++        <StandaloneStatusPanel
++          onClose={vi.fn()}
++          initialStatus={mockStatus}
++        />
++      </QueryClientProvider>,
++    );
++
++    // Advanced section is present and collapsed by default
++    const advancedDetails = screen.getByTestId('standalone-advanced-technical-details');
++    expect(advancedDetails).toBeDefined();
++    expect(advancedDetails.hasAttribute('open')).toBe(false);
++
++    // Toggle open
++    const toggle = screen.getByTestId('standalone-advanced-technical-details-toggle');
++    fireEvent.click(toggle);
++
++    expect(advancedDetails.hasAttribute('open')).toBe(true);
++    expect(screen.getByText(/Storage Volume Mount:/i)).toBeDefined();
++    expect(screen.getByText(/PRAGMA \/ WAL Tuning:/i)).toBeDefined();
++    expect(screen.getByText(/PRAGMA journal_mode = WAL/i)).toBeDefined();
++    expect(screen.getByText(/Tier-B nsjail strict cgroups/i)).toBeDefined();
++  });
+ });

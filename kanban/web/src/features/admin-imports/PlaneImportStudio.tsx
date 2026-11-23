@@ -12,6 +12,7 @@ import {
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './PlaneImportStudio.css';
 
 export interface EntityCounts {
@@ -81,6 +82,12 @@ export function PlaneImportStudio(): JSX.Element {
   const [bundleData, setBundleData] = useState<unknown>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
+
+  // Advanced Import Options
+  const [batchSize, setBatchSize] = useState<number>(100);
+  const [userMappingJson, setUserMappingJson] = useState<string>('');
+  const [conflictStrategy, setConflictStrategy] = useState<'skip' | 'overwrite' | 'rename'>('skip');
+  const [preserveLegacyUuids, setPreserveLegacyUuids] = useState<boolean>(true);
 
   const [stage, setStage] = useState<'input' | 'preview' | 'executing' | 'done'>('input');
   const [diffReport, setDiffReport] = useState<ImportDiffReport | null>(null);
@@ -581,6 +588,130 @@ export function PlaneImportStudio(): JSX.Element {
               />
             </div>
           )}
+
+          <div style={{ marginTop: 20 }}>
+            <AdvancedSection
+              title="Advanced Import Options"
+              summary="Batch sizing, user identity mapping, UUID preservation, and conflict resolution strategy"
+              testId="advanced-import-options"
+              activeOverridesCount={
+                (batchSize !== 100 ? 1 : 0) +
+                (userMappingJson.trim() ? 1 : 0) +
+                (conflictStrategy !== 'skip' ? 1 : 0) +
+                (!preserveLegacyUuids ? 1 : 0)
+              }
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
+                <div>
+                  <label
+                    htmlFor="import-batch-size"
+                    style={{
+                      display: 'block',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      marginBottom: 6,
+                      color: 'var(--kb-color-text-secondary)',
+                    }}
+                  >
+                    Import Batch Size:
+                  </label>
+                  <input
+                    id="import-batch-size"
+                    type="number"
+                    min={10}
+                    max={1000}
+                    step={10}
+                    className="kb-plane-textarea"
+                    style={{ minHeight: 40, height: 40, width: '100%' }}
+                    data-testid="import-batch-size-input"
+                    value={batchSize}
+                    onChange={(e) => {
+                      setBatchSize(Math.max(1, parseInt(e.target.value, 10) || 100));
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="import-conflict-strategy"
+                    style={{
+                      display: 'block',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      marginBottom: 6,
+                      color: 'var(--kb-color-text-secondary)',
+                    }}
+                  >
+                    Conflict Resolution Strategy:
+                  </label>
+                  <select
+                    id="import-conflict-strategy"
+                    className="kb-plane-textarea"
+                    style={{ minHeight: 40, height: 40, width: '100%' }}
+                    data-testid="import-conflict-strategy-select"
+                    value={conflictStrategy}
+                    onChange={(e) => {
+                      setConflictStrategy(e.target.value as 'skip' | 'overwrite' | 'rename');
+                    }}
+                  >
+                    <option value="skip">Skip Existing (Preserve Current)</option>
+                    <option value="overwrite">Overwrite / Update Invariants</option>
+                    <option value="rename">Rename / Auto-Suffix Sequence</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '14px' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.825rem',
+                    fontWeight: 600,
+                    color: 'var(--kb-color-text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={preserveLegacyUuids}
+                    onChange={(e) => {
+                      setPreserveLegacyUuids(e.target.checked);
+                    }}
+                    data-testid="import-preserve-uuids-checkbox"
+                  />
+                  Preserve Legacy System UUIDs (Deterministic migration idempotency)
+                </label>
+              </div>
+
+              <div style={{ marginTop: '14px' }}>
+                <label
+                  htmlFor="import-user-mapping"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.825rem',
+                    fontWeight: 600,
+                    marginBottom: 6,
+                    color: 'var(--kb-color-text-secondary)',
+                  }}
+                >
+                  Custom User Mapping JSON (Optional):
+                </label>
+                <textarea
+                  id="import-user-mapping"
+                  className="kb-plane-textarea"
+                  style={{ minHeight: 70, height: 70, width: '100%', fontFamily: 'monospace', fontSize: '0.8rem' }}
+                  placeholder={'{\n  "legacy-uuid-or-email": "@current_user"\n}'}
+                  data-testid="import-user-mapping-json"
+                  value={userMappingJson}
+                  onChange={(e) => {
+                    setUserMappingJson(e.target.value);
+                  }}
+                />
+              </div>
+            </AdvancedSection>
+          </div>
 
           <div className="kb-plane-btn-row">
             <button

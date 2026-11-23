@@ -258,4 +258,35 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
       );
     });
   });
+
+  it('Case 2: renders provider type with temperature and mTLS certs collapsed in AdvancedSection', () => {
+    render(
+      <AiProviderEditorDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        provider={null}
+        airGapMode={false}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    // Provider Kind select is visible at top level
+    const kindSelect = screen.getByTestId('provider-kind-select');
+    expect(kindSelect).toBeDefined();
+
+    // Advanced section is present and collapsed by default
+    const advancedSection = screen.getByTestId('advanced-settings-details');
+    expect(advancedSection).toBeDefined();
+    expect(advancedSection.hasAttribute('open')).toBe(false);
+
+    // Expand the advanced section
+    const toggle = screen.getByTestId('advanced-settings-details-toggle');
+    fireEvent.click(toggle);
+
+    expect(advancedSection.hasAttribute('open')).toBe(true);
+
+    // Temperature and mTLS cert fields are now accessible
+    expect(screen.getByTestId('provider-temperature-input')).toBeDefined();
+    expect(screen.getByTestId('provider-mtls-cert-input')).toBeDefined();
+  });
 });
