@@ -109,7 +109,4 @@ def test_migration_guide_sections_and_anchors() -> None:
     section_ids = [s["id"] for s in meta["sections"]]
     assert "multi-source-importer-architecture" in section_ids
     assert "legacy-key-alias-routing-and-permalinks" in section_ids
-    assert (
-        "canonical-csv-import-export-and-password-protected-zip-aes-256-packaging"
-        in section_ids
-    )
+    assert "canonical-csv-import-export-and-password-protected-zip-aes-256-packaging" in section_ids
