@@ -104,7 +104,19 @@ export function ListRow({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextRow = rowRef.current?.nextElementSibling as HTMLElement | null;
+      if (nextRow?.getAttribute('role') === 'row') {
+        nextRow.focus();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevRow = rowRef.current?.previousElementSibling as HTMLElement | null;
+      if (prevRow?.getAttribute('role') === 'row') {
+        prevRow.focus();
+      }
+    } else if (e.key === 'Enter') {
       setOpenerElement(rowRef.current);
       if (onOpenPeek) {
         onOpenPeek(issue.key);
@@ -128,7 +140,7 @@ export function ListRow({
       onKeyDown={handleKeyDown}
       aria-selected={isSelected}
     >
-      <div role="cell" className="list-row-left">
+      <div role="cell" aria-colindex={1} className="list-row-left">
         {onToggleSelect && (
           <span className="list-row-checkbox-wrap">
             <input
@@ -197,7 +209,7 @@ export function ListRow({
         <span className="list-row-summary">{issue.summary}</span>
       </div>
 
-      <div role="cell" className="list-row-right">
+      <div role="cell" aria-colindex={2} className="list-row-right">
         {gateKind && <EmojiHint kind={gateKind} />}
 
         {Boolean(issue.has_explicit_acl) && <EmojiHint kind="access" testId="hint-access" />}

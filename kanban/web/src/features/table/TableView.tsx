@@ -39,6 +39,7 @@ export interface TableViewProps {
   currentUserCapabilities?: string[] | undefined;
   projectStates?: StateSummary[] | undefined;
   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
+  focusedKey?: string | null | undefined;
   totalProjectIssueCount?: number | undefined;
   hiddenByStateCount?: number | undefined;
   onShowAllStates?: (() => void) | undefined;
@@ -57,6 +58,7 @@ export function TableView({
   nextCursor,
   onLoadMore,
   isLoading = false,
+  focusedKey = null,
   onOpenPeek,
   capabilities,
   currentUserCapabilities,
@@ -68,6 +70,7 @@ export function TableView({
 }: TableViewProps): JSX.Element {
   const [prevIssues, setPrevIssues] = useState<IssueItem[]>(issues);
   const [localIssues, setLocalIssues] = useState<IssueItem[]>(issues);
+  const [internalFocusedKey, setInternalFocusedKey] = useState<string | null>(null);
   if (issues !== prevIssues) {
     setPrevIssues(issues);
     setLocalIssues(issues);
@@ -446,8 +449,8 @@ export function TableView({
       <div className="table-scroll-wrap">
         <table className="issues-table">
           <thead className="issues-table-head">
-            <tr className="table-header-row">
-              <th className="sticky-col table-key-header" data-col-header="key">
+            <tr className="table-header-row" role="row" aria-rowindex={1}>
+              <th className="sticky-col table-key-header" data-col-header="key" role="columnheader" aria-colindex={1}>
                 <div className="table-key-cell-content">
                   {onSelectAll && (
                     <input
@@ -474,7 +477,7 @@ export function TableView({
 
               {activeColumns
                 .filter((id) => id !== 'key')
-                .map((colId) => {
+                .map((colId, colIdx) => {
                   const def = colDefMap.get(colId);
                   if (!def) return null;
                   const label = def.label;
@@ -490,6 +493,8 @@ export function TableView({
                       key={colId}
                       data-col-header={colId}
                       className={`table-col-header table-col-header--${colId}`}
+                      role="columnheader"
+                      aria-colindex={colIdx + 2}
                       aria-sort={isSortable ? ariaSort : undefined}
                     >
                       {isSortable ? (
@@ -515,9 +520,11 @@ export function TableView({
           </thead>
 
           <tbody className="issues-table-body">
-            {sortedIssues.map((issue) => {
+            {sortedIssues.map((issue, rowIdx) => {
               const isSelected = selectedSet.has(issue.key);
               const canEdit = canEditIssue(issue);
+              const effectiveFocusedKey = focusedKey ?? internalFocusedKey ?? sortedIssues[0]?.key ?? null;
+              const isRowFocused = effectiveFocusedKey === issue.key;
 
               // Priority mapping
               let priorityKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
@@ -542,8 +549,12 @@ export function TableView({
                 <tr
                   key={issue.key}
                   data-issue-key={issue.key}
+                  role="row"
+                  aria-rowindex={rowIdx + 2}
+                  tabIndex={isRowFocused ? 0 : -1}
                   className={`table-row ${isSelected ? 'table-row--selected' : ''}`.trim()}
                   onClick={(e) => {
+                    setInternalFocusedKey(issue.key);
                     const target = e.target as HTMLElement | null;
                     if (
                       target?.closest(
@@ -554,8 +565,47 @@ export function TableView({
                     }
                     onOpenPeek?.(issue.key);
                   }}
+                  onFocus={() => {
+                    setInternalFocusedKey(issue.key);
+                  }}
+                  onKeyDown={(e) => {
+                    const currentIndex = sortedIssues.findIndex((it) => it.key === issue.key);
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const nextIndex = Math.min(sortedIssues.length - 1, currentIndex + 1);
+                      const nextKey = sortedIssues[nextIndex]?.key;
+                      if (nextKey) {
+                        setInternalFocusedKey(nextKey);
+                        document.querySelector<HTMLElement>(`tr[data-issue-key="${nextKey}"]`)?.focus();
+                      }
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const prevIndex = Math.max(0, currentIndex - 1);
+                      const prevKey = sortedIssues[prevIndex]?.key;
+                      if (prevKey) {
+                        setInternalFocusedKey(prevKey);
+                        document.querySelector<HTMLElement>(`tr[data-issue-key="${prevKey}"]`)?.focus();
+                      }
+                    } else if (e.key === 'Home') {
+                      e.preventDefault();
+                      const firstKey = sortedIssues[0]?.key;
+                      if (firstKey) {
+                        setInternalFocusedKey(firstKey);
+                        document.querySelector<HTMLElement>(`tr[data-issue-key="${firstKey}"]`)?.focus();
+                      }
+                    } else if (e.key === 'End') {
+                      e.preventDefault();
+                      const lastKey = sortedIssues[sortedIssues.length - 1]?.key;
+                      if (lastKey) {
+                        setInternalFocusedKey(lastKey);
+                        document.querySelector<HTMLElement>(`tr[data-issue-key="${lastKey}"]`)?.focus();
+                      }
+                    } else if (e.key === 'Enter') {
+                      onOpenPeek?.(issue.key);
+                    }
+                  }}
                 >
-                  <td className="sticky-col table-key-cell" data-col="key">
+                  <td className="sticky-col table-key-cell" data-col="key" role="gridcell" aria-colindex={1}>
                     <div className="table-key-cell-content">
                       {onToggleSelect && (
                         <input
