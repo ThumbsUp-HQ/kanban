@@ -1020,12 +1020,12 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
   });
 
   describe('Release Candidate Polish & Accessibility (KAN-16 RC1)', () => {
-    it('places Home at Chapter 1 of 28 with informational category and Overview track', () => {
+    it('places Home at Chapter 1 of 29 with informational category and Overview track', () => {
       expect(WIKI_CHAPTERS[0]?.slug).toBe('home');
       expect(WIKI_CHAPTERS[0]?.order).toBe(1);
       expect(WIKI_CHAPTERS[0]?.category).toBe('informational');
       expect(WIKI_CHAPTERS[0]?.track).toBe('Overview');
-      expect(WIKI_CHAPTERS.length).toBe(28);
+      expect(WIKI_CHAPTERS.length).toBe(29);
     });
 
     it('exercises resolveSafeDocImageUrl branches directly', () => {

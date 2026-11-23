@@ -428,7 +428,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             "issue_export_enabled": settings.issue_export_enabled,
             "issue_import_enabled": settings.issue_import_enabled,
             "issue_export_allowed_roles": list(
-                settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+                settings.issue_export_allowed_roles
+                or ["workspace_admin", "project_admin", "member"]
             ),
             "report_export_enabled": settings.report_export_enabled,
             "report_export_allowed_roles": settings.report_export_allowed_roles,

@@ -54,6 +54,7 @@ export function ReportExportModal({
       return;
     }
     let isSubscribed = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingTemplates(true);
     setError(null);
 
@@ -78,7 +79,7 @@ export function ReportExportModal({
           }
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (!isSubscribed) return;
         setError(err instanceof Error ? err.message : 'Failed to load report templates.');
       })
@@ -231,7 +232,7 @@ export function ReportExportModal({
                 data-testid="report-template-select"
                 className="reports-select"
                 value={selectedTemplateSlug}
-                onChange={(e) => handleTemplateChange(e.target.value)}
+                onChange={(e) => { handleTemplateChange(e.target.value); }}
                 disabled={loadingTemplates}
               >
                 {templates.map((t) => (
@@ -255,7 +256,7 @@ export function ReportExportModal({
                       className={`reports-format-pill ${isActive ? 'reports-format-pill--active' : ''}`}
                       data-testid={`report-format-pill-${fmt.toLowerCase()}`}
                       aria-pressed={isActive}
-                      onClick={() => setSelectedFormat(fmt)}
+                      onClick={() => { setSelectedFormat(fmt); }}
                     >
                       {fmt}
                     </button>
@@ -280,7 +281,7 @@ export function ReportExportModal({
                           data-testid={`report-param-input-${param.name}`}
                           className="reports-textarea"
                           value={parameters[param.name] ?? ''}
-                          onChange={(e) => handleParameterChange(param.name, e.target.value)}
+                          onChange={(e) => { handleParameterChange(param.name, e.target.value); }}
                         />
                       ) : (
                         <input
@@ -289,7 +290,7 @@ export function ReportExportModal({
                           type="text"
                           className="reports-input"
                           value={parameters[param.name] ?? ''}
-                          onChange={(e) => handleParameterChange(param.name, e.target.value)}
+                          onChange={(e) => { handleParameterChange(param.name, e.target.value); }}
                         />
                       )}
                     </div>
@@ -306,7 +307,7 @@ export function ReportExportModal({
                   data-testid="reports-zip-toggle"
                   className="reports-checkbox"
                   checked={isZipEncrypted}
-                  onChange={(e) => setIsZipEncrypted(e.target.checked)}
+                  onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
                 />
                 <span className="reports-checkbox-label">
                   🔒 Encrypt report in AES-256 password-protected ZIP archive
@@ -321,7 +322,7 @@ export function ReportExportModal({
                     className="reports-input"
                     placeholder="Enter encryption passphrase (min 4 characters)"
                     value={zipPassword}
-                    onChange={(e) => setZipPassword(e.target.value)}
+                    onChange={(e) => { setZipPassword(e.target.value); }}
                     required
                   />
                 </div>
@@ -342,7 +343,7 @@ export function ReportExportModal({
                 type="button"
                 className="reports-btn reports-btn--secondary"
                 data-testid="reports-open-studio-btn"
-                onClick={() => setIsStudioOpen(true)}
+                onClick={() => { setIsStudioOpen(true); }}
               >
                 ⚙️ Template Studio
               </button>
@@ -350,7 +351,7 @@ export function ReportExportModal({
                 type="button"
                 className="reports-btn reports-btn--secondary"
                 data-testid="reports-preview-btn"
-                onClick={handleRenderPreview}
+                onClick={() => { void handleRenderPreview(); }}
                 disabled={loadingPreview}
               >
                 {loadingPreview ? 'Previewing...' : '👁️ Preview'}
@@ -370,7 +371,7 @@ export function ReportExportModal({
                 type="button"
                 className="reports-btn reports-btn--primary"
                 data-testid="reports-export-submit-btn"
-                onClick={handleExport}
+                onClick={() => { void handleExport(); }}
                 disabled={exporting || loadingTemplates}
               >
                 {exporting ? 'Generating...' : `Download ${selectedFormat}`}
@@ -383,7 +384,7 @@ export function ReportExportModal({
       {isStudioOpen && (
         <ReportTemplateStudioModal
           isOpen={isStudioOpen}
-          onClose={() => setIsStudioOpen(false)}
+          onClose={() => { setIsStudioOpen(false); }}
           workspaceSlug={workspaceSlug}
           projectKey={projectKey}
           onTemplateSaved={(newTpl) => {

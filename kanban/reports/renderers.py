@@ -492,7 +492,7 @@ def _build_sheet_xml(row_xmls: list[str]) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n'
-        f'  <sheetData>{"".join(row_xmls)}</sheetData>\n'
+        f"  <sheetData>{''.join(row_xmls)}</sheetData>\n"
         "</worksheet>"
     )
 
@@ -541,19 +541,19 @@ def render_docx(rendered_text: str, context: ReportContext) -> bytes:
             '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n'
             '  <w:style w:type="paragraph" w:styleId="Normal" w:default="1">\n'
             '    <w:name w:val="Normal"/>\n'
-            "    <w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\"/><w:sz w:val=\"22\"/></w:rPr>\n"
+            '    <w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr>\n'
             "  </w:style>\n"
             '  <w:style w:type="paragraph" w:styleId="Heading1">\n'
             '    <w:name w:val="Heading 1"/>\n'
-            "    <w:rPr><w:b/><w:sz w:val=\"36\"/><w:color w:val=\"0F172A\"/></w:rPr>\n"
+            '    <w:rPr><w:b/><w:sz w:val="36"/><w:color w:val="0F172A"/></w:rPr>\n'
             "  </w:style>\n"
             '  <w:style w:type="paragraph" w:styleId="Heading2">\n'
             '    <w:name w:val="Heading 2"/>\n'
-            "    <w:rPr><w:b/><w:sz w:val=\"28\"/><w:color w:val=\"1E293B\"/></w:rPr>\n"
+            '    <w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1E293B"/></w:rPr>\n'
             "  </w:style>\n"
             '  <w:style w:type="paragraph" w:styleId="Heading3">\n'
             '    <w:name w:val="Heading 3"/>\n'
-            "    <w:rPr><w:b/><w:sz w:val=\"24\"/><w:color w:val=\"334155\"/></w:rPr>\n"
+            '    <w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="334155"/></w:rPr>\n'
             "  </w:style>\n"
             "</w:styles>"
         )
@@ -617,7 +617,7 @@ def render_docx(rendered_text: str, context: ReportContext) -> bytes:
         doc_xml = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n'
-            f'  <w:body>{"".join(body_elements)}</w:body>\n'
+            f"  <w:body>{''.join(body_elements)}</w:body>\n"
             "</w:document>"
         )
         DefusedET.fromstring(doc_xml)
@@ -710,7 +710,7 @@ def render_odt(rendered_text: str, context: ReportContext) -> bytes:
             '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
             'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
             'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">\n'
-            f'  <office:body><office:text>{"".join(body_elements)}</office:text></office:body>\n'
+            f"  <office:body><office:text>{''.join(body_elements)}</office:text></office:body>\n"
             "</office:document-content>"
         )
         DefusedET.fromstring(content_xml)
@@ -835,7 +835,9 @@ def render_pdf(rendered_text: str, context: ReportContext) -> bytes:
         objects.append(stream_obj)
 
     # Font F1: Helvetica
-    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    objects.append(
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+    )
     # Font F2: Helvetica-Bold
     objects.append(
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"
@@ -915,7 +917,11 @@ def render_report_bundle(
             "docx",
         )
     if fmt == "odt":
-        return render_odt(rendered_markdown, context), "application/vnd.oasis.opendocument.text", "odt"
+        return (
+            render_odt(rendered_markdown, context),
+            "application/vnd.oasis.opendocument.text",
+            "odt",
+        )
     if fmt == "pdf":
         return render_pdf(rendered_markdown, context), "application/pdf", "pdf"
     raise ValueError(f"Unsupported report export format: {format_type}")

@@ -932,8 +932,6 @@ function IssueSurfaceContent({
     const canEdit =
       canModifyIssueField(currentIssue, 'description') &&
       (capabilities.includes('EDIT') || capabilities.includes('ADMIN'));
-    const canComment = hasIssuePermission(currentIssue, 'issue:comment');
-    const canAttach = hasIssuePermission(currentIssue, 'field:attach_files');
 
     const headerStates = (() => {
       if (projectStates.length > 0) {

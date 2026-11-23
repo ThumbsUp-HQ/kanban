@@ -10,15 +10,15 @@ Covers:
    - ZipBomb protection (ratio > 100x and max size 50 MiB).
    - Path traversal protection (leading slash and relative '../' rejection).
    - Memory zeroization verification.
-2. Canonical CSV schema, CWE-1236 formula defense, surrogates, and secret scanning (kanban.csv.issue_csv):
+2. Canonical CSV schema, CWE-1236 formula defense, surrogates, and secret scanning:
    - Canonical 16-column header contract.
    - CWE-1236 sanitization on export and stripping on import.
    - UTF-16 lone surrogate rejection (INVALID_UTF8_SURROGATE).
    - KAN-72 secret push protection enforcement on import.
    - Template generation with project-specific workflow states.
 3. 3-tier governance, permissions, and REST API endpoints (kanban.api.v1.issue_csv):
-   - System Admin governance flags (EXPORT_DISABLED_BY_SYSTEM_ADMIN / IMPORT_DISABLED_BY_SYSTEM_ADMIN).
-   - Workspace Admin governance flags (EXPORT_DISABLED_BY_WORKSPACE_ADMIN / IMPORT_DISABLED_BY_WORKSPACE_ADMIN).
+   - System Admin governance flags (EXPORT_DISABLED / IMPORT_DISABLED).
+   - Workspace Admin governance flags (EXPORT_DISABLED / IMPORT_DISABLED).
    - Role-based export capability (INSUFFICIENT_CAPABILITY).
    - Project & workspace CSV and password-protected ZIP export with filter reflection.
    - Project CSV & encrypted ZIP import with dry-run preview and atomic commit.
@@ -30,25 +30,17 @@ from __future__ import annotations
 import base64
 import io
 import struct
-import uuid
-import zlib
+import zipfile
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import text
 
-from database.models.issues import Issue
-from database.models.workspace_settings import WorkspaceSettings
 from kanban.api.deps import PrincipalContext
-from kanban.api.problems import ProblemException
 from kanban.content import ContentNormalizeError
 from kanban.csv.aes_zip import (
-    EXTRA_FIELD_WINZIP_AES,
-    MAX_UNCOMPRESSED_SIZE,
-    MIN_PASSWORD_LENGTH,
     CorruptZipError,
     InvalidPasswordError,
     PasswordTooShortError,
@@ -61,19 +53,20 @@ from kanban.csv.aes_zip import (
 )
 from kanban.csv.issue_csv import (
     CSV_COLUMNS,
-    CsvImportDiffReport,
     desanitize_cell_from_import,
     export_issues_to_csv,
     generate_issue_import_template,
     parse_issues_from_csv,
-    process_issue_import,
     sanitize_cell_for_export,
     validate_no_surrogates,
 )
 from kanban.settings import get_settings
 
 if TYPE_CHECKING:
+    import uuid
     from collections.abc import Awaitable, Callable
+
+    from httpx import AsyncClient
 
     from kanban.tests.api.conftest import ApiEnv, SeededUser
 
@@ -202,7 +195,7 @@ def test_winzip_aes256_path_traversal() -> None:
 def test_winzip_aes256_zipbomb_protection() -> None:
     """Archive with excessive compression ratio raises ZipBombError."""
     password = "CorrectHorseBatteryStaple123!"
-    # Highly compressible payload (200KB of zeros compresses to ~150 bytes, ratio > 1000x > 100x limit)
+    # Highly compressible payload (200KB of zeros compresses to ~150B, >100x ratio limit)
     data = {"bomb.csv": b"\x00" * 200_000}
     bomb_zip = create_winzip_aes256_zip(data, password)
 
@@ -306,14 +299,13 @@ def test_export_issues_to_csv() -> None:
 
 
 async def test_api_template_endpoints(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """GET import-template.csv returns project and workspace templates."""
     user = await make_user("admin1", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("TMPL", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("TMPL", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
     # Project template
@@ -329,14 +321,13 @@ async def test_api_template_endpoints(
 
 
 async def test_api_export_csv_and_zip(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Export project issues to CSV and WinZip AE-2 ZIP container."""
     user = await make_user("exp_user", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("EXP1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("EXP1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
     # Create a test issue first
@@ -384,7 +375,7 @@ async def test_api_export_governance_tiers(
     """3-Tier governance enforcement on export."""
     admin = await make_user("gov_admin", workspace_role="WORKSPACE_ADMIN")
     member = await make_user("gov_member", workspace_role="WORKSPACE_MEMBER")
-    proj_id = await make_project("GOV1", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"})
+    await make_project("GOV1", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"})
 
     # 1. System-level disabled
     with patch("kanban.api.v1.issue_csv.get_settings") as mock_settings:
@@ -418,7 +409,9 @@ async def test_api_export_governance_tiers(
 
     # Member is denied
     member_client = as_principal(member)
-    res_mem = await member_client.post("/api/v1/projects/GOV1/issues/export", json={"format": "csv"})
+    res_mem = await member_client.post(
+        "/api/v1/projects/GOV1/issues/export", json={"format": "csv"}
+    )
     assert res_mem.status_code == 403
     assert "INSUFFICIENT_CAPABILITY" in res_mem.text
 
@@ -431,7 +424,7 @@ async def test_api_import_governance_tiers(
 ) -> None:
     """3-Tier governance enforcement on import."""
     admin = await make_user("imp_admin", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("IMP1", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    await make_project("IMP1", created_by=admin, roles={admin: "PROJECT_ADMIN"})
 
     csv_data = b"key,summary\n,New issue\n"
 
@@ -476,10 +469,10 @@ async def test_api_import_csv_dry_run_and_commit(
     client = as_principal(user)
 
     csv_content = (
-        "key,project_key,summary,state,priority\n"
-        ",IMPRT,First Imported Issue,Todo,urgent\n"
-        ",IMPRT,Second Imported Issue,Backlog,medium\n"
-    ).encode("utf-8")
+        b"key,project_key,summary,state,priority\n"
+        b",IMPRT,First Imported Issue,Todo,urgent\n"
+        b",IMPRT,Second Imported Issue,Backlog,medium\n"
+    )
 
     # 1. Dry run preview
     dry_res = await client.post(
@@ -494,7 +487,11 @@ async def test_api_import_csv_dry_run_and_commit(
     assert report["error_count"] == 0
 
     # Verify zero issues persisted in DB
-    cnt = (await api_env.seed.execute(text("SELECT count(*) FROM issues WHERE project_id = :pid"), {"pid": proj_id})).scalar()
+    cnt = (
+        await api_env.seed.execute(
+            text("SELECT count(*) FROM issues WHERE project_id = :pid"), {"pid": proj_id}
+        )
+    ).scalar()
     assert cnt == 0
 
     # 2. Atomic commit
@@ -507,22 +504,25 @@ async def test_api_import_csv_dry_run_and_commit(
     assert commit_report["creates_count"] == 2
 
     # Verify rows persisted
-    cnt_after = (await api_env.seed.execute(text("SELECT count(*) FROM issues WHERE project_id = :pid"), {"pid": proj_id})).scalar()
+    cnt_after = (
+        await api_env.seed.execute(
+            text("SELECT count(*) FROM issues WHERE project_id = :pid"), {"pid": proj_id}
+        )
+    ).scalar()
     assert cnt_after == 2
 
 
 async def test_api_import_winzip_aes256_encrypted_zip(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Import from WinZip AE-2 (AES-256) password-protected ZIP archive."""
     user = await make_user("zip_imp", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("ZIP1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("ZIP1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
-    csv_data = "key,summary\n,Secure Issue From ZIP\n".encode("utf-8")
+    csv_data = b"key,summary\n,Secure Issue From ZIP\n"
     password = "SuperSecretContainerKey123!"
     zip_bytes = create_winzip_aes256_zip({"issues.csv": csv_data}, password)
 
@@ -546,20 +546,19 @@ async def test_api_import_winzip_aes256_encrypted_zip(
 
 
 async def test_api_import_secret_detection(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Importing file containing credentials/tokens triggers secret push protection."""
     user = await make_user("sec_imp", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("SEC1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("SEC1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
     secret_csv = (
-        "key,summary,description_markdown\n"
-        ",Issue with secret,Leaked token: ghp_1234567890abcdef1234567890abcdef\n"
-    ).encode("utf-8")
+        b"key,summary,description_markdown\n"
+        b",Issue with secret,Leaked token: ghp_1234567890abcdef1234567890abcdef\n"
+    )
 
     res = await client.post(
         "/api/v1/projects/SEC1/issues/import?dry_run=true",
@@ -619,7 +618,7 @@ def test_winzip_aes256_corrupt_payload_guards() -> None:
     assert "EOCD" in str(exc2.value)
 
     # 3. Empty files dict in create
-    with pytest.raises(ValueError) as exc3:
+    with pytest.raises(ValueError, match="empty") as exc3:
         create_winzip_aes256_zip({}, "ValidPassword123!")
     assert "empty" in str(exc3.value)
 
@@ -628,9 +627,7 @@ def test_winzip_aes256_corrupt_payload_guards() -> None:
 
 
 def test_unencrypted_zip_extraction() -> None:
-    """extract_winzip_aes256_zip also cleanly extracts standard unencrypted ZIP archives (stored and deflated)."""
-    import zipfile
-
+    """extract_winzip_aes256_zip cleanly extracts standard unencrypted ZIP archives."""
     # 1. Deflated
     buf_def = io.BytesIO()
     with zipfile.ZipFile(buf_def, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -664,14 +661,13 @@ def test_parse_issues_from_csv_bytes_and_empty_rows() -> None:
 
 
 async def test_api_import_update_existing_and_validation_errors(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Import updating existing issue by key, plus date and required summary validation errors."""
     user = await make_user("upd_user", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("UPD1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("UPD1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
     # Step 1: Create an issue
@@ -683,7 +679,7 @@ async def test_api_import_update_existing_and_validation_errors(
     created_issue = c_res.json()
     issue_key = created_issue["key"]
 
-    # Step 2: Import CSV that updates the existing issue and introduces validation errors on other rows
+    # Step 2: Import CSV that updates the existing issue and introduces validation errors
     csv_content = (
         "key,summary,description_markdown,start_date,due_date\n"
         f"{issue_key},Updated via CSV,New description,2026-01-01,2026-01-10\n"
@@ -691,7 +687,7 @@ async def test_api_import_update_existing_and_validation_errors(
         ",Bad date row,Desc,not-a-date,2026-01-10\n"
         ",Bad due date row,Desc,2026-01-01,invalid-due\n"
         ",Inverted dates row,Desc,2026-02-01,2026-01-01\n"
-    ).encode("utf-8")
+    ).encode()
 
     # Dry-run
     res_dry = await client.post(
@@ -705,7 +701,9 @@ async def test_api_import_update_existing_and_validation_errors(
     assert issue_key in report_dry["updated_keys"]
 
     # Commit update with clean CSV
-    clean_csv = f"key,summary,description_markdown\n{issue_key},Updated via CSV,New description\n".encode("utf-8")
+    clean_csv = (
+        f"key,summary,description_markdown\n{issue_key},Updated via CSV,New description\n".encode()
+    )
     res_commit = await client.post(
         "/api/v1/projects/UPD1/issues/import?dry_run=false",
         files={"file": ("clean.csv", clean_csv, "text/csv")},
@@ -722,21 +720,20 @@ async def test_api_import_update_existing_and_validation_errors(
 
 
 async def test_api_import_unknown_state_priority_and_custom_fields(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Import with non-existent state or priority adds validation error to diff report."""
     user = await make_user("state_user", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("ST1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("ST1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
 
     csv_bad = (
-        "key,summary,state,priority,custom_fields_json\n"
-        ",Unknown state issue,NonExistentState,,\n"
-        ",Unknown priority issue,,NonExistentPriority,\n"
-    ).encode("utf-8")
+        b"key,summary,state,priority,custom_fields_json\n"
+        b",Unknown state issue,NonExistentState,,\n"
+        b",Unknown priority issue,,NonExistentPriority,\n"
+    )
 
     res = await client.post(
         "/api/v1/projects/ST1/issues/import?dry_run=true",
@@ -759,7 +756,9 @@ async def test_api_import_with_labels_and_modules(
 ) -> None:
     """Import resolves and attaches matching project modules and labels."""
     user = await make_user("lbl_user", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("LM1", created_by=user, roles={user: "PROJECT_ADMIN"}, modules_enabled=True)
+    proj_id = await make_project(
+        "LM1", created_by=user, roles={user: "PROJECT_ADMIN"}, modules_enabled=True
+    )
     client = as_principal(user)
 
     # Create module
@@ -767,15 +766,15 @@ async def test_api_import_with_labels_and_modules(
 
     # Create label
     await api_env.seed.execute(
-        text("INSERT INTO project_labels (id, workspace_id, project_id, name, color_hex) VALUES (gen_random_uuid(), :ws, :proj, 'frontend', '#ff0000')"),
+        text(
+            "INSERT INTO project_labels (id, workspace_id, project_id, name, color_hex) "
+            "VALUES (gen_random_uuid(), :ws, :proj, 'frontend', '#ff0000')"
+        ),
         {"ws": api_env.workspace_id, "proj": proj_id},
     )
     await api_env.seed.commit()
 
-    csv_data = (
-        "key,summary,modules,labels\n"
-        ",Issue with tags,CoreEngine,frontend\n"
-    ).encode("utf-8")
+    csv_data = b"key,summary,modules,labels\n,Issue with tags,CoreEngine,frontend\n"
 
     res = await client.post(
         "/api/v1/projects/LM1/issues/import?dry_run=false",
@@ -822,7 +821,9 @@ def test_winzip_aes256_corrupt_bounds_and_methods() -> None:
         extract_winzip_aes256_zip(bad_cd_magic, "SuperSecretPassword123!")
 
     # 4. local_offset + 30 > len(zip_bytes)
-    bad_lh_offset = valid[: cd_offset + 42] + struct.pack("<I", len(valid) - 10) + valid[cd_offset + 46 :]
+    bad_lh_offset = (
+        valid[: cd_offset + 42] + struct.pack("<I", len(valid) - 10) + valid[cd_offset + 46 :]
+    )
     with pytest.raises(CorruptZipError, match="Local header extends beyond"):
         extract_winzip_aes256_zip(bad_lh_offset, "SuperSecretPassword123!")
 
@@ -841,16 +842,68 @@ def test_unsupported_compression_methods() -> None:
     """Test unsupported compression methods in unencrypted and encrypted entries."""
     fname = b"test.txt"
     # Unencrypted entry with unsupported method 9
-    lh = struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0, 9, 0, 0, 0, 4, 4, len(fname), 0) + fname + b"data"
-    cd = struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0, 9, 0, 0, 0, 4, 4, len(fname), 0, 0, 0, 0, 0, 0) + fname
+    lh = (
+        struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0, 9, 0, 0, 0, 4, 4, len(fname), 0)
+        + fname
+        + b"data"
+    )
+    cd = (
+        struct.pack(
+            "<IHHHHHHIIIHHHHHII",
+            0x02014B50,
+            20,
+            20,
+            0,
+            9,
+            0,
+            0,
+            0,
+            4,
+            4,
+            len(fname),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+        + fname
+    )
     eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 1, 1, len(cd), len(lh), 0)
     unsupported_unenc = lh + cd + eocd
     with pytest.raises(CorruptZipError, match="Unsupported unencrypted compression method"):
         extract_winzip_aes256_zip(unsupported_unenc)
 
     # Encrypted entry with method != 99
-    lh_enc = struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 1, 8, 0, 0, 0, 4, 4, len(fname), 0) + fname + b"data"
-    cd_enc = struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 1, 8, 0, 0, 0, 4, 4, len(fname), 0, 0, 0, 0, 0, 0) + fname
+    lh_enc = (
+        struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 1, 8, 0, 0, 0, 4, 4, len(fname), 0)
+        + fname
+        + b"data"
+    )
+    cd_enc = (
+        struct.pack(
+            "<IHHHHHHIIIHHHHHII",
+            0x02014B50,
+            20,
+            20,
+            1,
+            8,
+            0,
+            0,
+            0,
+            4,
+            4,
+            len(fname),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+        + fname
+    )
     eocd_enc = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 1, 1, len(cd_enc), len(lh_enc), 0)
     unsupported_enc = lh_enc + cd_enc + eocd_enc
     with pytest.raises(CorruptZipError, match="Unsupported encrypted compression method"):
@@ -858,14 +911,13 @@ def test_unsupported_compression_methods() -> None:
 
 
 async def test_process_issue_import_summary_secret(
-    api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
     as_principal: Callable[..., AsyncClient],
 ) -> None:
     """Summary containing leaked secret triggers validation error in import."""
     user = await make_user("sum_sec", workspace_role="WORKSPACE_ADMIN")
-    proj_id = await make_project("SS1", created_by=user, roles={user: "PROJECT_ADMIN"})
+    await make_project("SS1", created_by=user, roles={user: "PROJECT_ADMIN"})
     client = as_principal(user)
     csv_bytes = b"key,summary\n,ghp_123456789012345678901234567890123456\n"
     res = await client.post(
@@ -876,6 +928,3 @@ async def test_process_issue_import_summary_secret(
     report = res.json()
     assert report["error_count"] > 0
     assert any("summary" in e["column"] for e in report["errors"])
-
-
-

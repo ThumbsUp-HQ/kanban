@@ -6,7 +6,7 @@
  * Enables creating and testing custom Jinja2 report templates with variable chips and live validation.
  */
 
-import React, { useState, useRef, type JSX } from 'react';
+import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
 import { createReportTemplate, type ReportTemplate } from './reportsApi';
 import './reports.css';
 
@@ -35,7 +35,6 @@ export function ReportTemplateStudioModal({
   isOpen,
   onClose,
   workspaceSlug = 'default',
-  projectKey: _projectKey,
   onTemplateSaved,
 }: ReportTemplateStudioModalProps): JSX.Element | null {
   const [name, setName] = useState('');
@@ -76,7 +75,7 @@ export function ReportTemplateStudioModal({
     }, 0);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: SyntheticEvent) => {
     e.preventDefault();
     setError(null);
     if (!name.trim()) {
@@ -141,7 +140,7 @@ export function ReportTemplateStudioModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave}>
+        <form onSubmit={(e) => { void handleSave(e); }}>
           <div className="reports-modal-body">
             {error && (
               <div className="reports-error-banner" data-testid="template-studio-error">
@@ -160,7 +159,7 @@ export function ReportTemplateStudioModal({
                 className="reports-input"
                 placeholder="e.g., Weekly QA Health Briefing"
                 value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
+                onChange={(e) => { handleNameChange(e.target.value); }}
                 required
               />
             </div>
@@ -176,7 +175,7 @@ export function ReportTemplateStudioModal({
                 className="reports-input"
                 placeholder="e.g., weekly-qa-health"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value)}
+                onChange={(e) => { setSlug(e.target.value); }}
                 required
               />
             </div>
@@ -192,7 +191,7 @@ export function ReportTemplateStudioModal({
                 className="reports-input"
                 placeholder="Brief summary of template purpose"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => { setDescription(e.target.value); }}
               />
             </div>
 
@@ -206,7 +205,7 @@ export function ReportTemplateStudioModal({
                     key={snippet.label}
                     type="button"
                     className="reports-variable-chip"
-                    onClick={() => handleInsertSnippet(snippet.token)}
+                    onClick={() => { handleInsertSnippet(snippet.token); }}
                   >
                     + {snippet.label}
                   </button>
@@ -218,7 +217,7 @@ export function ReportTemplateStudioModal({
                 data-testid="studio-template-markdown-editor"
                 className="reports-textarea reports-textarea--code"
                 value={markdown}
-                onChange={(e) => setMarkdown(e.target.value)}
+                onChange={(e) => { setMarkdown(e.target.value); }}
                 rows={10}
                 required
               />

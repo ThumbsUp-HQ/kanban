@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
-from kanban.api.deps import PrincipalContext
+from kanban.api.deps import PrincipalContext  # noqa: TC001  # FastAPI runtime dependency resolution
 from kanban.api.v1.admin.auth_cards import require_server_admin
 from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.settings import get_settings

@@ -39,11 +39,11 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
   });
 
   it('renders assigned role labels with color dots', async () => {
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
-      if ((path as string) === '/api/v1/admin/principals/user-1/role-labels') {
-        return MOCK_ASSIGNED as never;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
+        return Promise.resolve(MOCK_ASSIGNED as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
@@ -57,14 +57,14 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
 
   it('removes assigned role label on click', async () => {
     const deleteSpy = vi.fn().mockResolvedValue({ status: 'deleted' });
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, opts) => {
-      if ((path as string) === '/api/v1/admin/principals/user-1/role-labels') {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+      if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
         if (method === 'DELETE') {
-          return deleteSpy(method, path, opts) as never;
+          return Promise.resolve(deleteSpy(method, path, opts) as never);
         }
-        return MOCK_ASSIGNED as never;
+        return Promise.resolve(MOCK_ASSIGNED as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
@@ -90,14 +90,14 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
       role_color_hex: '#10b981',
     });
 
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, opts) => {
-      if ((path as string) === '/api/v1/admin/principals/user-1/role-labels') {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+      if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
         if (method === 'POST') {
-          return postSpy(method, path, opts) as never;
+          return Promise.resolve(postSpy(method, path, opts) as never);
         }
-        return MOCK_ASSIGNED as never;
+        return Promise.resolve(MOCK_ASSIGNED as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);

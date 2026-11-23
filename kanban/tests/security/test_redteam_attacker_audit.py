@@ -25,6 +25,7 @@ from starlette.requests import Request
 from kanban.ai_config.service import _ALLOWED_PROVIDER_KINDS
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
+from kanban.api.v1.schemas.flow_metrics import MonteCarloForecast
 from kanban.app import create_app
 from kanban.attachments.pdf import sanitize_and_validate_pdf
 from kanban.auth.mfa.policy import assert_admin_routes_protected
@@ -38,10 +39,7 @@ from kanban.security.service_auth import (
     create_internal_service_auth_header,
     verify_internal_service_auth,
 )
-from kanban.services.flow_metrics import (
-    MonteCarloForecast,
-    _simulate_monte_carlo,
-)
+from kanban.services.flow_metrics import _simulate_monte_carlo
 from mcp.surfaces.admin import build_admin_registry
 from mcp.surfaces.agent import create_agent_registry
 from mcp.surfaces.docs import build_docs_registry
@@ -69,7 +67,7 @@ def test_domain_1_principal_context_mfa_pending_state() -> None:
     ctx = PrincipalContext(
         principal_id=p_id,
         workspace_id=ws_id,
-        token_scopes=["user"],
+        token_scopes=("user",),
         aal_level=1,
         mfa_pending=True,
     )

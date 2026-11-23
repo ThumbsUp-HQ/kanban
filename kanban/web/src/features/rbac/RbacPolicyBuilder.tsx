@@ -10,7 +10,7 @@
  * tier governance locking, and inline role creation popover.
  */
 
-import React, { useEffect, useRef, useState, type JSX, type ChangeEvent } from 'react';
+import React, { useEffect, useRef, useState, type JSX, type ChangeEvent, type SyntheticEvent } from 'react';
 import { apiFetch } from '../../api/client';
 import './RbacPolicyBuilder.css';
 
@@ -81,8 +81,6 @@ const PRESET_COLORS = [
 ];
 
 export function RbacPolicyBuilder({
-  workspaceId: _wsId,
-  projectId: _projId,
   isServerAdmin = false,
   initialRoleTier = 'workspace admin',
   onRolesChanged,
@@ -93,7 +91,6 @@ export function RbacPolicyBuilder({
   const [roles, setRoles] = useState<RbacRole[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [rolePermsMap, setRolePermsMap] = useState<Record<string, Set<string>>>({});
-  const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Popover state
@@ -108,7 +105,6 @@ export function RbacPolicyBuilder({
 
   // Fetch roles
   const loadRoles = async (): Promise<void> => {
-    setIsLoading(true);
     setErrorMsg(null);
     try {
       const fetched = (await apiFetch('GET', '/api/v1/admin/rbac/roles' as never)) as RbacRole[];
@@ -125,8 +121,8 @@ export function RbacPolicyBuilder({
             const pRes = (await apiFetch(
               'GET',
               `/api/v1/admin/rbac/roles/${r.id}/permissions` as never,
-            )) as { permissions: string[] };
-            permMap[r.id] = new Set(Array.isArray(pRes?.permissions) ? pRes.permissions : []);
+            )) as { permissions?: string[] };
+            permMap[r.id] = new Set(Array.isArray(pRes.permissions) ? pRes.permissions : []);
           } catch {
             permMap[r.id] = new Set();
           }
@@ -144,13 +140,13 @@ export function RbacPolicyBuilder({
     } catch (err: unknown) {
       const e = err as { detail?: string; message?: string };
       setErrorMsg(e.detail ?? e.message ?? 'Failed to load RBAC roles.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleToggleRoleSelection = (roleId: string): void => {
@@ -175,7 +171,7 @@ export function RbacPolicyBuilder({
     let count = 0;
     for (const rId of selectedRoleIds) {
       const perms = rolePermsMap[rId];
-      if (perms && perms.has(permKey)) {
+      if (perms?.has(permKey)) {
         count++;
       }
     }
@@ -240,7 +236,7 @@ export function RbacPolicyBuilder({
     setNewRoleSlug(autoSlug);
   };
 
-  const handleCreateRole = async (e: React.FormEvent): Promise<void> => {
+  const handleCreateRole = async (e: SyntheticEvent): Promise<void> => {
     e.preventDefault();
     if (!newRoleName.trim()) return;
 
@@ -281,8 +277,7 @@ export function RbacPolicyBuilder({
           className="rbac-tier-select"
           value={roleTier}
           data-testid="rbac-tier-select"
-          onChange={(e) =>
-            setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin')
+          onChange={(e) => { setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin'); }
           }
         >
           {isServerAdmin && <option value="system admin">system admin</option>}
@@ -301,7 +296,7 @@ export function RbacPolicyBuilder({
                 type="button"
                 className="rbac-chip-remove"
                 aria-label={`Deselect ${r.name}`}
-                onClick={() => handleToggleRoleSelection(r.id)}
+                onClick={() => { handleToggleRoleSelection(r.id); }}
               >
                 ×
               </button>
@@ -477,7 +472,7 @@ export function RbacPolicyBuilder({
                   className="rbac-form-input"
                   data-testid="rbac-new-role-slug"
                   value={newRoleSlug}
-                  onChange={(e) => setNewRoleSlug(e.target.value)}
+                  onChange={(e) => { setNewRoleSlug(e.target.value); }}
                   placeholder="e.g. lead-developer"
                 />
               </div>
@@ -490,7 +485,7 @@ export function RbacPolicyBuilder({
                       key={hex}
                       type="button"
                       className={`rbac-color-swatch-btn ${newRoleColor === hex ? 'rbac-color-swatch-btn--selected' : ''}`}
-                      onClick={() => setNewRoleColor(hex)}
+                      onClick={() => { setNewRoleColor(hex); }}
                       aria-label={`Select color ${hex}`}
                     >
                       <svg width="22" height="22" viewBox="0 0 22 22">
@@ -510,7 +505,7 @@ export function RbacPolicyBuilder({
                   className="rbac-form-select"
                   data-testid="rbac-clone-role-select"
                   value={cloneFromId}
-                  onChange={(e) => setCloneFromId(e.target.value)}
+                  onChange={(e) => { setCloneFromId(e.target.value); }}
                 >
                   <option value="">(None - Start Empty)</option>
                   {roles.map((r) => (
@@ -525,7 +520,7 @@ export function RbacPolicyBuilder({
                 <button
                   type="button"
                   className="rbac-btn-cancel"
-                  onClick={() => setIsPopoverOpen(false)}
+                  onClick={() => { setIsPopoverOpen(false); }}
                 >
                   Cancel
                 </button>

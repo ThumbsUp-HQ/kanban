@@ -270,8 +270,8 @@ def _decrypt_single_entry(
     if local_offset + 30 > len(zip_bytes):
         raise ValueError(f"Corrupt ZIP: local header out of bounds for {filename}")
 
-    loc_sig, _v, _f, _m, _t, _d, _c, _l_comp, _l_uncomp, l_fn_len, l_extra_len = (
-        struct.unpack("<IHHHHHIIIHH", zip_bytes[local_offset : local_offset + 30])
+    loc_sig, _v, _f, _m, _t, _d, _c, _l_comp, _l_uncomp, l_fn_len, l_extra_len = struct.unpack(
+        "<IHHHHHIIIHH", zip_bytes[local_offset : local_offset + 30]
     )
     if loc_sig != 0x04034B50:
         raise ValueError(f"Corrupt ZIP: invalid local header signature for {filename}")
@@ -283,9 +283,7 @@ def _decrypt_single_entry(
 
     salt = payload[:AE2_SALT_LEN]
     pwd_verify_in = payload[AE2_SALT_LEN : AE2_SALT_LEN + AE2_PWD_VERIFY_LEN]
-    ciphertext = payload[
-        AE2_SALT_LEN + AE2_PWD_VERIFY_LEN : len(payload) - AE2_AUTH_CODE_LEN
-    ]
+    ciphertext = payload[AE2_SALT_LEN + AE2_PWD_VERIFY_LEN : len(payload) - AE2_AUTH_CODE_LEN]
     auth_code_in = payload[len(payload) - AE2_AUTH_CODE_LEN :]
 
     kdf = PBKDF2HMAC(

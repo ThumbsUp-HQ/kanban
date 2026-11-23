@@ -53,7 +53,7 @@
   justify-content: space-between;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
-  background-color: var(--bg-surface-elevated, #f8fafc);
+  background-color: var(--bg-surface-raised, #f8fafc);
 }
 
 .reports-modal-title {
@@ -123,7 +123,7 @@
 .reports-textarea {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--border-input, #cbd5e1);
+  border: 1px solid var(--border-strong, #cbd5e1);
   border-radius: 6px;
   font-size: 0.875rem;
   color: var(--text-primary, #0f172a);
@@ -136,7 +136,7 @@
 .reports-select:focus,
 .reports-textarea:focus {
   outline: none;
-  border-color: var(--color-primary, #3b82f6);
+  border-color: var(--brand-primary, #3b82f6);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
@@ -177,15 +177,15 @@
 }
 
 .reports-format-pill--active {
-  background-color: var(--color-primary, #2563eb);
+  background-color: var(--brand-primary, #2563eb);
   color: #ffffff;
-  border-color: var(--color-primary, #2563eb);
+  border-color: var(--brand-primary, #2563eb);
   box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
 }
 
 /* Encryption Row */
 .reports-encryption-box {
-  background-color: var(--bg-surface-elevated, #f8fafc);
+  background-color: var(--bg-surface-raised, #f8fafc);
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: 8px;
   padding: 14px 16px;
@@ -223,7 +223,7 @@
 
 /* Preview Pane */
 .reports-preview-container {
-  background-color: var(--bg-surface-elevated, #f8fafc);
+  background-color: var(--bg-surface-raised, #f8fafc);
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: 8px;
   padding: 16px;
@@ -270,7 +270,7 @@
   justify-content: space-between;
   padding: 16px 24px;
   border-top: 1px solid var(--border-subtle, #e2e8f0);
-  background-color: var(--bg-surface-elevated, #f8fafc);
+  background-color: var(--bg-surface-raised, #f8fafc);
 }
 
 .reports-footer-left {
@@ -307,12 +307,12 @@
 }
 
 .reports-btn--primary {
-  background-color: var(--color-primary, #2563eb);
+  background-color: var(--brand-primary, #2563eb);
   color: #ffffff;
 }
 
 .reports-btn--primary:hover {
-  background-color: var(--color-primary-hover, #1d4ed8);
+  background-color: var(--brand-primary-hover, #1d4ed8);
 }
 
 .reports-btn:disabled {

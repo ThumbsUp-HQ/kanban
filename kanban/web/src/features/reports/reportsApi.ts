@@ -14,14 +14,14 @@ export interface ReportTemplate {
   description?: string | null | undefined;
   is_builtin: boolean;
   template_markdown: string;
-  parameters_schema_json: Array<{
+  parameters_schema_json: {
     name: string;
     label: string;
     type: string;
     default?: string | undefined;
     required?: boolean | undefined;
-  }> | Record<string, unknown>;
-  csv_columns_json: Array<{ header: string; expr: string }>;
+  }[] | Record<string, unknown>;
+  csv_columns_json: { header: string; expr: string }[];
   allowed_formats: string[];
   created_by_user_id?: string | null | undefined;
   created_at: string;
@@ -66,7 +66,7 @@ function buildHeaders(extraHeaders: Record<string, string> = {}): HeadersInit {
 
 export async function fetchReportTemplates(
   workspaceRef: string,
-  projectRef?: string | undefined,
+  projectRef?: string,
 ): Promise<ReportTemplate[]> {
   const query = projectRef ? `?project_ref=${encodeURIComponent(projectRef)}` : '';
   const res = await fetch(`/api/v1/workspaces/${encodeURIComponent(workspaceRef)}/report-templates${query}`, {
@@ -74,11 +74,11 @@ export async function fetchReportTemplates(
     headers: buildHeaders(),
   });
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to fetch report templates: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to fetch report templates: ${res.statusText}`);
   }
-  const data = await res.json();
-  return data.items || [];
+  const data = (await res.json()) as { items?: ReportTemplate[] };
+  return data.items ?? [];
 }
 
 export async function fetchReportTemplate(
@@ -93,10 +93,10 @@ export async function fetchReportTemplate(
     },
   );
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to fetch report template: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to fetch report template: ${res.statusText}`);
   }
-  return await res.json();
+  return (await res.json()) as ReportTemplate;
 }
 
 export async function createReportTemplate(
@@ -107,8 +107,8 @@ export async function createReportTemplate(
     description?: string | undefined;
     project_id?: string | undefined;
     template_markdown: string;
-    parameters_schema_json?: Record<string, unknown> | Array<unknown> | undefined;
-    csv_columns_json?: Array<{ header: string; expr: string }> | undefined;
+    parameters_schema_json?: Record<string, unknown> | unknown[] | undefined;
+    csv_columns_json?: { header: string; expr: string }[] | undefined;
     allowed_formats?: string[] | undefined;
   },
 ): Promise<ReportTemplate> {
@@ -121,10 +121,10 @@ export async function createReportTemplate(
     },
   );
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to create report template: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to create report template: ${res.statusText}`);
   }
-  return await res.json();
+  return (await res.json()) as ReportTemplate;
 }
 
 export async function updateReportTemplate(
@@ -134,8 +134,8 @@ export async function updateReportTemplate(
     name?: string | undefined;
     description?: string | undefined;
     template_markdown?: string | undefined;
-    parameters_schema_json?: Record<string, unknown> | Array<unknown> | undefined;
-    csv_columns_json?: Array<{ header: string; expr: string }> | undefined;
+    parameters_schema_json?: Record<string, unknown> | unknown[] | undefined;
+    csv_columns_json?: { header: string; expr: string }[] | undefined;
     allowed_formats?: string[] | undefined;
   },
 ): Promise<ReportTemplate> {
@@ -148,10 +148,10 @@ export async function updateReportTemplate(
     },
   );
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to update report template: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to update report template: ${res.statusText}`);
   }
-  return await res.json();
+  return (await res.json()) as ReportTemplate;
 }
 
 export async function deleteReportTemplate(
@@ -166,8 +166,8 @@ export async function deleteReportTemplate(
     },
   );
   if (!res.ok && res.status !== 204) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to delete report template: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to delete report template: ${res.statusText}`);
   }
 }
 
@@ -191,10 +191,10 @@ export async function previewReport(
     },
   );
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to render preview: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to render preview: ${res.statusText}`);
   }
-  return await res.json();
+  return (await res.json()) as ReportPreviewResponse;
 }
 
 export async function generateReport(
@@ -217,11 +217,11 @@ export async function generateReport(
   });
 
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Failed to generate report export: ${res.statusText}`);
+    const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorBody.detail ?? `Failed to generate report export: ${res.statusText}`);
   }
 
-  const disposition = res.headers.get('content-disposition') || '';
+  const disposition = res.headers.get('content-disposition') ?? '';
   let filename = `report.${params.format.toLowerCase()}`;
   const match = /filename=["']?([^"';]+)["']?/.exec(disposition);
   const matchedFilename = match?.[1];

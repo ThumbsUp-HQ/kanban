@@ -55,14 +55,14 @@ describe('CsvImportExportModal (KAN-316)', () => {
     expect(screen.getByTestId('export-format-csv')).toBeDefined();
   });
 
-  it('enforces 12-char password validation when WinZip AES-256 ZIP format is chosen', async () => {
+  it('enforces 12-char password validation when WinZip AES-256 ZIP format is chosen', () => {
     render(<CsvImportExportModal {...defaultProps} />);
 
     const zipRadio = screen.getByTestId('export-format-zip');
     fireEvent.click(zipRadio);
 
     const passwordInput = screen.getByTestId('export-zip-password-input');
-    const submitBtn = screen.getByTestId('export-submit-btn') as HTMLButtonElement;
+    const submitBtn = screen.getByTestId<HTMLButtonElement>('export-submit-btn');
 
     // Initially empty -> disabled
     expect(submitBtn.disabled).toBe(true);
@@ -85,7 +85,7 @@ describe('CsvImportExportModal (KAN-316)', () => {
   it('triggers download template API on button click', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      blob: async () => new Blob(['key,summary\n'], { type: 'text/csv' }),
+      blob: () => Promise.resolve(new Blob(['key,summary\n'], { type: 'text/csv' })),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -137,7 +137,7 @@ describe('CsvImportExportModal (KAN-316)', () => {
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => mockDiffReport,
+      json: () => Promise.resolve(mockDiffReport),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -163,7 +163,7 @@ describe('CsvImportExportModal (KAN-316)', () => {
     });
 
     // Confirm button should be enabled now
-    const confirmBtn = screen.getByTestId('import-confirm-btn') as HTMLButtonElement;
+    const confirmBtn = screen.getByTestId<HTMLButtonElement>('import-confirm-btn');
     expect(confirmBtn.disabled).toBe(false);
 
     // Run Confirm Import
@@ -181,7 +181,7 @@ describe('CsvImportExportModal (KAN-316)', () => {
   it('decodes governance error message when export is disabled', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
-      json: async () => ({ detail: 'EXPORT_DISABLED_BY_SYSTEM_ADMIN' }),
+      json: () => Promise.resolve({ detail: 'EXPORT_DISABLED_BY_SYSTEM_ADMIN' }),
     });
     vi.stubGlobal('fetch', fetchMock);
 

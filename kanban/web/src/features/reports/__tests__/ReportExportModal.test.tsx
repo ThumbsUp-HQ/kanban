@@ -130,7 +130,7 @@ describe('ReportExportModal', () => {
     expect(screen.getByTestId('reports-export-submit-btn').textContent).toContain('Download XLSX');
   });
 
-  it('toggles AES-256 ZIP password protection', async () => {
+  it('toggles AES-256 ZIP password protection', () => {
     render(
       <ReportExportModal
         isOpen={true}
@@ -140,18 +140,18 @@ describe('ReportExportModal', () => {
       />,
     );
 
-    const zipToggle = screen.getByTestId('reports-zip-toggle') as HTMLInputElement;
+    const zipToggle = screen.getByTestId<HTMLInputElement>('reports-zip-toggle');
     expect(zipToggle.checked).toBe(false);
     expect(screen.queryByTestId('reports-zip-password-input')).toBeNull();
 
     fireEvent.click(zipToggle);
     expect(zipToggle.checked).toBe(true);
 
-    const passwordInput = screen.getByTestId('reports-zip-password-input');
+    const passwordInput = screen.getByTestId<HTMLInputElement>('reports-zip-password-input');
     expect(passwordInput).toBeDefined();
 
     fireEvent.change(passwordInput, { target: { value: 'Secret123!' } });
-    expect((passwordInput as HTMLInputElement).value).toBe('Secret123!');
+    expect(passwordInput.value).toBe('Secret123!');
   });
 
   it('renders live preview on preview button click', async () => {
@@ -205,7 +205,7 @@ describe('ReportExportModal', () => {
     });
   });
 
-  it('opens template studio modal on studio button click', async () => {
+  it('opens template studio modal on studio button click', () => {
     render(
       <ReportExportModal
         isOpen={true}

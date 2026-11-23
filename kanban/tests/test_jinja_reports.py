@@ -155,8 +155,7 @@ def test_ssti_sandbox_timeout_limit() -> None:
     """Verify execution exceeding timeout budget raises TimeoutError."""
     context = ReportContext(issues=_sample_issues())
     slow_template = (
-        "{% for i in range(1000) %}{% for j in range(1000) %}"
-        "{{ i }}{{ j }}{% endfor %}{% endfor %}"
+        "{% for i in range(1000) %}{% for j in range(1000) %}{{ i }}{{ j }}{% endfor %}{% endfor %}"
     )
     with pytest.raises(TimeoutError, match="Report rendering exceeded timeout"):
         render_sandboxed_template(slow_template, context, timeout_seconds=0.01)
@@ -268,10 +267,13 @@ def test_render_csv_and_xlsx() -> None:
     context = ReportContext(issues=issues)
 
     # CSV
-    csv_bytes = render_csv(context, [
-        {"header": "Key", "expr": "issue.key"},
-        {"header": "Title", "expr": "issue.summary"},
-    ])
+    csv_bytes = render_csv(
+        context,
+        [
+            {"header": "Key", "expr": "issue.key"},
+            {"header": "Title", "expr": "issue.summary"},
+        ],
+    )
     csv_str = csv_bytes.decode("utf-8")
     assert "Key,Title" in csv_str
     assert "SEC-101" in csv_str
@@ -553,8 +555,7 @@ async def test_3_tier_governance_enforcement(
     # Tier 2: Workspace setting disabled
     await api_env.seed.execute(
         text(
-            "UPDATE workspace_settings SET report_export_enabled = false "
-            "WHERE workspace_id = :ws"
+            "UPDATE workspace_settings SET report_export_enabled = false WHERE workspace_id = :ws"
         ),
         {"ws": api_env.workspace_id},
     )
@@ -813,8 +814,7 @@ def test_renderers_deep_coverage() -> None:
     csv_bytes = render_csv(ctx, cols)
     csv_str = csv_bytes.decode("utf-8")
     expected_row = (
-        'Urgent,2026-11-20,2026-12-01,"alice, bob","security, backend",'
-        'Cycle 12,"Auth, Core",'
+        'Urgent,2026-11-20,2026-12-01,"alice, bob","security, backend",Cycle 12,"Auth, Core",'
     )
     assert expected_row in csv_str
     assert "Low,2026-11-21,,,,," in csv_str
@@ -835,11 +835,8 @@ def test_renderers_deep_coverage() -> None:
 
     # 3. PDF multi-page pagination and H3 subheadings
     para = "Paragraph line demonstrating report text wrapping and multi-page pagination.\n\n"
-    long_pdf_md = (
-        "# Multi-Page Document\n\n"
-        "## Section Heading\n\n"
-        "### Subsection Heading 1\n\n"
-        + (para * 120)
+    long_pdf_md = "# Multi-Page Document\n\n## Section Heading\n\n### Subsection Heading 1\n\n" + (
+        para * 120
     )
     pdf_bytes = render_pdf(long_pdf_md, ctx)
     assert len(pdf_bytes) > 0
@@ -911,4 +908,3 @@ def test_sandbox_custom_parameters_and_toc_skip() -> None:
     assert "Section B" in toc
     assert "[Table of Contents]" not in toc
     assert "[TOC]" not in toc
-

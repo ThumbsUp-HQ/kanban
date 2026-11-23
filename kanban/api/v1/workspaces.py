@@ -606,7 +606,7 @@ async def get_workspace_settings_by_ref(
     response_model=WorkspaceSettingsResponse,
     summary="Update workspace settings by workspace slug or ID",
 )
-async def update_workspace_settings_by_ref(
+async def update_workspace_settings_by_ref(  # noqa: C901, PLR0912
     workspace_ref: str,
     body: WorkspaceSettingsUpdate,
     _caller: Annotated[PrincipalContext, Depends(get_principal)],

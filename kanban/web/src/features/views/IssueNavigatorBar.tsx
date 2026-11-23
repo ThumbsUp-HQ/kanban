@@ -516,7 +516,7 @@ export function IssueNavigatorBar({
             type="button"
             className="navigator-reports-btn"
             data-testid="navigator-reports-export-btn"
-            onClick={() => setIsReportsModalOpen(true)}
+            onClick={() => { setIsReportsModalOpen(true); }}
             title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
           >
             <span>📄 Export</span>
@@ -579,7 +579,7 @@ export function IssueNavigatorBar({
 
       {csvModalTab && (
         <CsvImportExportModal
-          isOpen={csvModalTab !== null}
+          isOpen={true}
           onClose={() => { setCsvModalTab(null); }}
           projectKey={projectKey}
           workspaceScope={workspaceScope}
@@ -592,7 +592,7 @@ export function IssueNavigatorBar({
       {isReportsModalOpen && (
         <ReportExportModal
           isOpen={isReportsModalOpen}
-          onClose={() => setIsReportsModalOpen(false)}
+          onClose={() => { setIsReportsModalOpen(false); }}
           workspaceSlug={workspaceScope}
           projectKey={projectKey}
         />

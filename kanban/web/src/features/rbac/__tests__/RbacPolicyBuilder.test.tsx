@@ -40,11 +40,11 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
   });
 
   it('renders narrative sentence header with tier selector and sections', async () => {
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
-      if ((path as string) === '/api/v1/admin/rbac/roles') {
-        return MOCK_ROLES as never;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
+        return Promise.resolve(MOCK_ROLES as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RbacPolicyBuilder isServerAdmin={true} />);
@@ -63,11 +63,11 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
   });
 
   it('locks workspace permissions and shows warning banner for workspace admin', async () => {
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
-      if ((path as string) === '/api/v1/admin/rbac/roles') {
-        return MOCK_ROLES as never;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
+        return Promise.resolve(MOCK_ROLES as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RbacPolicyBuilder isServerAdmin={false} initialRoleTier="workspace admin" />);
@@ -76,20 +76,20 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
       expect(screen.getByTestId('workspace-locked-banner')).toBeDefined();
     });
 
-    const wsFieldset = screen.getByTestId('rbac-fieldset-workspace') as HTMLFieldSetElement;
+    const wsFieldset = screen.getByTestId<HTMLFieldSetElement>('rbac-fieldset-workspace');
     expect(wsFieldset.disabled).toBe(true);
   });
 
   it('allows toggling permissions via batch PUT call', async () => {
     const putSpy = vi.fn().mockResolvedValue({ status: 'ok' });
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, opts) => {
-      if ((path as string) === '/api/v1/admin/rbac/roles') {
-        return MOCK_ROLES as never;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
+        return Promise.resolve(MOCK_ROLES as never);
       }
-      if ((path as string) === '/api/v1/admin/rbac/roles/permissions:batch') {
-        return putSpy(method, path, opts) as never;
+      if (path.includes('/api/v1/admin/rbac/roles/permissions:batch')) {
+        return Promise.resolve(putSpy(method, path, opts) as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RbacPolicyBuilder isServerAdmin={true} />);
@@ -100,7 +100,10 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
 
     const createIssueCheckbox = screen
       .getByTestId('perm-item-issue:create')
-      .querySelector('input')!;
+      .querySelector('input');
+    if (!createIssueCheckbox) {
+      throw new Error('Checkbox not found');
+    }
 
     fireEvent.click(createIssueCheckbox);
 
@@ -118,14 +121,14 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
       permissions: [],
     });
 
-    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, opts) => {
-      if ((path as string) === '/api/v1/admin/rbac/roles') {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
         if (method === 'POST') {
-          return postSpy(method, path, opts) as never;
+          return Promise.resolve(postSpy(method, path, opts) as never);
         }
-        return MOCK_ROLES as never;
+        return Promise.resolve(MOCK_ROLES as never);
       }
-      return [] as never;
+      return Promise.resolve([] as never);
     });
 
     render(<RbacPolicyBuilder isServerAdmin={true} />);
@@ -141,7 +144,7 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
     const nameInput = screen.getByTestId('rbac-new-role-name');
     fireEvent.change(nameInput, { target: { value: 'Lead Dev' } });
 
-    const slugInput = screen.getByTestId('rbac-new-role-slug') as HTMLInputElement;
+    const slugInput = screen.getByTestId<HTMLInputElement>('rbac-new-role-slug');
     expect(slugInput.value).toBe('lead-dev');
 
     fireEvent.click(screen.getByTestId('rbac-submit-create-role'));

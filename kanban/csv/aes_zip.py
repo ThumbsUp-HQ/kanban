@@ -18,12 +18,12 @@ __all__ = [
     "COMPRESSION_DEFLATED",
     "COMPRESSION_METHOD_WINZIP_AES",
     "COMPRESSION_STORED",
-    "CorruptZipError",
     "EXTRA_FIELD_WINZIP_AES",
-    "InvalidPasswordError",
     "MAX_COMPRESSION_RATIO",
     "MAX_UNCOMPRESSED_SIZE",
     "MIN_PASSWORD_LENGTH",
+    "CorruptZipError",
+    "InvalidPasswordError",
     "PasswordTooShortError",
     "PathTraversalError",
     "WinZipAesZipError",
@@ -77,16 +77,17 @@ class CorruptZipError(WinZipAesZipError):
 def zeroize(*buffers: bytearray | memoryview) -> None:
     """Overwrite mutable memory buffers with zeros."""
     for buf in buffers:
-        try:
-            for i in range(len(buf)):
-                buf[i] = 0
-        except Exception:
-            pass
+        if isinstance(buf, memoryview) and buf.readonly:
+            continue
+        for i in range(len(buf)):
+            buf[i] = 0
 
 
-def _derive_keys(password: str, salt: bytes, use_sha256: bool = True) -> tuple[bytearray, bytearray, bytes]:
+def _derive_keys(
+    password: str, salt: bytes, *, use_sha256: bool = True
+) -> tuple[bytearray, bytearray, bytes]:
     """Derive 66 bytes (32-byte AES key, 32-byte HMAC key, 2-byte pwd_verify)."""
-    hash_alg = hashes.SHA256() if use_sha256 else hashes.SHA1()
+    hash_alg = hashes.SHA256() if use_sha256 else hashes.SHA1()  # noqa: S303
     kdf = PBKDF2HMAC(
         algorithm=hash_alg,
         length=66,
@@ -101,14 +102,14 @@ def _derive_keys(password: str, salt: bytes, use_sha256: bool = True) -> tuple[b
 
 
 def _ctr_crypt(data: bytes, aes_key: bytes) -> bytes:
-    """Encrypt or decrypt data using WinZip AES-CTR mode with little-endian 128-bit counter starting at 1."""
+    """Encrypt/decrypt data using WinZip AES-CTR mode (little-endian 128-bit counter)."""
     if not data:
         return b""
     blocks = (len(data) + 15) // 16
     buf = bytearray(blocks * 16)
     for i in range(blocks):
         struct.pack_into("<Q", buf, i * 16, i + 1)
-    cipher = Cipher(algorithms.AES(aes_key), modes.ECB())
+    cipher = Cipher(algorithms.AES(aes_key), modes.ECB())  # noqa: S305
     encryptor = cipher.encryptor()
     keystream = encryptor.update(buf) + encryptor.finalize()
 
@@ -118,13 +119,15 @@ def _ctr_crypt(data: bytes, aes_key: bytes) -> bytes:
 
 
 def create_winzip_aes256_zip(files: dict[str, bytes], password: str) -> bytes:
-    """Pack files into a standards-compliant WinZip AE-2 (AES-256) password-protected ZIP archive."""
+    """Pack files into a standards-compliant WinZip AE-2 (AES-256) ZIP archive."""
     if not files:
-        raise ValueError("files dictionary cannot be empty")
+        msg = "files dictionary cannot be empty"
+        raise ValueError(msg)
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise PasswordTooShortError(
+        msg = (
             f"Password must be at least {MIN_PASSWORD_LENGTH} characters long (got {len(password)})"
         )
+        raise PasswordTooShortError(msg)
 
     local_headers = bytearray()
     cd_entries = bytearray()
@@ -133,7 +136,8 @@ def create_winzip_aes256_zip(files: dict[str, bytes], password: str) -> bytes:
         # Sanitize filename
         clean_name = filename.strip().replace("\\", "/").lstrip("/")
         if not clean_name or ".." in clean_name.split("/"):
-            raise PathTraversalError(f"Dangerous or traversal filename: '{filename}'")
+            msg = f"Dangerous or traversal filename: '{filename}'"
+            raise PathTraversalError(msg)
         fname_bytes = clean_name.encode("utf-8")
 
         # 1. Deflate raw stream
@@ -231,15 +235,20 @@ def create_winzip_aes256_zip(files: dict[str, bytes], password: str) -> bytes:
     return bytes(local_headers + cd_entries + eocd)
 
 
-def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> dict[str, bytes]:  # noqa: C901, PLR0912, PLR0915
-    """Extract files from a WinZip AE-2 (AES-256) password-protected ZIP archive with strict safety guards."""
-    if len(zip_bytes) < 22:
-        raise CorruptZipError("ZIP payload too small to contain valid archive")
+def extract_winzip_aes256_zip(  # noqa: C901, PLR0912, PLR0915
+    zip_bytes: bytes, password: str | None = None
+) -> dict[str, bytes]:
+    """Extract files from a WinZip AE-2 (AES-256) ZIP archive with safety guards."""
+    min_eocd_len = 22
+    if len(zip_bytes) < min_eocd_len:
+        msg = "ZIP payload too small to contain valid archive"
+        raise CorruptZipError(msg)
 
     # Locate EOCD
     eocd_idx = zip_bytes.rfind(struct.pack("<I", EOCD_MAGIC))
     if eocd_idx == -1:
-        raise CorruptZipError("End of central directory record (EOCD) not found")
+        msg = "End of central directory record (EOCD) not found"
+        raise CorruptZipError(msg)
 
     eocd_fields = struct.unpack("<IHHHHIIH", zip_bytes[eocd_idx : eocd_idx + 22])
     total_entries = eocd_fields[4]
@@ -247,22 +256,25 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
     cd_offset = eocd_fields[6]
 
     if cd_offset + cd_size > len(zip_bytes):
-        raise CorruptZipError("Central directory record extends beyond file bounds")
+        msg = "Central directory record extends beyond file bounds"
+        raise CorruptZipError(msg)
 
     extracted: dict[str, bytes] = {}
     cd_pos = cd_offset
 
     for _ in range(total_entries):
         if cd_pos + 46 > len(zip_bytes):
-            raise CorruptZipError("Truncated central directory entry")
+            msg = "Truncated central directory entry"
+            raise CorruptZipError(msg)
         cd_fields = struct.unpack("<IHHHHHHIIIHHHHHII", zip_bytes[cd_pos : cd_pos + 46])
         if cd_fields[0] != CENTRAL_DIR_MAGIC:
-            raise CorruptZipError(f"Invalid central directory magic at offset {cd_pos}")
+            msg = f"Invalid central directory magic at offset {cd_pos}"
+            raise CorruptZipError(msg)
 
         flags = cd_fields[3]
         method = cd_fields[4]
         comp_size = cd_fields[8]
-        uncomp_size = cd_fields[9]
+        cd_fields[9]
         fname_len = cd_fields[10]
         extra_len = cd_fields[11]
         comment_len = cd_fields[12]
@@ -277,14 +289,17 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
         # Path traversal guard
         clean_name = filename.strip().replace("\\", "/").lstrip("/")
         if not clean_name or ".." in clean_name.split("/") or ":" in clean_name:
-            raise PathTraversalError(f"Dangerous or traversal path detected in archive: '{filename}'")
+            msg = f"Dangerous or traversal path detected in archive: '{filename}'"
+            raise PathTraversalError(msg)
 
         # Read local file header
         if local_offset + 30 > len(zip_bytes):
-            raise CorruptZipError("Local header extends beyond archive bounds")
+            msg = "Local header extends beyond archive bounds"
+            raise CorruptZipError(msg)
         lh_fields = struct.unpack("<IHHHHHIIIHH", zip_bytes[local_offset : local_offset + 30])
         if lh_fields[0] != LOCAL_HEADER_MAGIC:
-            raise CorruptZipError(f"Invalid local header magic at offset {local_offset}")
+            msg = f"Invalid local header magic at offset {local_offset}"
+            raise CorruptZipError(msg)
 
         lh_fname_len = lh_fields[9]
         lh_extra_len = lh_fields[10]
@@ -292,7 +307,8 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
         data_end = data_start + comp_size
 
         if data_end > len(zip_bytes):
-            raise CorruptZipError(f"File data for '{clean_name}' extends beyond archive bounds")
+            msg = f"File data for '{clean_name}' extends beyond archive bounds"
+            raise CorruptZipError(msg)
 
         entry_data = zip_bytes[data_start:data_end]
 
@@ -306,23 +322,36 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
                 decomp = zlib.decompressobj(wbits=-15)
                 content = decomp.decompress(entry_data)
             else:
-                raise CorruptZipError(f"Unsupported unencrypted compression method: {method}")
+                msg = f"Unsupported unencrypted compression method: {method}"
+                raise CorruptZipError(msg)
         else:
             # WinZip AES encrypted entry
             if method != COMPRESSION_METHOD_WINZIP_AES:
-                raise CorruptZipError(f"Unsupported encrypted compression method: {method}")
+                msg = f"Unsupported encrypted compression method: {method}"
+                raise CorruptZipError(msg)
 
             if not password:
-                raise InvalidPasswordError("Password is required to decrypt encrypted ZIP entry")
+                msg = "Password is required to decrypt encrypted ZIP entry"
+                raise InvalidPasswordError(msg)
 
             # Parse extra field 0x9901
-            extra_to_search = extra_bytes or zip_bytes[local_offset + 30 + lh_fname_len : data_start]
+            extra_to_search = (
+                extra_bytes or zip_bytes[local_offset + 30 + lh_fname_len : data_start]
+            )
             extra_method = COMPRESSION_DEFLATED
+            min_aes_extra_size = 7
+            sha256_key_len = 32
             epos = 0
             while epos + 4 <= len(extra_to_search):
                 etag, esize = struct.unpack("<HH", extra_to_search[epos : epos + 4])
-                if etag == EXTRA_FIELD_WINZIP_AES and esize >= 7 and epos + 4 + esize <= len(extra_to_search):
-                    _, _, _, extra_method = struct.unpack("<H2sBH", extra_to_search[epos + 4 : epos + 11])
+                if (
+                    etag == EXTRA_FIELD_WINZIP_AES
+                    and esize >= min_aes_extra_size
+                    and epos + 4 + esize <= len(extra_to_search)
+                ):
+                    _, _, _, extra_method = struct.unpack(
+                        "<H2sBH", extra_to_search[epos + 4 : epos + 11]
+                    )
                     break
                 epos += 4 + esize
 
@@ -346,13 +375,19 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
                     zeroize(ak, hk)
 
                 if not matched or aes_key is None or hmac_key is None:
-                    raise InvalidPasswordError("Incorrect ZIP password or corrupt verification code")
+                    msg = "Incorrect ZIP password or corrupt verification code"
+                    raise InvalidPasswordError(msg)
 
                 # Verify HMAC
-                h = hmac.new(bytes(hmac_key), ciphertext, "sha256" if len(hmac_key) == 32 else "sha1")
+                h = hmac.new(
+                    bytes(hmac_key),
+                    ciphertext,
+                    "sha256" if len(hmac_key) == sha256_key_len else "sha1",
+                )
                 computed_tag = h.digest()[:10]
                 if not hmac.compare_digest(computed_tag, stored_auth_tag):
-                    raise InvalidPasswordError("HMAC integrity authentication failed (corrupt data or wrong password)")
+                    msg = "HMAC integrity authentication failed (corrupt data or wrong password)"
+                    raise InvalidPasswordError(msg)
 
                 # Decrypt
                 compressed = _ctr_crypt(ciphertext, bytes(aes_key))
@@ -364,7 +399,8 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
                     decomp = zlib.decompressobj(wbits=-15)
                     content = decomp.decompress(compressed)
                 else:
-                    raise CorruptZipError(f"Unsupported WinZip AES compression method: {extra_method}")
+                    msg = f"Unsupported WinZip AES compression method: {extra_method}"
+                    raise CorruptZipError(msg)
             finally:
                 if aes_key is not None:
                     zeroize(aes_key)
@@ -373,13 +409,14 @@ def extract_winzip_aes256_zip(zip_bytes: bytes, password: str | None = None) -> 
 
         # Enforce Zip-Bomb guards
         if len(content) > MAX_UNCOMPRESSED_SIZE:
-            raise ZipBombError(
-                f"Uncompressed size for '{clean_name}' exceeds {MAX_UNCOMPRESSED_SIZE} bytes (got {len(content)})"
+            msg = (
+                f"Uncompressed size for '{clean_name}' exceeds "
+                f"{MAX_UNCOMPRESSED_SIZE} bytes (got {len(content)})"
             )
+            raise ZipBombError(msg)
         if len(entry_data) > 0 and (len(content) / len(entry_data)) > MAX_COMPRESSION_RATIO:
-            raise ZipBombError(
-                f"Compression ratio for '{clean_name}' exceeds {MAX_COMPRESSION_RATIO} ceiling"
-            )
+            msg = f"Compression ratio for '{clean_name}' exceeds {MAX_COMPRESSION_RATIO} ceiling"
+            raise ZipBombError(msg)
 
         extracted[clean_name] = content
 

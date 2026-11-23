@@ -58,6 +58,7 @@ export function RoleLabelPicker({
         isMounted = false;
       };
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailableRoles(propAvailableRoles);
     }
   }, [propAvailableRoles]);
@@ -89,6 +90,7 @@ export function RoleLabelPicker({
     return () => {
       isMounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [principalId]);
 
   // Assign a new role label
@@ -141,13 +143,13 @@ export function RoleLabelPicker({
   const labelsList = Array.isArray(assignedLabels) ? assignedLabels : [];
 
   const assignedRoleIds = new Set(labelsList.map((l) => l.role_id));
-  const unassignedRoles = rolesList.filter((r) => r && r.id && !assignedRoleIds.has(r.id));
+  const unassignedRoles = rolesList.filter((r) => Boolean(r.id) && !assignedRoleIds.has(r.id));
 
   return (
     <div className="role-label-picker" data-testid="role-label-picker">
       {labelsList.map((label, idx) => (
         <span
-          key={label.role_id ?? label.id ?? idx}
+          key={label.role_id || label.id || idx}
           className="rbac-role-chip"
           data-testid={`role-chip-${label.role_slug}`}
         >

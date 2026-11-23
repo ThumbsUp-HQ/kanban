@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import io
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from PIL import Image
@@ -76,7 +76,7 @@ async def _enroll_and_confirm_totp(session: AsyncSession, p_id: uuid.UUID) -> No
 
 def _setup_attachments_app_state(env: ApiEnv, tmp_path: Path) -> None:
     """Ensure key material, rate limiter, and blob store are configured on app state."""
-    app = env.client._transport.app  # noqa: SLF001 # type: ignore[attr-defined]
+    app: Any = getattr(env.client._transport, "app")  # noqa: B009, SLF001
     km = KeyMaterial(
         master_kek=b"\x11" * 32,
         auth_pepper=b"\x22" * 32,

@@ -70,7 +70,7 @@
 .kb-csv-modal-tabs {
   display: flex;
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
-  background: var(--bg-subtle, #f8fafc);
+  background: var(--bg-secondary, #f8fafc);
   padding: 0 var(--space-4, 16px);
   gap: var(--space-2, 8px);
 }
@@ -92,8 +92,8 @@
 }
 
 .kb-csv-modal-tab--active {
-  color: var(--accent, #3b82f6);
-  border-bottom-color: var(--accent, #3b82f6);
+  color: var(--accent-primary, #3b82f6);
+  border-bottom-color: var(--accent-primary, #3b82f6);
   font-weight: 600;
 }
 
@@ -115,8 +115,8 @@
 }
 
 .kb-csv-modal-success {
-  background: var(--success-bg, #f0fdf4);
-  color: var(--success-fg, #15803d);
+  background: var(--bg-success-subtle, #f0fdf4);
+  color: var(--text-success, #15803d);
   border: 1px solid var(--border-success, #bbf7d0);
   padding: var(--space-2, 8px) var(--space-3, 12px);
   border-radius: var(--radius-md, 6px);
@@ -181,8 +181,8 @@
 
 .kb-csv-modal-input:focus {
   outline: none;
-  border-color: var(--accent, #3b82f6);
-  box-shadow: 0 0 0 2px var(--accent-subtle, rgba(59, 130, 246, 0.2));
+  border-color: var(--accent-primary, #3b82f6);
+  box-shadow: 0 0 0 2px var(--bg-accent-subtle, rgba(59, 130, 246, 0.2));
 }
 
 .kb-password-hint {
@@ -198,8 +198,8 @@
 }
 
 .kb-password-hint--valid {
-  background: var(--success-bg, #f0fdf4);
-  color: var(--success-fg, #15803d);
+  background: var(--bg-success-subtle, #f0fdf4);
+  color: var(--text-success, #15803d);
 }
 
 .kb-csv-file-dropzone {
@@ -207,13 +207,13 @@
   border-radius: var(--radius-md, 8px);
   padding: var(--space-4, 16px);
   text-align: center;
-  background: var(--bg-subtle, #f8fafc);
+  background: var(--bg-secondary, #f8fafc);
   cursor: pointer;
   transition: border-color 150ms ease;
 }
 
 .kb-csv-file-dropzone:hover {
-  border-color: var(--accent, #3b82f6);
+  border-color: var(--accent-primary, #3b82f6);
 }
 
 .kb-csv-file-hidden-input {
@@ -235,7 +235,7 @@
 }
 
 .kb-csv-stat-card {
-  background: var(--bg-subtle, #f8fafc);
+  background: var(--bg-secondary, #f8fafc);
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: var(--radius-md, 6px);
   padding: var(--space-2, 8px);
@@ -259,11 +259,11 @@
 }
 
 .kb-csv-stat-card--success .kb-csv-stat-number {
-  color: var(--success-fg, #15803d);
+  color: var(--text-success, #15803d);
 }
 
 .kb-csv-stat-card--accent .kb-csv-stat-number {
-  color: var(--accent, #3b82f6);
+  color: var(--accent-primary, #3b82f6);
 }
 
 .kb-csv-diff-table-wrap {
@@ -280,7 +280,7 @@
 }
 
 .kb-csv-diff-table th {
-  background: var(--bg-subtle, #f8fafc);
+  background: var(--bg-secondary, #f8fafc);
   padding: var(--space-2, 8px) var(--space-3, 12px);
   text-align: left;
   font-weight: 600;
@@ -308,13 +308,13 @@
 }
 
 .kb-csv-action-badge--create {
-  background: var(--success-bg, #dcfce7);
-  color: var(--success-fg, #15803d);
+  background: var(--bg-success-subtle, #dcfce7);
+  color: var(--text-success, #15803d);
 }
 
 .kb-csv-action-badge--update {
-  background: var(--info-bg, #e0f2fe);
-  color: var(--info-fg, #0369a1);
+  background: var(--bg-accent-subtle, #e0f2fe);
+  color: var(--accent-primary, #0369a1);
 }
 
 .kb-csv-action-badge--error {
@@ -356,12 +356,12 @@
 }
 
 .kb-csv-btn-primary {
-  background: var(--accent, #3b82f6);
+  background: var(--accent-primary, #3b82f6);
   color: #ffffff;
 }
 
 .kb-csv-btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover, #2563eb);
+  background: var(--brand-primary-hover, #2563eb);
 }
 
 .kb-csv-btn-primary:disabled {
@@ -370,7 +370,7 @@
 }
 
 .kb-csv-btn-success {
-  background: var(--success-fg, #16a34a);
+  background: var(--text-success, #16a34a);
   color: #ffffff;
 }
 

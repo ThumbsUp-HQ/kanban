@@ -6,30 +6,22 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import logging
-import uuid
-from datetime import date, datetime
-from typing import Any, Final
+from datetime import UTC, date, datetime
+from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from database.models import (
     Cycle,
     Issue,
-    IssueAssignee,
-    IssueLabel,
-    IssueModule,
     Module,
-    Principal,
     Project,
     ProjectLabel,
     ProjectPriority,
     WorkflowState,
 )
-from kanban.api.deps import PrincipalContext
 from kanban.api.v1.schemas.issues import IssueCreate, IssuePatch
 from kanban.content.normalize import ContentNormalizeError, normalize_to_markdown
 from kanban.content.unicode_guard import SURROGATE_MAX, SURROGATE_MIN
@@ -38,6 +30,13 @@ from kanban.security.push_protection import (
     enforce_secret_push_protection,
 )
 from kanban.services import issues as issue_svc
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from kanban.api.deps import PrincipalContext
 
 logger = logging.getLogger(__name__)
 
@@ -99,17 +98,15 @@ def validate_no_surrogates(text_val: str) -> None:
     for char in text_val:
         cp = ord(char)
         if SURROGATE_MIN <= cp <= SURROGATE_MAX:
-            raise ContentNormalizeError("INVALID_UTF8_SURROGATE")
+            msg = "INVALID_UTF8_SURROGATE"
+            raise ContentNormalizeError(msg)
 
 
-def sanitize_cell_for_export(val: Any) -> str:
+def sanitize_cell_for_export(val: object) -> str:
     """Neutralize CWE-1236 formula injection when writing cells to CSV."""
     if val is None:
         return ""
-    if isinstance(val, (list, tuple, set)):
-        text_val = "; ".join(str(x) for x in val)
-    else:
-        text_val = str(val)
+    text_val = "; ".join(str(x) for x in val) if isinstance(val, (list, tuple, set)) else str(val)
     if text_val and text_val[0] in FORMULA_TRIGGERS:
         return f"'{text_val}"
     return text_val
@@ -127,65 +124,76 @@ def generate_issue_import_template(
     state_names: list[str] | None = None,
     priority_names: list[str] | None = None,
 ) -> str:
-    """Generate a canonical RFC 4180 CSV import template pre-populated with actual project metadata."""
-    effective_states = state_names if state_names else ["Backlog", "Todo", "In Progress", "Done"]
-    effective_priorities = priority_names if priority_names else ["medium", "high", "urgent", "low"]
+    """Generate a canonical RFC 4180 CSV import template pre-populated with project metadata."""
+    effective_states = state_names or ["Backlog", "Todo", "In Progress", "Done"]
+    effective_priorities = priority_names or ["medium", "high", "urgent", "low"]
 
     state_example_1 = effective_states[0]
     state_example_2 = effective_states[1] if len(effective_states) > 1 else effective_states[0]
 
     prio_example_1 = effective_priorities[0]
-    prio_example_2 = effective_priorities[1] if len(effective_priorities) > 1 else effective_priorities[0]
+    prio_example_2 = (
+        effective_priorities[1] if len(effective_priorities) > 1 else effective_priorities[0]
+    )
 
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
     writer.writerow(CSV_COLUMNS)
+    today_str = datetime.now(UTC).date().isoformat()
 
     # Sample Row 1 (new issue creation example)
-    writer.writerow([
-        "",  # key empty for new issue
-        project_key,
-        sanitize_cell_for_export("Integrate single sign-on authentication card"),
-        sanitize_cell_for_export("## Objective\nConfigure corporate OIDC provider with PKCE and AAL2 step-up."),
-        state_example_1,
-        prio_example_1,
-        "@alice, @bob",
-        "security, backend",
-        "Sprint 1",
-        "Authentication",
-        "",  # parent_key
-        date.today().isoformat(),
-        date.today().isoformat(),
-        "",  # created_at
-        "",  # updated_at
-        "{}",
-    ])
+    writer.writerow(
+        [
+            "",  # key empty for new issue
+            project_key,
+            sanitize_cell_for_export("Integrate single sign-on authentication card"),
+            sanitize_cell_for_export(
+                "## Objective\nConfigure corporate OIDC provider with PKCE and AAL2 step-up."
+            ),
+            state_example_1,
+            prio_example_1,
+            "@alice, @bob",
+            "security, backend",
+            "Sprint 1",
+            "Authentication",
+            "",  # parent_key
+            today_str,
+            today_str,
+            "",  # created_at
+            "",  # updated_at
+            "{}",
+        ]
+    )
 
     # Sample Row 2 (feature with parent and due date)
-    writer.writerow([
-        "",  # key empty
-        project_key,
-        sanitize_cell_for_export("Add biometric WebAuthn security keys support"),
-        sanitize_cell_for_export("Implement passkey registration and verification according to FIDO2 guidelines."),
-        state_example_2,
-        prio_example_2,
-        "@charlie",
-        "auth, passkey",
-        "Sprint 1",
-        "Authentication",
-        f"{project_key}-1",  # parent_key example
-        date.today().isoformat(),
-        date.today().isoformat(),
-        "",
-        "",
-        '{"compliance": "SOC2"}',
-    ])
+    writer.writerow(
+        [
+            "",  # key empty
+            project_key,
+            sanitize_cell_for_export("Add biometric WebAuthn security keys support"),
+            sanitize_cell_for_export(
+                "Implement passkey registration and verification according to FIDO2 guidelines."
+            ),
+            state_example_2,
+            prio_example_2,
+            "@charlie",
+            "auth, passkey",
+            "Sprint 1",
+            "Authentication",
+            f"{project_key}-1",  # parent_key example
+            today_str,
+            today_str,
+            "",
+            "",
+            '{"compliance": "SOC2"}',
+        ]
+    )
 
     return output.getvalue()
 
 
 def export_issues_to_csv(issues_rows: list[dict[str, Any]]) -> str:
-    """Serialize list of issue row dictionaries to canonical UTF-8 RFC 4180 CSV with CWE-1236 defense."""
+    """Serialize list of issue row dictionaries to canonical UTF-8 RFC 4180 CSV."""
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
     writer.writerow(CSV_COLUMNS)
@@ -216,10 +224,7 @@ def export_issues_to_csv(issues_rows: list[dict[str, Any]]) -> str:
 
 def parse_issues_from_csv(raw_csv: str | bytes) -> list[dict[str, str]]:
     """Parse raw CSV input into list of column-mapped dictionaries with surrogate validation."""
-    if isinstance(raw_csv, bytes):
-        text_content = raw_csv.decode("utf-8")
-    else:
-        text_content = raw_csv
+    text_content = raw_csv.decode("utf-8") if isinstance(raw_csv, bytes) else raw_csv
 
     validate_no_surrogates(text_content)
 
@@ -227,7 +232,7 @@ def parse_issues_from_csv(raw_csv: str | bytes) -> list[dict[str, str]]:
     header: list[str] | None = None
     rows: list[dict[str, str]] = []
 
-    for row_idx, row in enumerate(reader, start=1):
+    for _row_idx, row in enumerate(reader, start=1):
         if not row or all(not cell.strip() for cell in row):
             continue
         if header is None:
@@ -235,7 +240,7 @@ def parse_issues_from_csv(raw_csv: str | bytes) -> list[dict[str, str]]:
             continue
 
         row_dict: dict[str, str] = {}
-        for col_name, cell_val in zip(header, row):
+        for col_name, cell_val in zip(header, row, strict=False):
             row_dict[col_name] = desanitize_cell_from_import(cell_val.strip())
         rows.append(row_dict)
 
@@ -267,21 +272,19 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
     priorities = list(prio_res.scalars().all())
     prio_by_name = {p.slug.lower(): p for p in priorities}
     prio_by_label = {p.label.lower(): p for p in priorities}
-    default_prio = next((p for p in priorities if p.is_default), priorities[0] if priorities else None)
+    default_prio = next(
+        (p for p in priorities if p.is_default), priorities[0] if priorities else None
+    )
 
     label_res = await session.execute(
         select(ProjectLabel).where(ProjectLabel.project_id == project.id)
     )
     labels_by_name = {lbl.name.lower(): lbl for lbl in label_res.scalars().all()}
 
-    cycle_res = await session.execute(
-        select(Cycle).where(Cycle.project_id == project.id)
-    )
+    cycle_res = await session.execute(select(Cycle).where(Cycle.project_id == project.id))
     cycles_by_name = {c.name.lower(): c for c in cycle_res.scalars().all()}
 
-    mod_res = await session.execute(
-        select(Module).where(Module.project_id == project.id)
-    )
+    mod_res = await session.execute(select(Module).where(Module.project_id == project.id))
     modules_by_name = {m.name.lower(): m for m in mod_res.scalars().all()}
 
     savepoint = await session.begin_nested()
@@ -289,23 +292,31 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
     for idx, row in enumerate(rows, start=2):  # row 1 is header
         summary_raw = row.get("summary", "").strip()
         if not summary_raw:
-            report.errors.append(ImportRowError(row=idx, column="summary", message="Summary is required"))
+            report.errors.append(
+                ImportRowError(row=idx, column="summary", message="Summary is required")
+            )
             continue
 
         try:
             validate_no_surrogates(summary_raw)
-            enforce_secret_push_protection(summary_raw, field="summary", mode=PushProtectionMode.BLOCK)
-        except Exception as exc:
+            enforce_secret_push_protection(
+                summary_raw, field="summary", mode=PushProtectionMode.BLOCK
+            )
+        except Exception as exc:  # noqa: BLE001
             report.errors.append(ImportRowError(row=idx, column="summary", message=str(exc)))
             continue
 
         desc_raw = row.get("description_markdown", "")
         try:
             validate_no_surrogates(desc_raw)
-            enforce_secret_push_protection(desc_raw, field="description_markdown", mode=PushProtectionMode.BLOCK)
+            enforce_secret_push_protection(
+                desc_raw, field="description_markdown", mode=PushProtectionMode.BLOCK
+            )
             norm_desc = normalize_to_markdown(desc_raw) if desc_raw else ""
-        except Exception as exc:
-            report.errors.append(ImportRowError(row=idx, column="description_markdown", message=str(exc)))
+        except Exception as exc:  # noqa: BLE001
+            report.errors.append(
+                ImportRowError(row=idx, column="description_markdown", message=str(exc))
+            )
             continue
 
         # Resolve State
@@ -314,7 +325,11 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
             matched_state = state_by_name.get(state_str)
             if matched_state is None:
                 report.errors.append(
-                    ImportRowError(row=idx, column="state", message=f"Workflow state '{row.get('state')}' not found")
+                    ImportRowError(
+                        row=idx,
+                        column="state",
+                        message=f"Workflow state '{row.get('state')}' not found",
+                    )
                 )
                 continue
         else:
@@ -326,7 +341,11 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
             matched_prio = prio_by_name.get(prio_str) or prio_by_label.get(prio_str)
             if matched_prio is None:
                 report.errors.append(
-                    ImportRowError(row=idx, column="priority", message=f"Priority '{row.get('priority')}' not found")
+                    ImportRowError(
+                        row=idx,
+                        column="priority",
+                        message=f"Priority '{row.get('priority')}' not found",
+                    )
                 )
                 continue
         else:
@@ -339,16 +358,26 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
             try:
                 start_d = date.fromisoformat(row["start_date"].strip())
             except ValueError:
-                report.errors.append(ImportRowError(row=idx, column="start_date", message="Invalid start_date format"))
+                report.errors.append(
+                    ImportRowError(
+                        row=idx, column="start_date", message="Invalid start_date format"
+                    )
+                )
                 continue
         if row.get("due_date", "").strip():
             try:
                 due_d = date.fromisoformat(row["due_date"].strip())
             except ValueError:
-                report.errors.append(ImportRowError(row=idx, column="due_date", message="Invalid due_date format"))
+                report.errors.append(
+                    ImportRowError(row=idx, column="due_date", message="Invalid due_date format")
+                )
                 continue
         if start_d and due_d and due_d < start_d:
-            report.errors.append(ImportRowError(row=idx, column="due_date", message="due_date cannot be earlier than start_date"))
+            report.errors.append(
+                ImportRowError(
+                    row=idx, column="due_date", message="due_date cannot be earlier than start_date"
+                )
+            )
             continue
 
         # Cycle
@@ -379,10 +408,15 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
         # Check if existing issue by key
         existing_issue: Issue | None = None
         if issue_key:
+            seq_val = (
+                int(issue_key.split("-")[-1])
+                if "-" in issue_key and issue_key.split("-")[-1].isdigit()
+                else -1
+            )
             res = await session.execute(
                 select(Issue).where(
                     Issue.project_id == project.id,
-                    Issue.sequence_id == int(issue_key.split("-")[-1]) if "-" in issue_key and issue_key.split("-")[-1].isdigit() else -1,
+                    Issue.sequence_id == seq_val,
                 )
             )
             existing_issue = res.scalar_one_or_none()
@@ -398,25 +432,29 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
                     start_date=start_d,
                     due_date=due_d,
                     cycle_id=matched_cycle.id if matched_cycle else None,
-                    label_ids=target_label_ids if target_label_ids else None,
-                    module_ids=target_mod_ids if target_mod_ids else None,
+                    label_ids=target_label_ids or None,
+                    module_ids=target_mod_ids or None,
                 )
                 if_match = (
                     existing_issue.description_sha256.hex()
                     if existing_issue.description_sha256
                     else str(existing_issue.row_version)
                 )
-                await issue_svc.update_issue(session, caller, issue_key, patch_payload, if_match=if_match)
+                await issue_svc.update_issue(
+                    session, caller, issue_key, patch_payload, if_match=if_match
+                )
             report.to_update += 1
             report.updated_keys.append(issue_key)
-            report.items.append({
-                "row_number": idx,
-                "action": "update",
-                "key": issue_key,
-                "summary": summary_raw,
-                "state": matched_state.name if matched_state else "",
-                "priority": matched_prio.slug if matched_prio else "",
-            })
+            report.items.append(
+                {
+                    "row_number": idx,
+                    "action": "update",
+                    "key": issue_key,
+                    "summary": summary_raw,
+                    "state": matched_state.name if matched_state else "",
+                    "priority": matched_prio.slug if matched_prio else "",
+                }
+            )
         else:
             # Create path
             if not dry_run:
@@ -428,31 +466,37 @@ async def process_issue_import(  # noqa: C901, PLR0912, PLR0915
                     start_date=start_d,
                     due_date=due_d,
                     cycle_id=matched_cycle.id if matched_cycle else None,
-                    parent=parent_key if parent_key else None,
-                    label_ids=target_label_ids if target_label_ids else None,
-                    module_ids=target_mod_ids if target_mod_ids else None,
+                    parent=parent_key or None,
+                    label_ids=target_label_ids or None,
+                    module_ids=target_mod_ids or None,
                 )
-                created, _ = await issue_svc.create_issue(session, caller, project.identifier, create_payload)
+                created, _ = await issue_svc.create_issue(
+                    session, caller, project.identifier, create_payload
+                )
                 report.created_keys.append(created.key)
-                report.items.append({
-                    "row_number": idx,
-                    "action": "create",
-                    "key": created.key,
-                    "summary": summary_raw,
-                    "state": matched_state.name if matched_state else "",
-                    "priority": matched_prio.slug if matched_prio else "",
-                })
+                report.items.append(
+                    {
+                        "row_number": idx,
+                        "action": "create",
+                        "key": created.key,
+                        "summary": summary_raw,
+                        "state": matched_state.name if matched_state else "",
+                        "priority": matched_prio.slug if matched_prio else "",
+                    }
+                )
             else:
                 sim_key = f"{project.identifier}-{project.issue_seq_counter + report.to_create + 1}"
                 report.created_keys.append(sim_key)
-                report.items.append({
-                    "row_number": idx,
-                    "action": "create",
-                    "key": sim_key,
-                    "summary": summary_raw,
-                    "state": matched_state.name if matched_state else "",
-                    "priority": matched_prio.slug if matched_prio else "",
-                })
+                report.items.append(
+                    {
+                        "row_number": idx,
+                        "action": "create",
+                        "key": sim_key,
+                        "summary": summary_raw,
+                        "state": matched_state.name if matched_state else "",
+                        "priority": matched_prio.slug if matched_prio else "",
+                    }
+                )
             report.to_create += 1
 
     report.creates_count = report.to_create

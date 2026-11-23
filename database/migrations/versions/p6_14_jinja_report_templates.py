@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""jinja report templates
+"""jinja report templates.
 
 Revision ID: p6_14_jinja_report_templates
 Revises: p6_13_csv_import_export_governance

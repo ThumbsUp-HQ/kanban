@@ -26,7 +26,6 @@ from database.models import (
     ProjectLabel,
     ProjectPriority,
     WorkflowState,
-    Workspace,
     WorkspaceSettings,
 )
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -34,7 +33,6 @@ from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.csv.aes_zip import (
     MIN_PASSWORD_LENGTH,
-    PasswordTooShortError,
     create_winzip_aes256_zip,
     extract_winzip_aes256_zip,
 )
@@ -67,22 +65,36 @@ class IssueExportRequest(BaseModel):
     q: str | None = Field(default=None, description="Search query string")
     project_id: str | None = Field(default=None, description="Project ID or identifier scope")
     state_ids: list[str] | None = Field(default=None, description="Filter by state IDs")
-    state_categories: list[str] | None = Field(default=None, description="Filter by state categories / groups")
-    priorities: list[str] | None = Field(default=None, description="Filter by priority slugs or IDs")
-    assignee_ids: list[str] | None = Field(default=None, description="Filter by assignee IDs or handles")
+    state_categories: list[str] | None = Field(
+        default=None, description="Filter by state categories / groups"
+    )
+    priorities: list[str] | None = Field(
+        default=None, description="Filter by priority slugs or IDs"
+    )
+    assignee_ids: list[str] | None = Field(
+        default=None, description="Filter by assignee IDs or handles"
+    )
     label_ids: list[str] | None = Field(default=None, description="Filter by label IDs")
     cycle_id: str | None = Field(default=None, description="Filter by cycle ID")
     module_id: str | None = Field(default=None, description="Filter by module ID")
-    issue_ids: list[str] | None = Field(default=None, description="Specific issue IDs or keys to export")
-    sort_by: str | None = Field(default="created_at", description="Field to sort by (created_at, board_rank, sequence_id)")
+    issue_ids: list[str] | None = Field(
+        default=None, description="Specific issue IDs or keys to export"
+    )
+    sort_by: str | None = Field(
+        default="created_at", description="Field to sort by (created_at, board_rank, sequence_id)"
+    )
     sort_dir: Literal["asc", "desc"] | None = Field(default="asc", description="Sort direction")
-    format: Literal["csv", "zip_csv"] = Field(default="csv", description="Output format: csv or WinZip AES-256 zip_csv")
-    zip_password: str | None = Field(default=None, description="Mandatory password when format is zip_csv (>= 12 characters)")
+    format: Literal["csv", "zip_csv"] = Field(
+        default="csv", description="Output format: csv or WinZip AES-256 zip_csv"
+    )
+    zip_password: str | None = Field(
+        default=None, description="Mandatory password when format is zip_csv (>= 12 characters)"
+    )
 
 
 async def _check_export_governance(
     session: AsyncSession,
-    caller: PrincipalContext,
+    _caller: PrincipalContext,
     workspace_id: uuid.UUID,
     project_id: uuid.UUID | None = None,
 ) -> None:
@@ -201,12 +213,16 @@ async def download_project_import_template(
         project = await get_project_or_404(session, caller, project_ref)
 
         state_res = await session.execute(
-            select(WorkflowState.name).where(WorkflowState.project_id == project.id).order_by(WorkflowState.sort_order)
+            select(WorkflowState.name)
+            .where(WorkflowState.project_id == project.id)
+            .order_by(WorkflowState.sort_order)
         )
         states = list(state_res.scalars().all())
 
         prio_res = await session.execute(
-            select(ProjectPriority.slug).where(ProjectPriority.project_id == project.id).order_by(ProjectPriority.sort_order)
+            select(ProjectPriority.slug)
+            .where(ProjectPriority.project_id == project.id)
+            .order_by(ProjectPriority.sort_order)
         )
         priorities = list(prio_res.scalars().all())
 
@@ -237,13 +253,15 @@ async def download_project_import_template(
 )
 async def download_workspace_import_template(
     workspace_ref: str,
-    caller: Caller,
+    _caller: Caller,
     session: Session,
 ) -> Response:
     """Return generic RFC 4180 CSV template for importing issues into workspace."""
     async with timing_floor(floor_ms=25.0):
         ws_res = await session.execute(
-            text("SELECT id, slug FROM workspaces WHERE id = resolve_workspace_by_slug_or_id(:ident)"),
+            text(
+                "SELECT id, slug FROM workspaces WHERE id = resolve_workspace_by_slug_or_id(:ident)"
+            ),
             {"ident": workspace_ref},
         )
         ws_row = ws_res.mappings().one_or_none()
@@ -269,7 +287,7 @@ async def download_workspace_import_template(
         )
 
 
-async def _execute_export_query(  # noqa: C901, PLR0912
+async def _execute_export_query(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     project_id: uuid.UUID | None,
@@ -318,7 +336,9 @@ async def _execute_export_query(  # noqa: C901, PLR0912
 
     if req.issue_ids:
         # Match by key sequence or UUID
-        seqs = [int(i.split("-")[-1]) for i in req.issue_ids if "-" in i and i.split("-")[-1].isdigit()]
+        seqs = [
+            int(i.split("-")[-1]) for i in req.issue_ids if "-" in i and i.split("-")[-1].isdigit()
+        ]
         stmt = stmt.where(Issue.sequence_id.in_(seqs))
 
     if req.q:
@@ -327,11 +347,15 @@ async def _execute_export_query(  # noqa: C901, PLR0912
 
     # Sorting
     if req.sort_by == "sequence_id":
-        stmt = stmt.order_by(desc(Issue.sequence_id) if req.sort_dir == "desc" else Issue.sequence_id)
+        stmt = stmt.order_by(
+            desc(Issue.sequence_id) if req.sort_dir == "desc" else Issue.sequence_id
+        )
     elif req.sort_by == "board_rank":
         stmt = stmt.order_by(desc(Issue.board_rank) if req.sort_dir == "desc" else Issue.board_rank)
     else:
-        stmt = stmt.order_by(desc(Issue.sequence_id) if req.sort_dir == "desc" else Issue.sequence_id)
+        stmt = stmt.order_by(
+            desc(Issue.sequence_id) if req.sort_dir == "desc" else Issue.sequence_id
+        )
 
     result = await session.execute(stmt)
     records = result.all()
@@ -379,24 +403,26 @@ async def _execute_export_query(  # noqa: C901, PLR0912
         priority_slug: str = r[3]
         cycle_name: str | None = r[4]
 
-        rows.append({
-            "key": f"{proj_ident}-{issue.sequence_id}",
-            "project_key": proj_ident,
-            "summary": issue.summary,
-            "description_markdown": issue.description_markdown,
-            "state": state_name,
-            "priority": priority_slug,
-            "assignees": ", ".join(assignees_by_issue.get(issue.id, [])),
-            "labels": ", ".join(labels_by_issue.get(issue.id, [])),
-            "cycle": cycle_name or "",
-            "modules": ", ".join(modules_by_issue.get(issue.id, [])),
-            "parent_key": "",
-            "start_date": issue.start_date.isoformat() if issue.start_date else "",
-            "due_date": issue.due_date.isoformat() if issue.due_date else "",
-            "created_at": "",
-            "updated_at": "",
-            "custom_fields_json": "{}",
-        })
+        rows.append(
+            {
+                "key": f"{proj_ident}-{issue.sequence_id}",
+                "project_key": proj_ident,
+                "summary": issue.summary,
+                "description_markdown": issue.description_markdown,
+                "state": state_name,
+                "priority": priority_slug,
+                "assignees": ", ".join(assignees_by_issue.get(issue.id, [])),
+                "labels": ", ".join(labels_by_issue.get(issue.id, [])),
+                "cycle": cycle_name or "",
+                "modules": ", ".join(modules_by_issue.get(issue.id, [])),
+                "parent_key": "",
+                "start_date": issue.start_date.isoformat() if issue.start_date else "",
+                "due_date": issue.due_date.isoformat() if issue.due_date else "",
+                "created_at": "",
+                "updated_at": "",
+                "custom_fields_json": "{}",
+            }
+        )
 
     return rows
 
@@ -413,7 +439,7 @@ async def export_project_issues(
     session: Session,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
-    """Export project issues matching filters to CSV or WinZip AE-2 (AES-256) password-protected ZIP."""
+    """Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
     async with timing_floor(floor_ms=25.0):
         project = await get_project_or_404(session, caller, project_ref)
         await _check_export_governance(session, caller, project.workspace_id, project.id)
@@ -457,16 +483,18 @@ async def export_project_issues(
                 {f"{project.identifier}-issues.csv": csv_content.encode("utf-8")},
                 req.zip_password,
             )
+            zip_disp = f'attachment; filename="{project.identifier}-issues-export.zip"'
             return Response(
                 content=zip_bytes,
                 media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="{project.identifier}-issues-export.zip"'},
+                headers={"Content-Disposition": zip_disp},
             )
 
+        csv_disp = f'attachment; filename="{project.identifier}-issues-export.csv"'
         return Response(
             content=csv_content,
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{project.identifier}-issues-export.csv"'},
+            headers={"Content-Disposition": csv_disp},
         )
 
 
@@ -482,10 +510,12 @@ async def export_workspace_issues(
     session: Session,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
-    """Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) password-protected ZIP."""
+    """Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
     async with timing_floor(floor_ms=25.0):
         ws_res = await session.execute(
-            text("SELECT id, slug FROM workspaces WHERE id = resolve_workspace_by_slug_or_id(:ident)"),
+            text(
+                "SELECT id, slug FROM workspaces WHERE id = resolve_workspace_by_slug_or_id(:ident)"
+            ),
             {"ident": workspace_ref},
         )
         ws_row = ws_res.mappings().one_or_none()
@@ -546,7 +576,9 @@ async def export_workspace_issues(
             return Response(
                 content=zip_bytes,
                 media_type="application/zip",
-                headers={"Content-Disposition": f'attachment; filename="{ws_slug}-issues-export.zip"'},
+                headers={
+                    "Content-Disposition": f'attachment; filename="{ws_slug}-issues-export.zip"'
+                },
             )
 
         return Response(
@@ -561,14 +593,17 @@ async def export_workspace_issues(
     response_model=CsvImportDiffReport,
     summary="Import issues from CSV or WinZip AES-256 ZIP into project",
 )
-async def import_project_issues(
+async def import_project_issues(  # noqa: C901, PLR0912
     project_ref: str,
     request: Request,
     caller: Caller,
     session: Session,
-    dry_run: Annotated[bool, Query(description="Simulate import and return diff without committing")] = True,
+    *,
+    dry_run: Annotated[
+        bool, Query(description="Simulate import and return diff without committing")
+    ] = True,
 ) -> CsvImportDiffReport:
-    """Import issues from CSV or WinZip AE-2 (AES-256) password-protected ZIP archive into project."""
+    """Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project."""
     async with timing_floor(floor_ms=25.0):
         project = await get_project_or_404(session, caller, project_ref)
         await _check_import_governance(session, caller, project.workspace_id, project.id)
@@ -580,7 +615,9 @@ async def import_project_issues(
         file_bytes = body_bytes
 
         if "multipart/form-data" in content_type_header.lower():
-            msg_bytes = b"Content-Type: " + content_type_header.encode("latin-1") + b"\r\n\r\n" + body_bytes
+            msg_bytes = (
+                b"Content-Type: " + content_type_header.encode("latin-1") + b"\r\n\r\n" + body_bytes
+            )
             parsed_msg = email.message_from_bytes(msg_bytes)
             if parsed_msg.is_multipart():
                 parts = parsed_msg.get_payload()
@@ -593,7 +630,9 @@ async def import_project_issues(
                         if not isinstance(payload_raw, bytes):
                             continue
                         if name == "zip_password":
-                            zip_password = payload_raw.decode("utf-8", errors="replace").strip() or None
+                            zip_password = (
+                                payload_raw.decode("utf-8", errors="replace").strip() or None
+                            )
                         elif name in ("file", "archive") or part.get_filename():
                             filename = part.get_filename() or filename
                             file_bytes = payload_raw
@@ -622,7 +661,10 @@ async def import_project_issues(
                 ) from exc
 
             # Find .csv entry
-            csv_entry = next((content for name, content in extracted.items() if name.lower().endswith(".csv")), None)
+            csv_entry = next(
+                (content for name, content in extracted.items() if name.lower().endswith(".csv")),
+                None,
+            )
             if csv_entry is None:
                 raise ProblemException(
                     code="CSV_NOT_FOUND_IN_ZIP",

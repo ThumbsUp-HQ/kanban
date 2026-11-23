@@ -92,7 +92,7 @@ export function CsvImportExportModal({
     try {
       const endpoint = projectKey
         ? `/api/v1/projects/${encodeURIComponent(projectKey)}/issues/import-template.csv`
-        : `/api/v1/workspaces/${encodeURIComponent(workspaceScope || 'default')}/issues/import-template.csv`;
+        : `/api/v1/workspaces/${encodeURIComponent(workspaceScope ?? 'default')}/issues/import-template.csv`;
 
       const res = await fetch(endpoint, {
         method: 'GET',
@@ -129,18 +129,18 @@ export function CsvImportExportModal({
     try {
       const endpoint = projectKey
         ? `/api/v1/projects/${encodeURIComponent(projectKey)}/issues/export`
-        : `/api/v1/workspaces/${encodeURIComponent(workspaceScope || 'default')}/issues/export`;
+        : `/api/v1/workspaces/${encodeURIComponent(workspaceScope ?? 'default')}/issues/export`;
 
       const payload = {
         format: exportFormat,
         zip_password: exportFormat === 'zip_csv' ? exportPassword : null,
-        q: searchQuery || null,
-        state_ids: activeFilters.state || null,
-        priorities: activeFilters.priority || null,
-        assignee_ids: activeFilters.assignee || null,
-        label_ids: activeFilters.label || null,
-        cycle_id: activeFilters.cycle?.[0] || null,
-        module_id: activeFilters.module?.[0] || null,
+        q: searchQuery ?? null,
+        state_ids: activeFilters.state ?? null,
+        priorities: activeFilters.priority ?? null,
+        assignee_ids: activeFilters.assignee ?? null,
+        label_ids: activeFilters.label ?? null,
+        cycle_id: activeFilters.cycle?.[0] ?? null,
+        module_id: activeFilters.module?.[0] ?? null,
       };
 
       const csrfToken = getCsrfToken();
@@ -160,7 +160,7 @@ export function CsvImportExportModal({
 
       if (!res.ok) {
         const errJson = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(errJson.detail || 'Export failed');
+        throw new Error(errJson.detail ?? 'Export failed');
       }
 
       const blob = await res.blob();
@@ -183,7 +183,7 @@ export function CsvImportExportModal({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const file = e.target.files?.[0] || null;
+    const file = e.target.files?.[0] ?? null;
     setImportFile(file);
     setPreviewReport(null);
     setErrorMessage(null);
@@ -228,7 +228,7 @@ export function CsvImportExportModal({
       const data = (await res.json().catch(() => ({}))) as CsvImportDiffReport & { detail?: string };
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Import failed');
+        throw new Error(data.detail ?? 'Import failed');
       }
 
       if (dryRun) {
@@ -315,7 +315,7 @@ export function CsvImportExportModal({
           )}
 
           {activeTab === 'export' && (
-            <form onSubmit={handleExport} className="kb-csv-modal-section">
+            <form onSubmit={(e) => { void handleExport(e); }} className="kb-csv-modal-section">
               <p className="kb-csv-modal-desc">
                 Export matching issues from the active view and filters to canonical RFC 4180 CSV or encrypted ZIP.
               </p>
@@ -511,14 +511,14 @@ export function CsvImportExportModal({
                         </thead>
                         <tbody>
                           {previewReport.items.map((item) => (
-                            <tr key={`${String(item.row_number)}-${item.key || ''}`}>
+                            <tr key={`${String(item.row_number)}-${item.key ?? ''}`}>
                               <td>{item.row_number}</td>
                               <td>
                                 <span className={`kb-csv-action-badge kb-csv-action-badge--${item.action}`}>
                                   {item.action}
                                 </span>
                               </td>
-                              <td>{item.key || '-'}</td>
+                              <td>{item.key ?? '-'}</td>
                               <td>{item.summary}</td>
                               <td>{item.state}</td>
                               <td>{item.priority}</td>

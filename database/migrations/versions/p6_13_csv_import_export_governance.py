@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""csv import export governance
+"""csv import export governance.
 
 Revision ID: p6_13_csv_import_export_governance
 Revises: p6_11_git_truststore_and_attestations

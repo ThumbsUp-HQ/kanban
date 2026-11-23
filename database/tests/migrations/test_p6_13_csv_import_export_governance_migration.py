@@ -21,12 +21,18 @@ async def test_p6_13_csv_import_export_governance_migration_lifecycle() -> None:
             "SELECT column_name, data_type, is_nullable "
             "FROM information_schema.columns "
             "WHERE table_name = 'workspace_settings' "
-            "  AND column_name IN ('issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles') "
+            "  AND column_name IN ("
+            "    'issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles'"
+            "  ) "
             "ORDER BY column_name;"
         )
         assert len(cols_up) == 3
         col_names = {c["column_name"] for c in cols_up}
-        assert col_names == {"issue_export_enabled", "issue_import_enabled", "issue_export_allowed_roles"}
+        assert col_names == {
+            "issue_export_enabled",
+            "issue_import_enabled",
+            "issue_export_allowed_roles",
+        }
 
         # 2. Downgrade to previous revision
         await harness.downgrade(prev_rev)
@@ -35,7 +41,9 @@ async def test_p6_13_csv_import_export_governance_migration_lifecycle() -> None:
             "SELECT column_name "
             "FROM information_schema.columns "
             "WHERE table_name = 'workspace_settings' "
-            "  AND column_name IN ('issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles');"
+            "  AND column_name IN ("
+            "    'issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles'"
+            "  );"
         )
         assert len(cols_down) == 0
 
@@ -46,6 +54,8 @@ async def test_p6_13_csv_import_export_governance_migration_lifecycle() -> None:
             "SELECT column_name "
             "FROM information_schema.columns "
             "WHERE table_name = 'workspace_settings' "
-            "  AND column_name IN ('issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles');"
+            "  AND column_name IN ("
+            "    'issue_export_enabled', 'issue_import_enabled', 'issue_export_allowed_roles'"
+            "  );"
         )
         assert len(cols_up_again) == 3
