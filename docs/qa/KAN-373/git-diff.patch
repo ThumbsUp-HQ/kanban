@@ -1,0 +1,485 @@
+diff --git a/kanban/api/v1/issue_csv.py b/kanban/api/v1/issue_csv.py
+index 9398a098..cd7660bd 100644
+--- a/kanban/api/v1/issue_csv.py
++++ b/kanban/api/v1/issue_csv.py
+@@ -85,7 +85,7 @@ class IssueExportRequest(BaseModel):
+     )
+     sort_dir: Literal["asc", "desc"] | None = Field(default="asc", description="Sort direction")
+     format: Literal["csv", "zip_csv"] = Field(
+-        default="csv", description="Output format: csv or WinZip AES-256 zip_csv"
++        default="csv", description="Output format: csv or Password-protected ZIP (AES-256) zip_csv"
+     )
+     zip_password: str | None = Field(
+         default=None, description="Mandatory password when format is zip_csv (>= 12 characters)"
+@@ -429,7 +429,7 @@ async def _execute_export_query(  # noqa: C901, PLR0912, PLR0915
+ 
+ @router.post(
+     "/projects/{project_ref}/issues/export",
+-    summary="Export issues in project to CSV or WinZip AES-256 ZIP",
++    summary="Export issues in project to CSV or Password-protected ZIP (AES-256)",
+     response_class=Response,
+ )
+ async def export_project_issues(
+@@ -439,7 +439,7 @@ async def export_project_issues(
+     session: Session,
+     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> Response:
+-    """Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
++    """Export project issues matching filters to CSV or Password-protected ZIP (AES-256)."""
+     async with timing_floor(floor_ms=25.0):
+         project = await get_project_or_404(session, caller, project_ref)
+         await _check_export_governance(session, caller, project.workspace_id, project.id)
+@@ -500,7 +500,7 @@ async def export_project_issues(
+ 
+ @router.post(
+     "/workspaces/{workspace_ref}/issues/export",
+-    summary="Export issues in workspace to CSV or WinZip AES-256 ZIP",
++    summary="Export issues in workspace to CSV or Password-protected ZIP (AES-256)",
+     response_class=Response,
+ )
+ async def export_workspace_issues(
+@@ -510,7 +510,7 @@ async def export_workspace_issues(
+     session: Session,
+     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> Response:
+-    """Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
++    """Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256)."""
+     async with timing_floor(floor_ms=25.0):
+         ws_res = await session.execute(
+             text(
+@@ -591,7 +591,7 @@ async def export_workspace_issues(
+ @router.post(
+     "/projects/{project_ref}/issues/import",
+     response_model=CsvImportDiffReport,
+-    summary="Import issues from CSV or WinZip AES-256 ZIP into project",
++    summary="Import issues from CSV or Password-protected ZIP (AES-256) into project",
+ )
+ async def import_project_issues(  # noqa: C901, PLR0912
+     project_ref: str,
+@@ -603,7 +603,7 @@ async def import_project_issues(  # noqa: C901, PLR0912
+         bool, Query(description="Simulate import and return diff without committing")
+     ] = True,
+ ) -> CsvImportDiffReport:
+-    """Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project."""
++    """Import issues from CSV or Password-protected ZIP (AES-256) archive into project."""
+     async with timing_floor(floor_ms=25.0):
+         project = await get_project_or_404(session, caller, project_ref)
+         await _check_import_governance(session, caller, project.workspace_id, project.id)
+diff --git a/kanban/csv/aes_zip.py b/kanban/csv/aes_zip.py
+index 82f65aef..ed562e13 100644
+--- a/kanban/csv/aes_zip.py
++++ b/kanban/csv/aes_zip.py
+@@ -399,7 +399,7 @@ def extract_winzip_aes256_zip(  # noqa: C901, PLR0912, PLR0915
+                     decomp = zlib.decompressobj(wbits=-15)
+                     content = decomp.decompress(compressed)
+                 else:
+-                    msg = f"Unsupported WinZip AES compression method: {extra_method}"
++                    msg = f"Unsupported AES-256 password-protected ZIP (method 99) compression method: {extra_method}"
+                     raise CorruptZipError(msg)
+             finally:
+                 if aes_key is not None:
+diff --git a/kanban/reports/zip_packaging.py b/kanban/reports/zip_packaging.py
+index 9c695533..ec9c6951 100644
+--- a/kanban/reports/zip_packaging.py
++++ b/kanban/reports/zip_packaging.py
+@@ -248,7 +248,9 @@ def read_aes256_zip(
+         ) = struct.unpack("<IHHHHHHIIIHHHHHII", zip_bytes[cd_ptr : cd_ptr + 46])
+ 
+         if method != 99 or (flags & 1) == 0:
+-            raise ValueError("Archive is not encrypted with WinZip AES (method 99).")
++            raise ValueError(
++                "Archive is not encrypted with AES-256 password-protected ZIP (method 99)."
++            )
+ 
+         fn_start = cd_ptr + 46
+         filename = zip_bytes[fn_start : fn_start + fn_len].decode("utf-8")
+diff --git a/kanban/tests/test_docs_migration_guide.py b/kanban/tests/test_docs_migration_guide.py
+index 227e621c..833d7c05 100644
+--- a/kanban/tests/test_docs_migration_guide.py
++++ b/kanban/tests/test_docs_migration_guide.py
+@@ -109,4 +109,7 @@ def test_migration_guide_sections_and_anchors() -> None:
+     section_ids = [s["id"] for s in meta["sections"]]
+     assert "multi-source-importer-architecture" in section_ids
+     assert "legacy-key-alias-routing-and-permalinks" in section_ids
+-    assert "canonical-csv-import-export-and-winzip-aes-256-packaging" in section_ids
++    assert (
++        "canonical-csv-import-export-and-password-protected-zip-aes-256-packaging"
++        in section_ids
++    )
+diff --git a/kanban/tests/test_issue_csv_import_export.py b/kanban/tests/test_issue_csv_import_export.py
+index 0f04d79b..06086841 100644
+--- a/kanban/tests/test_issue_csv_import_export.py
++++ b/kanban/tests/test_issue_csv_import_export.py
+@@ -32,6 +32,7 @@ import io
+ import struct
+ import zipfile
+ from datetime import UTC, datetime
++from pathlib import Path
+ from typing import TYPE_CHECKING
+ from unittest.mock import patch
+ 
+@@ -928,3 +929,44 @@ async def test_process_issue_import_summary_secret(
+     report = res.json()
+     assert report["error_count"] > 0
+     assert any("summary" in e["column"] for e in report["errors"])
++
++
++def test_openapi_and_api_zero_winzip_trademark() -> None:
++    """Verify zero user-facing 'WinZip' copy in OpenAPI spec and issue CSV route descriptions (KAN-373)."""
++    from kanban.app import create_app
++
++    app = create_app()
++    openapi = app.openapi()
++
++    # Check issue export and import endpoints
++    export_proj = openapi["paths"]["/api/v1/projects/{project_ref}/issues/export"]["post"]
++    assert "WinZip" not in export_proj["summary"]
++    assert "WinZip" not in export_proj["description"]
++    assert "Password-protected ZIP (AES-256)" in export_proj["summary"]
++    assert "Password-protected ZIP (AES-256)" in export_proj["description"]
++
++    export_ws = openapi["paths"]["/api/v1/workspaces/{workspace_ref}/issues/export"]["post"]
++    assert "WinZip" not in export_ws["summary"]
++    assert "WinZip" not in export_ws["description"]
++    assert "Password-protected ZIP (AES-256)" in export_ws["summary"]
++    assert "Password-protected ZIP (AES-256)" in export_ws["description"]
++
++    import_proj = openapi["paths"]["/api/v1/projects/{project_ref}/issues/import"]["post"]
++    assert "WinZip" not in import_proj["summary"]
++    assert "WinZip" not in import_proj["description"]
++    assert "Password-protected ZIP (AES-256)" in import_proj["summary"]
++    assert "Password-protected ZIP (AES-256)" in import_proj["description"]
++
++    export_req_schema = openapi["components"]["schemas"]["IssueExportRequest"]
++    assert "WinZip" not in export_req_schema["properties"]["format"]["description"]
++    assert (
++        "Password-protected ZIP (AES-256)"
++        in export_req_schema["properties"]["format"]["description"]
++    )
++
++    # Also verify static kanban/web/openapi.json
++    openapi_file = Path(__file__).parents[1] / "web" / "openapi.json"
++    if openapi_file.exists():
++        content = openapi_file.read_text(encoding="utf-8")
++        assert "winzip" not in content.lower()
++
+diff --git a/kanban/tests/test_jinja_reports.py b/kanban/tests/test_jinja_reports.py
+index d8e29e73..519dfab3 100644
+--- a/kanban/tests/test_jinja_reports.py
++++ b/kanban/tests/test_jinja_reports.py
+@@ -887,8 +887,11 @@ def test_zip_packaging_tampering_and_corrupt_headers() -> None:
+     # in central directory, method is at cd_offset + 10 (2 bytes)
+     non_aes[cd_offset + 10] = 0x00
+     non_aes[cd_offset + 11] = 0x00
+-    with pytest.raises(ValueError, match="not encrypted with WinZip AES"):
++    with pytest.raises(
++        ValueError, match="not encrypted with AES-256 password-protected ZIP"
++    ) as exc_info:
+         read_aes256_zip(bytes(non_aes), pw)
++    assert "WinZip" not in str(exc_info.value)
+ 
+ 
+ def test_sandbox_custom_parameters_and_toc_skip() -> None:
+diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
+index c94dce3f..6111308a 100644
+--- a/kanban/web/openapi.json
++++ b/kanban/web/openapi.json
+@@ -7505,7 +7505,7 @@
+           },
+           "format": {
+             "default": "csv",
+-            "description": "Output format: csv or WinZip AES-256 zip_csv",
++            "description": "Output format: csv or Password-protected ZIP (AES-256) zip_csv",
+             "enum": [
+               "csv",
+               "zip_csv"
+@@ -22329,9 +22329,9 @@
+   },
+   "info": {
+     "title": "\ud83d\udc4dkanban API",
+-    "version": "0.2.1282",
+-    "x-build-commit": "b308d37655cb",
+-    "x-openapi-bundle-hash": "6c50eea38955944b6c65b81aa0875a15a684ae32bd77963a78474c52cf272376"
++    "version": "0.2.1395",
++    "x-build-commit": "72e49fe57958",
++    "x-openapi-bundle-hash": "1fd26b1bdd8c25f6b20ed4c319af206043f8700fe482cd9043699fa09f5b1d19"
+   },
+   "openapi": "3.1.0",
+   "paths": {
+@@ -36565,7 +36565,7 @@
+     },
+     "/api/v1/media-proxy": {
+       "get": {
+-        "description": "Retrieve external Markdown image over DNS-pinned cookieless socket.\n\nRequires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.\nValidates HMAC signature before URL parsing or DNS lookup.",
++        "description": "Retrieve external Markdown image over DNS-pinned cookieless socket.\n\nRequires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.\nValidates HMAC signature and expiration before URL parsing or DNS lookup.",
+         "operationId": "get_media_proxy_api_v1_media_proxy_get",
+         "parameters": [
+           {
+@@ -36589,6 +36589,24 @@
+               "title": "Sig",
+               "type": "string"
+             }
++          },
++          {
++            "description": "Expiration timestamp (UNIX epoch seconds)",
++            "in": "query",
++            "name": "exp",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "type": "integer"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "description": "Expiration timestamp (UNIX epoch seconds)",
++              "title": "Exp"
++            }
+           }
+         ],
+         "responses": {
+@@ -38855,6 +38873,20 @@
+               "type": "integer"
+             }
+           },
++          {
++            "description": "Monte Carlo simulation trials (10 to 50000)",
++            "in": "query",
++            "name": "trials",
++            "required": false,
++            "schema": {
++              "default": 10000,
++              "description": "Monte Carlo simulation trials (10 to 50000)",
++              "maximum": 50000,
++              "minimum": 10,
++              "title": "Trials",
++              "type": "integer"
++            }
++          },
+           {
+             "description": "Optional random seed for deterministic simulation and reproducibility",
+             "in": "query",
+@@ -39670,7 +39702,7 @@
+     },
+     "/api/v1/projects/{project_ref}/issues/export": {
+       "post": {
+-        "description": "Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
++        "description": "Export project issues matching filters to CSV or Password-protected ZIP (AES-256).",
+         "operationId": "export_project_issues_api_v1_projects__project_ref__issues_export_post",
+         "parameters": [
+           {
+@@ -39727,7 +39759,7 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Export issues in project to CSV or WinZip AES-256 ZIP",
++        "summary": "Export issues in project to CSV or Password-protected ZIP (AES-256)",
+         "tags": [
+           "issue-csv"
+         ]
+@@ -39735,7 +39767,7 @@
+     },
+     "/api/v1/projects/{project_ref}/issues/import": {
+       "post": {
+-        "description": "Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project.",
++        "description": "Import issues from CSV or Password-protected ZIP (AES-256) archive into project.",
+         "operationId": "import_project_issues_api_v1_projects__project_ref__issues_import_post",
+         "parameters": [
+           {
+@@ -39801,7 +39833,7 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Import issues from CSV or WinZip AES-256 ZIP into project",
++        "summary": "Import issues from CSV or Password-protected ZIP (AES-256) into project",
+         "tags": [
+           "issue-csv"
+         ]
+@@ -45706,7 +45738,7 @@
+     },
+     "/api/v1/workspaces/{workspace_ref}/issues/export": {
+       "post": {
+-        "description": "Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
++        "description": "Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256).",
+         "operationId": "export_workspace_issues_api_v1_workspaces__workspace_ref__issues_export_post",
+         "parameters": [
+           {
+@@ -45763,7 +45795,7 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Export issues in workspace to CSV or WinZip AES-256 ZIP",
++        "summary": "Export issues in workspace to CSV or Password-protected ZIP (AES-256)",
+         "tags": [
+           "issue-csv"
+         ]
+diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
+index b8c6c141..ef19254c 100644
+--- a/kanban/web/src/features/docs-center/wikiManifest.ts
++++ b/kanban/web/src/features/docs-center/wikiManifest.ts
+@@ -1643,8 +1643,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "canonical-csv-import-export-and-winzip-aes-256-packaging",
+-        "title": "5. Canonical CSV Import, Export, and WinZip AES-256 Packaging",
++        "id": "canonical-csv-import-export-and-password-protected-zip-aes-256-packaging",
++        "title": "5. Canonical CSV Import, Export, and Password-Protected ZIP (AES-256) Packaging",
+         "level": 2
+       },
+       {
+@@ -1658,8 +1658,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "winzip-ae-2-aes-256-password-protected-packaging",
+-        "title": "WinZip AE-2 (AES-256) Password-Protected Packaging",
++        "id": "password-protected-zip-aes-256-packaging",
++        "title": "Password-Protected ZIP (AES-256) Packaging",
+         "level": 3
+       },
+       {
+@@ -1688,7 +1688,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 2
+       }
+     ],
+-    "content": "# [Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide\n\nComprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane-DB, legacy issue key alias redirection, cross-project merge mode, and canonical CSV import/export governance.\n\n---\n\n## 1. Overview and Lossless Migration Philosophy\n\nMigrating issue tracking infrastructure between legacy platforms often introduces severe data loss: rich-text formatting degrades into corrupted markup, custom field hierarchies fracture, media attachments break into dead hyperlinks, and historical issue keys (`JIRA-101`, `PROJ-42`, `GH-89`) vanish, destroying institutional knowledge and broken permalinks across pull requests and documentation.\n\n\ud83d\udc4dkanban resolves these challenges through an end-to-end, multi-source migration pipeline engineered under three core principles:\n1. **Canonical Markdown Normalization:** Ingests proprietary document trees (such as Atlassian Document Format or raw HTML) and converts them into standardized, sanitized UTF-8 Markdown with strict UTF-16 lone surrogate rejection.\n2. **Deterministic Key Alias Routing (`IssueKeyAlias`):** Retains every historical issue key from upstream systems in a dedicated alias catalog, providing automatic HTTP 301/308 redirection across REST API and web interfaces.\n3. **Lossless Media Attachment Streaming:** Streams binary assets directly from legacy object stores (e.g. MinIO or S3) through HMAC-signed media shields, preventing SSRF attacks and broken image references.\n\n```mermaid\ngraph TD\n    Sources[\"Source Platforms (Jira, GitHub, Linear, Plane-DB, CSV)\"] --> Ingestion[\"Streaming Ingestion & Sanitization Engine\"]\n    Ingestion --> MarkdownConv[\"Canonical Markdown Converter (ADF/HTML -> GFM)\"]\n    Ingestion --> MediaStream[\"HMAC Media Proxy Attachment Storage\"]\n    Ingestion --> AliasRouter[\"IssueKeyAlias Catalog (301/308 Redirection Engine)\"]\n    Ingestion --> RLSInsert[\"PostgreSQL FORCE RLS Transactional Insertion\"]\n    RLSInsert --> UniversalGraph[\"Universal Object Graph (Issues, Stickies, Docs, Links)\"]\n```\n\n---\n\n## 2. Multi-Source Importer Architecture\n\nThe migration subsystem in `kanban/importer/` provides modular importers tailored to specific platform export formats:\n\n### Supported Importers and Capability Matrix\n\n| Source Tracker | Input Format | Converted Entities | Custom Fields & Mapping | Attachment Ingestion |\n| :--- | :--- | :--- | :--- | :--- |\n| **Jira Cloud & Server/DC** | JSON export bundle / REST dump | Issues, Subtasks, Comments, Worklogs, Links | Full ADF/HTML to Markdown conversion, user account mapping | Extracted and routed through HMAC media shield |\n| **GitHub Issues** | Issues JSON export / REST API dump | Issues, Pull Request links, Milestones, Labels | Milestones mapped to Cycles; Labels mapped to ProjectLabels | Downloaded and cryptographically hashed |\n| **Linear** | Linear JSON export / CSV archive | Issues, Cycles, Modules, Relations, Triage states | State taxonomy normalization; relations mapped to object_links | Assets fetched with token authorization |\n| **Plane-DB** | PostgreSQL dump + MinIO bucket (`scripts/export_plane_db.py`) | Workspaces, Projects, States, Issues, Docs, Stickies | 1:1 Universal Object Graph restoration | Direct streaming from MinIO S3 bucket |\n| **Canonical CSV** | RFC 4180 CSV / WinZip AES-256 ZIP (`KAN-316`) | 16-column canonical work items | JSON-encoded custom fields; CWE-1236 neutralized | Attachment metadata linked via URLs |\n\n### Jira ADF to Canonical Markdown Conversion\n\nAtlassian Document Format (ADF) stores rich text as deeply nested JSON node trees. The Jira importer traverses these AST nodes, translating them into standard GitHub Flavored Markdown:\n- Nested bullet lists, ordered lists, and task checklists.\n- Code blocks with language syntax tags.\n- Blockquotes, callout panels, and horizontal rules.\n- Table grids with cell alignments.\n- Inline mentions, status tags, and hyperlinks.\n\nUnrecognized node types fall back safely to formatted plain text, preventing pipeline crashes during bulk migrations.\n\n---\n\n## 3. Legacy Key Alias Routing and Permalinks\n\nTo preserve external hyperlinks in pull requests, commit messages, and external tickets, \ud83d\udc4dkanban implements persistent key aliasing.\n\n### Schema and Model Architecture\n\nThe `issue_key_aliases` table (managed via `database/models/issue_alias.py` and single-head migration `p6_03_multi_source_imports_and_aliases`) records historical keys:\n\n```sql\nCREATE TABLE issue_key_aliases (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,\n    issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,\n    legacy_key VARCHAR(64) NOT NULL,\n    source_platform VARCHAR(32) NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),\n    CONSTRAINT uq_issue_key_aliases_legacy_key UNIQUE (workspace_id, legacy_key)\n);\n```\n\n### HTTP Redirection Flow\n\nWhen a user or external API client requests an issue using an obsolete key:\n1. The resolver queries `issues` by current key (`project.key + '-' + sequence_id`).\n2. If not found, it queries `issue_key_aliases` by `legacy_key` within the caller's authorized workspace.\n3. If an alias match exists, the REST API returns `HTTP 308 Permanent Redirect` with the `Location` header set to `/api/v1/issues/{canonical_key}`.\n4. The web frontend navigates smoothly to the new canonical URL without breaking user state.\n\n```mermaid\nsequenceDiagram\n    participant Client as Web Browser / API Client\n    participant API as FastAPI Issue Router (/api/v1/issues/{key})\n    participant DB as PostgreSQL (issues & issue_key_aliases)\n\n    Client->>API: GET /api/v1/issues/JIRA-101\n    API->>DB: SELECT * FROM issues WHERE key = 'JIRA-101'\n    DB-->>API: 0 rows returned\n    API->>DB: SELECT canonical_key FROM issue_key_aliases WHERE legacy_key = 'JIRA-101'\n    DB-->>API: 1 row returned ('KAN-42')\n    API-->>Client: HTTP 308 Permanent Redirect (Location: /api/v1/issues/KAN-42)\n    Client->>API: GET /api/v1/issues/KAN-42\n    API->>DB: SELECT * FROM issues WHERE key = 'KAN-42'\n    DB-->>API: Issue payload\n    API-->>Client: HTTP 200 OK\n```\n\n---\n\n## 4. Cross-Project Merge Mode (`KANBA -> KAN`)\n\nDuring organizational consolidations, teams frequently need to merge entire projects into a single target project. The cross-project merge mode executes this consolidation losslessly:\n\n### Merge Execution Steps\n1. **Entity Re-Keying:** Each issue from the source project is re-keyed to the destination project prefix (e.g. `KANBA-15` becomes `KAN-248`), with sequence numbers allocated sequentially to avoid collisions.\n2. **Alias Registration:** The original key (`KANBA-15`) is recorded in `issue_key_aliases` pointing to the new issue ID.\n3. **Object Link Rewiring:** All directional relations (`PARENT_OF`, `BLOCKS`, `RELATES_TO`) in `object_links` pointing to the old issue are updated in place.\n4. **State Taxonomy Mapping:** Workflow states from the source project are mapped to equivalent states in the target project via an interactive alignment table.\n5. **Activity Log Continuity:** Historical audit entries are preserved and appended with a merge marker documenting the consolidation event.\n\n---\n\n## 5. Canonical CSV Import, Export, and WinZip AES-256 Packaging\n\nTicket `KAN-316` establishes enterprise CSV data interchange governance across system, workspace, and role tiers:\n\n### 16 Canonical CSV Columns\n\nExports and imports follow a deterministic 16-column RFC 4180 layout:\n1. `key`: Canonical issue key (e.g. `KAN-42`).\n2. `project_key`: Target project identifier.\n3. `summary`: Concise issue title.\n4. `description_markdown`: Canonical Markdown body text.\n5. `state`: Current workflow state name.\n6. `priority`: Priority name (`urgent`, `high`, `medium`, `low`).\n7. `assignees`: Semicolon-delimited list of assignee usernames.\n8. `labels`: Semicolon-delimited list of project labels.\n9. `cycle`: Sprint cycle name or identifier.\n10. `modules`: Semicolon-delimited list of functional modules.\n11. `parent_key`: Parent issue key for hierarchical tasks.\n12. `start_date`: ISO-8601 calendar start date (`YYYY-MM-DD`).\n13. `due_date`: ISO-8601 calendar deadline date (`YYYY-MM-DD`).\n14. `created_at`: Creation timestamp with timezone.\n15. `updated_at`: Modification timestamp with timezone.\n16. `custom_fields_json`: Serialized JSON dictionary of custom field values.\n\n### CWE-1236 Formula Injection Defense\n\nSpreadsheet applications (such as Microsoft Excel and LibreOffice Calc) interpret leading characters (`=`, `+`, `-`, `@`, `\\t`, `\\r`) as executable formulas. To eliminate CSV formula injection (CWE-1236):\n- **On Export:** Any cell beginning with a formula trigger character is neutralized by prepending a single quote (`'`).\n- **On Import:** The importer strips the protective prefix (`desanitize_cell_from_import`) before storing prose in PostgreSQL.\n\n### WinZip AE-2 (AES-256) Password-Protected Packaging\n\nFor highly confidential environments, CSV archives can be exported inside WinZip AE-2 encrypted ZIP containers:\n- **Cryptographic Standard:** AES-256 in Counter Mode (CTR) with PBKDF2-HMAC-SHA256 key derivation (1000 iterations) and 10-byte HMAC-SHA256 authentication tags.\n- **Strict Password Policy:** Passwords must meet a minimum length of 12 characters.\n- **Volatile Memory Sanitization:** Cryptographic key buffers are actively zeroized (`zeroize(aes_key, hmac_key)`) in mandatory Python `finally` blocks to prevent memory residue attacks.\n- **Zip-Bomb & Path Traversal Guards:** Enforces uncompressed size ratios and validates file paths against directory escape attempts.\n\n---\n\n## 6. Step-by-Step Operator Runbook: Dry Run and Cutover\n\n### Step 1: Pre-Migration Validation and Dry Run\n\nBefore importing production data, execute a non-destructive dry run:\n\n```bash\n# Export source Plane database and MinIO media objects\npython -m scripts.export_plane_db \\\n  --db-url \"postgresql://plane:secret@plane-db:5432/plane\" \\\n  --minio-endpoint \"http://minio:9000\" \\\n  --minio-bucket \"plane-uploads\" \\\n  --output-dir \"/backups/plane-export\"\n\n# Validate export bundle integrity and print summary metrics\nkanban-ctl import plane-bundle /backups/plane-export --dry-run\n```\n\nReview the dry-run output to verify total counts for workspaces, projects, states, issues, documents, and media attachments.\n\n### Step 2: Executing Live Cutover\n\nOnce dry-run validation passes:\n\n```bash\n# Execute live import with key alias generation and media streaming\nkanban-ctl import plane-bundle /backups/plane-export \\\n  --target-workspace \"kanban\" \\\n  --target-project \"KAN\" \\\n  --record-aliases \\\n  --confirm\n```\n\n### Step 3: Post-Migration Audit and Verification\n\n1. Verify that all issues are indexed and searchable via the web interface.\n2. Test legacy URL redirection by requesting an old key in your browser (e.g. `http://localhost:8000/issues/KANBA-1`). Confirm that the browser redirects automatically to the new canonical key (`KAN-1`).\n3. Navigate to `/admin/link-auditor` and execute a scan to confirm zero orphaned object links.\n\n---\n\n## 7. Visual Reference and Studio Screenshots\n\n![Plane Import Studio Configuration](images/49-admin-plane-import-studio.png)\n\n![Plane Migration Dry-Run and Validation Results](images/71-plane-migration-dry-run.png)\n"
++    "content": "# [Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide\n\nComprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane-DB, legacy issue key alias redirection, cross-project merge mode, and canonical CSV import/export governance.\n\n---\n\n## 1. Overview and Lossless Migration Philosophy\n\nMigrating issue tracking infrastructure between legacy platforms often introduces severe data loss: rich-text formatting degrades into corrupted markup, custom field hierarchies fracture, media attachments break into dead hyperlinks, and historical issue keys (`JIRA-101`, `PROJ-42`, `GH-89`) vanish, destroying institutional knowledge and broken permalinks across pull requests and documentation.\n\n\ud83d\udc4dkanban resolves these challenges through an end-to-end, multi-source migration pipeline engineered under three core principles:\n1. **Canonical Markdown Normalization:** Ingests proprietary document trees (such as Atlassian Document Format or raw HTML) and converts them into standardized, sanitized UTF-8 Markdown with strict UTF-16 lone surrogate rejection.\n2. **Deterministic Key Alias Routing (`IssueKeyAlias`):** Retains every historical issue key from upstream systems in a dedicated alias catalog, providing automatic HTTP 301/308 redirection across REST API and web interfaces.\n3. **Lossless Media Attachment Streaming:** Streams binary assets directly from legacy object stores (e.g. MinIO or S3) through HMAC-signed media shields, preventing SSRF attacks and broken image references.\n\n```mermaid\ngraph TD\n    Sources[\"Source Platforms (Jira, GitHub, Linear, Plane-DB, CSV)\"] --> Ingestion[\"Streaming Ingestion & Sanitization Engine\"]\n    Ingestion --> MarkdownConv[\"Canonical Markdown Converter (ADF/HTML -> GFM)\"]\n    Ingestion --> MediaStream[\"HMAC Media Proxy Attachment Storage\"]\n    Ingestion --> AliasRouter[\"IssueKeyAlias Catalog (301/308 Redirection Engine)\"]\n    Ingestion --> RLSInsert[\"PostgreSQL FORCE RLS Transactional Insertion\"]\n    RLSInsert --> UniversalGraph[\"Universal Object Graph (Issues, Stickies, Docs, Links)\"]\n```\n\n---\n\n## 2. Multi-Source Importer Architecture\n\nThe migration subsystem in `kanban/importer/` provides modular importers tailored to specific platform export formats:\n\n### Supported Importers and Capability Matrix\n\n| Source Tracker | Input Format | Converted Entities | Custom Fields & Mapping | Attachment Ingestion |\n| :--- | :--- | :--- | :--- | :--- |\n| **Jira Cloud & Server/DC** | JSON export bundle / REST dump | Issues, Subtasks, Comments, Worklogs, Links | Full ADF/HTML to Markdown conversion, user account mapping | Extracted and routed through HMAC media shield |\n| **GitHub Issues** | Issues JSON export / REST API dump | Issues, Pull Request links, Milestones, Labels | Milestones mapped to Cycles; Labels mapped to ProjectLabels | Downloaded and cryptographically hashed |\n| **Linear** | Linear JSON export / CSV archive | Issues, Cycles, Modules, Relations, Triage states | State taxonomy normalization; relations mapped to object_links | Assets fetched with token authorization |\n| **Plane-DB** | PostgreSQL dump + MinIO bucket (`scripts/export_plane_db.py`) | Workspaces, Projects, States, Issues, Docs, Stickies | 1:1 Universal Object Graph restoration | Direct streaming from MinIO S3 bucket |\n| **Canonical CSV** | RFC 4180 CSV / Password-Protected ZIP (AES-256) (`KAN-316`) | 16-column canonical work items | JSON-encoded custom fields; CWE-1236 neutralized | Attachment metadata linked via URLs |\n\n### Jira ADF to Canonical Markdown Conversion\n\nAtlassian Document Format (ADF) stores rich text as deeply nested JSON node trees. The Jira importer traverses these AST nodes, translating them into standard GitHub Flavored Markdown:\n- Nested bullet lists, ordered lists, and task checklists.\n- Code blocks with language syntax tags.\n- Blockquotes, callout panels, and horizontal rules.\n- Table grids with cell alignments.\n- Inline mentions, status tags, and hyperlinks.\n\nUnrecognized node types fall back safely to formatted plain text, preventing pipeline crashes during bulk migrations.\n\n---\n\n## 3. Legacy Key Alias Routing and Permalinks\n\nTo preserve external hyperlinks in pull requests, commit messages, and external tickets, \ud83d\udc4dkanban implements persistent key aliasing.\n\n### Schema and Model Architecture\n\nThe `issue_key_aliases` table (managed via `database/models/issue_alias.py` and single-head migration `p6_03_multi_source_imports_and_aliases`) records historical keys:\n\n```sql\nCREATE TABLE issue_key_aliases (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,\n    issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,\n    legacy_key VARCHAR(64) NOT NULL,\n    source_platform VARCHAR(32) NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),\n    CONSTRAINT uq_issue_key_aliases_legacy_key UNIQUE (workspace_id, legacy_key)\n);\n```\n\n### HTTP Redirection Flow\n\nWhen a user or external API client requests an issue using an obsolete key:\n1. The resolver queries `issues` by current key (`project.key + '-' + sequence_id`).\n2. If not found, it queries `issue_key_aliases` by `legacy_key` within the caller's authorized workspace.\n3. If an alias match exists, the REST API returns `HTTP 308 Permanent Redirect` with the `Location` header set to `/api/v1/issues/{canonical_key}`.\n4. The web frontend navigates smoothly to the new canonical URL without breaking user state.\n\n```mermaid\nsequenceDiagram\n    participant Client as Web Browser / API Client\n    participant API as FastAPI Issue Router (/api/v1/issues/{key})\n    participant DB as PostgreSQL (issues & issue_key_aliases)\n\n    Client->>API: GET /api/v1/issues/JIRA-101\n    API->>DB: SELECT * FROM issues WHERE key = 'JIRA-101'\n    DB-->>API: 0 rows returned\n    API->>DB: SELECT canonical_key FROM issue_key_aliases WHERE legacy_key = 'JIRA-101'\n    DB-->>API: 1 row returned ('KAN-42')\n    API-->>Client: HTTP 308 Permanent Redirect (Location: /api/v1/issues/KAN-42)\n    Client->>API: GET /api/v1/issues/KAN-42\n    API->>DB: SELECT * FROM issues WHERE key = 'KAN-42'\n    DB-->>API: Issue payload\n    API-->>Client: HTTP 200 OK\n```\n\n---\n\n## 4. Cross-Project Merge Mode (`KANBA -> KAN`)\n\nDuring organizational consolidations, teams frequently need to merge entire projects into a single target project. The cross-project merge mode executes this consolidation losslessly:\n\n### Merge Execution Steps\n1. **Entity Re-Keying:** Each issue from the source project is re-keyed to the destination project prefix (e.g. `KANBA-15` becomes `KAN-248`), with sequence numbers allocated sequentially to avoid collisions.\n2. **Alias Registration:** The original key (`KANBA-15`) is recorded in `issue_key_aliases` pointing to the new issue ID.\n3. **Object Link Rewiring:** All directional relations (`PARENT_OF`, `BLOCKS`, `RELATES_TO`) in `object_links` pointing to the old issue are updated in place.\n4. **State Taxonomy Mapping:** Workflow states from the source project are mapped to equivalent states in the target project via an interactive alignment table.\n5. **Activity Log Continuity:** Historical audit entries are preserved and appended with a merge marker documenting the consolidation event.\n\n---\n\n## 5. Canonical CSV Import, Export, and Password-Protected ZIP (AES-256) Packaging\n\nTicket `KAN-316` establishes enterprise CSV data interchange governance across system, workspace, and role tiers:\n\n### 16 Canonical CSV Columns\n\nExports and imports follow a deterministic 16-column RFC 4180 layout:\n1. `key`: Canonical issue key (e.g. `KAN-42`).\n2. `project_key`: Target project identifier.\n3. `summary`: Concise issue title.\n4. `description_markdown`: Canonical Markdown body text.\n5. `state`: Current workflow state name.\n6. `priority`: Priority name (`urgent`, `high`, `medium`, `low`).\n7. `assignees`: Semicolon-delimited list of assignee usernames.\n8. `labels`: Semicolon-delimited list of project labels.\n9. `cycle`: Sprint cycle name or identifier.\n10. `modules`: Semicolon-delimited list of functional modules.\n11. `parent_key`: Parent issue key for hierarchical tasks.\n12. `start_date`: ISO-8601 calendar start date (`YYYY-MM-DD`).\n13. `due_date`: ISO-8601 calendar deadline date (`YYYY-MM-DD`).\n14. `created_at`: Creation timestamp with timezone.\n15. `updated_at`: Modification timestamp with timezone.\n16. `custom_fields_json`: Serialized JSON dictionary of custom field values.\n\n### CWE-1236 Formula Injection Defense\n\nSpreadsheet applications (such as Microsoft Excel and LibreOffice Calc) interpret leading characters (`=`, `+`, `-`, `@`, `\\t`, `\\r`) as executable formulas. To eliminate CSV formula injection (CWE-1236):\n- **On Export:** Any cell beginning with a formula trigger character is neutralized by prepending a single quote (`'`).\n- **On Import:** The importer strips the protective prefix (`desanitize_cell_from_import`) before storing prose in PostgreSQL.\n\n### Password-Protected ZIP (AES-256) Packaging\n\nFor highly confidential environments, CSV archives can be exported inside password-protected ZIP (AES-256) containers:\n- **Cryptographic Standard:** AES-256 in Counter Mode (CTR) with PBKDF2-HMAC-SHA256 key derivation (1000 iterations) and 10-byte HMAC-SHA256 authentication tags.\n- **Strict Password Policy:** Passwords must meet a minimum length of 12 characters.\n- **Volatile Memory Sanitization:** Cryptographic key buffers are actively zeroized (`zeroize(aes_key, hmac_key)`) in mandatory Python `finally` blocks to prevent memory residue attacks.\n- **Zip-Bomb & Path Traversal Guards:** Enforces uncompressed size ratios and validates file paths against directory escape attempts.\n\n---\n\n## 6. Step-by-Step Operator Runbook: Dry Run and Cutover\n\n### Step 1: Pre-Migration Validation and Dry Run\n\nBefore importing production data, execute a non-destructive dry run:\n\n```bash\n# Export source Plane database and MinIO media objects\npython -m scripts.export_plane_db \\\n  --db-url \"postgresql://plane:secret@plane-db:5432/plane\" \\\n  --minio-endpoint \"http://minio:9000\" \\\n  --minio-bucket \"plane-uploads\" \\\n  --output-dir \"/backups/plane-export\"\n\n# Validate export bundle integrity and print summary metrics\nkanban-ctl import plane-bundle /backups/plane-export --dry-run\n```\n\nReview the dry-run output to verify total counts for workspaces, projects, states, issues, documents, and media attachments.\n\n### Step 2: Executing Live Cutover\n\nOnce dry-run validation passes:\n\n```bash\n# Execute live import with key alias generation and media streaming\nkanban-ctl import plane-bundle /backups/plane-export \\\n  --target-workspace \"kanban\" \\\n  --target-project \"KAN\" \\\n  --record-aliases \\\n  --confirm\n```\n\n### Step 3: Post-Migration Audit and Verification\n\n1. Verify that all issues are indexed and searchable via the web interface.\n2. Test legacy URL redirection by requesting an old key in your browser (e.g. `http://localhost:8000/issues/KANBA-1`). Confirm that the browser redirects automatically to the new canonical key (`KAN-1`).\n3. Navigate to `/admin/link-auditor` and execute a scan to confirm zero orphaned object links.\n\n---\n\n## 7. Visual Reference and Studio Screenshots\n\n![Plane Import Studio Configuration](images/49-admin-plane-import-studio.png)\n\n![Plane Migration Dry-Run and Validation Results](images/71-plane-migration-dry-run.png)\n"
+   },
+   {
+     "slug": "production-promotion-and-backup-runbook",
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index c455e897..760469b6 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -1111,7 +1111,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                     }}
+                   />
+                   <span className="kb-toggle-text">
+-                    Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
++                    Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)
+                   </span>
+                 </label>
+               </div>
+@@ -1130,7 +1130,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                     }}
+                   />
+                   <span className="kb-toggle-text">
+-                    Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
++                    Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)
+                   </span>
+                 </label>
+               </div>
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index e0a330dc..850d3be6 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -2696,4 +2696,38 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     fireEvent.click(toggleBtn);
+     expect(advSection.hasAttribute('open')).toBe(false);
+   });
++
++  it('renders trademark-free copy for CSV and password-protected ZIP export/import governance toggles (KAN-373)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      if (url.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true };
++      }
++      if (url.includes('/api/v1/admin/workspace-settings')) {
++        return {
++          id: 'ws-123',
++          name: 'Main Workspace',
++          slug: 'main-ws',
++          issue_export_enabled: true,
++          issue_import_enabled: true,
++        };
++      }
++      return [];
++    });
++
++    renderComponent();
++
++    expect(
++      await screen.findByText(
++        'Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)',
++      ),
++    ).toBeDefined();
++    expect(
++      screen.getByText(
++        'Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)',
++      ),
++    ).toBeDefined();
++    expect(screen.queryByText(/WinZip/i)).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/views/CsvImportExportModal.tsx b/kanban/web/src/features/views/CsvImportExportModal.tsx
+index d1efe966..264c1f61 100644
+--- a/kanban/web/src/features/views/CsvImportExportModal.tsx
++++ b/kanban/web/src/features/views/CsvImportExportModal.tsx
+@@ -1,8 +1,8 @@
+ /**
+- * CSV & WinZip AES-256 Import, Export and Download Template Modal (KAN-316).
++ * CSV & Password-Protected ZIP (AES-256) Import, Export and Download Template Modal (KAN-316).
+  *
+  * Provides:
+- * 1. Export Tab: CSV or WinZip AES-256 encrypted ZIP with active filter reflection.
++ * 1. Export Tab: CSV or Password-Protected ZIP (AES-256) encrypted ZIP with active filter reflection.
+  * 2. Import Tab: Download Template, file drop, Dry-Run preview diff table, and atomic commit.
+  * 3. 3-tier governance error decoding and minimum 12-char password enforcement.
+  */
+@@ -203,7 +203,7 @@ export function CsvImportExportModal({
+   const handleRunImport = async (dryRun: boolean): Promise<void> => {
+     /* v8 ignore next 4 */
+     if (!importFile) {
+-      setErrorMessage('Please select a CSV or WinZip AES-256 ZIP file.');
++      setErrorMessage('Please select a CSV or password-protected ZIP (AES-256) file.');
+       return;
+     }
+ 
+@@ -366,7 +366,7 @@ export function CsvImportExportModal({
+                       data-testid="export-format-zip"
+                     />
+                     <div>
+-                      <strong>WinZip AES-256 Encrypted ZIP</strong>
++                      <strong>Password-Protected ZIP (AES-256)</strong>
+                       <span className="kb-csv-modal-radio-desc">
+                         Industry standard AE-2 encrypted container (AES-256-CTR with PBKDF2 and HMAC-SHA256).
+                       </span>
+@@ -424,7 +424,7 @@ export function CsvImportExportModal({
+           {activeTab === 'import' && (
+             <div className="kb-csv-modal-section">
+               <p className="kb-csv-modal-desc">
+-                Import issues from CSV or password-protected WinZip AE-2 container. Run a dry run to inspect changes before committing.
++                Import issues from CSV or password-protected ZIP (AES-256) archive. Run a dry run to inspect changes before committing.
+               </p>
+ 
+               <div className="kb-csv-modal-field">
+diff --git a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+index 85b62b2e..2504393d 100644
+--- a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
++++ b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+@@ -55,6 +55,8 @@ describe('CsvImportExportModal (KAN-316)', () => {
+ 
+     // 2. WinZip AES-256 ZIP export on workspace fallback (empty projectKey)
+     rerender(<CsvImportExportModal {...defaultProps} projectKey="" />);
++    expect(screen.getByText('Password-Protected ZIP (AES-256)')).toBeDefined();
++    expect(screen.queryByText(/WinZip/i)).toBeNull();
+     fireEvent.click(screen.getByTestId('export-format-zip'));
+     fireEvent.change(screen.getByTestId('export-zip-password-input'), {
+       target: { value: 'super-secure-long-password-123' },
+@@ -144,6 +146,12 @@ describe('CsvImportExportModal (KAN-316)', () => {
+     vi.stubGlobal('fetch', fetchMock);
+ 
+     render(<CsvImportExportModal {...defaultProps} initialTab="import" />);
++    expect(
++      screen.getByText(
++        /Import issues from CSV or password-protected ZIP \(AES-256\) archive/,
++      ),
++    ).toBeDefined();
++    expect(screen.queryByText(/WinZip/i)).toBeNull();
+ 
+     const fileInput = screen.getByTestId('import-file-input');
+     const dropzone = fileInput.parentElement;

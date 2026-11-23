@@ -887,8 +887,11 @@ def test_zip_packaging_tampering_and_corrupt_headers() -> None:
     # in central directory, method is at cd_offset + 10 (2 bytes)
     non_aes[cd_offset + 10] = 0x00
     non_aes[cd_offset + 11] = 0x00
-    with pytest.raises(ValueError, match="not encrypted with WinZip AES"):
+    with pytest.raises(
+        ValueError, match="not encrypted with AES-256 password-protected ZIP"
+    ) as exc_info:
         read_aes256_zip(bytes(non_aes), pw)
+    assert "WinZip" not in str(exc_info.value)
 
 
 def test_sandbox_custom_parameters_and_toc_skip() -> None:

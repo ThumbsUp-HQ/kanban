@@ -32,6 +32,7 @@ import io
 import struct
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -928,3 +929,44 @@ async def test_process_issue_import_summary_secret(
     report = res.json()
     assert report["error_count"] > 0
     assert any("summary" in e["column"] for e in report["errors"])
+
+
+def test_openapi_and_api_zero_winzip_trademark() -> None:
+    """Verify zero user-facing 'WinZip' copy in OpenAPI spec and issue CSV route descriptions (KAN-373)."""
+    from kanban.app import create_app
+
+    app = create_app()
+    openapi = app.openapi()
+
+    # Check issue export and import endpoints
+    export_proj = openapi["paths"]["/api/v1/projects/{project_ref}/issues/export"]["post"]
+    assert "WinZip" not in export_proj["summary"]
+    assert "WinZip" not in export_proj["description"]
+    assert "Password-protected ZIP (AES-256)" in export_proj["summary"]
+    assert "Password-protected ZIP (AES-256)" in export_proj["description"]
+
+    export_ws = openapi["paths"]["/api/v1/workspaces/{workspace_ref}/issues/export"]["post"]
+    assert "WinZip" not in export_ws["summary"]
+    assert "WinZip" not in export_ws["description"]
+    assert "Password-protected ZIP (AES-256)" in export_ws["summary"]
+    assert "Password-protected ZIP (AES-256)" in export_ws["description"]
+
+    import_proj = openapi["paths"]["/api/v1/projects/{project_ref}/issues/import"]["post"]
+    assert "WinZip" not in import_proj["summary"]
+    assert "WinZip" not in import_proj["description"]
+    assert "Password-protected ZIP (AES-256)" in import_proj["summary"]
+    assert "Password-protected ZIP (AES-256)" in import_proj["description"]
+
+    export_req_schema = openapi["components"]["schemas"]["IssueExportRequest"]
+    assert "WinZip" not in export_req_schema["properties"]["format"]["description"]
+    assert (
+        "Password-protected ZIP (AES-256)"
+        in export_req_schema["properties"]["format"]["description"]
+    )
+
+    # Also verify static kanban/web/openapi.json
+    openapi_file = Path(__file__).parents[1] / "web" / "openapi.json"
+    if openapi_file.exists():
+        content = openapi_file.read_text(encoding="utf-8")
+        assert "winzip" not in content.lower()
+

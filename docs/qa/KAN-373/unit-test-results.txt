@@ -1,0 +1,87 @@
+=== Pytest: test_issue_csv_import_export.py & test_jinja_reports.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan373-2dfe0705/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan373-2dfe0705
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 58 items
+
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_password_policy PASSED [  1%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_roundtrip_deflate PASSED [  3%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_wrong_password PASSED [  5%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_missing_password PASSED [  6%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_tampered_ciphertext PASSED [  8%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_path_traversal PASSED [ 10%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_zipbomb_protection PASSED [ 12%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_zeroize PASSED [ 13%]
+kanban/tests/test_issue_csv_import_export.py::test_cwe_1236_formula_injection_defense PASSED [ 15%]
+kanban/tests/test_issue_csv_import_export.py::test_utf16_lone_surrogate_rejection PASSED [ 17%]
+kanban/tests/test_issue_csv_import_export.py::test_generate_issue_import_template PASSED [ 18%]
+kanban/tests/test_issue_csv_import_export.py::test_export_issues_to_csv PASSED [ 20%]
+kanban/tests/test_issue_csv_import_export.py::test_api_template_endpoints PASSED [ 22%]
+kanban/tests/test_issue_csv_import_export.py::test_api_export_csv_and_zip PASSED [ 24%]
+kanban/tests/test_issue_csv_import_export.py::test_api_export_governance_tiers PASSED [ 25%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_governance_tiers PASSED [ 27%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_csv_dry_run_and_commit PASSED [ 29%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_winzip_aes256_encrypted_zip PASSED [ 31%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_secret_detection PASSED [ 32%]
+kanban/tests/test_issue_csv_import_export.py::test_api_admin_system_settings PASSED [ 34%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_corrupt_payload_guards PASSED [ 36%]
+kanban/tests/test_issue_csv_import_export.py::test_unencrypted_zip_extraction PASSED [ 37%]
+kanban/tests/test_issue_csv_import_export.py::test_parse_issues_from_csv_bytes_and_empty_rows PASSED [ 39%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_update_existing_and_validation_errors PASSED [ 41%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_unknown_state_priority_and_custom_fields PASSED [ 43%]
+kanban/tests/test_issue_csv_import_export.py::test_api_import_with_labels_and_modules PASSED [ 44%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_zeroize_readonly PASSED [ 46%]
+kanban/tests/test_issue_csv_import_export.py::test_winzip_aes256_corrupt_bounds_and_methods PASSED [ 48%]
+kanban/tests/test_issue_csv_import_export.py::test_unsupported_compression_methods PASSED [ 50%]
+kanban/tests/test_issue_csv_import_export.py::test_process_issue_import_summary_secret PASSED [ 51%]
+kanban/tests/test_issue_csv_import_export.py::test_openapi_and_api_zero_winzip_trademark PASSED [ 53%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_blocks_forbidden_attributes PASSED [ 55%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_template_size_limit PASSED [ 56%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_output_size_limit PASSED [ 58%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_timeout_limit PASSED [ 60%]
+kanban/tests/test_jinja_reports.py::test_toc_and_issues_table_generation PASSED [ 62%]
+kanban/tests/test_jinja_reports.py::test_build_report_stats PASSED       [ 63%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_aes256_roundtrip PASSED [ 65%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_aes256_wrong_password PASSED [ 67%]
+kanban/tests/test_jinja_reports.py::test_formula_injection_neutralization PASSED [ 68%]
+kanban/tests/test_jinja_reports.py::test_render_markdown_and_html_sanitization PASSED [ 70%]
+kanban/tests/test_jinja_reports.py::test_render_csv_and_xlsx PASSED      [ 72%]
+kanban/tests/test_jinja_reports.py::test_render_docx_and_odt PASSED      [ 74%]
+kanban/tests/test_jinja_reports.py::test_render_pdf_passes_sanitizer PASSED [ 75%]
+kanban/tests/test_jinja_reports.py::test_render_report_bundle_all_formats PASSED [ 77%]
+kanban/tests/test_jinja_reports.py::test_builtin_presets_syntax_and_rendering PASSED [ 79%]
+kanban/tests/test_jinja_reports.py::test_report_templates_crud_api PASSED [ 81%]
+kanban/tests/test_jinja_reports.py::test_preview_report_api PASSED       [ 82%]
+kanban/tests/test_jinja_reports.py::test_generate_report_workspace_and_project_api PASSED [ 84%]
+kanban/tests/test_jinja_reports.py::test_3_tier_governance_enforcement PASSED [ 86%]
+kanban/tests/test_jinja_reports.py::test_docx_and_odt_comprehensive_formatting PASSED [ 87%]
+kanban/tests/test_jinja_reports.py::test_render_csv_custom_columns PASSED [ 89%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_single_file_and_error_branches PASSED [ 91%]
+kanban/tests/test_jinja_reports.py::test_sandbox_and_stats_edge_cases PASSED [ 93%]
+kanban/tests/test_jinja_reports.py::test_reports_api_syntax_and_not_found_branches PASSED [ 94%]
+kanban/tests/test_jinja_reports.py::test_renderers_deep_coverage PASSED  [ 96%]
+kanban/tests/test_jinja_reports.py::test_zip_packaging_tampering_and_corrupt_headers PASSED [ 98%]
+kanban/tests/test_jinja_reports.py::test_sandbox_custom_parameters_and_toc_skip PASSED [100%]
+
+============================= 58 passed in 16.11s ==============================
+
+=== Vitest: CsvImportExportModal.test.tsx & WorkspaceSettingsPage.test.tsx ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan373-2dfe0705/kanban/web
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/views/__tests__/CsvImportExportModal.test.tsx (5 tests) 266ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (37 tests) 2840ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (37)
+     ✓ renders workspace settings page and updates workspace name and slug 350ms
+
+ Test Files  2 passed (2)
+      Tests  42 passed (42)
+   Start at  10:45:58
+   Duration  4.07s (tests 61%, environment 30%, import 6%, transform 1%)
+

@@ -2696,4 +2696,38 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.click(toggleBtn);
     expect(advSection.hasAttribute('open')).toBe(false);
   });
+
+  it('renders trademark-free copy for CSV and password-protected ZIP export/import governance toggles (KAN-373)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url = path;
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return {
+          id: 'ws-123',
+          name: 'Main Workspace',
+          slug: 'main-ws',
+          issue_export_enabled: true,
+          issue_import_enabled: true,
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    expect(
+      await screen.findByText(
+        'Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)',
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        'Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)',
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/WinZip/i)).toBeNull();
+  });
 });
