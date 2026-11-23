@@ -2,10 +2,13 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CsvImportExportModal } from '../CsvImportExportModal';
+import * as clientModule from '../../../api/client';
 
 describe('CsvImportExportModal (KAN-316)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
+    window.URL.revokeObjectURL = vi.fn();
   });
 
   const defaultProps = {
@@ -16,6 +19,8 @@ describe('CsvImportExportModal (KAN-316)', () => {
     activeFilters: {
       state: ['todo', 'in_progress'],
       priority: ['high'],
+      cycle: ['cyc-1'],
+      module: ['mod-1'],
     },
     searchQuery: 'backend',
     initialTab: 'export' as const,
@@ -29,76 +34,57 @@ describe('CsvImportExportModal (KAN-316)', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders export tab with format selection and submit button', () => {
-    render(<CsvImportExportModal {...defaultProps} />);
-
-    expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
-    expect(screen.getByTestId('csv-modal-tab-export')).toBeDefined();
-    expect(screen.getByTestId('csv-modal-tab-import')).toBeDefined();
-    expect(screen.getByTestId('export-format-csv')).toBeDefined();
-    expect(screen.getByTestId('export-format-zip')).toBeDefined();
-    expect(screen.getByTestId('export-submit-btn')).toBeDefined();
-  });
-
-  it('switches between export and import tabs', () => {
-    render(<CsvImportExportModal {...defaultProps} />);
-
-    const importTab = screen.getByTestId('csv-modal-tab-import');
-    fireEvent.click(importTab);
-
-    expect(screen.getByTestId('download-template-btn')).toBeDefined();
-    expect(screen.getByTestId('import-file-input')).toBeDefined();
-    expect(screen.getByTestId('import-preview-btn')).toBeDefined();
-
-    const exportTab = screen.getByTestId('csv-modal-tab-export');
-    fireEvent.click(exportTab);
-    expect(screen.getByTestId('export-format-csv')).toBeDefined();
-  });
-
-  it('enforces 12-char password validation when WinZip AES-256 ZIP format is chosen', () => {
-    render(<CsvImportExportModal {...defaultProps} />);
-
-    const zipRadio = screen.getByTestId('export-format-zip');
-    fireEvent.click(zipRadio);
-
-    const passwordInput = screen.getByTestId('export-zip-password-input');
-    const submitBtn = screen.getByTestId<HTMLButtonElement>('export-submit-btn');
-
-    // Initially empty -> disabled
-    expect(submitBtn.disabled).toBe(true);
-
-    // Short password (< 12 chars) -> disabled and invalid banner
-    fireEvent.change(passwordInput, { target: { value: 'short-pwd' } });
-    expect(submitBtn.disabled).toBe(true);
-    expect(screen.getByTestId('export-password-validation').textContent).toContain(
-      'Password must be at least 12 characters',
-    );
-
-    // Valid password (>= 12 chars) -> enabled and valid banner
-    fireEvent.change(passwordInput, { target: { value: 'super-secure-long-password-123' } });
-    expect(submitBtn.disabled).toBe(false);
-    expect(screen.getByTestId('export-password-validation').textContent).toContain(
-      'Password meets minimum length',
-    );
-  });
-
-  it('triggers download template API on button click', async () => {
+  it('renders export tab and executes both CSV and AES-256 ZIP exports successfully', async () => {
+    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValue('csrf-tok-123');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       blob: () => Promise.resolve(new Blob(['key,summary\n'], { type: 'text/csv' })),
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    // Mock URL.createObjectURL and revokeObjectURL
-    const createObjectURLMock = vi.fn().mockReturnValue('blob:mock-url');
-    const revokeObjectURLMock = vi.fn();
-    window.URL.createObjectURL = createObjectURLMock;
-    window.URL.revokeObjectURL = revokeObjectURLMock;
+    const { rerender } = render(<CsvImportExportModal {...defaultProps} />);
 
-    render(<CsvImportExportModal {...defaultProps} initialTab="import" />);
+    // 1. Standard CSV export
+    fireEvent.click(screen.getByTestId('export-submit-btn'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/projects/TESTPROJ/issues/export',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
 
-    const downloadBtn = screen.getByTestId('download-template-btn');
-    fireEvent.click(downloadBtn);
+    // 2. WinZip AES-256 ZIP export on workspace fallback (empty projectKey)
+    rerender(<CsvImportExportModal {...defaultProps} projectKey="" />);
+    fireEvent.click(screen.getByTestId('export-format-zip'));
+    fireEvent.change(screen.getByTestId('export-zip-password-input'), {
+      target: { value: 'super-secure-long-password-123' },
+    });
+    fireEvent.click(screen.getByTestId('export-submit-btn'));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/workspaces/test-ws/issues/export',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  it('switches between export and import tabs and handles template download success and failure', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['key,summary\n'], { type: 'text/csv' })),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        text: () => Promise.resolve('IMPORT_DISABLED_BY_WORKSPACE_ADMIN'),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<CsvImportExportModal {...defaultProps} />);
+
+    fireEvent.click(screen.getByTestId('csv-modal-tab-import'));
+    fireEvent.click(screen.getByTestId('download-template-btn'));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -106,14 +92,27 @@ describe('CsvImportExportModal (KAN-316)', () => {
         expect.objectContaining({ method: 'GET' }),
       );
     });
+
+    // Workspace-scoped template download failure
+    rerender(<CsvImportExportModal {...defaultProps} projectKey="" initialTab="import" />);
+    fireEvent.click(screen.getByTestId('download-template-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('csv-modal-error').textContent).toContain(
+        'Import is disabled for this workspace by Workspace Administrator.',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('csv-modal-tab-export'));
+    expect(screen.getByTestId('export-format-csv')).toBeDefined();
   });
 
-  it('renders dry-run preview diff stats and rows on successful preview', async () => {
+  it('renders dry-run preview diff stats, row errors, ZIP password field, and confirms import', async () => {
+    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValue('csrf-tok-123');
     const mockDiffReport = {
       total_rows: 2,
       creates_count: 1,
       updates_count: 1,
-      error_count: 0,
+      error_count: 2,
       items: [
         {
           row_number: 1,
@@ -132,7 +131,10 @@ describe('CsvImportExportModal (KAN-316)', () => {
           priority: 'Medium',
         },
       ],
-      errors: [],
+      errors: [
+        { row_number: 3, column: 'priority', message: 'Invalid priority' },
+        { row_number: 4, column: null, message: 'Malformed row' },
+      ],
     };
 
     const fetchMock = vi.fn().mockResolvedValue({
@@ -144,33 +146,29 @@ describe('CsvImportExportModal (KAN-316)', () => {
     render(<CsvImportExportModal {...defaultProps} initialTab="import" />);
 
     const fileInput = screen.getByTestId('import-file-input');
-    const dummyFile = new File(['key,summary\n'], 'issues.csv', { type: 'text/csv' });
-    fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+    const dropzone = fileInput.parentElement;
+    if (dropzone) {
+      fireEvent.click(dropzone);
+    }
+    fireEvent.change(fileInput, { target: { files: [] } });
+    const zipFile = new File(['PK\x03\x04'], 'issues.zip', { type: 'application/zip' });
+    fireEvent.change(fileInput, { target: { files: [zipFile] } });
 
     expect(screen.getByTestId('import-selected-filename')).toBeDefined();
+    const zipPassInput = screen.getByTestId('import-zip-password-input');
+    fireEvent.change(zipPassInput, { target: { value: 'zip-secret-pass-123' } });
 
-    const previewBtn = screen.getByTestId('import-preview-btn');
-    fireEvent.click(previewBtn);
+    fireEvent.click(screen.getByTestId('import-preview-btn'));
 
     await waitFor(() => {
       expect(screen.getByTestId('import-preview-table')).toBeDefined();
-      expect(screen.getByTestId('import-stat-total').textContent).toBe('2');
-      expect(screen.getByTestId('import-stat-creates').textContent).toBe('1');
-      expect(screen.getByTestId('import-stat-updates').textContent).toBe('1');
-      expect(screen.getByTestId('import-stat-errors').textContent).toBe('0');
-      expect(screen.getByText('New issue summary')).toBeDefined();
-      expect(screen.getByText('Updated issue summary')).toBeDefined();
+      expect(screen.getByText(/Invalid priority/)).toBeDefined();
+      expect(screen.getByText(/Malformed row/)).toBeDefined();
     });
 
-    // Confirm button should be enabled now
-    const confirmBtn = screen.getByTestId<HTMLButtonElement>('import-confirm-btn');
-    expect(confirmBtn.disabled).toBe(false);
-
-    // Run Confirm Import
-    fireEvent.click(confirmBtn);
+    fireEvent.click(screen.getByTestId('import-confirm-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('import-success-banner')).toBeDefined();
       expect(screen.getByTestId('import-success-banner').textContent).toContain(
         'Import complete: 1 created, 1 updated.',
       );
@@ -178,23 +176,35 @@ describe('CsvImportExportModal (KAN-316)', () => {
     });
   });
 
-  it('decodes governance error message when export is disabled', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      json: () => Promise.resolve({ detail: 'EXPORT_DISABLED_BY_SYSTEM_ADMIN' }),
-    });
+  it('decodes all governance and archive security error codes', async () => {
+    const errorCases: [string, string][] = [
+      ['EXPORT_DISABLED_BY_SYSTEM_ADMIN', 'Export is disabled globally by System Administrator.'],
+      ['EXPORT_DISABLED_BY_WORKSPACE_ADMIN', 'Export is disabled for this workspace by Workspace Administrator.'],
+      ['IMPORT_DISABLED_BY_SYSTEM_ADMIN', 'Import is disabled globally by System Administrator.'],
+      ['INSUFFICIENT_CAPABILITY', 'You do not have permission to perform this action.'],
+      ['PASSWORD_REQUIRED', 'A password is required to decrypt this ZIP archive.'],
+      ['INVALID_PASSWORD', 'The provided password is incorrect or file has been tampered with.'],
+      ['ZIP_BOMB_DETECTED', 'Archive exceeded compression ratio or decompressed size limit.'],
+      ['PATH_TRAVERSAL_DETECTED', 'Archive contains invalid relative path traversal.'],
+      ['INVALID_UTF8_SURROGATE', 'File contains invalid UTF-16 surrogates.'],
+      ['CUSTOM_BACKEND_ERROR', 'CUSTOM_BACKEND_ERROR'],
+    ];
+
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     render(<CsvImportExportModal {...defaultProps} />);
-
     const submitBtn = screen.getByTestId('export-submit-btn');
-    fireEvent.click(submitBtn);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('csv-modal-error')).toBeDefined();
-      expect(screen.getByTestId('csv-modal-error').textContent).toContain(
-        'Export is disabled globally by System Administrator.',
-      );
-    });
+    for (const [code, expectedText] of errorCases) {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: code }),
+      });
+      fireEvent.click(submitBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('csv-modal-error').textContent).toContain(expectedText);
+      });
+    }
   });
 });

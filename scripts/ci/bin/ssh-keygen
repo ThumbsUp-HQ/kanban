@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+"""OpenSSH PROTOCOL.sshsig-compatible Ed25519 ssh-keygen for hermetic CI containers."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import struct
+import sys
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
+
+SSH_ED25519_HEADER = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20"
+SSHSIG_MAGIC = b"SSHSIG"
+
+
+def _ssh_str(data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + data
+
+
+def _read_ssh_str(buf: bytes, offset: int) -> tuple[bytes, int]:
+    (length,) = struct.unpack(">I", buf[offset : offset + 4])
+    start = offset + 4
+    return buf[start : start + length], start + length
+
+
+def _wire_pubkey(raw_pub_32: bytes) -> bytes:
+    return SSH_ED25519_HEADER + raw_pub_32
+
+
+def _fingerprint(wire_pk: bytes) -> str:
+    digest = hashlib.sha256(wire_pk).digest()
+    return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
+
+
+def _build_sshsig_signed_data(namespace: str, message: bytes) -> bytes:
+    h = hashlib.sha512(message).digest()
+    return (
+        SSHSIG_MAGIC
+        + _ssh_str(namespace.encode("utf-8"))
+        + _ssh_str(b"")
+        + _ssh_str(b"sha512")
+        + _ssh_str(h)
+    )
+
+
+def _encode_sshsig_blob(wire_pk: bytes, namespace: str, raw_sig: bytes) -> bytes:
+    sig_inner = _ssh_str(b"ssh-ed25519") + _ssh_str(raw_sig)
+    return (
+        SSHSIG_MAGIC
+        + struct.pack(">I", 1)
+        + _ssh_str(wire_pk)
+        + _ssh_str(namespace.encode("utf-8"))
+        + _ssh_str(b"")
+        + _ssh_str(b"sha512")
+        + _ssh_str(sig_inner)
+    )
+
+
+def _parse_sig_file(sig_path: Path) -> tuple[bytes, str, bytes]:
+    lines = [
+        ln.strip()
+        for ln in sig_path.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.strip().startswith("-----")
+    ]
+    blob = base64.b64decode("".join(lines))
+    if not blob.startswith(SSHSIG_MAGIC):
+        msg = "Invalid SSHSIG magic"
+        raise ValueError(msg)
+    offset = 6
+    (version,) = struct.unpack(">I", blob[offset : offset + 4])
+    if version != 1:
+        msg = f"Unsupported SSHSIG version: {version}"
+        raise ValueError(msg)
+    offset += 4
+    wire_pk, offset = _read_ssh_str(blob, offset)
+    ns_bytes, offset = _read_ssh_str(blob, offset)
+    _reserved, offset = _read_ssh_str(blob, offset)
+    _hash_alg, offset = _read_ssh_str(blob, offset)
+    sig_inner, offset = _read_ssh_str(blob, offset)
+    _sig_type, inner_off = _read_ssh_str(sig_inner, 0)
+    raw_sig, _ = _read_ssh_str(sig_inner, inner_off)
+    return wire_pk, ns_bytes.decode("utf-8"), raw_sig
+
+
+def _parse_allowed_signers(path: Path) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    if not path.is_file():
+        return entries
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        for idx, tok in enumerate(parts):
+            if tok == "ssh-ed25519" and idx >= 1 and idx + 1 < len(parts):
+                principals = parts[0]
+                b64_pk = parts[idx + 1]
+                for p in principals.split(","):
+                    if p.strip():
+                        entries.append((p.strip(), b64_pk.strip()))
+                break
+    return entries
+
+
+def _get_opt(args: list[str], flag: str) -> str | None:
+    for i, a in enumerate(args):
+        if a == flag and i + 1 < len(args):
+            return args[i + 1]
+        if a.startswith(flag) and len(a) > len(flag) and flag in ("-f", "-n", "-s", "-I", "-C"):
+            return a[len(flag) :]
+    return None
+
+
+def _cmd_keygen(args: list[str]) -> int:
+    key_file_str = _get_opt(args, "-f")
+    if not key_file_str:
+        sys.stderr.write("ssh-keygen: missing -f key_path\n")
+        return 1
+    comment = _get_opt(args, "-C") or ""
+    key_path = Path(key_file_str)
+    priv = Ed25519PrivateKey.generate()
+    pem_priv = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    openssh_pub = (
+        priv.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH,
+        )
+        .decode("ascii")
+    )
+    key_path.write_bytes(pem_priv)
+    key_path.chmod(0o600)
+    pub_line = f"{openssh_pub} {comment}".strip() + "\n"
+    Path(f"{key_path}.pub").write_text(pub_line, encoding="utf-8")
+    return 0
+
+
+def _load_privkey(key_path: Path) -> tuple[Ed25519PrivateKey, bytes]:
+    actual = key_path
+    if actual.suffix == ".pub" and actual.with_suffix("").is_file():
+        actual = actual.with_suffix("")
+    loaded = serialization.load_ssh_private_key(actual.read_bytes(), password=None)
+    if not isinstance(loaded, Ed25519PrivateKey):
+        msg = "Only Ed25519 keys are supported"
+        raise TypeError(msg)
+    raw_pub = loaded.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return loaded, _wire_pubkey(raw_pub)
+
+
+def _cmd_sign(args: list[str]) -> int:
+    key_file_str = _get_opt(args, "-f")
+    namespace = _get_opt(args, "-n") or "git"
+    if not key_file_str:
+        sys.stderr.write("ssh-keygen -Y sign: missing -f\n")
+        return 1
+    priv, wire_pk = _load_privkey(Path(key_file_str))
+    target_file = Path(args[-1])
+    payload = target_file.read_bytes()
+    signed_data = _build_sshsig_signed_data(namespace, payload)
+    raw_sig = priv.sign(signed_data)
+    blob = _encode_sshsig_blob(wire_pk, namespace, raw_sig)
+    b64_blob = base64.b64encode(blob).decode("ascii")
+    sig_text = (
+        "-----BEGIN SSH SIGNATURE-----\n"
+        + "\n".join(b64_blob[i : i + 70] for i in range(0, len(b64_blob), 70))
+        + "\n-----END SSH SIGNATURE-----\n"
+    )
+    Path(f"{target_file}.sig").write_text(sig_text, encoding="utf-8")
+    return 0
+
+
+def _cmd_find_principals(args: list[str]) -> int:
+    signers_str = _get_opt(args, "-f")
+    sig_str = _get_opt(args, "-s")
+    if not signers_str or not sig_str:
+        return 1
+    try:
+        wire_pk, _ns, _raw_sig = _parse_sig_file(Path(sig_str))
+    except Exception:  # noqa: BLE001
+        sys.stderr.write("No principal matched.\n")
+        return 1
+    target_b64_pk = base64.b64encode(wire_pk).decode("ascii")
+    matched = [p for p, pk in _parse_allowed_signers(Path(signers_str)) if pk == target_b64_pk]
+    if not matched:
+        sys.stderr.write("No principal matched.\n")
+        return 1
+    for p in matched:
+        sys.stdout.write(f"{p}\n")
+    return 0
+
+
+def _verify_raw(wire_pk: bytes, namespace: str, raw_sig: bytes, data: bytes) -> tuple[bool, str]:
+    if len(wire_pk) < 32:
+        return False, ""
+    raw_pub = wire_pk[-32:]
+    pub = Ed25519PublicKey.from_public_bytes(raw_pub)
+    signed_data = _build_sshsig_signed_data(namespace, data)
+    pub.verify(raw_sig, signed_data)
+    return True, _fingerprint(wire_pk)
+
+
+def _cmd_check_novalidate(args: list[str]) -> int:
+    sig_str = _get_opt(args, "-s")
+    namespace = _get_opt(args, "-n") or "git"
+    if not sig_str:
+        return 1
+    data = sys.stdin.buffer.read()
+    try:
+        wire_pk, _ns, raw_sig = _parse_sig_file(Path(sig_str))
+        ok, fp = _verify_raw(wire_pk, namespace, raw_sig, data)
+    except Exception:  # noqa: BLE001
+        sys.stderr.write("Signature verification failed\n")
+        return 1
+    if not ok:
+        return 1
+    sys.stdout.write(f'Good "{namespace}" signature with ED25519 key {fp}\n')
+    return 0
+
+
+def _cmd_verify(args: list[str]) -> int:
+    signers_str = _get_opt(args, "-f")
+    sig_str = _get_opt(args, "-s")
+    principal = _get_opt(args, "-I") or ""
+    namespace = _get_opt(args, "-n") or "git"
+    if not signers_str or not sig_str:
+        return 1
+    data = sys.stdin.buffer.read()
+    try:
+        wire_pk, _ns, raw_sig = _parse_sig_file(Path(sig_str))
+        target_b64_pk = base64.b64encode(wire_pk).decode("ascii")
+        allowed = _parse_allowed_signers(Path(signers_str))
+        if not any(p == principal and pk == target_b64_pk for p, pk in allowed):
+            sys.stderr.write("No principal matched.\n")
+            return 1
+        ok, fp = _verify_raw(wire_pk, namespace, raw_sig, data)
+    except Exception:  # noqa: BLE001
+        sys.stderr.write("Signature verification failed\n")
+        return 1
+    if not ok:
+        return 1
+    sys.stdout.write(f'Good "{namespace}" signature for {principal} with ED25519 key {fp}\n')
+    return 0
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    y_op = _get_opt(args, "-Y")
+    if y_op == "sign":
+        return _cmd_sign(args)
+    if y_op == "find-principals":
+        return _cmd_find_principals(args)
+    if y_op == "check-novalidate":
+        return _cmd_check_novalidate(args)
+    if y_op == "verify":
+        return _cmd_verify(args)
+    return _cmd_keygen(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

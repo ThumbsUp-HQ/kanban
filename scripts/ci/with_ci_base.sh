@@ -38,4 +38,4 @@ else
   DOCKER_ARGS+=(-v "${WORKDIR_PATH}:${WORKDIR_PATH}")
 fi
 
-exec docker run "${DOCKER_ARGS[@]}" "${IMAGE_TAG}" bash -c "git config --global --add safe.directory '*' && $*"
+exec docker run "${DOCKER_ARGS[@]}" "${IMAGE_TAG}" bash -c "if ! command -v ssh-keygen >/dev/null 2>&1; then ln -sf \"${WORKDIR_PATH}/scripts/ci/bin/ssh-keygen\" /usr/local/bin/ssh-keygen; fi && export PATH=\"\${PATH}:${WORKDIR_PATH}/scripts/ci/bin\" && git config --global --add safe.directory '*' && $*"

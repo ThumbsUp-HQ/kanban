@@ -307,7 +307,7 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     fireEvent.change(prioSelect, { target: { value: 'low' } });
   });
 
-  it('toggles filters expansion via mobile filters toggle button', () => {
+  it('toggles filters expansion via mobile filters toggle button and opens/closes CSV and Reports modals', () => {
     render(
       <IssueNavigatorBar
         projectKey="KAN"
@@ -322,5 +322,22 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(toggleBtn);
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // Open and close CSV Export modal
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+    expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+
+    // Open and close CSV Import modal
+    fireEvent.click(screen.getByTestId('navigator-import-btn'));
+    expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+
+    // Open and close Reports Export modal
+    fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
+    expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
+    fireEvent.click(screen.getByTestId('report-export-close-btn'));
+    expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
   });
 });

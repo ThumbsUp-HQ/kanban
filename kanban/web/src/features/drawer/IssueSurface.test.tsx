@@ -2587,6 +2587,30 @@ describe('IssueSurface', () => {
       getSpy.mockRestore();
       postSpy.mockRestore();
       unmount();
+
+      // Also test in drawer mode (proseBody branches) and when reset post rejects
+      const getDrawerSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithBreaker);
+      const postDrawerSpy = vi.spyOn(apiClient, 'post').mockRejectedValueOnce(new Error('fail'));
+      const drawerRender = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-71']}>
+            <IssueSurfaceRoot
+              mode="drawer"
+              issueKey="KAN-71"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      const drawerBanner = await screen.findByTestId('rework-tripped-banner');
+      expect(drawerBanner).toBeDefined();
+      fireEvent.click(screen.getByTestId('rework-reset-btn'));
+      await waitFor(() => {
+        expect(postDrawerSpy).toHaveBeenCalled();
+      });
+      getDrawerSpy.mockRestore();
+      postDrawerSpy.mockRestore();
+      drawerRender.unmount();
     });
 
     it('renders collapsible workpad section with workpad notes and revision', async () => {
@@ -2630,6 +2654,52 @@ describe('IssueSurface', () => {
 
       getSpy.mockRestore();
       unmount();
+
+      // Also test in drawer mode with empty body_markdown fallback and custom WorkpadSlot
+      const emptyWorkpadIssue = {
+        ...issueWithWorkpad,
+        key: 'KAN-73',
+        workpad: {
+          id: '01932e6b-0000-7000-8000-000000000074',
+          body_markdown: '',
+          revision: 1,
+        },
+      };
+      const getDrawerSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(emptyWorkpadIssue);
+      const drawerQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const drawerRender = render(
+        <QueryClientProvider client={drawerQc}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-73']}>
+            <IssueSurfaceRoot
+              mode="drawer"
+              issueKey="KAN-73"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByTestId('split-section-workpad');
+      expect(screen.getByText(/Revision 1/i)).toBeDefined();
+      drawerRender.unmount();
+
+      const customSlotRender = render(
+        <QueryClientProvider client={drawerQc}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-73']}>
+            <IssueSurfaceSlotsContext.Provider
+              value={{ workpad: () => <div data-testid="custom-workpad-slot">Custom Workpad</div> }}
+            >
+              <IssueSurfaceRoot
+                mode="drawer"
+                issueKey="KAN-73"
+                projectKey="KAN"
+              />
+            </IssueSurfaceSlotsContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByTestId('custom-workpad-slot');
+      customSlotRender.unmount();
+      getDrawerSpy.mockRestore();
     });
   });
 });
