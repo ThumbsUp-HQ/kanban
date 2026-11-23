@@ -1,0 +1,758 @@
+diff --git a/kanban/web/src/features/activity/CommentComposer.tsx b/kanban/web/src/features/activity/CommentComposer.tsx
+index 6dfe8c7f..f97d360f 100644
+--- a/kanban/web/src/features/activity/CommentComposer.tsx
++++ b/kanban/web/src/features/activity/CommentComposer.tsx
+@@ -113,11 +113,96 @@ export function CommentComposer({
+   const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
+   const [isPreview, setIsPreview] = useState(false);
+ 
++  // Mobile toolbar and virtual keyboard handling (KAN-345)
++  const [isMobile, setIsMobile] = useState<boolean>(() => {
++    if (typeof window !== 'undefined') {
++      const matchMediaActive =
++        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
++      return window.innerWidth <= 480 || matchMediaActive;
++    }
++    return false;
++  });
++  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
++  const [, setKeyboardInset] = useState<number>(0);
++
++  const containerRef = useRef<HTMLDivElement | null>(null);
+   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+   const alertRef = useRef<HTMLDivElement | null>(null);
+   const fileInputRef = useRef<HTMLInputElement | null>(null);
++  const overflowRef = useRef<HTMLDivElement | null>(null);
+   const undoDraftRef = useRef<string | null>(null);
+ 
++  useEffect(() => {
++    if (typeof window === 'undefined') return;
++
++    const handleResize = () => {
++      const matchMediaActive =
++        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
++      const mobile = window.innerWidth <= 480 || matchMediaActive;
++      setIsMobile(mobile);
++      if (!mobile) {
++        setIsOverflowOpen(false);
++      }
++    };
++
++    window.addEventListener('resize', handleResize);
++
++    const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 480px)') : null;
++    mql?.addEventListener('change', handleResize);
++
++    const vv = window.visualViewport;
++    const handleVisualViewportChange = () => {
++      if (!vv) return;
++      const inset = Math.max(0, window.innerHeight - vv.height);
++      setKeyboardInset(inset);
++      if (containerRef.current) {
++        containerRef.current.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
++      }
++      try {
++        document.documentElement.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
++      } catch {
++        // ignore
++      }
++    };
++
++    if (vv) {
++      vv.addEventListener('resize', handleVisualViewportChange);
++      vv.addEventListener('scroll', handleVisualViewportChange);
++    }
++
++    return () => {
++      window.removeEventListener('resize', handleResize);
++      mql?.removeEventListener('change', handleResize);
++      if (vv) {
++        vv.removeEventListener('resize', handleVisualViewportChange);
++        vv.removeEventListener('scroll', handleVisualViewportChange);
++      }
++    };
++  }, []);
++
++  useEffect(() => {
++    if (!isOverflowOpen) return;
++    const handleClickOutside = (e: MouseEvent) => {
++      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
++        setIsOverflowOpen(false);
++      }
++    };
++    document.addEventListener('mousedown', handleClickOutside);
++    return () => {
++      document.removeEventListener('mousedown', handleClickOutside);
++    };
++  }, [isOverflowOpen]);
++
++  const handleFocus = (): void => {
++    if (containerRef.current) {
++      try {
++        containerRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
++      } catch {
++        // ignore
++      }
++    }
++  };
++
+   useEffect(() => {
+     if (mentionWarning && alertRef.current) {
+       alertRef.current.focus();
+@@ -448,7 +533,11 @@ export function CommentComposer({
+   };
+ 
+   return (
+-    <div className={`comment-composer${isEditing ? ' comment-composer--editing' : ''}`}>
++    <div
++      ref={containerRef}
++      className={`comment-composer comment-editor${isEditing ? ' comment-composer--editing' : ''}`}
++      data-testid="comment-composer"
++    >
+       {/* Toolbar */}
+       <div className="comment-composer__toolbar" role="toolbar" aria-label="Comment formatting">
+         <button
+@@ -467,14 +556,16 @@ export function CommentComposer({
+         >
+           <em>I</em>
+         </button>
+-        <button
+-          type="button"
+-          className="composer-tool-btn"
+-          aria-label="Insert code"
+-          onClick={() => { insertTextAtCursor('```\n', '\n```', 'code'); }}
+-        >
+-          <code>&lt;/&gt;</code>
+-        </button>
++        {!isMobile && (
++          <button
++            type="button"
++            className="composer-tool-btn"
++            aria-label="Insert code"
++            onClick={() => { insertTextAtCursor('```\n', '\n```', 'code'); }}
++          >
++            <code>&lt;/&gt;</code>
++          </button>
++        )}
+         <button
+           type="button"
+           className="composer-tool-btn"
+@@ -491,16 +582,132 @@ export function CommentComposer({
+         >
+           ☑
+         </button>
+-        <button
+-          type="button"
+-          className="composer-tool-btn"
+-          aria-label="Attach media, SVG, or PDF"
+-          onClick={() => {
+-            fileInputRef.current?.click();
+-          }}
+-        >
+-          📎
+-        </button>
++        {!isMobile && (
++          <>
++            <button
++              type="button"
++              className="composer-tool-btn"
++              aria-label="Insert table"
++              onClick={() => {
++                insertTextAtCursor('| Column 1 | Column 2 |\n| --- | --- |\n| Item 1 | Item 2 |\n', '', '');
++              }}
++            >
++              ⊞
++            </button>
++            <button
++              type="button"
++              className="composer-tool-btn"
++              aria-label="Attach media, SVG, or PDF"
++              onClick={() => {
++                fileInputRef.current?.click();
++              }}
++            >
++              📎
++            </button>
++            <button
++              type="button"
++              className="composer-tool-btn"
++              aria-label="Insert Mermaid diagram"
++              onClick={() => { insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
++            >
++              📊
++            </button>
++            <button
++              type="button"
++              className={`composer-tool-btn${isPreview ? ' is-active' : ''}`}
++              aria-label="Raw markdown source view"
++              title="Raw markdown source view (Cmd/Ctrl+Shift+M)"
++              onClick={() => { setIsPreview((prev) => !prev); }}
++              data-testid="comment-tool-raw"
++            >
++              📝
++            </button>
++          </>
++        )}
++        {isMobile && (
++          <div ref={overflowRef} className="comment-composer__overflow-wrapper">
++            <button
++              type="button"
++              className={`composer-tool-btn${isOverflowOpen ? ' is-active' : ''}`}
++              aria-label="More formatting options"
++              title="More formatting options"
++              aria-haspopup="menu"
++              aria-expanded={isOverflowOpen}
++              data-testid="composer-overflow-btn"
++              onClick={() => { setIsOverflowOpen((prev) => !prev); }}
++            >
++              ⋮
++            </button>
++            {isOverflowOpen && (
++              <div
++                className="comment-composer__overflow-menu"
++                role="menu"
++                aria-label="More formatting options"
++              >
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="comment-composer__overflow-item"
++                  aria-label="Insert code"
++                  onClick={() => {
++                    insertTextAtCursor('```\n', '\n```', 'code');
++                    setIsOverflowOpen(false);
++                  }}
++                >
++                  <code>&lt;/&gt;</code> Code block
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="comment-composer__overflow-item"
++                  aria-label="Insert table"
++                  onClick={() => {
++                    insertTextAtCursor('| Column 1 | Column 2 |\n| --- | --- |\n| Item 1 | Item 2 |\n', '', '');
++                    setIsOverflowOpen(false);
++                  }}
++                >
++                  ⊞ Table
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="comment-composer__overflow-item"
++                  aria-label="Attach media, SVG, or PDF"
++                  onClick={() => {
++                    fileInputRef.current?.click();
++                    setIsOverflowOpen(false);
++                  }}
++                >
++                  📎 Attach media
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="comment-composer__overflow-item"
++                  aria-label="Insert Mermaid diagram"
++                  onClick={() => {
++                    insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]');
++                    setIsOverflowOpen(false);
++                  }}
++                >
++                  📊 Mermaid diagram
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="comment-composer__overflow-item"
++                  aria-label="Raw markdown source view"
++                  onClick={() => {
++                    setIsPreview((prev) => !prev);
++                    setIsOverflowOpen(false);
++                  }}
++                >
++                  📝 Raw markdown
++                </button>
++              </div>
++            )}
++          </div>
++        )}
+         <input
+           ref={fileInputRef}
+           type="file"
+@@ -511,24 +718,6 @@ export function CommentComposer({
+           onChange={(e) => { void handleFileSelected(e); }}
+           data-testid="comment-file-input"
+         />
+-        <button
+-          type="button"
+-          className="composer-tool-btn"
+-          aria-label="Insert Mermaid diagram"
+-          onClick={() => { insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
+-        >
+-          📊
+-        </button>
+-        <button
+-          type="button"
+-          className={`composer-tool-btn${isPreview ? ' is-active' : ''}`}
+-          aria-label="Raw markdown source view"
+-          title="Raw markdown source view (Cmd/Ctrl+Shift+M)"
+-          onClick={() => { setIsPreview((prev) => !prev); }}
+-          data-testid="comment-tool-raw"
+-        >
+-          📝
+-        </button>
+       </div>
+ 
+       {/* Editor Box */}
+@@ -546,11 +735,13 @@ export function CommentComposer({
+             ref={textareaRef}
+             className="comment-composer__textarea"
+             aria-label="Write a comment"
++            data-testid="comment-textarea"
+             placeholder={placeholder}
+             value={draft}
+             onChange={(e) => { void handleTextChange(e); }}
+             onKeyDown={handleKeyDown}
+             onPaste={handlePaste}
++            onFocus={handleFocus}
+             rows={3}
+           />
+         )}
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index 151811ca..3f51ce83 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -482,12 +482,63 @@
+   background: var(--bg-surface, #1e2227);
+   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+   border-radius: var(--radius-lg, 8px);
++  position: relative;
++  padding-bottom: max(var(--space-4, 16px), env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
++  transition: padding-bottom 150ms ease-out;
+ }
+ 
+ .comment-composer__toolbar {
+   display: flex;
+   align-items: center;
+-  column-gap: 4px;
++  flex-wrap: wrap;
++  gap: var(--space-1, 4px);
++  position: relative;
++}
++
++.comment-composer__overflow-wrapper {
++  position: relative;
++  display: inline-flex;
++}
++
++.comment-composer__overflow-menu {
++  position: absolute;
++  top: 100%;
++  right: 0;
++  margin-top: var(--space-1, 4px);
++  background: var(--bg-surface-raised, #1e2227);
++  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
++  border-radius: var(--radius-md, 6px);
++  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.3));
++  padding: var(--space-1, 4px);
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++  z-index: 50;
++  min-width: 160px;
++}
++
++.comment-composer__overflow-item {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  width: 100%;
++  padding: 8px 12px;
++  background: transparent;
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  color: var(--fg-secondary, #94a3b8);
++  font-size: 13px;
++  cursor: pointer;
++  text-align: left;
++  min-height: var(--tap-min, 44px);
++  box-sizing: border-box;
++}
++
++.comment-composer__overflow-item:hover,
++.comment-composer__overflow-item:focus-visible {
++  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
++  color: var(--fg-primary, #f8fafc);
++  outline: none;
+ }
+ 
+ .comment-composer__file-input {
+@@ -658,6 +709,22 @@
+   align-items: center;
+   justify-content: flex-end;
+   column-gap: 8px;
++  padding-bottom: max(0px, env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
++}
++
++@media (max-width: 480px), (pointer: coarse) {
++  .comment-composer .composer-tool-btn {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px);
++  }
++
++  .comment-composer .composer-submit-btn,
++  .comment-composer .composer-cancel-btn {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px) var(--space-4, 16px);
++  }
+ }
+ 
+ .composer-cancel-btn {
+diff --git a/kanban/web/src/features/drawer/CommentEditor.css b/kanban/web/src/features/drawer/CommentEditor.css
+new file mode 100644
+index 00000000..fabbcc1e
+--- /dev/null
++++ b/kanban/web/src/features/drawer/CommentEditor.css
+@@ -0,0 +1,32 @@
++/* Comment Editor Styling & Mobile Ergonomics (KAN-345, S2.1) */
++
++.comment-editor {
++  position: relative;
++  box-sizing: border-box;
++  width: 100%;
++}
++
++.comment-editor-wrapper {
++  position: relative;
++  width: 100%;
++  box-sizing: border-box;
++}
++
++@media (max-width: 480px), (pointer: coarse) {
++  .comment-editor .composer-tool-btn {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px);
++  }
++
++  .comment-editor .composer-submit-btn,
++  .comment-editor .composer-cancel-btn {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px) var(--space-4, 16px);
++  }
++
++  .comment-editor .comment-composer__footer {
++    padding-bottom: max(0px, env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
++  }
++}
+diff --git a/kanban/web/src/features/drawer/CommentEditor.tsx b/kanban/web/src/features/drawer/CommentEditor.tsx
+new file mode 100644
+index 00000000..135f69a3
+--- /dev/null
++++ b/kanban/web/src/features/drawer/CommentEditor.tsx
+@@ -0,0 +1,22 @@
++/**
++ * CommentEditor - Virtual Keyboard Inset Handling and Mobile Toolbar for Ticket Comment Editor (KAN-345, S2.1).
++ */
++
++import React, { type JSX } from 'react';
++import {
++  CommentComposer,
++  type CommentComposerProps,
++} from '../activity/CommentComposer';
++import './CommentEditor.css';
++
++export type CommentEditorProps = CommentComposerProps;
++
++export function CommentEditor(props: CommentEditorProps): JSX.Element {
++  return (
++    <div className="comment-editor" data-testid="comment-editor">
++      <CommentComposer {...props} />
++    </div>
++  );
++}
++
++export default CommentEditor;
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index 8a3f8c7d..355236dd 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -279,6 +279,7 @@
+     border-left: none;
+     border-top: none;
+     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
++    padding-bottom: max(env(safe-area-inset-bottom, 0px), env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
+   }
+   .surface__body,
+   .surface--drawer .surface__body,
+diff --git a/kanban/web/src/features/drawer/__tests__/CommentEditorMobile.test.tsx b/kanban/web/src/features/drawer/__tests__/CommentEditorMobile.test.tsx
+new file mode 100644
+index 00000000..55e5f6a3
+--- /dev/null
++++ b/kanban/web/src/features/drawer/__tests__/CommentEditorMobile.test.tsx
+@@ -0,0 +1,251 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
++import React from 'react';
++import { CommentEditor } from '../CommentEditor';
++import * as activityApi from '../../activity/activityApi';
++
++vi.mock('../../activity/activityApi', async () => {
++  const actual = await vi.importActual<typeof import('../../activity/activityApi')>(
++    '../../activity/activityApi',
++  );
++  return {
++    ...actual,
++    createComment: vi.fn(),
++    patchComment: vi.fn(),
++    fetchAssigneeSuggestions: vi.fn(),
++  };
++});
++
++describe('CommentEditorMobile (KAN-345)', () => {
++  const mockCreateComment = vi.mocked(activityApi.createComment);
++  const originalInnerWidth = window.innerWidth;
++  const originalVisualViewport = window.visualViewport;
++
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  afterEach(() => {
++    window.innerWidth = originalInnerWidth;
++    Object.defineProperty(window, 'visualViewport', {
++      value: originalVisualViewport,
++      writable: true,
++      configurable: true,
++    });
++  });
++
++  it('Case 1 (Positive): mobile toolbar collapses secondary buttons into overflow menu when width <= 480px', () => {
++    // 1. Simulate mobile viewport <= 480px
++    window.innerWidth = 390;
++
++    render(<CommentEditor issueKey="KAN-142" projectKey="KAN" />);
++
++    // Primary formatting actions remain immediately visible and accessible
++    expect(screen.getByRole('button', { name: 'Bold text' })).toBeDefined();
++    expect(screen.getByRole('button', { name: 'Italic text' })).toBeDefined();
++    expect(screen.getByRole('button', { name: 'Insert tasklist' })).toBeDefined();
++    expect(screen.getByRole('button', { name: 'Insert link' })).toBeDefined();
++
++    // Secondary formatting buttons are collapsed and not directly visible in toolbar
++    expect(screen.queryByRole('button', { name: 'Insert code' })).toBeNull();
++    expect(screen.queryByRole('button', { name: 'Insert table' })).toBeNull();
++    expect(screen.queryByRole('button', { name: 'Insert Mermaid diagram' })).toBeNull();
++    expect(screen.queryByRole('button', { name: 'Attach media, SVG, or PDF' })).toBeNull();
++    expect(screen.queryByRole('button', { name: 'Raw markdown source view' })).toBeNull();
++
++    // The overflow toggle button is present
++    const overflowBtn = screen.getByRole('button', { name: 'More formatting options' });
++    expect(overflowBtn).toBeDefined();
++    expect(overflowBtn.getAttribute('aria-expanded')).toBe('false');
++
++    // Click overflow button to open menu
++    fireEvent.click(overflowBtn);
++    expect(overflowBtn.getAttribute('aria-expanded')).toBe('true');
++
++    const overflowMenu = screen.getByRole('menu', { name: 'More formatting options' });
++    expect(overflowMenu).toBeDefined();
++
++    // Secondary items are now present inside the overflow menu
++    const codeMenuItem = screen.getByRole('menuitem', { name: 'Insert code' });
++    const tableMenuItem = screen.getByRole('menuitem', { name: 'Insert table' });
++    const attachMenuItem = screen.getByRole('menuitem', { name: 'Attach media, SVG, or PDF' });
++    const mermaidMenuItem = screen.getByRole('menuitem', { name: 'Insert Mermaid diagram' });
++    const previewMenuItem = screen.getByRole('menuitem', { name: 'Raw markdown source view' });
++
++    expect(codeMenuItem).toBeDefined();
++    expect(tableMenuItem).toBeDefined();
++    expect(attachMenuItem).toBeDefined();
++    expect(mermaidMenuItem).toBeDefined();
++    expect(previewMenuItem).toBeDefined();
++
++    // Clicking an item inserts markdown template and closes the overflow menu
++    fireEvent.click(tableMenuItem);
++    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
++    expect(textarea.value).toContain('| Column 1 | Column 2 |');
++    expect(screen.queryByRole('menu', { name: 'More formatting options' })).toBeNull();
++
++    // Resize viewport to desktop (> 480px) and verify full toolbar expands
++    act(() => {
++      window.innerWidth = 1024;
++      fireEvent(window, new Event('resize'));
++    });
++
++    expect(screen.getByRole('button', { name: 'Insert code' })).toBeDefined();
++    expect(screen.getByRole('button', { name: 'Insert table' })).toBeDefined();
++    expect(screen.getByRole('button', { name: 'Insert Mermaid diagram' })).toBeDefined();
++    expect(screen.queryByRole('button', { name: 'More formatting options' })).toBeNull();
++  });
++
++  it('Case 2 (Negative): editor does not scroll out of view when focused on mobile', () => {
++    window.innerWidth = 390;
++
++    // Mock scrollIntoView to verify element positioning
++    const scrollIntoViewMock = vi.fn();
++    Element.prototype.scrollIntoView = scrollIntoViewMock;
++
++    // Mock window.visualViewport to simulate mobile virtual keyboard popup
++    const listeners: Record<string, (() => void)[]> = {};
++    const mockVisualViewport = {
++      height: 400,
++      width: 390,
++      offsetTop: 0,
++      offsetLeft: 0,
++      pageTop: 0,
++      pageLeft: 0,
++      scale: 1,
++      addEventListener: vi.fn((event: string, cb: () => void) => {
++        const bucket = listeners[event] ?? [];
++        bucket.push(cb);
++        listeners[event] = bucket;
++      }),
++      removeEventListener: vi.fn((event: string, cb: () => void) => {
++        if (listeners[event]) {
++          listeners[event] = listeners[event].filter((fn) => fn !== cb);
++        }
++      }),
++    };
++
++    Object.defineProperty(window, 'visualViewport', {
++      value: mockVisualViewport,
++      writable: true,
++      configurable: true,
++    });
++
++    render(<CommentEditor issueKey="KAN-142" projectKey="KAN" />);
++
++    // Simulate virtual keyboard appearance by shrinking visualViewport
++    act(() => {
++      mockVisualViewport.height = 360;
++      listeners.resize?.forEach((fn) => { fn(); });
++      listeners.scroll?.forEach((fn) => { fn(); });
++    });
++
++    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
++
++    // Focus the textarea as the user starts typing
++    fireEvent.focus(textarea);
++
++    // Verify scrollIntoView was called to keep composer within visible viewport
++    expect(scrollIntoViewMock).toHaveBeenCalledWith({
++      block: 'nearest',
++      behavior: 'smooth',
++    });
++
++    // Negative verification: editor container is NOT hidden, displaced, or unmounted
++    expect(document.body.contains(textarea)).toBe(true);
++    const composer = screen.getByTestId('comment-composer');
++    expect(composer).toBeDefined();
++    expect(document.body.contains(composer)).toBe(true);
++  });
++
++  it('Case 3 (Boundary): comment submit button is disabled during submission and maintains touch target bounds', async () => {
++    window.innerWidth = 390;
++
++    let resolveSubmission: ((val: activityApi.CommentResponse) => void) | undefined;
++    const submissionPromise = new Promise<activityApi.CommentResponse>((resolve) => {
++      resolveSubmission = resolve;
++    });
++    mockCreateComment.mockReturnValueOnce(submissionPromise);
++
++    const onCancel = vi.fn();
++    render(<CommentEditor issueKey="KAN-142" projectKey="KAN" onCancel={onCancel} />);
++
++    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
++    fireEvent.change(textarea, { target: { value: 'Mobile test comment' } });
++
++    const submitBtn = screen.getByRole<HTMLButtonElement>('button', { name: 'Comment' });
++    const cancelBtn = screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' });
++
++    // Prior to submission: buttons are enabled and maintain touch target class
++    expect(submitBtn.disabled).toBe(false);
++    expect(cancelBtn.disabled).toBe(false);
++    expect(submitBtn.className).toContain('composer-submit-btn');
++    expect(cancelBtn.className).toContain('composer-cancel-btn');
++
++    // Trigger submission
++    fireEvent.click(submitBtn);
++
++    // During submission: boundary verification
++    expect(submitBtn.disabled).toBe(true);
++    expect(cancelBtn.disabled).toBe(true);
++    expect(submitBtn.textContent).toBe('Saving...');
++    expect(submitBtn.className).toContain('composer-submit-btn');
++
++    // Resolve submission
++    act(() => {
++      resolveSubmission?.({
++        id: 'c-new',
++        issue_id: 'i-1',
++        author: {
++          id: 'u-1',
++          display_name: 'Adam Outler',
++          handle: 'adam',
++        },
++        body_markdown: 'Mobile test comment',
++        created_at: new Date().toISOString(),
++        deleted: false,
++        reactions: [],
++      });
++    });
++
++    await waitFor(() => {
++      expect(submitBtn.disabled).toBe(false);
++      expect(textarea.value).toBe('');
++    });
++  });
++
++  it('covers overflow menu interactions: code, mermaid, attach, preview, and click outside dismissal', () => {
++    window.innerWidth = 360;
++
++    render(<CommentEditor issueKey="KAN-142" projectKey="KAN" />);
++
++    const overflowBtn = screen.getByRole('button', { name: 'More formatting options' });
++
++    // 1. Insert code
++    fireEvent.click(overflowBtn);
++    fireEvent.click(screen.getByRole('menuitem', { name: 'Insert code' }));
++    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Write a comment' });
++    expect(textarea.value).toContain('```');
++
++    // 2. Insert mermaid
++    fireEvent.click(overflowBtn);
++    fireEvent.click(screen.getByRole('menuitem', { name: 'Insert Mermaid diagram' }));
++    expect(textarea.value).toContain('```mermaid');
++
++    // 3. Attach file trigger
++    fireEvent.click(overflowBtn);
++    fireEvent.click(screen.getByRole('menuitem', { name: 'Attach media, SVG, or PDF' }));
++    expect(screen.queryByRole('menu', { name: 'More formatting options' })).toBeNull();
++
++    // 4. Raw preview toggle
++    fireEvent.click(overflowBtn);
++    fireEvent.click(screen.getByRole('menuitem', { name: 'Raw markdown source view' }));
++    expect(screen.getByTestId('comment-preview')).toBeDefined();
++
++    // 5. Dismiss overflow by clicking outside
++    fireEvent.click(overflowBtn);
++    expect(screen.getByRole('menu', { name: 'More formatting options' })).toBeDefined();
++    fireEvent.mouseDown(document.body);
++    expect(screen.queryByRole('menu', { name: 'More formatting options' })).toBeNull();
++  });
++});
+diff --git a/kanban/web/src/styles/spacing.css b/kanban/web/src/styles/spacing.css
+index 0efb3896..ba963797 100644
+--- a/kanban/web/src/styles/spacing.css
++++ b/kanban/web/src/styles/spacing.css
+@@ -44,4 +44,5 @@
+   --hint-pad: 12px 14px;
+   --focus-ring-w: 2px;
+   --tap-min: 44px;
++  --keyboard-inset-height: 0px;
+ }

@@ -1,0 +1,32 @@
+/* Comment Editor Styling & Mobile Ergonomics (KAN-345, S2.1) */
+
+.comment-editor {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.comment-editor-wrapper {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 480px), (pointer: coarse) {
+  .comment-editor .composer-tool-btn {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px);
+  }
+
+  .comment-editor .composer-submit-btn,
+  .comment-editor .composer-cancel-btn {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px) var(--space-4, 16px);
+  }
+
+  .comment-editor .comment-composer__footer {
+    padding-bottom: max(0px, env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
+  }
+}
