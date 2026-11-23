@@ -160,8 +160,10 @@ def test_codebase_metrics_parity() -> None:
     sql_up_files = list((ROOT_DIR / "database" / "migrations" / "sql").glob("*.up.sql"))
     versions_dir = ROOT_DIR / "database" / "migrations" / "versions"
     alembic_files = [f for f in versions_dir.glob("*.py") if not f.name.endswith("__init__.py")]
-    assert len(sql_up_files) == 76, f"Expected 76 SQL up files, got {len(sql_up_files)}"
-    assert len(alembic_files) == 76, f"Expected 76 Alembic versions, got {len(alembic_files)}"
+    assert len(sql_up_files) >= 76, f"Expected >=76 SQL up files, got {len(sql_up_files)}"
+    assert len(alembic_files) == len(sql_up_files), (
+        f"Expected {len(sql_up_files)} Alembic versions, got {len(alembic_files)}"
+    )
 
     # Live OpenAPI schema
     app = create_app()

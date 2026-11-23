@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan324-328-9a11c982
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -13,14 +13,14 @@ tests/security/test_stride_hostile_media.py ....                         [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------
+Name                                Stmts   Miss Branch BrPart  Cover
+---------------------------------------------------------------------
 kanban/media_proxy/__init__.py          7      0      0      0   100%
-kanban/media_proxy/client.py          155      5     46      3    96%   123->118, 226-227, 251-252, 302
-kanban/media_proxy/placeholder.py      24      0     10      3    91%   46->49, 50->55, 52->55
+kanban/media_proxy/client.py          155      5     46      3    96%
+kanban/media_proxy/placeholder.py      24      0     10      3    91%
 kanban/media_proxy/service.py          24      0      4      0   100%
-kanban/media_proxy/signing.py          92      3     28      1    97%   55->exit, 133-135
+kanban/media_proxy/signing.py          92      5     28      1    95%
 kanban/media_proxy/ssrf.py              7      0      0      0   100%
--------------------------------------------------------------------------------
-TOTAL                                 309      8     88      7    96%
-============================== 30 passed in 1.59s ==============================
+---------------------------------------------------------------------
+TOTAL                                 309     10     88      7    96%
+============================== 30 passed in 1.62s ==============================

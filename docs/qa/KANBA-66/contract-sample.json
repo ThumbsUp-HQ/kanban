@@ -8,7 +8,7 @@
         "content-type": "image/png",
         "content-length": "16",
         "cache-control": "private, max-age=3600",
-        "x-request-id": "936310f8cb8b4106a14fe165d7e5dbf8",
+        "x-request-id": "d8560e7c3696482db134be5b52919780",
         "content-security-policy": "default-src 'none'; sandbox",
         "x-content-type-options": "nosniff",
         "referrer-policy": "no-referrer",
@@ -27,7 +27,7 @@
         "content-length": "67",
         "x-kanban-media-status": "air-gap-placeholder",
         "cache-control": "private, no-store",
-        "x-request-id": "f909e9c242a84abdbb5fff70518cbd54",
+        "x-request-id": "ee58e63345804634a2fc1e522ca56ab2",
         "content-security-policy": "default-src 'none'; sandbox",
         "x-content-type-options": "nosniff",
         "referrer-policy": "no-referrer",
@@ -46,8 +46,8 @@
         "title": "Invalid Signature",
         "status": 403,
         "code": "INVALID_SIGNATURE",
-        "detail": "Missing or invalid HMAC signature for media proxy URL",
-        "request_id": "64363d1b0e224bd1965893c4a83f4783"
+        "detail": "Missing, expired, or invalid HMAC signature for media proxy URL",
+        "request_id": "812fec1bbece403e9810fe8ea48c8e4d"
       }
     },
     "403_MEDIA_HOST_BLOCKED": {
@@ -57,8 +57,8 @@
         "title": "Media Host Blocked",
         "status": 403,
         "code": "MEDIA_HOST_BLOCKED",
-        "detail": "External media host 'img.example.com' resolved to blocked non-public IP address '169.254.169.254' (SSRF guard)",
-        "request_id": "64c141f3e02d47239c44ec62d91ac980"
+        "detail": "External host 'img.example.com' resolved to blocked non-public IP address '169.254.169.254' (SSRF guard)",
+        "request_id": "c5b0f48d9d964864803f588f2e45335a"
       }
     },
     "502_MEDIA_REDIRECT_BLOCKED": {
@@ -69,7 +69,7 @@
         "status": 502,
         "code": "MEDIA_REDIRECT_BLOCKED",
         "detail": "Upstream host 'img.example.com' attempted redirect with status 302",
-        "request_id": "a6c9eab594024f97bf3a75e704f80373"
+        "request_id": "c0ed6cef19c64005b0fa5fc41ffb7e61"
       }
     },
     "502_MEDIA_TOO_LARGE": {
@@ -80,7 +80,7 @@
         "status": 502,
         "code": "MEDIA_TOO_LARGE",
         "detail": "Declared Content-Length 10485761 exceeds maximum limit of 10485760 bytes",
-        "request_id": "03c433cb823f42e895d98b15e97054cb"
+        "request_id": "8ce1144c59104245b5b39b78026b740c"
       }
     }
   }
