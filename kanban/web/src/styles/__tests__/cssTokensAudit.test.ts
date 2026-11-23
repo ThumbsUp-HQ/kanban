@@ -169,4 +169,42 @@ describe('CSS Tokens & Contrast Audit Gate (KANBA-190)', () => {
     expect(docsCss).toContain('min-height: 44px');
     expect(docsCss).toContain('@media (pointer: coarse)');
   });
+
+  it('verifies desktop board vertical and horizontal flex containment and scroll rules (KAN-380)', () => {
+    const appShellCss = fs.readFileSync(path.join(SRC_DIR, 'app/AppShell.css'), 'utf8');
+    expect(appShellCss).toContain('grid-template-columns: auto minmax(0, 1fr);');
+    expect(appShellCss).toMatch(/\.kb-main-canvas\s*\{[^}]*min-width:\s*0;/);
+    expect(appShellCss).toMatch(/\.kb-main-canvas\s*\{[^}]*min-height:\s*0;/);
+
+    const boardCss = fs.readFileSync(path.join(SRC_DIR, 'features/board/board.css'), 'utf8');
+    expect(boardCss).toContain('.kb-main-canvas:has(.board-canvas) > [data-testid="route-placeholder"]');
+    expect(boardCss).toContain('.issues-workspace:has(.board-canvas)');
+    expect(boardCss).toContain('.issues-workspace-route:has(.board-canvas)');
+    expect(boardCss).toContain('overscroll-behavior-y: contain;');
+
+    // Verify .board-canvas flex containment
+    expect(boardCss).toMatch(/\.board-canvas\s*\{[^}]*flex:\s*1 1 0%;/);
+    expect(boardCss).toMatch(/\.board-canvas\s*\{[^}]*min-height:\s*0;/);
+    expect(boardCss).toMatch(/\.board-canvas\s*\{[^}]*min-width:\s*0;/);
+
+    // Verify .board-lanes flex and scroll containment
+    expect(boardCss).toMatch(/\.board-lanes\s*\{[^}]*flex:\s*1 1 0%;/);
+    expect(boardCss).toMatch(/\.board-lanes\s*\{[^}]*overflow-x:\s*auto;/);
+    expect(boardCss).toMatch(/\.board-lanes\s*\{[^}]*overflow-y:\s*hidden;/);
+
+    // Verify .board-column height containment
+    expect(boardCss).toMatch(/\.board-column\s*\{[^}]*min-height:\s*0;/);
+    expect(boardCss).toMatch(/\.board-column\s*\{[^}]*height:\s*100%;/);
+    expect(boardCss).toMatch(/\.board-column\s*\{[^}]*max-height:\s*100%;/);
+
+    // Verify .board-column-scroll-area flex and vertical scroll containment
+    expect(boardCss).toMatch(/\.board-column-scroll-area\s*\{[^}]*flex:\s*1 1 0%;/);
+    expect(boardCss).toMatch(/\.board-column-scroll-area\s*\{[^}]*overflow-y:\s*auto;/);
+    expect(boardCss).toMatch(/\.board-column-scroll-area\s*\{[^}]*overflow-x:\s*hidden;/);
+
+    const filterBulkCss = fs.readFileSync(path.join(SRC_DIR, 'features/views/filterBulk.css'), 'utf8');
+    expect(filterBulkCss).toContain('.issues-workspace-route:has(.swimlane-board-grid)');
+    expect(filterBulkCss).toMatch(/\.swimlane-board-grid\s*\{[^}]*min-width:\s*0;/);
+    expect(filterBulkCss).toMatch(/\.swimlane-board-grid\s*\{[^}]*overflow-x:\s*auto;/);
+  });
 });

@@ -1,0 +1,74 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 17ms
+ ✓ src/features/board/__tests__/BoardDesktopScroll.test.tsx (5 tests) 183ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1236ms
+
+ Test Files  3 passed (3)
+      Tests  34 passed (34)
+   Start at  17:03:43
+   Duration  2.50s (environment 49%, tests 35%, import 11%, transform 3%, worker 3%)
+
+ % Coverage report from v8
+---------------|---------|----------|---------|---------|-------------------
+File           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+---------------|---------|----------|---------|---------|-------------------
+All files      |     100 |    96.42 |     100 |     100 |                   
+ BoardView.tsx |     100 |    96.42 |     100 |     100 | 249,260-268,367   
+---------------|---------|----------|---------|---------|-------------------
+
+--- Playwright Desktop Scroll E2E Verification Output ---
+
+[Playwright Proof] Preview server ready at http://127.0.0.1:18980
+
+[Viewport Test]: 01-desktop-scroll-1440x900 (1440x900) theme=light
+  [Assertion 1 - Column Vertical Geometry]:
+    scrollHeight=6445px, clientHeight=585px
+    rect.bottom=802.0px (must be <= 900px)
+    PASS: Column scroll-area is cleanly constrained within viewport!
+  [Assertion 2 - Column Vertical Scroll Action]:
+    scrollTop advanced to=250px (expected >= 200px)
+    PASS: Vertical scrolling works flawlessly!
+  [Assertion 3 - Horizontal Lanes Geometry & Scroll Action]:
+    lanes scrollWidth=1700px, clientWidth=1128px
+    lanes rect.bottom=876.0px (must be <= 900px)
+    lanes scrollLeft advanced to=200px (expected > 0)
+    PASS: Horizontal scrolling and scrollbar visibility work flawlessly!
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/01-desktop-scroll-1440x900.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/1440x900-desktop-light.png
+
+[Viewport Test]: 02-desktop-scroll-1440x900-dark (1440x900) theme=dark
+  [Assertion 1 - Column Vertical Geometry]:
+    scrollHeight=6445px, clientHeight=585px
+    rect.bottom=802.0px (must be <= 900px)
+    PASS: Column scroll-area is cleanly constrained within viewport!
+  [Assertion 2 - Column Vertical Scroll Action]:
+    scrollTop advanced to=250px (expected >= 200px)
+    PASS: Vertical scrolling works flawlessly!
+  [Assertion 3 - Horizontal Lanes Geometry & Scroll Action]:
+    lanes scrollWidth=1700px, clientWidth=1128px
+    lanes rect.bottom=876.0px (must be <= 900px)
+    lanes scrollLeft advanced to=200px (expected > 0)
+    PASS: Horizontal scrolling and scrollbar visibility work flawlessly!
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/02-desktop-scroll-1440x900-dark.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/1440x900-desktop-dark.png
+
+[Viewport Test]: 03-tablet-scroll-1024x768 (1024x768) theme=light
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/03-tablet-scroll-1024x768.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/1024x768-tablet.png
+
+[Viewport Test]: 04-tablet-portrait-scroll-768x1024 (768x1024) theme=light
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/04-tablet-portrait-scroll-768x1024.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/768x1024-tablet-portrait.png
+
+[Viewport Test]: 05-mobile-scroll-390x844 (390x844) theme=light
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/05-mobile-scroll-390x844.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/390x844-mobile-portrait.png
+
+[Viewport Test]: 06-small-mobile-scroll-375x667 (375x667) theme=light
+  -> Saved /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/06-small-mobile-scroll-375x667.png
+  -> Saved alias /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan380-6f0d0c60/docs/qa/KAN-380/screenshots/375x667-mobile-compact.png
+
+All 5-viewport screenshots and scroll proofs completed successfully.

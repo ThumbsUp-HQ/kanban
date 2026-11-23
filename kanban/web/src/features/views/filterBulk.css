@@ -255,10 +255,18 @@
    2D Group x Sub-Group Swimlane Board Grid (S6.4 item 2)
    ========================================================================== */
 
+.issues-workspace-route:has(.swimlane-board-grid) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .swimlane-board-grid {
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
