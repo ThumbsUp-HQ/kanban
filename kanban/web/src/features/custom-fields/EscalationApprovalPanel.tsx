@@ -330,9 +330,11 @@ export function EscalationApprovalPanel({
               latestApproval?.status === 'PENDING_SECOND_APPROVER') && (
               <div className="custom-field-approve-group">
                 {isSpMode && (
-                  <label className="custom-field-checkbox-label">
+                  <label className="custom-field-checkbox-label" htmlFor="sp-ack-checkbox">
                     <input
+                      id="sp-ack-checkbox"
                       type="checkbox"
+                      aria-label="I acknowledge elevated service-principal execution"
                       checked={spWarningAck}
                       onChange={(e) => {
                         setSpWarningAck(e.target.checked);

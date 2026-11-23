@@ -1008,8 +1008,14 @@ export function CustomFieldDefinitionEditor({
                     setMetadataText(e.target.value);
                   }}
                   data-testid="format-metadata-textarea"
+                  aria-invalid={Boolean(jsonError)}
+                  aria-describedby={jsonError ? 'format-metadata-error' : undefined}
                 />
-                {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
+                {jsonError && (
+                  <span id="format-metadata-error" role="alert" className="custom-field-input-error">
+                    {jsonError}
+                  </span>
+                )}
               </div>
 
               {/* Script Source Code */}
@@ -1055,6 +1061,8 @@ export function CustomFieldDefinitionEditor({
                         setTestIssueKey(e.target.value.toUpperCase());
                       }}
                       data-testid="test-issue-key-input"
+                      aria-invalid={Boolean(testError)}
+                      aria-describedby={testError ? 'test-execute-error' : undefined}
                     />
                     <button
                       type="button"
@@ -1072,6 +1080,8 @@ export function CustomFieldDefinitionEditor({
 
                 {testError && (
                   <div
+                    id="test-execute-error"
+                    role="alert"
                     className="custom-field-input-error custom-field-test-error-mt"
                     data-testid="test-execute-error"
                   >
@@ -1131,10 +1141,11 @@ export function CustomFieldDefinitionEditor({
 
             {/* Is Enabled */}
             <div className="custom-field-form-group">
-              <label className="custom-field-checkbox-label">
+              <label htmlFor="is-enabled" className="custom-field-checkbox-label">
                 <input
                   id="is-enabled"
                   type="checkbox"
+                  aria-label="Enabled"
                   checked={isEnabled}
                   onChange={(e) => {
                     setIsEnabled(e.target.checked);

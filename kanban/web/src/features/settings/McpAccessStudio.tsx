@@ -1181,7 +1181,7 @@ export function McpAccessStudio({
               className="kb-mcp-mint-form"
             >
               {mintError && (
-                <div className="kb-mcp-mint-error" role="alert" data-testid="mint-error-banner">
+                <div className="kb-mcp-mint-error" role="alert" id="mint-error-msg" data-testid="mint-error-banner">
                   {mintError}
                 </div>
               )}
@@ -1201,6 +1201,8 @@ export function McpAccessStudio({
                   }}
                   autoFocus
                   required
+                  aria-invalid={Boolean(mintError)}
+                  aria-describedby={mintError ? 'mint-error-msg' : undefined}
                 />
               </div>
 
@@ -1353,10 +1355,12 @@ export function McpAccessStudio({
                   <p className="kb-mcp-warning-text">
                     ⚠️ <strong>Are you sure?</strong> Unlimited keys never expire. This poses a significant security risk if the token is leaked or compromised.
                   </p>
-                  <label className="kb-mcp-confirm-unlimited-label">
+                  <label className="kb-mcp-confirm-unlimited-label" htmlFor="confirm-unlimited-checkbox">
                     <input
+                      id="confirm-unlimited-checkbox"
                       type="checkbox"
                       data-testid="confirm-unlimited-checkbox"
+                      aria-label="I understand the security risk and confirm creating an unlimited key"
                       checked={confirmUnlimited}
                       onChange={(e) => {
                         setConfirmUnlimited(e.target.checked);
@@ -1419,9 +1423,11 @@ export function McpAccessStudio({
                     {CAPABILITY_BITS.map(({ bit, name }) => {
                       const isChecked = (capabilityMask & bit) === bit;
                       return (
-                        <label key={bit} className="kb-mcp-tool-checkbox-label">
+                        <label key={bit} className="kb-mcp-tool-checkbox-label" htmlFor={`cap-bit-${String(bit)}`}>
                           <input
+                            id={`cap-bit-${String(bit)}`}
                             type="checkbox"
+                            aria-label={`Capability bit ${name} (${String(bit)})`}
                             data-testid={`cap-bit-${String(bit)}`}
                             checked={isChecked}
                             onChange={(e) => {
@@ -1485,9 +1491,11 @@ export function McpAccessStudio({
                       .map((toolName) => {
                       const isDisabled = disabledTools.includes(toolName);
                       return (
-                        <label key={toolName} className="kb-mcp-tool-checkbox-label">
+                        <label key={toolName} className="kb-mcp-tool-checkbox-label" htmlFor={`disable-tool-${toolName}`}>
                           <input
+                            id={`disable-tool-${toolName}`}
                             type="checkbox"
+                            aria-label={`Disable tool ${toolName}`}
                             data-testid={`disable-tool-${toolName}`}
                             checked={isDisabled}
                             onChange={(e) => {

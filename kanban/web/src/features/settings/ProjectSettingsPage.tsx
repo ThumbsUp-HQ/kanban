@@ -1493,7 +1493,7 @@ export function ProjectSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group kb-form-group-checkbox">
-              <label className="kb-checkbox-label">
+              <label className="kb-checkbox-label" htmlFor="enable-modules">
                 <input
                   type="checkbox"
                   id="enable-modules"
@@ -1523,9 +1523,11 @@ export function ProjectSettingsPage(): JSX.Element {
                 ) : (
                   <div className="kb-modules-checklist" data-testid="default-modules-select">
                     {availableModules.map((mod) => (
-                      <label key={mod.id} className="kb-checkbox-label">
+                      <label key={mod.id} className="kb-checkbox-label" htmlFor={`default-module-${mod.id}`}>
                         <input
                           type="checkbox"
+                          id={`default-module-${mod.id}`}
+                          aria-label={`Default module ${mod.name}`}
                           data-testid={`default-module-${mod.id}`}
                           checked={defaultModuleIds.includes(mod.id)}
                           onChange={(e) => {
@@ -1628,8 +1630,13 @@ export function ProjectSettingsPage(): JSX.Element {
             <form className="kb-add-member-form" onSubmit={handleCreateState}>
               <h3>Add Workflow State</h3>
               <div className="kb-form-row">
+                <label htmlFor="state-name-input" className="kb-visually-hidden">
+                  State name
+                </label>
                 <input
                   type="text"
+                  id="state-name-input"
+                  aria-label="State name"
                   data-testid="state-name-input"
                   className="kb-input"
                   placeholder="State name (e.g. In Review)"
@@ -1637,7 +1644,12 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setStateName(e.target.value); }}
                   required
                 />
+                <label htmlFor="state-group-select" className="kb-visually-hidden">
+                  State group
+                </label>
                 <select
+                  id="state-group-select"
+                  aria-label="State group"
                   data-testid="state-group-select"
                   className="kb-select"
                   value={stateGroup}
@@ -1662,9 +1674,11 @@ export function ProjectSettingsPage(): JSX.Element {
                   value={stateColor}
                   onChange={setStateColor}
                 />
-                <label className="kb-checkbox-label">
+                <label className="kb-checkbox-label" htmlFor="state-default-checkbox">
                   <input
                     type="checkbox"
+                    id="state-default-checkbox"
+                    aria-label="Default state"
                     data-testid="state-default-checkbox"
                     checked={stateIsDefault}
                     onChange={(e) => { setStateIsDefault(e.target.checked); }}
@@ -1686,16 +1700,28 @@ export function ProjectSettingsPage(): JSX.Element {
                 defaultOpen={false}
               >
                 <div className="kb-form-row kb-form-row-advanced">
+                  <label htmlFor="state-sort-order-input" className="kb-visually-hidden">
+                    Sort order
+                  </label>
                   <input
                     type="number"
+                    id="state-sort-order-input"
+                    aria-label="Sort order"
                     data-testid="state-sort-order-input"
                     className="kb-input"
                     placeholder="Order (0)"
                     value={stateSortOrder}
                     onChange={(e) => { setStateSortOrder(e.target.value); }}
                   />
+                  <label htmlFor="state-wip-soft-input" className="kb-visually-hidden">
+                    Soft WIP
+                  </label>
                   <input
                     type="number"
+                    id="state-wip-soft-input"
+                    aria-label="Soft WIP limit"
+                    aria-invalid={Boolean(wipLimitError)}
+                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
                     data-testid="state-wip-soft-input"
                     className="kb-input"
                     placeholder="Soft WIP"
@@ -1705,8 +1731,15 @@ export function ProjectSettingsPage(): JSX.Element {
                       setWipLimitError(null);
                     }}
                   />
+                  <label htmlFor="state-wip-hard-input" className="kb-visually-hidden">
+                    Hard WIP
+                  </label>
                   <input
                     type="number"
+                    id="state-wip-hard-input"
+                    aria-label="Hard WIP limit"
+                    aria-invalid={Boolean(wipLimitError)}
+                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
                     data-testid="state-wip-hard-input"
                     className="kb-input"
                     placeholder="Hard WIP"
@@ -1718,7 +1751,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   />
                 </div>
                 {wipLimitError && (
-                  <div className="kb-error-text" data-testid="wip-limit-error">
+                  <div className="kb-error-text" role="alert" id="wip-limit-error" data-testid="wip-limit-error">
                     {wipLimitError}
                   </div>
                 )}
@@ -1748,6 +1781,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <input
                             type="number"
+                            aria-label={`Edit order for state ${st.name}`}
                             data-testid={`state-edit-order-${st.id}`}
                             className="kb-input"
                             value={editStateSortOrder}
@@ -1766,6 +1800,7 @@ export function ProjectSettingsPage(): JSX.Element {
                             />
                             <input
                               type="text"
+                              aria-label={`Edit name for state ${st.name}`}
                               data-testid={`state-edit-name-${st.id}`}
                               className="kb-input"
                               maxLength={64}
@@ -1782,6 +1817,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <select
                             data-testid={`state-edit-group-${st.id}`}
+                            aria-label={`Edit group for state ${st.name}`}
                             className="kb-select"
                             value={editStateGroup}
                             onChange={(e) => {
@@ -1805,6 +1841,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <input
                             type="number"
+                            aria-label={`Edit soft WIP limit for state ${st.name}`}
                             data-testid={`state-edit-wip-soft-${st.id}`}
                             className="kb-input"
                             value={editStateWipSoft}
@@ -1814,6 +1851,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <input
                             type="number"
+                            aria-label={`Edit hard WIP limit for state ${st.name}`}
                             data-testid={`state-edit-wip-hard-${st.id}`}
                             className="kb-input"
                             value={editStateWipHard}
@@ -1821,9 +1859,11 @@ export function ProjectSettingsPage(): JSX.Element {
                           />
                         </td>
                         <td>
-                          <label className="kb-checkbox-label">
+                          <label className="kb-checkbox-label" htmlFor={`state-edit-default-${st.id}`}>
                             <input
                               type="checkbox"
+                              id={`state-edit-default-${st.id}`}
+                              aria-label={`Edit default for state ${st.name}`}
                               data-testid={`state-edit-default-${st.id}`}
                               checked={editStateIsDefault}
                               onChange={(e) => { setEditStateIsDefault(e.target.checked); }}
@@ -1942,8 +1982,13 @@ export function ProjectSettingsPage(): JSX.Element {
             <form className="kb-add-member-form" onSubmit={handleCreatePriority}>
               <h3>Add Priority</h3>
               <div className="kb-form-row">
+                <label htmlFor="priority-slug-input" className="kb-visually-hidden">
+                  Priority slug
+                </label>
                 <input
                   type="text"
+                  id="priority-slug-input"
+                  aria-label="Priority slug"
                   data-testid="priority-slug-input"
                   className="kb-input"
                   placeholder="Slug (e.g. urgent)"
@@ -1951,8 +1996,13 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setPrioritySlug(e.target.value); }}
                   required
                 />
+                <label htmlFor="priority-label-input" className="kb-visually-hidden">
+                  Priority label
+                </label>
                 <input
                   type="text"
+                  id="priority-label-input"
+                  aria-label="Priority label"
                   data-testid="priority-label-input"
                   className="kb-input"
                   placeholder="Label (e.g. Urgent)"
@@ -1960,8 +2010,13 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setPriorityLabel(e.target.value); }}
                   required
                 />
+                <label htmlFor="priority-emoji-input" className="kb-visually-hidden">
+                  Priority emoji
+                </label>
                 <input
                   type="text"
+                  id="priority-emoji-input"
+                  aria-label="Priority emoji"
                   data-testid="priority-emoji-input"
                   className="kb-input"
                   placeholder="Emoji (🔥)"
@@ -1973,17 +2028,24 @@ export function ProjectSettingsPage(): JSX.Element {
                   value={priorityColor}
                   onChange={setPriorityColor}
                 />
+                <label htmlFor="priority-sort-order-input" className="kb-visually-hidden">
+                  Priority sort order
+                </label>
                 <input
                   type="number"
+                  id="priority-sort-order-input"
+                  aria-label="Priority sort order"
                   data-testid="priority-sort-order-input"
                   className="kb-input"
                   placeholder="Sort Order"
                   value={prioritySortOrder}
                   onChange={(e) => { setPrioritySortOrder(e.target.value); }}
                 />
-                <label className="kb-checkbox-label">
+                <label className="kb-checkbox-label" htmlFor="priority-default-checkbox">
                   <input
                     type="checkbox"
+                    id="priority-default-checkbox"
+                    aria-label="Default priority"
                     data-testid="priority-default-checkbox"
                     checked={priorityIsDefault}
                     onChange={(e) => { setPriorityIsDefault(e.target.checked); }}
@@ -2023,6 +2085,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           <td>
                             <input
                               type="number"
+                              aria-label={`Edit sort order for priority ${p.label}`}
                               data-testid={`priority-edit-sort-${p.id}`}
                               className="kb-input"
                               value={editPrioritySortOrder}
@@ -2032,6 +2095,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           <td>
                             <input
                               type="text"
+                              aria-label={`Edit emoji for priority ${p.label}`}
                               data-testid={`priority-edit-emoji-${p.id}`}
                               className="kb-input"
                               value={editPriorityEmoji}
@@ -2041,6 +2105,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           <td>
                             <input
                               type="text"
+                              aria-label={`Edit label for priority ${p.label}`}
                               data-testid={`priority-edit-label-${p.id}`}
                               className="kb-input"
                               value={editPriorityLabel}
@@ -2050,6 +2115,7 @@ export function ProjectSettingsPage(): JSX.Element {
                           <td>
                             <input
                               type="text"
+                              aria-label={`Edit slug for priority ${p.label}`}
                               data-testid={`priority-edit-slug-${p.id}`}
                               className="kb-input"
                               value={editPrioritySlug}
@@ -2064,9 +2130,11 @@ export function ProjectSettingsPage(): JSX.Element {
                             />
                           </td>
                           <td>
-                            <label className="kb-checkbox-label">
+                            <label className="kb-checkbox-label" htmlFor={`priority-edit-default-${p.id}`}>
                               <input
                                 type="checkbox"
+                                id={`priority-edit-default-${p.id}`}
+                                aria-label={`Edit default for priority ${p.label}`}
                                 data-testid={`priority-edit-default-${p.id}`}
                                 checked={editPriorityIsDefault}
                                 onChange={(e) => { setEditPriorityIsDefault(e.target.checked); }}
@@ -2154,8 +2222,13 @@ export function ProjectSettingsPage(): JSX.Element {
             <form className="kb-add-member-form" onSubmit={handleCreateLabel}>
               <h3>Add Label</h3>
               <div className="kb-form-row">
+                <label htmlFor="label-name-input" className="kb-visually-hidden">
+                  Label name
+                </label>
                 <input
                   type="text"
+                  id="label-name-input"
+                  aria-label="Label name"
                   data-testid="label-name-input"
                   className="kb-input"
                   placeholder="Label name (e.g. bug, backend)"
@@ -2216,6 +2289,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <input
                             type="text"
+                            aria-label={`Edit name for label ${lbl.name}`}
                             data-testid={`label-edit-name-${lbl.id}`}
                             className="kb-input"
                             value={editLabelName}
@@ -2232,6 +2306,7 @@ export function ProjectSettingsPage(): JSX.Element {
                         <td>
                           <input
                             type="text"
+                            aria-label={`Edit exclusive group for label ${lbl.name}`}
                             data-testid={`label-edit-group-${lbl.id}`}
                             className="kb-input"
                             placeholder="Exclusive Group (optional)"
@@ -2329,8 +2404,13 @@ export function ProjectSettingsPage(): JSX.Element {
               <h3>Add Project Member</h3>
               <div className="kb-form-row">
                 <div className="kb-principal-picker">
+                  <label htmlFor="member-principal-id-input" className="kb-visually-hidden">
+                    Member principal
+                  </label>
                   <input
                     type="text"
+                    id="member-principal-id-input"
+                    aria-label="Search by name, @handle, or enter UUID"
                     data-testid="member-principal-id-input"
                     className="kb-input"
                     placeholder="Search by name, @handle, or enter UUID..."
@@ -2380,7 +2460,12 @@ export function ProjectSettingsPage(): JSX.Element {
                   )}
                 </div>
 
+                <label htmlFor="member-role-select" className="kb-visually-hidden">
+                  Member role
+                </label>
                 <select
+                  id="member-role-select"
+                  aria-label="Member role"
                   data-testid="member-role-select"
                   className="kb-select"
                   value={newRole}
@@ -2678,8 +2763,13 @@ export function ProjectSettingsPage(): JSX.Element {
                   To confirm, please type exact phrase: <code>{destructiveToken.confirm_phrase}</code>
                 </p>
 
+                <label htmlFor="confirm-phrase-input" className="kb-visually-hidden">
+                  Confirmation phrase
+                </label>
                 <input
                   type="text"
+                  id="confirm-phrase-input"
+                  aria-label="Confirmation phrase"
                   data-testid="confirm-phrase-input"
                   className="kb-input"
                   placeholder="Type confirmation phrase exactly"
@@ -2687,8 +2777,13 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setEnteredPhrase(e.target.value); }}
                 />
 
+                <label htmlFor="danger-reason-input" className="kb-visually-hidden">
+                  Reason for deletion
+                </label>
                 <input
                   type="text"
+                  id="danger-reason-input"
+                  aria-label="Reason for deletion"
                   data-testid="danger-reason-input"
                   className="kb-input kb-danger-reason-input"
                   placeholder="Reason for deletion (optional, min 10 chars)"

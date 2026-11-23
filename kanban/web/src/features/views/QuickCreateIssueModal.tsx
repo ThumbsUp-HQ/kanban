@@ -453,6 +453,8 @@ export function QuickCreateIssueModal({
                 setSummary(e.target.value);
               }}
               required
+              aria-invalid={Boolean(submitError)}
+              aria-describedby={submitError ? 'quick-create-error-msg' : undefined}
             />
           </div>
 
@@ -609,6 +611,7 @@ export function QuickCreateIssueModal({
 
           {submitError && (
             <div
+              id="quick-create-error-msg"
               className="quick-create-alert quick-create-alert--error"
               role="alert"
               data-testid="quick-create-error"
@@ -629,6 +632,7 @@ export function QuickCreateIssueModal({
                 type="checkbox"
                 className="quick-create-draft-checkbox"
                 data-testid="quick-create-draft-checkbox"
+                aria-label="Keep work-in-progress"
                 checked={isDraft}
                 onChange={(e) => {
                   setIsDraft(e.target.checked);
