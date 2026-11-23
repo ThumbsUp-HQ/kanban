@@ -307,7 +307,7 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     fireEvent.change(prioSelect, { target: { value: 'low' } });
   });
 
-  it('toggles filters expansion via mobile filters toggle button and opens/closes CSV and Reports modals', () => {
+  it('toggles filters expansion via mobile filters toggle button and opens/closes CSV, ZIP, and Reports modals', () => {
     render(
       <IssueNavigatorBar
         projectKey="KAN"
@@ -323,21 +323,59 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     fireEvent.click(toggleBtn);
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
 
-    // Open and close CSV Export modal
-    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    // Open export dropdown menu
+    const exportBtn = screen.getByTestId('navigator-export-btn');
+    expect(exportBtn.getAttribute('aria-haspopup')).toBe('menu');
+    expect(exportBtn.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(exportBtn);
+    expect(exportBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+
+    // 1. Open and close CSV Export modal via CSV option
+    fireEvent.click(screen.getByTestId('navigator-export-opt-csv'));
     expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
+    expect(csvRadio.checked).toBe(true);
     fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
     expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
 
-    // Open and close CSV Import modal
+    // 2. Open and close ZIP Export modal via Password-Protected ZIP option
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    fireEvent.click(screen.getByTestId('navigator-export-opt-zip'));
+    expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
+    expect(zipRadio.checked).toBe(true);
+    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+    expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+
+    // 3. Open and close Reports Export modal via Report Template option
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    fireEvent.click(screen.getByTestId('navigator-export-opt-template'));
+    expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
+    fireEvent.click(screen.getByTestId('report-export-close-btn'));
+    expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
+
+    // 4. Open and close CSV Import modal
     fireEvent.click(screen.getByTestId('navigator-import-btn'));
     expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
     fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
 
-    // Open and close Reports Export modal
+    // 5. Backwards-compatible alias for navigator-reports-export-btn
     fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
     expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
     fireEvent.click(screen.getByTestId('report-export-close-btn'));
     expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
+
+    // 6. Test menu dismissal with Escape key and outside click
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
   });
 });

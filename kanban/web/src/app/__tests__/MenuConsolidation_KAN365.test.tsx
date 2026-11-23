@@ -351,20 +351,48 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
       const listImportBtn = screen.getByTestId('navigator-import-btn');
       const listReportsBtn = screen.getByTestId('navigator-reports-export-btn');
 
+      // Open export dropdown and test CSV option
       act(() => {
         fireEvent.click(listExportBtn);
       });
+      const optCsv = screen.getByTestId('navigator-export-opt-csv');
+      act(() => {
+        fireEvent.click(optCsv);
+      });
       expect(handleExport).toHaveBeenCalledTimes(1);
+      expect(handleExport).toHaveBeenCalledWith('csv');
+
+      // Open export dropdown and test ZIP option
+      act(() => {
+        fireEvent.click(listExportBtn);
+      });
+      const optZip = screen.getByTestId('navigator-export-opt-zip');
+      act(() => {
+        fireEvent.click(optZip);
+      });
+      expect(handleExport).toHaveBeenCalledTimes(2);
+      expect(handleExport).toHaveBeenCalledWith('zip_csv');
+
+      // Open export dropdown and test Report Template option
+      act(() => {
+        fireEvent.click(listExportBtn);
+      });
+      const optTemplate = screen.getByTestId('navigator-export-opt-template');
+      act(() => {
+        fireEvent.click(optTemplate);
+      });
+      expect(handleExportReports).toHaveBeenCalledTimes(1);
 
       act(() => {
         fireEvent.click(listImportBtn);
       });
       expect(handleImport).toHaveBeenCalledTimes(1);
 
+      // Backwards-compatible reports trigger alias
       act(() => {
         fireEvent.click(listReportsBtn);
       });
-      expect(handleExportReports).toHaveBeenCalledTimes(1);
+      expect(handleExportReports).toHaveBeenCalledTimes(2);
 
       // 2. FilterDisplayBar refined Display popover actions
       act(() => {
@@ -394,6 +422,8 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
       // Verify refined popover content: Saved Views list, Save as view, Reports, Export, Import
       expect(within(popover).getByTestId('filter-display-saved-views-list')).toBeDefined();
       expect(within(popover).getByTestId('filter-display-save-view-btn')).toBeDefined();
+      expect(within(popover).getByTestId('filter-display-export-opt-csv')).toBeDefined();
+      expect(within(popover).getByTestId('filter-display-export-opt-zip')).toBeDefined();
       expect(within(popover).getByTestId('filter-display-reports-btn')).toBeDefined();
       expect(within(popover).getByTestId('filter-display-export-btn')).toBeDefined();
       expect(within(popover).getByTestId('filter-display-import-btn')).toBeDefined();
@@ -412,9 +442,31 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
       act(() => {
         fireEvent.click(reportsOption);
       });
-      expect(handleExportReports).toHaveBeenCalledTimes(2);
+      expect(handleExportReports).toHaveBeenCalledTimes(3);
 
-      // Reopen and trigger Export CSV
+      // Reopen and trigger Export CSV via option
+      act(() => {
+        fireEvent.click(displayBtn);
+      });
+      const optCsvOption = screen.getByTestId('filter-display-export-opt-csv');
+      act(() => {
+        fireEvent.click(optCsvOption);
+      });
+      expect(handleExport).toHaveBeenCalledTimes(3);
+      expect(handleExport).toHaveBeenCalledWith('csv');
+
+      // Reopen and trigger Export ZIP via option
+      act(() => {
+        fireEvent.click(displayBtn);
+      });
+      const optZipOption = screen.getByTestId('filter-display-export-opt-zip');
+      act(() => {
+        fireEvent.click(optZipOption);
+      });
+      expect(handleExport).toHaveBeenCalledTimes(4);
+      expect(handleExport).toHaveBeenCalledWith('zip_csv');
+
+      // Reopen and trigger Export CSV via backwards-compatible export btn
       act(() => {
         fireEvent.click(displayBtn);
       });
@@ -422,7 +474,7 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
       act(() => {
         fireEvent.click(exportOption);
       });
-      expect(handleExport).toHaveBeenCalledTimes(2);
+      expect(handleExport).toHaveBeenCalledTimes(5);
 
       // Reopen and trigger Import CSV
       act(() => {
@@ -449,6 +501,10 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
       const listExport = screen.getByTestId('navigator-export-btn');
       act(() => {
         fireEvent.click(listExport);
+      });
+      const optCsv = screen.getByTestId('navigator-export-opt-csv');
+      act(() => {
+        fireEvent.click(optCsv);
       });
 
       const listImport = screen.getByTestId('navigator-import-btn');

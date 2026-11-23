@@ -1,0 +1,650 @@
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx
+index d952c18c..94e60aac 100644
+--- a/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx
++++ b/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx
+@@ -351,20 +351,48 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
+       const listImportBtn = screen.getByTestId('navigator-import-btn');
+       const listReportsBtn = screen.getByTestId('navigator-reports-export-btn');
+ 
++      // Open export dropdown and test CSV option
+       act(() => {
+         fireEvent.click(listExportBtn);
+       });
++      const optCsv = screen.getByTestId('navigator-export-opt-csv');
++      act(() => {
++        fireEvent.click(optCsv);
++      });
+       expect(handleExport).toHaveBeenCalledTimes(1);
++      expect(handleExport).toHaveBeenCalledWith('csv');
++
++      // Open export dropdown and test ZIP option
++      act(() => {
++        fireEvent.click(listExportBtn);
++      });
++      const optZip = screen.getByTestId('navigator-export-opt-zip');
++      act(() => {
++        fireEvent.click(optZip);
++      });
++      expect(handleExport).toHaveBeenCalledTimes(2);
++      expect(handleExport).toHaveBeenCalledWith('zip_csv');
++
++      // Open export dropdown and test Report Template option
++      act(() => {
++        fireEvent.click(listExportBtn);
++      });
++      const optTemplate = screen.getByTestId('navigator-export-opt-template');
++      act(() => {
++        fireEvent.click(optTemplate);
++      });
++      expect(handleExportReports).toHaveBeenCalledTimes(1);
+ 
+       act(() => {
+         fireEvent.click(listImportBtn);
+       });
+       expect(handleImport).toHaveBeenCalledTimes(1);
+ 
++      // Backwards-compatible reports trigger alias
+       act(() => {
+         fireEvent.click(listReportsBtn);
+       });
+-      expect(handleExportReports).toHaveBeenCalledTimes(1);
++      expect(handleExportReports).toHaveBeenCalledTimes(2);
+ 
+       // 2. FilterDisplayBar refined Display popover actions
+       act(() => {
+@@ -394,6 +422,8 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
+       // Verify refined popover content: Saved Views list, Save as view, Reports, Export, Import
+       expect(within(popover).getByTestId('filter-display-saved-views-list')).toBeDefined();
+       expect(within(popover).getByTestId('filter-display-save-view-btn')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-export-opt-csv')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-export-opt-zip')).toBeDefined();
+       expect(within(popover).getByTestId('filter-display-reports-btn')).toBeDefined();
+       expect(within(popover).getByTestId('filter-display-export-btn')).toBeDefined();
+       expect(within(popover).getByTestId('filter-display-import-btn')).toBeDefined();
+@@ -412,9 +442,31 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
+       act(() => {
+         fireEvent.click(reportsOption);
+       });
+-      expect(handleExportReports).toHaveBeenCalledTimes(2);
++      expect(handleExportReports).toHaveBeenCalledTimes(3);
+ 
+-      // Reopen and trigger Export CSV
++      // Reopen and trigger Export CSV via option
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const optCsvOption = screen.getByTestId('filter-display-export-opt-csv');
++      act(() => {
++        fireEvent.click(optCsvOption);
++      });
++      expect(handleExport).toHaveBeenCalledTimes(3);
++      expect(handleExport).toHaveBeenCalledWith('csv');
++
++      // Reopen and trigger Export ZIP via option
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const optZipOption = screen.getByTestId('filter-display-export-opt-zip');
++      act(() => {
++        fireEvent.click(optZipOption);
++      });
++      expect(handleExport).toHaveBeenCalledTimes(4);
++      expect(handleExport).toHaveBeenCalledWith('zip_csv');
++
++      // Reopen and trigger Export CSV via backwards-compatible export btn
+       act(() => {
+         fireEvent.click(displayBtn);
+       });
+@@ -422,7 +474,7 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
+       act(() => {
+         fireEvent.click(exportOption);
+       });
+-      expect(handleExport).toHaveBeenCalledTimes(2);
++      expect(handleExport).toHaveBeenCalledTimes(5);
+ 
+       // Reopen and trigger Import CSV
+       act(() => {
+@@ -450,6 +502,10 @@ describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
+       act(() => {
+         fireEvent.click(listExport);
+       });
++      const optCsv = screen.getByTestId('navigator-export-opt-csv');
++      act(() => {
++        fireEvent.click(optCsv);
++      });
+ 
+       const listImport = screen.getByTestId('navigator-import-btn');
+       act(() => {
+diff --git a/kanban/web/src/features/views/CsvImportExportModal.tsx b/kanban/web/src/features/views/CsvImportExportModal.tsx
+index d1efe966..782aad8d 100644
+--- a/kanban/web/src/features/views/CsvImportExportModal.tsx
++++ b/kanban/web/src/features/views/CsvImportExportModal.tsx
+@@ -49,6 +49,7 @@ export interface CsvImportExportModalProps {
+   activeFilters?: ActiveFilters | undefined;
+   searchQuery?: string | undefined;
+   initialTab?: 'export' | 'import' | undefined;
++  initialExportFormat?: 'csv' | 'zip_csv' | undefined;
+   onImportSuccess?: (() => void) | undefined;
+ }
+ 
+@@ -60,10 +61,22 @@ export function CsvImportExportModal({
+   activeFilters = {},
+   searchQuery,
+   initialTab = 'export',
++  initialExportFormat = 'csv',
+   onImportSuccess,
+ }: CsvImportExportModalProps): JSX.Element | null {
+   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
+-  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>('csv');
++  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
++  if (initialTab !== prevInitialTab) {
++    setPrevInitialTab(initialTab);
++    setActiveTab(initialTab);
++  }
++
++  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>(initialExportFormat);
++  const [prevInitialExportFormat, setPrevInitialExportFormat] = useState(initialExportFormat);
++  if (initialExportFormat !== prevInitialExportFormat) {
++    setPrevInitialExportFormat(initialExportFormat);
++    setExportFormat(initialExportFormat);
++  }
+   const [exportPassword, setExportPassword] = useState('');
+   const [isExporting, setIsExporting] = useState(false);
+ 
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.tsx b/kanban/web/src/features/views/FilterDisplayBar.tsx
+index 6757560f..27fa3ea5 100644
+--- a/kanban/web/src/features/views/FilterDisplayBar.tsx
++++ b/kanban/web/src/features/views/FilterDisplayBar.tsx
+@@ -33,7 +33,7 @@ export interface FilterDisplayBarProps {
+   onSubGroupByChange?: (subGroup: GroupAxis) => void;
+   modulesEnabled?: boolean;
+   onSaveView?: () => void;
+-  onExport?: () => void;
++  onExport?: (format?: 'csv' | 'zip_csv') => void;
+   onImport?: () => void;
+   onExportReports?: () => void;
+   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+@@ -103,6 +103,7 @@ export function FilterDisplayBar({
+   const [liveCycles, setLiveCycles] = useState<FacetOption[]>([]);
+   const [liveModules, setLiveModules] = useState<FacetOption[]>([]);
+   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
++  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+   const internalSearchRef = useRef<HTMLInputElement>(null);
+   const searchRef = externalSearchRef ?? internalSearchRef;
+@@ -688,6 +689,39 @@ export function FilterDisplayBar({
+             >
+               Save as view
+             </button>
++            <div className="filter-facet-category-title">Export & Import</div>
++            <button
++              type="button"
++              className="filter-facet-option"
++              data-testid="filter-display-export-opt-csv"
++              onClick={() => {
++                if (onExport) {
++                  onExport('csv');
++                } else {
++                  setCsvExportFormat('csv');
++                  setCsvModalTab('export');
++                }
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              CSV (.csv)
++            </button>
++            <button
++              type="button"
++              className="filter-facet-option"
++              data-testid="filter-display-export-opt-zip"
++              onClick={() => {
++                if (onExport) {
++                  onExport('zip_csv');
++                } else {
++                  setCsvExportFormat('zip_csv');
++                  setCsvModalTab('export');
++                }
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              Password-Protected ZIP (AES-256)
++            </button>
+             <button
+               type="button"
+               className="filter-facet-option"
+@@ -701,7 +735,7 @@ export function FilterDisplayBar({
+                 setIsDisplayTuneOpen(false);
+               }}
+             >
+-              Export Reports (PDF, XLSX, CSV, DOCX, HTML, MD)
++              Report Template...
+             </button>
+             <button
+               type="button"
+@@ -709,8 +743,9 @@ export function FilterDisplayBar({
+               data-testid="filter-display-export-btn"
+               onClick={() => {
+                 if (onExport) {
+-                  onExport();
++                  onExport('csv');
+                 } else {
++                  setCsvExportFormat('csv');
+                   setCsvModalTab('export');
+                 }
+                 setIsDisplayTuneOpen(false);
+@@ -795,6 +830,7 @@ export function FilterDisplayBar({
+           activeFilters={activeFilters}
+           searchQuery={effectiveSearchQuery}
+           initialTab={csvModalTab}
++          initialExportFormat={csvExportFormat}
+         />
+       )}
+ 
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index d5639a37..55246ede 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -520,6 +520,52 @@
+   gap: var(--space-1, 4px);
+ }
+ 
++.navigator-export-dropdown {
++  position: relative;
++  display: inline-flex;
++}
++
++.navigator-export-menu {
++  position: absolute;
++  top: calc(100% + 4px);
++  left: 0;
++  z-index: 50;
++  min-width: 240px;
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-sm, 4px);
++  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
++  padding: 4px;
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.navigator-export-menu-item {
++  width: 100%;
++  text-align: left;
++  padding: 6px 10px;
++  background: transparent;
++  border: none;
++  border-radius: var(--radius-xs, 2px);
++  color: var(--fg-secondary, #cbd5e1);
++  font-family: var(--font-sans);
++  font-size: 12px;
++  font-weight: 500;
++  cursor: pointer;
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  transition: background-color 120ms ease, color 120ms ease;
++}
++
++.navigator-export-menu-item:hover,
++.navigator-export-menu-item:focus-visible {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++  outline: none;
++}
++
+ .navigator-csv-btn {
+   height: 28px;
+   padding: 0 10px;
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+index 9fab45ec..24be473d 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+@@ -307,7 +307,7 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+     fireEvent.change(prioSelect, { target: { value: 'low' } });
+   });
+ 
+-  it('toggles filters expansion via mobile filters toggle button and opens/closes CSV and Reports modals', () => {
++  it('toggles filters expansion via mobile filters toggle button and opens/closes CSV, ZIP, and Reports modals', () => {
+     render(
+       <IssueNavigatorBar
+         projectKey="KAN"
+@@ -323,21 +323,59 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+     fireEvent.click(toggleBtn);
+     expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+ 
+-    // Open and close CSV Export modal
++    // Open export dropdown menu
++    const exportBtn = screen.getByTestId('navigator-export-btn');
++    expect(exportBtn.getAttribute('aria-haspopup')).toBe('menu');
++    expect(exportBtn.getAttribute('aria-expanded')).toBe('false');
++
++    fireEvent.click(exportBtn);
++    expect(exportBtn.getAttribute('aria-expanded')).toBe('true');
++    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
++
++    // 1. Open and close CSV Export modal via CSV option
++    fireEvent.click(screen.getByTestId('navigator-export-opt-csv'));
++    expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
++    expect(csvRadio.checked).toBe(true);
++    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
++    expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
++
++    // 2. Open and close ZIP Export modal via Password-Protected ZIP option
+     fireEvent.click(screen.getByTestId('navigator-export-btn'));
++    fireEvent.click(screen.getByTestId('navigator-export-opt-zip'));
+     expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
++    expect(zipRadio.checked).toBe(true);
+     fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+     expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+ 
+-    // Open and close CSV Import modal
++    // 3. Open and close Reports Export modal via Report Template option
++    fireEvent.click(screen.getByTestId('navigator-export-btn'));
++    fireEvent.click(screen.getByTestId('navigator-export-opt-template'));
++    expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
++    fireEvent.click(screen.getByTestId('report-export-close-btn'));
++    expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
++
++    // 4. Open and close CSV Import modal
+     fireEvent.click(screen.getByTestId('navigator-import-btn'));
+     expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+     fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+ 
+-    // Open and close Reports Export modal
++    // 5. Backwards-compatible alias for navigator-reports-export-btn
+     fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
+     expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
+     fireEvent.click(screen.getByTestId('report-export-close-btn'));
+     expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
++
++    // 6. Test menu dismissal with Escape key and outside click
++    fireEvent.click(screen.getByTestId('navigator-export-btn'));
++    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
++    fireEvent.keyDown(document, { key: 'Escape' });
++    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
++
++    fireEvent.click(screen.getByTestId('navigator-export-btn'));
++    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
++    fireEvent.mouseDown(document.body);
++    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
+   });
+ });
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+index b2ac2efb..f40e84da 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+@@ -4,7 +4,7 @@
+  * and renders non-intrusive hidden-completed-banner during search.
+  */
+ 
+-import React, { useMemo, useCallback, useState, type JSX } from 'react';
++import React, { useMemo, useCallback, useState, useRef, useEffect, type JSX } from 'react';
+ import {
+   buildPreferenceFromExplicitStateTokens,
+   classifyStateFilterPreset,
+@@ -53,7 +53,7 @@ export interface IssueNavigatorBarProps {
+   activeViewId?: string | null;
+   onSelectSavedView?: (viewId: string) => void;
+   onSearchSubmit?: () => void;
+-  onExport?: () => void;
++  onExport?: (format?: 'csv' | 'zip_csv') => void;
+   onImport?: () => void;
+   onExportReports?: () => void;
+   className?: string;
+@@ -277,6 +277,29 @@ export function IssueNavigatorBar({
+   const currentModule = activeFilters.module?.[0] ?? 'all';
+   const [filtersExpanded, setFiltersExpanded] = React.useState<boolean>(false);
+   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
++  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
++  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
++  const exportMenuRef = useRef<HTMLDivElement>(null);
++
++  useEffect(() => {
++    if (!isExportMenuOpen) return;
++    const handleOutsideClick = (e: MouseEvent) => {
++      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
++        setIsExportMenuOpen(false);
++      }
++    };
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') {
++        setIsExportMenuOpen(false);
++      }
++    };
++    document.addEventListener('mousedown', handleOutsideClick);
++    document.addEventListener('keydown', handleKeyDown);
++    return () => {
++      document.removeEventListener('mousedown', handleOutsideClick);
++      document.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isExportMenuOpen]);
+ 
+   return (
+     <div
+@@ -359,23 +382,83 @@ export function IssueNavigatorBar({
+           </button>
+         </div>
+ 
+-        {/* CSV Import & Export Actions */}
+-        <div className="navigator-csv-actions" role="group" aria-label="CSV actions">
+-          <button
+-            type="button"
+-            className="navigator-csv-btn"
+-            data-testid="navigator-export-btn"
+-            aria-label="Export Issues to CSV"
+-            onClick={() => {
+-              if (onExport) {
+-                onExport();
+-              } else {
+-                setCsvModalTab('export');
+-              }
+-            }}
+-          >
+-            Export
+-          </button>
++        {/* CSV & Reports Export & Import Actions */}
++        <div className="navigator-csv-actions" role="group" aria-label="Export and import actions">
++          <div className="navigator-export-dropdown" ref={exportMenuRef}>
++            <button
++              type="button"
++              className="navigator-csv-btn navigator-export-btn"
++              data-testid="navigator-export-btn"
++              aria-label="Export issues"
++              aria-haspopup="menu"
++              aria-expanded={isExportMenuOpen}
++              onClick={() => {
++                setIsExportMenuOpen((prev) => !prev);
++              }}
++            >
++              <span>Export</span>
++              <span aria-hidden="true">▾</span>
++            </button>
++            {isExportMenuOpen && (
++              <div
++                className="navigator-export-menu"
++                role="menu"
++                aria-label="Export options"
++                data-testid="navigator-export-menu"
++              >
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="navigator-export-menu-item"
++                  data-testid="navigator-export-opt-csv"
++                  onClick={() => {
++                    setIsExportMenuOpen(false);
++                    if (onExport) {
++                      onExport('csv');
++                    } else {
++                      setCsvExportFormat('csv');
++                      setCsvModalTab('export');
++                    }
++                  }}
++                >
++                  CSV (.csv)
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="navigator-export-menu-item"
++                  data-testid="navigator-export-opt-zip"
++                  onClick={() => {
++                    setIsExportMenuOpen(false);
++                    if (onExport) {
++                      onExport('zip_csv');
++                    } else {
++                      setCsvExportFormat('zip_csv');
++                      setCsvModalTab('export');
++                    }
++                  }}
++                >
++                  Password-Protected ZIP (AES-256)
++                </button>
++                <button
++                  type="button"
++                  role="menuitem"
++                  className="navigator-export-menu-item"
++                  data-testid="navigator-export-opt-template"
++                  onClick={() => {
++                    setIsExportMenuOpen(false);
++                    if (onExportReports) {
++                      onExportReports();
++                    } else {
++                      setIsReportsModalOpen(true);
++                    }
++                  }}
++                >
++                  Report Template...
++                </button>
++              </div>
++            )}
++          </div>
+           <button
+             type="button"
+             className="navigator-csv-btn"
+@@ -391,6 +474,21 @@ export function IssueNavigatorBar({
+           >
+             Import
+           </button>
++          {/* Backwards-compatible alias for deprecated Row-2 reports export button */}
++          <button
++            type="button"
++            data-testid="navigator-reports-export-btn"
++            style={{ display: 'none' }}
++            aria-hidden="true"
++            tabIndex={-1}
++            onClick={() => {
++              if (onExportReports) {
++                onExportReports();
++              } else {
++                setIsReportsModalOpen(true);
++              }
++            }}
++          />
+         </div>
+ 
+         {/* Mobile / Compact Landscape Filters Toggle */}
+@@ -528,23 +626,6 @@ export function IssueNavigatorBar({
+           >
+             <span>{favoritesOnly ? '⭐ Favorites only' : '☆ Favorites only'}</span>
+           </button>
+-
+-          {/* Reports & Export Modal Trigger */}
+-          <button
+-            type="button"
+-            className="navigator-reports-btn"
+-            data-testid="navigator-reports-export-btn"
+-            onClick={() => {
+-              if (onExportReports) {
+-                onExportReports();
+-              } else {
+-                setIsReportsModalOpen(true);
+-              }
+-            }}
+-            title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
+-          >
+-            <span>📄 Export</span>
+-          </button>
+         </div>
+       )}
+ 
+@@ -632,6 +713,7 @@ export function IssueNavigatorBar({
+             activeFilters={activeFilters}
+             searchQuery={searchQuery}
+             initialTab={csvModalTab}
++            initialExportFormat={csvExportFormat}
+           />
+         )
+       }
+diff --git a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+index 85b62b2e..1fbf37fb 100644
+--- a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
++++ b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+@@ -68,6 +68,18 @@ describe('CsvImportExportModal (KAN-316)', () => {
+     });
+   });
+ 
++  it('supports initialExportFormat prop to pre-select CSV or ZIP format (KAN-374)', () => {
++    const { rerender } = render(
++      <CsvImportExportModal {...defaultProps} initialExportFormat="zip_csv" />,
++    );
++    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
++    expect(zipRadio.checked).toBe(true);
++
++    rerender(<CsvImportExportModal {...defaultProps} initialExportFormat="csv" />);
++    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
++    expect(csvRadio.checked).toBe(true);
++  });
++
+   it('switches between export and import tabs and handles template download success and failure', async () => {
+     const fetchMock = vi
+       .fn()
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index e3a0e223..bb3725dc 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -575,8 +575,14 @@ export function IssuesWorkspaceRoute({
+   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
+   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
++  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+ 
++  const handleExport = useCallback((format: 'csv' | 'zip_csv' = 'csv') => {
++    setCsvExportFormat(format);
++    setCsvModalTab('export');
++  }, []);
++
+   const handleOpenCreateModal = useCallback(() => {
+     setIsCreateModalOpen(true);
+   }, []);
+@@ -1275,7 +1281,7 @@ export function IssuesWorkspaceRoute({
+           savedViews={savedViews}
+           activeViewId={activeViewId}
+           onSelectSavedView={handleSelectSavedView}
+-          onExport={() => { setCsvModalTab('export'); }}
++          onExport={handleExport}
+           onImport={() => { setCsvModalTab('import'); }}
+           onExportReports={() => { setIsReportsModalOpen(true); }}
+         />
+@@ -1306,7 +1312,7 @@ export function IssuesWorkspaceRoute({
+           projectStates={projectStates}
+           stateFilter={stateFilterPref}
+           onStateFilterChange={handleUserStateFilterChange}
+-          onExport={() => { setCsvModalTab('export'); }}
++          onExport={handleExport}
+           onImport={() => { setCsvModalTab('import'); }}
+           onExportReports={() => { setIsReportsModalOpen(true); }}
+         />
+@@ -1540,6 +1546,7 @@ export function IssuesWorkspaceRoute({
+           activeFilters={activeFilters}
+           searchQuery={searchQuery}
+           initialTab={csvModalTab}
++          initialExportFormat={csvExportFormat}
+         />
+       )}
+ 
