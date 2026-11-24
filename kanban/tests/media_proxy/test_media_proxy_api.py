@@ -232,9 +232,9 @@ async def test_case_2_hmac_gate_defense(
         assert res_a.json()["code"] == "INVALID_SIGNATURE"
         assert resolver.call_count == 0
 
-        # B: Bit-flipped signature
+        # B: Bit-flipped signature (flip penultimate char inside the 32-byte digest)
         valid_path = sign_media_proxy_url("https://img.example.com/a.png", test_keys)
-        tampered_path = valid_path[:-1] + ("A" if valid_path[-1] != "A" else "B")
+        tampered_path = valid_path[:-2] + ("AA" if valid_path[-2:] != "AA" else "zz")
         res_b = await client.get(tampered_path)
         assert res_b.status_code == 403
         assert res_b.json()["code"] == "INVALID_SIGNATURE"
