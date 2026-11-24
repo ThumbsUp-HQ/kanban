@@ -451,6 +451,10 @@ async def test_stride_anti_enumeration_byte_identical_404(
                     "title": "Not Found",
                     "status": 404,
                     "code": "NOT_FOUND",
+                    "doc_href": "/docs/zero-trust-security-and-access-visibility",
+                    "help_summary": (
+                        "The requested resource was not found or you do not have access to view it."
+                    ),
                 }
 
                 # Compare headers excluding variable transport headers
