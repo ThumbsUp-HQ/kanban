@@ -11,6 +11,7 @@ import {
   type ImportSource,
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './PlaneImportStudio.css';
@@ -606,14 +607,24 @@ export function PlaneImportStudio(): JSX.Element {
                   <label
                     htmlFor="import-batch-size"
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
                       fontSize: '0.825rem',
                       fontWeight: 600,
                       marginBottom: 6,
                       color: 'var(--kb-color-text-secondary)',
                     }}
                   >
-                    Import Batch Size:
+                    Import Batch Size
+                    <FieldHelpHint
+                      title="Import Batch Size"
+                      summary="Number of entities to ingest per transactional database batch."
+                      defaultValue="100 items per batch"
+                      validValues={['10 to 1000 items']}
+                      docHref="/docs/migration-and-cutover-runbook#plane-import"
+                      testId="plane-import-batch-size-help"
+                    />
                   </label>
                   <input
                     id="import-batch-size"
@@ -635,14 +646,23 @@ export function PlaneImportStudio(): JSX.Element {
                   <label
                     htmlFor="import-conflict-strategy"
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
+                      width: '100%',
                       fontSize: '0.825rem',
                       fontWeight: 600,
                       marginBottom: 6,
                       color: 'var(--kb-color-text-secondary)',
                     }}
                   >
-                    Conflict Resolution Strategy:
+                    Conflict Resolution Strategy
+                    <FieldHelpHint
+                      title="Conflict Resolution Strategy"
+                      summary="Policy when encountering duplicate identifiers during workspace import."
+                      defaultValue="Skip Existing"
+                      docHref="/docs/migration-and-cutover-runbook#plane-import"
+                      testId="plane-import-conflict-strategy-help"
+                    />
                   </label>
                   <select
                     id="import-conflict-strategy"

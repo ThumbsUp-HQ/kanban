@@ -25,7 +25,6 @@ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
 import { DeleteAuditModal } from './DeleteAuditModal';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
-import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
@@ -1468,7 +1467,16 @@ export function ProjectSettingsPage(): JSX.Element {
         {activeTab === 'general' && (
           <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
             <div className="kb-form-group">
-              <label htmlFor="proj-name-input">Project Name</label>
+              <label htmlFor="proj-name-input">
+                Project Name
+                <FieldHelpHint
+                  title="Project Name"
+                  summary="Human-readable project name displayed across project boards and navigation."
+                  defaultValue="My Project"
+                  docHref="/docs/ticket-screen-and-work-item-features"
+                  testId="proj-name-help"
+                />
+              </label>
               <input
                 id="proj-name-input"
                 data-testid="project-name-input"
@@ -1481,7 +1489,16 @@ export function ProjectSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="proj-desc-input">Description (Markdown)</label>
+              <label htmlFor="proj-desc-input">
+                Description (Markdown)
+                <FieldHelpHint
+                  title="Description"
+                  summary="Markdown-formatted project summary and scope guidelines."
+                  defaultValue="None (blank)"
+                  docHref="/docs/ticket-screen-and-work-item-features"
+                  testId="proj-desc-help"
+                />
+              </label>
               <textarea
                 id="proj-desc-input"
                 data-testid="project-desc-input"
@@ -1505,6 +1522,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 <FieldHelpHint
                   title="Project Modules"
                   summary="Enables multi-milestone and component bundling across project issues."
+                  defaultValue="Enabled (true)"
                   docHref="/docs/ticket-screen-and-work-item-features#modules"
                   testId="proj-modules-help"
                 />
@@ -1564,16 +1582,24 @@ export function ProjectSettingsPage(): JSX.Element {
                     onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
                   />
                   <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+                  <FieldHelpHint
+                    title="Agent-Safe Sequence Numbering"
+                    summary="Automatically skips culturally or technically ambiguous issue numbers (13, 69, 88, 404, 420, 666, 1337, 1488) in this project."
+                    defaultValue="Inherits Workspace Default (Enabled)"
+                    docHref="/docs/ticket-screen-and-work-item-features"
+                    testId="proj-skip-seq-help"
+                  />
                 </label>
-                <EmojiHint kind="agentSafeNumbering" />
               </div>
 
               <div className="kb-form-group">
                 <label htmlFor="proj-auto-archive-input">
-                  Auto-Archive Days (optional)
+                  Auto-Archive Days (optional, Default: Off)
                   <FieldHelpHint
                     title="Auto-Archive Days"
                     summary="Number of days after completion or cancellation before work items are automatically archived from active views."
+                    defaultValue="Disabled (blank; e.g. 30 days)"
+                    validValues={['1 to 365 days (Leave blank to disable auto-archival)']}
                     example="30"
                     docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
                     testId="proj-auto-archive-help"
@@ -2255,7 +2281,16 @@ export function ProjectSettingsPage(): JSX.Element {
                 defaultOpen={false}
               >
                 <div className="kb-form-group">
-                  <label htmlFor="label-exclusive-group-input">Exclusive Group (optional)</label>
+                  <label htmlFor="label-exclusive-group-input">
+                    Exclusive Group (optional)
+                    <FieldHelpHint
+                      title="Exclusive Group"
+                      summary="Mutual exclusion group tag ensuring only one label in the group can be attached to an issue."
+                      defaultValue="None (unrestricted)"
+                      docHref="/docs/ticket-screen-and-work-item-features#labels"
+                      testId="proj-exclusive-group-help"
+                    />
+                  </label>
                   <input
                     id="label-exclusive-group-input"
                     type="text"

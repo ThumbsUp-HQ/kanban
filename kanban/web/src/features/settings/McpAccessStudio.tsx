@@ -1362,7 +1362,14 @@ export function McpAccessStudio({
 
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
-                  Expiration:
+                  Expiration
+                  <FieldHelpHint
+                    title="Token Expiration"
+                    summary="Lifetime duration before newly minted MCP access key expires."
+                    defaultValue="30 Days (Max: Workspace TTL)"
+                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                    testId="mcp-expiry-help"
+                  />
                 </label>
                 <select
                   id="mint-expiry-select"
@@ -1429,7 +1436,14 @@ export function McpAccessStudio({
               >
                 <div className="kb-mcp-form-row">
                   <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
-                    Capability Ceiling:
+                    Capability Ceiling
+                    <FieldHelpHint
+                      title="Capability Ceiling"
+                      summary="Maximum permission ceiling bitmask allocated to the client."
+                      defaultValue="31 (Standard Developer Agent)"
+                      docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                      testId="mcp-capability-ceiling-help"
+                    />
                   </label>
                   <select
                     id="capability-preset-select"

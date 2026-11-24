@@ -1,0 +1,1029 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 68c973e9..5eee52bc 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -16,7 +16,7 @@
+   min-height: 18px;
+   flex-shrink: 0;
+   padding: 0;
+-  margin: 0 0 0 var(--space-1);
++  margin: 0 0 0 auto;
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-full);
+   background: var(--bg-surface);
+@@ -152,7 +152,8 @@
+ }
+ 
+ /* Example section */
+-.field-help-hint-example {
++.field-help-hint-example,
++.field-help-hint-default {
+   margin-top: var(--space-1);
+ }
+ 
+@@ -219,3 +220,21 @@
+   outline: var(--focus-ring-w) solid var(--focus-ring);
+   outline-offset: 2px;
+ }
++
++/* Global form-label flex alignment pinning .field-help-hint to the right edge */
++label:has(> .field-help-hint),
++.kb-label:has(> .field-help-hint),
++.kb-form-label:has(> .field-help-hint),
++.kb-toggle-label:has(> .field-help-hint),
++.kb-checkbox-label:has(> .field-help-hint),
++.kb-mcp-form-label:has(> .field-help-hint),
++.kb-oauth-form-label:has(> .field-help-hint),
++.custom-field-form-label:has(> .field-help-hint),
++.workflow-form-label:has(> .field-help-hint),
++.auth-editor-label:has(> .field-help-hint),
++.kb-personal-settings-label:has(> .field-help-hint) {
++  display: flex;
++  align-items: center;
++  width: 100%;
++  gap: var(--space-2, 8px);
++}
+diff --git a/kanban/web/src/components/help/FieldHelpHint.test.tsx b/kanban/web/src/components/help/FieldHelpHint.test.tsx
+index 96796ccc..a885ac8e 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.test.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.test.tsx
+@@ -303,10 +303,33 @@ describe('FieldHelpHint Component', () => {
+     });
+ 
+     const popover = screen.getByTestId('blocks-hint-popover');
++    expect(popover.textContent).toContain('Example:');
+     expect(popover.textContent).toContain("issue.state === 'DONE' ? 100 : 0");
+     expect(popover.textContent).toContain('Cannot access external network.');
+   });
+ 
++  it('renders optional defaultValue block when provided', () => {
++    render(
++      <FieldHelpHint
++        title="Session Idle Timeout"
++        summary="Inactivity timeout."
++        defaultValue="30 minutes"
++        testId="default-val-hint"
++      />,
++    );
++
++    act(() => {
++      screen.getByTestId('default-val-hint').focus();
++    });
++
++    const popover = screen.getByTestId('default-val-hint-popover');
++    expect(popover.textContent).toContain('Default:');
++    expect(popover.textContent).toContain('30 minutes');
++    const defaultBlock = screen.getByTestId('default-val-hint-default');
++    expect(defaultBlock).toBeDefined();
++    expect(defaultBlock.querySelector('.field-help-hint-code')?.textContent).toBe('30 minutes');
++  });
++
+   it('renders More info -> footer link defaulting to /docs/custom-fields', () => {
+     render(
+       <FieldHelpHint
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index cace6d68..d094a2c0 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -44,6 +44,7 @@ export function FieldHelpHint({
+   title,
+   summary,
+   validValues,
++  defaultValue,
+   example,
+   caution,
+   docHref = '/docs/custom-fields',
+@@ -372,6 +373,16 @@ export function FieldHelpHint({
+ 
+             <div className="field-help-hint-summary">{summary}</div>
+ 
++            {defaultValue && (
++              <div
++                className="field-help-hint-default"
++                data-testid={testId ? `${testId}-default` : 'field-help-default-value'}
++              >
++                <span className="field-help-hint-subhead">Default:</span>
++                <code className="field-help-hint-code">{defaultValue}</code>
++              </div>
++            )}
++
+             {normalizedValues.length > 0 && (
+               <div className="field-help-hint-values">
+                 <span className="field-help-hint-subhead">Valid Values:</span>
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index d94e7bc3..3678fde5 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -407,6 +407,14 @@ function AgentDefinitionEditorContent({
+           <div className="kb-form-group">
+             <label htmlFor="agent-timeout-input" className="kb-form-label">
+               Timeout (milliseconds, 1000 to 300000)
++              <FieldHelpHint
++                title="Agent Timeout"
++                summary="Execution deadline in milliseconds before aborting agent harness invocation."
++                defaultValue="60000 ms (60 seconds)"
++                validValues={['1000 to 300000 ms']}
++                docHref="/docs/multi-provider-ai-engine-and-runners"
++                testId="agent-timeout-help"
++              />
+             </label>
+             <input
+               id="agent-timeout-input"
+diff --git a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+index a8f8b019..23425991 100644
+--- a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
++++ b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+@@ -2,6 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React, { useState, useEffect, type JSX } from 'react';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import {
+   fetchBudgets,
+   setBudget,
+@@ -188,6 +189,13 @@ function AiBudgetModalContent({
+             <div className="kb-form-group">
+               <label htmlFor="budget-token-cap-input" className="kb-form-label">
+                 Maximum Token Cap
++                <FieldHelpHint
++                  title="Maximum Token Cap"
++                  summary="Hard token usage ceiling enforced during the accounting window."
++                  defaultValue="0 (Zero-allowance freeze) or positive quota"
++                  docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
++                  testId="budget-token-cap-help"
++                />
+               </label>
+               <input
+                 id="budget-token-cap-input"
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index ac3a0646..5c74f7dc 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -505,6 +505,7 @@ function AiProviderEditorContent({
+             <FieldHelpHint
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
++              defaultValue="30000 ms (30 seconds)"
+               validValues={['1000 to 300000 (Default: 30000)']}
+               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
+               testId="provider-timeout-help"
+@@ -677,6 +678,14 @@ function AiProviderEditorContent({
+               <div className="kb-form-group">
+                 <label htmlFor="provider-temperature-input" className="kb-form-label">
+                   Temperature
++                  <FieldHelpHint
++                    title="Temperature"
++                    summary="Sampling randomness governing creative variance versus deterministic predictability."
++                    defaultValue="0.7"
++                    validValues={['0.0 to 2.0']}
++                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
++                    testId="provider-temperature-help"
++                  />
+                 </label>
+                 <input
+                   id="provider-temperature-input"
+@@ -698,6 +707,14 @@ function AiProviderEditorContent({
+               <div className="kb-form-group">
+                 <label htmlFor="provider-top-p-input" className="kb-form-label">
+                   Top-P (Nucleus)
++                  <FieldHelpHint
++                    title="Top-P (Nucleus)"
++                    summary="Nucleus sampling threshold pruning lowest-probability tokens."
++                    defaultValue="1.0"
++                    validValues={['0.0 to 1.0']}
++                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
++                    testId="provider-top-p-help"
++                  />
+                 </label>
+                 <input
+                   id="provider-top-p-input"
+@@ -719,6 +736,14 @@ function AiProviderEditorContent({
+               <div className="kb-form-group">
+                 <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+                   Max Tokens
++                  <FieldHelpHint
++                    title="Max Tokens"
++                    summary="Maximum generation token ceiling for completion and reasoning generation."
++                    defaultValue="4096 tokens"
++                    validValues={['1 to 128000 tokens']}
++                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
++                    testId="provider-max-tokens-help"
++                  />
+                 </label>
+                 <input
+                   id="provider-max-tokens-input"
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index 5dca8049..0ccae4cb 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -11,6 +11,7 @@ import {
+   type ImportSource,
+ } from './planeImportApi';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './PlaneImportStudio.css';
+@@ -606,14 +607,24 @@ export function PlaneImportStudio(): JSX.Element {
+                   <label
+                     htmlFor="import-batch-size"
+                     style={{
+-                      display: 'block',
++                      display: 'flex',
++                      alignItems: 'center',
++                      width: '100%',
+                       fontSize: '0.825rem',
+                       fontWeight: 600,
+                       marginBottom: 6,
+                       color: 'var(--kb-color-text-secondary)',
+                     }}
+                   >
+-                    Import Batch Size:
++                    Import Batch Size
++                    <FieldHelpHint
++                      title="Import Batch Size"
++                      summary="Number of entities to ingest per transactional database batch."
++                      defaultValue="100 items per batch"
++                      validValues={['10 to 1000 items']}
++                      docHref="/docs/migration-and-cutover-runbook#plane-import"
++                      testId="plane-import-batch-size-help"
++                    />
+                   </label>
+                   <input
+                     id="import-batch-size"
+@@ -635,14 +646,23 @@ export function PlaneImportStudio(): JSX.Element {
+                   <label
+                     htmlFor="import-conflict-strategy"
+                     style={{
+-                      display: 'block',
++                      display: 'flex',
++                      alignItems: 'center',
++                      width: '100%',
+                       fontSize: '0.825rem',
+                       fontWeight: 600,
+                       marginBottom: 6,
+                       color: 'var(--kb-color-text-secondary)',
+                     }}
+                   >
+-                    Conflict Resolution Strategy:
++                    Conflict Resolution Strategy
++                    <FieldHelpHint
++                      title="Conflict Resolution Strategy"
++                      summary="Policy when encountering duplicate identifiers during workspace import."
++                      defaultValue="Skip Existing"
++                      docHref="/docs/migration-and-cutover-runbook#plane-import"
++                      testId="plane-import-conflict-strategy-help"
++                    />
+                   </label>
+                   <select
+                     id="import-conflict-strategy"
+diff --git a/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx b/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
+index 4ef73089..e651affc 100644
+--- a/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
++++ b/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
+@@ -125,6 +125,13 @@ function MintEnrollmentTokenContent({
+           <div className="kb-form-group">
+             <label htmlFor="token-ttl-select" className="kb-form-label">
+               Token Expiration (TTL)
++              <FieldHelpHint
++                title="Token Expiration (TTL)"
++                summary="Lifetime of the single-use enrollment token before expiry."
++                defaultValue="900 seconds (15 minutes)"
++                docHref="/docs/multi-provider-ai-engine-and-runners"
++                testId="mint-token-ttl-help"
++              />
+             </label>
+             <select
+               id="token-ttl-select"
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.css b/kanban/web/src/features/projects/CreateProjectModal.css
+index 2dc8b529..f8856427 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.css
++++ b/kanban/web/src/features/projects/CreateProjectModal.css
+@@ -89,6 +89,7 @@
+ .kb-create-project-checkbox-row {
+   display: flex;
+   align-items: center;
++  width: 100%;
+   gap: 8px;
+   font-size: 13px;
+   cursor: pointer;
+@@ -97,6 +98,7 @@
+ .kb-create-project-checkbox-row-wrap {
+   display: flex;
+   align-items: center;
++  width: 100%;
+   gap: 8px;
+ }
+ 
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.test.tsx b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+index 45f64b00..16ea1052 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.test.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+@@ -602,4 +602,28 @@ describe('CreateProjectModal & useSessionGuard', () => {
+       expect(screen.getByRole('alert').textContent).toContain('Could not create project.');
+     });
+   });
++
++  it('renders Agent-Safe Sequence Numbering help hint with default value (KAN-394)', async () => {
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++      if (url.includes('/api/v1/admin/workspace-settings')) {
++        return Promise.resolve(new Response(JSON.stringify({ default_skip_loaded_sequence_numbers: true }), { status: 200 }));
++      }
++      return Promise.resolve(new Response(null, { status: 404 }));
++    });
++
++    render(
++      <MemoryRouter>
++        <CreateProjectModal isOpen={true} onClose={vi.fn()} />
++      </MemoryRouter>,
++    );
++
++    const hintTrigger = screen.getByTestId('create-proj-skip-seq-help');
++    expect(hintTrigger).toBeDefined();
++    fireEvent.focus(hintTrigger);
++
++    const popover = screen.getByTestId('create-proj-skip-seq-help-popover');
++    expect(popover.textContent).toContain('Default:');
++    expect(popover.textContent).toContain('Enabled (true)');
++  });
+ });
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.tsx b/kanban/web/src/features/projects/CreateProjectModal.tsx
+index f5b55a4b..7066d8ad 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.tsx
+@@ -9,7 +9,7 @@
+ import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
+ import { useNavigate } from 'react-router';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+-import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import './CreateProjectModal.css';
+ 
+ export interface CreatedProject {
+@@ -385,8 +385,14 @@ export function CreateProjectModal({
+                 }}
+               />
+               <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++              <FieldHelpHint
++                title="Agent-Safe Sequence Numbering"
++                summary="Skips culturally or technically ambiguous sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) when creating new tickets."
++                defaultValue="Enabled (true)"
++                docHref="/docs/ticket-screen-and-work-item-features"
++                testId="create-proj-skip-seq-help"
++              />
+             </label>
+-            <EmojiHint kind="agentSafeNumbering" />
+           </div>
+ 
+           {errorMessage && (
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 9330cc4b..6c40410e 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -1362,7 +1362,14 @@ export function McpAccessStudio({
+ 
+               <div className="kb-mcp-form-row">
+                 <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
+-                  Expiration:
++                  Expiration
++                  <FieldHelpHint
++                    title="Token Expiration"
++                    summary="Lifetime duration before newly minted MCP access key expires."
++                    defaultValue="30 Days (Max: Workspace TTL)"
++                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
++                    testId="mcp-expiry-help"
++                  />
+                 </label>
+                 <select
+                   id="mint-expiry-select"
+@@ -1429,7 +1436,14 @@ export function McpAccessStudio({
+               >
+                 <div className="kb-mcp-form-row">
+                   <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
+-                    Capability Ceiling:
++                    Capability Ceiling
++                    <FieldHelpHint
++                      title="Capability Ceiling"
++                      summary="Maximum permission ceiling bitmask allocated to the client."
++                      defaultValue="31 (Standard Developer Agent)"
++                      docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
++                      testId="mcp-capability-ceiling-help"
++                    />
+                   </label>
+                   <select
+                     id="capability-preset-select"
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index 428e30f6..b84bd4f9 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -6,6 +6,7 @@ import { apiFetch } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { McpAccessStudio } from './McpAccessStudio';
+ import './McpAccessStudio.css';
+ 
+@@ -514,7 +515,17 @@ export function WorkloadFederationSection({
+               </div>
+ 
+               <div className="kb-mcp-form-group">
+-                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">Capability Mask (0-255)</label>
++                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">
++                  Capability Mask (0-255)
++                  <FieldHelpHint
++                    title="Capability Mask"
++                    summary="Bitmask ceiling governing allowed Model Context Protocol operations."
++                    defaultValue="31 (Standard Developer Agent)"
++                    validValues={['0 to 255']}
++                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
++                    testId="policy-cap-mask-help"
++                  />
++                </label>
+                 <input
+                   id="wl-policy-cap-mask"
+                   type="number"
+@@ -541,7 +552,17 @@ export function WorkloadFederationSection({
+               </div>
+ 
+               <div className="kb-mcp-form-group">
+-                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">Max TTL Seconds</label>
++                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">
++                  Max TTL Seconds
++                  <FieldHelpHint
++                    title="Max TTL Seconds"
++                    summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."
++                    defaultValue="3600 seconds (1 hour)"
++                    validValues={['60 to 86400 seconds']}
++                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
++                    testId="policy-ttl-help"
++                  />
++                </label>
+                 <input
+                   id="wl-policy-ttl"
+                   type="number"
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index 6f38222f..98a168ee 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -42,6 +42,7 @@ import { ApiProblem } from '../../api/problem';
+ import type { MfaMethod } from '../auth/authApi';
+ import { copyToClipboard } from '../../utils/clipboard';
+ import { qk } from '../../api/queryKeys';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AvatarCropModal } from './AvatarCropModal';
+ import { AvatarLightboxModal } from './AvatarLightboxModal';
+ import './PersonalSettingsPage.css';
+@@ -698,6 +699,14 @@ export function PersonalSettingsPage(): JSX.Element {
+           <div className="kb-personal-settings-field">
+             <label htmlFor="timezone-select" className="kb-personal-settings-label">
+               Timezone
++              <FieldHelpHint
++                title="Timezone"
++                summary="IANA timezone identifier governing all localized timestamps across the interface."
++                defaultValue="UTC"
++                validValues={['IANA Timezone database identifier']}
++                docHref="/docs/user-profile-and-personal-settings"
++                testId="personal-timezone-help"
++              />
+             </label>
+             <select
+               id="timezone-select"
+@@ -767,6 +776,14 @@ export function PersonalSettingsPage(): JSX.Element {
+           <div className="kb-personal-settings-field">
+             <label htmlFor="new-password" className="kb-personal-settings-label">
+               New Password
++              <FieldHelpHint
++                title="New Password"
++                summary="Account password conforming to minimum entropy length requirements."
++                defaultValue="Minimum 12 characters (14 for Server Admins)"
++                validValues={['Minimum 12 characters (14 for Server Admins)']}
++                docHref="/docs/zero-trust-security-and-access-visibility#authentication"
++                testId="personal-new-password-help"
++              />
+             </label>
+             <div className="kb-personal-settings-password-wrapper">
+               <input
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index 6a80a8a5..b3d01e28 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -104,7 +104,12 @@
+   gap: 0.35rem;
+ }
+ 
+-.kb-form-group label {
++.kb-form-group label,
++.kb-form-group .kb-label {
++  display: flex;
++  align-items: center;
++  width: 100%;
++  gap: 0.5rem;
+   font-size: 0.9rem;
+   font-weight: 600;
+   color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
+@@ -117,6 +122,7 @@
+ .kb-checkbox-label {
+   display: flex;
+   align-items: center;
++  width: 100%;
+   gap: 0.5rem;
+   cursor: pointer;
+   font-size: 0.9rem;
+@@ -366,7 +372,8 @@
+ .kb-toggle-label {
+   display: flex;
+   align-items: center;
+-  gap: 0.75rem;
++  width: 100%;
++  gap: 0.5rem;
+   cursor: pointer;
+   font-weight: 500;
+   font-size: 0.95rem;
+@@ -374,6 +381,7 @@
+ }
+ 
+ .kb-toggle-text {
++  flex: 1 1 auto;
+   user-select: none;
+ }
+ 
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 00c89953..00b4cf4c 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -25,7 +25,6 @@ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
+ import { DeleteAuditModal } from './DeleteAuditModal';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+-import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+@@ -1468,7 +1467,16 @@ export function ProjectSettingsPage(): JSX.Element {
+         {activeTab === 'general' && (
+           <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
+             <div className="kb-form-group">
+-              <label htmlFor="proj-name-input">Project Name</label>
++              <label htmlFor="proj-name-input">
++                Project Name
++                <FieldHelpHint
++                  title="Project Name"
++                  summary="Human-readable project name displayed across project boards and navigation."
++                  defaultValue="My Project"
++                  docHref="/docs/ticket-screen-and-work-item-features"
++                  testId="proj-name-help"
++                />
++              </label>
+               <input
+                 id="proj-name-input"
+                 data-testid="project-name-input"
+@@ -1481,7 +1489,16 @@ export function ProjectSettingsPage(): JSX.Element {
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="proj-desc-input">Description (Markdown)</label>
++              <label htmlFor="proj-desc-input">
++                Description (Markdown)
++                <FieldHelpHint
++                  title="Description"
++                  summary="Markdown-formatted project summary and scope guidelines."
++                  defaultValue="None (blank)"
++                  docHref="/docs/ticket-screen-and-work-item-features"
++                  testId="proj-desc-help"
++                />
++              </label>
+               <textarea
+                 id="proj-desc-input"
+                 data-testid="project-desc-input"
+@@ -1505,6 +1522,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                 <FieldHelpHint
+                   title="Project Modules"
+                   summary="Enables multi-milestone and component bundling across project issues."
++                  defaultValue="Enabled (true)"
+                   docHref="/docs/ticket-screen-and-work-item-features#modules"
+                   testId="proj-modules-help"
+                 />
+@@ -1564,16 +1582,24 @@ export function ProjectSettingsPage(): JSX.Element {
+                     onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+                   />
+                   <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++                  <FieldHelpHint
++                    title="Agent-Safe Sequence Numbering"
++                    summary="Automatically skips culturally or technically ambiguous issue numbers (13, 69, 88, 404, 420, 666, 1337, 1488) in this project."
++                    defaultValue="Inherits Workspace Default (Enabled)"
++                    docHref="/docs/ticket-screen-and-work-item-features"
++                    testId="proj-skip-seq-help"
++                  />
+                 </label>
+-                <EmojiHint kind="agentSafeNumbering" />
+               </div>
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="proj-auto-archive-input">
+-                  Auto-Archive Days (optional)
++                  Auto-Archive Days (optional, Default: Off)
+                   <FieldHelpHint
+                     title="Auto-Archive Days"
+                     summary="Number of days after completion or cancellation before work items are automatically archived from active views."
++                    defaultValue="Disabled (blank; e.g. 30 days)"
++                    validValues={['1 to 365 days (Leave blank to disable auto-archival)']}
+                     example="30"
+                     docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
+                     testId="proj-auto-archive-help"
+@@ -2255,7 +2281,16 @@ export function ProjectSettingsPage(): JSX.Element {
+                 defaultOpen={false}
+               >
+                 <div className="kb-form-group">
+-                  <label htmlFor="label-exclusive-group-input">Exclusive Group (optional)</label>
++                  <label htmlFor="label-exclusive-group-input">
++                    Exclusive Group (optional)
++                    <FieldHelpHint
++                      title="Exclusive Group"
++                      summary="Mutual exclusion group tag ensuring only one label in the group can be attached to an issue."
++                      defaultValue="None (unrestricted)"
++                      docHref="/docs/ticket-screen-and-work-item-features#labels"
++                      testId="proj-exclusive-group-help"
++                    />
++                  </label>
+                   <input
+                     id="label-exclusive-group-input"
+                     type="text"
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index 760469b6..440d36ee 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -18,7 +18,6 @@ import { apiFetch } from '../../api/client';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+-import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+@@ -905,7 +904,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         {activeTab === 'general' && (
+           <form onSubmit={handleSaveGeneral} className="kb-settings-form" data-testid="workspace-general-form">
+             <div className="kb-form-group">
+-              <label htmlFor="ws-name-input">Workspace Name</label>
++              <label htmlFor="ws-name-input">
++                Workspace Name
++                <FieldHelpHint
++                  title="Workspace Name"
++                  summary="Human-readable organization workspace name shown in headers and navigation."
++                  defaultValue="kanban"
++                  docHref="/docs/studio-configuration-reference"
++                  testId="ws-name-help"
++                />
++              </label>
+               <input
+                 id="ws-name-input"
+                 type="text"
+@@ -918,7 +926,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="ws-slug-input">Workspace Slug</label>
++              <label htmlFor="ws-slug-input">
++                Workspace Slug
++                <FieldHelpHint
++                  title="Workspace Slug"
++                  summary="URL-safe lowercase identifier slug for workspace routes and API calls."
++                  defaultValue="kanban"
++                  validValues={['Lowercase letters, digits, and hyphens (a-z0-9-)']}
++                  docHref="/docs/studio-configuration-reference"
++                  testId="ws-slug-help"
++                />
++              </label>
+               <input
+                 id="ws-slug-input"
+                 type="text"
+@@ -931,7 +949,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="ws-display-name-input">Display Name</label>
++              <label htmlFor="ws-display-name-input">
++                Display Name
++                <FieldHelpHint
++                  title="Display Name"
++                  summary="Optional public-facing organization display name."
++                  defaultValue="Same as Workspace Name"
++                  docHref="/docs/studio-configuration-reference"
++                  testId="ws-display-name-help"
++                />
++              </label>
+               <input
+                 id="ws-display-name-input"
+                 type="text"
+@@ -949,6 +976,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                 <FieldHelpHint
+                   title="Default Project Visibility"
+                   summary="Controls whether newly created projects default to workspace-wide visibility or strict private access."
++                  defaultValue="Workspace (All members can view)"
+                   validValues={[
+                     { label: 'Workspace', description: 'All members of the workspace can discover and view by default.' },
+                     { label: 'Private', description: 'Restricted strictly to explicitly invited members.' },
+@@ -982,6 +1010,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <FieldHelpHint
+                     title="Granular Field-Level Override Rules"
+                     summary="Configure custom permission overrides on individual issue and project attributes."
++                    defaultValue="Strict workspace inheritance enabled"
+                     docHref="/docs/role-and-permission-matrix#workspace-level-roles"
+                     testId="ws-field-override-help"
+                   />
+@@ -993,10 +1022,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="ws-idle-timeout-input">
+-                  Session Idle Timeout (Minutes)
++                  Session Idle Timeout (Minutes, Default: 30)
+                   <FieldHelpHint
+                     title="Session Idle Timeout"
+                     summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
++                    defaultValue="30 minutes"
++                    validValues={['5 to 1440 minutes (Minimum: 5 minutes)']}
+                     docHref="/docs/multi-card-authentication-studio"
+                     testId="ws-idle-timeout-help"
+                   />
+@@ -1014,7 +1045,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
++                <label htmlFor="ws-abs-timeout-input">
++                  Session Absolute Timeout (Minutes, Default: 480)
++                  <FieldHelpHint
++                    title="Session Absolute Timeout"
++                    summary="Maximum lifetime of an authenticated browser session in minutes before mandatory re-login, regardless of activity."
++                    defaultValue="480 minutes (8 hours)"
++                    validValues={['60 to 43200 minutes (Minimum: 60 minutes)']}
++                    docHref="/docs/multi-card-authentication-studio"
++                    testId="ws-abs-timeout-help"
++                  />
++                </label>
+                 <input
+                   id="ws-abs-timeout-input"
+                   type="number"
+@@ -1028,7 +1069,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
++                <label htmlFor="ws-trash-retention-input">
++                  Trash Retention Days (Default: 30)
++                  <FieldHelpHint
++                    title="Trash Retention Days"
++                    summary="Number of days soft-deleted projects, issues, docs, and stickies remain restorable in workspace trash before automated permanent sweep. Updating this policy requires a fresh AAL2 (2FA) session."
++                    defaultValue="30 days"
++                    validValues={['7 to 365 days']}
++                    docHref="/docs/production-promotion-and-backup-runbook"
++                    testId="ws-trash-retention-help"
++                  />
++                </label>
+                 <input
+                   id="ws-trash-retention-input"
+                   type="number"
+@@ -1043,7 +1094,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
++                <label htmlFor="ws-mcp-key-max-ttl-input">
++                  MCP Key Max TTL (Days, Default: 90)
++                  <FieldHelpHint
++                    title="MCP Key Max TTL (Days)"
++                    summary="Maximum allowed expiration lifetime in days for newly minted Model Context Protocol (MCP) access keys in this workspace."
++                    defaultValue="90 days"
++                    validValues={['1 to 365 days']}
++                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
++                    testId="ws-mcp-key-ttl-help"
++                  />
++                </label>
+                 <input
+                   id="ws-mcp-key-max-ttl-input"
+                   type="number"
+@@ -1073,6 +1134,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <FieldHelpHint
+                     title="Air-Gap Mode"
+                     summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
++                    defaultValue="Disabled (false)"
+                     caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
+                     docHref="/docs/zero-trust-security-and-access-visibility"
+                     testId="ws-air-gap-help"
+@@ -1093,8 +1155,14 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <span className="kb-toggle-text">
+                     Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
+                   </span>
++                  <FieldHelpHint
++                    title="Agent-Safe Sequence Numbering"
++                    summary="Automatically skips culturally or technically ambiguous sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) when allocating new ticket keys."
++                    defaultValue="Enabled (true)"
++                    docHref="/docs/ticket-screen-and-work-item-features"
++                    testId="ws-skip-seq-help"
++                  />
+                 </label>
+-                <EmojiHint kind="agentSafeNumbering" />
+               </div>
+ 
+               <div className="kb-form-group kb-form-group-toggle">
+@@ -1113,6 +1181,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <span className="kb-toggle-text">
+                     Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)
+                   </span>
++                  <FieldHelpHint
++                    title="Enable Issue Export"
++                    summary="Allows authorized workspace roles to export work items to CSV or AES-256 password-protected ZIP archives."
++                    defaultValue="Enabled (true)"
++                    docHref="/docs/zero-trust-security-and-access-visibility"
++                    testId="ws-issue-export-help"
++                  />
+                 </label>
+               </div>
+ 
+@@ -1132,11 +1207,27 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <span className="kb-toggle-text">
+                     Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)
+                   </span>
++                  <FieldHelpHint
++                    title="Enable Issue Import"
++                    summary="Allows authorized administrators to import work items from CSV or password-protected ZIP bundles."
++                    defaultValue="Enabled (true)"
++                    docHref="/docs/migration-and-cutover-runbook"
++                    testId="ws-issue-import-help"
++                  />
+                 </label>
+               </div>
+ 
+               <div className="kb-form-group" data-testid="workspace-setting-export-roles">
+-                <label className="kb-label">Allowed Issue Export Roles</label>
++                <label className="kb-label">
++                  Allowed Issue Export Roles
++                  <FieldHelpHint
++                    title="Allowed Issue Export Roles"
++                    summary="Selects which workspace roles are permitted to trigger bulk CSV/ZIP issue exports when Issue Export is enabled."
++                    defaultValue="Workspace Admin, Project Admin, Member"
++                    docHref="/docs/role-and-permission-matrix"
++                    testId="ws-export-roles-help"
++                  />
++                </label>
+                 <div className="kb-roles-checklist">
+                   {[
+                     { role: 'workspace_admin', label: 'Workspace Admin' },
+@@ -1175,6 +1266,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <FieldHelpHint
+                     title="Webhook Restrictions"
+                     summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
++                    defaultValue="HMAC SHA-256 payload signing required"
+                     docHref="/docs/zero-trust-security-and-access-visibility"
+                     testId="ws-webhook-help"
+                   />
+@@ -1646,8 +1738,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
+               </p>
+               {isWsOrServerAdmin && (
+                 <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
+-                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-visually-hidden">
+-                    Trash Retention Days
++                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-label">
++                    Trash Retention Days (Default: 30)
++                    <FieldHelpHint
++                      title="Trash Retention Days"
++                      summary="Number of days soft-deleted projects, issues, docs, and stickies remain restorable in workspace trash before automated permanent sweep. Updating this policy requires a fresh AAL2 (2FA) session."
++                      defaultValue="30 days"
++                      validValues={['7 to 365 days']}
++                      docHref="/docs/production-promotion-and-backup-runbook"
++                      testId="ws-trash-retention-help"
++                    />
+                   </label>
+                   <input
+                     id="ws-trash-retention-input-trash-tab"
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index 34bad00b..0813a4d9 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -3600,5 +3600,53 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       fireEvent.click(screen.getByTestId('tab-roles'));
+       expect(await screen.findByTestId('project-roles-section')).toBeDefined();
+     });
++
++    it('renders normalized help hints and default values on project settings (KAN-394)', async () => {
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        const url: string = path;
++        const m = method.toUpperCase();
++
++        if ((url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) && m === 'GET') {
++          return {
++            id: 'p-1',
++            identifier: 'KAN',
++            name: 'Kanban Platform',
++            is_project_admin: true,
++            modules_enabled: true,
++            skip_loaded_sequence_numbers: true,
++          };
++        }
++        if (url.includes('/api/v1/projects/KAN/modules')) return [];
++        if (url.includes('/api/v1/projects/KAN/states')) return [];
++        if (url.includes('/api/v1/projects/KAN/labels')) return [];
++        return {};
++      });
++
++      renderComponent('KAN');
++
++      const nameHint = await screen.findByTestId('proj-name-help');
++      fireEvent.focus(nameHint);
++      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('Default:');
++      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('My Project');
++      fireEvent.blur(nameHint);
++
++      const modulesHint = screen.getByTestId('proj-modules-help');
++      fireEvent.focus(modulesHint);
++      expect(screen.getByTestId('proj-modules-help-popover').textContent).toContain('Enabled (true)');
++      fireEvent.blur(modulesHint);
++
++      // Expand advanced section
++      fireEvent.click(screen.getByTestId('project-general-advanced-section-toggle'));
++
++      const skipHint = screen.getByTestId('proj-skip-seq-help');
++      fireEvent.focus(skipHint);
++      expect(screen.getByTestId('proj-skip-seq-help-popover').textContent).toContain('Inherits Workspace Default (Enabled)');
++      fireEvent.blur(skipHint);
++
++      const autoArchiveHint = screen.getByTestId('proj-auto-archive-help');
++      fireEvent.focus(autoArchiveHint);
++      expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index 850d3be6..bece5e6c 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -2730,4 +2730,66 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     ).toBeDefined();
+     expect(screen.queryByText(/WinZip/i)).toBeNull();
+   });
++
++  it('renders normalized help hints and default values across settings fields (KAN-394)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      if (path.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true };
++      }
++      if (path.includes('/api/v1/admin/workspace-settings')) {
++        return {
++          id: 'ws-norm',
++          name: 'Normalization Test',
++          slug: 'norm-test',
++          display_name: 'Norm Org',
++          default_project_visibility: 'workspace',
++          session_idle_timeout_minutes: 30,
++          session_absolute_timeout_minutes: 480,
++          trash_retention_days: 30,
++          mcp_key_max_ttl_days: 90,
++          air_gap_mode: false,
++          default_skip_loaded_sequence_numbers: true,
++          issue_export_enabled: true,
++          issue_import_enabled: true,
++          issue_export_allowed_roles: ['workspace_admin', 'project_admin', 'member'],
++        };
++      }
++      return [];
++    });
++
++    renderComponent();
++
++    const nameHint = await screen.findByTestId('ws-name-help');
++    fireEvent.focus(nameHint);
++    expect(screen.getByTestId('ws-name-help-popover').textContent).toContain('Default:');
++    expect(screen.getByTestId('ws-name-help-popover').textContent).toContain('kanban');
++
++    fireEvent.blur(nameHint);
++
++    const slugHint = screen.getByTestId('ws-slug-help');
++    fireEvent.focus(slugHint);
++    expect(screen.getByTestId('ws-slug-help-popover').textContent).toContain('kanban');
++
++    fireEvent.blur(slugHint);
++
++    const advToggle = screen.getByTestId('workspace-advanced-security-section-toggle');
++    fireEvent.click(advToggle);
++
++    const idleHint = screen.getByTestId('ws-idle-timeout-help');
++    fireEvent.focus(idleHint);
++    expect(screen.getByTestId('ws-idle-timeout-help-popover').textContent).toContain('30 minutes');
++
++    fireEvent.blur(idleHint);
++
++    const absHint = screen.getByTestId('ws-abs-timeout-help');
++    fireEvent.focus(absHint);
++    expect(screen.getByTestId('ws-abs-timeout-help-popover').textContent).toContain('480 minutes (8 hours)');
++
++    fireEvent.blur(absHint);
++
++    const skipHint = screen.getByTestId('ws-skip-seq-help');
++    fireEvent.focus(skipHint);
++    expect(screen.getByTestId('ws-skip-seq-help-popover').textContent).toContain('Enabled (true)');
++  });
+ });

@@ -2730,4 +2730,66 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     ).toBeDefined();
     expect(screen.queryByText(/WinZip/i)).toBeNull();
   });
+
+  it('renders normalized help hints and default values across settings fields (KAN-394)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return {
+          id: 'ws-norm',
+          name: 'Normalization Test',
+          slug: 'norm-test',
+          display_name: 'Norm Org',
+          default_project_visibility: 'workspace',
+          session_idle_timeout_minutes: 30,
+          session_absolute_timeout_minutes: 480,
+          trash_retention_days: 30,
+          mcp_key_max_ttl_days: 90,
+          air_gap_mode: false,
+          default_skip_loaded_sequence_numbers: true,
+          issue_export_enabled: true,
+          issue_import_enabled: true,
+          issue_export_allowed_roles: ['workspace_admin', 'project_admin', 'member'],
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    const nameHint = await screen.findByTestId('ws-name-help');
+    fireEvent.focus(nameHint);
+    expect(screen.getByTestId('ws-name-help-popover').textContent).toContain('Default:');
+    expect(screen.getByTestId('ws-name-help-popover').textContent).toContain('kanban');
+
+    fireEvent.blur(nameHint);
+
+    const slugHint = screen.getByTestId('ws-slug-help');
+    fireEvent.focus(slugHint);
+    expect(screen.getByTestId('ws-slug-help-popover').textContent).toContain('kanban');
+
+    fireEvent.blur(slugHint);
+
+    const advToggle = screen.getByTestId('workspace-advanced-security-section-toggle');
+    fireEvent.click(advToggle);
+
+    const idleHint = screen.getByTestId('ws-idle-timeout-help');
+    fireEvent.focus(idleHint);
+    expect(screen.getByTestId('ws-idle-timeout-help-popover').textContent).toContain('30 minutes');
+
+    fireEvent.blur(idleHint);
+
+    const absHint = screen.getByTestId('ws-abs-timeout-help');
+    fireEvent.focus(absHint);
+    expect(screen.getByTestId('ws-abs-timeout-help-popover').textContent).toContain('480 minutes (8 hours)');
+
+    fireEvent.blur(absHint);
+
+    const skipHint = screen.getByTestId('ws-skip-seq-help');
+    fireEvent.focus(skipHint);
+    expect(screen.getByTestId('ws-skip-seq-help-popover').textContent).toContain('Enabled (true)');
+  });
 });

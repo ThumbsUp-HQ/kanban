@@ -125,6 +125,13 @@ function MintEnrollmentTokenContent({
           <div className="kb-form-group">
             <label htmlFor="token-ttl-select" className="kb-form-label">
               Token Expiration (TTL)
+              <FieldHelpHint
+                title="Token Expiration (TTL)"
+                summary="Lifetime of the single-use enrollment token before expiry."
+                defaultValue="900 seconds (15 minutes)"
+                docHref="/docs/multi-provider-ai-engine-and-runners"
+                testId="mint-token-ttl-help"
+              />
             </label>
             <select
               id="token-ttl-select"

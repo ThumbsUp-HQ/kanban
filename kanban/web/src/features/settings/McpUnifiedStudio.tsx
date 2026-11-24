@@ -6,6 +6,7 @@ import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { McpAccessStudio } from './McpAccessStudio';
 import './McpAccessStudio.css';
 
@@ -514,7 +515,17 @@ export function WorkloadFederationSection({
               </div>
 
               <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">Capability Mask (0-255)</label>
+                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">
+                  Capability Mask (0-255)
+                  <FieldHelpHint
+                    title="Capability Mask"
+                    summary="Bitmask ceiling governing allowed Model Context Protocol operations."
+                    defaultValue="31 (Standard Developer Agent)"
+                    validValues={['0 to 255']}
+                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                    testId="policy-cap-mask-help"
+                  />
+                </label>
                 <input
                   id="wl-policy-cap-mask"
                   type="number"
@@ -541,7 +552,17 @@ export function WorkloadFederationSection({
               </div>
 
               <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">Max TTL Seconds</label>
+                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">
+                  Max TTL Seconds
+                  <FieldHelpHint
+                    title="Max TTL Seconds"
+                    summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."
+                    defaultValue="3600 seconds (1 hour)"
+                    validValues={['60 to 86400 seconds']}
+                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                    testId="policy-ttl-help"
+                  />
+                </label>
                 <input
                   id="wl-policy-ttl"
                   type="number"

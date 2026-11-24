@@ -44,6 +44,7 @@ export function FieldHelpHint({
   title,
   summary,
   validValues,
+  defaultValue,
   example,
   caution,
   docHref = '/docs/custom-fields',
@@ -371,6 +372,16 @@ export function FieldHelpHint({
             </div>
 
             <div className="field-help-hint-summary">{summary}</div>
+
+            {defaultValue && (
+              <div
+                className="field-help-hint-default"
+                data-testid={testId ? `${testId}-default` : 'field-help-default-value'}
+              >
+                <span className="field-help-hint-subhead">Default:</span>
+                <code className="field-help-hint-code">{defaultValue}</code>
+              </div>
+            )}
 
             {normalizedValues.length > 0 && (
               <div className="field-help-hint-values">

@@ -18,7 +18,6 @@ import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
-import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import { AdvancedSection } from '../../ui/AdvancedSection';
@@ -905,7 +904,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
         {activeTab === 'general' && (
           <form onSubmit={handleSaveGeneral} className="kb-settings-form" data-testid="workspace-general-form">
             <div className="kb-form-group">
-              <label htmlFor="ws-name-input">Workspace Name</label>
+              <label htmlFor="ws-name-input">
+                Workspace Name
+                <FieldHelpHint
+                  title="Workspace Name"
+                  summary="Human-readable organization workspace name shown in headers and navigation."
+                  defaultValue="kanban"
+                  docHref="/docs/studio-configuration-reference"
+                  testId="ws-name-help"
+                />
+              </label>
               <input
                 id="ws-name-input"
                 type="text"
@@ -918,7 +926,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="ws-slug-input">Workspace Slug</label>
+              <label htmlFor="ws-slug-input">
+                Workspace Slug
+                <FieldHelpHint
+                  title="Workspace Slug"
+                  summary="URL-safe lowercase identifier slug for workspace routes and API calls."
+                  defaultValue="kanban"
+                  validValues={['Lowercase letters, digits, and hyphens (a-z0-9-)']}
+                  docHref="/docs/studio-configuration-reference"
+                  testId="ws-slug-help"
+                />
+              </label>
               <input
                 id="ws-slug-input"
                 type="text"
@@ -931,7 +949,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="ws-display-name-input">Display Name</label>
+              <label htmlFor="ws-display-name-input">
+                Display Name
+                <FieldHelpHint
+                  title="Display Name"
+                  summary="Optional public-facing organization display name."
+                  defaultValue="Same as Workspace Name"
+                  docHref="/docs/studio-configuration-reference"
+                  testId="ws-display-name-help"
+                />
+              </label>
               <input
                 id="ws-display-name-input"
                 type="text"
@@ -949,6 +976,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 <FieldHelpHint
                   title="Default Project Visibility"
                   summary="Controls whether newly created projects default to workspace-wide visibility or strict private access."
+                  defaultValue="Workspace (All members can view)"
                   validValues={[
                     { label: 'Workspace', description: 'All members of the workspace can discover and view by default.' },
                     { label: 'Private', description: 'Restricted strictly to explicitly invited members.' },
@@ -982,6 +1010,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <FieldHelpHint
                     title="Granular Field-Level Override Rules"
                     summary="Configure custom permission overrides on individual issue and project attributes."
+                    defaultValue="Strict workspace inheritance enabled"
                     docHref="/docs/role-and-permission-matrix#workspace-level-roles"
                     testId="ws-field-override-help"
                   />
@@ -993,10 +1022,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
               <div className="kb-form-group">
                 <label htmlFor="ws-idle-timeout-input">
-                  Session Idle Timeout (Minutes)
+                  Session Idle Timeout (Minutes, Default: 30)
                   <FieldHelpHint
                     title="Session Idle Timeout"
                     summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
+                    defaultValue="30 minutes"
+                    validValues={['5 to 1440 minutes (Minimum: 5 minutes)']}
                     docHref="/docs/multi-card-authentication-studio"
                     testId="ws-idle-timeout-help"
                   />
@@ -1014,7 +1045,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
+                <label htmlFor="ws-abs-timeout-input">
+                  Session Absolute Timeout (Minutes, Default: 480)
+                  <FieldHelpHint
+                    title="Session Absolute Timeout"
+                    summary="Maximum lifetime of an authenticated browser session in minutes before mandatory re-login, regardless of activity."
+                    defaultValue="480 minutes (8 hours)"
+                    validValues={['60 to 43200 minutes (Minimum: 60 minutes)']}
+                    docHref="/docs/multi-card-authentication-studio"
+                    testId="ws-abs-timeout-help"
+                  />
+                </label>
                 <input
                   id="ws-abs-timeout-input"
                   type="number"
@@ -1028,7 +1069,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
+                <label htmlFor="ws-trash-retention-input">
+                  Trash Retention Days (Default: 30)
+                  <FieldHelpHint
+                    title="Trash Retention Days"
+                    summary="Number of days soft-deleted projects, issues, docs, and stickies remain restorable in workspace trash before automated permanent sweep. Updating this policy requires a fresh AAL2 (2FA) session."
+                    defaultValue="30 days"
+                    validValues={['7 to 365 days']}
+                    docHref="/docs/production-promotion-and-backup-runbook"
+                    testId="ws-trash-retention-help"
+                  />
+                </label>
                 <input
                   id="ws-trash-retention-input"
                   type="number"
@@ -1043,7 +1094,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
+                <label htmlFor="ws-mcp-key-max-ttl-input">
+                  MCP Key Max TTL (Days, Default: 90)
+                  <FieldHelpHint
+                    title="MCP Key Max TTL (Days)"
+                    summary="Maximum allowed expiration lifetime in days for newly minted Model Context Protocol (MCP) access keys in this workspace."
+                    defaultValue="90 days"
+                    validValues={['1 to 365 days']}
+                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                    testId="ws-mcp-key-ttl-help"
+                  />
+                </label>
                 <input
                   id="ws-mcp-key-max-ttl-input"
                   type="number"
@@ -1073,6 +1134,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <FieldHelpHint
                     title="Air-Gap Mode"
                     summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
+                    defaultValue="Disabled (false)"
                     caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
                     docHref="/docs/zero-trust-security-and-access-visibility"
                     testId="ws-air-gap-help"
@@ -1093,8 +1155,14 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <span className="kb-toggle-text">
                     Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
                   </span>
+                  <FieldHelpHint
+                    title="Agent-Safe Sequence Numbering"
+                    summary="Automatically skips culturally or technically ambiguous sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) when allocating new ticket keys."
+                    defaultValue="Enabled (true)"
+                    docHref="/docs/ticket-screen-and-work-item-features"
+                    testId="ws-skip-seq-help"
+                  />
                 </label>
-                <EmojiHint kind="agentSafeNumbering" />
               </div>
 
               <div className="kb-form-group kb-form-group-toggle">
@@ -1113,6 +1181,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <span className="kb-toggle-text">
                     Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)
                   </span>
+                  <FieldHelpHint
+                    title="Enable Issue Export"
+                    summary="Allows authorized workspace roles to export work items to CSV or AES-256 password-protected ZIP archives."
+                    defaultValue="Enabled (true)"
+                    docHref="/docs/zero-trust-security-and-access-visibility"
+                    testId="ws-issue-export-help"
+                  />
                 </label>
               </div>
 
@@ -1132,11 +1207,27 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <span className="kb-toggle-text">
                     Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)
                   </span>
+                  <FieldHelpHint
+                    title="Enable Issue Import"
+                    summary="Allows authorized administrators to import work items from CSV or password-protected ZIP bundles."
+                    defaultValue="Enabled (true)"
+                    docHref="/docs/migration-and-cutover-runbook"
+                    testId="ws-issue-import-help"
+                  />
                 </label>
               </div>
 
               <div className="kb-form-group" data-testid="workspace-setting-export-roles">
-                <label className="kb-label">Allowed Issue Export Roles</label>
+                <label className="kb-label">
+                  Allowed Issue Export Roles
+                  <FieldHelpHint
+                    title="Allowed Issue Export Roles"
+                    summary="Selects which workspace roles are permitted to trigger bulk CSV/ZIP issue exports when Issue Export is enabled."
+                    defaultValue="Workspace Admin, Project Admin, Member"
+                    docHref="/docs/role-and-permission-matrix"
+                    testId="ws-export-roles-help"
+                  />
+                </label>
                 <div className="kb-roles-checklist">
                   {[
                     { role: 'workspace_admin', label: 'Workspace Admin' },
@@ -1175,6 +1266,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <FieldHelpHint
                     title="Webhook Restrictions"
                     summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
+                    defaultValue="HMAC SHA-256 payload signing required"
                     docHref="/docs/zero-trust-security-and-access-visibility"
                     testId="ws-webhook-help"
                   />
@@ -1646,8 +1738,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
               </p>
               {isWsOrServerAdmin && (
                 <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
-                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-visually-hidden">
-                    Trash Retention Days
+                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-label">
+                    Trash Retention Days (Default: 30)
+                    <FieldHelpHint
+                      title="Trash Retention Days"
+                      summary="Number of days soft-deleted projects, issues, docs, and stickies remain restorable in workspace trash before automated permanent sweep. Updating this policy requires a fresh AAL2 (2FA) session."
+                      defaultValue="30 days"
+                      validValues={['7 to 365 days']}
+                      docHref="/docs/production-promotion-and-backup-runbook"
+                      testId="ws-trash-retention-help"
+                    />
                   </label>
                   <input
                     id="ws-trash-retention-input-trash-tab"

@@ -407,6 +407,14 @@ function AgentDefinitionEditorContent({
           <div className="kb-form-group">
             <label htmlFor="agent-timeout-input" className="kb-form-label">
               Timeout (milliseconds, 1000 to 300000)
+              <FieldHelpHint
+                title="Agent Timeout"
+                summary="Execution deadline in milliseconds before aborting agent harness invocation."
+                defaultValue="60000 ms (60 seconds)"
+                validValues={['1000 to 300000 ms']}
+                docHref="/docs/multi-provider-ai-engine-and-runners"
+                testId="agent-timeout-help"
+              />
             </label>
             <input
               id="agent-timeout-input"

@@ -104,7 +104,12 @@
   gap: 0.35rem;
 }
 
-.kb-form-group label {
+.kb-form-group label,
+.kb-form-group .kb-label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
@@ -117,6 +122,7 @@
 .kb-checkbox-label {
   display: flex;
   align-items: center;
+  width: 100%;
   gap: 0.5rem;
   cursor: pointer;
   font-size: 0.9rem;
@@ -366,7 +372,8 @@
 .kb-toggle-label {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  width: 100%;
+  gap: 0.5rem;
   cursor: pointer;
   font-weight: 500;
   font-size: 0.95rem;
@@ -374,6 +381,7 @@
 }
 
 .kb-toggle-text {
+  flex: 1 1 auto;
   user-select: none;
 }
 

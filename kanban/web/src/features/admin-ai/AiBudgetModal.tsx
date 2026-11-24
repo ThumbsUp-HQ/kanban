@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, type JSX } from 'react';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   fetchBudgets,
   setBudget,
@@ -188,6 +189,13 @@ function AiBudgetModalContent({
             <div className="kb-form-group">
               <label htmlFor="budget-token-cap-input" className="kb-form-label">
                 Maximum Token Cap
+                <FieldHelpHint
+                  title="Maximum Token Cap"
+                  summary="Hard token usage ceiling enforced during the accounting window."
+                  defaultValue="0 (Zero-allowance freeze) or positive quota"
+                  docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
+                  testId="budget-token-cap-help"
+                />
               </label>
               <input
                 id="budget-token-cap-input"

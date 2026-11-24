@@ -9,7 +9,7 @@
 import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
-import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './CreateProjectModal.css';
 
 export interface CreatedProject {
@@ -385,8 +385,14 @@ export function CreateProjectModal({
                 }}
               />
               <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+              <FieldHelpHint
+                title="Agent-Safe Sequence Numbering"
+                summary="Skips culturally or technically ambiguous sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) when creating new tickets."
+                defaultValue="Enabled (true)"
+                docHref="/docs/ticket-screen-and-work-item-features"
+                testId="create-proj-skip-seq-help"
+              />
             </label>
-            <EmojiHint kind="agentSafeNumbering" />
           </div>
 
           {errorMessage && (

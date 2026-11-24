@@ -42,6 +42,7 @@ import { ApiProblem } from '../../api/problem';
 import type { MfaMethod } from '../auth/authApi';
 import { copyToClipboard } from '../../utils/clipboard';
 import { qk } from '../../api/queryKeys';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AvatarCropModal } from './AvatarCropModal';
 import { AvatarLightboxModal } from './AvatarLightboxModal';
 import './PersonalSettingsPage.css';
@@ -698,6 +699,14 @@ export function PersonalSettingsPage(): JSX.Element {
           <div className="kb-personal-settings-field">
             <label htmlFor="timezone-select" className="kb-personal-settings-label">
               Timezone
+              <FieldHelpHint
+                title="Timezone"
+                summary="IANA timezone identifier governing all localized timestamps across the interface."
+                defaultValue="UTC"
+                validValues={['IANA Timezone database identifier']}
+                docHref="/docs/user-profile-and-personal-settings"
+                testId="personal-timezone-help"
+              />
             </label>
             <select
               id="timezone-select"
@@ -767,6 +776,14 @@ export function PersonalSettingsPage(): JSX.Element {
           <div className="kb-personal-settings-field">
             <label htmlFor="new-password" className="kb-personal-settings-label">
               New Password
+              <FieldHelpHint
+                title="New Password"
+                summary="Account password conforming to minimum entropy length requirements."
+                defaultValue="Minimum 12 characters (14 for Server Admins)"
+                validValues={['Minimum 12 characters (14 for Server Admins)']}
+                docHref="/docs/zero-trust-security-and-access-visibility#authentication"
+                testId="personal-new-password-help"
+              />
             </label>
             <div className="kb-personal-settings-password-wrapper">
               <input

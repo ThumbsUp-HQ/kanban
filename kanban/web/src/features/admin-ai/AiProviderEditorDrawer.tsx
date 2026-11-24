@@ -505,6 +505,7 @@ function AiProviderEditorContent({
             <FieldHelpHint
               title="Cutoff Timeout (ms)"
               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+              defaultValue="30000 ms (30 seconds)"
               validValues={['1000 to 300000 (Default: 30000)']}
               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
               testId="provider-timeout-help"
@@ -677,6 +678,14 @@ function AiProviderEditorContent({
               <div className="kb-form-group">
                 <label htmlFor="provider-temperature-input" className="kb-form-label">
                   Temperature
+                  <FieldHelpHint
+                    title="Temperature"
+                    summary="Sampling randomness governing creative variance versus deterministic predictability."
+                    defaultValue="0.7"
+                    validValues={['0.0 to 2.0']}
+                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                    testId="provider-temperature-help"
+                  />
                 </label>
                 <input
                   id="provider-temperature-input"
@@ -698,6 +707,14 @@ function AiProviderEditorContent({
               <div className="kb-form-group">
                 <label htmlFor="provider-top-p-input" className="kb-form-label">
                   Top-P (Nucleus)
+                  <FieldHelpHint
+                    title="Top-P (Nucleus)"
+                    summary="Nucleus sampling threshold pruning lowest-probability tokens."
+                    defaultValue="1.0"
+                    validValues={['0.0 to 1.0']}
+                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                    testId="provider-top-p-help"
+                  />
                 </label>
                 <input
                   id="provider-top-p-input"
@@ -719,6 +736,14 @@ function AiProviderEditorContent({
               <div className="kb-form-group">
                 <label htmlFor="provider-max-tokens-input" className="kb-form-label">
                   Max Tokens
+                  <FieldHelpHint
+                    title="Max Tokens"
+                    summary="Maximum generation token ceiling for completion and reasoning generation."
+                    defaultValue="4096 tokens"
+                    validValues={['1 to 128000 tokens']}
+                    docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                    testId="provider-max-tokens-help"
+                  />
                 </label>
                 <input
                   id="provider-max-tokens-input"

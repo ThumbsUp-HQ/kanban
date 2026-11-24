@@ -3600,5 +3600,53 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       fireEvent.click(screen.getByTestId('tab-roles'));
       expect(await screen.findByTestId('project-roles-section')).toBeDefined();
     });
+
+    it('renders normalized help hints and default values on project settings (KAN-394)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url: string = path;
+        const m = method.toUpperCase();
+
+        if ((url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) && m === 'GET') {
+          return {
+            id: 'p-1',
+            identifier: 'KAN',
+            name: 'Kanban Platform',
+            is_project_admin: true,
+            modules_enabled: true,
+            skip_loaded_sequence_numbers: true,
+          };
+        }
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/states')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        return {};
+      });
+
+      renderComponent('KAN');
+
+      const nameHint = await screen.findByTestId('proj-name-help');
+      fireEvent.focus(nameHint);
+      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('Default:');
+      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('My Project');
+      fireEvent.blur(nameHint);
+
+      const modulesHint = screen.getByTestId('proj-modules-help');
+      fireEvent.focus(modulesHint);
+      expect(screen.getByTestId('proj-modules-help-popover').textContent).toContain('Enabled (true)');
+      fireEvent.blur(modulesHint);
+
+      // Expand advanced section
+      fireEvent.click(screen.getByTestId('project-general-advanced-section-toggle'));
+
+      const skipHint = screen.getByTestId('proj-skip-seq-help');
+      fireEvent.focus(skipHint);
+      expect(screen.getByTestId('proj-skip-seq-help-popover').textContent).toContain('Inherits Workspace Default (Enabled)');
+      fireEvent.blur(skipHint);
+
+      const autoArchiveHint = screen.getByTestId('proj-auto-archive-help');
+      fireEvent.focus(autoArchiveHint);
+      expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
+    });
   });
 });

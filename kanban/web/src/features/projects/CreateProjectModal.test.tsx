@@ -602,4 +602,28 @@ describe('CreateProjectModal & useSessionGuard', () => {
       expect(screen.getByRole('alert').textContent).toContain('Could not create project.');
     });
   });
+
+  it('renders Agent-Safe Sequence Numbering help hint with default value (KAN-394)', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve(new Response(JSON.stringify({ default_skip_loaded_sequence_numbers: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter>
+        <CreateProjectModal isOpen={true} onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    const hintTrigger = screen.getByTestId('create-proj-skip-seq-help');
+    expect(hintTrigger).toBeDefined();
+    fireEvent.focus(hintTrigger);
+
+    const popover = screen.getByTestId('create-proj-skip-seq-help-popover');
+    expect(popover.textContent).toContain('Default:');
+    expect(popover.textContent).toContain('Enabled (true)');
+  });
 });

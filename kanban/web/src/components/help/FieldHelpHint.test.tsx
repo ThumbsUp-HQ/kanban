@@ -303,8 +303,31 @@ describe('FieldHelpHint Component', () => {
     });
 
     const popover = screen.getByTestId('blocks-hint-popover');
+    expect(popover.textContent).toContain('Example:');
     expect(popover.textContent).toContain("issue.state === 'DONE' ? 100 : 0");
     expect(popover.textContent).toContain('Cannot access external network.');
+  });
+
+  it('renders optional defaultValue block when provided', () => {
+    render(
+      <FieldHelpHint
+        title="Session Idle Timeout"
+        summary="Inactivity timeout."
+        defaultValue="30 minutes"
+        testId="default-val-hint"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('default-val-hint').focus();
+    });
+
+    const popover = screen.getByTestId('default-val-hint-popover');
+    expect(popover.textContent).toContain('Default:');
+    expect(popover.textContent).toContain('30 minutes');
+    const defaultBlock = screen.getByTestId('default-val-hint-default');
+    expect(defaultBlock).toBeDefined();
+    expect(defaultBlock.querySelector('.field-help-hint-code')?.textContent).toBe('30 minutes');
   });
 
   it('renders More info -> footer link defaulting to /docs/custom-fields', () => {
