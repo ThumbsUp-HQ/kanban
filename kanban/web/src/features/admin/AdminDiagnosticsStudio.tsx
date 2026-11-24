@@ -9,6 +9,8 @@ import { NotFoundView } from '../../app/routes';
 import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { ApiProblem } from '../../api/problem';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './AdminDiagnosticsStudio.css';
 
 export interface SubsystemHealth {
@@ -274,6 +276,13 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       });
     },
     onError: (err: Error) => {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        window.dispatchEvent(
+          new CustomEvent('kb:open-aal2-stepup', {
+            detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+          }),
+        );
+      }
       setProbeAlert({
         type: 'error',
         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',
@@ -558,12 +567,14 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
 
       {probeAlert && (
         <div
+          role={probeAlert.type === 'error' ? 'alert' : 'status'}
           className={`admin-diag-panel ${
             probeAlert.type === 'ok' ? 'admin-diag-badge--ok' : 'admin-diag-badge--danger'
           }`}
           data-testid="probe-alert"
         >
-          {probeAlert.message}
+          <span>{probeAlert.message}</span>
+          {probeAlert.type === 'error' && <ErrorHelpHint error={probeAlert.message} />}
         </div>
       )}
 

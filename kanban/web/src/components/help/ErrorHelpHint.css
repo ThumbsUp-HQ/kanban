@@ -1,0 +1,110 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.kb-error-help-container {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.kb-error-help-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--kb-color-primary, #2563eb);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.kb-error-help-doc-link:hover {
+  color: var(--kb-color-primary-hover, #1d4ed8);
+  background-color: var(--kb-color-bg-hover, rgba(37, 99, 235, 0.08));
+}
+
+.kb-error-help-doc-link:focus-visible {
+  outline: 2px solid var(--kb-color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.kb-error-help-stepup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--kb-color-danger, #dc2626);
+  border: 1px solid var(--kb-color-danger, #dc2626);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.kb-error-help-stepup-btn:hover {
+  background-color: var(--kb-color-danger-hover, #b91c1c);
+  border-color: var(--kb-color-danger-hover, #b91c1c);
+}
+
+.kb-error-help-stepup-btn:active {
+  transform: translateY(1px);
+}
+
+.kb-error-help-stepup-btn:focus-visible {
+  outline: 2px solid var(--kb-color-danger, #dc2626);
+  outline-offset: 2px;
+}
+
+/* Global AAL2 Step-Up Modal */
+.kb-aal2-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 16px;
+}
+
+.kb-aal2-modal-container {
+  background-color: var(--kb-color-bg-surface, #ffffff);
+  color: var(--kb-color-text-main, #0f172a);
+  border-radius: 8px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 480px;
+  width: 100%;
+  padding: 24px;
+  position: relative;
+  border: 1px solid var(--kb-color-border-subtle, #e2e8f0);
+}
+
+.kb-aal2-modal-header {
+  margin-bottom: 16px;
+}
+
+.kb-aal2-modal-title {
+  margin: 0 0 6px 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--kb-color-text-main, #0f172a);
+}
+
+.kb-aal2-modal-desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--kb-color-text-muted, #64748b);
+  line-height: 1.4;
+}

@@ -72,7 +72,9 @@ export function CreatedByRow({
       if (
         typeof err === 'object' &&
         err !== null &&
-        (('code' in err && (err as { code: string }).code === 'AAL2_REQUIRED') ||
+        (('code' in err &&
+          ((err as { code: string }).code === 'AAL2_REQUIRED' ||
+            (err as { code: string }).code === 'AAL2_STALE')) ||
           ('status' in err && (err as { status: number }).status === 403))
       ) {
         setError('AAL2 second-factor authentication is required to override issue creator.');

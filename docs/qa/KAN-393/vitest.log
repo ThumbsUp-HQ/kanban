@@ -1,0 +1,25 @@
+
+> @kanban/web@0.1.0 test
+> vitest run src/components/help/ErrorHelpHint.test.tsx src/components/error/AppErrorModal.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/workflows/__tests__/WorkflowStudioPage.test.tsx src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx --run
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan393-561d40e1/kanban/web
+
+ ✓ src/components/help/ErrorHelpHint.test.tsx (12 tests) 90ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (23 tests) 1356ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 958ms
+ ✓ src/components/error/AppErrorModal.test.tsx (14 tests) 2188ms
+   ✓ AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary (14)
+     ✓ AppErrorModal (7)
+       ✓ resets copied state after 2 seconds 2019ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (43 tests) 3548ms
+   ✓ AuthStudioPage (KB-P3-36) (43)
+     ✓ opens drawer to add a new auth card and appends created card 336ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 342ms
+
+ Test Files  5 passed (5)
+      Tests  106 passed (106)
+   Start at  16:09:01
+   Duration  4.67s (tests 60%, environment 25%, import 11%, transform 4%)
+

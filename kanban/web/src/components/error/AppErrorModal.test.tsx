@@ -45,6 +45,8 @@ describe('AppErrorModal, RouteErrorBoundary, and GlobalErrorBoundary', () => {
       expect(copyBtn).toBeDefined();
       expect(reportLink).toBeDefined();
       expect(dismissBtn).toBeDefined();
+      expect(screen.getByTestId('app-error-help')).toBeDefined();
+      expect(screen.getByTestId('app-error-help-doc-link')).toBeDefined();
 
       const href = reportLink.getAttribute('href') ?? '';
       expect(href).toContain('https://github.com/ThumbsUp-HQ/kanban/issues/new');

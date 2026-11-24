@@ -157,7 +157,11 @@ export function EscalationApprovalPanel({
         return;
       }
 
-      if (errObj.status === 403 || errObj.code === 'AAL2_REQUIRED') {
+      if (
+        errObj.status === 403 ||
+        errObj.code === 'AAL2_REQUIRED' ||
+        errObj.code === 'AAL2_STALE'
+      ) {
         // Trigger AAL2 step-up challenge
         if (onAal2Challenge) {
           const challenged = await onAal2Challenge();

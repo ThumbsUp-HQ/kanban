@@ -337,3 +337,44 @@ def test_case_10_assert_admin_routes_protected() -> None:
     unprotected_with_y = assert_admin_routes_protected(app)
     # y is protected, so only x should still be in unprotected
     assert unprotected_with_y == ["/api/v1/admin/x"]
+
+
+@pytest.mark.asyncio
+async def test_aal2_stale_human_readable_and_problem_doc_links() -> None:
+    """Verify human-readable AAL2_STALE detail string, doc_href, and help_summary (KAN-393)."""
+    from starlette.requests import Request
+    from kanban.api.problems import PROBLEM_HELP_CATALOG, Problem, resolve_problem_help
+
+    # 1. Verify ProblemException default resolution from catalog
+    exc = ProblemException(
+        code="AAL2_STALE",
+        status=403,
+        title="AAL2 Session Stale",
+        detail="AAL2 verification is stale (950s > 900s). Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue.",
+    )
+    expected_doc, expected_summary = PROBLEM_HELP_CATALOG["AAL2_STALE"]
+    assert exc.doc_href == expected_doc
+    assert exc.help_summary == expected_summary
+    assert "AAL2 verification is stale (950s > 900s)." in str(exc.detail)
+    assert "Your 15-minute Admin 2FA security window" in str(exc.detail)
+
+    # 2. Verify problem_exception_handler populates doc_href and help_summary
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/admin/test", "headers": []}
+    req = Request(scope)
+    res = await problem_exception_handler(req, exc)
+    import json
+    data = json.loads(res.body.decode("utf-8"))
+    assert data["code"] == "AAL2_STALE"
+    assert data["doc_href"] == expected_doc
+    assert data["help_summary"] == expected_summary
+    assert "AAL2 verification is stale" in data["detail"]
+
+    # 3. Verify resolve_problem_help fallback
+    doc, summary = resolve_problem_help("UNKNOWN_RANDOM_CODE")
+    assert doc == "/docs/admin-diagnostics-and-link-inspector-studio"
+    assert "troubleshooting steps" in summary
+
+    doc_404, summary_404 = resolve_problem_help("NOT_FOUND", 404)
+    assert doc_404 == "/docs/zero-trust-security-and-access-visibility"
+    assert "requested resource was not found" in summary_404
+

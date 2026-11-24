@@ -10,6 +10,7 @@ import {
 } from './oauthApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './DeviceActivatePage.css';
 
 const BASE20_CHARS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -216,7 +217,7 @@ export function DeviceActivatePage(): JSX.Element {
       setCompletionStatus(res.status);
     } catch (err: unknown) {
       const errObj = err as { code?: string; message?: string };
-      if (errObj.code === 'AAL2_REQUIRED') {
+      if (errObj.code === 'AAL2_REQUIRED' || errObj.code === 'AAL2_STALE') {
         setErrorMessage(
           'AAL2 Passkey or TOTP verification required to approve /mcp/admin access.',
         );
@@ -262,7 +263,8 @@ export function DeviceActivatePage(): JSX.Element {
 
         {errorMessage && (
           <div className="kb-device-error-banner" role="alert" data-testid="error-banner">
-            {errorMessage}
+            <span>{errorMessage}</span>
+            <ErrorHelpHint error={errorMessage} />
           </div>
         )}
 

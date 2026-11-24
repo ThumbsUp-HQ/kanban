@@ -17,6 +17,8 @@ import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+import { ApiProblem } from '../../api/problem';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './aiStudio.css';
 
 interface CardTestStatus {
@@ -60,6 +62,13 @@ export function AiStudioPage(): JSX.Element {
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
         if (!active) return;
+        if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+          window.dispatchEvent(
+            new CustomEvent('kb:open-aal2-stepup', {
+              detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+            }),
+          );
+        }
         setError(err instanceof Error ? err.message : 'Failed to load AI providers');
       } finally {
         if (active) {
@@ -249,8 +258,9 @@ export function AiStudioPage(): JSX.Element {
       )}
 
       {error && (
-        <div className="kb-form-error" data-testid="ai-studio-error">
-          {error}
+        <div className="kb-form-error" role="alert" data-testid="ai-studio-error">
+          <span>{error}</span>
+          <ErrorHelpHint error={error} />
         </div>
       )}
 

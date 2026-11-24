@@ -7,6 +7,8 @@ import { apiFetch, getCsrfToken } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { NotFoundView } from '../../app/routes';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { ApiProblem } from '../../api/problem';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './LinkAuditorStudio.css';
 
 export type InvalidLinkReason =
@@ -223,6 +225,13 @@ export function LinkAuditorStudio(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
     },
     onError: (err: unknown) => {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        window.dispatchEvent(
+          new CustomEvent('kb:open-aal2-stepup', {
+            detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+          }),
+        );
+      }
       const msg = err instanceof Error ? err.message : 'Scan execution failed.';
       setStatusAlert({ type: 'error', message: msg });
     },
@@ -260,6 +269,13 @@ export function LinkAuditorStudio(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
     },
     onError: (err: unknown) => {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        window.dispatchEvent(
+          new CustomEvent('kb:open-aal2-stepup', {
+            detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+          }),
+        );
+      }
       const msg = err instanceof Error ? err.message : 'Purge execution failed.';
       setStatusAlert({ type: 'error', message: msg });
     },
@@ -358,11 +374,12 @@ export function LinkAuditorStudio(): JSX.Element {
       {/* Alert banner */}
       {statusAlert && (
         <div
-          role="status"
+          role={statusAlert.type === 'error' ? 'alert' : 'status'}
           className={`link-auditor-alert link-auditor-alert--${statusAlert.type}`}
           data-testid="link-auditor-alert"
         >
           <span>{statusAlert.message}</span>
+          {statusAlert.type === 'error' && <ErrorHelpHint error={statusAlert.message} />}
           <button
             type="button"
             className="link-auditor-alert__close"

@@ -31,6 +31,7 @@ import {
   type ReorderHooksPayload,
 } from './api';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './workflows.css';
 
 export interface WorkflowStudioPageProps {
@@ -161,7 +162,7 @@ export function WorkflowStudioPage({
 
   // Handle AAL2 403 response intercept
   const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
-    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
+    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
       setPendingMutation(mutation);
       const data = err.data;
       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -307,7 +308,8 @@ export function WorkflowStudioPage({
       {/* General Alert */}
       {generalError && (
         <div className="workflow-alert workflow-alert-danger" role="alert">
-          {generalError}
+          <span>{generalError}</span>
+          <ErrorHelpHint error={generalError} />
         </div>
       )}
 
