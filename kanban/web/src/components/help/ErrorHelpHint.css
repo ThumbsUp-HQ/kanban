@@ -16,7 +16,7 @@
   gap: 4px;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--kb-color-primary, #2563eb);
+  color: var(--brand-primary, #2563eb);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -28,12 +28,12 @@
 }
 
 .kb-error-help-doc-link:hover {
-  color: var(--kb-color-primary-hover, #1d4ed8);
-  background-color: var(--kb-color-bg-hover, rgba(37, 99, 235, 0.08));
+  color: var(--brand-primary-hover, #1d4ed8);
+  background-color: var(--bg-hover, rgba(37, 99, 235, 0.08));
 }
 
 .kb-error-help-doc-link:focus-visible {
-  outline: 2px solid var(--kb-color-primary, #2563eb);
+  outline: 2px solid var(--brand-primary, #2563eb);
   outline-offset: 2px;
 }
 
@@ -44,8 +44,8 @@
   font-size: 0.8125rem;
   font-weight: 600;
   color: #ffffff;
-  background-color: var(--kb-color-danger, #dc2626);
-  border: 1px solid var(--kb-color-danger, #dc2626);
+  background-color: var(--bg-danger, #dc2626);
+  border: 1px solid var(--bg-danger, #dc2626);
   border-radius: 4px;
   padding: 4px 10px;
   cursor: pointer;
@@ -53,8 +53,8 @@
 }
 
 .kb-error-help-stepup-btn:hover {
-  background-color: var(--kb-color-danger-hover, #b91c1c);
-  border-color: var(--kb-color-danger-hover, #b91c1c);
+  background-color: var(--bg-danger-hover, #b91c1c);
+  border-color: var(--bg-danger-hover, #b91c1c);
 }
 
 .kb-error-help-stepup-btn:active {
@@ -62,7 +62,7 @@
 }
 
 .kb-error-help-stepup-btn:focus-visible {
-  outline: 2px solid var(--kb-color-danger, #dc2626);
+  outline: 2px solid var(--bg-danger, #dc2626);
   outline-offset: 2px;
 }
 
@@ -81,7 +81,7 @@
 
 .kb-aal2-modal-container {
   background-color: var(--kb-color-bg-surface, #ffffff);
-  color: var(--kb-color-text-main, #0f172a);
+  color: var(--kb-color-text-primary, #0f172a);
   border-radius: 8px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   max-width: 480px;
@@ -99,12 +99,12 @@
   margin: 0 0 6px 0;
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--kb-color-text-main, #0f172a);
+  color: var(--kb-color-text-primary, #0f172a);
 }
 
 .kb-aal2-modal-desc {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--kb-color-text-muted, #64748b);
+  color: var(--kb-color-text-secondary, #64748b);
   line-height: 1.4;
 }

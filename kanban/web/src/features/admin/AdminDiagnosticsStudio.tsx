@@ -279,7 +279,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
         window.dispatchEvent(
           new CustomEvent('kb:open-aal2-stepup', {
-            detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+            detail: { challengeId: err.data.challenge_id, methods: err.data.methods },
           }),
         );
       }

@@ -603,7 +603,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
     });
   });
 
-  it('renders Agent-Safe Sequence Numbering help hint with default value (KAN-394)', async () => {
+  it('renders Agent-Safe Sequence Numbering help hint with default value (KAN-394)', () => {
     vi.spyOn(window, 'fetch').mockImplementation((input) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url.includes('/api/v1/admin/workspace-settings')) {

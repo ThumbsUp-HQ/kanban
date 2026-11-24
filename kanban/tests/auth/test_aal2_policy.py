@@ -371,7 +371,7 @@ async def test_aal2_stale_human_readable_and_problem_doc_links() -> None:
     scope = {"type": "http", "method": "GET", "path": "/api/v1/admin/test", "headers": []}
     req = Request(scope)
     res = await problem_exception_handler(req, exc)
-    data = json.loads(res.body.decode("utf-8"))
+    data = json.loads(bytes(res.body).decode("utf-8"))
     assert data["code"] == "AAL2_STALE"
     assert data["doc_href"] == expected_doc
     assert data["help_summary"] == expected_summary

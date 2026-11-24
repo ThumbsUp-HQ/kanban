@@ -20,7 +20,7 @@ export interface ProblemDetails {
   request_id?: string;
   doc_href?: string;
   help_summary?: string;
-  errors?: Array<{ path?: string | string[]; message?: string }>;
+  errors?: { path?: string | string[]; message?: string }[];
   [key: string]: unknown;
 }
 

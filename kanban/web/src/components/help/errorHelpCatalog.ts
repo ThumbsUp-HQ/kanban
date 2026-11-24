@@ -256,12 +256,16 @@ export const DEFAULT_ERROR_HELP: ErrorHelpEntry = {
   isAal2StepUp: false,
 };
 
+function catalogEntry(key: string): ErrorHelpEntry {
+  return ERROR_HELP_CATALOG[key] ?? DEFAULT_ERROR_HELP;
+}
+
 function extractMessage(errorOrMessage: unknown): string {
   if (typeof errorOrMessage === 'string') {
     return errorOrMessage;
   }
   if (errorOrMessage instanceof ApiProblem) {
-    return errorOrMessage.message || errorOrMessage.detail || '';
+    return errorOrMessage.message || (errorOrMessage.detail ?? '');
   }
   if (errorOrMessage instanceof Error) {
     return errorOrMessage.message;
@@ -338,7 +342,7 @@ export function resolveErrorHelp(
     code === 'AAL2_STALE' ||
     /aal2 verification is stale|aal2.*stale|900s\b/i.test(lowerMsg)
   ) {
-    const entry = ERROR_HELP_CATALOG.AAL2_STALE!;
+    const entry = catalogEntry('AAL2_STALE');
     return {
       code: 'AAL2_STALE',
       title: entry.title,
@@ -360,7 +364,7 @@ export function resolveErrorHelp(
     code === 'AAL2_REQUIRED' ||
     /aal2.*required|multi-factor.*required|second-factor.*required|admin.*2fa/i.test(lowerMsg)
   ) {
-    const entry = ERROR_HELP_CATALOG.AAL2_REQUIRED!;
+    const entry = catalogEntry('AAL2_REQUIRED');
     return {
       code: 'AAL2_REQUIRED',
       title: entry.title,
@@ -379,86 +383,86 @@ export function resolveErrorHelp(
 
   // MFA Enrollment Required pattern
   if (/mfa.*enroll|passkey.*enroll|totp.*enroll/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.MFA_ENROLLMENT_REQUIRED!;
+    return catalogEntry('MFA_ENROLLMENT_REQUIRED');
   }
 
   // Authentication Required pattern (401)
   if (/authentication.*required|session.*missing|unauthorized|\b401\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.AUTHENTICATION_REQUIRED!;
+    return catalogEntry('AUTHENTICATION_REQUIRED');
   }
 
   // Forbidden / Permissions pattern (403)
   if (/forbidden|permission.*denied|lacks.*permission|access.*denied|\b403\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.FORBIDDEN!;
+    return catalogEntry('FORBIDDEN');
   }
 
   // Not Found pattern (404)
   if (/not.*found|\b404\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.NOT_FOUND!;
+    return catalogEntry('NOT_FOUND');
   }
 
   // MCP / Scope pattern
   if (/scope.*violation|insufficient.*scope|scope.*tier/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.INSUFFICIENT_SCOPE!;
+    return catalogEntry('INSUFFICIENT_SCOPE');
   }
 
   // Taint Guard pattern
   if (/taint.*guard|read-taint|cross-scope.*taint/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED!;
+    return catalogEntry('CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED');
   }
 
   // Lockout prevention pattern
   if (/lockout.*prevented|last.*active.*admin/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.LOCKOUT_PREVENTED!;
+    return catalogEntry('LOCKOUT_PREVENTED');
   }
 
   // WIP limit pattern
   if (/wip.*limit/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.HARD_WIP_LIMIT_EXCEEDED!;
+    return catalogEntry('HARD_WIP_LIMIT_EXCEEDED');
   }
 
   // Gate timeout pattern
   if (/gate.*timeout|workflow.*timeout|validator.*timeout/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.GATE_TIMEOUT!;
+    return catalogEntry('GATE_TIMEOUT');
   }
 
   // Script recursion / JSON depth pattern
   if (/recursion|re-entrant/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.SCRIPT_RECURSION_BLOCKED!;
+    return catalogEntry('SCRIPT_RECURSION_BLOCKED');
   }
 
   if (/utf-16|surrogate|0xd800/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.INVALID_UTF8_SURROGATE!;
+    return catalogEntry('INVALID_UTF8_SURROGATE');
   }
 
   if (/json.*depth|nesting.*depth/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.JSON_DEPTH_EXCEEDED!;
+    return catalogEntry('JSON_DEPTH_EXCEEDED');
   }
 
   if (/json.*key|key.*count/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.JSON_KEYS_EXCEEDED!;
+    return catalogEntry('JSON_KEYS_EXCEEDED');
   }
 
   if (/payload.*large|entity too large|\b413\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.PAYLOAD_TOO_LARGE!;
+    return catalogEntry('PAYLOAD_TOO_LARGE');
   }
 
   if (/blast.*radius/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.BLAST_RADIUS_CHANGED!;
+    return catalogEntry('BLAST_RADIUS_CHANGED');
   }
 
   if (/manifest.*mismatch|definition changed/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.MANIFEST_MISMATCH!;
+    return catalogEntry('MANIFEST_MISMATCH');
   }
 
   // Validation pattern
   if (/validation.*failed|validation.*error|schema validation|\b422\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.VALIDATION_FAILED!;
+    return catalogEntry('VALIDATION_FAILED');
   }
 
   // Rate limit pattern (429)
   if (/rate.*limit|too many requests|\b429\b/i.test(lowerMsg)) {
-    return ERROR_HELP_CATALOG.RATE_LIMITED!;
+    return catalogEntry('RATE_LIMITED');
   }
 
   // Check ApiProblem docHref / helpSummary fallback

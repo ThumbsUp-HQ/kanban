@@ -2,13 +2,14 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, {
+  useContext,
   useEffect,
   useRef,
   useState,
   type JSX,
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { useQueryClient } from '@tanstack/react-query';
+import { QueryClientContext } from '@tanstack/react-query';
 import { useOptionalShellPanels } from '../../app/shellPanels';
 import { FieldHelpHint } from './FieldHelpHint';
 import { resolveErrorHelp, type ErrorHelpEntry } from './errorHelpCatalog';
@@ -111,22 +112,19 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
   const [challengeId, setChallengeId] = useState('aal2-stepup');
   const [methods, setMethods] = useState<MfaMethod[]>(['webauthn', 'totp']);
 
-  let queryClient: ReturnType<typeof useQueryClient> | null = null;
-  try {
-    queryClient = useQueryClient();
-  } catch {
-    // Outside QueryClientProvider (e.g. isolated test environments)
-  }
+  const queryClient = useContext(QueryClientContext) ?? null;
 
   // Listen for global AAL2 step-up events
   useEffect(() => {
     const handleOpen = (e: Event): void => {
-      const customEv = e as CustomEvent<{ challengeId?: string; methods?: MfaMethod[] }>;
-      if (customEv.detail?.challengeId) {
-        setChallengeId(customEv.detail.challengeId);
+      const detail = (
+        e as CustomEvent<{ challengeId?: string; methods?: MfaMethod[] } | undefined>
+      ).detail;
+      if (detail?.challengeId) {
+        setChallengeId(detail.challengeId);
       }
-      if (customEv.detail?.methods && Array.isArray(customEv.detail.methods)) {
-        setMethods(customEv.detail.methods);
+      if (detail?.methods && Array.isArray(detail.methods)) {
+        setMethods(detail.methods);
       }
       setIsStepUpOpen(true);
     };
@@ -149,6 +147,7 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
 
   // MutationObserver to scan and enhance [role="alert"] and known error banners
   useEffect(() => {
+    const roots = rootsRef.current;
     const selectors = [
       '[role="alert"]',
       '.kb-error-banner',
@@ -162,14 +161,14 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
 
     const scanAndEnhance = (): void => {
       // Clean up unmounted element roots
-      rootsRef.current.forEach((root, el) => {
+      roots.forEach((root, el) => {
         if (!document.body.contains(el)) {
           try {
             root.unmount();
           } catch {
             // Ignore unmount errors on detached nodes
           }
-          rootsRef.current.delete(el);
+          roots.delete(el);
         }
       });
 
@@ -203,7 +202,7 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
 
         try {
           const root = createRoot(container);
-          rootsRef.current.set(el, root);
+          roots.set(el, root);
           root.render(<ErrorHelpHint error={text} />);
         } catch {
           // Ignore render errors in restricted environments
@@ -225,14 +224,14 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
 
     return () => {
       observer.disconnect();
-      rootsRef.current.forEach((root) => {
+      roots.forEach((root) => {
         try {
           root.unmount();
         } catch {
           // Ignore unmount error during teardown
         }
       });
-      rootsRef.current.clear();
+      roots.clear();
     };
   }, []);
 
