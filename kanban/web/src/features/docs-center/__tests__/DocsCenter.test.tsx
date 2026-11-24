@@ -1483,12 +1483,13 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       );
     });
 
-    it('renders the 46-feature comparison matrix, non-goal compatibility tables, and 🎯✅ targets in DocsCenterPage', () => {
+    it('renders the 46-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage', () => {
       const comparisonChapter = getChapter('feature-comparison');
       expect(comparisonChapter).toBeDefined();
       expect(comparisonChapter?.content).toContain('OpenAI Symphony');
       expect(comparisonChapter?.content).toContain('Workspace/Issue/Field RBAC');
-      expect(comparisonChapter?.content).toContain('🎯✅');
+      expect(comparisonChapter?.content).not.toContain('🎯✅');
+      expect(comparisonChapter?.content).not.toContain('Planned in Core');
 
       render(
         <MemoryRouter initialEntries={['/docs/feature-comparison']}>

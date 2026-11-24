@@ -180,3 +180,53 @@ def test_sync_wiki_bundle_execution(tmp_path: Path) -> None:
     assert (temp_public_dir / "docs-images").is_dir()
     manifest_content = temp_out_manifest.read_text(encoding="utf-8")
     assert "export const WIKI_CHAPTERS: WikiChapter[] =" in manifest_content
+
+
+def test_feature_comparison_day2_clean_and_synced() -> None:
+    """Assert Feature-Comparison is clean, day-2 operations are complete, and docs/wiki are synced (KAN-388)."""
+    wiki_dir, _, _ = get_wiki_and_public_paths()
+    if not wiki_dir.is_dir():
+        pytest.skip(f"Wiki directory not found at {wiki_dir}")
+
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    docs_fc = repo_root / "docs" / "FEATURE_COMPARISON.md"
+    wiki_fc = wiki_dir / "Feature-Comparison.md"
+
+    assert docs_fc.is_file(), f"Missing docs comparison: {docs_fc}"
+    assert wiki_fc.is_file(), f"Missing wiki comparison: {wiki_fc}"
+
+    docs_text = docs_fc.read_text(encoding="utf-8")
+    wiki_text = wiki_fc.read_text(encoding="utf-8")
+
+    # Assert identical body content after line 1
+    docs_lines = docs_text.splitlines()
+    wiki_lines = wiki_text.splitlines()
+    assert len(docs_lines) > 1 and len(wiki_lines) > 1
+    assert docs_lines[1:] == wiki_lines[1:], "Body content mismatch between docs and wiki Feature Comparison"
+
+    # Neither file contains obsolete roadmap symbols or planned legend bullet
+    for label, content in [("docs", docs_text), ("wiki", wiki_text)]:
+        assert "🎯✅" not in content, f"{label} still contains obsolete 🎯✅ symbol"
+        assert "Planned in Core" not in content, f"{label} still contains 'Planned in Core' legend"
+
+    # Neither file contains internal ticket citations (KAN-\d+) or raw migration file paths (.up.sql)
+    for label, content in [("docs", docs_text), ("wiki", wiki_text)]:
+        kan_matches = re.findall(r"\bKAN-\d+\b", content)
+        assert not kan_matches, f"{label} contains internal ticket citations: {kan_matches}"
+        assert ".up.sql" not in content, f"{label} contains raw migration file paths (.up.sql)"
+
+    # All 10 rows under '## 5. Orchestration, Provenance & Day-2 Operations' have ✅ in the 👍kanban column
+    sec5_match = re.search(
+        r"## 5\. Orchestration, Provenance & Day-2 Operations\s*\n\s*\|([^\n]+)\|\s*\n\s*\|([^\n]+)\|\s*\n((?:\|[^\n]+\|\s*\n)+)",
+        docs_text,
+    )
+    assert sec5_match is not None, "Failed to locate Section 5 table in docs/FEATURE_COMPARISON.md"
+    table_rows = [r.strip() for r in sec5_match.group(3).strip().splitlines() if r.strip()]
+    assert len(table_rows) == 10, f"Expected 10 rows in Section 5 table, found {len(table_rows)}"
+
+    for row in table_rows:
+        cols = [c.strip() for c in row.split("|")[1:-1]]
+        feature_name = cols[0]
+        kanban_status = cols[1]
+        assert kanban_status == "✅", f"Feature '{feature_name}' does not have ✅ in 👍kanban column: {kanban_status}"
+
