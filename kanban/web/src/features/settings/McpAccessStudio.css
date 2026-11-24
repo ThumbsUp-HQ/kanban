@@ -305,6 +305,49 @@
   font-size: 0.875rem;
 }
 
+.kb-mcp-form-select optgroup {
+  font-weight: 600;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+  background-color: var(--bg-surface-raised, #161b22);
+}
+
+.kb-mcp-form-select option {
+  font-weight: normal;
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+  background-color: var(--bg-surface, #0d1117);
+}
+
+.kb-mcp-question-num {
+  font-weight: 700;
+  color: var(--accent-primary, #58a6ff);
+  margin-right: 4px;
+}
+
+.kb-mcp-form-question-heading {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+  margin-top: 8px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kb-mcp-key-summary-row {
+  margin-top: 4px;
+}
+
+.kb-mcp-key-summary {
+  padding: 10px 14px;
+  background-color: var(--bg-surface-raised, #161b22);
+  border: 1px solid var(--border-subtle, #30363d);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+}
+
 .kb-mcp-form-actions {
   display: flex;
   justify-content: flex-end;

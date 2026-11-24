@@ -529,19 +529,12 @@ describe('Accessible Names, Associated Form Labels, and Error Announcements (KAN
 
       expect(await screen.findByRole('dialog')).toBeDefined();
 
-      const labelInput = screen.getByLabelText(/^Key Label:/i);
+      const labelInput = screen.getByLabelText(/what is the key name/i);
       expect(labelInput.getAttribute('id')).toBe('mint-label-input');
 
-      const cidrsInput = screen.getByLabelText(/^Allowed CIDRs \(optional\):/i);
-      expect(cidrsInput.getAttribute('id')).toBe('mint-allowed-cidrs-input');
-
-      const ownerSelect = document.getElementById('mint-owner-kind-select') as HTMLSelectElement;
-      expect(ownerSelect).toBeDefined();
-      expect(document.querySelector('label[for="mint-owner-kind-select"]')?.textContent).toContain('Key Type');
-
-      const scopeSelect = document.getElementById('mint-scope-select') as HTMLSelectElement;
-      expect(scopeSelect).toBeDefined();
-      expect(document.querySelector('label[for="mint-scope-select"]')?.textContent).toContain('Scope Tier');
+      const keyScopeSelect = document.getElementById('mint-key-scope-type-select') as HTMLSelectElement;
+      expect(keyScopeSelect).toBeDefined();
+      expect(document.querySelector('label[for="mint-key-scope-type-select"]')?.textContent).toContain('Who is this key for & what can it access?');
 
       const surfaceSelect = screen.getByLabelText(/^Target Surface:/i);
       expect(surfaceSelect.getAttribute('id')).toBe('mint-surface-select');
@@ -549,12 +542,15 @@ describe('Accessible Names, Associated Form Labels, and Error Announcements (KAN
       const expirySelect = screen.getByLabelText(/^Expiration:/i);
       expect(expirySelect.getAttribute('id')).toBe('mint-expiry-select');
 
-      const capPresetSelect = screen.getByLabelText(/^Capability Ceiling:/i);
-      expect(capPresetSelect.getAttribute('id')).toBe('capability-preset-select');
-
       // Open Advanced Capability & Network Restrictions
       const advToggle = screen.getByTestId('advanced-capability-restrictions-toggle');
       fireEvent.click(advToggle);
+
+      const capPresetSelect = screen.getByLabelText(/^Capability Ceiling:/i);
+      expect(capPresetSelect.getAttribute('id')).toBe('capability-preset-select');
+
+      const cidrsInput = screen.getByLabelText(/^Allowed CIDRs \(optional\):/i);
+      expect(cidrsInput.getAttribute('id')).toBe('mint-allowed-cidrs-input');
 
       // Capability bit checkboxes
       const bitBoxes = screen.getAllByLabelText(/Capability bit/i);

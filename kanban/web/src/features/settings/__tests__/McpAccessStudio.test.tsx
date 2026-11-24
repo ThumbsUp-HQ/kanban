@@ -6,7 +6,12 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { McpAccessStudio, validateCidrInput } from '../McpAccessStudio';
+import {
+  McpAccessStudio,
+  validateCidrInput,
+  getCapabilityPresetName,
+  formatMintKeySummary,
+} from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
 import { ApiProblem } from '../../../api/problem';
@@ -848,7 +853,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     await waitFor(() => {
       expect(mintSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ scope_tier: 'global', owner_kind: 'personal_user' }),
+        expect.objectContaining({ scope_tier: 'global', owner_kind: 'service_bot' }),
       );
     });
     u1();
@@ -1165,8 +1170,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.change(labelInput, { target: { value: 'Automation Bot Key' } });
 
     // Switch Key Type to Service Bot
-    const ownerSelect = screen.getByTestId('mint-owner-kind-select');
-    fireEvent.change(ownerSelect, { target: { value: 'service_bot' } });
+    const ownerSelect = screen.getByTestId('mint-key-scope-type-select');
+    fireEvent.change(ownerSelect, { target: { value: 'service_bot:workspace' } });
 
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
 
@@ -1588,14 +1593,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     fireEvent.click(screen.getByTestId('mint-key-button'));
 
-    // Select personal_user
-    fireEvent.change(screen.getByTestId('mint-scope-select'), {
-      target: { value: 'personal_user' },
-    });
-
-    // Select project
-    fireEvent.change(screen.getByTestId('mint-scope-select'), {
-      target: { value: 'project' },
+    // Select project scope
+    fireEvent.change(screen.getByTestId('mint-key-scope-type-select'), {
+      target: { value: 'personal_user:project' },
     });
     expect(screen.getByTestId('mint-project-input')).not.toBeNull();
     fireEvent.change(screen.getByTestId('mint-project-input'), {
@@ -1823,7 +1823,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     // 2. Select Global scope in mint modal, enter invalid CIDR, and force form submit
     fireEvent.click(screen.getByTestId('mint-key-button'));
-    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'global' } });
+    fireEvent.change(screen.getByTestId('mint-key-scope-type-select'), { target: { value: 'service_bot:global' } });
     fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Global Key' } });
     fireEvent.change(screen.getByTestId('mint-allowed-cidrs-input'), { target: { value: '999.999.999.999/99' } });
 
@@ -1934,7 +1934,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.change(presetSelect, { target: { value: 'custom' } });
 
     // 2. Switch to project scope tier so mint-project-datalist renders with SAME and NONAME
-    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'project' } });
+    fireEvent.change(screen.getByTestId('mint-key-scope-type-select'), { target: { value: 'personal_user:project' } });
     const datalist = screen.getByTestId('mint-project-input');
     expect(datalist).toBeDefined();
 
@@ -1955,7 +1955,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     // 4. Open again and submit with non-empty projectKey so newKeyProject.trim() is true
     fireEvent.click(screen.getByTestId('mint-key-button'));
-    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'project' } });
+    fireEvent.change(screen.getByTestId('mint-key-scope-type-select'), { target: { value: 'personal_user:project' } });
     fireEvent.change(screen.getByTestId('mint-project-input'), { target: { value: 'PROJ-SNIP' } });
     fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Snippet Proj Key' } });
 
@@ -2162,6 +2162,339 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       expect(screen.getByTestId('capability-bits-grid')).toBeDefined();
       expect(screen.getByTestId('mint-allowed-cidrs-input')).toBeDefined();
       expect(screen.getByTestId('tools-selection-grid')).toBeDefined();
+    });
+  });
+
+  describe('Simplified Mint Modal 4-Question Form (KAN-390)', () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+        if (path === '/api/v1/projects') {
+          return Promise.resolve({
+            items: [
+              { id: 'proj-1', identifier: 'KAN', name: 'Kanban Core' },
+              { id: 'proj-2', identifier: 'OPS', name: 'Operations' },
+            ],
+          });
+        }
+        return Promise.resolve({
+          is_server_admin: true,
+          is_workspace_admin: true,
+        });
+      });
+    });
+
+    it('structures modal around the 4 plain-English questions and live summary', async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="workspace" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      // Question 1
+      expect(screen.getByText(/What is the key name\?/i)).toBeDefined();
+      expect(screen.getByTestId('mint-label-input')).toBeDefined();
+
+      // Question 2
+      expect(screen.getByText(/Who is this key for & what can it access\?/i)).toBeDefined();
+      expect(screen.getByTestId('mint-key-scope-type-select')).toBeDefined();
+
+      // Old separate selectors must NOT exist
+      expect(screen.queryByTestId('mint-owner-kind-select')).toBeNull();
+      expect(screen.queryByTestId('mint-scope-select')).toBeNull();
+
+      // Question 3
+      expect(screen.getByText(/What can it do\?/i)).toBeDefined();
+      expect(screen.getByTestId('mint-surface-select')).toBeDefined();
+      expect(screen.getByTestId('mint-expiry-select')).toBeDefined();
+
+      // AdvancedSection collapsed by default
+      const advSection = screen.getByTestId('advanced-capability-restrictions');
+      expect(advSection.hasAttribute('open')).toBe(false);
+
+      // Question 4: Live Plain-Language Key Summary
+      expect(screen.getByText(/Key Summary/i)).toBeDefined();
+      const liveSummary = screen.getByTestId('mint-key-summary');
+      expect(liveSummary).toBeDefined();
+      expect(liveSummary.textContent).toBe(
+        'Key "Untitled" for Personal User can access This Workspace and use Agent tools (Standard Developer Agent).',
+      );
+    });
+
+    it('reveals Allowed Project picker and updates live summary when selecting single project for personal user and service bot', async () => {
+      const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+        id: 'new-proj-key',
+        label: 'My Project Key',
+        display_hint: 'm1p1',
+        surface: 'agent',
+        scope_tier: 'project',
+        scopes: ['agent:read', 'agent:write'],
+        allowed_projects: ['OPS'],
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+        last_used_at: null,
+        revoked_at: null,
+        raw_key: 'kb_mcp_raw_test_project',
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      const keyScopeSelect = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+      const labelInput = screen.getByTestId('mint-label-input');
+
+      // Initially workspace: no project input
+      expect(screen.queryByTestId('mint-project-input')).toBeNull();
+
+      // 1. Select Personal - Single Project
+      fireEvent.change(keyScopeSelect, { target: { value: 'personal_user:project' } });
+      expect(screen.getByTestId('mint-project-input')).toBeDefined();
+
+      // Type label
+      fireEvent.change(labelInput, { target: { value: 'My Project Key' } });
+      const projInput = screen.getByTestId('mint-project-input');
+      fireEvent.change(projInput, { target: { value: 'OPS' } });
+
+      // Check live summary
+      expect(screen.getByTestId('mint-key-summary').textContent).toBe(
+        'Key "My Project Key" for Personal User can access Project OPS and use Agent tools (Standard Developer Agent).',
+      );
+
+      // 2. Select Service Bot - Single Project
+      fireEvent.change(keyScopeSelect, { target: { value: 'service_bot:project' } });
+      expect(screen.getByTestId('mint-key-summary').textContent).toBe(
+        'Key "My Project Key" for Service Bot can access Project OPS and use Agent tools (Standard Developer Agent).',
+      );
+
+      // Submit and verify exact payload
+      fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+      await waitFor(() => {
+        expect(mintSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            label: 'My Project Key',
+            owner_kind: 'service_bot',
+            scope_tier: 'project',
+            project_ref: 'OPS',
+            allowed_projects: ['OPS'],
+            capability_mask: 31,
+          }),
+        );
+      });
+    });
+
+    it('expands Advanced Capability & Network Restrictions revealing capability-preset-select, updating overrides and summary', async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      const advSection = screen.getByTestId('advanced-capability-restrictions');
+      const toggle = screen.getByTestId('advanced-capability-restrictions-toggle');
+
+      // Initially collapsed
+      expect(advSection.hasAttribute('open')).toBe(false);
+      // activeOverridesCount starts at 0 with default capabilityMask=31
+      expect(advSection.textContent).not.toContain('custom setting active');
+
+      // Expand
+      fireEvent.click(toggle);
+      expect(advSection.hasAttribute('open')).toBe(true);
+
+      const presetSelect = screen.getByTestId<HTMLSelectElement>('capability-preset-select');
+      expect(presetSelect).toBeDefined();
+      expect(presetSelect.value).toBe('31');
+
+      // Change preset to Read-Only Agent (1)
+      fireEvent.change(presetSelect, { target: { value: '1' } });
+      expect(presetSelect.value).toBe('1');
+
+      // Override count should reflect non-default mask (1 custom setting active)
+      expect(advSection.textContent).toContain('1 custom setting active');
+
+      // Summary updates with Read-Only Agent
+      expect(screen.getByTestId('mint-key-summary').textContent).toContain(
+        '(Read-Only Agent)',
+      );
+
+      // Change preset to Full Project Agent (255)
+      fireEvent.change(presetSelect, { target: { value: '255' } });
+      expect(screen.getByTestId('mint-key-summary').textContent).toContain(
+        '(Full Project Agent)',
+      );
+
+      // Change preset back to Standard Developer Agent (31)
+      fireEvent.change(presetSelect, { target: { value: '31' } });
+      expect(advSection.textContent).not.toContain('custom setting active');
+      expect(screen.getByTestId('mint-key-summary').textContent).toContain(
+        '(Standard Developer Agent)',
+      );
+    });
+
+    it('non-server-admin user never sees Service Bot - Server / Global in unified selector', async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio
+            user={{
+              is_server_admin: false,
+              is_workspace_admin: true,
+              is_project_admin: true,
+              workspace_role: 'WORKSPACE_ADMIN',
+            }}
+          />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      const keyScopeSelect = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+      const options = Array.from(keyScopeSelect.querySelectorAll('option')).map(
+        (o) => o.value,
+      );
+
+      expect(options).toContain('personal_user:project');
+      expect(options).toContain('personal_user:workspace');
+      expect(options).toContain('service_bot:project');
+      expect(options).toContain('service_bot:workspace');
+      expect(options).not.toContain('service_bot:global');
+      expect(screen.queryByText(/Service Bot - Server \/ Global/i)).toBeNull();
+    });
+
+    it('submitting while Advanced is collapsed sends default capability_mask cleanly', async () => {
+      const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+        id: 'new-def-key',
+        label: 'Default Mask Key',
+        display_hint: 'd1m1',
+        surface: 'agent',
+        scope_tier: 'workspace',
+        scopes: ['agent:read', 'agent:write'],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+        last_used_at: null,
+        revoked_at: null,
+        raw_key: 'kb_mcp_raw_test_default',
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      const advSection = screen.getByTestId('advanced-capability-restrictions');
+      expect(advSection.hasAttribute('open')).toBe(false);
+
+      fireEvent.change(screen.getByTestId('mint-label-input'), {
+        target: { value: 'Default Mask Key' },
+      });
+
+      fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+      await waitFor(() => {
+        expect(mintSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            label: 'Default Mask Key',
+            capability_mask: 31,
+          }),
+        );
+      });
+    });
+
+    it('exercises getCapabilityPresetName and formatMintKeySummary helper functions directly', () => {
+      expect(getCapabilityPresetName(1)).toBe('Read-Only Agent');
+      expect(getCapabilityPresetName(3)).toBe('View + Comment');
+      expect(getCapabilityPresetName(31)).toBe('Standard Developer Agent');
+      expect(getCapabilityPresetName(255)).toBe('Full Project Agent');
+      expect(getCapabilityPresetName(42)).toBe('Custom (42)');
+
+      // formatMintKeySummary with fallback Untitled and workspace
+      expect(
+        formatMintKeySummary({
+          label: '',
+          ownerKind: 'personal_user',
+          scopeTier: 'workspace',
+          surface: 'agent',
+          capabilityMask: 31,
+        }),
+      ).toBe(
+        'Key "Untitled" for Personal User can access This Workspace and use Agent tools (Standard Developer Agent).',
+      );
+
+      // formatMintKeySummary with global scope, service_bot, admin surface
+      expect(
+        formatMintKeySummary({
+          label: 'Infra Orchestrator',
+          ownerKind: 'service_bot',
+          scopeTier: 'global',
+          surface: 'admin',
+          capabilityMask: 255,
+        }),
+      ).toBe(
+        'Key "Infra Orchestrator" for Service Bot can access Entire Server and use Admin tools (Full Project Agent).',
+      );
+
+      // formatMintKeySummary with project scope, docs surface, custom mask
+      expect(
+        formatMintKeySummary({
+          label: 'Docs Bot',
+          ownerKind: 'service_bot',
+          scopeTier: 'project',
+          project: 'DOCS',
+          surface: 'docs',
+          capabilityMask: 3,
+        }),
+      ).toBe(
+        'Key "Docs Bot" for Service Bot can access Project DOCS and use Docs tools (View + Comment).',
+      );
+
+      // formatMintKeySummary with project scope but no project specified
+      expect(
+        formatMintKeySummary({
+          label: 'No Project Bot',
+          ownerKind: 'personal_user',
+          scopeTier: 'project',
+          project: '',
+          surface: 'agent',
+          capabilityMask: 1,
+        }),
+      ).toBe(
+        'Key "No Project Bot" for Personal User can access Project (None) and use Agent tools (Read-Only Agent).',
+      );
     });
   });
 });
