@@ -385,4 +385,3 @@ async def test_aal2_stale_human_readable_and_problem_doc_links() -> None:
     doc_404, summary_404 = resolve_problem_help("NOT_FOUND", 404)
     assert doc_404 == "/docs/zero-trust-security-and-access-visibility"
     assert "requested resource was not found" in summary_404
-
