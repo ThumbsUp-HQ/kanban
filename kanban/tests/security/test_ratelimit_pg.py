@@ -163,8 +163,9 @@ async def test_case_10_pg_concurrency(pg_worker_db: AsyncEngine) -> None:
     concurrency_engine = create_async_engine(pg_worker_db.url, poolclass=NullPool)
     limiter = PgRateLimiter(engine=concurrency_engine)
 
-    # Launch 50 parallel hit operations
-    tasks = [limiter.hit(policy, key) for _ in range(50)]
+    # Launch 50 parallel hit operations at a fixed mid-window timestamp
+    fixed_now = datetime.fromtimestamp(1794480010.0, tz=UTC)
+    tasks = [limiter.hit(policy, key, now=fixed_now) for _ in range(50)]
     decisions = await asyncio.gather(*tasks)
     await concurrency_engine.dispose()
 
