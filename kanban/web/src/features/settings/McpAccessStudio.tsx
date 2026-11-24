@@ -32,6 +32,7 @@ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { copyToClipboard } from '../../utils/clipboard';
+import './McpConfigSnippetModal.css';
 import './McpAccessStudio.css';
 
 export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
