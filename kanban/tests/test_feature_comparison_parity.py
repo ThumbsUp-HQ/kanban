@@ -27,36 +27,17 @@ WIKI_MANIFEST_PATH: Final[Path] = (
     ROOT_DIR / "kanban" / "web" / "src" / "features" / "docs-center" / "wikiManifest.ts"
 )
 
-SHIPPED_TICKETS: Final[list[str]] = [
-    "KAN-48",
-    "KAN-52",
-    "KAN-63",
-    "KAN-66",
-    "KAN-67",
-    "KAN-68",
-    "KAN-69",
-    "KAN-70",
-    "KAN-71",
-    "KAN-72",
-    "KAN-73",
-    "KAN-74",
-    "KAN-75",
-    "KAN-76",
-    "KAN-77",
-    "KAN-78",
-    "KAN-79",
-    "KAN-80",
-    "KAN-81",
-    "KAN-82",
-    "KAN-83",
-    "KAN-307",
-    "KAN-308",
-    "KAN-309",
-    "KAN-310",
-    "KAN-312",
-    "KAN-313",
-    "KAN-316",
-    "KAN-317",
+SHIPPED_FEATURES: Final[list[str]] = [
+    "Atomic Agent Lease & Fencing",
+    "Prompt-Injection Taint Gate",
+    "Dedicated Agent Workpad Slot",
+    "Pre-Write Secret Redaction",
+    "Crypto-Shredded Audit Chain",
+    "Ephemeral OIDC Agent Auth",
+    "Git Worktree / PR & Sig Gate",
+    "Lossless Import & Full Export",
+    "Deterministic JSON/Unix CLI",
+    "Native CFD, Lead & Aging WIP",
 ]
 
 
@@ -112,15 +93,16 @@ def test_feature_comparison_tables_and_shipped_status() -> None:
 
 
 def test_shipped_tickets_documented() -> None:
-    """Assert all shipped wave 1-6 tickets are documented across FEATURE_COMPARISON and README."""
+    """Assert all shipped capabilities are documented cleanly in FEATURE_COMPARISON and README."""
     fc_text = DOCS_FC_PATH.read_text(encoding="utf-8")
     readme_text = README_PATH.read_text(encoding="utf-8")
     combined = fc_text + "\n" + readme_text
 
-    for ticket in SHIPPED_TICKETS:
-        assert ticket in combined, (
-            f"Ticket {ticket} is not documented in FEATURE_COMPARISON or README"
+    for feature in SHIPPED_FEATURES:
+        assert feature in combined, (
+            f"Feature {feature} is not documented in FEATURE_COMPARISON or README"
         )
+    assert not re.findall(r"\bKAN-\d+\b", fc_text)
 
 
 def test_mcp_tool_counts_and_architecture_delta_parity() -> None:
