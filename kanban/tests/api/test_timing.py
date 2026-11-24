@@ -231,6 +231,10 @@ async def test_case_8_anti_enumeration_identical_response(
                 "title": "Not Found",
                 "status": 404,
                 "code": "NOT_FOUND",
+                "doc_href": "/docs/zero-trust-security-and-access-visibility",
+                "help_summary": (
+                    "The requested resource was not found or you do not have access to view it."
+                ),
             }
     finally:
         await app_engine.dispose()
