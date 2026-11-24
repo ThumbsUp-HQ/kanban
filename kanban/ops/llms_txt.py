@@ -270,7 +270,15 @@ _LLMS_TXT_TEMPLATE: Final[str] = """# 👍kanban - Agent-First, Security-First K
 
 > Open-source (Apache-2.0), Security-First (Priority #0), Agent-First (Priority #1) Kanban, Ticketing, and Knowledge Platform. Embedded PostgreSQL 16 with FORCE RLS, 24 low-token MCP tools across 3 isolated surfaces, canonical Markdown only, and zero SaaS AI paywalls.
 
-## 1. Platform & 3-Surface MCP Quick-Map
+## Humans
+
+If you are a human developer configuring your workspace, either:
+- Copy and paste the contents of `/llms.txt` into your AI coding agent (Claude Code, OpenAI Codex, Gemini CLI / Antigravity, Cursor), or
+- Deliver this `/llms.txt` URL directly to your agent (e.g., *"Read `<this-url>` and onboard this workspace to 👍kanban"*).
+
+## Agents
+
+### 1. Platform & 3-Surface MCP Quick-Map
 
 Access 👍kanban programmatically via Model Context Protocol (MCP) or REST APIs:
 - Agent Surface (/mcp/agent): 9 tools for ticket workflow (ping_agent, search_tickets, read_ticket, create_ticket, update_ticket, begin_work, transition_ticket, complete_work, add_comment, link_objects).
@@ -279,7 +287,7 @@ Access 👍kanban programmatically via Model Context Protocol (MCP) or REST APIs
 - Authentication: OAuth 2.1 with PKCE (S256) or scoped personal API tokens (kb_pat_* / kb_agt_*).
 - Level of Detail (LOD) Tiers: summary (strict 1,000-token cap), standard, and full.
 
-## 2. How to Create & Approach Tickets (kanban-ticket Rules)
+### 2. How to Create & Approach Tickets (kanban-ticket Rules)
 
 When authoring or executing tickets:
 1. Search First: Always call search_tickets to deduplicate before creating.
@@ -291,7 +299,7 @@ When authoring or executing tickets:
 7. State Machine Guard: If begin_work lands on a custom state with sort_order=0, transition ticket to "In Progress".
 8. Protected Instance Invariant: Never treat k.hackedyour.info / 192.168.1.101 as a destructive test bed.
 
-## 3. Mandatory Interactive Onboarding Directive ("Interview Before Writing Skills")
+### 3. Mandatory Interactive Onboarding Directive ("Interview Before Writing Skills")
 
 Before writing any agent skills or changing project configs, you MUST complete:
 - Phase 1: Read-only inspection of ~/.claude, ~/.codex, ~/.gemini, ~/.agents, AGENTS.md, and .agents/skills/.
@@ -302,7 +310,7 @@ Before writing any agent skills or changing project configs, you MUST complete:
   - Axis 4 (Persistence Scope): [4A] Project Workspace Only, [4B] Global User Workstation, [4C] Both Project & Global [Recommended].
 - Phase 3: Persist confirmed selections to .agents/skills/ and AGENTS.md with cross-harness symlinks.
 
-## 4. Recommended Skills Catalog
+### 4. Recommended Skills Catalog
 
 Install the official 👍kanban skills:
 - Workflow Setup: /llms-skills/kanban-workflow-setup.md

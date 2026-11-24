@@ -57,6 +57,31 @@ async def test_llms_txt_positive_get_and_head(app: FastAPI) -> None:  # noqa: PL
         raw_bytes = res.content
         assert len(raw_bytes) <= MAX_LLMS_TXT_BYTES
 
+        # Verify Humans and Agents sections
+        assert "## Humans" in body_text
+        assert "## Agents" in body_text
+        assert "Copy and paste the contents of `/llms.txt`" in body_text
+        assert "Deliver this `/llms.txt` URL directly to your agent" in body_text
+        assert "Claude Code, OpenAI Codex, Gemini CLI / Antigravity, Cursor" in body_text
+
+        # Verify section ordering: ## Humans < ## Agents < ### 1. < ### 2. < ### 3. < ### 4.
+        idx_humans = body_text.index("## Humans")
+        idx_agents = body_text.index("## Agents")
+        idx_sec1 = body_text.index("### 1. Platform & 3-Surface MCP Quick-Map")
+        idx_sec2 = body_text.index("### 2. How to Create & Approach Tickets (kanban-ticket Rules)")
+        idx_sec3 = body_text.index("### 3. Mandatory Interactive Onboarding Directive")
+        idx_sec4 = body_text.index("### 4. Recommended Skills Catalog")
+        assert idx_humans < idx_agents < idx_sec1 < idx_sec2 < idx_sec3 < idx_sec4
+
+        # Negative checks: zero demoted numbered headings remain at ## level
+        assert "\n## 1. " not in body_text
+        assert "\n## 2. " not in body_text
+        assert "\n## 3. " not in body_text
+        assert "\n## 4. " not in body_text
+        for line in body_text.splitlines():
+            for i in (1, 2, 3, 4):
+                assert not line.startswith(f"## {i}. "), f"Found demoted H2 heading: {line}"
+
         # Verify Platform & 3-Surface MCP Quick-Map
         assert "Platform & 3-Surface MCP Quick-Map" in body_text
         assert "/mcp/agent" in body_text
@@ -147,8 +172,17 @@ async def test_llms_full_txt_positive_get_and_head(app: FastAPI) -> None:
         assert len(raw_bytes) <= MAX_LLMS_FULL_BYTES
 
         # Verify standard /llms.txt header content is included
-        assert "Platform & 3-Surface MCP Quick-Map" in body_text
+        assert "## Humans" in body_text
+        assert "## Agents" in body_text
+        assert "### 1. Platform & 3-Surface MCP Quick-Map" in body_text
         assert "Interview Before Writing Skills" in body_text
+        assert "\n## 1. " not in body_text
+        assert "\n## 2. " not in body_text
+        assert "\n## 3. " not in body_text
+        assert "\n## 4. " not in body_text
+        for line in body_text.splitlines():
+            for i in (1, 2, 3, 4):
+                assert not line.startswith(f"## {i}. "), f"Found demoted H2 heading: {line}"
 
         # Verify all 4 skills are concatenated with clear delimiters
         for slug in ALLOWED_SKILL_SLUGS:
@@ -326,7 +360,23 @@ def test_content_invariants_and_byte_budgets() -> None:
     assert get_llms_full_txt_content() is get_llms_full_txt_content()
     assert get_skill_assets() is get_skill_assets()
 
-    # 5. Wheel package inclusion in kanban/pyproject.toml
+    # 5. Section headings structure: ## Humans, ## Agents, and ### 1. - 4.
+    for doc in (llms_txt, llms_full):
+        assert "## Humans" in doc
+        assert "## Agents" in doc
+        assert "### 1. Platform & 3-Surface MCP Quick-Map" in doc
+        assert "### 2. How to Create & Approach Tickets (kanban-ticket Rules)" in doc
+        assert "### 3. Mandatory Interactive Onboarding Directive" in doc
+        assert "### 4. Recommended Skills Catalog" in doc
+        assert "\n## 1. " not in doc
+        assert "\n## 2. " not in doc
+        assert "\n## 3. " not in doc
+        assert "\n## 4. " not in doc
+        for line in doc.splitlines():
+            for i in (1, 2, 3, 4):
+                assert not line.startswith(f"## {i}. "), f"Found demoted H2 heading: {line}"
+
+    # 6. Wheel package inclusion in kanban/pyproject.toml
     pyproject_path = Path("kanban/pyproject.toml")
     with pyproject_path.open("rb") as f:
         data = tomllib.load(f)
