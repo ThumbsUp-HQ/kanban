@@ -373,12 +373,22 @@ class TestAuditIntegrationAndCLI:
 
         assert header_lines == [expected_header] * 5
         assert separator_lines == [expected_separator] * 5
-        assert len(data_lines) == 46
+        assert len(data_lines) == 50
         planned_core_rows = [row for row in data_lines if "| 🎯✅ |" in row]
         assert len(planned_core_rows) == 0
         for row in cap_table_lines:
             cells = [cell.strip() for cell in row.strip("|").split("|")]
             assert len(cells) == 9, f"Expected 9 GFM columns, got {len(cells)} in row: {row}"
+
+        feature_names = [row.strip("|").split("|")[0].strip() for row in data_lines]
+        assert "Active Directory / LDAP" in feature_names
+        assert "OIDC" in feature_names
+        assert "/llms.txt & Skills Discovery" in feature_names
+        assert "Issue Tracker" in feature_names
+        assert "Kanban Board" in feature_names
+        assert "Synaptic Hybrid Vector Search" in feature_names
+        assert "Multi-Card OIDC & LDAPS" not in feature_names
+        assert "Core Kanban & Issues" not in feature_names
 
         sec6_table_lines = [line for line in spec_lines[sec6_idx:] if line.startswith("|")]
         sec6_9col = sec6_table_lines[:8]
@@ -400,5 +410,5 @@ class TestAuditIntegrationAndCLI:
         if wiki_dir.is_dir():
             wiki_file = wiki_dir / "Feature-Comparison.md"
             wiki_lines = wiki_file.read_text(encoding="utf-8").splitlines()
-            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (46 Features)"
+            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (50 Features)"
             assert wiki_lines[1:] == spec_lines[1:]

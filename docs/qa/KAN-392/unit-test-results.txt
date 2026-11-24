@@ -1,0 +1,66 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan392-7eaddfb5/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan392-7eaddfb5
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 37 items
+
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [  2%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [  5%]
+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [  8%]
+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 10%]
+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 13%]
+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 16%]
+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [ 18%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestSlugifyAnchor::test_slugify_clean_text PASSED [ 21%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestSlugifyAnchor::test_slugify_gfm_anchor PASSED [ 24%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestExtractWikiAnchors::test_extract_headings_and_anchor_tags PASSED [ 27%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckWikiChaptersTaxonomy::test_valid_wiki_directory PASSED [ 29%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckWikiChaptersTaxonomy::test_empty_directory_reports_violation PASSED [ 32%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckWikiChaptersTaxonomy::test_missing_h1_reports_violation PASSED [ 35%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckWikiChaptersTaxonomy::test_invalid_h1_prefix_reports_violation PASSED [ 37%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckManifestTaxonomy::test_missing_manifest_file PASSED [ 40%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckManifestTaxonomy::test_manifest_missing_array_pattern PASSED [ 43%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckManifestTaxonomy::test_manifest_invalid_json PASSED [ 45%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckManifestTaxonomy::test_manifest_valid_and_invalid_entries PASSED [ 48%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckManifestTaxonomy::test_manifest_invalid_home_metadata PASSED [ 51%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestInternalAndCodeLinks::test_internal_wiki_links PASSED [ 54%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestInternalAndCodeLinks::test_web_src_doc_links PASSED [ 56%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestInternalAndCodeLinks::test_web_src_nonexistent_directory PASSED [ 59%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckNoEmEnDashes::test_clean_files_pass PASSED [ 62%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckNoEmEnDashes::test_forbidden_dashes_detected PASSED [ 64%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestCheckNoEmEnDashes::test_invalid_utf8_file PASSED [ 67%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestAuditIntegrationAndCLI::test_live_repository_taxonomy_passes_cleanly PASSED [ 70%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestAuditIntegrationAndCLI::test_main_cli_success PASSED [ 72%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestAuditIntegrationAndCLI::test_main_cli_missing_wiki_dir PASSED [ 75%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestAuditIntegrationAndCLI::test_main_cli_failure_reports_nonzero PASSED [ 78%]
+kanban/tests/docs/test_check_docs_taxonomy.py::TestAuditIntegrationAndCLI::test_feature_comparison_matrix_sync_and_gfm_columns PASSED [ 81%]
+kanban/tests/test_wiki_bundle_sync.py::test_wiki_and_public_images_sha256_parity PASSED [ 83%]
+kanban/tests/test_wiki_bundle_sync.py::test_zero_duplicate_numeric_prefix_collisions PASSED [ 86%]
+kanban/tests/test_wiki_bundle_sync.py::test_every_markdown_image_reference_resolves PASSED [ 89%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_external_image_links_in_wiki PASSED [ 91%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_unreferenced_orphan_images PASSED [ 94%]
+kanban/tests/test_wiki_bundle_sync.py::test_sync_wiki_bundle_execution PASSED [ 97%]
+kanban/tests/test_wiki_bundle_sync.py::test_feature_comparison_day2_clean_and_synced PASSED [100%]
+
+============================== 37 passed in 2.10s ==============================
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan392-7eaddfb5/kanban/web
+> vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan392-7eaddfb5/kanban/web
+
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (45 tests) 3103ms
+   ✓ DocsCenter & Help System (KAN-16) (45)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (13)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 787ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 331ms
+
+ Test Files  1 passed (1)
+      Tests  45 passed (45)
+   Start at  09:17:40
+   Duration  4.27s (tests 76%, environment 17%, import 5%, transform 1%)
+

@@ -49,18 +49,18 @@ def test_feature_comparison_markdown_parity() -> None:
 
     if WIKI_FC_PATH.exists():
         wiki_lines = WIKI_FC_PATH.read_text(encoding="utf-8").splitlines()
-        assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (46 Features)"
+        assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (50 Features)"
         # All lines from line 2 onwards must match with 100% identical content
         assert docs_lines[1:] == wiki_lines[1:], (
             "Parity mismatch between docs and wiki Feature-Comparison"
         )
     else:
         manifest_text = WIKI_MANIFEST_PATH.read_text(encoding="utf-8")
-        assert "# [Informational] Feature Comparison Matrix (46 Features)" in manifest_text
+        assert "# [Informational] Feature Comparison Matrix (50 Features)" in manifest_text
 
 
 def test_feature_comparison_tables_and_shipped_status() -> None:
-    """Assert all 46 comparison rows in Sections 1-5 have checkmark for thumbs-up-kanban."""
+    """Assert all 50 comparison rows in Sections 1-5 have checkmark for thumbs-up-kanban."""
     content = DOCS_FC_PATH.read_text(encoding="utf-8")
 
     # Extract all rows from comparison tables in Sections 1 through 5
@@ -68,25 +68,45 @@ def test_feature_comparison_tables_and_shipped_status() -> None:
     table_row_re = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|.*\|$")
 
     section_feature_rows: list[tuple[str, str]] = []
+    section_counts: dict[str, int] = {}
+    current_section = ""
     in_section = False
 
     for line in content.splitlines():
         if line.startswith(("## 1. ", "## 2. ", "## 3. ", "## 4. ", "## 5. ")):
             in_section = True
+            current_section = line.split(".")[0].replace("## ", "").strip()
+            section_counts[current_section] = 0
             continue
         if line.startswith("## 6. "):
             in_section = False
             break
         if in_section and line.startswith("|") and not line.startswith(("| Feature", "| ---")):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            assert len(cells) == 9, f"Expected 9 GFM columns in row: {line}"
             m = table_row_re.match(line)
             if m:
                 feat_name = m.group(1).strip()
                 status = m.group(2).strip()
                 section_feature_rows.append((feat_name, status))
+                section_counts[current_section] += 1
 
-    assert len(section_feature_rows) == 46, (
-        f"Expected 46 feature rows, got {len(section_feature_rows)}"
+    assert len(section_feature_rows) == 50, (
+        f"Expected 50 feature rows, got {len(section_feature_rows)}"
     )
+    assert section_counts == {"1": 10, "2": 9, "3": 13, "4": 8, "5": 10}, (
+        f"Unexpected section row counts: {section_counts}"
+    )
+
+    feature_names = [feat for feat, _ in section_feature_rows]
+    assert "Active Directory / LDAP" in feature_names
+    assert "OIDC" in feature_names
+    assert "/llms.txt & Skills Discovery" in feature_names
+    assert "Issue Tracker" in feature_names
+    assert "Kanban Board" in feature_names
+    assert "Synaptic Hybrid Vector Search" in feature_names
+    assert "Multi-Card OIDC & LDAPS" not in feature_names
+    assert "Core Kanban & Issues" not in feature_names
 
     for feat_name, status in section_feature_rows:
         assert status == "✅", f"Feature '{feat_name}' has status '{status}', expected '✅'"

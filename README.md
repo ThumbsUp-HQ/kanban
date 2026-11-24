@@ -100,7 +100,7 @@ Every Kanban board looks identical until you inspect who controls the auth cards
 
 > **Notes:** (1) Jira Data Center ended new sales on March 30, 2026 and reaches End of Life on March 28, 2029. (2) Self-hosted GitHub Enterprise Server requires Enterprise licensing ($21/user/mo). (3) Vibe Kanban sunsetted its hosted cloud organizations in 2026 and operates as a local-first single-user tool. (4) Standalone PG16 is the turnkey runtime today; `docker-compose.yml` defines the 5-network topology while its `mcp-server`/`agent-runtime` placeholder services and `script-sandbox` worker remain preview stubs. (5) Atlassian Rovo MCP calls against Teamwork Graph consume metered monthly Rovo credits ($0.01/credit overage). (6) `github-mcp-server` exposes 52 tools (~30.3k tokens) by default across 5 core toolsets, with `projects` disabled unless manually enabled. (7) Plane CE includes all 5 core views (`List`, `Board`, `Calendar`, `Gantt`, `Spreadsheet`) and basic Pages, while Published Views, custom Work Item Types, and advanced Wiki capabilities are gated behind commercial tiers.
 >
-> Looking for the full 46-feature matrix (including OpenAI Symphony, Businessmap, Codebeamer, shipped vs. roadmap status, and intentional non-goals)? Read [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) or the [Wiki Feature Comparison Matrix](https://github.com/ThumbsUp-HQ/kanban/wiki/Feature-Comparison).
+> Looking for the full 50-feature matrix (including OpenAI Symphony, Businessmap, Codebeamer, shipped vs. roadmap status, and intentional non-goals)? Read [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) or the [Wiki Feature Comparison Matrix](https://github.com/ThumbsUp-HQ/kanban/wiki/Feature-Comparison).
 
 ---
 

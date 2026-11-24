@@ -235,3 +235,37 @@ def test_feature_comparison_day2_clean_and_synced() -> None:
         assert kanban_status == "✅", (
             f"Feature '{feature_name}' does not have ✅ in 👍kanban column: {kanban_status}"
         )
+
+    # Assert all 50 comparison rows across Sections 1-5 have 9 columns
+    sec_headers = [
+        "1. Security, Identity, Audit & Deployment",
+        "2. Agentic Tasks, MCP, AI & Workflow Gates",
+        "3. Issue Tracker & Kanban Board",
+        "4. Docs, Stickies, Markdown & Object Graph",
+        "5. Orchestration, Provenance & Day-2 Operations",
+    ]
+    all_feature_rows: list[str] = []
+    for header in sec_headers:
+        pattern = (
+            rf"## {re.escape(header)}\s*\n\s*\|([^\n]+)\|\s*\n"
+            r"\s*\|([^\n]+)\|\s*\n((?:\|[^\n]+\|\s*\n)+)"
+        )
+        match = re.search(pattern, docs_text)
+        assert match is not None, f"Failed to locate section {header}"
+        rows = [r.strip() for r in match.group(3).strip().splitlines() if r.strip()]
+        for r in rows:
+            cols = [c.strip() for c in r.strip("|").split("|")]
+            assert len(cols) == 9, f"Expected 9 GFM columns in row: {r}"
+            all_feature_rows.append(cols[0])
+
+    assert len(all_feature_rows) == 50, (
+        f"Expected 50 capability rows, found {len(all_feature_rows)}"
+    )
+    assert "Active Directory / LDAP" in all_feature_rows
+    assert "OIDC" in all_feature_rows
+    assert "/llms.txt & Skills Discovery" in all_feature_rows
+    assert "Issue Tracker" in all_feature_rows
+    assert "Kanban Board" in all_feature_rows
+    assert "Synaptic Hybrid Vector Search" in all_feature_rows
+    assert "Multi-Card OIDC & LDAPS" not in all_feature_rows
+    assert "Core Kanban & Issues" not in all_feature_rows
