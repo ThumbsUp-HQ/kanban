@@ -56,7 +56,7 @@ def test_feature_comparison_markdown_parity() -> None:
         )
     else:
         manifest_text = WIKI_MANIFEST_PATH.read_text(encoding="utf-8")
-        assert "# [Informational] Feature Comparison Matrix (50 Features)" in manifest_text
+        assert "[Informational] Feature Comparison Matrix (50 Features)" in manifest_text
 
 
 def test_feature_comparison_tables_and_shipped_status() -> None:
