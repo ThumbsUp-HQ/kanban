@@ -273,7 +273,8 @@ export function StateFilterPopover({
       <button
         ref={triggerRef}
         type="button"
-        className={`navigator-state-trigger ${isOpen ? 'navigator-state-trigger--open' : ''}`}
+        id="state-filter-trigger"
+        className={`navigator-state-trigger state-filter-trigger ${isOpen ? 'navigator-state-trigger--open' : ''}`}
         data-testid="navigator-filter-state"
         data-state-preset={classification.preset}
         aria-haspopup="dialog"

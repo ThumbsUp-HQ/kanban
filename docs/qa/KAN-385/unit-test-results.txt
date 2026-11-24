@@ -1,0 +1,222 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/kanban/web
+      Coverage enabled with v8
+
+stderr | src/features/views/__tests__/SearchBarOverlapRegression.test.tsx > SearchBarOverlapRegression - KAN-385 Flex Basis and Non-Overlap Invariants > Component Rendering: FilterDisplayBar > renders FilterDisplayBar with search form and state filter trigger as discrete siblings
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/views/__tests__/SearchBarOverlapRegression.test.tsx (10 tests) 219ms
+ ✓ src/features/views/IssueNavigatorBar.test.tsx (13 tests) 372ms
+
+ Test Files  2 passed (2)
+      Tests  23 passed (23)
+   Start at  21:48:41
+   Duration  1.54s (environment 53%, tests 25%, import 15%, transform 3%, worker 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    95.78 |     100 |     100 |                   
+ ...vigatorBar.tsx |     100 |    95.78 |     100 |     100 | ...21,211-215,228 
+-------------------|---------|----------|---------|---------|-------------------
+
+--- Playwright Multi-Viewport Search Overlap Proof ---
+[Playwright Proof] Preview server ready at http://127.0.0.1:18985
+
+================================================================
+[Viewport Test]: 1440x900-desktop (1440x900)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=661.8, right=717.0, top=86.5, bottom=109.5
+    States Button Box: left=732.0, right=894.1, top=84.0, bottom=112.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-1440x900-desktop.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=349.5, right=404.8, top=104.0, bottom=127.0
+      States Box: left=293.0, right=436.7, top=210.0, bottom=236.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-1440x900-desktop.png
+    Mode: basic-2col
+      Query Box : left=1033.2, right=1088.4, top=89.5, bottom=112.5
+      States Box: left=301.0, right=463.1, top=125.0, bottom=153.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-1440x900-desktop.png
+    Mode: advanced-1line
+      Query Box : left=608.8, right=653.1, top=84.0, bottom=108.0
+      States Box: left=925.1, right=1068.8, top=83.0, bottom=109.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-1440x900-desktop.png
+
+================================================================
+[Viewport Test]: 1100x800-intermediate-desktop (1100x800)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=321.8, right=377.0, top=86.5, bottom=109.5
+    States Button Box: left=392.0, right=554.1, top=84.0, bottom=112.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-1100x800-intermediate-desktop.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=93.5, right=148.8, top=101.0, bottom=124.0
+      States Box: left=37.0, right=180.7, top=207.0, bottom=233.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-1100x800-intermediate-desktop.png
+    Mode: basic-2col
+      Query Box : left=693.2, right=748.4, top=89.5, bottom=112.5
+      States Box: left=45.0, right=207.1, top=125.0, bottom=153.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-1100x800-intermediate-desktop.png
+    Mode: advanced-1line
+      Query Box : left=352.8, right=397.1, top=84.0, bottom=108.0
+      States Box: left=669.1, right=812.8, top=83.0, bottom=109.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-1100x800-intermediate-desktop.png
+
+================================================================
+[Viewport Test]: 1024x768-tablet-landscape (1024x768)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=329.4, right=384.7, top=82.5, bottom=105.5
+    States Button Box: left=399.7, right=561.7, top=80.0, bottom=108.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-1024x768-tablet-landscape.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=93.5, right=148.8, top=101.0, bottom=124.0
+      States Box: left=37.0, right=180.7, top=207.0, bottom=233.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-1024x768-tablet-landscape.png
+    Mode: basic-2col
+      Query Box : left=617.2, right=672.4, top=89.5, bottom=112.5
+      States Box: left=45.0, right=207.1, top=125.0, bottom=153.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-1024x768-tablet-landscape.png
+    Mode: advanced-1line
+      Query Box : left=352.8, right=397.1, top=84.0, bottom=108.0
+      States Box: left=669.1, right=812.8, top=83.0, bottom=109.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-1024x768-tablet-landscape.png
+
+================================================================
+[Viewport Test]: 900x700-compact-tablet (900x700)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=813.8, right=869.0, top=82.5, bottom=105.5
+    States Button Box: left=28.0, right=190.1, top=128.0, bottom=156.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-900x700-compact-tablet.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=93.5, right=148.8, top=101.0, bottom=124.0
+      States Box: left=37.0, right=180.7, top=207.0, bottom=233.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-900x700-compact-tablet.png
+    Mode: basic-2col
+      Query Box : left=493.2, right=548.4, top=89.5, bottom=112.5
+      States Box: left=45.0, right=207.1, top=125.0, bottom=153.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-900x700-compact-tablet.png
+    Mode: advanced-1line
+      Query Box : left=352.8, right=397.1, top=84.0, bottom=108.0
+      States Box: left=669.1, right=812.8, top=83.0, bottom=109.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-900x700-compact-tablet.png
+
+================================================================
+[Viewport Test]: 768x1024-tablet-portrait (768x1024)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=697.8, right=753.0, top=70.5, bottom=93.5
+    States Button Box: left=12.0, right=174.1, top=116.0, bottom=144.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-768x1024-tablet-portrait.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=93.5, right=148.8, top=104.0, bottom=127.0
+      States Box: left=37.0, right=180.7, top=210.0, bottom=236.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-768x1024-tablet-portrait.png
+    Mode: basic-2col
+      Query Box : left=506.2, right=561.5, top=89.5, bottom=112.5
+      States Box: left=45.0, right=207.1, top=165.0, bottom=193.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-768x1024-tablet-portrait.png
+    Mode: advanced-1line
+      Query Box : left=429.8, right=474.1, top=84.0, bottom=108.0
+      States Box: left=746.1, right=889.8, top=83.0, bottom=109.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-768x1024-tablet-portrait.png
+
+================================================================
+[Viewport Test]: 390x844-mobile-portrait (390x844)
+================================================================
+
+  --- Surface 1: FilterDisplayBar on Board Layout (?layout=board) ---
+    Query Button Box : left=399.8, right=455.0, top=67.0, bottom=111.0
+    States Button Box: left=12.0, right=174.1, top=130.0, bottom=166.0
+    Overlap Area     : 0.00 px^2 (expected 0)
+    PASS: Zero collision in FilterDisplayBar (overlapArea === 0).
+    -> Saved board screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/board-390x844-mobile-portrait.png
+
+  --- Surface 2: IssueNavigatorBar on List Layout (?layout=list) ---
+    Mode: 1col
+      Query Box : left=81.5, right=136.8, top=132.0, bottom=176.0
+      States Box: left=25.0, right=168.7, top=337.0, bottom=373.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in 1col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-1col-390x844-mobile-portrait.png
+    Mode: basic-2col
+      Query Box : left=89.5, right=144.8, top=136.0, bottom=180.0
+      States Box: left=0.0, right=0.0, top=0.0, bottom=0.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in basic-2col (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-basic-2col-390x844-mobile-portrait.png
+    Mode: advanced-1line
+      Query Box : left=417.8, right=462.1, top=76.0, bottom=120.0
+      States Box: left=815.8, right=959.5, top=80.0, bottom=116.0
+      Overlap   : 0.00 px^2 (expected 0)
+      PASS: Zero collision in advanced-1line (overlapArea === 0).
+      -> Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan385-d933fa40/docs/qa/KAN-385/screenshots/list-advanced-1line-390x844-mobile-portrait.png
+
+ALL 6 VIEWPORTS VALIDATED WITH ZERO OVERLAP ACROSS ALL SURFACES.
