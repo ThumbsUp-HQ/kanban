@@ -5,7 +5,10 @@ import {
   IssueNavigatorBar,
   NAVIGATOR_HEADER_MODE_STORAGE_KEY,
 } from './IssueNavigatorBar';
-import { ISSUE_FILTER_COOKIE_NAME } from './issueFilterCookie';
+import {
+  ISSUE_FILTER_COOKIE_NAME,
+  createActionableStateFilterPreference,
+} from './issueFilterCookie';
 import type { IssueItem, SavedView } from './viewsApi';
 
 describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
@@ -229,6 +232,57 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     expect(screen.queryByTestId('hidden-completed-banner')).toBeNull();
   });
 
+  it('calls onShowAllStates callback when clicking Show all in hidden-completed banner', () => {
+    const onShowAllStates = vi.fn();
+    const { unmount: unmount1 } = render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        queryMode="basic"
+        searchQuery="KAN-2"
+        onShowAllStates={onShowAllStates}
+      />,
+    );
+
+    const banner = screen.getByTestId('hidden-completed-banner');
+    expect(banner).toBeDefined();
+    fireEvent.click(screen.getByTestId('hidden-completed-show-all-btn'));
+    expect(onShowAllStates).toHaveBeenCalledTimes(1);
+    unmount1();
+
+    // Explicit hiddenCompletedCount and hiddenExactMatch props
+    const { unmount: unmount2 } = render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        hiddenCompletedCount={5}
+        hiddenExactMatch={{ key: 'KAN-99', stateName: 'Done' }}
+      />,
+    );
+    expect(screen.getByTestId('hidden-completed-banner').textContent).toContain('KAN-99 is hidden (Done)');
+    unmount2();
+
+    // Exact match with empty state name falling back to state group
+    const fallbackStateIssues: IssueItem[] = [
+      {
+        id: 'i-fallback',
+        key: 'KAN-FALLBACK',
+        summary: 'Fallback state issue',
+        state: { id: 's-done', name: '', group: 'completed' },
+        priority: { slug: 'low', label: 'Low' },
+      },
+    ];
+    const { unmount: unmountFallback } = render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={fallbackStateIssues}
+        searchQuery="KAN-FALLBACK"
+      />,
+    );
+    expect(screen.getByTestId('hidden-completed-banner').textContent).toContain('KAN-FALLBACK is hidden (completed)');
+    unmountFallback();
+  });
+
   it('handles favorites toggle and saved view selection', () => {
     const onToggleFavoritesOnly = vi.fn();
     const onSelectSavedView = vi.fn();
@@ -278,6 +332,17 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     fireEvent.change(viewSelect, { target: { value: 'view-2' } });
     expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
     fireEvent.change(viewSelect, { target: { value: '' } });
+
+    // Render with activeViewId undefined
+    rerender(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        savedViews={mockSavedViews}
+        onSelectSavedView={onSelectSavedView}
+      />,
+    );
+    expect(screen.getByTestId('navigator-saved-views-select')).toBeDefined();
   });
 
   it('invokes onExport, onImport, and onExportReports callbacks when provided as props', () => {
@@ -296,14 +361,44 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     );
 
     fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+    // Non-Escape key does not close menu
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+
+    // Inside click does not close menu
+    fireEvent.mouseDown(screen.getByTestId('navigator-export-menu'));
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+
+    // Press Escape to close export menu
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
+
+    // Open export menu and click outside to close
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
     fireEvent.click(screen.getByTestId('navigator-export-opt-csv'));
-    expect(onExport).toHaveBeenCalledTimes(1);
+    expect(onExport).toHaveBeenCalledWith('csv');
+
+    // Click ZIP option from export dropdown
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    fireEvent.click(screen.getByTestId('navigator-export-opt-zip'));
+    expect(onExport).toHaveBeenCalledWith('zip_csv');
+
+    // Click template option from export dropdown
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    fireEvent.click(screen.getByTestId('navigator-export-opt-template'));
+    expect(onExportReports).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('navigator-import-btn'));
     expect(onImport).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
-    expect(onExportReports).toHaveBeenCalledTimes(1);
+    expect(onExportReports).toHaveBeenCalledTimes(2);
   });
 
   it('covers defensive branches for missing assignees, display_name, cycle name, module_ids, and omitted onFiltersChange', () => {
@@ -340,6 +435,19 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     );
 
     const prioSelect = screen.getByTestId('navigator-filter-priority');
+    fireEvent.change(prioSelect, { target: { value: 'all' } });
+
+    // Controlled stateFilter and query mode with explicit state predicate
+    const { unmount } = render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={defensiveIssues}
+        stateFilter={createActionableStateFilterPreference()}
+        queryMode="query"
+        searchQuery="state:completed"
+      />,
+    );
+    unmount();
     fireEvent.change(prioSelect, { target: { value: 'low' } });
   });
 
@@ -415,7 +523,65 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
   });
 
-  describe('Space-Preserving Header Modes (KAN-377)', () => {
+  describe('Space-Preserving Header Modes (KAN-377 & KAN-386)', () => {
+    it('renders compact expand/contract density toggle button as first child of top row and cycles through modes', () => {
+      const onHeaderModeChange = vi.fn();
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          onHeaderModeChange={onHeaderModeChange}
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      const topRow = navBar.querySelector('.navigator-top-row');
+      expect(topRow).not.toBeNull();
+
+      // Density toggle button MUST be the first element in .navigator-top-row (before search form)
+      const toggleBtn = screen.getByTestId('navigator-header-density-toggle');
+      expect(topRow?.firstElementChild).toBe(toggleBtn);
+      const searchForm = navBar.querySelector('.navigator-search-form');
+      expect(toggleBtn.nextElementSibling).toBe(searchForm);
+
+      // 1. Initial 1col mode checks
+      expect(toggleBtn.getAttribute('data-header-mode')).toBe('1col');
+      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Compact 1-Column (click to expand to 2-Column)');
+      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 1-Col)');
+      expect(toggleBtn.querySelector('.navigator-density-icon--expand')).not.toBeNull();
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+
+      // 2. Click 1: transition to basic-2col
+      fireEvent.click(toggleBtn);
+      expect(toggleBtn.getAttribute('data-header-mode')).toBe('basic-2col');
+      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Expanded 2-Column (click for 1-Line compact)');
+      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 2-Col)');
+      expect(toggleBtn.querySelector('.navigator-density-icon--collapse-1line')).not.toBeNull();
+      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('basic-2col');
+      expect(onHeaderModeChange).toHaveBeenLastCalledWith('basic-2col');
+
+      // 3. Click 2: transition to advanced-1line
+      fireEvent.click(toggleBtn);
+      expect(toggleBtn.getAttribute('data-header-mode')).toBe('advanced-1line');
+      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Single-Line (click to contract to 1-Column)');
+      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 1-Line)');
+      expect(toggleBtn.querySelector('.navigator-density-icon--contract-1col')).not.toBeNull();
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('advanced-1line');
+      expect(onHeaderModeChange).toHaveBeenLastCalledWith('advanced-1line');
+
+      // 4. Click 3: cycle back to 1col
+      fireEvent.click(toggleBtn);
+      expect(toggleBtn.getAttribute('data-header-mode')).toBe('1col');
+      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Compact 1-Column (click to expand to 2-Column)');
+      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 1-Col)');
+      expect(toggleBtn.querySelector('.navigator-density-icon--expand')).not.toBeNull();
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('1col');
+      expect(onHeaderModeChange).toHaveBeenLastCalledWith('1col');
+    });
+
     it('defaults to 1col mode, renders data-header-mode="1col", and updates on 2-Col and 1-Line button clicks', () => {
       const onHeaderModeChange = vi.fn();
       render(

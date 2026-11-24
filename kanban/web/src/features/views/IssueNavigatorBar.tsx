@@ -130,6 +130,18 @@ export function IssueNavigatorBar({
     [onHeaderModeChange],
   );
 
+  const handleCycleHeaderMode = useCallback(() => {
+    let nextMode: NavigatorHeaderMode;
+    if (effectiveHeaderMode === '1col') {
+      nextMode = 'basic-2col';
+    } else if (effectiveHeaderMode === 'basic-2col') {
+      nextMode = 'advanced-1line';
+    } else {
+      nextMode = '1col';
+    }
+    handleHeaderModeSelect(nextMode);
+  }, [effectiveHeaderMode, handleHeaderModeSelect]);
+
   const effectiveStates = useMemo(
     () => resolveEffectiveProjectStates(projectStates),
     [projectStates],
@@ -351,6 +363,86 @@ export function IssueNavigatorBar({
     >
       {/* Top Search & Mode Row */}
       <div className="navigator-top-row">
+        {/* Compact Header Layout Density Toggle Button (KAN-386) */}
+        <button
+          type="button"
+          className="navigator-density-toggle-btn"
+          data-testid="navigator-header-density-toggle"
+          data-header-mode={effectiveHeaderMode}
+          onClick={handleCycleHeaderMode}
+          title={
+            effectiveHeaderMode === '1col'
+              ? 'Header layout: Compact 1-Column (click to expand to 2-Column)'
+              : effectiveHeaderMode === 'basic-2col'
+                ? 'Header layout: Expanded 2-Column (click for 1-Line compact)'
+                : 'Header layout: Single-Line (click to contract to 1-Column)'
+          }
+          aria-label={
+            effectiveHeaderMode === '1col'
+              ? 'Cycle header layout mode (current: 1-Col)'
+              : effectiveHeaderMode === 'basic-2col'
+                ? 'Cycle header layout mode (current: 2-Col)'
+                : 'Cycle header layout mode (current: 1-Line)'
+          }
+        >
+          {effectiveHeaderMode === '1col' && (
+            <svg
+              className="navigator-density-icon navigator-density-icon--expand"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="10 2 14 2 14 6" />
+              <polyline points="6 14 2 14 2 10" />
+              <line x1="14" y1="2" x2="9" y2="7" />
+              <line x1="2" y1="14" x2="7" y2="9" />
+            </svg>
+          )}
+          {effectiveHeaderMode === 'basic-2col' && (
+            <svg
+              className="navigator-density-icon navigator-density-icon--collapse-1line"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="2" y1="8" x2="14" y2="8" strokeWidth="2" />
+              <polyline points="5 4 8 7 11 4" />
+              <polyline points="5 12 8 9 11 12" />
+            </svg>
+          )}
+          {effectiveHeaderMode === 'advanced-1line' && (
+            <svg
+              className="navigator-density-icon navigator-density-icon--contract-1col"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="14 5 10 5 10 1" />
+              <polyline points="2 11 6 11 6 15" />
+              <line x1="14" y1="1" x2="10" y2="5" />
+              <line x1="2" y1="15" x2="6" y2="11" />
+            </svg>
+          )}
+        </button>
+
         <form
           className="navigator-search-form"
           onSubmit={(e) => {

@@ -106,15 +106,47 @@
   transition: all 120ms ease;
 }
 
-.navigator-header-mode-group {
+/* Compact Expand/Contract Header Density Toggle Button (KAN-386) */
+.navigator-density-toggle-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
   background: var(--bg-surface, #1e2025);
   border: 1px solid var(--border-subtle, #333842);
   border-radius: var(--radius-sm, 4px);
-  padding: 2px;
-  gap: 2px;
+  color: var(--fg-muted, #94a3b8);
+  cursor: pointer;
   flex-shrink: 0;
+  transition: all 120ms ease;
+  box-sizing: border-box;
+}
+
+.navigator-density-toggle-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  border-color: var(--border-subtle, #4b5263);
+}
+
+.navigator-density-toggle-btn:focus-visible {
+  outline: 2px solid var(--focus-ring, #6366f1);
+  outline-offset: 1px;
+}
+
+.navigator-density-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Legacy 3-button mode selector is hidden from view to save horizontal toolbar width (KAN-386) */
+.navigator-header-mode-group {
+  display: none !important;
 }
 
 .navigator-header-mode-btn {
@@ -190,9 +222,11 @@
   .navigator-search-btn,
   .navigator-mode-btn,
   .navigator-header-mode-btn,
+  .navigator-density-toggle-btn,
   .navigator-fav-toggle {
     min-height: 44px;
     height: 44px;
+    min-width: 44px;
   }
 }
 
@@ -805,6 +839,18 @@
   padding: 2px 6px;
   font-size: 11px;
   height: 24px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-density-toggle-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-density-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-filters-row {
