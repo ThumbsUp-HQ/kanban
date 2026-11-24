@@ -495,6 +495,34 @@
   background-color: #2ea043;
 }
 
+.kb-oauth-client-secret-panel {
+  margin: 16px 0;
+  padding: 16px;
+  background-color: var(--kb-color-bg-surface-raised, #161b22);
+  border: 1px solid var(--kb-color-border-warning, #d29922);
+  border-radius: 8px;
+}
+
+.kb-oauth-secret-warning {
+  color: var(--kb-color-text-warning, #d29922);
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.kb-oauth-secret-code {
+  font-family: monospace;
+  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #0d1117));
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  color: #3fb950;
+  font-size: 0.875rem;
+  user-select: all;
+  word-break: break-all;
+  flex: 1;
+}
+
 @media (max-width: 768px) {
   .kb-oauth-gov-container {
     width: 100%;

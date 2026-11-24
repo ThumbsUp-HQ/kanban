@@ -10,6 +10,7 @@ import hmac
 import html
 import logging
 import os
+import secrets
 import time
 import uuid  # noqa: TC003
 from datetime import UTC, datetime
@@ -34,7 +35,7 @@ _logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 CODE_TTL_SECONDS: Final[int] = 300
 REFRESH_TOKEN_TTL_DAYS: Final[int] = 30
-MAX_REDIRECT_URIS: Final[int] = 5
+MAX_REDIRECT_URIS: Final[int] = 16
 MIN_CODE_VERIFIER_LEN: Final[int] = 43
 MAX_CODE_VERIFIER_LEN: Final[int] = 128
 MAX_REGISTRATIONS_PER_IP_HOUR: Final[int] = 100
@@ -258,6 +259,35 @@ class OAuth2Error(Exception):
 def hash_token(token: str) -> bytes:
     """Compute SHA-256 digest of token string."""
     return hashlib.sha256(token.encode("ascii")).digest()
+
+
+def generate_client_secret() -> str:
+    """Generate cryptographically secure client secret for confidential OAuth clients."""
+    return f"kb_ocs_{secrets.token_urlsafe(32)}"
+
+
+def hash_client_secret(secret: str) -> str:
+    """Compute constant-time SHA-256 + pepper digest of client secret."""
+    try:
+        from kanban.auth.local.hashing import get_auth_pepper  # noqa: PLC0415
+
+        pepper = get_auth_pepper()
+    except (ValueError, RuntimeError, ImportError):
+        pepper = b"kanban_default_dev_pepper_do_not_use_in_prod"
+    return hmac.new(pepper, secret.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def verify_client_secret(secret: str, stored_hash: str | None) -> bool:
+    """Verify candidate client secret against stored hash in constant time."""
+    if not secret or not stored_hash:
+        return False
+    computed = hash_client_secret(secret)
+    return hmac.compare_digest(computed, stored_hash)
+
+
+def mask_client_secret_prefix(secret: str) -> str:
+    """Return masked client secret prefix for display (max 16 characters)."""
+    return f"{secret[:10]}..."
 
 
 def verify_pkce_s256(code_verifier: str, code_challenge: str) -> bool:

@@ -605,12 +605,12 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
     redirect_uri = "http://127.0.0.1:8080/callback"
     resource = "http://test/mcp/agent"
 
-    # 4a. 6 redirect URIs during registration -> 400
+    # 4a. 17 redirect URIs during registration (> MAX_REDIRECT_URIS 16) -> 400
     resp_reg_invalid = await client.post(
         "/oauth/register",
         json={
             "client_name": "Too Many URIs",
-            "redirect_uris": [f"http://127.0.0.1:808{i}/callback" for i in range(6)],
+            "redirect_uris": [f"http://127.0.0.1:808{i:02d}/callback" for i in range(17)],
         },
     )
     assert resp_reg_invalid.status_code == 400
@@ -1291,7 +1291,7 @@ async def test_case_8_rfc7591_dynamic_registration_metadata_and_validation(
         json={
             "client_name": "Bad Auth App",
             "redirect_uris": [redirect_uri],
-            "token_endpoint_auth_method": "client_secret_post",
+            "token_endpoint_auth_method": "unsupported_auth_method",
         },
     )
     assert resp_bad_auth.status_code == 400
@@ -1816,7 +1816,7 @@ async def test_case_13_admin_register_oauth_client(
         json={
             "client_name": "Bad Auth App",
             "redirect_uris": ["https://app.example.com/callback"],
-            "token_endpoint_auth_method": "client_secret_post",
+            "token_endpoint_auth_method": "unsupported_auth_method",
         },
     )
     assert resp_bad_auth.status_code == 400
@@ -1827,7 +1827,7 @@ async def test_case_13_admin_register_oauth_client(
         json={
             "client_name": "Confidential App",
             "redirect_uris": ["https://app.example.com/callback"],
-            "client_type": "confidential",
+            "client_type": "unsupported_client_type",
         },
     )
     assert resp_bad_type.status_code == 400
@@ -1949,3 +1949,377 @@ async def test_oauth_authorize_decision_origin_null_referrer_policy_security(
     assert "code" in params
     assert len(params["code"][0]) > 10
     assert params["state"][0] == "state-null-origin"
+
+
+# =========================================================================
+# Test Case 15: Confidential OAuth Clients & Gemini 16-URI DCR Flow (KAN-389)
+# =========================================================================
+
+
+async def test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Validate 16-URI DCR, confidential auth + PKCE S256, and Admin Secret governance."""
+    client = api_env.client
+
+    # 1. Positive: Gemini App style DCR with exactly 16 redirect URIs & client_secret_basic
+    gemini_16_uris = [f"http://127.0.0.1:{8080 + i}/callback" for i in range(16)]
+    resp_gemini_dcr = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Gemini App Assistant",
+            "redirect_uris": gemini_16_uris,
+            "token_endpoint_auth_method": "client_secret_basic",
+        },
+    )
+    assert resp_gemini_dcr.status_code == 201
+    gemini_data = resp_gemini_dcr.json()
+    assert gemini_data["client_type"] == "confidential"
+    assert gemini_data["token_endpoint_auth_method"] == "client_secret_basic"
+    assert len(gemini_data["redirect_uris"]) == 16
+    client_secret_basic = gemini_data.get("client_secret")
+    assert client_secret_basic is not None
+    assert client_secret_basic.startswith("kb_ocs_")
+    assert gemini_data.get("client_secret_expires_at") == 0
+    client_id_basic = gemini_data["client_id"]
+
+    # 2. Negative DCR tests
+    # a. > 16 redirect URIs (17 URIs) -> 400
+    resp_too_many = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Too Many URIs App",
+            "redirect_uris": [f"http://127.0.0.1:{8080 + i}/callback" for i in range(17)],
+        },
+    )
+    assert resp_too_many.status_code == 400
+    assert "maximum 16" in resp_too_many.json()["error_description"].lower()
+
+    # b. Wildcard in hostname or path -> 422
+    resp_wildcard = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Wildcard App",
+            "redirect_uris": ["https://*.gemini.example.com/callback"],
+        },
+    )
+    assert resp_wildcard.status_code == 422
+    assert "wildcard" in resp_wildcard.json()["error_description"].lower()
+
+    # c. Fragment in redirect URI -> 400
+    resp_fragment = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Fragment App",
+            "redirect_uris": ["https://gemini.example.com/callback#token"],
+        },
+    )
+    assert resp_fragment.status_code == 400
+    assert "fragment" in resp_fragment.json()["error_description"].lower()
+
+    # d. Userinfo in redirect URI -> 400
+    resp_userinfo = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Userinfo App",
+            "redirect_uris": ["https://user:pass@gemini.example.com/callback"],
+        },
+    )
+    assert resp_userinfo.status_code == 400
+    assert "userinfo" in resp_userinfo.json()["error_description"].lower()
+
+    # e. Non-loopback HTTP -> 400
+    resp_plain_http = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Plain HTTP App",
+            "redirect_uris": ["http://gemini.example.com/callback"],
+        },
+    )
+    assert resp_plain_http.status_code == 400
+    assert "https or loopback" in resp_plain_http.json()["error_description"].lower()
+
+    # 3. Flow with client_secret_basic + mandatory PKCE S256
+    user = await make_user("gemini_user", workspace_role="WORKSPACE_MEMBER")
+    as_principal(user)
+    v1, c1 = _generate_pkce()
+    chosen_uri = gemini_16_uris[0]
+    resource = "http://test/mcp/agent"
+
+    resp_auth1 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id_basic,
+            "redirect_uri": chosen_uri,
+            "code_challenge": c1,
+            "code_challenge_method": "S256",
+            "state": "state_basic_1",
+            "resource": resource,
+        },
+    )
+    assert resp_auth1.status_code == 200
+    csrf1 = _extract_csrf(resp_auth1.text)
+
+    resp_dec1 = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id_basic,
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+            "code_challenge": c1,
+            "code_challenge_method": "S256",
+            "state": "state_basic_1",
+            "action": "approve",
+            "csrf_token": csrf1,
+            "scopes": ["agent:read"],
+        },
+        follow_redirects=False,
+    )
+    assert resp_dec1.status_code == 302
+    loc1 = urllib.parse.urlparse(resp_dec1.headers["location"])
+    code1 = urllib.parse.parse_qs(loc1.query)["code"][0]
+
+    api_env.resolver.principal = None
+
+    # Negative: Missing client_secret for confidential client -> 401 invalid_client
+    resp_no_secret = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id_basic,
+            "code": code1,
+            "code_verifier": v1,
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_no_secret.status_code == 401
+    assert resp_no_secret.json()["error"] == "invalid_client"
+
+    # Negative: Wrong client_secret -> 401 invalid_client
+    raw_bad_creds = f"{client_id_basic}:wrong_secret".encode()
+    bad_basic_header = "Basic " + base64.b64encode(raw_bad_creds).decode()
+    resp_wrong_secret = await client.post(
+        "/oauth/token",
+        headers={"Authorization": bad_basic_header},
+        data={
+            "grant_type": "authorization_code",
+            "code": code1,
+            "code_verifier": v1,
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_wrong_secret.status_code == 401
+    assert resp_wrong_secret.json()["error"] == "invalid_client"
+
+    # Negative: Missing code_verifier -> 400 invalid_request
+    raw_good_creds = f"{client_id_basic}:{client_secret_basic}".encode()
+    good_basic_header = "Basic " + base64.b64encode(raw_good_creds).decode()
+    resp_no_verifier = await client.post(
+        "/oauth/token",
+        headers={"Authorization": good_basic_header},
+        data={
+            "grant_type": "authorization_code",
+            "code": code1,
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_no_verifier.status_code == 400
+
+    # Negative: Wrong PKCE code_verifier -> 400 invalid_grant
+    resp_wrong_verifier = await client.post(
+        "/oauth/token",
+        headers={"Authorization": good_basic_header},
+        data={
+            "grant_type": "authorization_code",
+            "code": code1,
+            "code_verifier": "wrong_verifier_" + ("x" * 40),
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_wrong_verifier.status_code == 400
+    assert resp_wrong_verifier.json()["error"] == "invalid_grant"
+
+    # Positive: Valid Basic auth + PKCE S256 code exchange -> 200 OK
+    resp_tok_basic = await client.post(
+        "/oauth/token",
+        headers={"Authorization": good_basic_header},
+        data={
+            "grant_type": "authorization_code",
+            "code": code1,
+            "code_verifier": v1,
+            "redirect_uri": chosen_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_tok_basic.status_code == 200
+    tok_basic_data = resp_tok_basic.json()
+    assert "access_token" in tok_basic_data
+    assert "refresh_token" in tok_basic_data
+    rt_basic = tok_basic_data["refresh_token"]
+
+    # Refresh Token exchange: Wrong secret -> 401
+    resp_rt_wrong = await client.post(
+        "/oauth/token",
+        headers={"Authorization": bad_basic_header},
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": rt_basic,
+        },
+    )
+    assert resp_rt_wrong.status_code == 401
+
+    # Refresh Token exchange: Valid basic auth -> 200 OK rotated
+    resp_rt_ok = await client.post(
+        "/oauth/token",
+        headers={"Authorization": good_basic_header},
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": rt_basic,
+        },
+    )
+    assert resp_rt_ok.status_code == 200
+    assert "access_token" in resp_rt_ok.json()
+
+    # 4. Flow with client_secret_post
+    resp_post_dcr = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Post Auth App",
+            "redirect_uris": ["http://127.0.0.1:8999/callback"],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    )
+    assert resp_post_dcr.status_code == 201
+    client_id_post = resp_post_dcr.json()["client_id"]
+    client_secret_post = resp_post_dcr.json()["client_secret"]
+
+    as_principal(user)
+    v2, c2 = _generate_pkce()
+    resp_auth2 = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id_post,
+            "redirect_uri": "http://127.0.0.1:8999/callback",
+            "code_challenge": c2,
+            "code_challenge_method": "S256",
+            "state": "state_post_2",
+            "resource": resource,
+        },
+    )
+    csrf2 = _extract_csrf(resp_auth2.text)
+    resp_dec2 = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id_post,
+            "redirect_uri": "http://127.0.0.1:8999/callback",
+            "resource": resource,
+            "code_challenge": c2,
+            "code_challenge_method": "S256",
+            "state": "state_post_2",
+            "action": "approve",
+            "csrf_token": csrf2,
+            "scopes": ["agent:read"],
+        },
+        follow_redirects=False,
+    )
+    loc2 = resp_dec2.headers["location"]
+    code2 = urllib.parse.parse_qs(urllib.parse.urlparse(loc2).query)["code"][0]
+
+    api_env.resolver.principal = None
+
+    # Positive: client_secret_post with form body
+    resp_tok_post = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id_post,
+            "client_secret": client_secret_post,
+            "code": code2,
+            "code_verifier": v2,
+            "redirect_uri": "http://127.0.0.1:8999/callback",
+            "resource": resource,
+        },
+    )
+    assert resp_tok_post.status_code == 200
+    assert "access_token" in resp_tok_post.json()
+
+    # 5. Admin API Confidential Client Creation & PATCH redirect_uris
+    admin_user = await make_user("admin_oauth_gov", workspace_role="WORKSPACE_ADMIN")
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": admin_user.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res_mfa = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": admin_user.id},
+    )
+    p_row = res_mfa.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+
+    admin_16_uris = [f"https://admin-app.example.com/{i}" for i in range(16)]
+    resp_admin_create = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Admin Confidential App",
+            "redirect_uris": admin_16_uris,
+            "client_type": "confidential",
+            "token_endpoint_auth_method": "client_secret_basic",
+        },
+    )
+    assert resp_admin_create.status_code == 201
+    admin_client_data = resp_admin_create.json()
+    assert admin_client_data["client_type"] == "confidential"
+    assert len(admin_client_data["redirect_uris"]) == 16
+    assert admin_client_data["client_secret"].startswith("kb_ocs_")
+    assert admin_client_data["client_secret_prefix"].startswith("kb_ocs_")
+    admin_cid = admin_client_data["client_id"]
+
+    # Verify GET /api/v1/admin/oauth-clients never leaks client_secret
+    resp_admin_list = await client.get("/api/v1/admin/oauth-clients")
+    assert resp_admin_list.status_code == 200
+    listed_items = resp_admin_list.json()
+    matching_admin_client = next((c for c in listed_items if c["client_id"] == admin_cid), None)
+    assert matching_admin_client is not None
+    assert "client_secret" not in matching_admin_client
+    assert "client_secret_hash" not in matching_admin_client
+    assert matching_admin_client["client_secret_prefix"].startswith("kb_ocs_")
+
+    # PATCH /api/v1/admin/oauth-clients/{client_id} to update redirect_uris
+    new_16_uris = [f"https://updated.example.com/{i}" for i in range(16)]
+    resp_admin_patch = await client.patch(
+        f"/api/v1/admin/oauth-clients/{admin_cid}",
+        json={"redirect_uris": new_16_uris},
+    )
+    assert resp_admin_patch.status_code == 200
+    assert resp_admin_patch.json()["redirect_uris"] == new_16_uris
+
+    # PATCH with 17 URIs is rejected with 400
+    resp_patch_too_many = await client.patch(
+        f"/api/v1/admin/oauth-clients/{admin_cid}",
+        json={"redirect_uris": [f"https://too-many.example.com/{i}" for i in range(17)]},
+    )
+    assert resp_patch_too_many.status_code == 400

@@ -30,17 +30,22 @@ from kanban.oauth.jwt import (
 from kanban.oauth.server import (
     CONSENT_STYLE_SHA256,
     MAX_CODE_VERIFIER_LEN,
+    MAX_REDIRECT_URIS,
     OAuth2Error,
     RegistrationRateLimiter,
     check_registration_rate_limit,
+    generate_client_secret,
     generate_consent_csrf_token,
+    hash_client_secret,
     hash_token,
+    mask_client_secret_prefix,
     parse_resource_target,
     parse_surface_from_resource,
     render_consent_screen,
     resolve_public_base_url,
     validate_redirect_uri,
     validate_registration_redirect_uris,
+    verify_client_secret,
     verify_consent_csrf_token,
     verify_pkce_s256,
 )
@@ -87,17 +92,20 @@ def test_validate_registration_redirect_uris_errors() -> None:
         ]
     )
 
+    # Exactly 16 URIs pass without error (Gemini App MCP OAuth DCR support)
+    validate_registration_redirect_uris([f"https://example.com/{i}" for i in range(16)])
+
     # Empty
     with pytest.raises(OAuth2Error) as exc_empty:
         validate_registration_redirect_uris([])
     assert exc_empty.value.status_code == 400
     assert "At least one" in exc_empty.value.description
 
-    # Over 5
+    # Over 16
     with pytest.raises(OAuth2Error) as exc_max:
-        validate_registration_redirect_uris([f"https://example.com/{i}" for i in range(6)])
+        validate_registration_redirect_uris([f"https://example.com/{i}" for i in range(17)])
     assert exc_max.value.status_code == 400
-    assert "Maximum 5" in exc_max.value.description
+    assert f"Maximum {MAX_REDIRECT_URIS}" in exc_max.value.description
 
     # Plain HTTP non-loopback
     with pytest.raises(OAuth2Error) as exc_http:
@@ -120,6 +128,32 @@ def test_validate_registration_redirect_uris_errors() -> None:
         validate_registration_redirect_uris(["https://example.com/*/callback"])
     assert exc_wild_path.value.status_code == 422
     assert "wildcard" in exc_wild_path.value.description
+
+
+def test_client_secret_generation_hashing_and_verification() -> None:
+    """Test confidential client secret generation, hashing, and constant-time verify."""
+    secret = generate_client_secret()
+    assert secret.startswith("kb_ocs_")
+    assert len(secret) > 40
+
+    prefix = mask_client_secret_prefix(secret)
+    assert prefix.startswith(secret[:10])
+    assert prefix.endswith("...")
+    assert len(prefix) <= 16
+
+    hashed = hash_client_secret(secret)
+    assert hashed != secret
+    assert len(hashed) == 64
+
+    # Verification: valid secret matches
+    assert verify_client_secret(secret, hashed) is True
+
+    # Verification: wrong secret rejected
+    assert verify_client_secret("kb_ocs_invalid_wrong_secret", hashed) is False
+    assert verify_client_secret("", hashed) is False
+    assert verify_client_secret(secret, None) is False
+    assert verify_client_secret(secret, "") is False
+    assert verify_client_secret("", None) is False
 
 
 def test_registration_rate_limiter() -> None:
