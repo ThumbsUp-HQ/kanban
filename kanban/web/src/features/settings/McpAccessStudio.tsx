@@ -1362,7 +1362,7 @@ export function McpAccessStudio({
 
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
-                  Expiration
+                  Expiration:
                   <FieldHelpHint
                     title="Token Expiration"
                     summary="Lifetime duration before newly minted MCP access key expires."
@@ -1436,7 +1436,7 @@ export function McpAccessStudio({
               >
                 <div className="kb-mcp-form-row">
                   <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
-                    Capability Ceiling
+                    Capability Ceiling:
                     <FieldHelpHint
                       title="Capability Ceiling"
                       summary="Maximum permission ceiling bitmask allocated to the client."

@@ -539,14 +539,14 @@ describe('Accessible Names, Associated Form Labels, and Error Announcements (KAN
       const surfaceSelect = screen.getByLabelText(/^Target Surface:/i);
       expect(surfaceSelect.getAttribute('id')).toBe('mint-surface-select');
 
-      const expirySelect = screen.getByLabelText(/^Expiration:/i);
+      const expirySelect = screen.getByLabelText(/^Expiration:/i, { selector: 'select' });
       expect(expirySelect.getAttribute('id')).toBe('mint-expiry-select');
 
       // Open Advanced Capability & Network Restrictions
       const advToggle = screen.getByTestId('advanced-capability-restrictions-toggle');
       fireEvent.click(advToggle);
 
-      const capPresetSelect = screen.getByLabelText(/^Capability Ceiling:/i);
+      const capPresetSelect = screen.getByLabelText(/^Capability Ceiling:/i, { selector: 'select' });
       expect(capPresetSelect.getAttribute('id')).toBe('capability-preset-select');
 
       const cidrsInput = screen.getByLabelText(/^Allowed CIDRs \(optional\):/i);
