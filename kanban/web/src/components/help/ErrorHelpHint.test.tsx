@@ -4,6 +4,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiProblem } from '../../api/problem';
 import { resolveErrorHelp } from './errorHelpCatalog';
 import { ErrorHelpHint, GlobalErrorAlertEnhancer } from './ErrorHelpHint';
@@ -12,17 +13,37 @@ import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 vi.mock('../../features/auth/SecondFactorStep', () => ({
   SecondFactorStep: ({
     onSuccess,
+    onError,
+    onSessionExpired,
     onCancel,
   }: {
     challengeId: string;
     methods: string[];
     onSuccess: () => void;
+    onError?: (err: string) => void;
+    onSessionExpired?: () => void;
     onCancel?: () => void;
   }) => (
     <div data-testid="mock-second-factor-step">
       <button type="button" data-testid="mock-stepup-success" onClick={onSuccess}>
         Simulate Step-Up Success
       </button>
+      {onError && (
+        <button
+          type="button"
+          data-testid="mock-stepup-error"
+          onClick={() => {
+            onError('MFA failed');
+          }}
+        >
+          Simulate Error
+        </button>
+      )}
+      {onSessionExpired && (
+        <button type="button" data-testid="mock-stepup-expired" onClick={onSessionExpired}>
+          Simulate Expired
+        </button>
+      )}
       {onCancel && (
         <button type="button" data-testid="mock-stepup-cancel" onClick={onCancel}>
           Cancel Step-Up
@@ -87,22 +108,30 @@ describe('errorHelpCatalog: resolveErrorHelp (KAN-393)', () => {
     expect(surrogate.code).toBe('INVALID_UTF8_SURROGATE');
   });
 
-  it('resolves unknown messages to guaranteed default documentation fallback', () => {
+  it('resolves unknown messages to guaranteed default documentation fallback and extracts object fields', () => {
     const fallback = resolveErrorHelp('Something completely unlisted and unexpected happened');
     expect(fallback.code).toBe('UNKNOWN_ERROR');
     expect(fallback.title).toBe('Application Diagnostic Error');
     expect(fallback.docHref).toBe('/docs/admin-diagnostics-and-link-inspector-studio');
     expect(fallback.isAal2StepUp).toBe(false);
+
+    expect(resolveErrorHelp(new Error('Multi-Factor Authentication required')).code).toBe('AAL2_REQUIRED');
+    expect(resolveErrorHelp({ code: 'RATE_LIMITED', detail: 'Too many' }).code).toBe('RATE_LIMITED');
+    expect(resolveErrorHelp({ title: '404 Not Found' }).code).toBe('NOT_FOUND');
+    expect(resolveErrorHelp({ message: '401 Unauthorized' }).code).toBe('AUTHENTICATION_REQUIRED');
+    expect(resolveErrorHelp({ foo: 123 }).code).toBe('UNKNOWN_ERROR');
   });
 });
 
 describe('ErrorHelpHint Component (KAN-393)', () => {
   it('renders (?) FieldHelpHint and More info link for general errors without step-up button', () => {
-    render(<ErrorHelpHint error="WIP limit exceeded for column In Progress" testId="wip-error" />);
+    render(<ErrorHelpHint error="WIP limit exceeded for column In Progress" />);
 
-    expect(screen.getByTestId('wip-error')).toBeDefined();
-    expect(screen.getByTestId('wip-error-question')).toBeDefined();
-    expect(screen.getByTestId('wip-error-doc-link')).toBeDefined();
+    expect(screen.getByTestId('kb-error-help-container')).toBeDefined();
+    expect(screen.getByTestId('error-help-hint')).toBeDefined();
+    const docLink = screen.getByTestId('error-help-doc-link');
+    expect(docLink).toBeDefined();
+    fireEvent.click(docLink);
     expect(screen.queryByTestId('error-aal2-stepup-btn')).toBeNull();
   });
 
@@ -218,5 +247,54 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
 
     expect(successHandler).toHaveBeenCalledTimes(1);
     window.removeEventListener('kb:aal2-stepup-success', successHandler);
+  });
+
+  it('invalidates QueryClient and handles onError, onSessionExpired, and alert cleanup', async () => {
+    const qc = new QueryClient();
+    const invSpy = vi.spyOn(qc, 'invalidateQueries');
+
+    const alertEl = document.createElement('div');
+    alertEl.setAttribute('role', 'alert');
+    alertEl.textContent = 'AAL2 verification is stale (950s > 900s).';
+    document.body.appendChild(alertEl);
+
+    const emptyAlert = document.createElement('div');
+    emptyAlert.setAttribute('role', 'alert');
+    document.body.appendChild(emptyAlert);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <GlobalErrorAlertEnhancer />
+      </QueryClientProvider>,
+    );
+
+    expect(alertEl.getAttribute('data-kb-error-help-mounted')).toBe('true');
+
+    // Remove alertEl and trigger mutation to exercise detached root cleanup
+    document.body.removeChild(alertEl);
+    const secondAlert = document.createElement('div');
+    secondAlert.setAttribute('role', 'alert');
+    secondAlert.innerHTML = '<span class="kb-error-help-container">Existing</span>';
+    document.body.appendChild(secondAlert);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-aal2-stepup'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('global-aal2-stepup-modal')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('mock-stepup-error'));
+    fireEvent.click(screen.getByTestId('mock-stepup-success'));
+    expect(invSpy).toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-aal2-stepup'));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-stepup-expired')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-stepup-expired'));
   });
 });

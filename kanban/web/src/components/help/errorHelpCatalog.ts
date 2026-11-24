@@ -260,21 +260,27 @@ function catalogEntry(key: string): ErrorHelpEntry {
   return ERROR_HELP_CATALOG[key] ?? DEFAULT_ERROR_HELP;
 }
 
+function applyOverrides(base: ErrorHelpEntry, errorOrMessage: unknown, codeOverride?: string): ErrorHelpEntry {
+  const isProb = errorOrMessage instanceof ApiProblem;
+  return {
+    ...base,
+    code: codeOverride ?? base.code,
+    summary: isProb && errorOrMessage.helpSummary ? errorOrMessage.helpSummary : base.summary,
+    docHref: isProb && errorOrMessage.docHref ? errorOrMessage.docHref : base.docHref,
+  };
+}
+
 function extractMessage(errorOrMessage: unknown): string {
   if (typeof errorOrMessage === 'string') {
     return errorOrMessage;
-  }
-  if (errorOrMessage instanceof ApiProblem) {
-    return errorOrMessage.message || (errorOrMessage.detail ?? '');
   }
   if (errorOrMessage instanceof Error) {
     return errorOrMessage.message;
   }
   if (errorOrMessage !== null && typeof errorOrMessage === 'object') {
     const obj = errorOrMessage as Record<string, unknown>;
-    if (typeof obj.message === 'string') return obj.message;
-    if (typeof obj.detail === 'string') return obj.detail;
-    if (typeof obj.title === 'string') return obj.title;
+    const candidate = obj.message ?? obj.detail ?? obj.title;
+    return typeof candidate === 'string' ? candidate : '';
   }
   return '';
 }
@@ -287,13 +293,36 @@ function extractCode(errorOrMessage: unknown, explicitCode?: string): string | u
     return errorOrMessage.code;
   }
   if (errorOrMessage !== null && typeof errorOrMessage === 'object') {
-    const obj = errorOrMessage as Record<string, unknown>;
-    if (typeof obj.code === 'string' && obj.code.trim() !== '') {
-      return obj.code.trim();
+    const rawCode = (errorOrMessage as Record<string, unknown>).code;
+    if (typeof rawCode === 'string' && rawCode.trim() !== '') {
+      return rawCode.trim();
     }
   }
   return undefined;
 }
+
+const PATTERN_RULES: readonly [RegExp, string][] = [
+  [/aal2 verification is stale|aal2.*stale|900s\b/i, 'AAL2_STALE'],
+  [/aal2.*required|multi-factor.*required|second-factor.*required|admin.*2fa/i, 'AAL2_REQUIRED'],
+  [/mfa.*enroll|passkey.*enroll|totp.*enroll/i, 'MFA_ENROLLMENT_REQUIRED'],
+  [/authentication.*required|session.*missing|unauthorized|\b401\b/i, 'AUTHENTICATION_REQUIRED'],
+  [/forbidden|permission.*denied|lacks.*permission|access.*denied|\b403\b/i, 'FORBIDDEN'],
+  [/not.*found|\b404\b/i, 'NOT_FOUND'],
+  [/scope.*violation|insufficient.*scope|scope.*tier/i, 'INSUFFICIENT_SCOPE'],
+  [/taint.*guard|read-taint|cross-scope.*taint/i, 'CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED'],
+  [/lockout.*prevented|last.*active.*admin/i, 'LOCKOUT_PREVENTED'],
+  [/wip.*limit/i, 'HARD_WIP_LIMIT_EXCEEDED'],
+  [/gate.*timeout|workflow.*timeout|validator.*timeout/i, 'GATE_TIMEOUT'],
+  [/recursion|re-entrant/i, 'SCRIPT_RECURSION_BLOCKED'],
+  [/utf-16|surrogate|0xd800/i, 'INVALID_UTF8_SURROGATE'],
+  [/json.*depth|nesting.*depth/i, 'JSON_DEPTH_EXCEEDED'],
+  [/json.*key|key.*count/i, 'JSON_KEYS_EXCEEDED'],
+  [/payload.*large|entity too large|\b413\b/i, 'PAYLOAD_TOO_LARGE'],
+  [/blast.*radius/i, 'BLAST_RADIUS_CHANGED'],
+  [/manifest.*mismatch|definition changed/i, 'MANIFEST_MISMATCH'],
+  [/validation.*failed|validation.*error|schema validation|\b422\b/i, 'VALIDATION_FAILED'],
+  [/rate.*limit|too many requests|\b429\b/i, 'RATE_LIMITED'],
+];
 
 /**
  * Universal Error Help Resolver (KB-UX-ERROR-DOCS-AAL2, KAN-393).
@@ -308,182 +337,18 @@ export function resolveErrorHelp(
   const msg = extractMessage(errorOrMessage);
 
   // 1. Direct Catalog Match by Code
-  if (code && Object.prototype.hasOwnProperty.call(ERROR_HELP_CATALOG, code)) {
-    const entry = ERROR_HELP_CATALOG[code];
-    if (entry) {
-      let customSummary = entry.summary;
-      let customDocHref = entry.docHref;
-
-      if (errorOrMessage instanceof ApiProblem) {
-        if (errorOrMessage.helpSummary) {
-          customSummary = errorOrMessage.helpSummary;
-        }
-        if (errorOrMessage.docHref) {
-          customDocHref = errorOrMessage.docHref;
-        }
-      }
-
-      return {
-        code,
-        title: entry.title,
-        summary: customSummary,
-        remediation: entry.remediation,
-        docHref: customDocHref,
-        isAal2StepUp: entry.isAal2StepUp,
-      };
-    }
+  const direct = code ? ERROR_HELP_CATALOG[code] : undefined;
+  if (direct) {
+    return applyOverrides(direct, errorOrMessage, code);
   }
 
   // 2. Pattern Matching on Code or Message
   const lowerMsg = `${code ?? ''} ${msg}`.toLowerCase();
-
-  // AAL2 Stale pattern
-  if (
-    code === 'AAL2_STALE' ||
-    /aal2 verification is stale|aal2.*stale|900s\b/i.test(lowerMsg)
-  ) {
-    const entry = catalogEntry('AAL2_STALE');
-    return {
-      code: 'AAL2_STALE',
-      title: entry.title,
-      summary:
-        errorOrMessage instanceof ApiProblem && errorOrMessage.helpSummary
-          ? errorOrMessage.helpSummary
-          : entry.summary,
-      remediation: entry.remediation,
-      docHref:
-        errorOrMessage instanceof ApiProblem && errorOrMessage.docHref
-          ? errorOrMessage.docHref
-          : entry.docHref,
-      isAal2StepUp: true,
-    };
-  }
-
-  // AAL2 Required pattern
-  if (
-    code === 'AAL2_REQUIRED' ||
-    /aal2.*required|multi-factor.*required|second-factor.*required|admin.*2fa/i.test(lowerMsg)
-  ) {
-    const entry = catalogEntry('AAL2_REQUIRED');
-    return {
-      code: 'AAL2_REQUIRED',
-      title: entry.title,
-      summary:
-        errorOrMessage instanceof ApiProblem && errorOrMessage.helpSummary
-          ? errorOrMessage.helpSummary
-          : entry.summary,
-      remediation: entry.remediation,
-      docHref:
-        errorOrMessage instanceof ApiProblem && errorOrMessage.docHref
-          ? errorOrMessage.docHref
-          : entry.docHref,
-      isAal2StepUp: true,
-    };
-  }
-
-  // MFA Enrollment Required pattern
-  if (/mfa.*enroll|passkey.*enroll|totp.*enroll/i.test(lowerMsg)) {
-    return catalogEntry('MFA_ENROLLMENT_REQUIRED');
-  }
-
-  // Authentication Required pattern (401)
-  if (/authentication.*required|session.*missing|unauthorized|\b401\b/i.test(lowerMsg)) {
-    return catalogEntry('AUTHENTICATION_REQUIRED');
-  }
-
-  // Forbidden / Permissions pattern (403)
-  if (/forbidden|permission.*denied|lacks.*permission|access.*denied|\b403\b/i.test(lowerMsg)) {
-    return catalogEntry('FORBIDDEN');
-  }
-
-  // Not Found pattern (404)
-  if (/not.*found|\b404\b/i.test(lowerMsg)) {
-    return catalogEntry('NOT_FOUND');
-  }
-
-  // MCP / Scope pattern
-  if (/scope.*violation|insufficient.*scope|scope.*tier/i.test(lowerMsg)) {
-    return catalogEntry('INSUFFICIENT_SCOPE');
-  }
-
-  // Taint Guard pattern
-  if (/taint.*guard|read-taint|cross-scope.*taint/i.test(lowerMsg)) {
-    return catalogEntry('CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED');
-  }
-
-  // Lockout prevention pattern
-  if (/lockout.*prevented|last.*active.*admin/i.test(lowerMsg)) {
-    return catalogEntry('LOCKOUT_PREVENTED');
-  }
-
-  // WIP limit pattern
-  if (/wip.*limit/i.test(lowerMsg)) {
-    return catalogEntry('HARD_WIP_LIMIT_EXCEEDED');
-  }
-
-  // Gate timeout pattern
-  if (/gate.*timeout|workflow.*timeout|validator.*timeout/i.test(lowerMsg)) {
-    return catalogEntry('GATE_TIMEOUT');
-  }
-
-  // Script recursion / JSON depth pattern
-  if (/recursion|re-entrant/i.test(lowerMsg)) {
-    return catalogEntry('SCRIPT_RECURSION_BLOCKED');
-  }
-
-  if (/utf-16|surrogate|0xd800/i.test(lowerMsg)) {
-    return catalogEntry('INVALID_UTF8_SURROGATE');
-  }
-
-  if (/json.*depth|nesting.*depth/i.test(lowerMsg)) {
-    return catalogEntry('JSON_DEPTH_EXCEEDED');
-  }
-
-  if (/json.*key|key.*count/i.test(lowerMsg)) {
-    return catalogEntry('JSON_KEYS_EXCEEDED');
-  }
-
-  if (/payload.*large|entity too large|\b413\b/i.test(lowerMsg)) {
-    return catalogEntry('PAYLOAD_TOO_LARGE');
-  }
-
-  if (/blast.*radius/i.test(lowerMsg)) {
-    return catalogEntry('BLAST_RADIUS_CHANGED');
-  }
-
-  if (/manifest.*mismatch|definition changed/i.test(lowerMsg)) {
-    return catalogEntry('MANIFEST_MISMATCH');
-  }
-
-  // Validation pattern
-  if (/validation.*failed|validation.*error|schema validation|\b422\b/i.test(lowerMsg)) {
-    return catalogEntry('VALIDATION_FAILED');
-  }
-
-  // Rate limit pattern (429)
-  if (/rate.*limit|too many requests|\b429\b/i.test(lowerMsg)) {
-    return catalogEntry('RATE_LIMITED');
-  }
-
-  // Check ApiProblem docHref / helpSummary fallback
-  let docHref = DEFAULT_ERROR_HELP.docHref;
-  let summary = DEFAULT_ERROR_HELP.summary;
-
-  if (errorOrMessage instanceof ApiProblem) {
-    if (errorOrMessage.docHref) {
-      docHref = errorOrMessage.docHref;
-    }
-    if (errorOrMessage.helpSummary) {
-      summary = errorOrMessage.helpSummary;
+  for (const [pattern, matchedKey] of PATTERN_RULES) {
+    if (pattern.test(lowerMsg)) {
+      return applyOverrides(catalogEntry(matchedKey), errorOrMessage, matchedKey);
     }
   }
 
-  return {
-    code: code ?? 'UNKNOWN_ERROR',
-    title: DEFAULT_ERROR_HELP.title,
-    summary,
-    remediation: DEFAULT_ERROR_HELP.remediation,
-    docHref,
-    isAal2StepUp: false,
-  };
+  return applyOverrides(DEFAULT_ERROR_HELP, errorOrMessage, code ?? 'UNKNOWN_ERROR');
 }
