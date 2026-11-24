@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Support confidential OAuth 2.1 clients
+"""Support confidential OAuth 2.1 clients.
 
 Revision ID: p6_16_oauth_confidential_clients
 Revises: p6_15_hardened_workspace_switch_and_module_issues
