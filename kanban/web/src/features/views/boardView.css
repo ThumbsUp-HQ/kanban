@@ -47,6 +47,13 @@
   }
 }
 
+/* Hide redundant touch quick-move button on fine-pointer desktop viewports (KAN-384) */
+@media (hover: hover) and (pointer: fine) {
+  .board-card-touch-action-btn {
+    display: none;
+  }
+}
+
 /* Touch Reorder Overlay & Backdrop */
 .touch-reorder-overlay {
   position: fixed;

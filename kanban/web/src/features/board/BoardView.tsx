@@ -125,6 +125,10 @@ export function BoardView({
     return DEFAULT_STATES;
   }, [propStates, projectQuery.data]);
 
+  const sortedStates = useMemo(() => {
+    return [...states].sort((a, b) => a.sort_order - b.sort_order);
+  }, [states]);
+
   const currentUserCapabilities = useMemo(() => {
     if (propCapabilities !== undefined && propCapabilities.length > 0) {
       return propCapabilities;
@@ -357,8 +361,8 @@ export function BoardView({
   // Keyboard navigation handler (Alt+Arrows)
   const handleKeyboardMove = useCallback(
     (issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => {
-      const currentStateIdx = states.findIndex((s) => s.id === issue.state_id);
-      const currentState = states[currentStateIdx];
+      const currentStateIdx = sortedStates.findIndex((s) => s.id === issue.state_id);
+      const currentState = sortedStates[currentStateIdx];
       /* v8 ignore next 3 */
       if (!currentState) {
         return;
@@ -369,9 +373,9 @@ export function BoardView({
 
       if (direction === 'left' || direction === 'right') {
         const targetStateIdx = direction === 'left' ? currentStateIdx - 1 : currentStateIdx + 1;
-        if (targetStateIdx < 0 || targetStateIdx >= states.length) return;
+        if (targetStateIdx < 0 || targetStateIdx >= sortedStates.length) return;
 
-        const targetState = states[targetStateIdx];
+        const targetState = sortedStates[targetStateIdx];
         /* v8 ignore next 3 */
         if (!targetState) {
           return;
@@ -414,7 +418,14 @@ export function BoardView({
         announce(`Moved ${issue.key} down in ${currentState.name}`);
       }
     },
-    [states, issuesByState, handlePerformMove],
+    [sortedStates, issuesByState, handlePerformMove],
+  );
+
+  const handleCardStateTransition = useCallback(
+    (issueKey: string, targetStateId: string) => {
+      handlePerformMove(issueKey, { type: 'column', stateId: targetStateId });
+    },
+    [handlePerformMove],
   );
 
   const handleHardWipModalSubmit = (reason: string) => {
@@ -450,7 +461,7 @@ export function BoardView({
       )}
 
       <div className="board-lanes" data-testid="board-lanes">
-        {states.map((st) => {
+        {sortedStates.map((st) => {
           /* v8 ignore next */
           const colIssues = issuesByState[st.id] ?? [];
           return (
@@ -471,10 +482,8 @@ export function BoardView({
               onOpenPeek={onOpenPeek}
               onKeyboardMove={handleKeyboardMove}
               onNewItem={onNewItem}
-              onStateTransition={(issueKey, targetStateId) => {
-                handlePerformMove(issueKey, { type: 'column', stateId: targetStateId });
-              }}
-              projectStates={states}
+              onStateTransition={handleCardStateTransition}
+              projectStates={sortedStates}
               currentUserCapabilities={currentUserCapabilities}
             />
           );

@@ -275,6 +275,7 @@
 }
 
 .board-card-top {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -282,6 +283,8 @@
 }
 
 .board-card-key {
+  min-width: 0;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -301,6 +304,8 @@
 }
 
 .board-card-top-badges {
+  min-width: 0;
+  flex-shrink: 1;
   display: flex;
   align-items: center;
   gap: var(--space-1, 4px);
@@ -310,6 +315,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 148px;
   min-height: 36px;
   height: 36px;
   padding: 4px 8px;
@@ -323,6 +329,15 @@
   transition: all 150ms ease;
   user-select: none;
   box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card-state-btn span:not(.board-card-state-btn-glyph) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .board-card-state-btn:hover {
@@ -334,6 +349,14 @@
 .board-card-state-btn-glyph {
   font-size: 0.875rem;
   line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Hide redundant touch quick-move button on fine-pointer desktop viewports (KAN-384) */
+@media (hover: hover) and (pointer: fine) {
+  .board-card-touch-action-btn {
+    display: none;
+  }
 }
 
 @media (max-width: 768px) {

@@ -1,0 +1,30 @@
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan384-8b599a29/kanban/web
+> vitest run src/features/board/__tests__/BoardCardQuickMove.test.tsx src/features/board/BoardCard.test.tsx src/features/board/BoardView.test.tsx --coverage --coverage.include=src/features/board/BoardCard.tsx --coverage.include=src/features/board/BoardView.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan384-8b599a29/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/board/__tests__/BoardCardQuickMove.test.tsx (12 tests) 454ms
+ ✓ src/features/board/BoardCard.test.tsx (14 tests) 470ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1520ms
+
+ Test Files  3 passed (3)
+      Tests  48 passed (48)
+   Start at  21:36:17
+   Duration  3.05s (environment 42%, tests 41%, import 12%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+---------------|---------|----------|---------|---------|-----------------------
+File           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s     
+---------------|---------|----------|---------|---------|-----------------------
+All files      |     100 |    95.59 |     100 |     100 |                       
+ BoardCard.tsx |     100 |    95.97 |     100 |     100 | ...90-206,265,273,444 
+ BoardView.tsx |     100 |    95.13 |     100 |     100 | 129,253,264-272,371   
+---------------|---------|----------|---------|---------|-----------------------

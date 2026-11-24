@@ -1,0 +1,201 @@
+diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
+index b8d21071..f17e2c0f 100644
+--- a/kanban/web/src/features/board/BoardCard.tsx
++++ b/kanban/web/src/features/board/BoardCard.tsx
+@@ -149,6 +149,11 @@ export function BoardCard({
+     capabilities.includes('EDIT') ||
+     capabilities.includes('ADMIN');
+ 
++  const resolvedStateName =
++    issue.state?.name ??
++    projectStates?.find((s) => s.id === issue.state_id)?.name ??
++    'Move';
++
+   const handleStateBtnClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+     e.preventDefault();
+     e.stopPropagation();
+@@ -307,7 +312,7 @@ export function BoardCard({
+                 onClick={handleStateBtnClick}
+               >
+                 <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+-                <span>{issue.state?.name ?? 'Move'}</span>
++                <span>{resolvedStateName}</span>
+               </button>
+             </>
+           )}
+@@ -427,7 +432,11 @@ export function BoardCard({
+             id: issue.id,
+             key: issue.key,
+             summary: issue.summary,
+-            state: issue.state ?? { id: issue.state_id, name: issue.state_id, group: stateGroup },
++            state: issue.state ?? {
++              id: issue.state_id,
++              name: resolvedStateName !== 'Move' ? resolvedStateName : issue.state_id,
++              group: stateGroup,
++            },
+             priority: issue.priority ? { id: issue.priority.id, label: issue.priority.label, slug: issue.priority.slug } : { id: 'none', label: 'None', slug: 'none' },
+           } as unknown as IssueItem}
+           onClose={() => { setIsStatePopoverOpen(false); }}
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index c943926d..8a19422f 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -125,6 +125,10 @@ export function BoardView({
+     return DEFAULT_STATES;
+   }, [propStates, projectQuery.data]);
+ 
++  const sortedStates = useMemo(() => {
++    return [...states].sort((a, b) => a.sort_order - b.sort_order);
++  }, [states]);
++
+   const currentUserCapabilities = useMemo(() => {
+     if (propCapabilities !== undefined && propCapabilities.length > 0) {
+       return propCapabilities;
+@@ -357,8 +361,8 @@ export function BoardView({
+   // Keyboard navigation handler (Alt+Arrows)
+   const handleKeyboardMove = useCallback(
+     (issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => {
+-      const currentStateIdx = states.findIndex((s) => s.id === issue.state_id);
+-      const currentState = states[currentStateIdx];
++      const currentStateIdx = sortedStates.findIndex((s) => s.id === issue.state_id);
++      const currentState = sortedStates[currentStateIdx];
+       /* v8 ignore next 3 */
+       if (!currentState) {
+         return;
+@@ -369,9 +373,9 @@ export function BoardView({
+ 
+       if (direction === 'left' || direction === 'right') {
+         const targetStateIdx = direction === 'left' ? currentStateIdx - 1 : currentStateIdx + 1;
+-        if (targetStateIdx < 0 || targetStateIdx >= states.length) return;
++        if (targetStateIdx < 0 || targetStateIdx >= sortedStates.length) return;
+ 
+-        const targetState = states[targetStateIdx];
++        const targetState = sortedStates[targetStateIdx];
+         /* v8 ignore next 3 */
+         if (!targetState) {
+           return;
+@@ -414,7 +418,14 @@ export function BoardView({
+         announce(`Moved ${issue.key} down in ${currentState.name}`);
+       }
+     },
+-    [states, issuesByState, handlePerformMove],
++    [sortedStates, issuesByState, handlePerformMove],
++  );
++
++  const handleCardStateTransition = useCallback(
++    (issueKey: string, targetStateId: string) => {
++      handlePerformMove(issueKey, { type: 'column', stateId: targetStateId });
++    },
++    [handlePerformMove],
+   );
+ 
+   const handleHardWipModalSubmit = (reason: string) => {
+@@ -450,7 +461,7 @@ export function BoardView({
+       )}
+ 
+       <div className="board-lanes" data-testid="board-lanes">
+-        {states.map((st) => {
++        {sortedStates.map((st) => {
+           /* v8 ignore next */
+           const colIssues = issuesByState[st.id] ?? [];
+           return (
+@@ -471,10 +482,8 @@ export function BoardView({
+               onOpenPeek={onOpenPeek}
+               onKeyboardMove={handleKeyboardMove}
+               onNewItem={onNewItem}
+-              onStateTransition={(issueKey, targetStateId) => {
+-                handlePerformMove(issueKey, { type: 'column', stateId: targetStateId });
+-              }}
+-              projectStates={states}
++              onStateTransition={handleCardStateTransition}
++              projectStates={sortedStates}
+               currentUserCapabilities={currentUserCapabilities}
+             />
+           );
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index 30ea6b64..9ba049cd 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -275,6 +275,7 @@
+ }
+ 
+ .board-card-top {
++  min-width: 0;
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+@@ -282,6 +283,8 @@
+ }
+ 
+ .board-card-key {
++  min-width: 0;
++  flex-shrink: 0;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+@@ -301,6 +304,8 @@
+ }
+ 
+ .board-card-top-badges {
++  min-width: 0;
++  flex-shrink: 1;
+   display: flex;
+   align-items: center;
+   gap: var(--space-1, 4px);
+@@ -310,6 +315,7 @@
+   display: inline-flex;
+   align-items: center;
+   gap: 4px;
++  max-width: 148px;
+   min-height: 36px;
+   height: 36px;
+   padding: 4px 8px;
+@@ -323,6 +329,15 @@
+   transition: all 150ms ease;
+   user-select: none;
+   box-sizing: border-box;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.board-card-state-btn span:not(.board-card-state-btn-glyph) {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
+ }
+ 
+ .board-card-state-btn:hover {
+@@ -334,6 +349,14 @@
+ .board-card-state-btn-glyph {
+   font-size: 0.875rem;
+   line-height: 1;
++  flex-shrink: 0;
++}
++
++/* Hide redundant touch quick-move button on fine-pointer desktop viewports (KAN-384) */
++@media (hover: hover) and (pointer: fine) {
++  .board-card-touch-action-btn {
++    display: none;
++  }
+ }
+ 
+ @media (max-width: 768px) {
+diff --git a/kanban/web/src/features/views/boardView.css b/kanban/web/src/features/views/boardView.css
+index 8aec7527..34d6b5cb 100644
+--- a/kanban/web/src/features/views/boardView.css
++++ b/kanban/web/src/features/views/boardView.css
+@@ -47,6 +47,13 @@
+   }
+ }
+ 
++/* Hide redundant touch quick-move button on fine-pointer desktop viewports (KAN-384) */
++@media (hover: hover) and (pointer: fine) {
++  .board-card-touch-action-btn {
++    display: none;
++  }
++}
++
+ /* Touch Reorder Overlay & Backdrop */
+ .touch-reorder-overlay {
+   position: fixed;
