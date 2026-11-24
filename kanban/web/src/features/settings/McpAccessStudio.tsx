@@ -163,6 +163,53 @@ export function validateCidrInput(rawInput: string): { valid: boolean; cidrs: st
   return { valid: true, cidrs: parts };
 }
 
+export function getCapabilityPresetName(mask: number): string {
+  switch (mask) {
+    case 1:
+      return 'Read-Only Agent';
+    case 3:
+      return 'View + Comment';
+    case 31:
+      return 'Standard Developer Agent';
+    case 255:
+      return 'Full Project Agent';
+    default:
+      return `Custom (${String(mask)})`;
+  }
+}
+
+export function formatMintKeySummary({
+  label,
+  ownerKind,
+  scopeTier,
+  project,
+  surface,
+  capabilityMask,
+}: {
+  label: string;
+  ownerKind: OwnerKind;
+  scopeTier: ScopeTier;
+  project?: string | null | undefined;
+  surface: 'agent' | 'docs' | 'admin';
+  capabilityMask: number;
+}): string {
+  const trimmedLabel = label.trim();
+  const displayLabel = trimmedLabel.length > 0 ? trimmedLabel : 'Untitled';
+  const displayOwner = ownerKind === 'service_bot' ? 'Service Bot' : 'Personal User';
+  let displayScope = 'This Workspace';
+  if (scopeTier === 'project') {
+    const trimmedProj = project?.trim();
+    const proj = trimmedProj && trimmedProj.length > 0 ? trimmedProj : '(None)';
+    displayScope = `Project ${proj}`;
+  } else if (scopeTier === 'global') {
+    displayScope = 'Entire Server';
+  }
+  const displaySurface = surface === 'agent' ? 'Agent' : surface === 'docs' ? 'Docs' : 'Admin';
+  const displayPreset = getCapabilityPresetName(capabilityMask);
+
+  return `Key "${displayLabel}" for ${displayOwner} can access ${displayScope} and use ${displaySurface} tools (${displayPreset}).`;
+}
+
 export type ActiveScopeFilter = 'all' | 'project' | 'workspace' | 'server';
 export type ActiveView = 'mine' | 'governance';
 
@@ -467,18 +514,24 @@ export function McpAccessStudio({
 
   const handleOpenMintModal = (): void => {
     let initialTier: ScopeTier = 'workspace';
+    let initialOwner: OwnerKind = 'personal_user';
     if (activeScope === 'server' || tier === 'global') {
       initialTier = 'global';
+      initialOwner = 'service_bot';
     } else if (activeScope === 'project' || tier === 'project') {
       initialTier = 'project';
+      initialOwner = 'personal_user';
     } else if (activeScope === 'workspace' || tier === 'workspace') {
       initialTier = 'workspace';
+      initialOwner = 'personal_user';
     } else {
       initialTier = 'workspace';
+      initialOwner = 'personal_user';
     }
-    setNewKeyOwnerKind('personal_user');
+    setNewKeyOwnerKind(initialOwner);
     setNewKeyScopeTier(initialTier);
     setNewKeyProject(effectiveProjectKey);
+    setCapabilityMask(31);
     setShowMintModal(true);
   };
 
@@ -1186,9 +1239,10 @@ export function McpAccessStudio({
                   {mintError}
                 </div>
               )}
+              {/* Question 1: Key Name */}
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-label-input" className="kb-mcp-form-label">
-                  Key Label:
+                  <span className="kb-mcp-question-num">1.</span> What is the key name?
                 </label>
                 <input
                   id="mint-label-input"
@@ -1207,61 +1261,46 @@ export function McpAccessStudio({
                 />
               </div>
 
-              {/* Key Type Selector in Mint Modal */}
+              {/* Question 2: Unified Key Type & Scope Tier Selector */}
               <div className="kb-mcp-form-row">
-                <label htmlFor="mint-owner-kind-select" className="kb-mcp-form-label">
-                  Key Type:
-                </label>
-                <select
-                  id="mint-owner-kind-select"
-                  className="kb-mcp-form-select"
-                  data-testid="mint-owner-kind-select"
-                  value={newKeyOwnerKind}
-                  onChange={(e) => {
-                    setNewKeyOwnerKind(e.target.value as OwnerKind);
-                  }}
-                >
-                  <option value="personal_user">Personal User Key</option>
-                  <option value="service_bot">Service Bot Key</option>
-                </select>
-              </div>
-
-              {/* Scope Tier Selector in Mint Modal */}
-              <div className="kb-mcp-form-row">
-                <label htmlFor="mint-scope-select" className="kb-mcp-form-label">
-                  Scope Tier:
+                <label htmlFor="mint-key-scope-type-select" className="kb-mcp-form-label">
+                  <span className="kb-mcp-question-num">2.</span> Who is this key for & what can it access?
                   <FieldHelpHint
-                    title="MCP Scope Tier"
-                    summary="Security boundary governing which workspace or project resources this key can read or mutate."
+                    title="Key Type & Scope"
+                    summary="Security boundary and ownership model governing whether this token belongs to your personal account or an automated service bot, and which workspace or project resources it can access."
                     validValues={[
-                      { label: 'Workspace', description: 'Access scoped to the current active workspace.' },
-                      { label: 'Project', description: 'Restricted strictly to one designated project.' },
-                      { label: 'Server / Global', description: 'Unrestricted server admin cross-workspace key.' },
-                      { label: 'Personal User', description: 'Inherits invoking user personal credentials.' },
+                      { label: 'Personal - Entire Workspace', description: 'Inherits your user credentials across the entire workspace.' },
+                      { label: 'Personal - Single Project', description: 'Inherits your user credentials scoped strictly to one project.' },
+                      { label: 'Service Bot - Entire Workspace', description: 'Dedicated bot/automation token scoped to this workspace.' },
+                      { label: 'Service Bot - Single Project', description: 'Dedicated bot/automation token restricted strictly to one project.' },
+                      { label: 'Service Bot - Server / Global', description: 'Server admin automation key across all workspaces.' },
                     ]}
                     docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
                     testId="mint-scope-help"
                   />
                 </label>
                 <select
-                  id="mint-scope-select"
+                  id="mint-key-scope-type-select"
                   className="kb-mcp-form-select"
-                  data-testid="mint-scope-select"
-                  value={newKeyScopeTier === 'personal_user' ? 'workspace' : newKeyScopeTier}
+                  data-testid="mint-key-scope-type-select"
+                  value={`${newKeyOwnerKind}:${newKeyScopeTier}`}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'personal_user') {
-                      setNewKeyOwnerKind('personal_user');
-                      setNewKeyScopeTier('workspace');
-                    } else {
-                      setNewKeyScopeTier(val as ScopeTier);
-                    }
+                    const [ownerKind, scopeTier] = e.target.value.split(':') as [OwnerKind, ScopeTier];
+                    setNewKeyOwnerKind(ownerKind);
+                    setNewKeyScopeTier(scopeTier);
                   }}
                 >
-                  <option value="workspace">Workspace</option>
-                  <option value="project">Project</option>
-                  {isServerAdmin && <option value="global">Server / Global</option>}
-                  <option value="personal_user">Personal User Key</option>
+                  <optgroup label="For Me (Personal User)">
+                    <option value="personal_user:project">Personal - Single Project</option>
+                    <option value="personal_user:workspace">Personal - Entire Workspace</option>
+                  </optgroup>
+                  <optgroup label="For an Automated Bot / CI (Service Bot)">
+                    <option value="service_bot:project">Service Bot - Single Project</option>
+                    <option value="service_bot:workspace">Service Bot - Entire Workspace</option>
+                    {isServerAdmin && (
+                      <option value="service_bot:global">Service Bot - Server / Global</option>
+                    )}
+                  </optgroup>
                 </select>
               </div>
 
@@ -1293,6 +1332,11 @@ export function McpAccessStudio({
                   )}
                 </div>
               )}
+
+              {/* Question 3: Capabilities, Target Surface, Expiration & Advanced */}
+              <div className="kb-mcp-form-question-heading">
+                <span className="kb-mcp-question-num">3.</span> What can it do?
+              </div>
 
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-surface-select" className="kb-mcp-form-label">
@@ -1372,39 +1416,6 @@ export function McpAccessStudio({
                 </div>
               )}
 
-              <div className="kb-mcp-form-row">
-                <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
-                  Capability Ceiling:
-                </label>
-                <select
-                  id="capability-preset-select"
-                  className="kb-mcp-form-select"
-                  data-testid="capability-preset-select"
-                  value={
-                    [1, 3, 31, 255].includes(capabilityMask)
-                      ? String(capabilityMask)
-                      : 'custom'
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val !== 'custom') {
-                      setCapabilityMask(Number(val));
-                    }
-                  }}
-                >
-                  <option value="1">Read-Only Agent (1)</option>
-                  <option value="3">View + Comment (3)</option>
-                  <option value="31">Standard Developer Agent (31)</option>
-                  <option value="255">Full Project Agent (255)</option>
-                  {![1, 3, 31, 255].includes(capabilityMask) && (
-                    <option value="custom">Custom ({capabilityMask})</option>
-                  )}
-                </select>
-                <span className="kb-mcp-form-hint">
-                  Sets the maximum permission ceiling. Keys narrow permissions downward without escalating privileges.
-                </span>
-              </div>
-
               <AdvancedSection
                 title="Advanced Capability & Network Restrictions"
                 summary="Granular bitmask permissions, tool-level narrowing, and CIDR ingress restrictions"
@@ -1413,9 +1424,42 @@ export function McpAccessStudio({
                 activeOverridesCount={
                   (allowedCidrsInput.trim() ? 1 : 0) +
                   (disabledTools.length > 0 ? 1 : 0) +
-                  (![1, 31, 255].includes(capabilityMask) ? 1 : 0)
+                  (capabilityMask !== 31 ? 1 : 0)
                 }
               >
+                <div className="kb-mcp-form-row">
+                  <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
+                    Capability Ceiling:
+                  </label>
+                  <select
+                    id="capability-preset-select"
+                    className="kb-mcp-form-select"
+                    data-testid="capability-preset-select"
+                    value={
+                      [1, 3, 31, 255].includes(capabilityMask)
+                        ? String(capabilityMask)
+                        : 'custom'
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val !== 'custom') {
+                        setCapabilityMask(Number(val));
+                      }
+                    }}
+                  >
+                    <option value="1">Read-Only Agent (1)</option>
+                    <option value="3">View + Comment (3)</option>
+                    <option value="31">Standard Developer Agent (31)</option>
+                    <option value="255">Full Project Agent (255)</option>
+                    {![1, 3, 31, 255].includes(capabilityMask) && (
+                      <option value="custom">Custom ({capabilityMask})</option>
+                    )}
+                  </select>
+                  <span className="kb-mcp-form-hint">
+                    Sets the maximum permission ceiling. Keys narrow permissions downward without escalating privileges.
+                  </span>
+                </div>
+
                 <div className="kb-mcp-form-row">
                   <label className="kb-mcp-form-label">
                     Granular Capability Bit Toggles:
@@ -1514,6 +1558,23 @@ export function McpAccessStudio({
                   </div>
                 </div>
               </AdvancedSection>
+
+              {/* Question 4: Live Plain-Language Key Summary */}
+              <div className="kb-mcp-form-row kb-mcp-key-summary-row">
+                <div className="kb-mcp-form-question-heading">
+                  <span className="kb-mcp-question-num">4.</span> Key Summary
+                </div>
+                <div className="kb-mcp-key-summary" data-testid="mint-key-summary">
+                  {formatMintKeySummary({
+                    label: newKeyLabel,
+                    ownerKind: newKeyOwnerKind,
+                    scopeTier: newKeyScopeTier,
+                    project: newKeyScopeTier === 'project' ? newKeyProject : undefined,
+                    surface: newKeySurface,
+                    capabilityMask,
+                  })}
+                </div>
+              </div>
 
               <div className="kb-mcp-form-actions">
                 <button

@@ -1,0 +1,30 @@
+=== TYPECHECK ===
+$ pnpm --dir kanban/web typecheck
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+Exit code: 0
+
+=== ESLINT ===
+$ pnpm --dir kanban/web lint
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+Exit code: 0
+
+=== BUILD ===
+$ pnpm --dir kanban/web build
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+✓ 758 modules transformed.
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-DXuQWv3M.css            590.17 kB │ gzip:  82.79 kB
+dist/assets/index-DBgwLMzF.js           2,833.47 kB │ gzip: 784.17 kB
+✓ built in 1.45s
+Exit code: 0
+
+=== CHECK NO DASHES ===
+$ uv run python -m scripts.check_no_dashes --all
+0 violations found across all repository files.
+Exit code: 0

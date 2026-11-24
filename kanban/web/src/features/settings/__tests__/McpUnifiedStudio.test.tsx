@@ -265,8 +265,8 @@ describe('Unified MCP Studio (KAN-31)', () => {
     fireEvent.click(screen.getByTestId('mint-key-button'));
     await waitFor(() => {
       expect(screen.getByTestId('mint-modal-card')).toBeDefined();
-      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
-      expect(scopeSelect.value).toBe('global');
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+      expect(scopeSelect.value).toBe('service_bot:global');
     });
   });
 
@@ -375,8 +375,8 @@ describe('Unified MCP Studio (KAN-31)', () => {
     const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
     fireEvent.change(labelInput, { target: { value: 'Step-up Key' } });
 
-    const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
-    fireEvent.change(scopeSelect, { target: { value: 'project' } });
+    const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+    fireEvent.change(scopeSelect, { target: { value: 'personal_user:project' } });
 
     await waitFor(() => {
       expect(screen.getByTestId('mint-project-input')).toBeDefined();
@@ -548,8 +548,8 @@ describe('Unified MCP Studio (KAN-31)', () => {
     fireEvent.click(screen.getByTestId('scope-pill-workspace'));
     fireEvent.click(screen.getByTestId('mint-key-button'));
     await waitFor(() => {
-      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-scope-select');
-      expect(scopeSelect.value).toBe('workspace');
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+      expect(scopeSelect.value).toBe('personal_user:workspace');
     });
   });
 
