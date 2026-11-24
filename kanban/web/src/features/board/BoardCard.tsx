@@ -149,6 +149,11 @@ export function BoardCard({
     capabilities.includes('EDIT') ||
     capabilities.includes('ADMIN');
 
+  const resolvedStateName =
+    issue.state?.name ??
+    projectStates?.find((s) => s.id === issue.state_id)?.name ??
+    'Move';
+
   const handleStateBtnClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
     e.preventDefault();
     e.stopPropagation();
@@ -329,7 +334,7 @@ export function BoardCard({
               >
                 <span className="board-card-state-btn-dot" aria-hidden="true" />
                 <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
-                <span>{issue.state?.name ?? 'Move'}</span>
+                <span>{resolvedStateName}</span>
               </button>
             </>
           )}
@@ -457,7 +462,11 @@ export function BoardCard({
             id: issue.id,
             key: issue.key,
             summary: issue.summary,
-            state: issue.state ?? { id: issue.state_id, name: issue.state_id, group: stateGroup },
+            state: issue.state ?? {
+              id: issue.state_id,
+              name: resolvedStateName !== 'Move' ? resolvedStateName : issue.state_id,
+              group: stateGroup,
+            },
             priority: issue.priority ? { id: issue.priority.id, label: issue.priority.label, slug: issue.priority.slug } : { id: 'none', label: 'None', slug: 'none' },
           } as unknown as IssueItem}
           onClose={() => { setIsStatePopoverOpen(false); }}
