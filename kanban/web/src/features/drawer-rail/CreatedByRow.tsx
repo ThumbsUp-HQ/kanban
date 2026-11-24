@@ -1,4 +1,5 @@
 import React, { useState, type JSX } from 'react';
+import { isAal2StepUpCode } from '../../api/problem';
 import type { CreatorSummary, IssueDetail } from '../drawer/slots';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 
@@ -72,9 +73,7 @@ export function CreatedByRow({
       if (
         typeof err === 'object' &&
         err !== null &&
-        (('code' in err &&
-          ((err as { code: string }).code === 'AAL2_REQUIRED' ||
-            (err as { code: string }).code === 'AAL2_STALE')) ||
+        (('code' in err && isAal2StepUpCode((err as { code: string }).code)) ||
           ('status' in err && (err as { status: number }).status === 403))
       ) {
         setError('AAL2 second-factor authentication is required to override issue creator.');

@@ -10,6 +10,7 @@ import {
 } from './oauthApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
+import { isAal2StepUpCode } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './DeviceActivatePage.css';
 
@@ -217,7 +218,7 @@ export function DeviceActivatePage(): JSX.Element {
       setCompletionStatus(res.status);
     } catch (err: unknown) {
       const errObj = err as { code?: string; message?: string };
-      if (errObj.code === 'AAL2_REQUIRED' || errObj.code === 'AAL2_STALE') {
+      if (isAal2StepUpCode(errObj.code)) {
         setErrorMessage(
           'AAL2 Passkey or TOTP verification required to approve /mcp/admin access.',
         );

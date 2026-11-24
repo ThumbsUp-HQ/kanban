@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import { apiFetch } from '../../api/client';
-import { ApiProblem } from '../../api/problem';
+import { ApiProblem, isAal2StepUpCode } from '../../api/problem';
 import { NotFoundView } from '../../app/routes';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import { useAuth } from '../auth/AuthContext';
@@ -162,7 +162,7 @@ export function WorkflowStudioPage({
 
   // Handle AAL2 403 response intercept
   const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
-    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+    if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
       setPendingMutation(mutation);
       const data = err.data;
       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';

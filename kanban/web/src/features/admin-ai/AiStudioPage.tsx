@@ -17,7 +17,7 @@ import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
-import { ApiProblem } from '../../api/problem';
+import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './aiStudio.css';
 
@@ -62,13 +62,7 @@ export function AiStudioPage(): JSX.Element {
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
         if (!active) return;
-        if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-          window.dispatchEvent(
-            new CustomEvent('kb:open-aal2-stepup', {
-              detail: { challengeId: err.data.challenge_id, methods: err.data.methods },
-            }),
-          );
-        }
+        dispatchAal2StepUpIfRequired(err);
         setError(err instanceof Error ? err.message : 'Failed to load AI providers');
       } finally {
         if (active) {

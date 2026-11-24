@@ -101,3 +101,21 @@ export function isNotFound(error: unknown): boolean {
 export function isPreconditionFailed(error: unknown): boolean {
   return error instanceof ApiProblem && error.status === 412;
 }
+
+/** True for AAL2_REQUIRED or AAL2_STALE problem codes (KAN-393). */
+export function isAal2StepUpCode(code: unknown): boolean {
+  return typeof code === 'string' && /^AAL2_(?:REQUIRED|STALE)$/.test(code);
+}
+
+/** Dispatches global kb:open-aal2-stepup event when err is an AAL2 ApiProblem (KAN-393). */
+export function dispatchAal2StepUpIfRequired(err: unknown): boolean {
+  if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
+    window.dispatchEvent(
+      new CustomEvent('kb:open-aal2-stepup', {
+        detail: { challengeId: err.data.challenge_id, methods: err.data.methods },
+      }),
+    );
+    return true;
+  }
+  return false;
+}

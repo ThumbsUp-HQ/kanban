@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, type JSX } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
-import { ApiProblem } from '../../api/problem';
+import { ApiProblem, isAal2StepUpCode } from '../../api/problem';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AuthCardRow } from './AuthCardRow';
 import { AuthCardEditorDrawer } from './AuthCardEditorDrawer';
@@ -201,7 +201,7 @@ export function AuthStudioPage(): JSX.Element {
       const res = await fetchAdminAuthCards();
       setCards(res.cards);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
         setPendingMutation({ type: 'load' });
         const data = err.data;
         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -228,7 +228,7 @@ export function AuthStudioPage(): JSX.Element {
       const principals = await fetchAdminPrincipals(activeFilter);
       setUsers(Array.isArray(principals) ? principals : []);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
         setPendingMutation({ type: 'load' });
         const data = err.data;
         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -265,7 +265,7 @@ export function AuthStudioPage(): JSX.Element {
 
   // AAL2 Step-Up handler
   const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
-    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+    if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
       setPendingMutation(mutation);
       const data = err.data;
       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';

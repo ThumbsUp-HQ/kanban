@@ -4,6 +4,7 @@
 import type { JSX } from 'react';
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAal2StepUpCode } from '../../api/problem';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   approveFieldEscalation,
@@ -157,11 +158,7 @@ export function EscalationApprovalPanel({
         return;
       }
 
-      if (
-        errObj.status === 403 ||
-        errObj.code === 'AAL2_REQUIRED' ||
-        errObj.code === 'AAL2_STALE'
-      ) {
+      if (errObj.status === 403 || isAal2StepUpCode(errObj.code)) {
         // Trigger AAL2 step-up challenge
         if (onAal2Challenge) {
           const challenged = await onAal2Challenge();

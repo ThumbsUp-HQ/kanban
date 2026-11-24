@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { ApiProblem, isNotFound, isPreconditionFailed } from './problem.ts';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  ApiProblem,
+  dispatchAal2StepUpIfRequired,
+  isAal2StepUpCode,
+  isNotFound,
+  isPreconditionFailed,
+} from './problem.ts';
 
 describe('ApiProblem', () => {
   it('parses an RFC 7807 body', () => {
@@ -67,5 +73,17 @@ describe('ApiProblem', () => {
     expect(isPreconditionFailed(new ApiProblem(412))).toBe(true);
     expect(isPreconditionFailed(new ApiProblem(409))).toBe(false);
     expect(isPreconditionFailed('x')).toBe(false);
+    expect(isAal2StepUpCode('AAL2_REQUIRED')).toBe(true);
+    expect(isAal2StepUpCode('AAL2_STALE')).toBe(true);
+    expect(isAal2StepUpCode('FORBIDDEN')).toBe(false);
+    expect(isAal2StepUpCode(null)).toBe(false);
+
+    const spy = vi.fn();
+    window.addEventListener('kb:open-aal2-stepup', spy);
+    expect(dispatchAal2StepUpIfRequired(new ApiProblem(403, { code: 'AAL2_STALE' }))).toBe(true);
+    expect(dispatchAal2StepUpIfRequired(new ApiProblem(403, { code: 'FORBIDDEN' }))).toBe(false);
+    expect(dispatchAal2StepUpIfRequired(new Error('nope'))).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(1);
+    window.removeEventListener('kb:open-aal2-stepup', spy);
   });
 });

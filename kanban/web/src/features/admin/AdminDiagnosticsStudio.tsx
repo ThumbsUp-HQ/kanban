@@ -9,7 +9,7 @@ import { NotFoundView } from '../../app/routes';
 import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
-import { ApiProblem } from '../../api/problem';
+import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './AdminDiagnosticsStudio.css';
 
@@ -276,13 +276,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       });
     },
     onError: (err: Error) => {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-        window.dispatchEvent(
-          new CustomEvent('kb:open-aal2-stepup', {
-            detail: { challengeId: err.data.challenge_id, methods: err.data.methods },
-          }),
-        );
-      }
+      dispatchAal2StepUpIfRequired(err);
       setProbeAlert({
         type: 'error',
         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',
