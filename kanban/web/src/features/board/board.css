@@ -237,10 +237,13 @@
 }
 
 .board-card {
+  --card-state-accent: var(--state-unstarted-fg, #3b82f6);
+  --card-priority-accent: var(--fg-muted, #94a3b8);
   padding: var(--card-pad, 16px 18px);
   margin-bottom: var(--card-gap, 12px);
   background: var(--bg-surface, #ffffff);
   border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border-left: 3.5px solid var(--card-state-accent);
   border-radius: var(--radius-lg, 10px);
   box-sizing: border-box;
   display: flex;
@@ -259,7 +262,55 @@
 
 .board-card:hover {
   border-color: var(--border-strong);
+  border-left-color: var(--card-state-accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Card State Group Accents (KAN-383) */
+.board-card.board-card--state-backlog,
+.board-card[data-state-group='backlog'] {
+  --card-state-accent: var(--state-backlog-fg, #64748b);
+}
+
+.board-card.board-card--state-unstarted,
+.board-card[data-state-group='unstarted'] {
+  --card-state-accent: var(--state-unstarted-fg, #3b82f6);
+}
+
+.board-card.board-card--state-started,
+.board-card[data-state-group='started'] {
+  --card-state-accent: var(--state-started-fg, #f59e0b);
+}
+
+.board-card.board-card--state-completed,
+.board-card[data-state-group='completed'] {
+  --card-state-accent: var(--state-completed-fg, #10b981);
+}
+
+.board-card.board-card--state-cancelled,
+.board-card[data-state-group='cancelled'] {
+  --card-state-accent: var(--state-cancelled-fg, #ef4444);
+}
+
+/* Card Priority Accents (KAN-383) */
+.board-card[data-priority='urgent'],
+.board-card.board-card--priority-urgent {
+  --card-priority-accent: #ef4444;
+}
+
+.board-card[data-priority='high'],
+.board-card.board-card--priority-high {
+  --card-priority-accent: #f97316;
+}
+
+.board-card[data-priority='medium'],
+.board-card.board-card--priority-medium {
+  --card-priority-accent: #3b82f6;
+}
+
+.board-card[data-priority='low'],
+.board-card.board-card--priority-low {
+  --card-priority-accent: #64748b;
 }
 
 .board-card[data-dragging='true'] {
@@ -331,9 +382,20 @@
   border-color: var(--border-strong);
 }
 
+.board-card-state-btn-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--card-state-accent, var(--accent-primary));
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
 .board-card-state-btn-glyph {
   font-size: 0.875rem;
   line-height: 1;
+  color: var(--card-state-accent, inherit);
 }
 
 @media (max-width: 768px) {
@@ -396,6 +458,45 @@
   color: var(--danger-fg);
   background: rgba(220, 38, 38, 0.1);
   font-weight: 600;
+}
+
+/* Priority Color Pill Styling (KAN-383) */
+.board-card-priority-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  transition: all 120ms ease;
+}
+
+.board-card-priority-pill--urgent {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.board-card-priority-pill--high {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.28);
+}
+
+.board-card-priority-pill--medium {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.board-card-priority-pill--low {
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.12);
+  border-color: rgba(100, 116, 139, 0.28);
+}
+
+.board-card-priority-label {
+  font-size: 0.75rem;
+  line-height: 1;
 }
 
 .board-column-footer {

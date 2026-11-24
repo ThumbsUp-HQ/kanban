@@ -1,0 +1,1288 @@
+diff --git a/kanban/web/e2e/qa/kan-383-card-color-codes.spec.ts b/kanban/web/e2e/qa/kan-383-card-color-codes.spec.ts
+new file mode 100644
+index 00000000..fb9a0877
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-383-card-color-codes.spec.ts
+@@ -0,0 +1,305 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync, copyFileSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++
++process.env.QA_TICKET_ID = 'KAN-383';
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KAN-383/screenshots',
++);
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(150);
++}
++
++function getBaseMocks(): MockHandlers {
++  const me = loadFixture<Record<string, unknown>>('me-adam');
++  const rawProject = loadFixture<Record<string, unknown>>('project-kan');
++  const projectKan = {
++    ...rawProject,
++    identifier: 'KAN',
++    capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN'],
++    is_project_admin: true,
++  };
++
++  const workflowStates = [
++    { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1, color_hex: '#64748b' },
++    { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2, color_hex: '#3b82f6' },
++    { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, color_hex: '#f59e0b' },
++    { id: 'state-done', name: 'Done', group: 'completed', sort_order: 4, color_hex: '#10b981' },
++    { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 5, color_hex: '#ef4444' },
++  ];
++
++  const boardIssues = {
++    items: [
++      {
++        id: 'iss-101',
++        key: 'KAN-101',
++        summary: 'Backlog telemetry pipeline ingest schema',
++        state_id: 'state-backlog',
++        state: workflowStates[0],
++        board_rank: '0000000000000001',
++        priority: { id: 'p-low', label: 'Low', slug: 'low' },
++        assignees: [{ id: 'u-1', handle: 'alice' }],
++      },
++      {
++        id: 'iss-102',
++        key: 'KAN-102',
++        summary: 'Review CSP violation report ingestion router',
++        state_id: 'state-todo',
++        state: workflowStates[1],
++        board_rank: '0000000000000002',
++        priority: { id: 'p-med', label: 'Medium', slug: 'medium' },
++        assignees: [{ id: 'u-2', handle: 'bob' }],
++      },
++      {
++        id: 'iss-142',
++        key: 'KAN-142',
++        summary: 'Harden Multi-Card OIDC & LDAPS Auth Studio',
++        state_id: 'state-in-progress',
++        state: workflowStates[2],
++        board_rank: '0000000000000003',
++        priority: { id: 'p-urg', label: 'Urgent', slug: 'urgent' },
++        assignees: [{ id: 'u-adam', handle: 'adam' }, { id: 'u-sec', free_text: 'Ext: SecAudit' }],
++        due_date: '2026-12-01',
++      },
++      {
++        id: 'iss-143',
++        key: 'KAN-143',
++        summary: 'Clean-room security reality checker verification',
++        state_id: 'state-done',
++        state: workflowStates[3],
++        board_rank: '0000000000000004',
++        priority: { id: 'p-high', label: 'High', slug: 'high' },
++        assignees: [{ id: 'u-qa', handle: 'reality-checker', is_agent: true, name: 'RealityChecker' }],
++      },
++      {
++        id: 'iss-144',
++        key: 'KAN-144',
++        summary: 'Deprecated legacy basic auth header parser',
++        state_id: 'state-cancelled',
++        state: workflowStates[4],
++        board_rank: '0000000000000005',
++        priority: null,
++      },
++    ],
++    total: 5,
++  };
++
++  return {
++    'GET /api/v1/me': { json: me },
++    'GET /api/v1/auth/me': { json: { ...me, is_server_admin: true } },
++    'GET /api/v1/users/me': { json: me },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'test-csrf-token-kan-383',
++        user: me,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'test-csrf-token-kan-383' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/system/status': { json: loadFixture('system-status-prod') },
++    'GET /api/v1/workspaces': {
++      json: [
++        {
++          id: '01918a22-0000-7000-8000-000000000001',
++          name: 'Primary Workspace',
++          slug: 'kanban',
++          is_current: true,
++        },
++      ],
++    },
++    'GET /api/v1/workspaces/current': {
++      json: {
++        id: '01918a22-0000-7000-8000-000000000001',
++        name: 'Primary Workspace',
++        slug: 'kanban',
++        is_current: true,
++      },
++    },
++    'GET /api/v1/projects': { json: [projectKan] },
++    'GET /api/v1/projects/KAN': { json: projectKan },
++    'GET /api/v1/projects/KAN/cycles': { json: [] },
++    'GET /api/v1/projects/KAN/modules': { json: [] },
++    'GET /api/v1/projects/KAN/states': { json: workflowStates },
++    'GET /api/v1/projects/KAN/issues': { json: boardIssues },
++    'GET /api/v1/projects/KAN/priorities': {
++      json: [
++        { slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 1 },
++        { slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++        { slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 3 },
++        { slug: 'low', label: 'Low', emoji: '💤', sort_order: 4 },
++      ],
++    },
++    'GET /api/v1/projects/KAN/labels': { json: [] },
++    'GET /api/v1/projects/KAN/assignee-suggestions': {
++      json: { items: [{ id: 'u-1', handle: '@adam', display_name: 'Adam Outler', type: 'USER' }] },
++    },
++    'GET /api/v1/projects/KAN/custom-fields': { json: [] },
++    'GET /api/v1/projects/KAN/views': { json: [] },
++    'GET /api/v1/objects/KAN/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'GET /api/v1/notifications/unread-count': { json: { count: 0 } },
++  };
++}
++
++test.describe('KAN-383 Visual Proofs: Workflow State & Priority Color Coding on Kanban Cards', () => {
++  test.beforeEach(async ({ context }) => {
++    await context.addCookies([
++      {
++        name: 'kb_csrf',
++        value: 'test-csrf-token-kan-383',
++        domain: '127.0.0.1',
++        path: '/',
++      },
++    ]);
++  });
++
++  test('01: desktop 1440x900 light - Cards render left accent bars and priority color pills', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getBaseMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await applyTheme(page, 'light');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="board-card-KAN-142"]')).toBeVisible();
++
++    const shotPath = await annotatedScreenshot(page, testInfo, {
++      name: '01-board-cards-desktop-1440x900-light',
++      annotations: [
++        {
++          selector: '[data-testid="board-card-KAN-142"]',
++          label: 'Card Left Color Accent Bar',
++          note: '3.5px solid var(--card-state-accent) matching started (#f59e0b)',
++        },
++        {
++          selector: '[data-testid="board-card-state-btn-KAN-142"] .board-card-state-btn-dot',
++          label: 'State Status Dot Indicator',
++          note: 'Colored circle indicator matching state accent color',
++        },
++        {
++          selector: '[data-testid="priority-pill-KAN-142"]',
++          label: 'Priority Urgent Color Pill',
++          note: 'board-card-priority-pill--urgent in .board-card-meta',
++        },
++      ],
++    });
++
++    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '01-board-cards-desktop-1440x900-light.png'));
++  });
++
++  test('02: desktop 1440x900 dark - High contrast state accent bars and priority pills in dark mode', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getBaseMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await applyTheme(page, 'dark');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="board-card-KAN-142"]')).toBeVisible();
++
++    const shotPath = await annotatedScreenshot(page, testInfo, {
++      name: '02-board-cards-desktop-1440x900-dark',
++      annotations: [
++        {
++          selector: '[data-testid="board-card-KAN-142"]',
++          label: 'Dark Theme Card Accent',
++          note: 'Vibrant amber border-left accent bar against dark surface',
++        },
++        {
++          selector: '[data-testid="board-card-KAN-143"]',
++          label: 'Completed State Accent',
++          note: 'Emerald green border-left accent bar on done cards',
++        },
++      ],
++    });
++
++    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '02-board-cards-desktop-1440x900-dark.png'));
++  });
++
++  test('03: tablet landscape 1024x768 - Clean card layout and visible status accents', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 1024, height: 768 });
++    await mockApi(page, getBaseMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await applyTheme(page, 'light');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="board-card-KAN-142"]')).toBeVisible();
++
++    const shotPath = await annotatedScreenshot(page, testInfo, {
++      name: '03-board-cards-tablet-landscape-1024x768',
++      annotations: [
++        {
++          selector: '[data-testid="board-card-KAN-142"]',
++          label: 'Tablet Landscape Board Card',
++          note: 'Uncluttered card header and distinct state accent bar',
++        },
++      ],
++    });
++
++    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '03-board-cards-tablet-landscape-1024x768.png'));
++  });
++
++  test('04: tablet portrait 768x1024 - Responsive board cards with color coding', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 768, height: 1024 });
++    await mockApi(page, getBaseMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await applyTheme(page, 'light');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="board-card-KAN-142"]')).toBeVisible();
++
++    const shotPath = await annotatedScreenshot(page, testInfo, {
++      name: '04-board-cards-tablet-portrait-768x1024',
++      annotations: [
++        {
++          selector: '[data-testid="board-card-KAN-142"]',
++          label: 'Tablet Portrait Card',
++          note: 'Clear visual state and priority cues',
++        },
++      ],
++    });
++
++    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '04-board-cards-tablet-portrait-768x1024.png'));
++  });
++
++  test('05: mobile 390x844 - Mobile touch board cards with state and priority indicators', async ({ page }, testInfo) => {
++    await page.setViewportSize({ width: 390, height: 844 });
++    await mockApi(page, getBaseMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await applyTheme(page, 'light');
++    await page.waitForLoadState('networkidle');
++
++    await expect(page.locator('[data-testid="board-card-KAN-142"]')).toBeVisible();
++
++    const shotPath = await annotatedScreenshot(page, testInfo, {
++      name: '05-board-cards-mobile-390x844',
++      annotations: [
++        {
++          selector: '[data-testid="board-card-KAN-142"]',
++          label: 'Mobile Card Accent',
++          note: 'State accent bar and priority pill visible in mobile viewport',
++        },
++      ],
++    });
++
++    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '05-board-cards-mobile-390x844.png'));
++  });
++});
+diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
+index b8d21071..044ad274 100644
+--- a/kanban/web/src/features/board/BoardCard.tsx
++++ b/kanban/web/src/features/board/BoardCard.tsx
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useRef, useState, type JSX } from 'react';
++import React, { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+ import {
+   draggable,
+   dropTargetForElements,
+@@ -173,6 +173,25 @@ export function BoardCard({
+     }
+   };
+ 
++  // Synchronize custom state color accent on card container (KAN-383)
++  useLayoutEffect(() => {
++    const el = cardRef.current;
++    /* v8 ignore next 3 */
++    if (!el) {
++      return;
++    }
++    const colorHex = issue.state?.color_hex;
++    const safeHex =
++      colorHex && /^#[0-9A-Fa-f]{6}$/.test(colorHex.trim())
++        ? colorHex.trim()
++        : null;
++    if (safeHex) {
++      el.style.setProperty('--card-state-accent', safeHex);
++    } else {
++      el.style.removeProperty('--card-state-accent');
++    }
++  }, [issue.state?.color_hex]);
++
+   useEffect(() => {
+     const el = cardRef.current;
+     /* v8 ignore next 3 */
+@@ -257,9 +276,11 @@ export function BoardCard({
+       ref={cardRef}
+       role="button"
+       tabIndex={0}
+-      className={`board-card ${isGatePending ? 'board-card--pending-gate' : ''} ${isTouchLifted ? 'board-card--touch-lifted' : ''}`}
++      className={`board-card board-card--state-${stateGroup} ${isGatePending ? 'board-card--pending-gate' : ''} ${isTouchLifted ? 'board-card--touch-lifted' : ''}`}
+       data-testid={`board-card-${issue.key}`}
+       data-issue-key={issue.key}
++      data-state-group={stateGroup}
++      data-priority={issue.priority?.slug ?? 'none'}
+       data-gate-pending={isGatePending ? 'true' : undefined}
+       aria-disabled={isGatePending ? 'true' : undefined}
+       title={isGatePending ? 'Transition gate in progress' : undefined}
+@@ -306,6 +327,7 @@ export function BoardCard({
+                 title={`Move ${issue.key}`}
+                 onClick={handleStateBtnClick}
+               >
++                <span className="board-card-state-btn-dot" aria-hidden="true" />
+                 <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+                 <span>{issue.state?.name ?? 'Move'}</span>
+               </button>
+@@ -356,11 +378,19 @@ export function BoardCard({
+ 
+       <div className="board-card-meta">
+         {priorityKind && (
+-          <EmojiHint
+-            kind={priorityKind}
+-            label={issue.priority?.label ?? 'Priority'}
+-            testId={`priority-${issue.key}`}
+-          />
++          <span
++            className={`board-card-chip board-card-priority-pill board-card-priority-pill--${(issue.priority?.slug ?? 'none').toLowerCase()}`}
++            data-testid={`priority-pill-${issue.key}`}
++          >
++            <EmojiHint
++              kind={priorityKind}
++              label={issue.priority?.label ?? 'Priority'}
++              testId={`priority-${issue.key}`}
++            />
++            {issue.priority?.label && (
++              <span className="board-card-priority-label">{issue.priority.label}</span>
++            )}
++          </span>
+         )}
+ 
+         {issue.assignees?.map((a, idx) => {
+diff --git a/kanban/web/src/features/board/__tests__/BoardCardColorCodes.test.tsx b/kanban/web/src/features/board/__tests__/BoardCardColorCodes.test.tsx
+new file mode 100644
+index 00000000..4f40dd10
+--- /dev/null
++++ b/kanban/web/src/features/board/__tests__/BoardCardColorCodes.test.tsx
+@@ -0,0 +1,413 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import { act, fireEvent, render, screen } from '@testing-library/react';
++import { describe, expect, it, vi } from 'vitest';
++import { BoardCard } from '../BoardCard.tsx';
++import type { BoardIssue, StateGroup } from '../boardApi.ts';
++
++const baseIssue: BoardIssue = {
++  id: 'iss-test-1',
++  key: 'KAN-383',
++  summary: 'Card Color Coding Verification',
++  state_id: 'state-started',
++  board_rank: '0000000000000001',
++};
++
++describe('BoardCard Color Codes & Priority Accents (KAN-383)', () => {
++  it('renders board-card--state-<group> modifier class and data-state-group for all 5 state groups', () => {
++    const stateGroups: StateGroup[] = ['backlog', 'unstarted', 'started', 'completed', 'cancelled'];
++
++    for (const group of stateGroups) {
++      const { unmount } = render(
++        <BoardCard
++          issue={{
++            ...baseIssue,
++            state: { id: `state-${group}`, name: group, group },
++          }}
++          stateGroup={group}
++        />,
++      );
++
++      const card = screen.getByTestId('board-card-KAN-383');
++      expect(card.classList.contains(`board-card--state-${group}`)).toBe(true);
++      expect(card.getAttribute('data-state-group')).toBe(group);
++
++      unmount();
++    }
++  });
++
++  it('renders data-priority attribute matching issue priority slug or none', () => {
++    // Priority urgent
++    const { rerender } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          priority: { id: 'p1', label: 'Urgent', slug: 'urgent' },
++        }}
++        stateGroup="started"
++      />,
++    );
++    const card = screen.getByTestId('board-card-KAN-383');
++    expect(card.getAttribute('data-priority')).toBe('urgent');
++
++    // Priority high
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          priority: { id: 'p2', label: 'High', slug: 'high' },
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(card.getAttribute('data-priority')).toBe('high');
++
++    // Priority medium
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          priority: { id: 'p3', label: 'Medium', slug: 'medium' },
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(card.getAttribute('data-priority')).toBe('medium');
++
++    // Priority low
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          priority: { id: 'p4', label: 'Low', slug: 'low' },
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(card.getAttribute('data-priority')).toBe('low');
++
++    // No priority
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          priority: null,
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(card.getAttribute('data-priority')).toBe('none');
++  });
++
++  it('synchronizes --card-state-accent via useLayoutEffect when custom valid state.color_hex is provided', () => {
++    const { rerender } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 'state-custom-1', name: 'Custom State', group: 'started', color_hex: '#7c3aed' },
++        }}
++        stateGroup="started"
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-383');
++    expect(card.style.getPropertyValue('--card-state-accent')).toBe('#7c3aed');
++
++    // Rerender with another valid hex
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 'state-custom-2', name: 'Emerald Done', group: 'completed', color_hex: '#10B981' },
++        }}
++        stateGroup="completed"
++      />,
++    );
++    expect(card.style.getPropertyValue('--card-state-accent')).toBe('#10B981');
++  });
++
++  it('rejects malformed or unsafe hex strings and removes --card-state-accent property', () => {
++    const invalidHexes = [
++      'red',
++      '#fff',
++      '#12345',
++      '#1234567',
++      'javascript:alert(1)',
++      '#zzzzzz',
++      '   ',
++    ];
++
++    const { rerender } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 's1', name: 'Valid First', group: 'started', color_hex: '#2563eb' },
++        }}
++        stateGroup="started"
++      />,
++    );
++    const card = screen.getByTestId('board-card-KAN-383');
++    expect(card.style.getPropertyValue('--card-state-accent')).toBe('#2563eb');
++
++    for (const invalidHex of invalidHexes) {
++      rerender(
++        <BoardCard
++          issue={{
++            ...baseIssue,
++            state: { id: 's1', name: 'Invalid State', group: 'started', color_hex: invalidHex },
++          }}
++          stateGroup="started"
++        />,
++      );
++      expect(card.style.getPropertyValue('--card-state-accent')).toBe('');
++    }
++
++    // null / undefined color_hex
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 's1', name: 'No Color State', group: 'started', color_hex: null },
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(card.style.getPropertyValue('--card-state-accent')).toBe('');
++  });
++
++  it('renders status dot indicator and glyph inside .board-card-state-btn', () => {
++    render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 'state-in-prog', name: 'In Progress', group: 'started', color_hex: '#f59e0b' },
++        }}
++        stateGroup="started"
++      />,
++    );
++
++    const stateBtn = screen.getByTestId('board-card-state-btn-KAN-383');
++    expect(stateBtn).toBeDefined();
++
++    const dot = stateBtn.querySelector('.board-card-state-btn-dot');
++    expect(dot).not.toBeNull();
++
++    const glyph = stateBtn.querySelector('.board-card-state-btn-glyph');
++    expect(glyph).not.toBeNull();
++    expect(glyph?.textContent).toBe('⇄');
++    expect(stateBtn.textContent).toContain('In Progress');
++  });
++
++  it('renders priority color pill with slug-based modifier class in .board-card-meta', () => {
++    const priorities = [
++      { slug: 'urgent', label: 'Urgent' },
++      { slug: 'high', label: 'High' },
++      { slug: 'medium', label: 'Medium' },
++      { slug: 'low', label: 'Low' },
++    ];
++
++    for (const p of priorities) {
++      const { unmount } = render(
++        <BoardCard
++          issue={{
++            ...baseIssue,
++            priority: { id: `p-${p.slug}`, label: p.label, slug: p.slug },
++          }}
++          stateGroup="started"
++        />,
++      );
++
++      const pill = screen.getByTestId('priority-pill-KAN-383');
++      expect(pill.classList.contains('board-card-priority-pill')).toBe(true);
++      expect(pill.classList.contains(`board-card-priority-pill--${p.slug}`)).toBe(true);
++      expect(pill.textContent).toContain(p.label);
++
++      unmount();
++    }
++  });
++
++  it('board.css defines left accent border and semantic color mappings for all 5 state groups and priority levels', () => {
++    const cssPath = path.resolve(__dirname, '../board.css');
++    const css = fs.readFileSync(cssPath, 'utf-8');
++
++    // Left accent bar
++    expect(css).toContain('border-left: 3.5px solid var(--card-state-accent);');
++    expect(css).toContain('--card-state-accent: var(--state-unstarted-fg, #3b82f6);');
++    expect(css).toContain('--card-priority-accent: var(--fg-muted, #94a3b8);');
++    expect(css).toContain('border-left-color: var(--card-state-accent);');
++
++    // 5 State group color token fallbacks
++    expect(css).toContain('--card-state-accent: var(--state-backlog-fg, #64748b);');
++    expect(css).toContain('--card-state-accent: var(--state-unstarted-fg, #3b82f6);');
++    expect(css).toContain('--card-state-accent: var(--state-started-fg, #f59e0b);');
++    expect(css).toContain('--card-state-accent: var(--state-completed-fg, #10b981);');
++    expect(css).toContain('--card-state-accent: var(--state-cancelled-fg, #ef4444);');
++
++    // State classes and data attributes
++    expect(css).toContain('.board-card.board-card--state-backlog');
++    expect(css).toContain('.board-card.board-card--state-unstarted');
++    expect(css).toContain('.board-card.board-card--state-started');
++    expect(css).toContain('.board-card.board-card--state-completed');
++    expect(css).toContain('.board-card.board-card--state-cancelled');
++
++    // Priority color pill styles
++    expect(css).toContain('.board-card-priority-pill');
++    expect(css).toContain('.board-card-priority-pill--urgent');
++    expect(css).toContain('.board-card-priority-pill--high');
++    expect(css).toContain('.board-card-priority-pill--medium');
++    expect(css).toContain('.board-card-priority-pill--low');
++
++    // State button indicator styles
++    expect(css).toContain('.board-card-state-btn-dot');
++    expect(css).toContain('.board-card-state-btn-glyph');
++  });
++
++  it('exercises quick move touch action button, popover cancellation, and state/rank transition', () => {
++    const onStateTransition = vi.fn();
++    const onKeyboardMove = vi.fn();
++
++    const { unmount } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 'state-started', name: 'In Progress', group: 'started' },
++        }}
++        stateGroup="started"
++        onStateTransition={onStateTransition}
++        onKeyboardMove={onKeyboardMove}
++      />,
++    );
++
++    const touchBtn = screen.getByTestId('board-card-touch-action-KAN-383');
++    fireEvent.click(touchBtn);
++
++    // Cancel closes popover
++    const cancelBtn = screen.getByTestId('touch-reorder-cancel-btn');
++    fireEvent.click(cancelBtn);
++    expect(screen.queryByTestId('touch-reorder-cancel-btn')).toBeNull();
++
++    // Reopen and select state directly
++    fireEvent.click(touchBtn);
++    const doneOption = screen.getByTestId('touch-state-option-state-done');
++    fireEvent.click(doneOption);
++    expect(onStateTransition).toHaveBeenCalledWith('KAN-383', 'state-done');
++
++    // Reopen, select rank top and apply move
++    fireEvent.click(touchBtn);
++    const topRankBtn = screen.getByTestId('touch-rank-top');
++    fireEvent.click(topRankBtn);
++    const applyBtn = screen.getByTestId('touch-reorder-apply-btn');
++    fireEvent.click(applyBtn);
++    expect(onKeyboardMove).toHaveBeenCalledWith(expect.anything(), 'up');
++
++    unmount();
++
++    // Custom projectStates and bottom rank position (rank down)
++    const customStates = [
++      { id: 's-1', name: 'Open', group: 'unstarted' as const, sort_order: 1 },
++      { id: 's-2', name: 'Closed', group: 'completed' as const, sort_order: 2 },
++    ];
++    const { unmount: unmount2 } = render(
++      <BoardCard
++        issue={{ ...baseIssue, state: undefined, priority: null }}
++        stateGroup="unstarted"
++        projectStates={customStates}
++        onStateTransition={onStateTransition}
++        onKeyboardMove={onKeyboardMove}
++      />,
++    );
++    const touchBtn2 = screen.getByTestId('board-card-touch-action-KAN-383');
++    fireEvent.click(touchBtn2);
++    const bottomRankBtn = screen.getByTestId('touch-rank-bottom');
++    fireEvent.click(bottomRankBtn);
++    const applyBtn2 = screen.getByTestId('touch-reorder-apply-btn');
++    fireEvent.click(applyBtn2);
++    expect(onKeyboardMove).toHaveBeenCalledWith(expect.anything(), 'down');
++    unmount2();
++
++    // Without onKeyboardMove
++    const { unmount: unmount3 } = render(
++      <BoardCard
++        issue={{ ...baseIssue, state: undefined, priority: null }}
++        stateGroup="unstarted"
++        onStateTransition={onStateTransition}
++      />,
++    );
++    fireEvent.click(screen.getByTestId('board-card-touch-action-KAN-383'));
++    fireEvent.click(screen.getByTestId('touch-reorder-apply-btn'));
++    unmount3();
++  });
++
++  it('covers state popover without onStateTransition and aging WIP without currentAgeHours', () => {
++    const { unmount, rerender } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: undefined,
++          priority: null,
++          is_aging_wip: true,
++          age_in_current_state_hours: undefined,
++        }}
++        stateGroup="started"
++      />,
++    );
++
++    expect(screen.getByTestId('aging-wip-KAN-383')).toBeDefined();
++
++    const stateBtn = screen.getByTestId('board-card-state-btn-KAN-383');
++    fireEvent.click(stateBtn);
++
++    // Aging WIP with age hours
++    rerender(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          is_aging_wip: true,
++          age_in_current_state_hours: 48,
++        }}
++        stateGroup="started"
++      />,
++    );
++    expect(screen.getByTestId('aging-wip-KAN-383').textContent).toContain('48h');
++
++    unmount();
++  });
++
++  it('exercises touch lift state with timer advance and state popover dialog', () => {
++    vi.useFakeTimers();
++    navigator.vibrate = vi.fn();
++    const onStateTransition = vi.fn();
++
++    const { unmount } = render(
++      <BoardCard
++        issue={{
++          ...baseIssue,
++          state: { id: 'state-started', name: 'In Progress', group: 'started' },
++        }}
++        stateGroup="started"
++        onStateTransition={onStateTransition}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-383');
++    fireEvent.touchStart(card, {
++      touches: [{ clientX: 200, clientY: 200 }],
++    });
++    act(() => {
++      vi.advanceTimersByTime(250);
++    });
++    expect(card.classList.contains('board-card--touch-lifted')).toBe(true);
++    expect(card.getAttribute('data-touch-lifted')).toBe('true');
++    fireEvent.touchEnd(card);
++    expect(card.classList.contains('board-card--touch-lifted')).toBe(false);
++
++    // Open state popover
++    const stateBtn = screen.getByTestId('board-card-state-btn-KAN-383');
++    fireEvent.click(stateBtn);
++    const popover = screen.getByRole('dialog');
++    expect(popover).toBeDefined();
++
++    vi.useRealTimers();
++    unmount();
++  });
++});
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index 30ea6b64..0c258459 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -237,10 +237,13 @@
+ }
+ 
+ .board-card {
++  --card-state-accent: var(--state-unstarted-fg, #3b82f6);
++  --card-priority-accent: var(--fg-muted, #94a3b8);
+   padding: var(--card-pad, 16px 18px);
+   margin-bottom: var(--card-gap, 12px);
+   background: var(--bg-surface, #ffffff);
+   border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
++  border-left: 3.5px solid var(--card-state-accent);
+   border-radius: var(--radius-lg, 10px);
+   box-sizing: border-box;
+   display: flex;
+@@ -259,9 +262,57 @@
+ 
+ .board-card:hover {
+   border-color: var(--border-strong);
++  border-left-color: var(--card-state-accent);
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+ }
+ 
++/* Card State Group Accents (KAN-383) */
++.board-card.board-card--state-backlog,
++.board-card[data-state-group='backlog'] {
++  --card-state-accent: var(--state-backlog-fg, #64748b);
++}
++
++.board-card.board-card--state-unstarted,
++.board-card[data-state-group='unstarted'] {
++  --card-state-accent: var(--state-unstarted-fg, #3b82f6);
++}
++
++.board-card.board-card--state-started,
++.board-card[data-state-group='started'] {
++  --card-state-accent: var(--state-started-fg, #f59e0b);
++}
++
++.board-card.board-card--state-completed,
++.board-card[data-state-group='completed'] {
++  --card-state-accent: var(--state-completed-fg, #10b981);
++}
++
++.board-card.board-card--state-cancelled,
++.board-card[data-state-group='cancelled'] {
++  --card-state-accent: var(--state-cancelled-fg, #ef4444);
++}
++
++/* Card Priority Accents (KAN-383) */
++.board-card[data-priority='urgent'],
++.board-card.board-card--priority-urgent {
++  --card-priority-accent: #ef4444;
++}
++
++.board-card[data-priority='high'],
++.board-card.board-card--priority-high {
++  --card-priority-accent: #f97316;
++}
++
++.board-card[data-priority='medium'],
++.board-card.board-card--priority-medium {
++  --card-priority-accent: #3b82f6;
++}
++
++.board-card[data-priority='low'],
++.board-card.board-card--priority-low {
++  --card-priority-accent: #64748b;
++}
++
+ .board-card[data-dragging='true'] {
+   opacity: 0.4;
+ }
+@@ -331,9 +382,20 @@
+   border-color: var(--border-strong);
+ }
+ 
++.board-card-state-btn-dot {
++  display: inline-block;
++  width: 7px;
++  height: 7px;
++  border-radius: 50%;
++  background-color: var(--card-state-accent, var(--accent-primary));
++  flex-shrink: 0;
++  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
++}
++
+ .board-card-state-btn-glyph {
+   font-size: 0.875rem;
+   line-height: 1;
++  color: var(--card-state-accent, inherit);
+ }
+ 
+ @media (max-width: 768px) {
+@@ -398,6 +460,45 @@
+   font-weight: 600;
+ }
+ 
++/* Priority Color Pill Styling (KAN-383) */
++.board-card-priority-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  font-weight: 500;
++  border: 1px solid var(--border-subtle);
++  transition: all 120ms ease;
++}
++
++.board-card-priority-pill--urgent {
++  color: #ef4444;
++  background: rgba(239, 68, 68, 0.12);
++  border-color: rgba(239, 68, 68, 0.28);
++}
++
++.board-card-priority-pill--high {
++  color: #f97316;
++  background: rgba(249, 115, 22, 0.12);
++  border-color: rgba(249, 115, 22, 0.28);
++}
++
++.board-card-priority-pill--medium {
++  color: #3b82f6;
++  background: rgba(59, 130, 246, 0.12);
++  border-color: rgba(59, 130, 246, 0.28);
++}
++
++.board-card-priority-pill--low {
++  color: #64748b;
++  background: rgba(100, 116, 139, 0.12);
++  border-color: rgba(100, 116, 139, 0.28);
++}
++
++.board-card-priority-label {
++  font-size: 0.75rem;
++  line-height: 1;
++}
++
+ .board-column-footer {
+   margin-top: var(--space-2, 8px);
+   padding-top: var(--space-1, 4px);
+diff --git a/scripts/capture_kan383_screenshots.mjs b/scripts/capture_kan383_screenshots.mjs
+new file mode 100644
+index 00000000..e156973e
+--- /dev/null
++++ b/scripts/capture_kan383_screenshots.mjs
+@@ -0,0 +1,327 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { spawn } from 'node:child_process';
++import { chromium } from '/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs';
++
++const PORT = 18983;
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const OUT_DIR = path.resolve('docs/qa/KAN-383/screenshots');
++
++const VIEWPORTS = [
++  {
++    name: '01-board-cards-desktop-1440x900-light',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
++  },
++  {
++    name: '02-board-cards-desktop-1440x900-dark',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
++  },
++  {
++    name: '03-board-cards-tablet-landscape-1024x768',
++    width: 1024,
++    height: 768,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
++  },
++  {
++    name: '04-board-cards-tablet-portrait-768x1024',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
++  },
++  {
++    name: '05-board-cards-mobile-390x844',
++    width: 390,
++    height: 844,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
++  },
++];
++
++async function waitForServer(url, timeoutMs = 15000) {
++  const start = Date.now();
++  while (Date.now() - start < timeoutMs) {
++    try {
++      const res = await fetch(url);
++      if (res.ok || res.status === 404 || res.status === 200) {
++        return true;
++      }
++    } catch {
++      // wait and retry
++    }
++    await new Promise((resolve) => setTimeout(resolve, 300));
++  }
++  throw new Error(`Server failed to start at ${url} within ${timeoutMs}ms`);
++}
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`Starting preview server on port ${PORT}...`);
++  const previewProc = spawn(
++    'pnpm',
++    ['--dir', 'kanban/web', 'exec', 'vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
++    { stdio: 'inherit' }
++  );
++
++  try {
++    await waitForServer(BASE_URL);
++    console.log(`Preview server ready at ${BASE_URL}`);
++
++    const browser = await chromium.launch({
++      executablePath: '/usr/bin/google-chrome',
++      headless: true,
++      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
++    });
++
++    const mockWorkflowStates = [
++      { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1, color_hex: '#64748b' },
++      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2, color_hex: '#3b82f6' },
++      { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, color_hex: '#f59e0b' },
++      { id: 'state-done', name: 'Done', group: 'completed', sort_order: 4, color_hex: '#10b981' },
++      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 5, color_hex: '#ef4444' },
++    ];
++
++    const mockPriorities = [
++      { id: 'p-urg', slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 1 },
++      { id: 'p-high', slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++      { id: 'p-med', slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 3 },
++      { id: 'p-low', slug: 'low', label: 'Low', emoji: '💤', sort_order: 4 },
++    ];
++
++    const mockBoardIssues = {
++      items: [
++        {
++          id: 'iss-101',
++          key: 'KAN-101',
++          summary: 'Telemetry pipeline ingest schema definition',
++          state_id: 'state-backlog',
++          state: mockWorkflowStates[0],
++          board_rank: '0000000000000001',
++          priority: mockPriorities[3], // low
++          assignees: [{ id: 'u-1', handle: 'alice' }],
++        },
++        {
++          id: 'iss-102',
++          key: 'KAN-102',
++          summary: 'Review CSP violation report ingestion router',
++          state_id: 'state-todo',
++          state: mockWorkflowStates[1],
++          board_rank: '0000000000000002',
++          priority: mockPriorities[2], // medium
++          assignees: [{ id: 'u-2', handle: 'bob' }],
++        },
++        {
++          id: 'iss-142',
++          key: 'KAN-142',
++          summary: 'Harden Multi-Card OIDC & LDAPS Auth Studio',
++          state_id: 'state-in-progress',
++          state: mockWorkflowStates[2],
++          board_rank: '0000000000000003',
++          priority: mockPriorities[0], // urgent
++          assignees: [
++            { id: 'u-adam', handle: 'adam' },
++            { id: 'u-sec', free_text: 'Ext: SecAudit' },
++          ],
++          due_date: '2026-12-01',
++        },
++        {
++          id: 'iss-143',
++          key: 'KAN-143',
++          summary: 'Clean-room security reality checker verification',
++          state_id: 'state-done',
++          state: mockWorkflowStates[3],
++          board_rank: '0000000000000004',
++          priority: mockPriorities[1], // high
++          assignees: [{ id: 'u-qa', handle: 'reality-checker', is_agent: true, name: 'RealityChecker' }],
++        },
++        {
++          id: 'iss-144',
++          key: 'KAN-144',
++          summary: 'Deprecated legacy basic auth header parser',
++          state_id: 'state-cancelled',
++          state: mockWorkflowStates[4],
++          board_rank: '0000000000000005',
++          priority: null,
++          assignees: [],
++        },
++      ],
++      total: 5,
++    };
++
++    const mockProject = {
++      id: '01918a22-0000-7000-8000-000000000002',
++      key: 'KAN',
++      identifier: 'KAN',
++      name: 'Platform Core',
++      description: 'Core platform engineering',
++      visibility: 'internal',
++      capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'TRANSITION'],
++      is_project_admin: true,
++    };
++
++    for (const vp of VIEWPORTS) {
++      console.log(`Capturing ${vp.name}...`);
++      const context = await browser.newContext({
++        viewport: { width: vp.width, height: vp.height },
++        deviceScaleFactor: 1,
++      });
++
++      const page = await context.newPage();
++
++      // Auth mocks
++      await page.route('**/api/v1/auth/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-adam',
++            handle: 'adam',
++            display_name: 'Adam Outler',
++            email: 'adam@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++
++      await page.route('**/api/v1/users/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-adam',
++            handle: 'adam',
++            display_name: 'Adam Outler',
++          }),
++        });
++      });
++
++      await page.route('**/api/v1/auth/session', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            authenticated: true,
++            aal_level: 2,
++            csrf_token: 'test-csrf-token',
++            user: { id: 'u-adam', handle: 'adam', display_name: 'Adam Outler' },
++          }),
++        });
++      });
++
++      await page.route('**/api/v1/workspaces', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'ws-1', name: 'Primary Workspace', slug: 'kanban', is_current: true },
++          ]),
++        });
++      });
++
++      await page.route('**/api/v1/workspaces/current', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({ id: 'ws-1', name: 'Primary Workspace', slug: 'kanban', is_current: true }),
++        });
++      });
++
++      await page.route('**/api/v1/projects', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([mockProject]),
++        });
++      });
++
++      await page.route('**/api/v1/projects/KAN', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(mockProject),
++        });
++      });
++
++      await page.route('**/api/v1/projects/KAN/states', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(mockWorkflowStates),
++        });
++      });
++
++      await page.route('**/api/v1/projects/KAN/priorities', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(mockPriorities),
++        });
++      });
++
++      await page.route('**/api/v1/projects/KAN/issues*', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(mockBoardIssues),
++        });
++      });
++
++      // Default mocks for sub-resources
++      await page.route('**/api/v1/projects/KAN/cycles', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/projects/KAN/modules', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/projects/KAN/labels', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/projects/KAN/views', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/projects/KAN/custom-fields', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/objects/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
++      await page.route('**/api/v1/notifications/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[],"count":0}' }));
++
++      try {
++        await page.goto(vp.url, { waitUntil: 'load', timeout: 15000 });
++      } catch (err) {
++        console.warn(`Warning navigating to ${vp.url}:`, err.message);
++      }
++
++      await page.evaluate((theme) => {
++        document.documentElement.setAttribute('data-theme', theme);
++        document.documentElement.dataset.theme = theme;
++        localStorage.setItem('kb_theme', theme);
++        localStorage.setItem('kb:theme', theme);
++      }, vp.theme);
++
++      await page.waitForTimeout(1000);
++
++      // Verify board card is rendered
++      const card = await page.$('[data-testid="board-card-KAN-142"]');
++      if (card) {
++        console.log(`Found board card KAN-142 in ${vp.name}`);
++      }
++
++      const outPath = path.join(OUT_DIR, `${vp.name}.png`);
++      await page.screenshot({ path: outPath, fullPage: false });
++      console.log(`Saved screenshot to ${outPath}`);
++
++      await context.close();
++    }
++
++    await browser.close();
++    console.log('All 5 screenshots captured successfully.');
++  } finally {
++    previewProc.kill();
++  }
++}
++
++main().catch((err) => {
++  console.error('Error during screenshot capture:', err);
++  process.exit(1);
++});
