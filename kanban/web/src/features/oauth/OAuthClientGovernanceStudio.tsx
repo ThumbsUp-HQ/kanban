@@ -15,6 +15,8 @@ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { ApiProblem } from '../../api/problem';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './OAuthClientGovernanceStudio.css';
 
 export function OAuthClientGovernanceStudio(): JSX.Element {
@@ -52,6 +54,13 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       const data = await fetchAdminOAuthClients();
       setClients(data);
     } catch (err: unknown) {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        window.dispatchEvent(
+          new CustomEvent('kb:open-aal2-stepup', {
+            detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+          }),
+        );
+      }
       setError(err instanceof Error ? err.message : 'Failed to load registered OAuth clients.');
     } finally {
       setLoading(false);
@@ -310,7 +319,8 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
 
       {error !== null && (
         <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">
-          {error}
+          <span>{error}</span>
+          <ErrorHelpHint error={error} />
         </div>
       )}
 

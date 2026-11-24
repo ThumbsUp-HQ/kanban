@@ -1,0 +1,45 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan393-561d40e1/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan393-561d40e1
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 35 items
+
+kanban/tests/auth/test_aal2_policy.py::test_case_9_aal2_policy_enforcement PASSED [  2%]
+kanban/tests/auth/test_aal2_policy.py::test_require_admin_aal2_missing_factory PASSED [  5%]
+kanban/tests/auth/test_aal2_policy.py::test_case_10_assert_admin_routes_protected PASSED [  8%]
+kanban/tests/auth/test_aal2_policy.py::test_aal2_stale_human_readable_and_problem_doc_links PASSED [ 11%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_hardware_fido2_key_up_only_compatibility PASSED [ 14%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_first_factor_deadlock_and_second_factor_staleness PASSED [ 17%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_workspace_admin_and_server_admin_last_factor_lockout PASSED [ 20%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_credential_metadata_and_clone_detection PASSED [ 22%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_step_up_methods_discovery PASSED [ 25%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_service_and_policy_direct_unit_branches PASSED [ 28%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_delete_totp_role_lockout_branches PASSED [ 31%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py::test_kan24_problems_methods_serialization PASSED [ 34%]
+kanban/tests/auth/test_identity_linking.py::test_case_5_positive_explicit_aal2_link_oidc_and_ldap PASSED [ 37%]
+kanban/tests/auth/test_identity_linking.py::test_case_6_security_aal1_and_stale_aal2_link_blocked PASSED [ 40%]
+kanban/tests/auth/test_identity_linking.py::test_case_7_security_cross_session_csrf_and_intent_replay PASSED [ 42%]
+kanban/tests/auth/test_identity_linking.py::test_case_8_security_already_linked_subject_rejected PASSED [ 45%]
+kanban/tests/auth/test_identity_linking.py::test_case_10_unlink_and_privilege_boundary PASSED [ 48%]
+kanban/tests/auth/test_identity_linking.py::test_api_endpoints_and_contract_samples PASSED [ 51%]
+kanban/tests/auth/test_identity_linking.py::test_api_endpoints_full_coverage PASSED [ 54%]
+kanban/tests/auth/test_identity_linking.py::test_identity_service_internal_methods PASSED [ 57%]
+kanban/tests/auth/test_identity_linking.py::test_identity_service_error_handling_and_unexpected_exceptions PASSED [ 60%]
+kanban/tests/auth/test_identity_linking.py::test_require_link_aal2_edge_cases PASSED [ 62%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_get_default PASSED [ 65%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_patch_and_activity PASSED [ 68%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_air_gap_toggle_and_aal2 PASSED [ 71%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_validation_boundaries PASSED [ 74%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_authz_and_admin_protection PASSED [ 77%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_rls_isolation PASSED [ 80%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_project_admin_rejected PASSED [ 82%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_fallback_creation PASSED [ 85%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_direct_aal2_enforcement PASSED [ 88%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_trash_retention_sync PASSED [ 91%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_trash_retention_aal2_freshness PASSED [ 94%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_trash_retention_shortening_warn PASSED [ 97%]
+kanban/tests/api/test_workspace_settings.py::test_workspace_settings_name_and_slug_updates PASSED [100%]
+
+============================== 35 passed in 8.10s ==============================

@@ -16,6 +16,7 @@ import { Sidebar, SIDEBAR_STORAGE_KEY, sanitizeSidebarState } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
 import { ShortcutsCheatSheetModal } from './ShortcutsCheatSheetModal';
+import { GlobalErrorAlertEnhancer } from '../components/help/ErrorHelpHint';
 import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
@@ -413,6 +414,9 @@ export function AppShell({
           isOpen={shortcutsModalOpen}
           onClose={() => { setShortcutsModalOpen(false); }}
         />
+
+        {/* Global Error Alert Enhancer & AAL2 Step-Up Host (KAN-393) */}
+        <GlobalErrorAlertEnhancer />
       </div>
     </ShellPanelsProvider>
   );

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http
 import logging
 import re
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -25,6 +26,135 @@ logger = logging.getLogger(__name__)
 
 _CODE_REGEX = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 PROBLEM_MEDIA_TYPE = "application/problem+json"
+
+PROBLEM_HELP_CATALOG: dict[str, tuple[str, str]] = {
+    "AAL2_STALE": (
+        "/docs/multi-card-authentication-studio#aal2-step-up",
+        (
+            "Your 15-minute (900s) Admin 2FA verification window (AAL2) has expired. "
+            "Re-verify with your Passkey or TOTP Authenticator app to continue."
+        ),
+    ),
+    "AAL2_REQUIRED": (
+        "/docs/multi-card-authentication-studio#aal2-step-up",
+        (
+            "This administrative or security-sensitive action requires Multi-Factor Authentication "
+            "(AAL2) via Passkey or TOTP."
+        ),
+    ),
+    "MFA_ENROLLMENT_REQUIRED": (
+        "/docs/multi-card-authentication-studio#mfa-enrollment",
+        (
+            "Administrators must enroll a Passkey (WebAuthn) or TOTP Authenticator app "
+            "before accessing administrative studios."
+        ),
+    ),
+    "AUTHENTICATION_REQUIRED": (
+        "/docs/multi-card-authentication-studio",
+        "Your session is missing or expired. Sign in again to continue.",
+    ),
+    "FORBIDDEN": (
+        "/docs/role-and-permission-matrix",
+        "Your account role or token lacks permission for this operation.",
+    ),
+    "INSUFFICIENT_SCOPE": (
+        "/docs/three-surface-mcp-server-architecture#scope-tiers",
+        "The active token or session lacks the required OAuth/MCP scope tier.",
+    ),
+    "INSUFFICIENT_CAPABILITY": (
+        "/docs/role-and-permission-matrix",
+        "Your effective role or capability bitmask does not include the required capability.",
+    ),
+    "KEY_SCOPE_VIOLATION": (
+        "/docs/three-surface-mcp-server-architecture#scope-tiers",
+        "The MCP access key is restricted to a narrower project or workspace scope.",
+    ),
+    "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
+        "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
+        (
+            "Session read-taint guard requires explicit confirmation before writing "
+            "across project boundaries."
+        ),
+    ),
+    "MCP_TAINT_BLOCKED": (
+        "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
+        "Cross-project write blocked by session read-taint exfiltration protection.",
+    ),
+    "LOCKOUT_PREVENTED": (
+        "/docs/multi-card-authentication-studio#lockout-prevention",
+        "Cannot disable or delete the last active administrator authentication card.",
+    ),
+    "HARD_WIP_LIMIT_EXCEEDED": (
+        "/docs/enterprise-whitespace-and-kanban-board#wip-limits",
+        "Target column has reached its Hard Work-In-Progress (WIP) limit.",
+    ),
+    "GATE_TIMEOUT": (
+        "/docs/scripted-workflows-and-transition-helpers",
+        "A synchronous workflow validator or transition gate exceeded its execution timeout.",
+    ),
+    "SCRIPT_RECURSION_BLOCKED": (
+        "/docs/custom-scripts-and-json-security-architecture",
+        "Re-entrant script call to test-execute or dry-run was blocked by recursion guard.",
+    ),
+    "INVALID_UTF8_SURROGATE": (
+        "/docs/canonical-markdown-and-safe-media-pipeline",
+        "Payload contains invalid UTF-16 lone surrogate code points (0xD800-0xDFFF).",
+    ),
+    "JSON_DEPTH_EXCEEDED": (
+        "/docs/custom-scripts-and-json-security-architecture",
+        "JSON payload nesting depth exceeds the 32-level security limit.",
+    ),
+    "JSON_KEYS_EXCEEDED": (
+        "/docs/custom-scripts-and-json-security-architecture",
+        "JSON payload object key count exceeds the 5,000-key limit.",
+    ),
+    "PAYLOAD_TOO_LARGE": (
+        "/docs/custom-scripts-and-json-security-architecture",
+        "Request body exceeds the maximum allowed payload size.",
+    ),
+    "BLAST_RADIUS_CHANGED": (
+        "/docs/production-promotion-and-backup-runbook",
+        (
+            "The entity graph changed since the deletion preview was computed. "
+            "Re-run preview to confirm."
+        ),
+    ),
+    "MANIFEST_MISMATCH": (
+        "/docs/admin-custom-scripted-fields-and-sandbox",
+        "The custom field manifest SHA-256 changed since opening. Reload before approving.",
+    ),
+    "VALIDATION_FAILED": (
+        "/docs/rest-api-architecture-and-openapi-guide",
+        "One or more request parameters failed schema validation.",
+    ),
+    "VALIDATION_ERROR": (
+        "/docs/rest-api-architecture-and-openapi-guide",
+        "Request payload failed validation constraints.",
+    ),
+    "RATE_LIMITED": (
+        "/docs/zero-trust-security-and-access-visibility",
+        "Too many requests in the current window. Wait before retrying.",
+    ),
+}
+
+DEFAULT_PROBLEM_HELP: tuple[str, str] = (
+    "/docs/admin-diagnostics-and-link-inspector-studio",
+    "Review the error details and open the platform documentation for troubleshooting steps.",
+)
+
+NOT_FOUND_PROBLEM_HELP: tuple[str, str] = (
+    "/docs/zero-trust-security-and-access-visibility",
+    "The requested resource was not found or you do not have access to view it.",
+)
+
+
+def resolve_problem_help(code: str, status: int | None = None) -> tuple[str, str]:
+    """Resolve documentation link and human-readable help summary for a problem code."""
+    if code in PROBLEM_HELP_CATALOG:
+        return PROBLEM_HELP_CATALOG[code]
+    if code == "NOT_FOUND" or status == http.HTTPStatus.NOT_FOUND:
+        return NOT_FOUND_PROBLEM_HELP
+    return DEFAULT_PROBLEM_HELP
 
 
 def format_validation_error(exc: Exception) -> str:
@@ -111,6 +241,14 @@ class Problem(BaseModel):
         default=None,
         description="Preferred MFA method for step-up elevation",
     )
+    doc_href: str | None = Field(
+        default=None,
+        description="Documentation URI for troubleshooting this problem",
+    )
+    help_summary: str | None = Field(
+        default=None,
+        description="Human-readable remediation guidance and context",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -138,6 +276,8 @@ class ProblemException(Exception):  # noqa: N818
         current_preview: dict[str, Any] | None = None,
         methods: list[str] | None = None,
         preferred_method: str | None = None,
+        doc_href: str | None = None,
+        help_summary: str | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -163,6 +303,9 @@ class ProblemException(Exception):  # noqa: N818
         self.current_preview = current_preview
         self.methods = methods
         self.preferred_method = preferred_method
+        default_href, default_summary = resolve_problem_help(code, status)
+        self.doc_href = doc_href or default_href
+        self.help_summary = help_summary or default_summary
 
 
 def not_found() -> NoReturn:
@@ -282,6 +425,8 @@ async def problem_exception_handler(
         current_preview=exc.current_preview,
         methods=exc.methods or extra_fields.pop("methods", None),
         preferred_method=exc.preferred_method or extra_fields.pop("preferred_method", None),
+        doc_href=exc.doc_href or extra_fields.pop("doc_href", None),
+        help_summary=exc.help_summary or extra_fields.pop("help_summary", None),
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}
@@ -321,6 +466,7 @@ async def validation_exception_handler(
         extra={"request_id": req_id, "log_user": actor, "status_code": 422},
     )
 
+    val_doc_href, val_help_summary = resolve_problem_help("VALIDATION_FAILED", 422)
     problem = Problem(
         type="urn:kanban:problem:VALIDATION_FAILED",
         title="Validation Failed",
@@ -329,6 +475,8 @@ async def validation_exception_handler(
         detail="Request validation failed",
         request_id=req_id,
         errors=field_errors or None,
+        doc_href=val_doc_href,
+        help_summary=val_help_summary,
     )
     return JSONResponse(
         status_code=422,
@@ -390,6 +538,7 @@ async def starlette_http_exception_handler(
             extra={"request_id": req_id, "log_user": actor, "status_code": exc.status_code},
         )
 
+    sh_doc_href, sh_help_summary = resolve_problem_help(code, exc.status_code)
     problem = Problem(
         type=f"urn:kanban:problem:{code}",
         title=default_title,
@@ -397,6 +546,8 @@ async def starlette_http_exception_handler(
         code=code,
         detail=detail,
         request_id=req_id,
+        doc_href=sh_doc_href,
+        help_summary=sh_help_summary,
     )
     response_headers = {"x-request-id": req_id}
     if exc.headers:
@@ -428,6 +579,7 @@ async def unhandled_exception_handler(
         extra={"request_id": req_id, "log_user": actor, "status_code": 500},
     )
 
+    un_doc_href, un_help_summary = resolve_problem_help("INTERNAL_ERROR", 500)
     problem = Problem(
         type="urn:kanban:problem:INTERNAL_ERROR",
         title="Internal Server Error",
@@ -435,6 +587,8 @@ async def unhandled_exception_handler(
         code="INTERNAL_ERROR",
         detail=None,
         request_id=req_id,
+        doc_href=un_doc_href,
+        help_summary=un_help_summary,
     )
     return JSONResponse(
         status_code=500,

@@ -10,6 +10,8 @@ import {
 import { AgentValidationModal } from './AgentValidationModal';
 import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { ApiProblem } from '../../api/problem';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './agentStudio.css';
 
 export function AgentStudioPage(): JSX.Element {
@@ -35,6 +37,13 @@ export function AgentStudioPage(): JSX.Element {
         setAgents(list);
       } catch (err: unknown) {
         if (!active) return;
+        if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+          window.dispatchEvent(
+            new CustomEvent('kb:open-aal2-stepup', {
+              detail: { challengeId: err.data?.challenge_id, methods: err.data?.methods },
+            }),
+          );
+        }
         setError(err instanceof Error ? err.message : 'Failed to load agent definitions');
       } finally {
         if (active) {
@@ -98,8 +107,9 @@ export function AgentStudioPage(): JSX.Element {
       </div>
 
       {error && (
-        <div className="kb-form-hint kb-agent-studio-error" data-testid="agent-studio-error">
-          {error}
+        <div className="kb-form-hint kb-agent-studio-error" role="alert" data-testid="agent-studio-error">
+          <span>{error}</span>
+          <ErrorHelpHint error={error} />
         </div>
       )}
 

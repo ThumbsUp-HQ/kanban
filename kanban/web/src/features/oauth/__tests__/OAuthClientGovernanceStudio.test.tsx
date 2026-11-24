@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router';
 import { OAuthClientGovernanceStudio } from '../OAuthClientGovernanceStudio';
 import * as oauthApi from '../oauthApi';
+import { ApiProblem } from '../../../api/problem';
 import * as clipboardModule from '../../../utils/clipboard';
 
 const mockClients: oauthApi.OAuthClientItem[] = [
@@ -242,6 +243,34 @@ describe('OAuthClientGovernanceStudio', () => {
         'Failed to load registered OAuth clients.',
       );
     });
+  });
+
+  it('renders ErrorHelpHint and dispatches kb:open-aal2-stepup on AAL2_STALE or AAL2_REQUIRED error (KAN-393)', async () => {
+    const stepUpListener = vi.fn();
+    window.addEventListener('kb:open-aal2-stepup', stepUpListener);
+
+    const aal2Prob = new ApiProblem(403, {
+      code: 'AAL2_STALE',
+      detail: 'AAL2 verification is stale (950s > 900s).',
+      challenge_id: 'chall-oauth-aal2',
+      methods: ['totp'],
+    });
+
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce(aal2Prob);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert')).toBeDefined();
+      expect(screen.getByTestId('error-help-doc-link')).toBeDefined();
+    });
+
+    expect(stepUpListener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('kb:open-aal2-stepup', stepUpListener);
   });
 
   it('handles action patch and delete error branches', async () => {

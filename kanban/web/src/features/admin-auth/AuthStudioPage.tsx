@@ -31,6 +31,7 @@ import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './adminAuth.css';
 
 interface CurrentUserResponse {
@@ -76,8 +77,8 @@ export function formatHandle(
 }
 
 interface PendingMutation {
-  type: 'toggle' | 'reorder' | 'delete' | 'save';
-  card: AdminAuthCard;
+  type: 'toggle' | 'reorder' | 'delete' | 'save' | 'load';
+  card?: AdminAuthCard;
   extra?: unknown;
 }
 
@@ -200,7 +201,13 @@ export function AuthStudioPage(): JSX.Element {
       const res = await fetchAdminAuthCards();
       setCards(res.cards);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        setPendingMutation({ type: 'load' });
+        const data = err.data;
+        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
+        const methods = Array.isArray(data.methods) ? (data.methods as MfaMethod[]) : (['webauthn', 'totp'] as MfaMethod[]);
+        setAal2Challenge({ challengeId, methods });
+      } else if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
         setAccessDenied(true);
       } else if (err instanceof Error) {
         setGeneralError(err.message);
@@ -221,7 +228,13 @@ export function AuthStudioPage(): JSX.Element {
       const principals = await fetchAdminPrincipals(activeFilter);
       setUsers(Array.isArray(principals) ? principals : []);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
+      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+        setPendingMutation({ type: 'load' });
+        const data = err.data;
+        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
+        const methods = Array.isArray(data.methods) ? (data.methods as MfaMethod[]) : (['webauthn', 'totp'] as MfaMethod[]);
+        setAal2Challenge({ challengeId, methods });
+      } else if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
         setAccessDenied(true);
       } else if (err instanceof Error) {
         setUserActionError(err.message);
@@ -252,7 +265,7 @@ export function AuthStudioPage(): JSX.Element {
 
   // AAL2 Step-Up handler
   const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
-    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
+    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
       setPendingMutation(mutation);
       const data = err.data;
       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -270,9 +283,12 @@ export function AuthStudioPage(): JSX.Element {
 
     if (!mutation) return;
 
-    if (mutation.type === 'toggle') {
+    if (mutation.type === 'load') {
+      void loadCards();
+      void loadUsers();
+    } else if (mutation.type === 'toggle' && mutation.card) {
       await handleToggleEnabled(mutation.card, Boolean(mutation.extra));
-    } else if (mutation.type === 'delete') {
+    } else if (mutation.type === 'delete' && mutation.card) {
       await handleDeleteCard(mutation.card);
     }
   };
@@ -764,6 +780,7 @@ export function AuthStudioPage(): JSX.Element {
         <div className="auth-lockout-banner" role="alert">
           <div className="auth-lockout-header">
             <span>{generalError}</span>
+            <ErrorHelpHint error={generalError} />
             <button
               type="button"
               className="auth-btn-secondary"
@@ -781,6 +798,7 @@ export function AuthStudioPage(): JSX.Element {
         <div className="auth-lockout-banner" role="alert">
           <div className="auth-lockout-header">
             <span>{userActionError}</span>
+            <ErrorHelpHint error={userActionError} />
             <button
               type="button"
               className="auth-btn-secondary"

@@ -13,6 +13,7 @@ import React, {
 } from 'react';
 import { useLocation, useNavigate, useRouteError } from 'react-router';
 import { safeCopyToClipboard } from '../../utils/uuid';
+import { ErrorHelpHint } from '../help/ErrorHelpHint';
 import './AppErrorModal.css';
 
 export interface AppErrorModalProps {
@@ -112,6 +113,10 @@ export function AppErrorModal({
             data-testid="error-message"
           >
             {errorMessage}
+          </div>
+
+          <div className="app-error-modal__help-row">
+            <ErrorHelpHint error={error ?? errorMessage} testId="app-error-help" />
           </div>
 
           <div className="app-error-modal__url" data-testid="error-url">

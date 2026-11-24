@@ -248,7 +248,12 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
                     code="AAL2_STALE",
                     status=403,
                     title="AAL2 Session Stale",
-                    detail="AAL2 verification timestamp is missing or stale.",
+                    detail=(
+                        "AAL2 verification timestamp is missing or stale. "
+                        "Your 15-minute Admin 2FA security window "
+                        "(Authenticator Assurance Level 2) requires re-verification "
+                        "with your Passkey or Authenticator app (TOTP) to continue."
+                    ),
                 )
             now_utc = datetime.now(UTC)
             if verified_at.tzinfo is None:
@@ -257,7 +262,10 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
                 stale_msg = (
                     f"AAL2 verification is stale ({int(age_sec)}s > "
-                    f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
+                    f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s). "
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) has expired; please re-verify "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
                 )
                 raise ProblemException(
                     code="AAL2_STALE",

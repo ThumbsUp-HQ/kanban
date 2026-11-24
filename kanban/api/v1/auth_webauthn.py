@@ -178,7 +178,12 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
             code="AAL2_STALE",
             status=403,
             title="AAL2 Session Stale",
-            detail="AAL2 verification timestamp is missing or stale.",
+            detail=(
+                "AAL2 verification timestamp is missing or stale. "
+                "Your 15-minute Admin 2FA security window "
+                "(Authenticator Assurance Level 2) requires re-verification "
+                "with your Passkey or Authenticator app (TOTP) to continue."
+            ),
             methods=methods,
             preferred_method=preferred,
         )
@@ -188,7 +193,12 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
         verified_at = verified_at.replace(tzinfo=UTC)
     age = (now - verified_at).total_seconds()
     if age > AAL2_MAX_AGE_SECONDS:
-        detail_msg = f"AAL2 verification is stale ({int(age)}s > {AAL2_MAX_AGE_SECONDS}s)."
+        detail_msg = (
+            f"AAL2 verification is stale ({int(age)}s > {AAL2_MAX_AGE_SECONDS}s). "
+            "Your 15-minute Admin 2FA security window "
+            "(Authenticator Assurance Level 2) has expired; please re-verify "
+            "with your Passkey or Authenticator app (TOTP) to continue."
+        )
         raise ProblemException(
             code="AAL2_STALE",
             status=403,

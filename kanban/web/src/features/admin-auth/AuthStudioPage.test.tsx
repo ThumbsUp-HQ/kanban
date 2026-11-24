@@ -336,6 +336,62 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
   });
 
+  it('intercepts 403 AAL2_STALE, opens SecondFactorStep modal, and replays mutation (KAN-393)', async () => {
+    vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/auth/me') return adminUser;
+      if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+      return {};
+    });
+
+    const toggleSpy = vi
+      .spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled')
+      .mockRejectedValueOnce(
+        new ApiProblem(403, {
+          code: 'AAL2_STALE',
+          detail: 'AAL2 verification is stale (950s > 900s).',
+          challenge_id: 'chall-stale-99',
+          methods: ['totp'],
+        }),
+      )
+      .mockResolvedValueOnce({
+        ...mockCards[1],
+        is_enabled: false,
+      });
+
+    vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/auth/me') return adminUser;
+      if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+      if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
+      return {};
+    });
+
+    render(<AuthStudioPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('GitHub Enterprise')).toBeDefined();
+    });
+
+    const ghSwitch = screen.getByRole('switch', { name: /Enable GitHub Enterprise/i });
+    fireEvent.click(ghSwitch);
+
+    // Dialog opens with SecondFactorStep
+    await waitFor(() => {
+      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
+    });
+
+    // Enter 6-digit TOTP code
+    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
+    fireEvent.change(totpInput, { target: { value: '123456' } });
+
+    await waitFor(() => {
+      expect(toggleSpy).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+    });
+  });
+
   it('deletes card when delete button is confirmed', async () => {
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();

@@ -10,12 +10,28 @@ function pickString(obj: Record<string, unknown>, key: string): string | undefin
   return typeof value === 'string' ? value : undefined;
 }
 
+export interface ProblemDetails {
+  type?: string;
+  title?: string;
+  status?: number;
+  code?: string;
+  detail?: string;
+  instance?: string;
+  request_id?: string;
+  doc_href?: string;
+  help_summary?: string;
+  errors?: Array<{ path?: string | string[]; message?: string }>;
+  [key: string]: unknown;
+}
+
 export class ApiProblem extends Error {
   readonly status: number;
   readonly code: string;
   readonly title: string | undefined;
   readonly detail: string | undefined;
   readonly instance: string | undefined;
+  readonly docHref: string | undefined;
+  readonly helpSummary: string | undefined;
   readonly data: Record<string, unknown>;
 
   constructor(status: number, data?: unknown) {
@@ -26,6 +42,8 @@ export class ApiProblem extends Error {
     const code = pickString(obj, 'code');
     const title = pickString(obj, 'title');
     const detail = pickString(obj, 'detail');
+    const docHref = pickString(obj, 'doc_href');
+    const helpSummary = pickString(obj, 'help_summary');
     const resolvedCode = code !== undefined && code.trim() !== '' ? code : 'UNKNOWN';
     let message = detail ?? title ?? `API error ${String(status)} (${resolvedCode})`;
     if (Array.isArray(obj.errors) && obj.errors.length > 0) {
@@ -68,6 +86,8 @@ export class ApiProblem extends Error {
     this.title = title;
     this.detail = detail;
     this.instance = pickString(obj, 'instance');
+    this.docHref = docHref;
+    this.helpSummary = helpSummary;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

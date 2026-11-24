@@ -205,6 +205,32 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
     });
   });
 
+  it('triggers AAL2 step-up challenge modal on 403 AAL2_STALE (KAN-393)', async () => {
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
+
+    const aal2StaleProblem = new ApiProblem(403, {
+      code: 'AAL2_STALE',
+      detail: 'AAL2 verification is stale (950s > 900s).',
+      challenge_id: 'challenge-stale-xyz',
+      methods: ['totp'],
+    });
+
+    vi.spyOn(api, 'deleteWorkflowHook').mockRejectedValue(aal2StaleProblem);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('require-qa-proof-link')).toBeDefined();
+    });
+
+    const detachBtn = screen.getByRole('button', { name: 'Detach require-qa-proof-link' });
+    fireEvent.click(detachBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+    });
+  });
+
   it('renders empty state CTA when transition has 0 hooks (Mandatory Test Case 6)', async () => {
     const emptyRules: api.TransitionRule[] = [
       {
