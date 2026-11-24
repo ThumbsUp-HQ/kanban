@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base
 
-OAuthClientType = Literal["public"]
+OAuthClientType = Literal["public", "confidential"]
 OAuthClientStatus = Literal["active", "pending_admin_approval", "disabled"]
 OAuthSurface = Literal["agent", "docs", "admin"]
 
@@ -45,6 +45,14 @@ class OAuthClient(Base):
         nullable=False,
         default="public",
         server_default="public",
+    )
+    client_secret_hash: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    client_secret_prefix: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
     )
     redirect_uris: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
@@ -81,7 +89,7 @@ class OAuthClient(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "client_type = 'public'",
+            "client_type IN ('public', 'confidential')",
             name="oauth_clients_type_check",
         ),
         CheckConstraint(

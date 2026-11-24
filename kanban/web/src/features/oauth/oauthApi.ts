@@ -47,9 +47,16 @@ export interface OAuthClientItem {
   client_id: string;
   client_name?: string | null | undefined;
   client_type: 'confidential' | 'public';
-  token_endpoint_auth_method?: 'none' | 'private_key_jwt' | undefined;
+  token_endpoint_auth_method?:
+    | 'none'
+    | 'private_key_jwt'
+    | 'client_secret_basic'
+    | 'client_secret_post'
+    | undefined;
   redirect_uris: string[];
   status: OAuthClientStatus;
+  client_secret?: string | undefined;
+  client_secret_prefix?: string | null | undefined;
   created_at: string;
   updated_at?: string | null | undefined;
 }
@@ -87,8 +94,13 @@ export async function registerAdminOAuthClient(
 export interface RegisterOAuthClientRequest {
   client_name?: string | undefined;
   redirect_uris: string[];
-  client_type?: 'public' | undefined;
-  token_endpoint_auth_method?: 'none' | 'private_key_jwt' | undefined;
+  client_type?: 'public' | 'confidential' | undefined;
+  token_endpoint_auth_method?:
+    | 'none'
+    | 'private_key_jwt'
+    | 'client_secret_basic'
+    | 'client_secret_post'
+    | undefined;
   grant_types?: string[] | undefined;
   response_types?: string[] | undefined;
 }

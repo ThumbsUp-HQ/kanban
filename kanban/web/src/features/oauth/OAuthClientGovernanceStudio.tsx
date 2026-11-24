@@ -27,7 +27,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const [showRegisterModal, setShowRegisterModal] = useState<boolean>(false);
   const [registerName, setRegisterName] = useState<string>('');
   const [registerUris, setRegisterUris] = useState<string>('');
-  const [registerAuthMethod, setRegisterAuthMethod] = useState<'none' | 'private_key_jwt'>('none');
+  const [registerClientType, setRegisterClientType] = useState<'public' | 'confidential'>('public');
+  const [registerAuthMethod, setRegisterAuthMethod] = useState<
+    'none' | 'private_key_jwt' | 'client_secret_basic' | 'client_secret_post'
+  >('none');
   const [registerPkceEnforce, setRegisterPkceEnforce] = useState<boolean>(true);
   const [registerAccessTokenTtl, setRegisterAccessTokenTtl] = useState<number>(3600);
   const [registerGrantTypes, setRegisterGrantTypes] = useState<string>('authorization_code,refresh_token');
@@ -35,6 +38,12 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
   const [copiedClientId, setCopiedClientId] = useState<boolean>(false);
+  const [copiedClientSecret, setCopiedClientSecret] = useState<boolean>(false);
+
+  const [editClient, setEditClient] = useState<OAuthClientItem | null>(null);
+  const [editUris, setEditUris] = useState<string>('');
+  const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const loadClients = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -114,6 +123,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   const handleOpenRegister = (): void => {
     setRegisterName('');
     setRegisterUris('');
+    setRegisterClientType('public');
     setRegisterAuthMethod('none');
     setRegisterPkceEnforce(true);
     setRegisterAccessTokenTtl(3600);
@@ -121,6 +131,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
     setRegisterError(null);
     setRegisteredClient(null);
     setCopiedClientId(false);
+    setCopiedClientSecret(false);
     setShowRegisterModal(true);
   };
 
@@ -140,7 +151,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       const created = await registerAdminOAuthClient({
         client_name: registerName.trim() || 'MCP Client',
         redirect_uris: uris,
-        client_type: 'public',
+        client_type: registerClientType,
         token_endpoint_auth_method: registerAuthMethod,
       });
       setRegisteredClient(created);
@@ -164,6 +175,61 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       setTimeout(() => {
         setCopiedClientId(false);
       }, 2000);
+    }
+  };
+
+  const handleCopyClientSecret = async (secret: string): Promise<void> => {
+    const success = await copyToClipboard(secret);
+    if (success) {
+      setCopiedClientSecret(true);
+      setTimeout(() => {
+        setCopiedClientSecret(false);
+      }, 2000);
+    }
+  };
+
+  const handleOpenEditUris = (client: OAuthClientItem): void => {
+    setEditClient(client);
+    setEditUris(client.redirect_uris.join('\n'));
+    setEditError(null);
+  };
+
+  const handleEditUrisSubmit = async (e: React.SyntheticEvent): Promise<void> => {
+    e.preventDefault();
+    if (!editClient) {
+      return;
+    }
+    setEditError(null);
+    const uris = editUris
+      .split(/[\n,]/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (uris.length === 0) {
+      setEditError('At least one redirect URI is required.');
+      return;
+    }
+    if (uris.length > 16) {
+      setEditError('Maximum 16 redirect URIs permitted.');
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      await patchAdminOAuthClient(editClient.client_id, { redirect_uris: uris });
+      setClients((prev) =>
+        prev.map((c) =>
+          c.client_id === editClient.client_id ? { ...c, redirect_uris: uris } : c,
+        ),
+      );
+      setSuccessMsg(`Redirect URIs updated for client ${editClient.client_id}.`);
+      setEditClient(null);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setEditError(err.message);
+      } else {
+        setEditError('Failed to update redirect URIs.');
+      }
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -346,6 +412,19 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                           Inspect
                         </button>
 
+                        {!isRevoked && (
+                          <button
+                            type="button"
+                            className="kb-oauth-gov-btn"
+                            data-testid={`edit-uris-btn-${client.client_id}`}
+                            onClick={() => {
+                              handleOpenEditUris(client);
+                            }}
+                          >
+                            Edit URIs
+                          </button>
+                        )}
+
                         {client.status !== 'active' && !isRevoked && (
                           <button
                             type="button"
@@ -465,6 +544,20 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                 <span className="kb-oauth-detail-label">Client Type</span>
                 <span className="kb-oauth-detail-value">{inspectClient.client_type}</span>
               </div>
+              {inspectClient.client_secret_prefix && (
+                <div className="kb-oauth-detail-row">
+                  <span className="kb-oauth-detail-label">Client Secret</span>
+                  <span className="kb-oauth-detail-value" data-testid="inspect-client-secret-prefix">
+                    {inspectClient.client_secret_prefix} (Masked)
+                  </span>
+                </div>
+              )}
+              {inspectClient.token_endpoint_auth_method && (
+                <div className="kb-oauth-detail-row">
+                  <span className="kb-oauth-detail-label">Auth Method</span>
+                  <span className="kb-oauth-detail-value">{inspectClient.token_endpoint_auth_method}</span>
+                </div>
+              )}
               <div className="kb-oauth-detail-row">
                 <span className="kb-oauth-detail-label">Status</span>
                 <span className="kb-oauth-detail-value">{getStatusBadge(inspectClient.status)}</span>
@@ -558,6 +651,34 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                     </button>
                   </div>
                 </div>
+                {registeredClient.client_secret && (
+                  <div className="kb-oauth-client-secret-panel" data-testid="client-secret-panel">
+                    <div className="kb-oauth-secret-warning" role="alert" data-testid="secret-warning">
+                      <strong>Important:</strong> Copy this Client Secret immediately. For security, it will never be displayed again.
+                    </div>
+                    <div className="kb-oauth-detail-row">
+                      <span className="kb-oauth-detail-label">Client Secret</span>
+                      <div className="kb-oauth-copy-row">
+                        <code className="kb-oauth-secret-code" data-testid="registered-client-secret">
+                          {registeredClient.client_secret}
+                        </code>
+                        <button
+                          type="button"
+                          className="kb-oauth-copy-btn"
+                          data-testid="copy-client-secret-btn"
+                          onClick={() => {
+                            const secret = registeredClient.client_secret;
+                            if (secret) {
+                              void handleCopyClientSecret(secret);
+                            }
+                          }}
+                        >
+                          {copiedClientSecret ? 'Copied!' : 'Copy Client Secret'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="kb-oauth-detail-row">
                   <span className="kb-oauth-detail-label">Client Name</span>
                   <span className="kb-oauth-detail-value">{registeredClient.client_name}</span>
@@ -621,6 +742,74 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                   </div>
 
                   <div className="kb-oauth-form-field">
+                    <label htmlFor="reg-client-type" className="kb-oauth-form-label">
+                      Client Type
+                    </label>
+                    <select
+                      id="reg-client-type"
+                      className="kb-oauth-form-select"
+                      data-testid="select-client-type"
+                      value={registerClientType}
+                      onChange={(e) => {
+                        const type = e.target.value as 'public' | 'confidential';
+                        setRegisterClientType(type);
+                        if (type === 'confidential') {
+                          setRegisterAuthMethod('client_secret_basic');
+                        } else {
+                          setRegisterAuthMethod('none');
+                        }
+                      }}
+                      disabled={registerSubmitting}
+                    >
+                      <option value="public">Public (PKCE only)</option>
+                      <option value="confidential">Confidential (Client Secret + PKCE)</option>
+                    </select>
+                  </div>
+
+                  <div className="kb-oauth-form-field">
+                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+                      Token Endpoint Authentication Method
+                    </label>
+                    <select
+                      id="reg-auth-method"
+                      className="kb-oauth-form-select"
+                      data-testid="select-auth-method"
+                      value={registerAuthMethod}
+                      onChange={(e) => {
+                        setRegisterAuthMethod(
+                          e.target.value as
+                            | 'none'
+                            | 'private_key_jwt'
+                            | 'client_secret_basic'
+                            | 'client_secret_post',
+                        );
+                      }}
+                      disabled={registerSubmitting}
+                    >
+                      {registerClientType === 'confidential' ? (
+                        <>
+                          <option value="client_secret_basic">
+                            client_secret_basic (HTTP Basic Auth + PKCE)
+                          </option>
+                          <option value="client_secret_post">
+                            client_secret_post (Form POST Body + PKCE)
+                          </option>
+                          <option value="private_key_jwt">
+                            private_key_jwt (Asymmetric client authentication)
+                          </option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="none">none (Public client with PKCE S256)</option>
+                          <option value="private_key_jwt">
+                            private_key_jwt (Asymmetric client authentication)
+                          </option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+
+                  <div className="kb-oauth-form-field">
                     <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
                       Redirect URIs (one per line, HTTPS or loopback HTTP)
                       <FieldHelpHint
@@ -651,26 +840,6 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                     summary="PKCE S256 enforcement, token lifetimes, and grant type restrictions"
                     testId="advanced-oauth-parameters"
                   >
-                    <div className="kb-oauth-form-field">
-                      <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
-                        Token Endpoint Authentication Method
-                      </label>
-                      <select
-                        id="reg-auth-method"
-                        className="kb-oauth-form-select"
-                        data-testid="select-auth-method"
-                        value={registerAuthMethod}
-                        onChange={(e) => {
-                          setRegisterAuthMethod(e.target.value as 'none' | 'private_key_jwt');
-                        }}
-                        disabled={registerSubmitting}
-                      >
-                        <option value="none">none (Public client with PKCE S256)</option>
-                        <option value="private_key_jwt">
-                          private_key_jwt (Asymmetric client authentication)
-                        </option>
-                      </select>
-                    </div>
 
                     <div className="kb-oauth-form-field">
                       <label className="kb-oauth-form-label" htmlFor="reg-pkce-toggle">
@@ -753,6 +922,100 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Redirect URIs Modal */}
+      {editClient !== null && (
+        <div
+          className="kb-oauth-modal-backdrop"
+          data-testid="edit-uris-modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !editSubmitting) {
+              setEditClient(null);
+            }
+          }}
+        >
+          <div
+            className="kb-oauth-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-uris-modal-title"
+            data-testid="edit-uris-modal"
+          >
+            <div className="kb-oauth-modal-header">
+              <h3 id="edit-uris-modal-title" className="kb-oauth-modal-title">
+                Edit Redirect URIs: {editClient.client_name ?? editClient.client_id}
+              </h3>
+              <button
+                type="button"
+                className="kb-oauth-modal-close"
+                aria-label="Close modal"
+                data-testid="close-edit-uris-btn"
+                onClick={() => {
+                  setEditClient(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                void handleEditUrisSubmit(e);
+              }}
+              data-testid="edit-uris-form"
+            >
+              <div className="kb-oauth-modal-body">
+                {editError && (
+                  <div
+                    className="kb-oauth-gov-alert kb-oauth-gov-alert-error"
+                    role="alert"
+                    data-testid="edit-uris-error"
+                  >
+                    {editError}
+                  </div>
+                )}
+                <div className="kb-oauth-form-field">
+                  <label htmlFor="edit-redirect-uris" className="kb-oauth-form-label">
+                    Redirect URIs (up to 16 URIs, one per line, HTTPS or loopback HTTP)
+                  </label>
+                  <textarea
+                    id="edit-redirect-uris"
+                    className="kb-oauth-form-textarea"
+                    data-testid="input-edit-redirect-uris"
+                    rows={6}
+                    value={editUris}
+                    onChange={(e) => {
+                      setEditUris(e.target.value);
+                    }}
+                    required
+                    disabled={editSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="kb-oauth-modal-footer">
+                <button
+                  type="button"
+                  className="kb-oauth-gov-btn"
+                  data-testid="cancel-edit-uris-btn"
+                  disabled={editSubmitting}
+                  onClick={() => {
+                    setEditClient(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="kb-oauth-gov-btn kb-oauth-gov-btn-primary"
+                  data-testid="submit-edit-uris-btn"
+                  disabled={editSubmitting}
+                >
+                  {editSubmitting ? 'Saving...' : 'Save Redirect URIs'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

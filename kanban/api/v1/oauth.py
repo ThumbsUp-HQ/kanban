@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import logging
 import os
@@ -54,14 +55,18 @@ from kanban.oauth.server import (
     SURFACE_SCOPES,
     OAuth2Error,
     check_registration_rate_limit,
+    generate_client_secret,
     generate_consent_csrf_token,
+    hash_client_secret,
     hash_token,
+    mask_client_secret_prefix,
     parse_surface_from_resource,
     render_consent_screen,
     resolve_public_base_url,
     revoke_grant_family,
     validate_redirect_uri,
     validate_registration_redirect_uris,
+    verify_client_secret,
     verify_consent_csrf_token,
     verify_pkce_s256,
 )
@@ -185,7 +190,7 @@ class OAuthClientRegisterRequest(BaseModel):
 
     client_name: str | None = Field(default=None, max_length=200)
     redirect_uris: list[str] = Field(min_length=1)
-    client_type: Literal["public"] = "public"
+    client_type: Literal["public", "confidential"] = "public"
     grant_types: list[str] | None = None
     response_types: list[str] | None = None
     token_endpoint_auth_method: str | None = None
@@ -213,6 +218,8 @@ class OAuthClientRegisterResponse(BaseModel):
     grant_types: list[str] | None = None
     response_types: list[str] | None = None
     token_endpoint_auth_method: str = "none"  # noqa: S105
+    client_secret: str | None = None
+    client_secret_expires_at: int | None = None
 
 
 class OAuthGrantResponse(BaseModel):
@@ -243,16 +250,18 @@ class AdminOAuthClientCreateRequest(BaseModel):
     redirect_uris: list[str] = Field(
         ...,
         min_length=1,
-        max_length=5,
         description="List of redirect URIs using HTTPS or loopback HTTP",
     )
     client_type: str = Field(
         default="public",
-        description="OAuth 2.1 client type (public)",
+        description="OAuth 2.1 client type (public or confidential)",
     )
     token_endpoint_auth_method: str = Field(
         default="none",
-        description="Authentication method: 'none' or 'private_key_jwt'",
+        description=(
+            "Authentication method: 'none', 'private_key_jwt', "
+            "'client_secret_basic', or 'client_secret_post'"
+        ),
     )
     grant_types: list[str] | None = Field(
         default=None,
@@ -323,7 +332,12 @@ async def oauth_as_metadata(request: Request, subpath: str | None = None) -> JSO
                 "urn:ietf:params:oauth:token-type:id_token",
             ],
             "response_types_supported": ["code"],
-            "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+            "token_endpoint_auth_methods_supported": [
+                "none",
+                "private_key_jwt",
+                "client_secret_basic",
+                "client_secret_post",
+            ],
         },
         headers={"Cache-Control": "public, max-age=3600"},
     )
@@ -352,15 +366,30 @@ async def oauth_register_client(
     payload: OAuthClientRegisterRequest,
     session: UnauthSession,
 ) -> JSONResponse:
-    """Register public OAuth 2.1 client with strict URI and rate limit validation."""
+    """Register public or confidential OAuth 2.1 client with strict validation."""
     _check_no_token_in_query(request)
 
     # 1. IP rate limiting (100/hr)
     client_ip = request.client.host if request.client else "127.0.0.1"
     check_registration_rate_limit(client_ip)
 
-    # 2. Redirect URI validation
-    validate_registration_redirect_uris(payload.redirect_uris)
+    # 2. Redirect URI validation with structured rejection logging
+    try:
+        validate_registration_redirect_uris(payload.redirect_uris)
+    except OAuth2Error as exc:
+        _logger.warning(
+            "OAuth DCR registration rejected for IP %s: %s (uri_count=%d)",
+            client_ip,
+            exc.description,
+            len(payload.redirect_uris),
+            extra={
+                "client_ip": client_ip,
+                "rejection_reason": exc.error,
+                "rejection_detail": exc.description,
+                "uri_count": len(payload.redirect_uris),
+            },
+        )
+        raise
 
     # 3. Grant types validation
     allowed_grants = {
@@ -371,9 +400,15 @@ async def oauth_register_client(
     err_meta = "invalid_client_metadata"
     if payload.grant_types is not None:
         if not payload.grant_types:
+            _logger.warning("OAuth DCR rejected: empty grant_types from IP %s", client_ip)
             raise OAuth2Error(err_meta, "grant_types cannot be empty", 400)
         unsupported = [gt for gt in payload.grant_types if gt not in allowed_grants]
         if unsupported:
+            _logger.warning(
+                "OAuth DCR rejected: unsupported grant_types %s from IP %s",
+                unsupported,
+                client_ip,
+            )
             raise OAuth2Error(
                 err_meta,
                 f"Unsupported grant_types: {unsupported}",
@@ -381,19 +416,54 @@ async def oauth_register_client(
             )
 
     # 4. Token endpoint auth method validation
-    if payload.token_endpoint_auth_method is not None:
-        if payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post"):
-            raise OAuth2Error(
-                err_meta,
-                "Public clients must use token_endpoint_auth_method 'none'",
-                400,
-            )
-        if payload.token_endpoint_auth_method not in ("none", "private_key_jwt"):
-            raise OAuth2Error(
-                err_meta,
-                f"Unsupported token_endpoint_auth_method '{payload.token_endpoint_auth_method}'",
-                400,
-            )
+    supported_methods = {
+        "none",
+        "private_key_jwt",
+        "client_secret_basic",
+        "client_secret_post",
+    }
+    if (
+        payload.token_endpoint_auth_method is not None
+        and payload.token_endpoint_auth_method not in supported_methods
+    ):
+        _logger.warning(
+            "OAuth DCR rejected: unsupported token_endpoint_auth_method '%s' from IP %s",
+            payload.token_endpoint_auth_method,
+            client_ip,
+            extra={"client_ip": client_ip, "auth_method": payload.token_endpoint_auth_method},
+        )
+        raise OAuth2Error(
+            err_meta,
+            f"Unsupported token_endpoint_auth_method '{payload.token_endpoint_auth_method}'",
+            400,
+        )
+
+    is_confidential = (
+        payload.client_type == "confidential"
+        or payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post")
+    )
+
+    eff_auth_method: str
+    if is_confidential:
+        eff_client_type = "confidential"
+        eff_auth_method = (
+            payload.token_endpoint_auth_method
+            if payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post")
+            else "client_secret_basic"
+        )
+        raw_secret = generate_client_secret()
+        secret_hash = hash_client_secret(raw_secret)
+        secret_prefix = mask_client_secret_prefix(raw_secret)
+    else:
+        eff_client_type = "public"
+        eff_auth_method = (
+            payload.token_endpoint_auth_method
+            if payload.token_endpoint_auth_method in ("none", "private_key_jwt")
+            else "none"
+        )
+        raw_secret = None
+        secret_hash = None
+        secret_prefix = None
 
     eff_client_name = (
         payload.client_name.strip()
@@ -406,7 +476,6 @@ async def oauth_register_client(
         "urn:ietf:params:oauth:grant-type:device_code",
     ]
     eff_response_types = payload.response_types or ["code"]
-    eff_auth_method = "none"
 
     # 5. Check workspace policy for client approval
     require_approval = (
@@ -419,7 +488,9 @@ async def oauth_register_client(
     client_record = OAuthClient(
         client_id=client_id,
         client_name=eff_client_name,
-        client_type="public",
+        client_type=eff_client_type,
+        client_secret_hash=secret_hash,
+        client_secret_prefix=secret_prefix,
         redirect_uris=payload.redirect_uris,
         status=initial_status,
         workspace_id=None,
@@ -428,19 +499,21 @@ async def oauth_register_client(
     session.add(client_record)
     await session.commit()
 
-    return JSONResponse(
-        {
-            "client_id": client_record.client_id,
-            "client_name": client_record.client_name,
-            "client_type": client_record.client_type,
-            "redirect_uris": client_record.redirect_uris,
-            "status": client_record.status,
-            "grant_types": eff_grant_types,
-            "response_types": eff_response_types,
-            "token_endpoint_auth_method": eff_auth_method,
-        },
-        status_code=201,
-    )
+    resp_payload: dict[str, Any] = {
+        "client_id": client_record.client_id,
+        "client_name": client_record.client_name,
+        "client_type": client_record.client_type,
+        "redirect_uris": client_record.redirect_uris,
+        "status": client_record.status,
+        "grant_types": eff_grant_types,
+        "response_types": eff_response_types,
+        "token_endpoint_auth_method": eff_auth_method,
+    }
+    if raw_secret is not None:
+        resp_payload["client_secret"] = raw_secret
+        resp_payload["client_secret_expires_at"] = 0
+
+    return JSONResponse(resp_payload, status_code=201)
 
 
 @oauth_root_router.post(
@@ -856,7 +929,53 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
 
     form = await _parse_request_payload(request)
     eff_grant_type = str(form.get("grant_type", ""))
-    eff_client_id = str(form.get("client_id", ""))
+    err_inv_client = "invalid_client"
+    err_inv_grant = "invalid_grant"
+
+    # Client authentication extraction (client_secret_basic vs client_secret_post vs none)
+    auth_header = request.headers.get("authorization", "")
+    basic_client_id: str | None = None
+    basic_client_secret: str | None = None
+
+    if auth_header.strip().lower().startswith("basic "):
+        raw_b64 = auth_header.strip()[6:].strip()
+        try:
+            decoded_bytes = base64.b64decode(raw_b64, validate=True)
+            decoded_str = decoded_bytes.decode("utf-8", errors="replace")
+            if ":" in decoded_str:
+                raw_cid, raw_sec = decoded_str.split(":", 1)
+                basic_client_id = urllib.parse.unquote_plus(raw_cid)
+                basic_client_secret = urllib.parse.unquote_plus(raw_sec)
+            else:
+                desc = "Malformed Basic authorization header"
+                raise OAuth2Error(err_inv_client, desc, 401)
+        except (ValueError, UnicodeDecodeError) as exc:
+            if isinstance(exc, OAuth2Error):
+                raise
+            desc = "Invalid Basic authorization header encoding"
+            raise OAuth2Error(err_inv_client, desc, 401) from None
+
+    body_client_id = form.get("client_id")
+    body_client_secret = form.get("client_secret")
+
+    if basic_client_id is not None and body_client_secret is not None:
+        desc = "Multiple client authentication methods attempted"
+        raise OAuth2Error(err_inv_client, desc, 401)
+
+    if basic_client_id is not None and body_client_id and basic_client_id != str(body_client_id):
+        desc = "client_id mismatch between header and body"
+        raise OAuth2Error(err_inv_client, desc, 401)
+
+    if basic_client_id is not None:
+        eff_client_id = basic_client_id
+        eff_client_secret = basic_client_secret
+    elif body_client_secret is not None:
+        eff_client_id = str(body_client_id) if body_client_id else ""
+        eff_client_secret = str(body_client_secret)
+    else:
+        eff_client_id = str(body_client_id) if body_client_id else ""
+        eff_client_secret = None
+
     eff_code_val = form.get("code")
     eff_code = str(eff_code_val) if eff_code_val is not None else None
     eff_cv_val = form.get("code_verifier")
@@ -903,6 +1022,28 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             desc = "Authorization code already consumed; entire grant family revoked"
             raise OAuth2Error(err, desc, 400)
 
+        # Client authentication and authorization code binding verification
+        stmt_client = select(OAuthClient).where(OAuthClient.id == code_record.client_id)
+        client_record = (await session.execute(stmt_client)).scalar_one_or_none()
+        if client_record is None or client_record.status != "active":
+            desc = "Client is invalid or inactive"
+            raise OAuth2Error(err_inv_client, desc, 401)
+
+        if eff_client_id and eff_client_id != client_record.client_id:
+            desc = "client_id mismatch with authorization code"
+            raise OAuth2Error(err_inv_grant, desc, 400)
+
+        eff_client_id = client_record.client_id
+
+        # Confidential client requires client_secret verification
+        if client_record.client_type == "confidential":
+            if not eff_client_secret:
+                desc = "Confidential client authentication required"
+                raise OAuth2Error(err_inv_client, desc, 401)
+            if not verify_client_secret(eff_client_secret, client_record.client_secret_hash):
+                desc = "Invalid client secret"
+                raise OAuth2Error(err_inv_client, desc, 401)
+
         # Validate redirect_uri exact match
         if code_record.redirect_uri != eff_redirect_uri:
             err = "invalid_grant"
@@ -915,7 +1056,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             desc = "resource mismatch"
             raise OAuth2Error(err, desc, 400)
 
-        # Validate PKCE S256
+        # Validate PKCE S256 (MANDATORY IN ADDITION TO CLIENT SECRET)
         if not verify_pkce_s256(eff_code_verifier, code_record.code_challenge):
             err = "invalid_grant"
             desc = "PKCE code_verifier validation failed"
@@ -989,6 +1130,22 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             err = "invalid_grant"
             desc = "Refresh token reuse detected; entire grant family revoked"
             raise OAuth2Error(err, desc, 400)
+
+        # Client lookup & authentication for refresh token
+        stmt_client = select(OAuthClient).where(OAuthClient.id == existing_rt.client_id)
+        client_record = (await session.execute(stmt_client)).scalar_one_or_none()
+        if client_record is not None:
+            if eff_client_id and eff_client_id != client_record.client_id:
+                desc = "client_id mismatch with refresh token"
+                raise OAuth2Error(err_inv_grant, desc, 400)
+            if client_record.client_type == "confidential":
+                if not eff_client_secret:
+                    desc = "Confidential client authentication required"
+                    raise OAuth2Error(err_inv_client, desc, 401)
+                if not verify_client_secret(eff_client_secret, client_record.client_secret_hash):
+                    desc = "Invalid client secret"
+                    raise OAuth2Error(err_inv_client, desc, 401)
+            eff_client_id = client_record.client_id
 
         # Rotate: revoke current refresh token
         existing_rt.revoked_at = now
@@ -1454,23 +1611,50 @@ async def admin_register_oauth_client(
     # 1. Strict redirect URI validation allowing https:// or loopback http://
     validate_registration_redirect_uris(payload.redirect_uris)
 
-    # 2. Token endpoint auth method must be 'none' or 'private_key_jwt'
-    if payload.token_endpoint_auth_method not in ("none", "private_key_jwt"):
+    # 2. Token endpoint auth method and client type validation
+    valid_auth_methods = ("none", "private_key_jwt", "client_secret_basic", "client_secret_post")
+    if payload.token_endpoint_auth_method not in valid_auth_methods:
         raise ProblemException(
             code="INVALID_CLIENT_METADATA",
             status=400,
             title="Invalid Client Metadata",
-            detail="token_endpoint_auth_method must be 'none' or 'private_key_jwt'.",
+            detail=f"token_endpoint_auth_method must be one of {valid_auth_methods}.",
         )
 
-    # 3. Client type validation
-    if payload.client_type != "public":
+    if payload.client_type not in ("public", "confidential"):
         raise ProblemException(
             code="INVALID_CLIENT_METADATA",
             status=400,
             title="Invalid Client Metadata",
-            detail="client_type must be 'public'.",
+            detail="client_type must be 'public' or 'confidential'.",
         )
+
+    is_confidential = (
+        payload.client_type == "confidential"
+        or payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post")
+    )
+
+    eff_auth_method: str
+    if is_confidential:
+        eff_client_type = "confidential"
+        eff_auth_method = (
+            payload.token_endpoint_auth_method
+            if payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post")
+            else "client_secret_basic"
+        )
+        raw_secret = generate_client_secret()
+        secret_hash = hash_client_secret(raw_secret)
+        secret_prefix = mask_client_secret_prefix(raw_secret)
+    else:
+        eff_client_type = "public"
+        eff_auth_method = (
+            payload.token_endpoint_auth_method
+            if payload.token_endpoint_auth_method in ("none", "private_key_jwt")
+            else "none"
+        )
+        raw_secret = None
+        secret_hash = None
+        secret_prefix = None
 
     eff_client_name = (
         payload.client_name.strip()
@@ -1482,7 +1666,9 @@ async def admin_register_oauth_client(
     client_record = OAuthClient(
         client_id=client_id,
         client_name=eff_client_name,
-        client_type="public",
+        client_type=eff_client_type,
+        client_secret_hash=secret_hash,
+        client_secret_prefix=secret_prefix,
         redirect_uris=payload.redirect_uris,
         status="active",
         workspace_id=caller.workspace_id,
@@ -1500,26 +1686,29 @@ async def admin_register_oauth_client(
         payload={
             "client_id": client_record.client_id,
             "client_name": client_record.client_name,
+            "client_type": client_record.client_type,
             "redirect_uris": client_record.redirect_uris,
-            "token_endpoint_auth_method": payload.token_endpoint_auth_method,
+            "token_endpoint_auth_method": eff_auth_method,
         },
     )
 
     await session.commit()
 
-    return JSONResponse(
-        {
-            "client_id": client_record.client_id,
-            "client_name": client_record.client_name,
-            "client_type": client_record.client_type,
-            "token_endpoint_auth_method": payload.token_endpoint_auth_method,
-            "redirect_uris": client_record.redirect_uris,
-            "status": client_record.status,
-            "created_at": client_record.created_at.isoformat(),
-            "updated_at": client_record.updated_at.isoformat(),
-        },
-        status_code=status.HTTP_201_CREATED,
-    )
+    resp: dict[str, Any] = {
+        "client_id": client_record.client_id,
+        "client_name": client_record.client_name,
+        "client_type": client_record.client_type,
+        "token_endpoint_auth_method": eff_auth_method,
+        "redirect_uris": client_record.redirect_uris,
+        "status": client_record.status,
+        "created_at": client_record.created_at.isoformat(),
+        "updated_at": client_record.updated_at.isoformat(),
+    }
+    if raw_secret is not None:
+        resp["client_secret"] = raw_secret
+        resp["client_secret_prefix"] = secret_prefix
+
+    return JSONResponse(resp, status_code=status.HTTP_201_CREATED)
 
 
 @oauth_v1_router.get(
@@ -1548,6 +1737,7 @@ async def admin_list_oauth_clients(
                 "client_id": c.client_id,
                 "client_name": c.client_name,
                 "client_type": c.client_type,
+                "client_secret_prefix": c.client_secret_prefix,
                 "redirect_uris": c.redirect_uris,
                 "status": c.status,
                 "created_at": c.created_at.isoformat(),
@@ -1605,6 +1795,8 @@ async def admin_patch_oauth_client(
         {
             "client_id": client_record.client_id,
             "client_name": client_record.client_name,
+            "client_type": client_record.client_type,
+            "client_secret_prefix": client_record.client_secret_prefix,
             "status": client_record.status,
             "redirect_uris": client_record.redirect_uris,
             "updated_at": client_record.updated_at.isoformat(),

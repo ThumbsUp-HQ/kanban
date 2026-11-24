@@ -608,6 +608,238 @@ describe('OAuthClientGovernanceStudio', () => {
     });
   });
 
+  it('registers a confidential OAuth client and displays one-time client_secret copy panel', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const registerSpy = vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockResolvedValue({
+      client_id: 'client_confidential_999',
+      client_name: 'Gemini Agent Service',
+      client_type: 'confidential',
+      token_endpoint_auth_method: 'client_secret_basic',
+      redirect_uris: ['https://gemini.google.com/oauth/callback'],
+      status: 'active',
+      client_secret: 'kb_ocs_secret_key_1234567890abcdef',
+      client_secret_prefix: 'kb_ocs_sec...',
+      created_at: new Date().toISOString(),
+    });
+
+    const copySpy = vi.spyOn(clipboardModule, 'copyToClipboard').mockResolvedValue(true);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    fireEvent.change(screen.getByTestId('input-client-name'), {
+      target: { value: 'Gemini Agent Service' },
+    });
+    fireEvent.change(screen.getByTestId('select-client-type'), {
+      target: { value: 'confidential' },
+    });
+    fireEvent.change(screen.getByTestId('select-auth-method'), {
+      target: { value: 'client_secret_basic' },
+    });
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'https://gemini.google.com/oauth/callback' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+
+    await waitFor(() => {
+      expect(registerSpy).toHaveBeenCalledWith({
+        client_name: 'Gemini Agent Service',
+        redirect_uris: ['https://gemini.google.com/oauth/callback'],
+        client_type: 'confidential',
+        token_endpoint_auth_method: 'client_secret_basic',
+      });
+      expect(screen.getByTestId('client-secret-panel')).toBeDefined();
+      expect(screen.getByTestId('secret-warning')).toBeDefined();
+      expect(screen.getByTestId('registered-client-secret').textContent).toBe(
+        'kb_ocs_secret_key_1234567890abcdef',
+      );
+    });
+
+    // Test copying the client secret
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('copy-client-secret-btn'));
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(copySpy).toHaveBeenCalledWith('kb_ocs_secret_key_1234567890abcdef');
+    expect(screen.getByTestId('copy-client-secret-btn').textContent).toBe('Copied!');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.getByTestId('copy-client-secret-btn').textContent).toBe('Copy Client Secret');
+    vi.useRealTimers();
+
+    fireEvent.click(screen.getByTestId('done-register-btn'));
+    expect(screen.queryByTestId('register-client-modal')).toBeNull();
+  });
+
+  it('allows editing redirect URIs on an existing client and saves changes', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const patchSpy = vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-uris-btn-client_active_app')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+    expect(screen.getByTestId('edit-uris-modal')).toBeDefined();
+
+    fireEvent.change(screen.getByTestId('input-edit-redirect-uris'), {
+      target: {
+        value: 'https://cursor.com/new-callback\nhttp://127.0.0.1:4567/new-callback',
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+
+    await waitFor(() => {
+      expect(patchSpy).toHaveBeenCalledWith('client_active_app', {
+        redirect_uris: [
+          'https://cursor.com/new-callback',
+          'http://127.0.0.1:4567/new-callback',
+        ],
+      });
+      expect(screen.getByTestId('success-alert').textContent).toContain(
+        'Redirect URIs updated for client client_active_app.',
+      );
+    });
+  });
+
+  it('validates edit redirect URIs modal boundary errors and cancelation', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-uris-btn-client_active_app')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+
+    // Empty URIs
+    fireEvent.change(screen.getByTestId('input-edit-redirect-uris'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+    expect(screen.getByTestId('edit-uris-error').textContent).toContain(
+      'At least one redirect URI is required.',
+    );
+
+    // More than 16 URIs
+    const seventeenUris = Array.from(
+      { length: 17 },
+      (_, i) => `https://app.com/cb/${String(i)}`,
+    ).join('\n');
+    fireEvent.change(screen.getByTestId('input-edit-redirect-uris'), {
+      target: { value: seventeenUris },
+    });
+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+    expect(screen.getByTestId('edit-uris-error').textContent).toContain(
+      'Maximum 16 redirect URIs permitted.',
+    );
+
+    // Close via close button
+    fireEvent.click(screen.getByTestId('close-edit-uris-btn'));
+    expect(screen.queryByTestId('edit-uris-modal')).toBeNull();
+
+    // Reopen and close via cancel button
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+    expect(screen.getByTestId('edit-uris-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-edit-uris-btn'));
+    expect(screen.queryByTestId('edit-uris-modal')).toBeNull();
+
+    // Reopen and close via backdrop click
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+    expect(screen.getByTestId('edit-uris-modal-backdrop')).toBeDefined();
+    fireEvent.click(screen.getByTestId('edit-uris-modal-backdrop'));
+    expect(screen.queryByTestId('edit-uris-modal')).toBeNull();
+  });
+
+  it('handles edit redirect URIs patch failure branches', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(
+      new Error('Invalid URI scheme'),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-uris-btn-client_active_app')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-uris-error').textContent).toContain('Invalid URI scheme');
+    });
+
+    // Non-error fallback
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce('raw error');
+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-uris-error').textContent).toContain(
+        'Failed to update redirect URIs.',
+      );
+    });
+  });
+
+  it('inspects client details including masked client secret prefix and auth method', async () => {
+    const clientsWithSecret: oauthApi.OAuthClientItem[] = [
+      {
+        client_id: 'client_conf_mcp',
+        client_name: 'MCP Confidential Server',
+        client_type: 'confidential',
+        token_endpoint_auth_method: 'client_secret_post',
+        client_secret_prefix: 'kb_ocs_9988...',
+        redirect_uris: ['https://mcp.example.com/oauth/callback'],
+        status: 'active',
+        created_at: new Date('2026-03-01T00:00:00Z').toISOString(),
+      },
+    ];
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(clientsWithSecret);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('inspect-btn-client_conf_mcp')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('inspect-btn-client_conf_mcp'));
+
+    expect(screen.getByTestId('inspect-client-secret-prefix').textContent).toContain(
+      'kb_ocs_9988... (Masked)',
+    );
+    expect(screen.getByText('client_secret_post')).toBeDefined();
+  });
+
   it('handles unmounting gracefully during loadClients', async () => {
     let resolvePromise: (value: oauthApi.OAuthClientItem[]) => void = () => undefined;
     vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockImplementation(
