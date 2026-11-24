@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http
 import logging
 import re
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -29,15 +30,24 @@ PROBLEM_MEDIA_TYPE = "application/problem+json"
 PROBLEM_HELP_CATALOG: dict[str, tuple[str, str]] = {
     "AAL2_STALE": (
         "/docs/multi-card-authentication-studio#aal2-step-up",
-        "Your 15-minute (900s) Admin 2FA verification window (AAL2) has expired. Re-verify with your Passkey or TOTP Authenticator app to continue.",
+        (
+            "Your 15-minute (900s) Admin 2FA verification window (AAL2) has expired. "
+            "Re-verify with your Passkey or TOTP Authenticator app to continue."
+        ),
     ),
     "AAL2_REQUIRED": (
         "/docs/multi-card-authentication-studio#aal2-step-up",
-        "This administrative or security-sensitive action requires Multi-Factor Authentication (AAL2) via Passkey or TOTP.",
+        (
+            "This administrative or security-sensitive action requires Multi-Factor Authentication "
+            "(AAL2) via Passkey or TOTP."
+        ),
     ),
     "MFA_ENROLLMENT_REQUIRED": (
         "/docs/multi-card-authentication-studio#mfa-enrollment",
-        "Administrators must enroll a Passkey (WebAuthn) or TOTP Authenticator app before accessing administrative studios.",
+        (
+            "Administrators must enroll a Passkey (WebAuthn) or TOTP Authenticator app "
+            "before accessing administrative studios."
+        ),
     ),
     "AUTHENTICATION_REQUIRED": (
         "/docs/multi-card-authentication-studio",
@@ -61,7 +71,10 @@ PROBLEM_HELP_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
         "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
-        "Session read-taint guard requires explicit confirmation before writing across project boundaries.",
+        (
+            "Session read-taint guard requires explicit confirmation before writing "
+            "across project boundaries."
+        ),
     ),
     "MCP_TAINT_BLOCKED": (
         "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
@@ -101,7 +114,10 @@ PROBLEM_HELP_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "BLAST_RADIUS_CHANGED": (
         "/docs/production-promotion-and-backup-runbook",
-        "The entity graph changed since the deletion preview was computed. Re-run preview to confirm.",
+        (
+            "The entity graph changed since the deletion preview was computed. "
+            "Re-run preview to confirm."
+        ),
     ),
     "MANIFEST_MISMATCH": (
         "/docs/admin-custom-scripted-fields-and-sandbox",
@@ -136,7 +152,7 @@ def resolve_problem_help(code: str, status: int | None = None) -> tuple[str, str
     """Resolve documentation link and human-readable help summary for a problem code."""
     if code in PROBLEM_HELP_CATALOG:
         return PROBLEM_HELP_CATALOG[code]
-    if code == "NOT_FOUND" or status == 404:
+    if code == "NOT_FOUND" or status == http.HTTPStatus.NOT_FOUND:
         return NOT_FOUND_PROBLEM_HELP
     return DEFAULT_PROBLEM_HELP
 

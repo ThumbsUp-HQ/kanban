@@ -7,6 +7,7 @@ Implements KB-P2-05a, Test Cases 9 and 10.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Final
@@ -15,11 +16,17 @@ import httpx
 import pytest
 from fastapi import Depends, FastAPI
 from sqlalchemy import text
+from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from database.session import RLSContext, RLSSessionFactory
 from kanban.api.deps import PrincipalContext
-from kanban.api.problems import ProblemException, problem_exception_handler
+from kanban.api.problems import (
+    PROBLEM_HELP_CATALOG,
+    ProblemException,
+    problem_exception_handler,
+    resolve_problem_help,
+)
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
 from kanban.auth.mfa.policy import (
@@ -342,15 +349,17 @@ def test_case_10_assert_admin_routes_protected() -> None:
 @pytest.mark.asyncio
 async def test_aal2_stale_human_readable_and_problem_doc_links() -> None:
     """Verify human-readable AAL2_STALE detail string, doc_href, and help_summary (KAN-393)."""
-    from starlette.requests import Request
-    from kanban.api.problems import PROBLEM_HELP_CATALOG, Problem, resolve_problem_help
-
     # 1. Verify ProblemException default resolution from catalog
+    detail_msg = (
+        "AAL2 verification is stale (950s > 900s). Your 15-minute Admin 2FA security window "
+        "(Authenticator Assurance Level 2) has expired; please re-verify with your "
+        "Passkey or Authenticator app (TOTP) to continue."
+    )
     exc = ProblemException(
         code="AAL2_STALE",
         status=403,
         title="AAL2 Session Stale",
-        detail="AAL2 verification is stale (950s > 900s). Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue.",
+        detail=detail_msg,
     )
     expected_doc, expected_summary = PROBLEM_HELP_CATALOG["AAL2_STALE"]
     assert exc.doc_href == expected_doc
@@ -362,7 +371,6 @@ async def test_aal2_stale_human_readable_and_problem_doc_links() -> None:
     scope = {"type": "http", "method": "GET", "path": "/api/v1/admin/test", "headers": []}
     req = Request(scope)
     res = await problem_exception_handler(req, exc)
-    import json
     data = json.loads(res.body.decode("utf-8"))
     assert data["code"] == "AAL2_STALE"
     assert data["doc_href"] == expected_doc

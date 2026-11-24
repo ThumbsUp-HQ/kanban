@@ -121,8 +121,9 @@ async def require_link_aal2(
             title="AAL2 Session Stale",
             detail=(
                 "AAL2 verification timestamp is missing or stale. "
-                "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                "requires re-verification with your Passkey or Authenticator app (TOTP) to continue."
+                "Your 15-minute Admin 2FA security window "
+                "(Authenticator Assurance Level 2) requires re-verification "
+                "with your Passkey or Authenticator app (TOTP) to continue."
             ),
             methods=methods,
             preferred_method=preferred,
@@ -139,8 +140,9 @@ async def require_link_aal2(
             title="AAL2 Session Stale",
             detail=(
                 f"AAL2 verification is stale ({int(age)}s > {MAX_AAL2_AGE_SECONDS}s). "
-                "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                "has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue."
+                "Your 15-minute Admin 2FA security window "
+                "(Authenticator Assurance Level 2) has expired; please re-verify "
+                "with your Passkey or Authenticator app (TOTP) to continue."
             ),
             methods=methods,
             preferred_method=preferred,

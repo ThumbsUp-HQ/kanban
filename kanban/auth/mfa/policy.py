@@ -94,8 +94,9 @@ class _RequireAal2:
                     title="AAL2 Session Stale",
                     detail=(
                         "AAL2 verification timestamp is missing or stale. "
-                        "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                        "requires re-verification with your Passkey or Authenticator app (TOTP) to continue."
+                        "Your 15-minute Admin 2FA security window "
+                        "(Authenticator Assurance Level 2) requires re-verification "
+                        "with your Passkey or Authenticator app (TOTP) to continue."
                     ),
                     methods=methods,
                     preferred_method=preferred,
@@ -110,8 +111,9 @@ class _RequireAal2:
                 preferred = "webauthn" if "webauthn" in methods else "totp"
                 detail_msg = (
                     f"AAL2 verification is stale ({int(age)}s > {self.max_age_seconds}s). "
-                    "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                    "has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue."
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) has expired; please re-verify "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
                 )
                 raise ProblemException(
                     code="AAL2_STALE",
@@ -253,8 +255,9 @@ async def require_admin_aal2(  # noqa: C901, PLR0912
                 title="AAL2 Session Stale",
                 detail=(
                     "AAL2 verification timestamp is missing or stale. "
-                    "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                    "requires re-verification with your Passkey or Authenticator app (TOTP) to continue."
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) requires re-verification "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
                 ),
                 methods=admin_methods,
                 preferred_method=preferred,
@@ -266,8 +269,9 @@ async def require_admin_aal2(  # noqa: C901, PLR0912
         if age > ADMIN_AAL2_MAX_AGE_SECONDS:
             detail_msg = (
                 f"AAL2 verification is stale ({int(age)}s > {ADMIN_AAL2_MAX_AGE_SECONDS}s). "
-                "Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) "
-                "has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue."
+                "Your 15-minute Admin 2FA security window "
+                "(Authenticator Assurance Level 2) has expired; please re-verify "
+                "with your Passkey or Authenticator app (TOTP) to continue."
             )
             raise ProblemException(
                 code="AAL2_STALE",
