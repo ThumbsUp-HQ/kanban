@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, type JSX } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import {
   draggable,
   dropTargetForElements,
@@ -173,6 +173,25 @@ export function BoardCard({
     }
   };
 
+  // Synchronize custom state color accent on card container (KAN-383)
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    /* v8 ignore next 3 */
+    if (!el) {
+      return;
+    }
+    const colorHex = issue.state?.color_hex;
+    const safeHex =
+      colorHex && /^#[0-9A-Fa-f]{6}$/.test(colorHex.trim())
+        ? colorHex.trim()
+        : null;
+    if (safeHex) {
+      el.style.setProperty('--card-state-accent', safeHex);
+    } else {
+      el.style.removeProperty('--card-state-accent');
+    }
+  }, [issue.state?.color_hex]);
+
   useEffect(() => {
     const el = cardRef.current;
     /* v8 ignore next 3 */
@@ -257,9 +276,11 @@ export function BoardCard({
       ref={cardRef}
       role="button"
       tabIndex={0}
-      className={`board-card ${isGatePending ? 'board-card--pending-gate' : ''} ${isTouchLifted ? 'board-card--touch-lifted' : ''}`}
+      className={`board-card board-card--state-${stateGroup} ${isGatePending ? 'board-card--pending-gate' : ''} ${isTouchLifted ? 'board-card--touch-lifted' : ''}`}
       data-testid={`board-card-${issue.key}`}
       data-issue-key={issue.key}
+      data-state-group={stateGroup}
+      data-priority={issue.priority?.slug ?? 'none'}
       data-gate-pending={isGatePending ? 'true' : undefined}
       aria-disabled={isGatePending ? 'true' : undefined}
       title={isGatePending ? 'Transition gate in progress' : undefined}
@@ -306,6 +327,7 @@ export function BoardCard({
                 title={`Move ${issue.key}`}
                 onClick={handleStateBtnClick}
               >
+                <span className="board-card-state-btn-dot" aria-hidden="true" />
                 <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
                 <span>{issue.state?.name ?? 'Move'}</span>
               </button>
@@ -356,11 +378,19 @@ export function BoardCard({
 
       <div className="board-card-meta">
         {priorityKind && (
-          <EmojiHint
-            kind={priorityKind}
-            label={issue.priority?.label ?? 'Priority'}
-            testId={`priority-${issue.key}`}
-          />
+          <span
+            className={`board-card-chip board-card-priority-pill board-card-priority-pill--${(issue.priority?.slug ?? 'none').toLowerCase()}`}
+            data-testid={`priority-pill-${issue.key}`}
+          >
+            <EmojiHint
+              kind={priorityKind}
+              label={issue.priority?.label ?? 'Priority'}
+              testId={`priority-${issue.key}`}
+            />
+            {issue.priority?.label && (
+              <span className="board-card-priority-label">{issue.priority.label}</span>
+            )}
+          </span>
         )}
 
         {issue.assignees?.map((a, idx) => {
