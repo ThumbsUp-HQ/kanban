@@ -13,6 +13,7 @@ import {
   setCsrfToken,
   registerAal2StepUpHandler,
   getActiveAal2StepUpHandler,
+  resetAal2StepUpCoordinator,
   Aal2StepUpCancelledError,
 } from '../client';
 import { ApiProblem } from '../problem';
@@ -53,9 +54,16 @@ vi.mock('../../features/auth/SecondFactorStep', () => ({
   ),
 }));
 
+beforeEach(() => {
+  cleanup();
+  resetAal2StepUpCoordinator();
+  vi.useRealTimers();
+});
+
 afterEach(() => {
   cleanup();
-  registerAal2StepUpHandler(null);
+  resetAal2StepUpCoordinator();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -868,7 +876,7 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     };
     window.addEventListener('kb:aal2-expires-at', expiresListener);
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -933,12 +941,12 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
 
     // Tab without Shift on last button -> wraps to first
     lastBtn?.focus();
-    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+    fireEvent.keyDown(lastBtn ?? window, { key: 'Tab', shiftKey: false });
     expect(document.activeElement).toBe(firstBtn);
 
     // Tab with Shift on first button -> wraps to last
     firstBtn?.focus();
-    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    fireEvent.keyDown(firstBtn ?? window, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(lastBtn);
 
     // Complete step-up successfully to verify replay with x-kb-aal2-expires-at header
@@ -949,11 +957,12 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     expect(expiresAtDetail).toBe('2026-11-25T15:00:00Z');
 
     window.removeEventListener('kb:aal2-expires-at', expiresListener);
+    unmount();
   });
 
   it('WebSudoModalHost handles direct invocation without challengeId', async () => {
     vi.useRealTimers();
-    render(<WebSudoModalHost />);
+    const { unmount } = render(<WebSudoModalHost />);
     const handler = getActiveAal2StepUpHandler();
     expect(handler).toBeDefined();
 
@@ -970,6 +979,7 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
     const success = await p;
     expect(success).toBe(false);
+    unmount();
   });
 
   it('replays successfully when getCsrfToken is null and bootstrapCsrfToken returns null', async () => {

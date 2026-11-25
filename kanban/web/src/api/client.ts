@@ -44,6 +44,12 @@ let pendingAal2StepUp: Promise<boolean> | null = null;
 
 export function registerAal2StepUpHandler(handler: Aal2StepUpHandler | null): void {
   activeAal2StepUpHandler = handler;
+  pendingAal2StepUp = null;
+}
+
+export function resetAal2StepUpCoordinator(): void {
+  activeAal2StepUpHandler = null;
+  pendingAal2StepUp = null;
 }
 
 export function getActiveAal2StepUpHandler(): Aal2StepUpHandler | null {
