@@ -987,18 +987,18 @@ index 326fa860..c5e8e561 100644
    });
  });
 diff --git a/kanban/web/src/features/admin-runners/runnerStudio.css b/kanban/web/src/features/admin-runners/runnerStudio.css
-index d2bc179c..61fb0f90 100644
+index d2bc179c..bf38fbb4 100644
 --- a/kanban/web/src/features/admin-runners/runnerStudio.css
 +++ b/kanban/web/src/features/admin-runners/runnerStudio.css
-@@ -110,16 +110,167 @@
+@@ -110,16 +110,175 @@
  }
  
  .kb-mint-expires-hint {
 -  margin-bottom: var(--space-4);
 +  margin-bottom: 8px;
 +  font-size: 11.5px;
- }
- 
++}
++
 +/* Modal Card & Body layout (KAN-399) */
 +.kb-modal-card {
 +  background-color: var(--kb-color-bg-surface, #ffffff);
@@ -1084,6 +1084,14 @@ index d2bc179c..61fb0f90 100644
 +  margin-bottom: 6px;
 +}
 +
++.kb-token-label-row label,
++.kb-token-label-row .kb-form-label {
++  width: auto !important;
++  margin-bottom: 0 !important;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
 +[data-testid="copy-runner-cli-btn"],
 +.kb-copy-cli-btn {
 +  white-space: nowrap !important;
@@ -1135,10 +1143,10 @@ index d2bc179c..61fb0f90 100644
 +  border: 1px solid #bfdbfe;
 +  color: #1e40af;
 +  border-radius: var(--radius-md, 8px);
-+  padding: 10px 14px;
-+  margin-bottom: 10px;
-+  font-size: 12.5px;
-+  line-height: 1.45;
++  padding: 8px 12px;
++  margin-bottom: 8px;
++  font-size: 12px;
++  line-height: 1.4;
 +}
 +
 +[data-theme='dark'] .kb-single-reveal-alert {
@@ -1163,7 +1171,7 @@ index d2bc179c..61fb0f90 100644
  }
  
  /* Runner Filter Pills */
-@@ -343,4 +494,26 @@
+@@ -343,4 +502,26 @@
      flex-direction: column;
      align-items: stretch;
    }

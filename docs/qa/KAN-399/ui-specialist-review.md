@@ -3,7 +3,7 @@
 ## Ticket Reference
 - **Ticket ID**: `KAN-399` (`[KB-RUNNER-ENROLL-UX-AND-CLI] Runner Enrollment UX and CLI Hardening`)
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
-- **Branch**: `fix/KAN-399-rc1` (Round-1 Remediation)
+- **Branch**: `fix/KAN-399-rc2` (Round-2 Polish)
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -15,7 +15,8 @@
 - **Ergonomics & Positioning**:
   - The CLI ingestion section previously only displayed a static `<pre className="kb-runner-cli-pre">` snippet without an automated clipboard copy trigger. Operators had to manually select long CLI strings containing tokens and URLs, risking missing quotation marks or trailing arguments.
   - Positioned a dedicated button with `data-testid="copy-runner-cli-btn"` directly in the section label row (`.kb-token-label-row`) adjacent to the "Example Runner CLI Ingestion:" label.
-  - Aligned using flexbox (`justifyContent: 'space-between', alignItems: 'center'`) maintaining standard breathable platform rhythm (`marginBottom: 8px`).
+  - Aligned using flexbox (`justifyContent: 'space-between', alignItems: 'center'`) maintaining standard breathable platform rhythm (`marginBottom: 6px`).
+  - Explicit `.kb-token-label-row label, .kb-token-label-row .kb-form-label { width: auto !important; margin-bottom: 0 !important; display: inline-flex; align-items: center; }` ensures the label and Copy button sit on the same horizontal row without premature wrapping on desktop and tablet viewports.
   - Styled with `white-space: nowrap !important; flex-shrink: 0 !important; padding: 5px 12px; min-height: 30px;` so button text never wraps or clips across any viewport.
 - **Interactive Feedback**:
   - Default resting state: `"Copy CLI Command"` using secondary button styling (`.kb-btn .kb-btn-secondary`).
@@ -57,11 +58,14 @@
 
 - **Automated Vitest Suite**:
   - `src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx`:
-    - 8 tests passing (100% pass rate).
+    - 21 tests passing (100% pass rate; 100% statements/lines, 98.66% branches).
     - Explicit test assertions for `copy-runner-cli-btn`, `dismiss-mint-modal-btn` label `"Done"`, `--server-url` presence, clipboard fallback behavior, and negative assertion for absent `"I have safely stored the token"`.
+- **Python Backend Unit Tests**:
+  - `agent/tests/test_remote_runner.py` and `agent/tests/remote_runner/test_config_and_enroll.py`:
+    - 20 tests passing (10 in `test_remote_runner.py` + 10 in `test_config_and_enroll.py`, 96% coverage on `agent/remote_runner/cli.py`).
 - **Playwright E2E Visual Verification**:
   - `e2e/qa/kan-399-runner-enroll-screenshots.spec.ts`:
-    - 25 responsive tests passing across desktop, tablet, and mobile devices with zero WebSocket reconnect toast overlay.
+    - 25 responsive tests passing across desktop, tablet, and mobile devices with zero WebSocket reconnect toast overlay and zero clipping.
 
 ---
 

@@ -29,30 +29,35 @@ EXIT CODE: 0
 ======================================================================
 5. check_no_dashes.py --all
 ======================================================================
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc1-f92ff573/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc2-2d1229bf/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 
 EXIT CODE: 0
 
 ======================================================================
 6. pnpm --dir kanban/web typecheck
 ======================================================================
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc1-f92ff573/kanban/web
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc2-2d1229bf/kanban/web
 > tsc -b --noEmit
+
 
 EXIT CODE: 0
 
 ======================================================================
 7. pnpm --dir kanban/web lint
 ======================================================================
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc1-f92ff573/kanban/web
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc2-2d1229bf/kanban/web
 > eslint . --max-warnings 0
+
 
 EXIT CODE: 0
 
 ======================================================================
 8. pnpm --dir kanban/web build
 ======================================================================
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc1-f92ff573/kanban/web
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-rc2-2d1229bf/kanban/web
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
@@ -62,15 +67,14 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-BUEROrmM.css            597.23 kB │ gzip:  83.92 kB
-dist/assets/index-DE8djPok.js           2,870.98 kB │ gzip: 794.79 kB
-
-✓ built in 1.26s
+dist/assets/index-s054nf5n.css            597.77 kB │ gzip:  84.03 kB
+dist/assets/index-eHxSaOkn.js           2,872.41 kB │ gzip: 795.11 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.26s
 
 EXIT CODE: 0
