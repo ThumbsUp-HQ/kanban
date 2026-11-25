@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, type JSX } from 'react';
+import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { Link } from 'react-router';
 import { copyToClipboard } from '../../utils/clipboard';
 import './ConnectOAuthAppModal.css';
@@ -58,8 +58,15 @@ export function ConnectOAuthAppModal({
   const [activeTab, setActiveTab] = useState<ToolTab>('claude');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const isMountedRef = useRef(true);
   useEffect(() => {
-    const isMounted = { current: true };
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     void (async () => {
       try {
         const res = await fetch('/api/v1/projects', {
@@ -67,8 +74,8 @@ export function ConnectOAuthAppModal({
           headers: { Accept: 'application/json' },
           credentials: 'same-origin',
         });
-        if (!res.ok || !isMounted.current) {
-          if (!projectKey && !fetchedProjectKey) {
+        if (!res.ok) {
+          if (isMountedRef.current && !projectKey) {
             setFetchedProjectKey('<PROJECT_KEY>');
           }
           return;
@@ -76,6 +83,7 @@ export function ConnectOAuthAppModal({
         const data = (await res.json()) as
           | { items?: { key?: string; identifier?: string; name?: string }[] }
           | { key?: string; identifier?: string; name?: string }[];
+        if (!isMountedRef.current) return;
         const items = Array.isArray(data) ? data : (data.items ?? []);
         const mapped = items
           .map((p) => {
@@ -87,22 +95,17 @@ export function ConnectOAuthAppModal({
         const firstKey = mapped[0]?.key;
         if (firstKey) {
           setFetchedProjectKey(firstKey);
-          if (!selectedProjectKey) {
-            setSelectedProjectKey(firstKey);
-          }
+          setSelectedProjectKey((prev) => (prev ? prev : firstKey));
         } else {
           setFetchedProjectKey('<PROJECT_KEY>');
         }
       } catch {
-        if (isMounted.current && !projectKey && !fetchedProjectKey) {
+        if (isMountedRef.current && !projectKey) {
           setFetchedProjectKey('<PROJECT_KEY>');
         }
       }
     })();
-    return () => {
-      isMounted.current = false;
-    };
-  }, [projectKey, fetchedProjectKey, selectedProjectKey]);
+  }, [projectKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {

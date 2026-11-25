@@ -403,7 +403,7 @@ export function WorkloadFederationSection({
                     onClick={() => {
                       if (!formName) setFormName('GitHub Actions CI');
                       setFormIssuer('https://token.actions.githubusercontent.com');
-                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormClientId(window.location.origin);
                       setFormSubjectPattern('repo:org/repo:ref:refs/heads/*');
                       setFormSurface('agent');
                     }}
@@ -417,7 +417,7 @@ export function WorkloadFederationSection({
                     onClick={() => {
                       if (!formName) setFormName('GitLab CI');
                       setFormIssuer('https://gitlab.com');
-                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormClientId(window.location.origin);
                       setFormSubjectPattern('project_path:group/project:ref:*:ref_type:branch');
                       setFormSurface('agent');
                     }}
@@ -431,7 +431,7 @@ export function WorkloadFederationSection({
                     onClick={() => {
                       if (!formName) setFormName('Kubernetes Workload');
                       setFormIssuer('https://kubernetes.default.svc.cluster.local');
-                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormClientId(window.location.origin);
                       setFormSubjectPattern('system:serviceaccount:default:*');
                       setFormSurface('agent');
                     }}

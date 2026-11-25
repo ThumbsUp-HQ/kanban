@@ -535,6 +535,16 @@ async def test_admin_workload_identities_crud(
     res_get404 = await api_env.client.get(f"/api/v1/admin/workload-identities/{pol_id}")
     assert res_get404.status_code == 404
 
+    fake_id = str(uuid.uuid4())
+    res_patch404 = await api_env.client.patch(
+        f"/api/v1/admin/workload-identities/{fake_id}",
+        json={"name": "Ghost"},
+    )
+    assert res_patch404.status_code == 404
+
+    res_del404 = await api_env.client.delete(f"/api/v1/admin/workload-identities/{fake_id}")
+    assert res_del404.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_validate_workload_jwt_edge_cases_and_coverage(  # noqa: PLR0915

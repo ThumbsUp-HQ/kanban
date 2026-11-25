@@ -1,87 +1,62 @@
 === PYTEST UNIT TEST RESULTS ===
-Uninstalled 4 packages in 0.71ms
-Installed 4 packages in 2ms
-============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 58 items
+collected 116 items
 
-kanban/tests/oauth/test_oauth_flow.py ..................                 [ 31%]
-kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 46%]
-kanban/tests/api/test_admin_mcp_keys_api.py ....                         [ 53%]
-kanban/tests/auth/test_workload_oidc_exchange.py .......                 [ 65%]
-mcp/tests/test_workload_jwt_auth.py .......                              [ 77%]
-mcp/tests/test_mcp_capability_mask_and_cidr.py ......                    [ 87%]
+kanban/tests/oauth/test_device_flow.py ......                            [  5%]
+kanban/tests/oauth/test_oauth_coverage.py .........................      [ 26%]
+kanban/tests/oauth/test_oauth_flow.py ..................                 [ 42%]
+kanban/tests/oauth/test_oauth_unit.py .........................          [ 63%]
+kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 71%]
+kanban/tests/api/test_admin_mcp_keys_api.py ....                         [ 75%]
+kanban/tests/auth/test_workload_oidc_exchange.py .......                 [ 81%]
+mcp/tests/test_workload_jwt_auth.py .......                              [ 87%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py ........                  [ 93%]
 kanban/tests/test_feature_comparison_parity.py .......                   [100%]
 
-============================= 58 passed in 19.66s ==============================
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                         Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------------
+kanban/api/v1/admin/mcp_keys.py                201     27     58      9    81%   62->69, 151-167, 171, 201-208, 256, 267, 318, 396, 399-419
+kanban/api/v1/admin/workload_identities.py     154      2     18      2    98%   103, 117, 182->184
+kanban/api/v1/mcp_keys.py                      210      3     80      5    97%   69->76, 333, 346->336, 349-350, 394->397, 470->496
+kanban/api/v1/oauth.py                         921     30    268     22    95%   847->852, 906, 936->941, 939-940, 942-943, 968-970, 1019-1025, 1126, 1190->1193, 1321->1335, 1351-1354, 1403-1405, 1489-1491, 1493, 1498->1497, 1507->1540, 1519-1521, 1530-1531, 1577->1580, 1653->1668, 1674->1678, 1818, 1834, 1932, 2273->2276
+kanban/security/mcp_keys.py                    481    192    272     52    54%   124-182, 198-199, 212-213, 218-222, 229-255, 284, 294, 307-312, 319, 337, 346, 354, 360->374, 369, 371, 376, 385, 396-411, 420->532, 422, 462->480, 507, 513->532, 524, 536-537, 546, 559, 566, 578, 588->591, 592, 602, 609, 646->666, 678, 680->708, 689->692, 692->708, 720-737, 747, 766->770, 772->776, 778, 781-782, 796, 808, 811-812, 825->834, 842->845, 884-894, 898-900, 928-951, 958, 961, 969, 973, 975-986, 993->995, 997, 1046-1162
+mcp/app.py                                      60      0     18      4    95%   85->93, 96->99, 102->105, 108->112
+----------------------------------------------------------------------------------------
+TOTAL                                         2027    254    714     94    83%
+============================= 116 passed in 49.41s =============================
 
 === VITEST UNIT TEST RESULTS ===
-
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+      Coverage enabled with v8
 
-stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > supports toggling scope checkboxes
-An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > closes on Escape key press and backdrop click
-An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > allows dynamically changing Target Scope between Workspace, Single Project, and Server (KAN-395)
-An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (15 tests) 511ms
- ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 438ms
- ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (30 tests) 2888ms
-   ✓ OAuthClientGovernanceStudio (30)
-     ✓ inspects client details in modal and closes modal 324ms
-     ✓ handles search input, status filter pills, and pagination controls 343ms
- ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (25 tests) 2079ms
-   ✓ Unified MCP Studio (KAN-31) (16)
-     ✓ handles AAL2 cancellation on minting and retries without error banners 455ms
- ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (47 tests) 2880ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (16 tests) 464ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (14 tests) 417ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (30 tests) 3307ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (25 tests) 2494ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (47 tests) 3139ms
 
  Test Files  5 passed (5)
-      Tests  130 passed (130)
-   Start at  14:48:14
-   Duration  5.25s (tests 54%, environment 24%, import 15%, transform 7%)
+      Tests  132 passed (132)
+   Start at  15:10:36
+   Duration  5.61s (tests 58%, environment 21%, import 14%, transform 6%, worker 1%)
 
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.85 |    95.34 |   99.64 |   99.06 |                   
+ oauth             |   98.91 |    96.28 |     100 |   98.88 |                   
+  DeviceActivate...|     100 |    96.55 |     100 |     100 | 54-55,113         
+  OAuthClientGov...|   98.45 |    96.11 |     100 |   98.39 | 97-98,210,367,436 
+ settings          |   98.81 |    94.92 |   99.34 |   99.19 |                   
+  ConnectOAuthAp...|   98.16 |    95.32 |     100 |     100 | 72-84,88          
+  McpAccessStudio  |   98.59 |    95.85 |   98.88 |   98.71 | ...61-662,833-834 
+  McpUnifiedStudio |     100 |    89.41 |     100 |     100 | ...65,172,418-432 
+-------------------|---------|----------|---------|---------|-------------------

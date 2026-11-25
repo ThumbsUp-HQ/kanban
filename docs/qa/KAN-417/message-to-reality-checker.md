@@ -60,18 +60,10 @@ This packet provides forensic verification evidence for ticket **KAN-417 (Phase 
 Execute the following commands from the workspace root to reproduce all verification results:
 
 ```bash
-# 1. Run backend unit test suites (51 tests)
-uv run pytest kanban/tests/oauth/test_oauth_flow.py \
-  kanban/tests/api/test_unified_mcp_keys_api.py \
-  kanban/tests/api/test_admin_mcp_keys_api.py \
-  kanban/tests/auth/test_workload_oidc_exchange.py \
-  mcp/tests/test_workload_jwt_auth.py \
-  mcp/tests/test_mcp_capability_mask_and_cidr.py
+# 1. Run backend unit test suites (116 tests: 51 core slice + 58 oauth flow + 7 parity)
+uv run python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/oauth/test_device_flow.py', 'kanban/tests/oauth/test_oauth_coverage.py', 'kanban/tests/oauth/test_oauth_flow.py', 'kanban/tests/oauth/test_oauth_unit.py', 'kanban/tests/api/test_unified_mcp_keys_api.py', 'kanban/tests/api/test_admin_mcp_keys_api.py', 'kanban/tests/auth/test_workload_oidc_exchange.py', 'mcp/tests/test_workload_jwt_auth.py', 'mcp/tests/test_mcp_capability_mask_and_cidr.py', 'kanban/tests/test_feature_comparison_parity.py']))"
 
-# 2. Run OpenAPI schema parity check (7 tests)
-uv run pytest kanban/tests/test_feature_comparison_parity.py
-
-# 3. Run frontend Vitest test suites (130 tests with >=95% branch coverage)
+# 2. Run frontend Vitest test suites (132 tests with 95.34% branch coverage and 0 act(...) warnings)
 pnpm --dir kanban/web exec vitest run --coverage \
   --coverage.include="src/features/settings/McpAccessStudio.tsx" \
   --coverage.include="src/features/settings/ConnectOAuthAppModal.tsx" \
@@ -84,7 +76,7 @@ pnpm --dir kanban/web exec vitest run --coverage \
   src/features/oauth/__tests__/DeviceActivatePage.test.tsx \
   src/features/settings/__tests__/McpUnifiedStudio.test.tsx
 
-# 4. Run static linters and build checks
+# 3. Run static linters and build checks
 uv run ruff check kanban/ mcp/
 uv run mypy kanban/ mcp/
 python3 scripts/check_no_dashes.py --all
@@ -92,7 +84,7 @@ pnpm --dir kanban/web typecheck
 pnpm --dir kanban/web lint
 pnpm --dir kanban/web build
 
-# 5. Verify integrity checksums
+# 4. Verify integrity checksums
 cd docs/qa/KAN-417 && sha256sum -c changed-files-manifest.txt
 ```
 
