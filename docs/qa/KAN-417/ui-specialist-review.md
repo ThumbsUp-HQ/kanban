@@ -63,7 +63,7 @@ The implementation succeeds brilliantly in reducing visual clutter while enhanci
 
 - Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across documentation and code.
 - Visual inspection completed directly via `read_file` on all 5 rendered PNG artifacts in `docs/qa/KAN-417/screenshots/`.
-- Frontend Vitest test suites (130 tests across 5 components) verified passing with **95.04%** branch coverage.
+- Frontend Vitest test suites (133 tests across 5 components) verified passing with **95.96%** branch coverage.
 - Full build pipeline verified clean: `tsc`, `eslint`, `vite build`, `ruff`, and `mypy` all exit 0.
 
 The UI/UX implementation of KAN-417 is thoroughly engineered, elegant, and ready for production promotion.

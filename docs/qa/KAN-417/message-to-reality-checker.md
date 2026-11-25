@@ -60,16 +60,12 @@ This packet provides forensic verification evidence for ticket **KAN-417 (Phase 
 Execute the following commands from the workspace root to reproduce all verification results:
 
 ```bash
-# 1. Run backend unit test suites (116 tests: 51 core slice + 58 oauth flow + 7 parity)
+# 1. Run backend unit test suites (118 tests: 53 core slice + 58 oauth flow + 7 parity; 95% on admin/mcp_keys.py, 98% on workload_identities.py, 97% on mcp_keys.py, 95% on oauth.py, 95% on mcp/app.py)
 uv run python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/oauth/test_device_flow.py', 'kanban/tests/oauth/test_oauth_coverage.py', 'kanban/tests/oauth/test_oauth_flow.py', 'kanban/tests/oauth/test_oauth_unit.py', 'kanban/tests/api/test_unified_mcp_keys_api.py', 'kanban/tests/api/test_admin_mcp_keys_api.py', 'kanban/tests/auth/test_workload_oidc_exchange.py', 'mcp/tests/test_workload_jwt_auth.py', 'mcp/tests/test_mcp_capability_mask_and_cidr.py', 'kanban/tests/test_feature_comparison_parity.py']))"
 
-# 2. Run frontend Vitest test suites (132 tests with 95.34% branch coverage and 0 act(...) warnings)
+# 2. Run frontend Vitest test suites (133 tests with 95.96% branch coverage and 0 act(...) warnings)
+COVERAGE_INCLUDE="src/features/settings/McpAccessStudio.tsx,src/features/settings/ConnectOAuthAppModal.tsx,src/features/settings/McpUnifiedStudio.tsx,src/features/oauth/OAuthClientGovernanceStudio.tsx,src/features/oauth/DeviceActivatePage.tsx" \
 pnpm --dir kanban/web exec vitest run --coverage \
-  --coverage.include="src/features/settings/McpAccessStudio.tsx" \
-  --coverage.include="src/features/settings/ConnectOAuthAppModal.tsx" \
-  --coverage.include="src/features/settings/McpUnifiedStudio.tsx" \
-  --coverage.include="src/features/oauth/OAuthClientGovernanceStudio.tsx" \
-  --coverage.include="src/features/oauth/DeviceActivatePage.tsx" \
   src/features/settings/__tests__/McpAccessStudio.test.tsx \
   src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx \
   src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx \

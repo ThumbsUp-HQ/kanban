@@ -50,11 +50,12 @@ The table below maps each item from `01-audit-and-cuts.md` 1:1 to its final impl
 ### 3.1 Unit and Coverage Results
 1. **Frontend Vitest Suites:**
    - Files tested: `McpAccessStudio.test.tsx`, `ConnectOAuthAppModal.test.tsx`, `OAuthClientGovernanceStudio.test.tsx`, `DeviceActivatePage.test.tsx`, `McpUnifiedStudio.test.tsx`.
-   - Results: **130 passed (100%)**, zero failed, zero act(...) warnings.
-   - Coverage: Statements **98.93%**, Branches **95.04%**, Functions **99.28%**, Lines **99.06%**. Meets and exceeds the mandatory `>=95%` branch coverage threshold.
+   - Results: **133 passed (100%)**, zero failed, zero act(...) warnings.
+   - Coverage: Statements **99.02%**, Branches **95.96%**, Functions **99.64%**, Lines **99.06%**. Meets and exceeds the mandatory `>=95%` branch coverage threshold.
 2. **Backend Pytest Suites:**
-   - Tests executed: `test_oauth_flow.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`.
-   - Results: **51 passed (100%)**, zero failed, zero errors.
+   - Tests executed: `test_oauth_flow.py`, `test_device_flow.py`, `test_oauth_coverage.py`, `test_oauth_unit.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`, `test_feature_comparison_parity.py`.
+   - Results: **118 passed (100%)**, zero failed, zero errors (53.18s).
+   - Coverage: `admin/mcp_keys.py` 95%, `admin/workload_identities.py` 98%, `mcp_keys.py` 97%, `oauth.py` 95%, `mcp/app.py` 95% (total 96%).
 3. **OpenAPI Schema Parity:**
    - Executed: `uv run pytest kanban/tests/test_feature_comparison_parity.py`.
    - Results: **7 passed (100%)**. 0 delta in endpoints, operations, or OpenAPI schemas.
@@ -64,7 +65,7 @@ The table below maps each item from `01-audit-and-cuts.md` 1:1 to its final impl
 - `uv run mypy kanban/ mcp/`: Clean pass (Success: no issues found in 808 source files).
 - `pnpm --dir kanban/web typecheck`: Clean pass (0 errors).
 - `pnpm --dir kanban/web lint`: Clean pass (0 errors, 0 warnings).
-- `pnpm --dir kanban/web build`: Built client environment in 1.60s without errors.
+- `pnpm --dir kanban/web build`: Built client environment in 1.23s without errors.
 - `python3 scripts/check_no_dashes.py --all`: Clean pass (0 em-dash or en-dash violations).
 
 ---

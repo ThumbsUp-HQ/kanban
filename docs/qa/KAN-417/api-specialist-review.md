@@ -102,29 +102,29 @@ The backend changes in this branch directly implement and enforce critical secur
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 114 tests passed across OAuth flows, unified MCP key management, admin MCP endpoints, workload OIDC token exchange, and JWT authentication:
+   - 118 tests passed across OAuth flows, unified MCP key management, admin MCP endpoints, workload OIDC token exchange, and JWT authentication:
      - `kanban/tests/oauth/test_device_flow.py`: 6 passed
      - `kanban/tests/oauth/test_oauth_coverage.py`: 25 passed
      - `kanban/tests/oauth/test_oauth_flow.py`: 18 passed
      - `kanban/tests/oauth/test_oauth_unit.py`: 25 passed
      - `kanban/tests/api/test_unified_mcp_keys_api.py`: 9 passed
-     - `kanban/tests/api/test_admin_mcp_keys_api.py`: 4 passed
+     - `kanban/tests/api/test_admin_mcp_keys_api.py`: 6 passed
      - `kanban/tests/auth/test_workload_oidc_exchange.py`: 7 passed
      - `mcp/tests/test_workload_jwt_auth.py`: 7 passed
-     - `mcp/tests/test_mcp_capability_mask_and_cidr.py`: 6 passed
+     - `mcp/tests/test_mcp_capability_mask_and_cidr.py`: 8 passed
      - `kanban/tests/test_feature_comparison_parity.py`: 7 passed
-   - Total runtime: 53.69s, 0 failures, 0 errors.
+   - Total runtime: 53.18s, 0 failures, 0 errors.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 130 tests passed across 5 test suites (`ConnectOAuthAppModal`, `DeviceActivatePage`, `OAuthClientGovernanceStudio`, `McpUnifiedStudio`, `McpAccessStudio`).
-   - Branch coverage: 95.04% (exceeds >=95% requirement).
+   - 133 tests passed across 5 test suites (`ConnectOAuthAppModal`, `DeviceActivatePage`, `OAuthClientGovernanceStudio`, `McpUnifiedStudio`, `McpAccessStudio`).
+   - Branch coverage: 95.96% (exceeds >=95% requirement across all touched files).
 
 3. **Static Analysis & Linting Pipeline**:
    - `ruff check`: All checks passed.
    - `mypy`: Success, 0 issues found in 808 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.41s.
+   - `vite build`: Succeeded in 1.23s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -137,7 +137,7 @@ The backend changes in this branch directly implement and enforce critical secur
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All 5 build tools pass cleanly.
-  - `unit-test-results.txt`: Documents 114 backend and 130 frontend passing tests.
+  - `unit-test-results.txt`: Documents 118 backend and 133 frontend passing tests.
   - `git-diff.patch`: Fully captured without dirty tracking files.
   - `screenshots/`: 5 multi-viewport unclipped PNG captures.
   - `changed-files-manifest.txt` and `SHA256SUMS.txt`: Verified with `sha256sum -c`.

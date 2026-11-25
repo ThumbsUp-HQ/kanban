@@ -1062,5 +1062,87 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     // Click preset when name is already set
     fireEvent.click(screen.getByTestId('preset-github-actions'));
     expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
+    fireEvent.click(screen.getByTestId('preset-gitlab-ci'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
+    fireEvent.click(screen.getByTestId('preset-kubernetes'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
+  });
+
+  it('covers fallback defaults when submitting policy with empty capMask, ttl, and desc (KAN-417)', async () => {
+    let sentBody: Record<string, unknown> | null = null;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, _url, opts) => {
+      if (opts?.body) {
+        sentBody = opts.body as Record<string, unknown>;
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('add-workload-policy-btn')).toBeDefined();
+    });
+
+    // 1. Create with empty capMask, ttl, and desc
+    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
+    fireEvent.click(screen.getByTestId('preset-github-actions'));
+    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('policy-cap-mask-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('policy-ttl-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+
+    await waitFor(() => {
+      expect(sentBody).not.toBeNull();
+      expect(sentBody?.capability_mask).toBe(255);
+      expect(sentBody?.max_ttl_seconds).toBe(3600);
+      expect(sentBody?.description).toBeUndefined();
+    });
+
+    // 2. Edit with empty capMask, ttl, and desc
+    const mockPolicy: WorkloadIdentityPolicyItem = {
+      id: 'pol-custom-1',
+      workspace_id: 'ws-1',
+      name: 'Custom',
+      description: 'Existing Desc',
+      issuer: 'https://custom.issuer',
+      client_id: 'client-1',
+      subject_pattern: 'sub:*',
+      required_claims_json: {},
+      surface: 'agent',
+      scopes: ['agent:read'],
+      allowed_project_ids: [],
+      capability_mask: 7,
+      allowed_cidrs: ['10.0.0.0/8'],
+      max_ttl_seconds: 1800,
+      is_enabled: true,
+      created_by_id: 'usr-1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, _url, opts) => {
+      if (method === 'PATCH' && opts?.body) {
+        sentBody = opts.body as Record<string, unknown>;
+        return Promise.resolve(mockPolicy);
+      }
+      return Promise.resolve([mockPolicy]);
+    });
+
+    const { unmount } = render(<WorkloadFederationSection isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-policy-btn-pol-custom-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-custom-1'));
+    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('policy-cap-mask-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('policy-ttl-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+
+    await waitFor(() => {
+      expect(sentBody?.capability_mask).toBe(255);
+      expect(sentBody?.max_ttl_seconds).toBe(3600);
+      expect(sentBody?.description).toBeUndefined();
+    });
+    unmount();
   });
 });
