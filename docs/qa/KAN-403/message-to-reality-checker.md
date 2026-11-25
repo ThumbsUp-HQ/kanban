@@ -4,7 +4,7 @@
 - **Ticket ID**: KAN-403 (`[KB-LOCAL-FOLDER-ONBOARDING-PROMPT] Default /llms.txt Onboarding to Local Project Folder (.agents/skills/ & AGENTS.md) & Add User/Project AgentOnboardingPromptCard`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f` (from `main`, linear Alembic head #82 `p6_20_oauth_clients_status_check`)
-- **Head Commit**: `e0f893fe`
+- **Head Commit**: `34cef65c`
 
 ## Forensic Verification Summary
 
@@ -50,12 +50,12 @@
 1. **Unit Test & Coverage Report**:
    - `docs/qa/KAN-403/unit-test-results.txt`
    - Static Migration Check: `uv run kanban-ctl db check-migrations --static-only` (All 83 migrations valid, single head: `p6_21_agent_onboarding_preferences`).
-   - Backend Pytest: 50 passed tests in 37.36s.
+   - Backend Pytest: 49 passed tests in 34.84s with 0 warnings.
      - `database/models/principals.py`: 100% coverage
      - `kanban/ops/llms_txt.py`: 100% coverage
      - `kanban/api/v1/user_settings.py`: 95% coverage (100% on new preferences endpoints)
      - Total Backend Coverage: 97% across changed modules
-   - Frontend Vitest: 88 passed tests in 6.21s.
+   - Frontend Vitest: 90 passed tests in 5.89s with 0 warnings.
      - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% funcs, 100% lines
      - `AgentOnboardingPromptCard.tsx`: 100% statements, 100% branches, 100% funcs, 100% lines
      - `personalSettingsApi.ts`: 100% statements, 100% branches, 100% funcs, 100% lines

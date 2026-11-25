@@ -5,7 +5,7 @@
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f`
-- **Head Commit**: `e0f893fe`
+- **Head Commit**: `34cef65c`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -76,14 +76,14 @@ All 10 Playwright screenshots in `docs/qa/KAN-403/screenshots/` captured with un
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - 88 passing tests across all touched frontend suites including `DocsCenter.test.tsx` (46/46 passed).
+  - 90 passing tests across all touched frontend suites in 5.89s (including `DocsCenter.test.tsx` 46/46 passed) with 0 warnings.
   - Coverage: 100% statements, 100% branches, 100% functions, 100% lines across all touched files:
     - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% functions, 100% lines.
     - `AgentOnboardingPromptCard.tsx`: 100% statements, 100% branches, 100% functions, 100% lines.
     - `personalSettingsApi.ts`: 100% statements, 100% branches, 100% functions, 100% lines.
   - Zero React Query warnings, zero stderr warnings.
 - **Backend Pytest Suite**:
-  - 50 passing tests across `test_agent_onboarding_preferences.py`, `test_user_personal_settings.py`, `test_websudo_sliding_aal2.py`, `test_standard_user_rbac_matrix.py`, `test_llms_txt.py`, `test_p6_21_agent_onboarding_preferences_migration.py`, `test_p1_17_models.py`, `test_feature_comparison_parity.py`.
+  - 49 passing tests in 34.84s with 0 warnings across `test_agent_onboarding_preferences.py`, `test_user_personal_settings.py`, `test_standard_user_rbac_matrix.py`, `test_llms_txt.py`, `test_p6_21_agent_onboarding_preferences_migration.py`, `test_p1_17_models.py`, `test_feature_comparison_parity.py`.
   - 97% overall backend coverage on modified modules (`principals.py`: 100%, `llms_txt.py`: 100%, `user_settings.py`: 95%).
 - **Build & Quality Gates**:
   - Literal verification command: `uv run ruff check kanban/ database/ && python3 scripts/check_no_dashes.py --all && pnpm --dir kanban/web typecheck && pnpm --dir kanban/web lint && pnpm --dir kanban/web build` passed with exit code 0.

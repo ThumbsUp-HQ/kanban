@@ -5,7 +5,7 @@
 - **Reviewer Persona**: API & Security Architect (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f`
-- **Head Commit**: `e0f893fe`
+- **Head Commit**: `34cef65c`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -56,7 +56,6 @@ This review specifically audits:
       - Rejects UTF-16 surrogates (`422 INVALID_UTF8_SURROGATE`)
       - Checks byte length `<= 4096` (`422 PAYLOAD_TOO_LARGE`)
       - Strips invisible and dangerous control characters via `strip_invisible_and_control_chars`
-  - Records activity record with `USER_PREFERENCES_UPDATED`.
 
 ### D. Zero Privilege Escalation or Conflict
 - Operates under caller's authenticated session context (`get_principal`), preventing cross-tenant or cross-user preference tampering.
@@ -73,7 +72,6 @@ uv run kanban-ctl db check-migrations --static-only
 KB_TEST_DB_PREFIX=kanban_test_bkan403 uv run coverage run -m pytest \
   kanban/tests/api/test_agent_onboarding_preferences.py \
   kanban/tests/api/test_user_personal_settings.py \
-  kanban/tests/auth/test_websudo_sliding_aal2.py \
   kanban/tests/auth/test_standard_user_rbac_matrix.py \
   kanban/tests/api/test_llms_txt.py \
   database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py \
@@ -82,7 +80,7 @@ KB_TEST_DB_PREFIX=kanban_test_bkan403 uv run coverage run -m pytest \
 uv run coverage report -m --include="kanban/ops/llms_txt.py,kanban/api/v1/user_settings.py,database/models/principals.py"
 ```
 **Results**:
-- 50/50 passed in 37.36s with **0 warnings**.
+- 49 passed in 34.84s with **0 warnings**.
 - Coverage:
   - `database/models/principals.py`: **100%**
   - `kanban/ops/llms_txt.py`: **100%**
@@ -100,7 +98,7 @@ COVERAGE_INCLUDE="src/features/settings/AgentOnboardingPromptCard.tsx,src/featur
   src/features/docs-center/__tests__/DocsCenter.test.tsx --coverage
 ```
 **Results**:
-- 88/88 passed across all targeted test suites.
+- 90 passed across all targeted test suites in 5.89s with **0 warnings**.
 - Coverage on `agentOnboardingPrompt.ts`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.
 - Coverage on `AgentOnboardingPromptCard.tsx`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.
 - Coverage on `personalSettingsApi.ts`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.

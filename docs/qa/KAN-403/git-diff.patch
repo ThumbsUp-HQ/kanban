@@ -1,5 +1,5 @@
 diff --git a/README.md b/README.md
-index 50c93311..028e0e07 100644
+index 50c93311..e7a27d89 100644
 --- a/README.md
 +++ b/README.md
 @@ -173,7 +173,7 @@ flowchart LR
@@ -7,7 +7,7 @@ index 50c93311..028e0e07 100644
  | :--- | :--- | :--- |
  | **`database/`** | 92 SQLAlchemy 2.0 models, 76 Alembic single-head migrations / SQL up files, Universal Object Graph, SHA-256 `activity_records` | `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`), zero-context fail closed, canonical UTF-8 Markdown only |
 -| **`kanban/`** | FastAPI app (`291` paths, `386` operations, `387` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
-+| **`kanban/`** | FastAPI app (`292` paths, `388` operations, `390` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
++| **`kanban/`** | FastAPI app (`292` paths, `388` operations, `391` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
  | **`mcp/`** | 3 isolated Streamable HTTP surfaces (`10` agent + `3` docs + `12` admin = `25` tools; 24 standard suite), OAuth 2.1 + PKCE `S256` | `InlineSafeDumper` LOD YAML, 2-stage delete blast hash, `mcp_read_taint`, forbidden from importing `database/` |
  | **`agent/`** | LLM `ProviderRouter` (`openai`, `gemini`, `ollama`, `fixture`), Sparkle FIM (`<150ms` p95), `cli_pipe` & mTLS `remote_runner` | `AirGapGuard` fail-closed egress, zero-shell `execve`, `kanban-agent validate-*` offline test workbench |
  
@@ -128,7 +128,7 @@ index 00000000..6dda3609
 +        # 3. Upgrade back to head
 +        await harness.upgrade("p6_21_agent_onboarding_preferences")
 diff --git a/kanban/api/v1/user_settings.py b/kanban/api/v1/user_settings.py
-index 9e6a36ec..b0dc593d 100644
+index 9e6a36ec..815c1173 100644
 --- a/kanban/api/v1/user_settings.py
 +++ b/kanban/api/v1/user_settings.py
 @@ -7,16 +7,17 @@ from __future__ import annotations
@@ -159,7 +159,7 @@ index 9e6a36ec..b0dc593d 100644
  from kanban.services.activity import ActivityEventType, record_activity
  
  if TYPE_CHECKING:
-@@ -795,3 +797,238 @@ async def change_password(  # noqa: C901
+@@ -795,3 +797,288 @@ async def change_password(  # noqa: C901
              "message": "Password changed successfully.",
          }
      )
@@ -226,6 +226,34 @@ index 9e6a36ec..b0dc593d 100644
 +    )
 +
 +
++class AgentOnboardingPrefsPatch(BaseModel):
++    """Partial update payload for per-user agent onboarding preferences."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    scope: Literal["local_only", "global_allowed"] | None = Field(
++        default=None,
++        description="Persistence scope boundary (defaults strictly to local project folder)",
++    )
++    execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = Field(
++        default=None,
++        description="Preferred execution topology",
++    )
++    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = Field(
++        default=None,
++        description="Model tier and token allocation strategy",
++    )
++    qa_rigor: Literal["standard", "strict_forensic"] | None = Field(
++        default=None,
++        description="QA verification and coverage gate rigor",
++    )
++    custom_notes: str | None = Field(
++        default=None,
++        max_length=4096,
++        description="Custom onboarding instructions or constraints (max 4096 bytes)",
++    )
++
++
 +class UserPreferencesResponse(BaseModel):
 +    """Response containing user preferences."""
 +
@@ -241,7 +269,7 @@ index 9e6a36ec..b0dc593d 100644
 +
 +    model_config = ConfigDict(extra="forbid")
 +
-+    agent_onboarding_prefs: AgentOnboardingPrefs | None = None
++    agent_onboarding_prefs: AgentOnboardingPrefsPatch | None = None
 +    scope: Literal["local_only", "global_allowed"] | None = None
 +    execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = None
 +    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = None
@@ -294,6 +322,59 @@ index 9e6a36ec..b0dc593d 100644
 +    )
 +
 +
++def _merge_agent_onboarding_prefs(
++    active: AgentOnboardingPrefs,
++    body: UpdateUserPreferencesRequest,
++) -> AgentOnboardingPrefs:
++    """Merge active preferences with partial nested and top-level patch fields."""
++    nested = body.agent_onboarding_prefs
++    scope = (
++        body.scope
++        if body.scope is not None
++        else (nested.scope if nested and nested.scope is not None else active.scope)
++    )
++    mode = (
++        body.execution_mode
++        if body.execution_mode is not None
++        else (
++            nested.execution_mode
++            if nested and nested.execution_mode is not None
++            else active.execution_mode
++        )
++    )
++    strat = (
++        body.model_strategy
++        if body.model_strategy is not None
++        else (
++            nested.model_strategy
++            if nested and nested.model_strategy is not None
++            else active.model_strategy
++        )
++    )
++    rigor = (
++        body.qa_rigor
++        if body.qa_rigor is not None
++        else (nested.qa_rigor if nested and nested.qa_rigor is not None else active.qa_rigor)
++    )
++    notes_raw = (
++        body.custom_notes
++        if body.custom_notes is not None
++        else (
++            nested.custom_notes
++            if nested and nested.custom_notes is not None
++            else active.custom_notes
++        )
++    )
++    sanitized_notes = _validate_custom_notes(notes_raw)
++    return AgentOnboardingPrefs(
++        scope=scope,
++        execution_mode=mode,
++        model_strategy=strat,
++        qa_rigor=rigor,
++        custom_notes=sanitized_notes,
++    )
++
++
 +@router.patch(
 +    "/users/me/preferences",
 +    response_model=UserPreferencesResponse,
@@ -335,38 +416,7 @@ index 9e6a36ec..b0dc593d 100644
 +        if current_prefs_dict
 +        else AgentOnboardingPrefs()
 +    )
-+    new_scope = active_prefs.scope
-+    new_mode = active_prefs.execution_mode
-+    new_strat = active_prefs.model_strategy
-+    new_rigor = active_prefs.qa_rigor
-+    new_notes = active_prefs.custom_notes
-+
-+    if body.agent_onboarding_prefs is not None:
-+        new_scope = body.agent_onboarding_prefs.scope
-+        new_mode = body.agent_onboarding_prefs.execution_mode
-+        new_strat = body.agent_onboarding_prefs.model_strategy
-+        new_rigor = body.agent_onboarding_prefs.qa_rigor
-+        new_notes = body.agent_onboarding_prefs.custom_notes
-+
-+    if body.scope is not None:
-+        new_scope = body.scope
-+    if body.execution_mode is not None:
-+        new_mode = body.execution_mode
-+    if body.model_strategy is not None:
-+        new_strat = body.model_strategy
-+    if body.qa_rigor is not None:
-+        new_rigor = body.qa_rigor
-+    if body.custom_notes is not None:
-+        new_notes = body.custom_notes
-+
-+    sanitized_notes = _validate_custom_notes(new_notes)
-+    updated_prefs = AgentOnboardingPrefs(
-+        scope=new_scope,
-+        execution_mode=new_mode,
-+        model_strategy=new_strat,
-+        qa_rigor=new_rigor,
-+        custom_notes=sanitized_notes,
-+    )
++    updated_prefs = _merge_agent_onboarding_prefs(active_prefs, body)
 +
 +    if session_factory is not None:
 +        rls_ctx = RLSContext(
@@ -467,10 +517,10 @@ index 662f6c70..6866bb72 100644
  ### 4. Recommended Skills Catalog
 diff --git a/kanban/tests/api/test_agent_onboarding_preferences.py b/kanban/tests/api/test_agent_onboarding_preferences.py
 new file mode 100644
-index 00000000..9c5ca3b7
+index 00000000..39f209a3
 --- /dev/null
 +++ b/kanban/tests/api/test_agent_onboarding_preferences.py
-@@ -0,0 +1,595 @@
+@@ -0,0 +1,672 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit and integration tests for agent onboarding preferences (KAN-403).
@@ -497,7 +547,7 @@ index 00000000..9c5ca3b7
 +from kanban.api.deps import PrincipalContext
 +from kanban.api.problems import ProblemException
 +from kanban.api.v1.user_settings import (
-+    AgentOnboardingPrefs,
++    AgentOnboardingPrefsPatch,
 +    ChangePasswordRequest,
 +    UpdateUserPreferencesRequest,
 +    _parse_avatar_upload,
@@ -581,6 +631,83 @@ index 00000000..9c5ca3b7
 +    assert data_b["principal_id"] == str(user_b.id)
 +    assert data_b["agent_onboarding_prefs"]["execution_mode"] == "swarm"
 +    assert data_b["agent_onboarding_prefs"]["custom_notes"] == ""
++
++
++async def test_user_preferences_partial_nested_merge(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    api_env: ApiEnv,
++) -> None:
++    """Verify partial nested prefs merge without overwriting keys."""
++    user = await make_user("partial_user")
++    await api_env.seed.commit()
++    client = as_principal(user)
++
++    # 1. Set full initial preferences
++    init_res = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={
++            "agent_onboarding_prefs": {
++                "scope": "global_allowed",
++                "execution_mode": "swarm",
++                "model_strategy": "hybrid",
++                "qa_rigor": "standard",
++                "custom_notes": "Existing instructions.",
++            }
++        },
++    )
++    assert init_res.status_code == 200
++    init_data = init_res.json()
++    assert init_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
++    assert init_data["agent_onboarding_prefs"]["execution_mode"] == "swarm"
++    assert init_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
++    assert init_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
++    assert init_data["agent_onboarding_prefs"]["custom_notes"] == "Existing instructions."
++
++    # 2. Partial nested patch: only execution_mode
++    partial_res = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"execution_mode": "teamwork"}},
++    )
++    assert partial_res.status_code == 200
++    partial_data = partial_res.json()
++    assert partial_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
++    assert partial_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
++    assert partial_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
++    assert partial_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
++    assert partial_data["agent_onboarding_prefs"]["custom_notes"] == "Existing instructions."
++
++    # 3. Partial nested patch: only custom_notes
++    notes_res = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"custom_notes": "Updated note only."}},
++    )
++    assert notes_res.status_code == 200
++    notes_data = notes_res.json()
++    assert notes_data["agent_onboarding_prefs"]["custom_notes"] == "Updated note only."
++    assert notes_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
++    assert notes_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
++    assert notes_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
++    assert notes_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
++
++    # 4. Partial nested patch: only scope and qa_rigor
++    scope_res = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"scope": "local_only", "qa_rigor": "strict_forensic"}},
++    )
++    assert scope_res.status_code == 200
++    scope_data = scope_res.json()
++    assert scope_data["agent_onboarding_prefs"]["scope"] == "local_only"
++    assert scope_data["agent_onboarding_prefs"]["qa_rigor"] == "strict_forensic"
++    assert scope_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
++    assert scope_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
++    assert scope_data["agent_onboarding_prefs"]["custom_notes"] == "Updated note only."
++
++    # 5. GET confirms persisted state in database
++    get_res = await client.get("/api/v1/users/me/preferences")
++    assert get_res.status_code == 200
++    get_data = get_res.json()
++    assert get_data["agent_onboarding_prefs"] == scope_data["agent_onboarding_prefs"]
 +
 +
 +async def test_user_preferences_validation_errors(
@@ -790,7 +917,7 @@ index 00000000..9c5ca3b7
 +    assert get_res.agent_onboarding_prefs.execution_mode == "swarm"
 +
 +    update_body = UpdateUserPreferencesRequest(
-+        agent_onboarding_prefs=AgentOnboardingPrefs(
++        agent_onboarding_prefs=AgentOnboardingPrefsPatch(
 +            scope="global_allowed",
 +            execution_mode="single_thread",
 +            model_strategy="quota_sipping_flash",
@@ -1090,7 +1217,7 @@ index 87fb8735..3b0ed5d6 100644
          skills = data["skills"]
          assert len(skills) == len(ALLOWED_SKILL_SLUGS)
 diff --git a/kanban/tests/test_feature_comparison_parity.py b/kanban/tests/test_feature_comparison_parity.py
-index 2dc3feeb..0245b5cc 100644
+index 2dc3feeb..07a21316 100644
 --- a/kanban/tests/test_feature_comparison_parity.py
 +++ b/kanban/tests/test_feature_comparison_parity.py
 @@ -178,16 +178,16 @@ def test_codebase_metrics_parity() -> None:
@@ -1102,7 +1229,7 @@ index 2dc3feeb..0245b5cc 100644
 -    assert schemas_count == 387
 +    assert paths_count == 292
 +    assert ops_count == 388
-+    assert schemas_count == 390
++    assert schemas_count == 391
  
      readme_text = README_PATH.read_text(encoding="utf-8")
      assert "92 SQLAlchemy 2.0 models" in readme_text
@@ -1112,7 +1239,7 @@ index 2dc3feeb..0245b5cc 100644
 -    assert "387" in readme_text
 +    assert "292" in readme_text
 +    assert "388" in readme_text
-+    assert "390" in readme_text
++    assert "391" in readme_text
  
  
  def test_wiki_manifest_synchronization() -> None:
@@ -1928,10 +2055,10 @@ index c7d5b9ee..b81df0ad 100644
          {activeTab === 'states' && (
 diff --git a/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
 new file mode 100644
-index 00000000..d1496559
+index 00000000..d065c0e5
 --- /dev/null
 +++ b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,497 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2064,21 +2191,27 @@ index 00000000..d1496559
 +    // Project key context is included in prompt
 +    const preview = screen.getByTestId('agent-onboarding-prompt-preview');
 +    expect(preview.textContent).toContain('for project KAN-403');
++    expect(preview.textContent).toContain('Execution Mode (default: Swarm)');
++    expect(preview.textContent).toContain('Model/Quota Strategy (default: Quota-Sipping Flash 3.8)');
++    expect(preview.textContent).toContain('QA Rigor (default: Strict Forensic reality-checker)');
 +
 +    // Change Execution Mode
 +    const execSelect = screen.getByTestId<HTMLSelectElement>('pref-exec-mode-select');
 +    fireEvent.change(execSelect, { target: { value: 'teamwork' } });
 +    expect(execSelect.value).toBe('teamwork');
++    expect(preview.textContent).toContain('Execution Mode (default: Teamwork)');
 +
 +    // Change Model Strategy
 +    const modelSelect = screen.getByTestId<HTMLSelectElement>('pref-model-strat-select');
 +    fireEvent.change(modelSelect, { target: { value: 'hybrid' } });
 +    expect(modelSelect.value).toBe('hybrid');
++    expect(preview.textContent).toContain('Model/Quota Strategy (default: Hybrid)');
 +
 +    // Change QA Rigor
 +    const qaSelect = screen.getByTestId<HTMLSelectElement>('pref-qa-rigor-select');
 +    fireEvent.change(qaSelect, { target: { value: 'standard' } });
 +    expect(qaSelect.value).toBe('standard');
++    expect(preview.textContent).toContain('QA Rigor (default: Standard)');
 +
 +    // Change Custom Notes
 +    const notesInput = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');
@@ -2425,10 +2558,10 @@ index 00000000..d1496559
 +});
 diff --git a/kanban/web/src/features/settings/__tests__/agentOnboardingPrompt.test.ts b/kanban/web/src/features/settings/__tests__/agentOnboardingPrompt.test.ts
 new file mode 100644
-index 00000000..3b98e75a
+index 00000000..430e495f
 --- /dev/null
 +++ b/kanban/web/src/features/settings/__tests__/agentOnboardingPrompt.test.ts
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,99 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2492,13 +2625,48 @@ index 00000000..3b98e75a
 +      globalThis.window = originalWindow;
 +    }
 +  });
++
++  it('reflects selected executionMode, modelStrategy, and qaRigor in prompt text', () => {
++    const prompt = buildAgentOnboardingPrompt({
++      origin: 'https://kanban.example.com',
++      executionMode: 'swarm',
++      modelStrategy: 'quota_sipping_flash',
++      qaRigor: 'strict_forensic',
++    });
++    expect(prompt).toContain('Execution Mode (default: Swarm)');
++    expect(prompt).toContain('Model/Quota Strategy (default: Quota-Sipping Flash 3.8)');
++    expect(prompt).toContain('QA Rigor (default: Strict Forensic reality-checker)');
++  });
++
++  it('supports single option overrides cleanly', () => {
++    const p1 = buildAgentOnboardingPrompt({ executionMode: 'single_thread' });
++    expect(p1).toContain('Execution Mode (default: Single-Thread)');
++    expect(p1).toContain(
++      'Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra)',
++    );
++    expect(p1).toContain('QA Rigor (Standard or Strict Forensic)');
++
++    const p2 = buildAgentOnboardingPrompt({
++      executionMode: 'teamwork',
++      modelStrategy: 'hybrid',
++      qaRigor: 'standard',
++    });
++    expect(p2).toContain('Execution Mode (default: Teamwork)');
++    expect(p2).toContain('Model/Quota Strategy (default: Hybrid)');
++    expect(p2).toContain('QA Rigor (default: Standard)');
++
++    const p3 = buildAgentOnboardingPrompt({ modelStrategy: 'unconstrained_max' });
++    expect(p3).toContain(
++      'Model/Quota Strategy (default: Unconstrained Sol MAX / Claude Ultra)',
++    );
++  });
 +});
 diff --git a/kanban/web/src/features/settings/agentOnboardingPrompt.ts b/kanban/web/src/features/settings/agentOnboardingPrompt.ts
 new file mode 100644
-index 00000000..8e9dabe3
+index 00000000..901b5a60
 --- /dev/null
 +++ b/kanban/web/src/features/settings/agentOnboardingPrompt.ts
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,80 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2531,7 +2699,47 @@ index 00000000..8e9dabe3
 +      '(~/.claude, ~/.codex, ~/.gemini, ~/.agents).';
 +  }
 +
-+  let prompt = `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow${projectClause}, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and ${scopeClause}`;
++  const execLabel =
++    options.executionMode === 'single_thread'
++      ? 'Single-Thread'
++      : options.executionMode === 'teamwork'
++        ? 'Teamwork'
++        : options.executionMode === 'swarm'
++          ? 'Swarm'
++          : undefined;
++
++  const modelLabel =
++    options.modelStrategy === 'quota_sipping_flash'
++      ? 'Quota-Sipping Flash 3.8'
++      : options.modelStrategy === 'hybrid'
++        ? 'Hybrid'
++        : options.modelStrategy === 'unconstrained_max'
++          ? 'Unconstrained Sol MAX / Claude Ultra'
++          : undefined;
++
++  const qaLabel =
++    options.qaRigor === 'standard'
++      ? 'Standard'
++      : options.qaRigor === 'strict_forensic'
++        ? 'Strict Forensic reality-checker'
++        : undefined;
++
++  let interviewClause: string;
++  if (execLabel || modelLabel || qaLabel) {
++    const execDesc = execLabel ? `default: ${execLabel}` : 'Single-Thread, Teamwork, or Swarm';
++    const modelDesc = modelLabel
++      ? `default: ${modelLabel}`
++      : 'Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra';
++    const qaDesc = qaLabel ? `default: ${qaLabel}` : 'Standard or Strict Forensic';
++    interviewClause = `interview me on Execution Mode (${execDesc}), Model/Quota Strategy (${modelDesc}), and QA Rigor (${qaDesc})`;
++  } else {
++    interviewClause =
++      'interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), ' +
++      'Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), ' +
++      'and QA Rigor';
++  }
++
++  let prompt = `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow${projectClause}, ${interviewClause}, and ${scopeClause}`;
 +
 +  if (options.customNotes && options.customNotes.trim().length > 0) {
 +    prompt += ` Notes: ${options.customNotes.trim()}`;
