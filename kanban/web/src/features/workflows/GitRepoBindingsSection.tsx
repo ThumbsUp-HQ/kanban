@@ -159,12 +159,20 @@ export function GitRepoBindingsSection({
       return;
     }
 
+    if (credential === 'workspace-pat') {
+      const trimmedPat = patToken.trim();
+      if (!trimmedPat) {
+        setFormError('Personal Access Token (PAT) is required when workspace-pat credential is selected.');
+        return;
+      }
+    }
+
     const payload: CreateRepoBindingPayload = {
       slug: trimmedSlug,
       remote_url: remoteUrl.trim(),
       default_ref: defaultRef.trim() || 'main',
       access_mode: accessMode,
-      ...(credential ? { credential } : {}),
+      ...(credential ? { credential: credential === 'workspace-pat' ? patToken.trim() : credential } : {}),
     };
 
     setIsSubmitting(true);

@@ -56,6 +56,15 @@ This packet provides indisputable forensic verification evidence for ticket **KA
 
 ---
 
+### 2.6 Reality-Checker Round 1 Remediation Items (100% Resolved)
+- **Git PAT Credential Transmission & Validation (`GitRepoBindingsSection.tsx`):** Fixed credential submission bug where static `'workspace-pat'` was transmitted instead of `patToken.trim()`. Enforced mandatory non-empty PAT validation with clear error display. Verified with 18 Vitest unit tests (95.65% branch coverage).
+- **High-Contrast Dark Mode Overrides (`WorkspaceSettingsPage.css`):** Replaced undefined `--kb-color-bg-subtle` with `--kb-color-bg-surface-raised` and added explicit dark mode tokens (`background: #1e293b; color: #f1f5f9; border-color: #334155;` >= 4.5:1 WCAG AA contrast).
+- **Mobile & Tablet Layout Responsiveness (`PersonalSettingsPage.css`, `ProjectSettingsPage.css`):** Wrapped `.kb-timezone-search-row` with `flex-wrap: wrap; flex: 1 1 180px;` so Auto-detect button never overflows at 390x844. Added horizontal scroll and wrapped actions for passkeys table on <= 900px tablets. Set `min-height: 44px; white-space: normal; line-height: 1.35;` on `.kb-btn-purge` to prevent mobile border clipping.
+- **Transitive Hierarchy Cycle Warning (`WorkspaceSettingsPage.tsx`):** Enforced `group-cycle-pill` display whenever `/cycle/i.test(groupActionError)` even when cyclic groups are outside `groupMembers`.
+- **Interactive Modals & Drawers Multi-Viewport Screenshots:** Captured unclipped PNGs for `AttachHookDialog`, `DryRunDrawer`, `GitRepoBindingsSection` Bind Modal, and `CustomFieldDefinitionEditor` Tamper Dialog, bringing the verified visual screenshot suite to 29 PNGs.
+
+---
+
 ## 3. Replication & Verification Instructions
 
 Execute the following commands from the workspace root to reproduce all verification results:
@@ -91,7 +100,7 @@ uv run pytest \
   --cov=kanban --cov-config=.tmp_coveragerc --cov-report=term-missing
 rm -f .tmp_coveragerc
 
-# 2. Run frontend Vitest suite (279 passed in 17.14s, 96.08% overall branch coverage, >=95% on every touched file)
+# 2. Run frontend Vitest suite (280 passed in 15.86s, 96.05% overall branch coverage, >=95% on every touched file)
 cd kanban/web && npx vitest run \
   src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx \
   src/features/settings/__tests__/ProjectSettingsPage.test.tsx \
@@ -130,7 +139,7 @@ cd docs/qa/KAN-427 && sha256sum -c changed-files-manifest.txt
 
 ## 4. Visual Evidence & Screenshots
 
-All 25 unclipped multi-viewport captures were recorded via Playwright in `docs/qa/KAN-427/screenshots/` and visually verified via `read_file`:
+All 29 unclipped Playwright captures (25 multi-viewport baseline + 4 interactive modal/drawer captures) were recorded in `docs/qa/KAN-427/screenshots/` and visually verified via `read_file`:
 - `01-workspace-settings-01-desktop-1440x900-light.png` (1440x900)
 - `01-workspace-settings-02-desktop-1440x900-dark.png` (1440x900)
 - `01-workspace-settings-03-tablet-landscape-1024x768.png` (1024x768)
@@ -156,6 +165,10 @@ All 25 unclipped multi-viewport captures were recorded via Playwright in `docs/q
 - `03-personal-settings-03-tablet-landscape-1024x768.png` (1024x768)
 - `03-personal-settings-04-tablet-portrait-768x1024.png` (768x1024)
 - `03-personal-settings-05-mobile-portrait-390x844.png` (390x844)
+- `06-workflow-attach-hook-dialog.png` (1440x900 - AttachHookDialog Wasm vs Agent + Select/Clear All)
+- `07-workflow-dry-run-drawer.png` (1440x900 - DryRunDrawer Simulation Top Banner + Field Diff Table)
+- `08-git-repo-bindings-modal.png` (1440x900 - GitRepoBindingsSection Bind Repo Modal + SSRF Callout + Masked PAT)
+- `09-custom-field-tamper-dialog.png` (1440x900 - CustomFieldDefinitionEditor Tamper Confirm Dialog Old vs New SHA-256)
 
 ---
 

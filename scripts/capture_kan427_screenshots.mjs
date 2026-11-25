@@ -727,11 +727,7 @@ async function main() {
           const dangerTab = page.locator('[data-testid="tab-danger"]');
           if (await dangerTab.count()) {
             await dangerTab.click();
-            const purgeBtn = page.locator('[data-testid="request-purge-btn"]');
-            if (await purgeBtn.count()) {
-              await purgeBtn.click();
-              await page.waitForSelector('[data-testid="danger-card-purge"]', { timeout: 4000 });
-            }
+            await page.waitForSelector('[data-testid="danger-card-purge"]', { timeout: 4000 });
           }
         } catch (e) {
           console.warn('project danger zone error:', e.message);
@@ -826,6 +822,150 @@ async function main() {
         console.log(`Captured ${filename}`);
         await context.close();
       }
+    }
+
+    // 6. Interactive Dialog: AttachHookDialog (Wasm vs Agent + Select/Clear All)
+    {
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+        bypassCSP: true,
+      });
+      const page = await context.newPage();
+      await setupInterceptions(page);
+      await page.goto(`${BASE_URL}/projects/KAN/settings/workflows?attach=1`, { waitUntil: 'networkidle' });
+
+      try {
+        await page.waitForSelector('.workflow-dialog-backdrop, [role="dialog"]', { timeout: 6000 });
+        const agentRadio = page.locator('label:has-text("Agent Transition Helper")');
+        if (await agentRadio.count()) {
+          await agentRadio.click();
+        }
+        await page.waitForTimeout(300);
+      } catch (e) {
+        console.warn('attach hook dialog error:', e.message);
+      }
+
+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
+      const filename = '06-workflow-attach-hook-dialog.png';
+      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
+      console.log(`Captured ${filename}`);
+      await context.close();
+    }
+
+    // 7. Interactive Drawer: DryRunDrawer (Simulation banner + before/after diff table)
+    {
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+        bypassCSP: true,
+      });
+      const page = await context.newPage();
+      await setupInterceptions(page);
+      await page.goto(`${BASE_URL}/projects/KAN/settings/workflows`, { waitUntil: 'networkidle' });
+
+      try {
+        await page.waitForSelector('.workflow-studio', { timeout: 6000 });
+        const dryRunBtn = page.locator('button:has-text("Dry-Run Against Sample Ticket")').first();
+        if (await dryRunBtn.count()) {
+          await dryRunBtn.click();
+          await page.waitForSelector('.dry-run-drawer, [data-testid="dry-run-drawer"]', { timeout: 4000 });
+        }
+        await page.waitForTimeout(300);
+      } catch (e) {
+        console.warn('dry-run drawer error:', e.message);
+      }
+
+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
+      const filename = '07-workflow-dry-run-drawer.png';
+      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
+      console.log(`Captured ${filename}`);
+      await context.close();
+    }
+
+    // 8. Interactive Modal: GitRepoBindingsSection (Bind Repo modal with SSRF callout + masked PAT)
+    {
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+        bypassCSP: true,
+      });
+      const page = await context.newPage();
+      await setupInterceptions(page);
+      await page.goto(`${BASE_URL}/projects/KAN/settings/workflows`, { waitUntil: 'networkidle' });
+
+      try {
+        await page.waitForSelector('.repo-bindings-section', { timeout: 6000 });
+        const bindBtn = page.locator('button:has-text("Bind Git Repository")');
+        if (await bindBtn.count()) {
+          await bindBtn.click();
+          await page.waitForSelector('[role="dialog"]', { timeout: 4000 });
+          const credSelect = page.locator('#repo-cred-select');
+          if (await credSelect.count()) {
+            await credSelect.selectOption('workspace-pat');
+            await page.waitForSelector('[data-testid="repo-pat-input"]', { timeout: 2000 });
+            await page.locator('[data-testid="repo-pat-input"]').fill('ghp_exampleMaskedPat1234567890SecretToken');
+          }
+        }
+        await page.waitForTimeout(300);
+      } catch (e) {
+        console.warn('bind git repo modal error:', e.message);
+      }
+
+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
+      const filename = '08-git-repo-bindings-modal.png';
+      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
+      console.log(`Captured ${filename}`);
+      await context.close();
+    }
+
+    // 9. Interactive Modal: CustomFieldDefinitionEditor (Tamper confirm dialog with old vs new SHA-256)
+    {
+      const context = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+        bypassCSP: true,
+      });
+      const page = await context.newPage();
+      await setupInterceptions(page);
+      await page.goto(`${BASE_URL}/projects/KAN/settings/custom-fields`, { waitUntil: 'networkidle' });
+
+      try {
+        await page.waitForSelector('[data-testid="custom-fields-editor-layout"], [data-testid="custom-fields-def-list"]', { timeout: 6000 });
+        const fieldItem = page.locator('[data-testid="field-item-cvss-score"]');
+        if (await fieldItem.count()) {
+          await fieldItem.click();
+          await page.waitForTimeout(400);
+
+          // Open advanced section
+          const advToggle = page.locator('[data-testid="custom-field-advanced-section-toggle"]');
+          if (await advToggle.count()) {
+            await advToggle.click();
+            await page.waitForTimeout(300);
+          }
+
+          // Modify unit suffix to change output format metadata and manifest SHA
+          const unitSuffix = page.locator('[data-testid="meta-number-unit-suffix"]');
+          if (await unitSuffix.count()) {
+            await unitSuffix.fill('modified-pts');
+            await page.waitForTimeout(200);
+          }
+
+          const saveBtn = page.locator('[data-testid="save-definition-btn"]');
+          if (await saveBtn.count()) {
+            await saveBtn.click();
+            await page.waitForSelector('[data-testid="tamper-confirm-dialog"]', { timeout: 6000 });
+          }
+        }
+      } catch (e) {
+        console.warn('custom field tamper dialog error:', e.message);
+      }
+
+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
+      const filename = '09-custom-field-tamper-dialog.png';
+      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
+      console.log(`Captured ${filename}`);
+      await context.close();
     }
 
     await browser.close();

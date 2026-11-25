@@ -1675,7 +1675,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
                     {groupActionError && (
                       <div data-testid="group-cycle-alert" id="group-cycle-alert" className="kb-settings-alert kb-settings-alert-error" role="alert">
-                        {groupActionError}
+                        <span>{groupActionError}</span>
+                        {/cycle/i.test(groupActionError) && (
+                          <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '8px' }}>
+                            Cycle Detected
+                          </span>
+                        )}
                       </div>
                     )}
 

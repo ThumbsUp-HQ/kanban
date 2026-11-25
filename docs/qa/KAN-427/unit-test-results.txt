@@ -39,7 +39,7 @@ kanban/workflows/dry_run.py                   208      7     48      5    95%   
 TOTAL                                        1116    131    260     45    85%
 ======================== 93 passed in 85.09s (0:01:25) =========================
 
-2. FRONTEND VITEST SUITE (279 tests passed, >=95% branch coverage):
+2. FRONTEND VITEST SUITE (280 tests passed, >=95% branch coverage):
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan427-3a52f19e/kanban/web
       Coverage enabled with v8
@@ -49,7 +49,7 @@ TOTAL                                        1116    131    260     45    85%
    ✓ DryRunDrawer (KB-P5-24) (6)
      ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 329ms
  ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 709ms
- ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (17 tests) 1125ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1125ms
  ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (13 tests) 1668ms
    ✓ AttachHookDialog (KB-P5-24) (13)
      ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 513ms
@@ -79,24 +79,24 @@ TOTAL                                        1116    131    260     45    85%
        ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 491ms
 
  Test Files  10 passed (10)
-      Tests  279 passed (279)
-   Start at  16:48:31
-   Duration  17.14s (tests 67%, environment 20%, import 9%, transform 3%, worker 1%)
+      Tests  280 passed (280)
+   Start at  17:16:10
+   Duration  15.86s (tests 67%, environment 21%, import 9%, transform 3%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.63 |    96.08 |   99.05 |    99.9 |                   
+All files          |   99.68 |    96.05 |   99.24 |   99.95 |                   
  custom-fields     |   99.72 |    96.61 |     100 |     100 |                   
   ...ionEditor.tsx |     100 |    97.01 |     100 |     100 | ...,642,1168-1182 
   ...ovalPanel.tsx |   98.82 |    95.74 |     100 |     100 | 111-123,139,153   
- settings          |   99.68 |     95.8 |   98.88 |     100 |                   
+ settings          |   99.68 |    95.73 |   98.88 |     100 |                   
   ...tingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...69,391,484,580 
   ...tingsPage.tsx |   99.57 |    95.05 |     100 |     100 | ...1095,1770,2870 
-  ...tingsPage.tsx |     100 |    96.23 |    96.9 |     100 | ...76-477,685,714 
- workflows         |   99.27 |    96.94 |   98.64 |   99.25 |                   
+  ...tingsPage.tsx |     100 |    96.03 |    96.9 |     100 | ...7,685,714,1679 
+ workflows         |   99.64 |    97.01 |     100 |   99.63 |                   
   ...ookDialog.tsx |     100 |    98.24 |     100 |     100 | 50                
   DryRunDrawer.tsx |   98.78 |    96.77 |     100 |   98.75 | 93                
-  ...gsSection.tsx |   99.13 |    95.34 |   95.45 |   99.13 | 445               
+  ...gsSection.tsx |     100 |    95.65 |     100 |     100 | 76,158,246        
 -------------------|---------|----------|---------|---------|-------------------

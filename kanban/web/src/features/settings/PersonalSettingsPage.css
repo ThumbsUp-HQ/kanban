@@ -488,8 +488,32 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .kb-table-scroll-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .kb-personal-settings-th,
+  .kb-personal-settings-td {
+    padding: 8px 6px;
+  }
+
+  .kb-passkey-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-start;
+  }
+
+  .kb-passkey-actions .kb-personal-settings-btn {
+    padding: 0 8px;
+    font-size: var(--text-xs);
+    height: 30px;
+  }
 }
 
 .kb-personal-settings-modal-backdrop--stepup {
@@ -1016,11 +1040,13 @@
 
 .kb-timezone-search-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
 .kb-timezone-filter-input {
-  flex: 1;
+  min-width: 0;
+  flex: 1 1 180px;
 }
 
 .kb-timezone-auto-btn {

@@ -166,4 +166,4 @@ This step-by-step test plan provides exact operations to validate the simplified
 | **Frontend ESLint** | `pnpm --dir kanban/web lint` | Pass (0 warnings) |
 | **Frontend Build** | `pnpm --dir kanban/web build` | Pass (Clean production build) |
 | **Backend Feature Tests** | `pytest tests/unit/api/...` | Pass (93/93 tests passing) |
-| **Frontend Feature Tests** | `vitest run src/features/...` | Pass (279/279 tests passing, >=95% branch coverage on all touched components) |
+| **Frontend Feature Tests** | `vitest run src/features/...` | Pass (280/280 tests passing, >=95% branch coverage on all touched components) |

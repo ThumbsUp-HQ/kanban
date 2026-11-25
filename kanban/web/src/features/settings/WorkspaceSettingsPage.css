@@ -124,10 +124,11 @@
 .kb-readable-duration {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--kb-color-text-secondary, #64748b);
-  background: var(--kb-color-bg-subtle, #f1f5f9);
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #64748b));
+  background: var(--kb-color-bg-surface-raised, var(--bg-surface-raised, #f1f5f9));
   padding: 4px 10px;
   border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #e2e8f0));
 }
 
 .kb-preset-pills {
@@ -141,30 +142,31 @@
   padding: 4px 10px;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid var(--kb-color-border-subtle, #cbd5e1);
-  background: var(--kb-color-bg-surface, #ffffff);
-  color: var(--kb-color-text-primary, #0f172a);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #cbd5e1));
+  background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+  color: var(--kb-color-text-primary, var(--fg-primary, #0f172a));
   border-radius: 9999px;
   cursor: pointer;
   transition: all 0.15s ease-in-out;
 }
 
 .kb-preset-pill:hover {
-  background: var(--kb-color-bg-subtle, #f8fafc);
-  border-color: var(--kb-color-primary, #2563eb);
+  background: var(--kb-color-bg-surface-raised, var(--bg-surface-raised, #f8fafc));
+  border-color: var(--kb-color-primary, var(--accent-primary, #2563eb));
 }
 
 .kb-preset-pill-active {
-  background: var(--kb-color-primary, #2563eb);
+  background: var(--kb-color-primary, var(--accent-primary, #2563eb));
   color: #ffffff;
-  border-color: var(--kb-color-primary, #2563eb);
+  border-color: var(--kb-color-primary, var(--accent-primary, #2563eb));
 }
 
 .kb-webhook-restrictions-card {
   padding: var(--space-4, 16px);
-  border: 1px solid var(--kb-color-border-subtle, #e2e8f0);
+  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #e2e8f0));
   border-radius: var(--radius-md, 8px);
-  background: var(--kb-color-bg-subtle, #f8fafc);
+  background: var(--kb-color-bg-surface-raised, var(--bg-surface-raised, #f8fafc));
+  color: var(--kb-color-text-primary, var(--fg-primary, #0f172a));
   margin-top: var(--space-3, 12px);
 }
 
@@ -179,6 +181,12 @@
   font-size: 0.9375rem;
   font-weight: 600;
   margin: 0;
+  color: var(--kb-color-text-primary, var(--fg-primary, #0f172a));
+}
+
+.kb-webhook-restrictions-card p,
+.kb-webhook-restrictions-card .kb-help-text {
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #4b5563));
 }
 
 .kb-webhook-restrictions-card .kb-doc-link-wrapper {
@@ -189,9 +197,52 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--kb-color-primary, #2563eb);
+  color: var(--kb-color-primary, var(--accent-primary, #2563eb));
   text-decoration: underline;
   cursor: pointer;
   font: inherit;
+}
+
+/* Dark mode explicit high-contrast overrides */
+[data-theme="dark"] .kb-readable-duration {
+  background: #1e293b;
+  color: #94a3b8;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .kb-preset-pill {
+  background: #16181d;
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .kb-preset-pill:hover {
+  background: #1f232b;
+  border-color: #60a5fa;
+}
+
+[data-theme="dark"] .kb-preset-pill-active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+[data-theme="dark"] .kb-webhook-restrictions-card {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .kb-webhook-restrictions-card .kb-card-title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .kb-webhook-restrictions-card p,
+[data-theme="dark"] .kb-webhook-restrictions-card .kb-help-text {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .kb-link-btn {
+  color: #60a5fa;
 }
 

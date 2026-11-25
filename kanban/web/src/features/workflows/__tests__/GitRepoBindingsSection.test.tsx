@@ -261,13 +261,22 @@ describe('GitRepoBindingsSection', () => {
 
     expect(await screen.findAllByText(/Insecure URL scheme rejected/i)).toHaveLength(2);
 
-    // Test valid inputs
+    // Test valid inputs with workspace-pat credential
     fireEvent.change(urlInput, { target: { value: 'https://github.com/myorg/myrepo.git' } });
     fireEvent.change(refInput, { target: { value: 'release/v1.0' } });
     fireEvent.change(accessSelect, { target: { value: 'bare_git_tools' } });
     fireEvent.change(credSelect, { target: { value: 'workspace-pat' } });
 
     expect(screen.getByText('Valid remote git URL (HTTPS / SSH).')).toBeDefined();
+
+    // Verify blank PAT rejection
+    fireEvent.click(screen.getByText('Bind Repository'));
+    expect(await screen.findByText(/Personal Access Token \(PAT\) is required/i)).toBeDefined();
+    expect(createSpy).not.toHaveBeenCalled();
+
+    // Type PAT token and submit
+    const patInput = screen.getByTestId('repo-pat-input');
+    fireEvent.change(patInput, { target: { value: 'ghp_test_secret_token_123' } });
 
     fireEvent.click(screen.getByText('Bind Repository'));
 
@@ -277,7 +286,7 @@ describe('GitRepoBindingsSection', () => {
         remote_url: 'https://github.com/myorg/myrepo.git',
         default_ref: 'release/v1.0',
         access_mode: 'bare_git_tools',
-        credential: 'workspace-pat',
+        credential: 'ghp_test_secret_token_123',
       });
     });
 
@@ -373,6 +382,33 @@ describe('GitRepoBindingsSection', () => {
       expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({
         slug: 'fallback-slug',
         default_ref: 'main',
+      }));
+    });
+  });
+
+  it('submits with non-pat credential without requiring patToken', async () => {
+    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
+    const createSpy = vi.spyOn(api, 'createRepoBinding').mockResolvedValue({
+      id: 'r-non-pat',
+      slug: 'non-pat-mirror',
+      remote_url: 'https://github.com/org/repo.git',
+      default_ref: 'main',
+      access_mode: 'ro_vfs_mount',
+    });
+
+    renderSection();
+    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
+
+    fireEvent.change(screen.getByLabelText(/Repository Identifier \/ Slug/i), { target: { value: 'non-pat-slug' } });
+    fireEvent.change(screen.getByLabelText(/Remote Git URL/i), { target: { value: 'https://github.com/org/repo.git' } });
+    fireEvent.change(screen.getByLabelText(/Authentication Credential/i), { target: { value: 'ssh-key' } });
+
+    fireEvent.click(screen.getByText('Bind Repository'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({
+        slug: 'non-pat-slug',
+        credential: 'ssh-key',
       }));
     });
   });
