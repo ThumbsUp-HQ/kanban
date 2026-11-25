@@ -3,8 +3,8 @@
 ## Ticket Reference
 - **Ticket ID**: `KAN-395` (`Support 1,200+ character OAuth state tokens for Google Gemini MCP OAuth 2.1 integration`)
 - **Reviewer Persona**: UI/UX Design Specialist (`ui-designer.md` / `ux-architect.md`)
-- **Branch**: `feat/KAN-395-gemini-oauth-state`
-- **Commit**: `d15b43fa`
+- **Branch**: `main` (merged from `feat/KAN-395-gemini-oauth-state`)
+- **Commit**: `93a1a7a94c66f7f2aece1d46acd3f4d5cd66e621`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-24
 
