@@ -324,22 +324,29 @@ class McpProtocolHandler:
 
     def _check_request_preconditions(self, request: Request) -> Response | None:
         """Validate HTTP method, DNS-rebinding origin, and protocol version header."""
-        if request.method == "GET":
-            return Response(
-                "Standalone SSE streams are not supported; use Streamable HTTP POST",
-                status_code=405,
-                headers={"Allow": "POST, DELETE"},
-            )
-
         origin = request.headers.get("origin")
         if origin and self.settings.allowed_origins and origin not in self.settings.allowed_origins:
             return Response("Forbidden Origin", status_code=403)
+
+        if request.method == "HEAD":
+            return Response(
+                "",
+                status_code=200,
+                headers={"Content-Type": "application/json", "Allow": "POST, DELETE, GET, HEAD"},
+            )
+
+        if request.method == "GET":
+            return JSONResponse(
+                {"status": "ok", "service": "kanban-mcp", "protocol": "2025-06-18"},
+                status_code=200,
+                headers={"Allow": "POST, DELETE, GET, HEAD"},
+            )
 
         if request.method not in ("POST", "DELETE"):
             return Response(
                 f"Method {request.method} not allowed",
                 status_code=405,
-                headers={"Allow": "POST, DELETE"},
+                headers={"Allow": "POST, DELETE, GET, HEAD"},
             )
 
         proto_ver = request.headers.get("mcp-protocol-version")

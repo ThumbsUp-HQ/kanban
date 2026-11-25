@@ -34,6 +34,10 @@ from kanban.oauth.jwt import (
     verify_access_token,
 )
 from kanban.security.service_auth import create_internal_service_auth_header
+from kanban.tests.security.helpers import (
+    create_project,
+    rebuild_era,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -2334,8 +2338,16 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
     """Full Gemini MCP OAuth 2.1 handshake with 1200-char state & proxy (KAN-395)."""
     client = api_env.client
 
+    ws_slug_row = (
+        await api_env.seed.execute(
+            text("SELECT slug FROM workspaces WHERE id = :ws_id"),
+            {"ws_id": api_env.workspace_id},
+        )
+    ).scalar_one()
+    ws_slug = str(ws_slug_row)
+
     redirect_uri = "https://gemini.google.com/oauth/callback?app=connected&env=prod"
-    resource = "https://k.hackedyour.info/mcp/agent/w/gemini-ws"
+    resource = f"https://k.hackedyour.info/mcp/agent/w/{ws_slug}"
 
     # 1. Reverse-proxy HTTPS discovery check
     resp_as = await client.get(
@@ -2352,7 +2364,7 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
     assert as_meta["token_endpoint"] == "https://k.hackedyour.info/oauth/token"
 
     resp_res = await client.get(
-        "/.well-known/oauth-protected-resource/mcp/w/gemini-ws",
+        f"/.well-known/oauth-protected-resource/mcp/w/{ws_slug}",
         headers={
             "x-forwarded-proto": "https",
             "x-forwarded-host": "k.hackedyour.info",
@@ -2360,7 +2372,7 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
     )
     assert resp_res.status_code == 200
     res_meta = resp_res.json()
-    assert res_meta["resource"] == "https://k.hackedyour.info/mcp/agent/w/gemini-ws"
+    assert res_meta["resource"] == f"https://k.hackedyour.info/mcp/agent/w/{ws_slug}"
     assert "agent:read" in res_meta["scopes_supported"]
 
     # 2. Dynamic Client Registration (RFC 7591)
@@ -2472,10 +2484,11 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
     assert token_json["token_type"] == "Bearer"
     assert token_json["expires_in"] == 900
     assert "access_token" in token_json
+    access_token = token_json["access_token"]
 
     # 8. Unauthenticated 401 on /mcp/agent/w/{ws} returns RFC 9728 WWW-Authenticate
     resp_mcp_unauth = await client.post(
-        "/mcp/agent/w/gemini-ws",
+        f"/mcp/agent/w/{ws_slug}",
         headers={
             "x-forwarded-proto": "https",
             "x-forwarded-host": "k.hackedyour.info",
@@ -2486,6 +2499,490 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
     assert 'realm="kanban-mcp"' in www_auth
     expected_meta = (
         'resource_metadata="https://k.hackedyour.info/.well-known/'
-        'oauth-protected-resource/mcp/agent/w/gemini-ws"'
+        f'oauth-protected-resource/mcp/agent/w/{ws_slug}"'
     )
     assert expected_meta in www_auth
+
+    # 9. In-process MCP server validation: HEAD, GET, and POST streamable HTTP tools/list
+    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
+    assert raw_app is not None
+    mcp_client, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
+    try:
+        # HEAD probe succeeds with 200
+        resp_head = await mcp_client.head(
+            f"/mcp/agent/w/{ws_slug}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp_head.status_code == 200
+        assert "POST" in resp_head.headers.get("allow", "")
+
+        # GET probe succeeds with 200 status payload
+        resp_get = await mcp_client.get(
+            f"/mcp/agent/w/{ws_slug}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert resp_get.status_code == 200
+        assert resp_get.json()["status"] == "ok"
+
+        # POST initialize succeeds and returns Mcp-Session-Id
+        init_resp = await mcp_client.post(
+            f"/mcp/agent/w/{ws_slug}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert init_resp.status_code == 200
+        session_id = init_resp.headers.get("mcp-session-id")
+        assert session_id is not None
+
+        # POST tools/list succeeds
+        resp_tools = await mcp_client.post(
+            f"/mcp/agent/w/{ws_slug}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Mcp-Session-Id": session_id,
+            },
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        )
+        assert resp_tools.status_code == 200
+        tools_body = resp_tools.json()
+        assert "result" in tools_body
+        assert "tools" in tools_body["result"]
+    finally:
+        await mcp_client.aclose()
+
+
+# =========================================================================
+# Test Case: Cross-Workspace OAuth 2.1 Scoping & MCP Boundary Gates (KAN-395)
+# =========================================================================
+
+
+async def test_gemini_oauth_cross_workspace_scoping_and_mcp_gates(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Test Gate A/B/C/D cross-workspace OAuth 2.1 scoping and MCP boundary enforcement."""
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/callback"
+
+    # 1. Setup client via DCR
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Gemini Cross-Workspace Client",
+            "redirect_uris": [redirect_uri],
+        },
+    )
+    assert resp_reg.status_code == 201
+    client_id = resp_reg.json()["client_id"]
+
+    # 2. Setup user in default workspace
+    user = await make_user("gemini_user", workspace_role="WORKSPACE_MEMBER")
+    as_principal(user)
+
+    # 3. Setup secondary target workspace with KAN and OTHER projects, plus user membership
+    ws_kanban_id = uuid.uuid4()
+    ws_kanban_slug = f"ws-kanban-{ws_kanban_id.hex[:6]}"
+    ws2_member_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Kanban WS')"),
+        {"id": ws_kanban_id, "slug": ws_kanban_slug},
+    )
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object("
+            "  'user'::object_kind, :ws_id, NULL, :ckey, 'Gemini Member', :u_id, :u_id"
+            ")"
+        ),
+        {"ws_id": ws_kanban_id, "ckey": f"usr-{ws2_member_id.hex[:10]}", "u_id": ws2_member_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
+            "VALUES (:id, 'USER', :ws_id, 'Gemini User', 'ACTIVE')"
+        ),
+        {"id": ws2_member_id, "ws_id": ws_kanban_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
+            "VALUES (:id, 'user', 'USER', :ws_id, 'gemini@example.com')"
+        ),
+        {"id": ws2_member_id, "ws_id": ws_kanban_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO role_bindings "
+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
+            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_MEMBER', 'workspace', NULL)"
+        ),
+        {"id": uuid.uuid4(), "ws_id": ws_kanban_id, "p_id": ws2_member_id},
+    )
+    proj_kan_id = await create_project(
+        api_env.seed,
+        ws_kanban_id,
+        identifier="KAN",
+        name="Kanban Project",
+        created_by_id=ws2_member_id,
+    )
+    await create_project(
+        api_env.seed,
+        ws_kanban_id,
+        identifier="OTHER",
+        name="Other Project",
+        created_by_id=ws2_member_id,
+    )
+
+    # Link identity between caller principal and target workspace principal via verified auth card
+    card_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO auth_provider_cards ("
+            "  id, workspace_id, provider_kind, slug, display_name, is_enabled, sort_rank"
+            ") VALUES ("
+            "  :id, :ws_id, 'OIDC', :slug, 'Corp OIDC', true, '0|h00000:'"
+            ")"
+        ),
+        {"id": card_id, "ws_id": api_env.workspace_id, "slug": f"card-{uuid.uuid4().hex[:8]}"},
+    )
+    shared_sub = f"sub-{uuid.uuid4().hex[:12]}"
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO user_identities ("
+            "  id, workspace_id, principal_id, auth_card_id, "
+            "  immutable_subject_id, subject_email_at_link"
+            ") VALUES ("
+            "  :id, :ws_id, :p_id, :card_id, :sub, 'gemini@example.com'"
+            ")"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "ws_id": api_env.workspace_id,
+            "p_id": user.id,
+            "card_id": card_id,
+            "sub": shared_sub,
+        },
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO user_identities ("
+            "  id, workspace_id, principal_id, auth_card_id, "
+            "  immutable_subject_id, subject_email_at_link"
+            ") VALUES ("
+            "  :id, :ws_id, :p_id, :card_id, :sub, 'gemini@example.com'"
+            ")"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "ws_id": ws_kanban_id,
+            "p_id": ws2_member_id,
+            "card_id": card_id,
+            "sub": shared_sub,
+        },
+    )
+    await rebuild_era(api_env.seed, ws_kanban_id)
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    # 4. Setup forbidden workspace without user membership
+    ws_forbidden_id = uuid.uuid4()
+    ws_forbidden_slug = f"ws-forbidden-{ws_forbidden_id.hex[:6]}"
+    await api_env.seed.execute(
+        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Forbidden WS')"),
+        {"id": ws_forbidden_id, "slug": ws_forbidden_slug},
+    )
+    await rebuild_era(api_env.seed, ws_forbidden_id)
+    await api_env.seed.commit()
+
+    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
+    assert raw_app is not None
+
+    # =========================================================================
+    # GATE A: Forbidden Workspace Scoping
+    # =========================================================================
+    as_principal(user)
+    _v_a, challenge_a = _generate_pkce()
+    resp_auth_a = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge_a,
+            "code_challenge_method": "S256",
+            "state": "state-forbidden-ws",
+            "resource": f"http://test/mcp/agent/w/{ws_forbidden_slug}",
+            "scope": "agent:read agent:write",
+        },
+        follow_redirects=False,
+    )
+    assert resp_auth_a.status_code == 302
+    loc_a = resp_auth_a.headers["location"]
+    qs_a = urllib.parse.parse_qs(urllib.parse.urlparse(loc_a).query)
+    assert qs_a["error"][0] == "access_denied"
+    assert "not a member" in qs_a["error_description"][0]
+    assert qs_a["state"][0] == "state-forbidden-ws"
+
+    # =========================================================================
+    # GATE B: Workspace-Level Resource & Boundary Enforcement
+    # =========================================================================
+    as_principal(user)
+    verifier_b, challenge_b = _generate_pkce()
+    resp_auth_b = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge_b,
+            "code_challenge_method": "S256",
+            "state": "state-ws-kanban",
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
+            "scope": "agent:read agent:write",
+        },
+    )
+    assert resp_auth_b.status_code == 200
+    assert "Authorize Gemini Cross-Workspace Client" in resp_auth_b.text
+    assert "AGENT" in resp_auth_b.text
+    assert "Kanban Project" in resp_auth_b.text
+    csrf_b = _extract_csrf(resp_auth_b.text)
+
+    resp_dec_b = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
+            "code_challenge": challenge_b,
+            "code_challenge_method": "S256",
+            "state": "state-ws-kanban",
+            "action": "approve",
+            "csrf_token": csrf_b,
+            "scopes": ["agent:read", "agent:write"],
+            "allowed_project_id": "__ALL__",
+        },
+        follow_redirects=False,
+    )
+    assert resp_dec_b.status_code == 302
+    dec_loc_b = resp_dec_b.headers["location"]
+    code_b = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_b).query)["code"][0]
+
+    api_env.resolver.principal = None
+    resp_tok_b = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code_b,
+            "code_verifier": verifier_b,
+            "redirect_uri": redirect_uri,
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
+        },
+    )
+    assert resp_tok_b.status_code == 200
+    token_b = resp_tok_b.json()["access_token"]
+    claims_b = verify_access_token(token_b)
+    assert claims_b["ws"] == str(ws_kanban_id)
+    assert claims_b["scope_tier"] == "workspace"
+
+    mcp_b, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
+    try:
+        # HEAD probe 200 OK
+        resp_h = await mcp_b.head(
+            f"/mcp/agent/w/{ws_kanban_slug}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert resp_h.status_code == 200
+
+        # GET probe 200 OK
+        resp_g = await mcp_b.get(
+            f"/mcp/agent/w/{ws_kanban_slug}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert resp_g.status_code == 200
+
+        # POST initialize 200 OK
+        resp_init_b = await mcp_b.post(
+            f"/mcp/agent/w/{ws_kanban_slug}",
+            headers={"Authorization": f"Bearer {token_b}"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert resp_init_b.status_code == 200
+        sess_b = resp_init_b.headers["mcp-session-id"]
+
+        # POST tools/list 200 OK
+        resp_tl_b = await mcp_b.post(
+            f"/mcp/agent/w/{ws_kanban_slug}",
+            headers={"Authorization": f"Bearer {token_b}", "Mcp-Session-Id": sess_b},
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        )
+        assert resp_tl_b.status_code == 200
+
+        # POST to forbidden workspace -> 403 KEY_SCOPE_VIOLATION
+        resp_forbid_b = await mcp_b.post(
+            f"/mcp/agent/w/{ws_forbidden_slug}",
+            headers={"Authorization": f"Bearer {token_b}"},
+            json={"jsonrpc": "2.0", "id": 3, "method": "initialize"},
+        )
+        assert resp_forbid_b.status_code == 403
+        assert "KEY_SCOPE_VIOLATION" in resp_forbid_b.text
+    finally:
+        await mcp_b.aclose()
+
+    # =========================================================================
+    # GATE C: Project-Level Resource & Scoping Enforcement
+    # =========================================================================
+    as_principal(user)
+    verifier_c, challenge_c = _generate_pkce()
+    resp_auth_c = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge_c,
+            "code_challenge_method": "S256",
+            "state": "state-proj-kan",
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
+            "scope": "agent:read agent:write",
+        },
+    )
+    assert resp_auth_c.status_code == 200
+    csrf_c = _extract_csrf(resp_auth_c.text)
+
+    resp_dec_c = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
+            "code_challenge": challenge_c,
+            "code_challenge_method": "S256",
+            "state": "state-proj-kan",
+            "action": "approve",
+            "csrf_token": csrf_c,
+            "scopes": ["agent:read", "agent:write"],
+            "allowed_project_id": str(proj_kan_id),
+        },
+        follow_redirects=False,
+    )
+    assert resp_dec_c.status_code == 302
+    dec_loc_c = resp_dec_c.headers["location"]
+    code_c = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_c).query)["code"][0]
+
+    api_env.resolver.principal = None
+    resp_tok_c = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code_c,
+            "code_verifier": verifier_c,
+            "redirect_uri": redirect_uri,
+            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
+        },
+    )
+    assert resp_tok_c.status_code == 200
+    token_c = resp_tok_c.json()["access_token"]
+    claims_c = verify_access_token(token_c)
+    assert claims_c["scope_tier"] == "project"
+    assert claims_c["allowed_projects"] == [str(proj_kan_id)]
+
+    mcp_c, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
+    try:
+        # Accessing allowed project /p/KAN -> 200 OK
+        resp_p_kan = await mcp_c.post(
+            f"/mcp/agent/w/{ws_kanban_slug}/p/KAN",
+            headers={"Authorization": f"Bearer {token_c}"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert resp_p_kan.status_code == 200
+
+        # Accessing other project /p/OTHER -> 403 KEY_SCOPE_VIOLATION
+        resp_p_other = await mcp_c.post(
+            f"/mcp/agent/w/{ws_kanban_slug}/p/OTHER",
+            headers={"Authorization": f"Bearer {token_c}"},
+            json={"jsonrpc": "2.0", "id": 2, "method": "initialize"},
+        )
+        assert resp_p_other.status_code == 403
+        assert "KEY_SCOPE_VIOLATION" in resp_p_other.text
+    finally:
+        await mcp_c.aclose()
+
+    # =========================================================================
+    # GATE D: Server-Level Resource & Global Access Enforcement
+    # =========================================================================
+    as_principal(user)
+    verifier_d, challenge_d = _generate_pkce()
+    resp_auth_d = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge_d,
+            "code_challenge_method": "S256",
+            "state": "state-server-level",
+            "resource": "http://test/mcp/agent",
+            "scope": "agent:read agent:write",
+        },
+    )
+    assert resp_auth_d.status_code == 200
+    csrf_d = _extract_csrf(resp_auth_d.text)
+
+    resp_dec_d = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": "http://test/mcp/agent",
+            "code_challenge": challenge_d,
+            "code_challenge_method": "S256",
+            "state": "state-server-level",
+            "action": "approve",
+            "csrf_token": csrf_d,
+            "scopes": ["agent:read", "agent:write"],
+            "allowed_project_id": "__ALL__",
+        },
+        follow_redirects=False,
+    )
+    assert resp_dec_d.status_code == 302
+    dec_loc_d = resp_dec_d.headers["location"]
+    code_d = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_d).query)["code"][0]
+
+    api_env.resolver.principal = None
+    resp_tok_d = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code_d,
+            "code_verifier": verifier_d,
+            "redirect_uri": redirect_uri,
+            "resource": "http://test/mcp/agent",
+        },
+    )
+    assert resp_tok_d.status_code == 200
+    token_d = resp_tok_d.json()["access_token"]
+    claims_d = verify_access_token(token_d)
+    assert claims_d["scope_tier"] == "server"
+
+    mcp_d, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
+    try:
+        # Accessing server surface /mcp/agent -> 200 OK
+        resp_srv = await mcp_d.post(
+            "/mcp/agent",
+            headers={"Authorization": f"Bearer {token_d}"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        assert resp_srv.status_code == 200
+
+        # Accessing workspace subpath /mcp/agent/w/{ws_kanban_slug} with server-tier token -> 200 OK
+        resp_srv_ws = await mcp_d.post(
+            f"/mcp/agent/w/{ws_kanban_slug}",
+            headers={"Authorization": f"Bearer {token_d}"},
+            json={"jsonrpc": "2.0", "id": 2, "method": "initialize"},
+        )
+        assert resp_srv_ws.status_code == 200
+    finally:
+        await mcp_d.aclose()

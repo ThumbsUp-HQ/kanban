@@ -271,7 +271,7 @@ def intersect_key_and_connection_scope(
 
     # 1. Global connection mode
     if scope.is_global:
-        if token_tier == "global" or not token_ws:  # noqa: S105
+        if token_tier in ("global", "server") or not token_ws:
             return scope
 
         # Token is pinned to workspace or project: connection inherits token scope
@@ -299,7 +299,7 @@ def intersect_key_and_connection_scope(
         )
 
         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
-        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
+        if token_tier not in ("global", "server") and has_boundary and not ws_match:
             msg = (
                 f"Requested workspace '{scope.workspace_slug}' is outside "
                 f"the scope boundary of this API key."
@@ -340,7 +340,7 @@ def intersect_key_and_connection_scope(
         _validate_boundary_project(boundary, scope, auth_ctx)
 
         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
-        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
+        if token_tier not in ("global", "server") and has_boundary and not ws_match:
             msg = (
                 f"Requested workspace '{scope.workspace_slug}' is outside "
                 f"the scope boundary of this API key."

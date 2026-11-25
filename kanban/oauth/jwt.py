@@ -71,6 +71,7 @@ def mint_access_token(  # noqa: PLR0913, PLR0917
     allowed_projects: Sequence[uuid.UUID] | None = None,
     ttl_seconds: int = ACCESS_TOKEN_TTL_SECONDS,
     now: float | None = None,
+    scope_tier: str | None = None,
 ) -> str:
     """Mint a signed ES256 JWT access token bound to a single surface audience."""
     current_time = int(time.time() if now is None else now)
@@ -95,6 +96,8 @@ def mint_access_token(  # noqa: PLR0913, PLR0917
         "iat": current_time,
         "exp": current_time + ttl_seconds,
     }
+    if scope_tier is not None:
+        claims["scope_tier"] = scope_tier
     if allowed_projects:
         claims["allowed_projects"] = [str(p) for p in allowed_projects]
 

@@ -811,6 +811,8 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         except ValueError:
             return McpIntrospectionResult(active=False)
 
+        scope_tier = str(claims.get("scope_tier") or "workspace")
+
         scope_str = claims.get("scope", "")
         scopes_list = scope_str.split() if scope_str else []
         allowed_projects_raw = claims.get("allowed_projects")
@@ -819,13 +821,15 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             with contextlib.suppress(ValueError):
                 allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
 
-        ws_slug_res = (
-            await session.execute(
-                text("SELECT resolve_workspace_slug(:ws_id)"),
-                {"ws_id": ws_uuid},
-            )
-        ).scalar_one_or_none()
-        ws_slug: str | None = str(ws_slug_res) if ws_slug_res else None
+        ws_slug: str | None = None
+        if ws_uuid is not None:
+            ws_slug_res = (
+                await session.execute(
+                    text("SELECT resolve_workspace_slug(:ws_id)"),
+                    {"ws_id": ws_uuid},
+                )
+            ).scalar_one_or_none()
+            ws_slug = str(ws_slug_res) if ws_slug_res else None
 
         oauth_proj_keys: list[str] = []
         if allowed_projects:
@@ -841,11 +845,12 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         oauth_res = McpIntrospectionResult(
             active=True,
             principal_id=principal_uuid,
-            workspace_id=ws_uuid,
-            workspace_slug=ws_slug,
+            workspace_id=ws_uuid if scope_tier != "server" else None,
+            workspace_slug=ws_slug if scope_tier != "server" else None,
             surface=token_surface or surface,
             scopes=scopes_list,
             token_kind="oauth",  # noqa: S106
+            scope_tier=scope_tier,
             allowed_projects=allowed_projects,
             allowed_project_ids=allowed_projects,
             allowed_project_keys=oauth_proj_keys or None,

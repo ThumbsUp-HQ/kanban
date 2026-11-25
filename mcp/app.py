@@ -34,16 +34,16 @@ def _build_surface_sub_app(
     """Build an independent sub-app for a single MCP surface."""
     return Starlette(
         routes=[
-            Route("/", handler.handle_request, methods=["GET", "POST", "DELETE"]),
+            Route("/", handler.handle_request, methods=["GET", "POST", "DELETE", "HEAD"]),
             Route(
                 "/w/{workspace_slug}",
                 handler.handle_request,
-                methods=["GET", "POST", "DELETE"],
+                methods=["GET", "POST", "DELETE", "HEAD"],
             ),
             Route(
                 "/w/{workspace_slug}/p/{project_key}",
                 handler.handle_request,
-                methods=["GET", "POST", "DELETE"],
+                methods=["GET", "POST", "DELETE", "HEAD"],
             ),
         ]
     )
@@ -184,52 +184,64 @@ def create_mcp_app(  # noqa: PLR0913
             methods=["GET"],
         ),
         # Bare /mcp routes (default to agent surface)
-        Route("/mcp", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+        Route("/mcp", agent_handler.handle_request, methods=["GET", "POST", "DELETE", "HEAD"]),
         Route(
             "/mcp/w/{workspace_slug}",
             agent_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         Route(
             "/mcp/w/{workspace_slug}/p/{project_key}",
             agent_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         # Explicit direct routes for /mcp/<surface>
-        Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
-        Route("/mcp/docs", docs_handler.handle_request, methods=["GET", "POST", "DELETE"]),
-        Route("/mcp/admin", admin_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+        Route(
+            "/mcp/agent",
+            agent_handler.handle_request,
+            methods=["GET", "POST", "DELETE", "HEAD"],
+        ),
+        Route(
+            "/mcp/docs",
+            docs_handler.handle_request,
+            methods=["GET", "POST", "DELETE", "HEAD"],
+        ),
+        Route(
+            "/mcp/admin",
+            admin_handler.handle_request,
+            methods=["GET", "POST", "DELETE", "HEAD"],
+        ),
         # Workspace-scoped routes
         Route(
             "/mcp/agent/w/{workspace_slug}",
             agent_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         Route(
             "/mcp/docs/w/{workspace_slug}",
             docs_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         Route(
             "/mcp/admin/w/{workspace_slug}",
             admin_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         # Project-scoped routes
         Route(
             "/mcp/agent/w/{workspace_slug}/p/{project_key}",
             agent_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         Route(
             "/mcp/docs/w/{workspace_slug}/p/{project_key}",
             docs_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         Route(
             "/mcp/admin/w/{workspace_slug}/p/{project_key}",
             admin_handler.handle_request,
-            methods=["GET", "POST", "DELETE"],
+            methods=["GET", "POST", "DELETE", "HEAD"],
         ),
         # Mounts for sub-path routing
         Mount("/mcp/agent", app=agent_app),

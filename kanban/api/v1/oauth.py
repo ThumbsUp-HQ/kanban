@@ -60,6 +60,7 @@ from kanban.oauth.server import (
     hash_client_secret,
     hash_token,
     mask_client_secret_prefix,
+    parse_resource_target,
     parse_surface_from_resource,
     render_consent_screen,
     resolve_public_base_url,
@@ -562,6 +563,82 @@ def _redirect_with_params(redirect_uri: str, params: dict[str, Any]) -> Redirect
     return RedirectResponse(f"{redirect_uri}{sep}{urlencode(params)}", status_code=302)
 
 
+async def _resolve_target_scope(
+    session: AsyncSession,
+    resource: str,
+    base_url: str,
+    caller_principal_id: uuid.UUID,
+    caller_workspace_id: uuid.UUID,
+) -> tuple[str, uuid.UUID, uuid.UUID, list[uuid.UUID] | None, str]:
+    """Resolve (surface, ws_id, principal_id, allowed_projects, tier) from resource.
+
+    Validates that:
+    1. If a workspace is in resource (/mcp/{surface}/w/{ws_slug}), it exists and caller is a member.
+    2. If a project is specified in resource (/p/{proj_key}), it exists in target workspace.
+    3. If resource is server-level (/mcp/{surface}), tier is 'server'.
+    """
+    surface, ws_slug, proj_key = parse_resource_target(resource, base_url)
+
+    if ws_slug is None:
+        # Server-level resource
+        return surface, caller_workspace_id, caller_principal_id, None, "server"
+
+    # Workspace-level or project-level resource resolved via SECURITY DEFINER helpers
+    ws_res = (
+        await session.execute(
+            text("SELECT resolve_workspace_by_slug_or_id(:slug)"),
+            {"slug": ws_slug},
+        )
+    ).scalar_one_or_none()
+    if ws_res is None:
+        err = "access_denied"
+        desc = f"Target workspace {ws_slug!r} not found"
+        raise OAuth2Error(err, desc, 403)
+
+    target_ws_id = ws_res if isinstance(ws_res, uuid.UUID) else uuid.UUID(str(ws_res))
+
+    # Verify caller membership in target workspace using SECURITY DEFINER procedure
+    try:
+        switch_row = (
+            await session.execute(
+                text(
+                    "SELECT workspace_id, principal_id FROM kb_auth_switch_workspace(:ws_id, :p_id)"
+                ),
+                {"ws_id": target_ws_id, "p_id": caller_principal_id},
+            )
+        ).first()
+    except Exception as exc:
+        err = "access_denied"
+        desc = f"Principal is not a member of target workspace {ws_slug!r}"
+        raise OAuth2Error(err, desc, 403) from exc
+
+    if switch_row is None:
+        err = "access_denied"
+        desc = f"Principal is not a member of target workspace {ws_slug!r}"
+        raise OAuth2Error(err, desc, 403)
+    effective_principal_id = switch_row[1] or caller_principal_id
+
+    allowed_projects: list[uuid.UUID] | None = None
+    scope_tier = "workspace"
+
+    if proj_key is not None:
+        proj_res = (
+            await session.execute(
+                text("SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"),
+                {"ws_id": target_ws_id, "ident": proj_key},
+            )
+        ).scalar_one_or_none()
+        if proj_res is None:
+            err = "access_denied"
+            desc = f"Target project {proj_key!r} not found in workspace"
+            raise OAuth2Error(err, desc, 403)
+        proj_id = proj_res if isinstance(proj_res, uuid.UUID) else uuid.UUID(str(proj_res))
+        allowed_projects = [proj_id]
+        scope_tier = "project"
+
+    return surface, target_ws_id, effective_principal_id, allowed_projects, scope_tier
+
+
 # =========================================================================
 # Interactive Authorization & Consent Flow
 # =========================================================================
@@ -677,7 +754,24 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         }
         return _redirect_with_params(redirect_uri, params)
 
-    # 11. Bind caller RLS context on session and load available projects + principal display name
+    # 11. Target scope & workspace resolution
+    try:
+        surface, eff_ws_id, eff_p_id, req_projects, _scope_tier = await _resolve_target_scope(
+            session=session,
+            resource=effective_resource,
+            base_url=base_url,
+            caller_principal_id=caller.principal_id,
+            caller_workspace_id=caller.workspace_id,
+        )
+    except OAuth2Error as exc:
+        params = {
+            "error": exc.error,
+            "error_description": exc.description,
+            "state": state,
+        }
+        return _redirect_with_params(redirect_uri, params)
+
+    # 12. Bind caller RLS context on session and load available projects + principal display name
     await session.execute(
         text(
             "SELECT set_config('app.principal_id', :p_id, true), "
@@ -685,21 +779,25 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             "set_config('app.aal_level', :aal, true)"
         ),
         {
-            "p_id": str(caller.principal_id),
-            "w_id": str(caller.workspace_id),
+            "p_id": str(eff_p_id),
+            "w_id": str(eff_ws_id),
             "aal": str(caller.aal_level),
         },
     )
-    stmt_projects = select(Project.id, Project.name).where(
-        Project.workspace_id == caller.workspace_id
-    )
+    if req_projects:
+        stmt_projects = select(Project.id, Project.name).where(
+            Project.workspace_id == eff_ws_id,
+            Project.id.in_(req_projects),
+        )
+    else:
+        stmt_projects = select(Project.id, Project.name).where(Project.workspace_id == eff_ws_id)
     projects_rows = (await session.execute(stmt_projects)).all()
     available_projects = [(row[0], row[1]) for row in projects_rows]
 
     # Resolve principal display name
     stmt_user = text("SELECT display_name FROM principals WHERE id = :p_id")
-    p_name = (await session.execute(stmt_user, {"p_id": caller.principal_id})).scalar_one_or_none()
-    principal_display = p_name or str(caller.principal_id)
+    p_name = (await session.execute(stmt_user, {"p_id": eff_p_id})).scalar_one_or_none()
+    principal_display = p_name or str(eff_p_id)
 
     key_material = getattr(request.app.state, "key_material", None)
     session_service = getattr(request.app.state, "session_service", None)
@@ -875,16 +973,50 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
         }
         return _redirect_with_params(redirect_uri, params)
 
-    # 4. Project narrowing
-    allowed_projects: list[uuid.UUID] | None = None
-    if allowed_project_id and allowed_project_id != "__ALL__":
-        with contextlib.suppress(ValueError):
-            allowed_projects = [uuid.UUID(allowed_project_id)]
+    # 8. Target scope & workspace resolution
+    try:
+        surface, eff_ws_id, eff_p_id, req_projects, _scope_tier = await _resolve_target_scope(
+            session=session,
+            resource=resource,
+            base_url=base_url,
+            caller_principal_id=caller.principal_id,
+            caller_workspace_id=caller.workspace_id,
+        )
+    except OAuth2Error as exc:
+        params = {
+            "error": exc.error,
+            "error_description": exc.description,
+            "state": state,
+        }
+        return _redirect_with_params(redirect_uri, params)
 
-    # 5. Create or lookup OAuthGrant
+    # 9. Project narrowing
+    if req_projects:
+        allowed_projects = req_projects
+    else:
+        allowed_projects = None
+        if allowed_project_id and allowed_project_id != "__ALL__":
+            with contextlib.suppress(ValueError):
+                allowed_projects = [uuid.UUID(allowed_project_id)]
+
+    # 10. Bind effective target workspace & principal RLS context on session
+    await session.execute(
+        text(
+            "SELECT set_config('app.principal_id', :p_id, true), "
+            "set_config('app.workspace_id', :w_id, true), "
+            "set_config('app.aal_level', :aal, true)"
+        ),
+        {
+            "p_id": str(eff_p_id),
+            "w_id": str(eff_ws_id),
+            "aal": str(caller.aal_level),
+        },
+    )
+
+    # 11. Create or lookup OAuthGrant
     grant = OAuthGrant(
-        workspace_id=caller.workspace_id,
-        principal_id=caller.principal_id,
+        workspace_id=eff_ws_id,
+        principal_id=eff_p_id,
         client_id=client_record.id,
         surface=surface,
         scopes=approved_scopes,
@@ -893,7 +1025,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
     session.add(grant)
     await session.flush()
 
-    # 6. Generate single-use authorization code (256-bit URL-safe)
+    # 11. Generate single-use authorization code (256-bit URL-safe)
     code = secrets.token_urlsafe(32)
     code_sha = hash_token(code)
     now = datetime.now(UTC)
@@ -902,8 +1034,8 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
         code_sha256=code_sha,
         grant_id=grant.id,
         client_id=client_record.id,
-        principal_id=caller.principal_id,
-        workspace_id=caller.workspace_id,
+        principal_id=eff_p_id,
+        workspace_id=eff_ws_id,
         code_challenge=code_challenge,
         code_challenge_method=code_challenge_method,
         resource=resource,
@@ -1071,6 +1203,17 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
         # Mark code consumed
         code_record.consumed_at = now
 
+        # Determine scope tier
+        _t_surface, t_ws_slug, t_proj_key = parse_resource_target(
+            code_record.resource or "", base_url
+        )
+        if t_ws_slug is None:
+            scope_tier = "server"
+        elif code_record.allowed_projects or t_proj_key:
+            scope_tier = "project"
+        else:
+            scope_tier = "workspace"
+
         # Mint Access Token JWT
         access_token = mint_access_token(
             issuer=base_url,
@@ -1083,6 +1226,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             workspace_id=code_record.workspace_id,
             allowed_projects=code_record.allowed_projects,
             ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
+            scope_tier=scope_tier,
         )
 
         # Generate Refresh Token
@@ -1166,6 +1310,14 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             raise OAuth2Error(err, desc, 400)
 
         surface_url = f"{base_url}/mcp/{grant.surface}"
+        eff_target_resource = eff_resource or surface_url
+        _t_surface, t_ws_slug, t_proj_key = parse_resource_target(eff_target_resource, base_url)
+        if t_ws_slug is None:
+            scope_tier = "server"
+        elif grant.allowed_projects or t_proj_key:
+            scope_tier = "project"
+        else:
+            scope_tier = "workspace"
 
         # Mint new access token
         new_access_token = mint_access_token(
@@ -1179,6 +1331,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             workspace_id=grant.workspace_id,
             allowed_projects=grant.allowed_projects,
             ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
+            scope_tier=scope_tier,
         )
 
         # Mint rotated refresh token

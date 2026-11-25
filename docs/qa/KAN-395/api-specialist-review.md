@@ -53,7 +53,19 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
 
 ---
 
-## 4. Verdict
+## 4. Live MCP Handshake & Scoping Resolution (Addendum)
+
+1. **Target Workspace Scoping via RFC 8707 Resource Indicator:**
+   - Authorization requests targeting scoped resources (`/mcp/{surface}/w/{ws_slug}` or `/mcp/{surface}/w/{ws_slug}/p/{proj_key}`) now correctly resolve the target workspace using the SECURITY DEFINER function `resolve_workspace_by_slug_or_id`.
+   - Caller membership in the target workspace is strictly enforced via `kb_auth_switch_workspace(:ws_id, :p_id)`, failing closed with 403 `access_denied` if the principal is not a member.
+   - Consent screen rendering and decision processing dynamically switch the PostgreSQL session RLS context (`app.workspace_id`, `app.principal_id`), binding `OAuthGrant` and `OAuthAuthorizationCode` records to the target workspace while respecting Row-Level Security.
+   - Access tokens minted during code exchange or refresh token rotation include `scope_tier` (`'server' | 'workspace' | 'project'`) and are bound to the verified target workspace.
+2. **HTTP Probing & Protocol Conformance:**
+   - MCP endpoints on `/mcp/{surface}`, `/mcp/{surface}/w/{ws_slug}`, and `/mcp/{surface}/w/{ws_slug}/p/{proj_key}` now accept `HEAD` requests returning 200 OK with `Allow: POST, DELETE, GET, HEAD`, and authenticated `GET` requests returning 200 OK service descriptors for MCP clients (such as Google Gemini) that probe endpoints before initiating JSON-RPC sessions.
+
+---
+
+## 5. Verdict
 
 **`APPROVED`**
 
