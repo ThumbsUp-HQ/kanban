@@ -61,7 +61,7 @@ This packet provides indisputable forensic verification evidence for ticket **KA
 - **High-Contrast Dark Mode Overrides (`WorkspaceSettingsPage.css`):** Replaced undefined `--kb-color-bg-subtle` with `--kb-color-bg-surface-raised` and added explicit dark mode tokens (`background: #1e293b; color: #f1f5f9; border-color: #334155;` >= 4.5:1 WCAG AA contrast).
 - **Mobile & Tablet Layout Responsiveness (`PersonalSettingsPage.css`, `ProjectSettingsPage.css`):** Wrapped `.kb-timezone-search-row` with `flex-wrap: wrap; flex: 1 1 180px;` so Auto-detect button never overflows at 390x844. Added horizontal scroll and wrapped actions for passkeys table on <= 900px tablets. Set `min-height: 44px; white-space: normal; line-height: 1.35;` on `.kb-btn-purge` to prevent mobile border clipping.
 - **Transitive Hierarchy Cycle Warning (`WorkspaceSettingsPage.tsx`):** Enforced `group-cycle-pill` display whenever `/cycle/i.test(groupActionError)` even when cyclic groups are outside `groupMembers`.
-- **Interactive Modals & Drawers Multi-Viewport Screenshots:** Captured unclipped PNGs for `AttachHookDialog`, `DryRunDrawer`, `GitRepoBindingsSection` Bind Modal, and `CustomFieldDefinitionEditor` Tamper Dialog, bringing the verified visual screenshot suite to 29 PNGs.
+- **Interactive Modals & Drawers Multi-Viewport Screenshots:** Captured unclipped PNGs for `AttachHookDialog`, `DryRunDrawer`, `GitRepoBindingsSection` Bind Modal, and `CustomFieldDefinitionEditor` Tamper Dialog, bringing the verified visual screenshot suite to 39 PNGs (35 multi-viewport baseline across 7 views + 4 interactive modal/drawer dialogs).
 
 ---
 
@@ -139,7 +139,7 @@ cd docs/qa/KAN-427 && sha256sum -c changed-files-manifest.txt
 
 ## 4. Visual Evidence & Screenshots
 
-All 29 unclipped Playwright captures (25 multi-viewport baseline + 4 interactive modal/drawer captures) were recorded in `docs/qa/KAN-427/screenshots/` and visually verified via `read_file`:
+All 39 unclipped Playwright captures (35 multi-viewport baseline + 4 interactive modal/drawer captures) were recorded in `docs/qa/KAN-427/screenshots/` and visually verified via `read_file`:
 - `01-workspace-settings-01-desktop-1440x900-light.png` (1440x900)
 - `01-workspace-settings-02-desktop-1440x900-dark.png` (1440x900)
 - `01-workspace-settings-03-tablet-landscape-1024x768.png` (1024x768)
@@ -165,6 +165,16 @@ All 29 unclipped Playwright captures (25 multi-viewport baseline + 4 interactive
 - `03-personal-settings-03-tablet-landscape-1024x768.png` (1024x768)
 - `03-personal-settings-04-tablet-portrait-768x1024.png` (768x1024)
 - `03-personal-settings-05-mobile-portrait-390x844.png` (390x844)
+- `04-custom-fields-studio-01-desktop-1440x900-light.png` (1440x900)
+- `04-custom-fields-studio-02-desktop-1440x900-dark.png` (1440x900)
+- `04-custom-fields-studio-03-tablet-landscape-1024x768.png` (1024x768)
+- `04-custom-fields-studio-04-tablet-portrait-768x1024.png` (768x1024)
+- `04-custom-fields-studio-05-mobile-portrait-390x844.png` (390x844)
+- `05-workflow-studio-01-desktop-1440x900-light.png` (1440x900)
+- `05-workflow-studio-02-desktop-1440x900-dark.png` (1440x900)
+- `05-workflow-studio-03-tablet-landscape-1024x768.png` (1024x768)
+- `05-workflow-studio-04-tablet-portrait-768x1024.png` (768x1024)
+- `05-workflow-studio-05-mobile-portrait-390x844.png` (390x844)
 - `06-workflow-attach-hook-dialog.png` (1440x900 - AttachHookDialog Wasm vs Agent + Select/Clear All)
 - `07-workflow-dry-run-drawer.png` (1440x900 - DryRunDrawer Simulation Top Banner + Field Diff Table)
 - `08-git-repo-bindings-modal.png` (1440x900 - GitRepoBindingsSection Bind Repo Modal + SSRF Callout + Masked PAT)

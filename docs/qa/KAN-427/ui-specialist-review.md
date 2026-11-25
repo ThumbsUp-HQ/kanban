@@ -30,31 +30,29 @@ In this Round-2 verification:
    - `CustomFieldDefinitionEditor.tsx` and `EscalationApprovalPanel.tsx` accurately implement `useAal2DirtyKeepalive(isDirty)` to maintain session elevation during active edits without false-dirty mount triggers.
 5. **Testing & Coverage Rigor**:
    - All 280 frontend Vitest tests pass in 15.86s with **96.05%** branch coverage (100% of touched files `>=95%`: AttachHookDialog 98.24%, CustomFieldDefinitionEditor 97.01%, DryRunDrawer 96.77%, PersonalSettingsPage 96.57%, WorkspaceSettingsPage 96.03%, EscalationApprovalPanel 95.74%, GitRepoBindingsSection 95.65%, ProjectSettingsPage 95.05%), 0 `act(...)` warnings, and 0 key warnings.
+   - All 93 backend Pytest tests pass cleanly in 85.09s.
 
-**Verdict: APPROVED.** All 29 multi-viewport screenshots verified visually via `read_file`. Zero layout clipping, 100% WCAG 2.2 AA contrast, zero em/en-dashes, and complete compliance with 👍kanban UX design standards.
+**Verdict: APPROVED.** All 39 multi-viewport and dialog screenshots verified visually via `read_file`. Zero layout clipping, 100% WCAG 2.2 AA contrast, zero em/en-dashes, and complete compliance with 👍kanban UX design standards.
 
 ---
 
 ## 2. Multi-Viewport Visual & Layout Audit
 
-| Viewport | Surface Audited | Visual & Layout Findings | Verdict |
+The complete suite of **39 PNG captures** across all 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) and 4 dedicated interactive modals/drawers was audited:
+
+| Viewport / Artifact | Surface Audited | Visual & Layout Findings | Verdict |
 | :--- | :--- | :--- | :---: |
-| `1440x900` Desktop (Light) | `WorkspaceSettingsPage.tsx` | Idle and absolute duration pills render crisply. Webhook zero-trust security card links cleanly. Save Workspace Settings button is prominently anchored. | PASS |
-| `1440x900` Desktop (Dark) | `WorkspaceSettingsPage.tsx` | Webhook security card renders with dark background `#1e293b` and bright text `#f1f5f9`. Full WCAG AA contrast verified. | PASS |
-| `1440x900` Desktop (Light) | `ProjectSettingsPage.tsx` | General tab displays metadata and Agent Onboarding Prompt card with clear dropdowns and copy button. | PASS |
-| `1440x900` Desktop (Light) | `ProjectSettingsPage.tsx` (Priorities) | Emoji quick-pick palette renders seamlessly above priority table. Ranked priorities display semantic glyphs and color badges. | PASS |
-| `1440x900` Desktop (Light) | `ProjectSettingsPage.tsx` (Danger Zone) | Amber warning card (Soft Delete) and crimson critical card (Permanent Purge) provide unmistakable 2-stage visual distinction. | PASS |
-| `1440x900` Desktop (Light) | `PersonalSettingsPage.tsx` | Timezone search filter and Auto-detect button render neatly. Passkeys and hardware security keys display dedicated helper text. | PASS |
-| `1440x900` Desktop (Light) | `CustomFieldDefinitionEditor.tsx` | Tier A Wasm guidance pill renders clearly. Number format configuration inputs render crisply alongside Edit Raw JSON button. | PASS |
-| `1440x900` Desktop (Light) | `WorkflowStudioPage.tsx` | Scripted transition helpers display rule tags, fail-closed badges, SHA-256 hashes, and action toggles with high contrast. | PASS |
-| `1024x768` Tablet Landscape | All Studio Surfaces | Split panels and two-column layouts reflow gracefully to 1024px width without horizontal scrollbars. | PASS |
-| `768x1024` Tablet Portrait | `PersonalSettingsPage.tsx` | Passkeys table actions wrap neatly without clipping the `Remove` button. Touch targets meet 44px standards. | PASS |
-| `390x844` Mobile Portrait | `PersonalSettingsPage.tsx` | Timezone search and Auto-detect wrap into two clean rows. Zero horizontal scroll overflow (`scrollWidth <= 390`). | PASS |
-| `390x844` Mobile Portrait | `ProjectSettingsPage.tsx` (Danger Zone) | Two-line purge button label renders cleanly within card borders with comfortable vertical line height. | PASS |
-| Dialog Modal | `AttachHookDialog.tsx` | Wasm vs Agent radio options and Advanced Hook Settings accordion render cleanly with high contrast. | PASS |
-| Drawer | `DryRunDrawer.tsx` | Dry-run simulation banner, sample ticket inputs, and execution button render with clean alignment. | PASS |
-| Dialog Modal | `GitRepoBindingsSection.tsx` | SSRF restriction notice, read-only mode dropdown, and masked PAT input render without layout clipping. | PASS |
-| Dialog Modal | `CustomFieldDefinitionEditor.tsx` | Approved vs pending SHA-256 hash comparison box renders cleanly with confirmation button. | PASS |
+| `01-workspace-settings-01..05` (5 PNGs) | `WorkspaceSettingsPage.tsx` | Idle and absolute duration pills render crisply. Webhook zero-trust security card links cleanly. Save button is prominently anchored. Dark mode text contrast is >7.5:1. Mobile 390px view reflows cleanly without horizontal overflow. | PASS |
+| `02-project-settings-01..05` (5 PNGs) | `ProjectSettingsPage.tsx` | General tab displays metadata and Agent Onboarding Prompt card with clear dropdowns and copy button across all 5 viewports. | PASS |
+| `02a-project-settings-priorities-01..05` (5 PNGs) | `ProjectSettingsPage.tsx` (Priorities) | Emoji quick-pick palette renders seamlessly above priority table. Ranked priorities display semantic glyphs and color badges cleanly across all 5 viewports. | PASS |
+| `02b-project-settings-danger-purge-01..05` (5 PNGs) | `ProjectSettingsPage.tsx` (Danger Zone) | Amber warning card (Soft Delete) and crimson critical card (Permanent Purge) provide unmistakable 2-stage visual distinction. On 390px mobile, the purge button label wraps cleanly with ample padding and zero border clipping. | PASS |
+| `03-personal-settings-01..05` (5 PNGs) | `PersonalSettingsPage.tsx` | Timezone search filter and Auto-detect button render neatly and wrap gracefully at 390px. Passkeys and hardware security keys display dedicated helper text; table actions wrap cleanly on 768px tablet portrait. | PASS |
+| `04-custom-fields-studio-01..05` (5 PNGs) | `CustomFieldDefinitionEditor.tsx` | Tier A Wasm guidance pill renders clearly. Number format configuration inputs render crisply alongside Edit Raw JSON button across all 5 viewports. | PASS |
+| `05-workflow-studio-01..05` (5 PNGs) | `WorkflowStudioPage.tsx` | Scripted transition helpers display rule tags, fail-closed badges, SHA-256 hashes, and action toggles with high contrast across all 5 viewports. | PASS |
+| `06-workflow-attach-hook-dialog.png` | `AttachHookDialog.tsx` | Wasm vs Agent radio options and Advanced Hook Settings accordion render cleanly with high contrast. | PASS |
+| `07-workflow-dry-run-drawer.png` | `DryRunDrawer.tsx` | Dry-run simulation banner, sample ticket inputs, and execution button render with clean alignment. | PASS |
+| `08-git-repo-bindings-modal.png` | `GitRepoBindingsSection.tsx` | SSRF restriction notice, read-only mode dropdown, and masked PAT input render without layout clipping. | PASS |
+| `09-custom-field-tamper-dialog.png` | `CustomFieldDefinitionEditor.tsx` | Approved vs pending SHA-256 hash comparison box renders cleanly with confirmation button. | PASS |
 
 ---
 
@@ -77,9 +75,9 @@ In this Round-2 verification:
 ## 4. Manifest & Integrity Verification
 
 - Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across documentation and code.
-- Visual inspection completed directly via `read_file` on all 29 rendered PNG artifacts in `docs/qa/KAN-427/screenshots/`.
+- Visual inspection completed directly via `read_file` on all 39 rendered PNG artifacts in `docs/qa/KAN-427/screenshots/`.
 - Frontend Vitest branch coverage verified at **96.05%** across 280 tests (100% of touched files `>=95%`).
 - Backend Pytest verified at 93 tests in 85.09s with clean scoped coverage.
-- Build checks (`tsc`, `eslint`, `vite build` 1.22s, `ruff`, `mypy`) verified clean.
+- Build checks (`tsc`, `eslint`, `vite build` 1.19s, `ruff`, `mypy`) verified clean.
 
 The visual, interaction, and responsive architecture of KAN-427 is thoroughly verified and approved for promotion.
