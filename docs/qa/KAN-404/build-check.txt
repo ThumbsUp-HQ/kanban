@@ -1,14 +1,27 @@
+=== STATIC MIGRATION CHECK ===
 OK: All 82 migrations valid. Single head: p6_20_oauth_clients_status_check
+
+=== RUFF LINT CHECK ===
 All checks passed!
-Success: no issues found in 679 source files
+
+=== MYPY TYPE CHECK ===
+Success: no issues found in 1369 source files
+
+=== NO DASHES CHECK ===
+
+=== FRONTEND TYPECHECK ===
 
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > tsc -b --noEmit
 
 
+=== FRONTEND LINT ===
+
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > eslint . --max-warnings 0
 
+
+=== FRONTEND BUILD ===
 
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > tsc -b && vite build
@@ -21,6 +34,6 @@ computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-BLX1a42e.css            605.28 kB │ gzip:  85.23 kB
-dist/assets/index-DZZ5tNoh.js           2,878.26 kB │ gzip: 797.30 kB
+dist/assets/index-CILR23SE.js           2,878.25 kB │ gzip: 797.30 kB
 
-✓ built in 1.20s
+✓ built in 1.42s

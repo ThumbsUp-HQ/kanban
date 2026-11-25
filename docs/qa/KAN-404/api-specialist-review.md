@@ -2,7 +2,7 @@
 
 - **Ticket ID:** KAN-404 (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona:** Senior Backend & API Security Architect (`@api-spec`)
-- **Branch:** `fix/KAN-404-rc1` (commit `006eb550`)
+- **Branch:** `fix/KAN-404-rc1` (commit `54ad6956`)
 - **Status:** APPROVED
 - **Date:** 2026-11-25
 
@@ -55,13 +55,13 @@
 ## 3. Quality Gates & Test Results
 
 - **Unit Tests**:
-  - 16 Pytest tests passing in `kanban/tests/auth/test_websudo_sliding_aal2.py` and `kanban/tests/custom_fields/test_custom_field_approvals_api.py`.
-  - 398 Vitest tests passing across 13 test suites with branch coverage >= 95% (WebSudoModalHost: 100% stmts / 97.05% branch; AdminStudioSubnav: 100% stmts / 97.77% branch).
+  - 89 Pytest backend tests passing in 38.06s with >= 95% coverage on all target modules (database.models.auth: 100%, kanban.api.v1.auth_session: 97%, kanban.auth.mfa.policy: 97%, kanban.custom_fields.approvals: 96%; Total: 97%).
+  - 217 Vitest frontend tests passing across 8 test suites with branch coverage >= 95% (All files: 99.4% stmts / 95.75% branch / 99.57% funcs / 99.46% lines; WebSudoModalHost: 100% stmts / 100% branch; AdminStudioSubnav: 100% stmts / 95.55% branch; client.ts: 99.45% lines / 95.08% branch).
 - **Static Analysis & Build**:
-  - 0 ruff errors (`uv run ruff check kanban/`).
-  - 0 mypy errors in 679 source files (`uv run mypy kanban/`).
+  - 0 ruff errors (`uv run ruff check .`).
+  - 0 mypy errors in 1369 source files (`uv run mypy`).
   - 0 tsc errors, 0 linter warnings (`pnpm typecheck`, `pnpm lint`).
-  - Clean production build (1.18s, 762 modules transformed).
+  - Clean production build (1.42s, 762 modules transformed).
   - 0 forbidden Unicode dashes (`python3 scripts/check_no_dashes.py --all`).
   - Manifest verified 100% OK with `sha256sum -c`.
 
