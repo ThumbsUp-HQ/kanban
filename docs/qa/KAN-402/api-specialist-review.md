@@ -5,7 +5,7 @@
 - **Reviewer Persona**: API & Security Architect (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
 - **Branch**: `feat/KAN-402-workspace-project-ai-agents`
 - **Base Commit**: `ea30b70a`
-- **Head Commit**: `COMMIT_SHA_PLACEHOLDER`
+- **Head Commit**: `45db6e87`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
