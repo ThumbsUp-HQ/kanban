@@ -30,7 +30,7 @@
   - Enforced UTF-16 lone surrogate rejection: `0xD800 <= ord(c) <= 0xDFFF` -> `422 INVALID_UTF8_SURROGATE`.
   - Enforced byte-length limit on `custom_notes` (`<= 4096` bytes -> `422 PAYLOAD_TOO_LARGE`).
   - Validated enum constraints for `scope`, `execution_mode`, `model_strategy`, `qa_rigor`.
-- Updated live OpenAPI paths/ops/schemas count in `README.md` and `kanban/tests/test_feature_comparison_parity.py` (`paths: 292`, `ops: 388`, `schemas: 390`).
+- Updated live OpenAPI paths/ops/schemas count in `README.md` and `kanban/tests/test_feature_comparison_parity.py` (`paths: 292`, `ops: 388`, `schemas: 391`).
 
 ### 3. Reusable `<AgentOnboardingPromptCard>` & UI Integration
 - Created `kanban/web/src/features/settings/agentOnboardingPrompt.ts` with `buildAgentOnboardingPrompt(...)` helper.
