@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, type JSX } from 'react';
 import { copyToClipboard } from '../../utils/clipboard';
+import { buildAgentOnboardingPrompt } from './agentOnboardingPrompt';
 import './McpConfigSnippetModal.css';
 
 export interface McpConfigSnippetModalProps {
@@ -169,7 +170,7 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
 
   const handleCopyPrompt = async (): Promise<void> => {
     const success = await copyToClipboard(
-      `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`,
+      buildAgentOnboardingPrompt({ origin, projectKey }),
     );
     if (success) {
       setPromptCopied(true);

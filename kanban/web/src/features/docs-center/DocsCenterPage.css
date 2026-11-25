@@ -79,6 +79,26 @@
   background: var(--bg-surface);
 }
 
+.kb-docs-copy-prompt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-docs-copy-prompt-btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+}
+
 .kb-docs-mobile-chapters-btn {
   display: none;
   min-height: 44px;

@@ -1,0 +1,216 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.kb-agent-onboarding-card {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  color: var(--fg-primary, #111827);
+}
+
+.kb-agent-onboarding-card-header {
+  margin-bottom: 1.25rem;
+}
+
+.kb-agent-onboarding-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-primary, #111827);
+}
+
+.kb-agent-onboarding-subtitle {
+  font-size: 0.875rem;
+  color: var(--fg-muted, #6b7280);
+  margin: 0;
+}
+
+.kb-agent-onboarding-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .kb-agent-onboarding-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.kb-agent-onboarding-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.kb-agent-onboarding-field-full {
+  grid-column: 1 / -1;
+}
+
+.kb-agent-onboarding-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-secondary, #374151);
+}
+
+.kb-agent-onboarding-select,
+.kb-agent-onboarding-textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border-subtle, #d1d5db);
+  border-radius: 6px;
+  background: var(--bg-surface-raised, #ffffff);
+  color: var(--fg-primary, #111827);
+  box-sizing: border-box;
+}
+
+.kb-agent-onboarding-select:focus,
+.kb-agent-onboarding-textarea:focus {
+  outline: none;
+  border-color: var(--focus-ring, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.kb-agent-onboarding-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.kb-agent-onboarding-warning-banner {
+  background: var(--warn-bg, #fef3c7);
+  border: 1px solid var(--border-warning, #f59e0b);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--warn-fg, #92400e);
+  margin-top: 0.5rem;
+  grid-column: 1 / -1;
+}
+
+.kb-agent-onboarding-prompt-box {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+}
+
+.kb-agent-onboarding-prompt-preview {
+  background: var(--bg-surface-raised, #f3f4f6);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  font-family: monospace;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg-primary, #1f2937);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.kb-agent-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.kb-agent-onboarding-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.kb-agent-onboarding-btn-primary {
+  background: var(--accent-primary, #2563eb);
+  color: var(--accent-primary-fg, #ffffff);
+  border: 1px solid transparent;
+}
+
+.kb-agent-onboarding-btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover, #1d4ed8);
+}
+
+.kb-agent-onboarding-btn-secondary {
+  background: var(--bg-surface-raised, #ffffff);
+  color: var(--fg-primary, #374151);
+  border: 1px solid var(--border-subtle, #d1d5db);
+}
+
+.kb-agent-onboarding-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.kb-agent-onboarding-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kb-agent-onboarding-alert {
+  padding: 0.625rem 0.875rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+}
+
+.kb-agent-onboarding-alert-success {
+  background: var(--bg-success-subtle, #ecfdf5);
+  border: 1px solid var(--border-success, #10b981);
+  color: var(--ok-fg, #065f46);
+}
+
+.kb-agent-onboarding-alert-error {
+  background: var(--danger-bg, #fef2f2);
+  border: 1px solid var(--border-danger, #ef4444);
+  color: var(--danger-fg, #991b1b);
+}
+
+/* Clean-room screenshot capture unconstrained mode */
+body.kb-screenshot-unconstrained,
+body.kb-screenshot-unconstrained #root,
+body.kb-screenshot-unconstrained .kb-app-shell,
+body.kb-screenshot-unconstrained .kb-main-canvas,
+body.kb-screenshot-unconstrained .kb-canvas,
+body.kb-screenshot-unconstrained .kb-page,
+body.kb-screenshot-unconstrained main,
+body.kb-screenshot-unconstrained .settings-page,
+body.kb-screenshot-unconstrained .personal-settings-page,
+body.kb-screenshot-unconstrained .project-settings-page {
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+body.kb-screenshot-unconstrained .kb-topbar,
+body.kb-screenshot-unconstrained header,
+body.kb-screenshot-unconstrained .app-topbar,
+body.kb-screenshot-unconstrained .topbar,
+body.kb-screenshot-unconstrained nav {
+  position: static !important;
+  top: auto !important;
+}
+
+body.kb-screenshot-unconstrained .realtime-status-chip,
+body.kb-screenshot-unconstrained .realtime-live-region,
+body.kb-screenshot-unconstrained .kb-toast,
+body.kb-screenshot-unconstrained [role="alert"],
+body.kb-screenshot-unconstrained [class*="toast"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}

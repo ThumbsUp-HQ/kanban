@@ -7,16 +7,17 @@ from __future__ import annotations
 import email
 import email.message
 import hashlib
+import json
 import logging
 import os
 import re
 import uuid
 import zoneinfo
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, cast
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from starlette.requests import Request  # noqa: TC002  # Required at runtime by FastAPI
 from starlette.responses import JSONResponse
@@ -28,6 +29,7 @@ from kanban.attachments.raster import sanitize_and_reencode_avatar
 from kanban.attachments.sniff import sniff_media_type
 from kanban.attachments.storage import LocalFilesystemBlobStore
 from kanban.auth.local.hashing import get_auth_pepper, hash_password, verify_password
+from kanban.content.unicode_guard import strip_invisible_and_control_chars
 from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
@@ -794,4 +796,289 @@ async def change_password(  # noqa: C901
             "success": True,
             "message": "Password changed successfully.",
         }
+    )
+
+
+SURROGATE_MIN = 0xD800
+SURROGATE_MAX = 0xDFFF
+MAX_CUSTOM_NOTES_BYTES = 4096
+
+
+def _validate_custom_notes(notes: str) -> str:
+    """Validate UTF-16 surrogates, check byte bound, and strip invisible control characters."""
+    for char in notes:
+        cp = ord(char)
+        if SURROGATE_MIN <= cp <= SURROGATE_MAX:
+            raise ProblemException(
+                code="INVALID_UTF8_SURROGATE",
+                status=422,
+                title="Invalid UTF-8 Surrogate",
+                detail="custom_notes contains invalid UTF-16 surrogate characters.",
+            )
+    encoded_len = len(notes.encode("utf-8"))
+    if encoded_len > MAX_CUSTOM_NOTES_BYTES:
+        raise ProblemException(
+            code="PAYLOAD_TOO_LARGE",
+            status=422,
+            title="Payload Too Large",
+            detail=(
+                f"custom_notes UTF-8 byte length {encoded_len} exceeds maximum "
+                f"{MAX_CUSTOM_NOTES_BYTES} bytes."
+            ),
+        )
+    sanitized, _, _ = strip_invisible_and_control_chars(
+        notes, max_input_bytes=MAX_CUSTOM_NOTES_BYTES
+    )
+    return sanitized
+
+
+class AgentOnboardingPrefs(BaseModel):
+    """Per-user onboarding preferences for AI coding agents."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["local_only", "global_allowed"] = Field(
+        default="local_only",
+        description="Persistence scope boundary (defaults strictly to local project folder)",
+    )
+    execution_mode: Literal["single_thread", "teamwork", "swarm"] = Field(
+        default="swarm",
+        description="Preferred execution topology",
+    )
+    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] = Field(
+        default="quota_sipping_flash",
+        description="Model tier and token allocation strategy",
+    )
+    qa_rigor: Literal["standard", "strict_forensic"] = Field(
+        default="strict_forensic",
+        description="QA verification and coverage gate rigor",
+    )
+    custom_notes: str = Field(
+        default="",
+        max_length=4096,
+        description="Custom onboarding instructions or constraints (max 4096 bytes)",
+    )
+
+
+class AgentOnboardingPrefsPatch(BaseModel):
+    """Partial update payload for per-user agent onboarding preferences."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["local_only", "global_allowed"] | None = Field(
+        default=None,
+        description="Persistence scope boundary (defaults strictly to local project folder)",
+    )
+    execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = Field(
+        default=None,
+        description="Preferred execution topology",
+    )
+    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = Field(
+        default=None,
+        description="Model tier and token allocation strategy",
+    )
+    qa_rigor: Literal["standard", "strict_forensic"] | None = Field(
+        default=None,
+        description="QA verification and coverage gate rigor",
+    )
+    custom_notes: str | None = Field(
+        default=None,
+        max_length=4096,
+        description="Custom onboarding instructions or constraints (max 4096 bytes)",
+    )
+
+
+class UserPreferencesResponse(BaseModel):
+    """Response containing user preferences."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: str
+    workspace_id: str
+    agent_onboarding_prefs: AgentOnboardingPrefs
+
+
+class UpdateUserPreferencesRequest(BaseModel):
+    """Payload for updating user preferences."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_onboarding_prefs: AgentOnboardingPrefsPatch | None = None
+    scope: Literal["local_only", "global_allowed"] | None = None
+    execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = None
+    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = None
+    qa_rigor: Literal["standard", "strict_forensic"] | None = None
+    custom_notes: str | None = None
+
+
+@router.get(
+    "/users/me/preferences",
+    response_model=UserPreferencesResponse,
+    summary="Get Current User Preferences",
+    description=(
+        "Retrieve per-user preferences including agent onboarding configuration under FORCE RLS."
+    ),
+)
+async def get_user_preferences(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> UserPreferencesResponse:
+    """Retrieve personal preferences for the authenticated principal."""
+    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
+    prefs_dict: dict[str, Any] = {}
+
+    if session_factory is not None:
+        rls_ctx = RLSContext(
+            principal_id=principal.principal_id,
+            workspace_id=principal.workspace_id,
+            token_scopes=principal.token_scopes,
+            aal_level=cast("Literal[1, 2]", principal.aal_level),
+        )
+        async with session_factory.session(rls_ctx) as session:
+            res = await session.execute(
+                text(
+                    "SELECT agent_onboarding_prefs_json FROM public.user_preferences "
+                    "WHERE principal_id = :p_id AND workspace_id = :ws_id"
+                ),
+                {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
+            )
+            raw_prefs = res.scalar_one_or_none()
+            if isinstance(raw_prefs, dict):
+                prefs_dict = raw_prefs
+
+    active_prefs = (
+        AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs()
+    )
+    return UserPreferencesResponse(
+        principal_id=str(principal.principal_id),
+        workspace_id=str(principal.workspace_id),
+        agent_onboarding_prefs=active_prefs,
+    )
+
+
+def _merge_agent_onboarding_prefs(
+    active: AgentOnboardingPrefs,
+    body: UpdateUserPreferencesRequest,
+) -> AgentOnboardingPrefs:
+    """Merge active preferences with partial nested and top-level patch fields."""
+    nested = body.agent_onboarding_prefs
+    scope = (
+        body.scope
+        if body.scope is not None
+        else (nested.scope if nested and nested.scope is not None else active.scope)
+    )
+    mode = (
+        body.execution_mode
+        if body.execution_mode is not None
+        else (
+            nested.execution_mode
+            if nested and nested.execution_mode is not None
+            else active.execution_mode
+        )
+    )
+    strat = (
+        body.model_strategy
+        if body.model_strategy is not None
+        else (
+            nested.model_strategy
+            if nested and nested.model_strategy is not None
+            else active.model_strategy
+        )
+    )
+    rigor = (
+        body.qa_rigor
+        if body.qa_rigor is not None
+        else (nested.qa_rigor if nested and nested.qa_rigor is not None else active.qa_rigor)
+    )
+    notes_raw = (
+        body.custom_notes
+        if body.custom_notes is not None
+        else (
+            nested.custom_notes
+            if nested and nested.custom_notes is not None
+            else active.custom_notes
+        )
+    )
+    sanitized_notes = _validate_custom_notes(notes_raw)
+    return AgentOnboardingPrefs(
+        scope=scope,
+        execution_mode=mode,
+        model_strategy=strat,
+        qa_rigor=rigor,
+        custom_notes=sanitized_notes,
+    )
+
+
+@router.patch(
+    "/users/me/preferences",
+    response_model=UserPreferencesResponse,
+    summary="Update Current User Preferences",
+    description=(
+        "Update per-user preferences including agent onboarding configuration under FORCE RLS."
+    ),
+)
+async def update_user_preferences(
+    body: UpdateUserPreferencesRequest,
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> UserPreferencesResponse:
+    """Update personal preferences for the authenticated principal."""
+    session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
+    current_prefs_dict: dict[str, Any] = {}
+
+    if session_factory is not None:
+        rls_ctx = RLSContext(
+            principal_id=principal.principal_id,
+            workspace_id=principal.workspace_id,
+            token_scopes=principal.token_scopes,
+            aal_level=cast("Literal[1, 2]", principal.aal_level),
+        )
+        async with session_factory.session(rls_ctx) as session:
+            res = await session.execute(
+                text(
+                    "SELECT agent_onboarding_prefs_json FROM public.user_preferences "
+                    "WHERE principal_id = :p_id AND workspace_id = :ws_id"
+                ),
+                {"p_id": principal.principal_id, "ws_id": principal.workspace_id},
+            )
+            raw_prefs = res.scalar_one_or_none()
+            if isinstance(raw_prefs, dict):
+                current_prefs_dict = raw_prefs
+
+    active_prefs = (
+        AgentOnboardingPrefs(**current_prefs_dict)
+        if current_prefs_dict
+        else AgentOnboardingPrefs()
+    )
+    updated_prefs = _merge_agent_onboarding_prefs(active_prefs, body)
+
+    if session_factory is not None:
+        rls_ctx = RLSContext(
+            principal_id=principal.principal_id,
+            workspace_id=principal.workspace_id,
+            token_scopes=principal.token_scopes,
+            aal_level=cast("Literal[1, 2]", principal.aal_level),
+        )
+        async with session_factory.session(rls_ctx) as session:
+            await session.execute(
+                text(
+                    "INSERT INTO public.user_preferences ("
+                    "  principal_id, workspace_id, agent_onboarding_prefs_json, updated_at"
+                    ") VALUES ("
+                    "  :p_id, :ws_id, CAST(:prefs_json AS jsonb), clock_timestamp()"
+                    ") ON CONFLICT (principal_id) DO UPDATE SET "
+                    "  agent_onboarding_prefs_json = EXCLUDED.agent_onboarding_prefs_json, "
+                    "  updated_at = clock_timestamp()"
+                ),
+                {
+                    "p_id": principal.principal_id,
+                    "ws_id": principal.workspace_id,
+                    "prefs_json": json.dumps(updated_prefs.model_dump()),
+                },
+            )
+
+    return UserPreferencesResponse(
+        principal_id=str(principal.principal_id),
+        workspace_id=str(principal.workspace_id),
+        agent_onboarding_prefs=updated_prefs,
     )

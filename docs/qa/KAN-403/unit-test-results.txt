@@ -1,0 +1,95 @@
+OK: All 83 migrations valid. Single head: p6_21_agent_onboarding_preferences
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 49 items
+
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_defaults_and_lifecycle PASSED [  2%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_partial_nested_merge PASSED [  4%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_validation_errors PASSED [  6%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_validate_custom_notes_function PASSED [  8%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_top_level_fields_and_persistence PASSED [ 10%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_build_me_response_aal2_active_and_avatar_blob_store PASSED [ 12%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_avatar_sniff_media_type_generic_exception PASSED [ 14%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_direct_invocation_without_session_factory PASSED [ 16%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_avatar_upload_payload_guards PASSED [ 18%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_build_me_response_roles_and_capabilities PASSED [ 20%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_settings_session_factory_none_runtime_errors PASSED [ 22%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_settings_new_local_admin_credential_create PASSED [ 24%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_profile_and_avatar_lifecycle PASSED [ 26%]
+kanban/tests/api/test_user_personal_settings.py::test_password_change_policy_and_session_revocation PASSED [ 28%]
+kanban/tests/api/test_user_personal_settings.py::test_passkey_rename_and_mfa_status PASSED [ 30%]
+kanban/tests/api/test_user_personal_settings.py::test_admin_totp_last_factor_guard PASSED [ 32%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_validation_errors PASSED [ 34%]
+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_fallbacks PASSED [ 36%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_avatar_etag_and_blob_error PASSED [ 38%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_password_change_branches PASSED [ 40%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_pepper_and_svg_rejection PASSED [ 42%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_raw_binary_upload_and_delete_empty PASSED [ 44%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_auth_me_role_and_capabilities_matrix PASSED [ 46%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_project_response_is_project_admin_and_role PASSED [ 48%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_project_members_crud_and_capability_gating PASSED [ 51%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_workspace_admin_cannot_grant_server_admin PASSED [ 53%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_workspace_settings_update_name_slug_and_conflict PASSED [ 55%]
+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [ 57%]
+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [ 59%]
+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 61%]
+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 63%]
+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 65%]
+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 67%]
+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 69%]
+database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py::test_p6_21_agent_onboarding_preferences_migration_lifecycle PASSED [ 71%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 73%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 75%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 77%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 79%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 81%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 83%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 85%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [ 87%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [ 89%]
+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [ 91%]
+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 93%]
+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 95%]
+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 97%]
+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [100%]
+
+============================= 49 passed in 34.84s ==============================
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+database/models/principals.py      121      0      0      0   100%
+kanban/api/v1/user_settings.py     408     15    118     11    95%   136-137, 190-191, 201-202, 222-223, 236->238, 254-257, 294->318, 297->318, 314->318, 370-371, 403->413, 404->413, 406, 408->404, 609->612
+kanban/ops/llms_txt.py             126      0     20      0   100%
+----------------------------------------------------------------------------
+TOTAL                              655     15    138     11    97%
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/agentOnboardingPrompt.test.ts (8 tests) 10ms
+ ✓ src/features/settings/personalSettingsApi.test.ts (23 tests) 39ms
+ ✓ src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx (13 tests) 405ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (46 tests) 4583ms
+   ✓ DocsCenter & Help System (KAN-16) (46)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (13)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1581ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 467ms
+
+ Test Files  4 passed (4)
+      Tests  90 passed (90)
+   Start at  09:13:34
+   Duration  5.89s (tests 59%, environment 32%, import 7%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...PromptCard.tsx |     100 |      100 |     100 |     100 |                   
+ ...rdingPrompt.ts |     100 |      100 |     100 |     100 |                   
+ ...SettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

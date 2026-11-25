@@ -45,6 +45,7 @@ import { qk } from '../../api/queryKeys';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AvatarCropModal } from './AvatarCropModal';
 import { AvatarLightboxModal } from './AvatarLightboxModal';
+import { AgentOnboardingPromptCard } from './AgentOnboardingPromptCard';
 import './PersonalSettingsPage.css';
 
 // IANA Timezones list
@@ -1202,6 +1203,9 @@ export function PersonalSettingsPage(): JSX.Element {
           </p>
         )}
       </section>
+
+      {/* Section 5: Agent Onboarding Prompt Card */}
+      <AgentOnboardingPromptCard />
 
       <footer className="kb-personal-settings-footer">
         <Link

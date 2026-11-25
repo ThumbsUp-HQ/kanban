@@ -1,0 +1,272 @@
+OK: All 83 migrations valid. Single head: p6_21_agent_onboarding_preferences
+👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
+👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
+👍 INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
+👍 INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
+👍 INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p4_14_mcp_scopable_keys, Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_14_mcp_scopable_keys -> p5_19b_project_repo_bindings, project_repo_bindings registry for hardened bare git mirrors (KB-P5-19b).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_19b_project_repo_bindings -> p4_07_mcp_read_taint, mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_07_mcp_read_taint -> p5_17a_workflow_hooks, Workflow hook DDL, executions, and invocations (KB-P5-17a).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_17a_workflow_hooks -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
+👍 INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p4_18_oauth_mcp_scoping, OAuth & MCP scoping helpers, label column, and RLS-safe workspace functions.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_23_oidc_link_intent_fk -> p4_24_agent_safe_sequences, Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
+👍 INFO  [alembic.runtime.migration] Running upgrade p4_24_agent_safe_sequences -> p6_02_pdf_attachments, Allow application/pdf attachments and page_count.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_02_pdf_attachments -> p6_03_multi_source_imports_and_aliases, Multi source imports and issue key aliases.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_03_multi_source_imports_and_aliases -> p6_04_enforce_credential_boundary_rls_gucs, Enforce credential boundary rls gucs.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_04_enforce_credential_boundary_rls_gucs -> p6_05_issue_leases_and_fencing, Issue leases and fencing.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_05_issue_leases_and_fencing -> p6_06_crypto_shredded_activity_ledger, Envelope-encrypted activity records payloads and AAL2 two-stage crypto-shredding.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_06_crypto_shredded_activity_ledger -> p6_07_content_provenance_and_taint, Content provenance trust tiers and untrusted content taint tracking.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_07_content_provenance_and_taint -> p6_08_workload_identity_policies, Workload identity policies and JTI replay prevention (KB-AUTH-OIDC-EXCHANGE-01, KAN-74).
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_08_workload_identity_policies -> p6_09_scm_webhooks_and_outbound_bus, SCM webhooks, artifacts, and outbound webhook bus (KB-DEVSECOPS-BUS-01).
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_09_scm_webhooks_and_outbound_bus -> p6_11_git_truststore_and_attestations, Git truststore and commit signature attestations (KB-DEVSECOPS-ATTEST-01).
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_11_git_truststore_and_attestations -> p6_13_csv_import_export_governance, csv import export governance.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_13_csv_import_export_governance -> p6_14_jinja_report_templates, jinja report templates.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_14_jinja_report_templates -> p6_10_issue_workpads_and_rework_breaker, Issue workpads and rework breaker.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_10_issue_workpads_and_rework_breaker -> p6_12_granular_rbac_roles, Granular rbac roles.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_12_granular_rbac_roles -> p6_15_hardened_workspace_switch_and_module_issues, Hardened workspace switch and module_issues security invoker.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_15_hardened_workspace_switch_and_module_issues -> p6_16_oauth_confidential_clients, Support confidential OAuth 2.1 clients.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_16_oauth_confidential_clients -> p6_17_server_admin_role_access, Update app_principal_has_role for server admin scope.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_17_server_admin_role_access -> p6_18_websudo_sliding_aal2, WebSudo sliding window and request replay.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_18_websudo_sliding_aal2 -> p6_19_server_admin_cross_workspace_role_access, Fix app_principal_has_role for cross-workspace server admin and credential scoping.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_19_server_admin_cross_workspace_role_access -> p6_20_oauth_clients_status_check, Update oauth_clients status check constraint for suspended and revoked.
+👍 INFO  [alembic.runtime.migration] Running upgrade p6_20_oauth_clients_status_check -> p6_21_agent_onboarding_preferences, Add agent_onboarding_prefs_json to user_preferences.
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 101 items
+
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  0%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  1%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [  2%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [  3%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [  4%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [  5%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [  6%]
+database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py::test_p6_21_agent_onboarding_preferences_migration_lifecycle PASSED [  7%]
+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [  8%]
+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [  9%]
+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 10%]
+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 11%]
+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 12%]
+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 13%]
+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 14%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_workspace_admin_ai_providers_lifecycle PASSED [ 15%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_project_admin_ai_providers_scoping_and_isolation PASSED [ 16%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_workspace_reorder_with_project_providers_isolation PASSED [ 17%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_workspace_and_project_agent_definitions_lifecycle PASSED [ 18%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_server_admin_agent_definitions_lifecycle PASSED [ 19%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_defaults_and_lifecycle PASSED [ 20%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_partial_nested_merge PASSED [ 21%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_validation_errors PASSED [ 22%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_validate_custom_notes_function PASSED [ 23%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_top_level_fields_and_persistence PASSED [ 24%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_build_me_response_aal2_active_and_avatar_blob_store PASSED [ 25%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_avatar_sniff_media_type_generic_exception PASSED [ 26%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_preferences_direct_invocation_without_session_factory PASSED [ 27%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_avatar_upload_payload_guards PASSED [ 28%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_build_me_response_roles_and_capabilities PASSED [ 29%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_settings_session_factory_none_runtime_errors PASSED [ 30%]
+kanban/tests/api/test_agent_onboarding_preferences.py::test_user_settings_new_local_admin_credential_create PASSED [ 31%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_profile_and_avatar_lifecycle PASSED [ 32%]
+kanban/tests/api/test_user_personal_settings.py::test_password_change_policy_and_session_revocation PASSED [ 33%]
+kanban/tests/api/test_user_personal_settings.py::test_passkey_rename_and_mfa_status PASSED [ 34%]
+kanban/tests/api/test_user_personal_settings.py::test_admin_totp_last_factor_guard PASSED [ 35%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_validation_errors PASSED [ 36%]
+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_fallbacks PASSED [ 37%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_avatar_etag_and_blob_error PASSED [ 38%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_password_change_branches PASSED [ 39%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_pepper_and_svg_rejection PASSED [ 40%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_raw_binary_upload_and_delete_empty PASSED [ 41%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_auth_me_role_and_capabilities_matrix PASSED [ 42%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_project_response_is_project_admin_and_role PASSED [ 43%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_project_members_crud_and_capability_gating PASSED [ 44%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_workspace_admin_cannot_grant_server_admin PASSED [ 45%]
+kanban/tests/auth/test_standard_user_rbac_matrix.py::test_workspace_settings_update_name_slug_and_conflict PASSED [ 46%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_1_positive_rest_lifecycle_and_budget_usage PASSED [ 47%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_3_security_secret_suppression PASSED [ 48%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_4_security_member_isolation PASSED [ 49%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_5_security_csrf_and_airgap PASSED [ 50%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_6_negative_base_url_ssrf_and_invalid_token_cap PASSED [ 51%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_7_boundary_key_length_and_patch_clear PASSED [ 52%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_9_audit_activity_records PASSED [ 53%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_additional_coverage_branches PASSED [ 54%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_reorder PASSED [ 55%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_probe_and_test_connection PASSED [ 56%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_1_positive_create_cli_pipe_and_codex PASSED [ 57%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo] PASSED [ 58%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--YOLO] PASSED [ 59%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo=true] PASSED [ 60%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-skip-permissions] PASSED [ 61%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously] PASSED [ 62%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-foo] PASSED [ 63%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--full-auto] PASSED [ 64%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--allow-all-tools=1] PASSED [ 65%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args0] PASSED [ 66%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args1] PASSED [ 67%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args2] PASSED [ 68%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args3] PASSED [ 69%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3b_security_binary_allowlist PASSED [ 70%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_4_security_arg_boundaries_and_opaque_injection PASSED [ 71%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_5_runtime_argv_assertion_catches_tampered_records PASSED [ 72%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_6_rls_member_denial_and_cross_workspace_404 PASSED [ 73%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_7_boundary_and_validation PASSED [ 74%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_8_delete_and_agent_in_use PASSED [ 75%]
+kanban/tests/agents/test_agent_definitions_api.py::test_crud_endpoints_get_list_patch PASSED [ 76%]
+kanban/tests/agents/test_agent_definitions_api.py::test_duplicate_slug_conflict_409 PASSED [ 77%]
+kanban/tests/agents/test_agent_definitions_api.py::test_workspace_slug_lookup PASSED [ 78%]
+kanban/tests/agents/test_agent_definitions_api.py::test_project_scoped_agent_lifecycle PASSED [ 79%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_create PASSED [ 80%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_patch PASSED [ 81%]
+kanban/tests/ai_config/test_service.py::test_01_positive_create_and_unwrap_secret PASSED [ 82%]
+kanban/tests/ai_config/test_service.py::test_03_gcm_tag_tamper_fails_closed PASSED [ 83%]
+kanban/tests/ai_config/test_service.py::test_04_save_gemini_air_gap_violation PASSED [ 84%]
+kanban/tests/ai_config/test_service.py::test_05_plaintext_bytearray_zeroized_after_create PASSED [ 85%]
+kanban/tests/ai_config/test_service.py::test_base_url_validation_matrix PASSED [ 86%]
+kanban/tests/ai_config/test_service.py::test_field_validation_errors PASSED [ 87%]
+kanban/tests/ai_config/test_service.py::test_crud_and_lifecycle_operations PASSED [ 88%]
+kanban/tests/ai_config/test_service.py::test_unwrap_edge_cases PASSED    [ 89%]
+kanban/tests/ai_config/test_service.py::test_private_lan_and_ssrf_base_urls PASSED [ 90%]
+kanban/tests/ai_config/test_service.py::test_air_gap_with_local_openai PASSED [ 91%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_ollama PASSED [ 92%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_gemini_and_headers PASSED [ 93%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_openai_and_network_errors PASSED [ 94%]
+kanban/tests/ai_config/test_service.py::test_budget_additional_branches PASSED [ 95%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_zero_rebinding_and_ssrf_rejection PASSED [ 96%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_gemini_aq_key_fallback PASSED [ 97%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_exception_scrubs_secrets PASSED [ 98%]
+kanban/tests/ai_config/test_service.py::test_service_coverage_branches PASSED [ 99%]
+kanban/tests/ai_config/test_service.py::test_probe_provider_strict_timeout_cutoff PASSED [100%]
+
+======================== 101 passed in 64.98s (0:01:04) ========================
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+database/models/principals.py           121      0      0      0   100%
+kanban/agents/service.py                145      2     34      3    97%   86->exit, 218, 375
+kanban/ai_config/service.py             456     19    160      9    95%   242-251, 265-266, 306-307, 571-572, 674-675, 710, 720, 907->932, 927-928, 982
+kanban/api/v1/admin/ai_providers.py     489     22     88      5    95%   63-68, 79-80, 229, 627, 711, 784->exit, 858-860, 1000-1012, 1094-1095, 1213
+kanban/api/v1/agent_definitions.py       97      0      4      0   100%
+kanban/api/v1/user_settings.py          408     15    118     11    95%   136-137, 190-191, 201-202, 222-223, 236->238, 254-257, 294->318, 297->318, 314->318, 370-371, 403->413, 404->413, 406, 408->404, 609->612
+kanban/ops/llms_txt.py                  126      0     20      0   100%
+---------------------------------------------------------------------------------
+TOTAL                                  1842     58    424     28    96%
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/agentOnboardingPrompt.test.ts (8 tests) 13ms
+ ✓ src/features/settings/personalSettingsApi.test.ts (23 tests) 30ms
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 25ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 334ms
+ ✓ src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx (13 tests) 527ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (26 tests) 909ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (43 tests) 1877ms
+stderr | src/app/__tests__/MenuConsolidation_KAN363.test.tsx > Menu Consolidation KAN-363 Suite (Global Navigation Deduplication) > Test Case 3: AI Studio Server vs Workspace Consolidation, Redirect and About Integrity > preserves clean About 👍kanban links across Topbar, Sidebar, and Personal Settings
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["userPreferences"]
+
+ ✓ src/app/__tests__/MenuConsolidation_KAN363.test.tsx (8 tests) 813ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (43 tests) 2135ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (43)
+     ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 376ms
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (38 tests) 3319ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (38)
+     ✓ renders workspace settings page and updates workspace name and slug 516ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (40 tests) 4583ms
+   ✓ ProjectSettingsPage (KANBA-202) (40)
+     ✓ renders project settings page tabs and switches between them 397ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 306ms
+     ✓ covers fallback error messages when error object has no message property 316ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (46 tests) 5205ms
+   ✓ DocsCenter & Help System (KAN-16) (46)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 313ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (13)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1582ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 500ms
+
+ Test Files  12 passed (12)
+      Tests  300 passed (300)
+   Start at  09:59:10
+   Duration  7.30s (tests 51%, environment 35%, import 9%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.59 |    95.88 |   99.34 |     100 |                   
+ admin-agents      |    99.5 |    96.03 |     100 |     100 |                   
+  ...torDrawer.tsx |     100 |    95.12 |     100 |     100 | 66-67,71,143,176  
+  ...tudioPage.tsx |   97.95 |    96.96 |     100 |     100 | 69                
+  ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
+  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
+  cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
+ admin-ai          |   99.36 |    96.44 |     100 |     100 |                   
+  ...dgetModal.tsx |     100 |    96.66 |     100 |     100 | 53,117            
+  ...torDrawer.tsx |     100 |     95.6 |     100 |     100 | ...17,322,325,420 
+  AiStudioPage.tsx |   98.58 |    97.27 |     100 |     100 | 124,157-160       
+  aiAdminApi.ts    |   97.91 |    98.52 |     100 |     100 | 172               
+ settings          |   99.69 |    95.58 |   98.95 |     100 |                   
+  ...romptCard.tsx |     100 |      100 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.57 |    95.01 |     100 |     100 | ...1074-1077,1740 
+  ...tingsPage.tsx |   99.79 |    95.44 |   96.77 |     100 | ...82,500,680,707 
+  ...dingPrompt.ts |     100 |      100 |     100 |     100 |                   
+  ...ettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -25,6 +25,8 @@ import {
   startLinkIdentity,
   linkLdapIdentity,
   unlinkIdentity,
+  fetchUserPreferences,
+  updateUserPreferences,
 } from './personalSettingsApi';
 
 describe('personalSettingsApi', () => {
@@ -342,5 +344,58 @@ describe('personalSettingsApi', () => {
     expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/auth/identities/{identity_id}', {
       params: { identity_id: 'ident-99' },
     });
+  });
+
+  it('fetchUserPreferences invokes GET /api/v1/users/me/preferences and falls back cleanly', async () => {
+    const mockPrefs = {
+      principal_id: 'p-1',
+      workspace_id: 'ws-1',
+      agent_onboarding_prefs: {
+        scope: 'local_only' as const,
+        execution_mode: 'swarm' as const,
+        model_strategy: 'quota_sipping_flash' as const,
+        qa_rigor: 'strict_forensic' as const,
+        custom_notes: 'Local preference note',
+      },
+    };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockPrefs);
+
+    const res = await fetchUserPreferences();
+    expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/users/me/preferences');
+    expect(res).toEqual(mockPrefs);
+
+    // Fallback when server returns null/undefined
+    apiFetchSpy.mockResolvedValue(null);
+    const fallbackRes = await fetchUserPreferences();
+    expect(fallbackRes.agent_onboarding_prefs.scope).toBe('local_only');
+    expect(fallbackRes.agent_onboarding_prefs.execution_mode).toBe('swarm');
+  });
+
+  it('updateUserPreferences invokes PATCH /api/v1/users/me/preferences with json body', async () => {
+    const mockUpdated = {
+      principal_id: 'p-1',
+      workspace_id: 'ws-1',
+      agent_onboarding_prefs: {
+        scope: 'local_only' as const,
+        execution_mode: 'single_thread' as const,
+        model_strategy: 'quota_sipping_flash' as const,
+        qa_rigor: 'strict_forensic' as const,
+        custom_notes: 'Updated note',
+      },
+    };
+    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockUpdated);
+
+    const payload = {
+      agent_onboarding_prefs: {
+        scope: 'local_only' as const,
+        execution_mode: 'single_thread' as const,
+      },
+    };
+    const res = await updateUserPreferences(payload);
+    expect(apiFetchSpy).toHaveBeenCalledWith('PATCH', '/api/v1/users/me/preferences', {
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res).toEqual(mockUpdated);
   });
 });

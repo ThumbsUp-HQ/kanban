@@ -30,6 +30,7 @@ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import { AiStudioPage } from '../admin-ai/AiStudioPage';
 import { AgentStudioPage } from '../admin-agents/AgentStudioPage';
+import { AgentOnboardingPromptCard } from './AgentOnboardingPromptCard';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -1476,7 +1477,8 @@ export function ProjectSettingsPage(): JSX.Element {
         )}
         {/* 1. General Tab */}
         {activeTab === 'general' && (
-          <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
+          <>
+            <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
             <div className="kb-form-group">
               <label htmlFor="proj-name-input">
                 Project Name
@@ -1639,7 +1641,10 @@ export function ProjectSettingsPage(): JSX.Element {
               {isSaving ? 'Saving...' : 'Save Settings'}
             </button>
           </form>
-        )}
+
+          <AgentOnboardingPromptCard projectKey={projectKey} />
+        </>
+      )}
 
         {/* 2. Workflow States Tab */}
         {activeTab === 'states' && (
