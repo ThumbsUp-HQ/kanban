@@ -18,13 +18,13 @@
 - **Remediation in `ConnectOAuthAppModal.css`**:
   - Compacted `.kb-connect-oauth-card` height to `max-height: min(96vh, 880px)`.
   - Streamlined container and inner padding:
-    - Header padding: `10px 18px` (from `12px 20px`)
-    - Body padding: `10px 18px`, `gap: 8px` (from `12px 20px`, `gap: 10px`)
-    - Endpoints grid: `padding: 8px 10px`, `gap: 6px`
-    - Connector tabs: `gap: 4px`, tab height `30px`, tab padding `3px 8px`, font size `12px`
-    - Gemini instructional hint: `padding: 6px 10px`, `gap: 2px`, `margin-bottom: 4px`
-    - Code snippet container: `padding: 6px 10px`, font size `11.5px`, line-height `1.35`
-    - Footer padding: `10px 18px`
+    - Header padding: `8px 16px` (from `12px 20px`)
+    - Body padding: `8px 16px`, `gap: 6px` (from `12px 20px`, `gap: 10px`)
+    - Endpoints grid: `padding: 6px 10px`, `gap: 6px`
+    - Connector tabs: `gap: 4px`, tab height `26px`, tab padding `2px 8px`, font size `0.75rem`
+    - Gemini instructional hint: `padding: 5px 8px`, `gap: 2px`, `margin-bottom: 4px`
+    - Code snippet container: `padding: 6px 10px`, font size `0.75rem`, line-height `1.25`
+    - Footer padding: `8px 16px`
 - **Zero Mid-Line Slicing Result**:
   - On `1440x900` desktop, across **all three scopes** (`workspace`, `project`, AND `server`), the entire modal fits comfortably inside the viewport with generous top and bottom margins.
   - The Gemini instructional hint, code snippet box, Copy Command button, Device Code instruction, and Close footer button are 100% visible above the fold with zero horizontal mid-line slicing.

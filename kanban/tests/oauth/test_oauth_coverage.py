@@ -1,3 +1,4 @@
+# mypy: disable-error-code="method-assign,no-any-return,union-attr"
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Unit and boundary tests for kanban.api.v1.oauth coverage expansion."""
@@ -71,6 +72,7 @@ def _make_mock_session() -> tuple[AsyncMock, list[Any]]:
     mock_nested.__aenter__ = AsyncMock(return_value=None)
     mock_nested.__aexit__ = AsyncMock(return_value=None)
     session.begin_nested = MagicMock(return_value=mock_nested)
+    session.add = MagicMock()
     queue: list[Any] = []
 
     def _exec(*_args: object, **_kwargs: object) -> MagicMock:
@@ -754,6 +756,7 @@ async def test_oauth_token_authorization_code_missing_and_expired() -> None:
     mock_nested.__aenter__ = AsyncMock(return_value=None)
     mock_nested.__aexit__ = AsyncMock(return_value=None)
     session.begin_nested = MagicMock(return_value=mock_nested)
+    session.add = MagicMock()
 
     req_code = Request(
         {
@@ -1118,6 +1121,7 @@ async def test_oauth_token_refresh_token_success() -> None:
     mock_nested.__aenter__ = AsyncMock(return_value=None)
     mock_nested.__aexit__ = AsyncMock(return_value=None)
     session.begin_nested = MagicMock(return_value=mock_nested)
+    session.add = MagicMock()
 
     mock_rt_valid = MagicMock(spec=OAuthRefreshToken)
     mock_rt_valid.expires_at = datetime.now(UTC) + timedelta(days=1)

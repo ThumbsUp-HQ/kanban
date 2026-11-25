@@ -1,5 +1,423 @@
+diff --git a/kanban/api/v1/auth_cards_public.py b/kanban/api/v1/auth_cards_public.py
+index 9329d205..55e0d800 100644
+--- a/kanban/api/v1/auth_cards_public.py
++++ b/kanban/api/v1/auth_cards_public.py
+@@ -78,8 +78,8 @@ async def start_card_login(  # noqa: PLR0913, PLR0917
+     slug: str,
+     request: Request,
+     session: PublicSession,
+-    next: Annotated[str | None, Query(max_length=2048)] = None,  # noqa: A002
+-    return_to: Annotated[str | None, Query(max_length=2048)] = None,
++    next: Annotated[str | None, Query(max_length=8192)] = None,  # noqa: A002
++    return_to: Annotated[str | None, Query(max_length=8192)] = None,
+     remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
+ ) -> Response:
+     """Start OIDC/OAuth2 login flow for an enabled card.
+diff --git a/kanban/api/v1/auth_oidc.py b/kanban/api/v1/auth_oidc.py
+index 3f654f86..2b471279 100644
+--- a/kanban/api/v1/auth_oidc.py
++++ b/kanban/api/v1/auth_oidc.py
+@@ -95,7 +95,7 @@ async def oidc_start(  # noqa: PLR0913, PLR0917
+     request: Request,
+     session: AuthSession,
+     flow: FlowDep,
+-    return_to: Annotated[str | None, Query(max_length=2048)] = None,
++    return_to: Annotated[str | None, Query(max_length=8192)] = None,
+     remember_me: Annotated[bool, Query()] = True,  # noqa: FBT002
+ ) -> Response:
+     """Initialize authorization-code flow with PKCE S256 for an OIDC or OAuth2 card."""
+diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
+index 2d8c231f..71f90c60 100644
+--- a/kanban/api/v1/oauth.py
++++ b/kanban/api/v1/oauth.py
+@@ -60,6 +60,7 @@ from kanban.oauth.server import (
+     hash_client_secret,
+     hash_token,
+     mask_client_secret_prefix,
++    parse_resource_target,
+     parse_surface_from_resource,
+     render_consent_screen,
+     resolve_public_base_url,
+@@ -106,7 +107,7 @@ __all__ = [
+ _REQUIRED_AAL_LEVEL: Final[int] = 2
+ MIN_CODE_CHALLENGE_LEN: Final[int] = 43
+ MAX_CODE_CHALLENGE_LEN: Final[int] = 128
+-MAX_STATE_LEN: Final[int] = 512
++MAX_STATE_LEN: Final[int] = 4096
+ _logger: Final[logging.Logger] = logging.getLogger(__name__)
+ 
+ Caller = Annotated[PrincipalContext, Depends(get_principal)]
+@@ -556,6 +557,88 @@ async def oauth_device_authorize(
+     )
+ 
+ 
++def _redirect_with_params(redirect_uri: str, params: dict[str, Any]) -> RedirectResponse:
++    """Build RFC 6749 compliant 302 redirect preserving any existing query parameters."""
++    sep = "&" if "?" in redirect_uri else "?"
++    return RedirectResponse(f"{redirect_uri}{sep}{urlencode(params)}", status_code=302)
++
++
++async def _resolve_target_scope(
++    session: AsyncSession,
++    resource: str,
++    base_url: str,
++    caller_principal_id: uuid.UUID,
++    caller_workspace_id: uuid.UUID,
++) -> tuple[str, uuid.UUID, uuid.UUID, list[uuid.UUID] | None, str]:
++    """Resolve (surface, ws_id, principal_id, allowed_projects, tier) from resource.
++
++    Validates that:
++    1. If a workspace is in resource (/mcp/{surface}/w/{ws_slug}), it exists and caller is a member.
++    2. If a project is specified in resource (/p/{proj_key}), it exists in target workspace.
++    3. If resource is server-level (/mcp/{surface}), tier is 'server'.
++    """
++    surface, ws_slug, proj_key = parse_resource_target(resource, base_url)
++
++    if ws_slug is None:
++        # Server-level resource
++        return surface, caller_workspace_id, caller_principal_id, None, "server"
++
++    # Workspace-level or project-level resource resolved via SECURITY DEFINER helpers
++    ws_res = (
++        await session.execute(
++            text("SELECT resolve_workspace_by_slug_or_id(:slug)"),
++            {"slug": ws_slug},
++        )
++    ).scalar_one_or_none()
++    if ws_res is None:
++        err = "access_denied"
++        desc = f"Target workspace {ws_slug!r} not found"
++        raise OAuth2Error(err, desc, 403)
++
++    target_ws_id = ws_res if isinstance(ws_res, uuid.UUID) else uuid.UUID(str(ws_res))
++
++    # Verify caller membership in target workspace using SECURITY DEFINER procedure
++    try:
++        switch_row = (
++            await session.execute(
++                text(
++                    "SELECT workspace_id, principal_id FROM kb_auth_switch_workspace(:ws_id, :p_id)"
++                ),
++                {"ws_id": target_ws_id, "p_id": caller_principal_id},
++            )
++        ).first()
++    except Exception as exc:
++        err = "access_denied"
++        desc = f"Principal is not a member of target workspace {ws_slug!r}"
++        raise OAuth2Error(err, desc, 403) from exc
++
++    if switch_row is None:
++        err = "access_denied"
++        desc = f"Principal is not a member of target workspace {ws_slug!r}"
++        raise OAuth2Error(err, desc, 403)
++    effective_principal_id = switch_row[1] or caller_principal_id
++
++    allowed_projects: list[uuid.UUID] | None = None
++    scope_tier = "workspace"
++
++    if proj_key is not None:
++        proj_res = (
++            await session.execute(
++                text("SELECT resolve_project_id_by_key_or_id(:ws_id, :ident)"),
++                {"ws_id": target_ws_id, "ident": proj_key},
++            )
++        ).scalar_one_or_none()
++        if proj_res is None:
++            err = "access_denied"
++            desc = f"Target project {proj_key!r} not found in workspace"
++            raise OAuth2Error(err, desc, 403)
++        proj_id = proj_res if isinstance(proj_res, uuid.UUID) else uuid.UUID(str(proj_res))
++        allowed_projects = [proj_id]
++        scope_tier = "project"
++
++    return surface, target_ws_id, effective_principal_id, allowed_projects, scope_tier
++
++
+ # =========================================================================
+ # Interactive Authorization & Consent Flow
+ # =========================================================================
+@@ -599,7 +682,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+     # 3. Validate state parameter
+     if not state or len(state) > MAX_STATE_LEN:
+         err = "invalid_request"
+-        desc = "state parameter required and must be <= 512 chars"
++        desc = f"state parameter required and must be <= {MAX_STATE_LEN} chars"
+         raise OAuth2Error(err, desc, 400)
+ 
+     # 4. Lookup client
+@@ -623,7 +706,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+             "error_description": f"client_{client_record.status}",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
+ 
+     # 7. Validate resource & surface
+     base_url = resolve_public_base_url(request)
+@@ -640,7 +723,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+                 "error_description": f"Scope {sc} invalid for {surface}",
+                 "state": state,
+             }
+-            return RedirectResponse(f"{redirect_uri}?{urlencode(params)}")
++            return _redirect_with_params(redirect_uri, params)
+ 
+     # 9. Principal resolution
+     resolver = getattr(request.app.state, "principal_resolver", DenyAllResolver())
+@@ -669,9 +752,26 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+             "error_description": "aal2_required",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
++
++    # 11. Target scope & workspace resolution
++    try:
++        surface, eff_ws_id, eff_p_id, req_projects, _scope_tier = await _resolve_target_scope(
++            session=session,
++            resource=effective_resource,
++            base_url=base_url,
++            caller_principal_id=caller.principal_id,
++            caller_workspace_id=caller.workspace_id,
++        )
++    except OAuth2Error as exc:
++        params = {
++            "error": exc.error,
++            "error_description": exc.description,
++            "state": state,
++        }
++        return _redirect_with_params(redirect_uri, params)
+ 
+-    # 11. Bind caller RLS context on session and load available projects + principal display name
++    # 12. Bind caller RLS context on session and load available projects + principal display name
+     await session.execute(
+         text(
+             "SELECT set_config('app.principal_id', :p_id, true), "
+@@ -679,21 +779,25 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+             "set_config('app.aal_level', :aal, true)"
+         ),
+         {
+-            "p_id": str(caller.principal_id),
+-            "w_id": str(caller.workspace_id),
++            "p_id": str(eff_p_id),
++            "w_id": str(eff_ws_id),
+             "aal": str(caller.aal_level),
+         },
+     )
+-    stmt_projects = select(Project.id, Project.name).where(
+-        Project.workspace_id == caller.workspace_id
+-    )
++    if req_projects:
++        stmt_projects = select(Project.id, Project.name).where(
++            Project.workspace_id == eff_ws_id,
++            Project.id.in_(req_projects),
++        )
++    else:
++        stmt_projects = select(Project.id, Project.name).where(Project.workspace_id == eff_ws_id)
+     projects_rows = (await session.execute(stmt_projects)).all()
+     available_projects = [(row[0], row[1]) for row in projects_rows]
+ 
+     # Resolve principal display name
+     stmt_user = text("SELECT display_name FROM principals WHERE id = :p_id")
+-    p_name = (await session.execute(stmt_user, {"p_id": caller.principal_id})).scalar_one_or_none()
+-    principal_display = p_name or str(caller.principal_id)
++    p_name = (await session.execute(stmt_user, {"p_id": eff_p_id})).scalar_one_or_none()
++    principal_display = p_name or str(eff_p_id)
+ 
+     key_material = getattr(request.app.state, "key_material", None)
+     session_service = getattr(request.app.state, "session_service", None)
+@@ -838,7 +942,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+             "error_description": f"client_{client_record.status}",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
+ 
+     # 6. Admin surface requires AAL2
+     if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
+@@ -847,7 +951,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+             "error_description": "aal2_required",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
+ 
+     # 7. Handle User Deny
+     if action.lower() != "approve":
+@@ -856,7 +960,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+             "error_description": "User denied consent",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
+ 
+     # 8. Scope validation and rejection of empty approved scopes
+     allowed_surface_scopes = SURFACE_SCOPES[surface]
+@@ -867,18 +971,52 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+             "error_description": "At least one valid scope must be approved",
+             "state": state,
+         }
+-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++        return _redirect_with_params(redirect_uri, params)
+ 
+-    # 4. Project narrowing
+-    allowed_projects: list[uuid.UUID] | None = None
+-    if allowed_project_id and allowed_project_id != "__ALL__":
+-        with contextlib.suppress(ValueError):
+-            allowed_projects = [uuid.UUID(allowed_project_id)]
++    # 8. Target scope & workspace resolution
++    try:
++        surface, eff_ws_id, eff_p_id, req_projects, _scope_tier = await _resolve_target_scope(
++            session=session,
++            resource=resource,
++            base_url=base_url,
++            caller_principal_id=caller.principal_id,
++            caller_workspace_id=caller.workspace_id,
++        )
++    except OAuth2Error as exc:
++        params = {
++            "error": exc.error,
++            "error_description": exc.description,
++            "state": state,
++        }
++        return _redirect_with_params(redirect_uri, params)
++
++    # 9. Project narrowing
++    if req_projects:
++        allowed_projects = req_projects
++    else:
++        allowed_projects = None
++        if allowed_project_id and allowed_project_id != "__ALL__":
++            with contextlib.suppress(ValueError):
++                allowed_projects = [uuid.UUID(allowed_project_id)]
+ 
+-    # 5. Create or lookup OAuthGrant
++    # 10. Bind effective target workspace & principal RLS context on session
++    await session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :w_id, true), "
++            "set_config('app.aal_level', :aal, true)"
++        ),
++        {
++            "p_id": str(eff_p_id),
++            "w_id": str(eff_ws_id),
++            "aal": str(caller.aal_level),
++        },
++    )
++
++    # 11. Create or lookup OAuthGrant
+     grant = OAuthGrant(
+-        workspace_id=caller.workspace_id,
+-        principal_id=caller.principal_id,
++        workspace_id=eff_ws_id,
++        principal_id=eff_p_id,
+         client_id=client_record.id,
+         surface=surface,
+         scopes=approved_scopes,
+@@ -887,7 +1025,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+     session.add(grant)
+     await session.flush()
+ 
+-    # 6. Generate single-use authorization code (256-bit URL-safe)
++    # 11. Generate single-use authorization code (256-bit URL-safe)
+     code = secrets.token_urlsafe(32)
+     code_sha = hash_token(code)
+     now = datetime.now(UTC)
+@@ -896,8 +1034,8 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+         code_sha256=code_sha,
+         grant_id=grant.id,
+         client_id=client_record.id,
+-        principal_id=caller.principal_id,
+-        workspace_id=caller.workspace_id,
++        principal_id=eff_p_id,
++        workspace_id=eff_ws_id,
+         code_challenge=code_challenge,
+         code_challenge_method=code_challenge_method,
+         resource=resource,
+@@ -913,7 +1051,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
+     await session.commit()
+ 
+     params = {"code": code, "state": state}
+-    return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
++    return _redirect_with_params(redirect_uri, params)
+ 
+ 
+ @oauth_root_router.post(
+@@ -1051,7 +1189,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
+             raise OAuth2Error(err, desc, 400)
+ 
+         # Validate resource match if provided
+-        if eff_resource and code_record.resource != eff_resource:
++        if eff_resource and (code_record.resource or "").rstrip("/") != eff_resource.rstrip("/"):
+             err = "invalid_grant"
+             desc = "resource mismatch"
+             raise OAuth2Error(err, desc, 400)
+@@ -1065,6 +1203,17 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
+         # Mark code consumed
+         code_record.consumed_at = now
+ 
++        # Determine scope tier
++        _t_surface, t_ws_slug, t_proj_key = parse_resource_target(
++            code_record.resource or "", base_url
++        )
++        if t_ws_slug is None:
++            scope_tier = "server"
++        elif code_record.allowed_projects or t_proj_key:
++            scope_tier = "project"
++        else:
++            scope_tier = "workspace"
++
+         # Mint Access Token JWT
+         access_token = mint_access_token(
+             issuer=base_url,
+@@ -1077,6 +1226,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
+             workspace_id=code_record.workspace_id,
+             allowed_projects=code_record.allowed_projects,
+             ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
++            scope_tier=scope_tier,
+         )
+ 
+         # Generate Refresh Token
+@@ -1160,6 +1310,14 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
+             raise OAuth2Error(err, desc, 400)
+ 
+         surface_url = f"{base_url}/mcp/{grant.surface}"
++        eff_target_resource = eff_resource or surface_url
++        _t_surface, t_ws_slug, t_proj_key = parse_resource_target(eff_target_resource, base_url)
++        if t_ws_slug is None:
++            scope_tier = "server"
++        elif grant.allowed_projects or t_proj_key:
++            scope_tier = "project"
++        else:
++            scope_tier = "workspace"
+ 
+         # Mint new access token
+         new_access_token = mint_access_token(
+@@ -1173,6 +1331,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
+             workspace_id=grant.workspace_id,
+             allowed_projects=grant.allowed_projects,
+             ttl_seconds=ACCESS_TOKEN_TTL_SECONDS,
++            scope_tier=scope_tier,
+         )
+ 
+         # Mint rotated refresh token
+diff --git a/kanban/auth/oidc/flow.py b/kanban/auth/oidc/flow.py
+index 26365d36..85e13534 100644
+--- a/kanban/auth/oidc/flow.py
++++ b/kanban/auth/oidc/flow.py
+@@ -54,7 +54,9 @@ if TYPE_CHECKING:
+ 
+ logger = logging.getLogger(__name__)
+ 
+-RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~]{0,2048}$")
++RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(
++    r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~@,;!$'()*]{0,8192}$"
++)
+ 
+ BROWSER_BINDING_COOKIE_NAME: Final[str] = "__Host-kb_oidc"
+ FALLBACK_BROWSER_BINDING_COOKIE_NAME: Final[str] = "kb_oidc"
 diff --git a/kanban/oauth/server.py b/kanban/oauth/server.py
-index ff9c7ecb..7c6259ae 100644
+index 7c962823..7c6259ae 100644
 --- a/kanban/oauth/server.py
 +++ b/kanban/oauth/server.py
 @@ -51,16 +51,45 @@ OAUTH_CONSENT_CSRF_MAX_TTL: Final[int] = 600
@@ -48,7 +466,7 @@ index ff9c7ecb..7c6259ae 100644
  }
  * { box-sizing: border-box; margin: 0; padding: 0; }
  body {
-@@ -74,21 +103,21 @@ body {
+@@ -74,29 +103,31 @@ body {
    padding: 1rem;
  }
  .consent-card {
@@ -74,7 +492,9 @@ index ff9c7ecb..7c6259ae 100644
    padding: 0.25rem 0.625rem;
    border-radius: 6px;
    border: 1px solid var(--border);
-@@ -98,7 +127,7 @@ body {
++  word-break: break-all;
++  max-width: 100%;
+ }
  .user-badge {
    text-align: center;
    font-size: 0.8125rem;
@@ -83,7 +503,7 @@ index ff9c7ecb..7c6259ae 100644
    margin-top: 0.5rem;
  }
  .user-badge strong {
-@@ -120,7 +149,7 @@ body {
+@@ -118,7 +149,7 @@ body {
    font-size: 0.875rem;
    text-transform: uppercase;
    letter-spacing: 0.05em;
@@ -92,7 +512,7 @@ index ff9c7ecb..7c6259ae 100644
    margin-bottom: 0.5rem;
  }
  .scope-list {
-@@ -128,7 +157,7 @@ body {
+@@ -126,7 +157,7 @@ body {
    flex-direction: column;
    gap: 0.5rem;
    margin-bottom: 1.25rem;
@@ -101,7 +521,7 @@ index ff9c7ecb..7c6259ae 100644
    padding: 0.75rem;
    border-radius: 8px;
  }
-@@ -144,13 +173,13 @@ body {
+@@ -142,13 +173,13 @@ body {
    flex-direction: column;
    gap: 0.125rem;
  }
@@ -118,7 +538,7 @@ index ff9c7ecb..7c6259ae 100644
    color: var(--text);
    border: 1px solid var(--border);
    border-radius: 6px;
-@@ -170,8 +199,8 @@ body {
+@@ -168,8 +199,8 @@ body {
  }
  .btn-approve { background: var(--primary); color: white; }
  .btn-approve:hover { background: var(--primary-hover); }
@@ -129,12 +549,75 @@ index ff9c7ecb..7c6259ae 100644
  
  CONSENT_STYLE_SHA256: Final[str] = base64.b64encode(
      hashlib.sha256(CONSENT_STYLE_CSS.encode("utf-8")).digest()
+@@ -361,6 +392,10 @@ def resolve_public_base_url(request: Request | None = None) -> str:
+     if request is not None:
+         proto = request.headers.get("x-forwarded-proto")
+         host = request.headers.get("x-forwarded-host") or request.headers.get("host")
++        if proto:
++            proto = proto.split(",")[0].strip()
++        if host:
++            host = host.split(",")[0].strip()
+         if proto and host:
+             return f"{proto}://{host}".rstrip("/")
+         if host:
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index 2cb317c2..d23f1f59 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -811,6 +811,8 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         except ValueError:
+             return McpIntrospectionResult(active=False)
+ 
++        scope_tier = str(claims.get("scope_tier") or "workspace")
++
+         scope_str = claims.get("scope", "")
+         scopes_list = scope_str.split() if scope_str else []
+         allowed_projects_raw = claims.get("allowed_projects")
+@@ -819,13 +821,15 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+             with contextlib.suppress(ValueError):
+                 allowed_projects = [uuid.UUID(str(p)) for p in allowed_projects_raw]
+ 
+-        ws_slug_res = (
+-            await session.execute(
+-                text("SELECT resolve_workspace_slug(:ws_id)"),
+-                {"ws_id": ws_uuid},
+-            )
+-        ).scalar_one_or_none()
+-        ws_slug: str | None = str(ws_slug_res) if ws_slug_res else None
++        ws_slug: str | None = None
++        if ws_uuid is not None:
++            ws_slug_res = (
++                await session.execute(
++                    text("SELECT resolve_workspace_slug(:ws_id)"),
++                    {"ws_id": ws_uuid},
++                )
++            ).scalar_one_or_none()
++            ws_slug = str(ws_slug_res) if ws_slug_res else None
+ 
+         oauth_proj_keys: list[str] = []
+         if allowed_projects:
+@@ -841,11 +845,12 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         oauth_res = McpIntrospectionResult(
+             active=True,
+             principal_id=principal_uuid,
+-            workspace_id=ws_uuid,
+-            workspace_slug=ws_slug,
++            workspace_id=ws_uuid if scope_tier != "server" else None,
++            workspace_slug=ws_slug if scope_tier != "server" else None,
+             surface=token_surface or surface,
+             scopes=scopes_list,
+             token_kind="oauth",  # noqa: S106
++            scope_tier=scope_tier,
+             allowed_projects=allowed_projects,
+             allowed_project_ids=allowed_projects,
+             allowed_project_keys=oauth_proj_keys or None,
 diff --git a/kanban/tests/oauth/test_oauth_coverage.py b/kanban/tests/oauth/test_oauth_coverage.py
 new file mode 100644
-index 00000000..ca12cb5d
+index 00000000..33482895
 --- /dev/null
 +++ b/kanban/tests/oauth/test_oauth_coverage.py
-@@ -0,0 +1,1307 @@
+@@ -0,0 +1,1311 @@
++# mypy: disable-error-code="method-assign,no-any-return,union-attr"
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit and boundary tests for kanban.api.v1.oauth coverage expansion."""
@@ -208,6 +691,7 @@ index 00000000..ca12cb5d
 +    mock_nested.__aenter__ = AsyncMock(return_value=None)
 +    mock_nested.__aexit__ = AsyncMock(return_value=None)
 +    session.begin_nested = MagicMock(return_value=mock_nested)
++    session.add = MagicMock()
 +    queue: list[Any] = []
 +
 +    def _exec(*_args: object, **_kwargs: object) -> MagicMock:
@@ -891,6 +1375,7 @@ index 00000000..ca12cb5d
 +    mock_nested.__aenter__ = AsyncMock(return_value=None)
 +    mock_nested.__aexit__ = AsyncMock(return_value=None)
 +    session.begin_nested = MagicMock(return_value=mock_nested)
++    session.add = MagicMock()
 +
 +    req_code = Request(
 +        {
@@ -1255,6 +1740,7 @@ index 00000000..ca12cb5d
 +    mock_nested.__aenter__ = AsyncMock(return_value=None)
 +    mock_nested.__aexit__ = AsyncMock(return_value=None)
 +    session.begin_nested = MagicMock(return_value=mock_nested)
++    session.add = MagicMock()
 +
 +    mock_rt_valid = MagicMock(spec=OAuthRefreshToken)
 +    mock_rt_valid.expires_at = datetime.now(UTC) + timedelta(days=1)
@@ -1442,10 +1928,698 @@ index 00000000..ca12cb5d
 +    )
 +    assert resp_bad_scope.status_code == 302
 +    assert "error=invalid_scope" in resp_bad_scope.headers["location"]
+diff --git a/kanban/tests/oauth/test_oauth_flow.py b/kanban/tests/oauth/test_oauth_flow.py
+index 47c6494c..6118fec5 100644
+--- a/kanban/tests/oauth/test_oauth_flow.py
++++ b/kanban/tests/oauth/test_oauth_flow.py
+@@ -34,6 +34,10 @@ from kanban.oauth.jwt import (
+     verify_access_token,
+ )
+ from kanban.security.service_auth import create_internal_service_auth_header
++from kanban.tests.security.helpers import (
++    create_project,
++    rebuild_era,
++)
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable
+@@ -2323,3 +2327,663 @@ async def test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr(  #
+         json={"redirect_uris": [f"https://too-many.example.com/{i}" for i in range(17)]},
+     )
+     assert resp_patch_too_many.status_code == 400
++
++
++@pytest.mark.asyncio
++async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Full Gemini MCP OAuth 2.1 handshake with 1200-char state & proxy (KAN-395)."""
++    client = api_env.client
++
++    ws_slug_row = (
++        await api_env.seed.execute(
++            text("SELECT slug FROM workspaces WHERE id = :ws_id"),
++            {"ws_id": api_env.workspace_id},
++        )
++    ).scalar_one()
++    ws_slug = str(ws_slug_row)
++
++    redirect_uri = "https://gemini.google.com/oauth/callback?app=connected&env=prod"
++    resource = f"https://k.hackedyour.info/mcp/agent/w/{ws_slug}"
++
++    # 1. Reverse-proxy HTTPS discovery check
++    resp_as = await client.get(
++        "/.well-known/oauth-authorization-server",
++        headers={
++            "x-forwarded-proto": "https",
++            "x-forwarded-host": "k.hackedyour.info",
++        },
++    )
++    assert resp_as.status_code == 200
++    as_meta = resp_as.json()
++    assert as_meta["issuer"] == "https://k.hackedyour.info"
++    assert as_meta["authorization_endpoint"] == "https://k.hackedyour.info/oauth/authorize"
++    assert as_meta["token_endpoint"] == "https://k.hackedyour.info/oauth/token"
++
++    resp_res = await client.get(
++        f"/.well-known/oauth-protected-resource/mcp/w/{ws_slug}",
++        headers={
++            "x-forwarded-proto": "https",
++            "x-forwarded-host": "k.hackedyour.info",
++        },
++    )
++    assert resp_res.status_code == 200
++    res_meta = resp_res.json()
++    assert res_meta["resource"] == f"https://k.hackedyour.info/mcp/agent/w/{ws_slug}"
++    assert "agent:read" in res_meta["scopes_supported"]
++
++    # 2. Dynamic Client Registration (RFC 7591)
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={
++            "client_name": "Google Gemini Connected App",
++            "redirect_uris": [redirect_uri],
++        },
++    )
++    assert resp_reg.status_code == 201
++    client_id = resp_reg.json()["client_id"]
++
++    # 3. 1,200-char Gemini state parameter
++    gemini_state = "gemini_state_token_" + ("x" * 1181)
++    assert len(gemini_state) == 1200
++    verifier, challenge = _generate_pkce()
++
++    # 4. Unauthenticated user redirected to /login?next=... preserving long state
++    api_env.resolver.principal = None
++    resp_unauth = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": gemini_state,
++            "resource": resource,
++            "scope": "agent:read agent:write",
++        },
++        follow_redirects=False,
++    )
++    assert resp_unauth.status_code == 302
++    login_next_loc = resp_unauth.headers["location"]
++    assert login_next_loc.startswith("/login?next=")
++    # Unquoted login next must contain the full 1200-char state
++    unquoted_login_url = urllib.parse.unquote(login_next_loc)
++    assert gemini_state in unquoted_login_url
++
++    # 5. Authenticate user & render consent screen
++    user = await make_user("gemini_tester", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++
++    resp_auth = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": gemini_state,
++            "resource": resource,
++            "scope": "agent:read agent:write",
++        },
++    )
++    assert resp_auth.status_code == 200
++    assert "Authorize Google Gemini Connected App" in resp_auth.text
++    assert gemini_state in resp_auth.text
++    csrf_token = _extract_csrf(resp_auth.text)
++
++    # 6. POST /oauth/authorize/decision -> Approve
++    resp_decision = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": gemini_state,
++            "action": "approve",
++            "csrf_token": csrf_token,
++            "scopes": ["agent:read", "agent:write"],
++            "allowed_project_id": "__ALL__",
++        },
++        follow_redirects=False,
++    )
++    assert resp_decision.status_code == 302
++    decision_loc = resp_decision.headers["location"]
++    # Check that separator is & and never ?a=1?code=
++    assert decision_loc.startswith(f"{redirect_uri}&")
++    assert "?code=" not in decision_loc
++
++    parsed_loc = urllib.parse.urlparse(decision_loc)
++    qs = urllib.parse.parse_qs(parsed_loc.query)
++    code = qs["code"][0]
++    assert qs["state"][0] == gemini_state
++    assert qs["app"][0] == "connected"
++    assert qs["env"][0] == "prod"
++
++    # 7. POST /oauth/token -> Exchange code for token
++    api_env.resolver.principal = None
++    resp_token = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code,
++            "code_verifier": verifier,
++            "redirect_uri": redirect_uri,
++            "resource": resource,
++        },
++    )
++    assert resp_token.status_code == 200
++    token_json = resp_token.json()
++    assert token_json["token_type"] == "Bearer"
++    assert token_json["expires_in"] == 900
++    assert "access_token" in token_json
++    access_token = token_json["access_token"]
++
++    # 8. Unauthenticated 401 on /mcp/agent/w/{ws} returns RFC 9728 WWW-Authenticate
++    resp_mcp_unauth = await client.post(
++        f"/mcp/agent/w/{ws_slug}",
++        headers={
++            "x-forwarded-proto": "https",
++            "x-forwarded-host": "k.hackedyour.info",
++        },
++    )
++    assert resp_mcp_unauth.status_code == 401
++    www_auth = resp_mcp_unauth.headers.get("www-authenticate", "")
++    assert 'realm="kanban-mcp"' in www_auth
++    expected_meta = (
++        'resource_metadata="https://k.hackedyour.info/.well-known/'
++        f'oauth-protected-resource/mcp/agent/w/{ws_slug}"'
++    )
++    assert expected_meta in www_auth
++
++    # 9. In-process MCP server validation: HEAD, GET, and POST streamable HTTP tools/list
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++    mcp_client, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        # HEAD probe succeeds with 200
++        resp_head = await mcp_client.head(
++            f"/mcp/agent/w/{ws_slug}",
++            headers={"Authorization": f"Bearer {access_token}"},
++        )
++        assert resp_head.status_code == 200
++        assert "POST" in resp_head.headers.get("allow", "")
++
++        # GET probe returns 405 Method Not Allowed per MCP Streamable HTTP spec
++        resp_get = await mcp_client.get(
++            f"/mcp/agent/w/{ws_slug}",
++            headers={"Authorization": f"Bearer {access_token}"},
++        )
++        assert resp_get.status_code == 405
++        assert "POST" in resp_get.headers.get("allow", "")
++
++        # POST initialize succeeds and returns Mcp-Session-Id
++        init_resp = await mcp_client.post(
++            f"/mcp/agent/w/{ws_slug}",
++            headers={"Authorization": f"Bearer {access_token}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers.get("mcp-session-id")
++        assert session_id is not None
++
++        # POST tools/list succeeds
++        resp_tools = await mcp_client.post(
++            f"/mcp/agent/w/{ws_slug}",
++            headers={
++                "Authorization": f"Bearer {access_token}",
++                "Mcp-Session-Id": session_id,
++            },
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
++        )
++        assert resp_tools.status_code == 200
++        tools_body = resp_tools.json()
++        assert "result" in tools_body
++        assert "tools" in tools_body["result"]
++    finally:
++        await mcp_client.aclose()
++
++
++# =========================================================================
++# Test Case: Cross-Workspace OAuth 2.1 Scoping & MCP Boundary Gates (KAN-395)
++# =========================================================================
++
++
++async def test_gemini_oauth_cross_workspace_scoping_and_mcp_gates(  # noqa: PLR0915
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Test Gate A/B/C/D cross-workspace OAuth 2.1 scoping and MCP boundary enforcement."""
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++
++    # 1. Setup client via DCR
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={
++            "client_name": "Gemini Cross-Workspace Client",
++            "redirect_uris": [redirect_uri],
++        },
++    )
++    assert resp_reg.status_code == 201
++    client_id = resp_reg.json()["client_id"]
++
++    # 2. Setup user in default workspace
++    user = await make_user("gemini_user", workspace_role="WORKSPACE_MEMBER")
++    as_principal(user)
++
++    # 3. Setup secondary target workspace with KAN and OTHER projects, plus user membership
++    ws_kanban_id = uuid.uuid4()
++    ws_kanban_slug = f"ws-kanban-{ws_kanban_id.hex[:6]}"
++    ws2_member_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Kanban WS')"),
++        {"id": ws_kanban_id, "slug": ws_kanban_slug},
++    )
++    await api_env.seed.execute(
++        text(
++            "SELECT register_object("
++            "  'user'::object_kind, :ws_id, NULL, :ckey, 'Gemini Member', :u_id, :u_id"
++            ")"
++        ),
++        {"ws_id": ws_kanban_id, "ckey": f"usr-{ws2_member_id.hex[:10]}", "u_id": ws2_member_id},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
++            "VALUES (:id, 'USER', :ws_id, 'Gemini User', 'ACTIVE')"
++        ),
++        {"id": ws2_member_id, "ws_id": ws_kanban_id},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++            "VALUES (:id, 'user', 'USER', :ws_id, 'gemini@example.com')"
++        ),
++        {"id": ws2_member_id, "ws_id": ws_kanban_id},
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO role_bindings "
++            "(id, workspace_id, principal_id, role, scope_type, project_id) "
++            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_MEMBER', 'workspace', NULL)"
++        ),
++        {"id": uuid.uuid4(), "ws_id": ws_kanban_id, "p_id": ws2_member_id},
++    )
++    proj_kan_id = await create_project(
++        api_env.seed,
++        ws_kanban_id,
++        identifier="KAN",
++        name="Kanban Project",
++        created_by_id=ws2_member_id,
++    )
++    await create_project(
++        api_env.seed,
++        ws_kanban_id,
++        identifier="OTHER",
++        name="Other Project",
++        created_by_id=ws2_member_id,
++    )
++
++    # Link identity between caller principal and target workspace principal via verified auth card
++    card_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO auth_provider_cards ("
++            "  id, workspace_id, provider_kind, slug, display_name, is_enabled, sort_rank"
++            ") VALUES ("
++            "  :id, :ws_id, 'OIDC', :slug, 'Corp OIDC', true, '0|h00000:'"
++            ")"
++        ),
++        {"id": card_id, "ws_id": api_env.workspace_id, "slug": f"card-{uuid.uuid4().hex[:8]}"},
++    )
++    shared_sub = f"sub-{uuid.uuid4().hex[:12]}"
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO user_identities ("
++            "  id, workspace_id, principal_id, auth_card_id, "
++            "  immutable_subject_id, subject_email_at_link"
++            ") VALUES ("
++            "  :id, :ws_id, :p_id, :card_id, :sub, 'gemini@example.com'"
++            ")"
++        ),
++        {
++            "id": uuid.uuid4(),
++            "ws_id": api_env.workspace_id,
++            "p_id": user.id,
++            "card_id": card_id,
++            "sub": shared_sub,
++        },
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO user_identities ("
++            "  id, workspace_id, principal_id, auth_card_id, "
++            "  immutable_subject_id, subject_email_at_link"
++            ") VALUES ("
++            "  :id, :ws_id, :p_id, :card_id, :sub, 'gemini@example.com'"
++            ")"
++        ),
++        {
++            "id": uuid.uuid4(),
++            "ws_id": ws_kanban_id,
++            "p_id": ws2_member_id,
++            "card_id": card_id,
++            "sub": shared_sub,
++        },
++    )
++    await rebuild_era(api_env.seed, ws_kanban_id)
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    # 4. Setup forbidden workspace without user membership
++    ws_forbidden_id = uuid.uuid4()
++    ws_forbidden_slug = f"ws-forbidden-{ws_forbidden_id.hex[:6]}"
++    await api_env.seed.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Forbidden WS')"),
++        {"id": ws_forbidden_id, "slug": ws_forbidden_slug},
++    )
++    await rebuild_era(api_env.seed, ws_forbidden_id)
++    await api_env.seed.commit()
++
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++
++    # =========================================================================
++    # GATE A: Forbidden Workspace Scoping
++    # =========================================================================
++    as_principal(user)
++    _v_a, challenge_a = _generate_pkce()
++    resp_auth_a = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge_a,
++            "code_challenge_method": "S256",
++            "state": "state-forbidden-ws",
++            "resource": f"http://test/mcp/agent/w/{ws_forbidden_slug}",
++            "scope": "agent:read agent:write",
++        },
++        follow_redirects=False,
++    )
++    assert resp_auth_a.status_code == 302
++    loc_a = resp_auth_a.headers["location"]
++    qs_a = urllib.parse.parse_qs(urllib.parse.urlparse(loc_a).query)
++    assert qs_a["error"][0] == "access_denied"
++    assert "not a member" in qs_a["error_description"][0]
++    assert qs_a["state"][0] == "state-forbidden-ws"
++
++    # =========================================================================
++    # GATE B: Workspace-Level Resource & Boundary Enforcement
++    # =========================================================================
++    as_principal(user)
++    verifier_b, challenge_b = _generate_pkce()
++    resp_auth_b = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge_b,
++            "code_challenge_method": "S256",
++            "state": "state-ws-kanban",
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
++            "scope": "agent:read agent:write",
++        },
++    )
++    assert resp_auth_b.status_code == 200
++    assert "Authorize Gemini Cross-Workspace Client" in resp_auth_b.text
++    assert "AGENT" in resp_auth_b.text
++    assert "Kanban Project" in resp_auth_b.text
++    csrf_b = _extract_csrf(resp_auth_b.text)
++
++    resp_dec_b = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
++            "code_challenge": challenge_b,
++            "code_challenge_method": "S256",
++            "state": "state-ws-kanban",
++            "action": "approve",
++            "csrf_token": csrf_b,
++            "scopes": ["agent:read", "agent:write"],
++            "allowed_project_id": "__ALL__",
++        },
++        follow_redirects=False,
++    )
++    assert resp_dec_b.status_code == 302
++    dec_loc_b = resp_dec_b.headers["location"]
++    code_b = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_b).query)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_tok_b = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code_b,
++            "code_verifier": verifier_b,
++            "redirect_uri": redirect_uri,
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}",
++        },
++    )
++    assert resp_tok_b.status_code == 200
++    token_b = resp_tok_b.json()["access_token"]
++    claims_b = verify_access_token(token_b)
++    assert claims_b["ws"] == str(ws_kanban_id)
++    assert claims_b["scope_tier"] == "workspace"
++
++    mcp_b, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        # HEAD probe 200 OK
++        resp_h = await mcp_b.head(
++            f"/mcp/agent/w/{ws_kanban_slug}",
++            headers={"Authorization": f"Bearer {token_b}"},
++        )
++        assert resp_h.status_code == 200
++
++        # GET probe returns 405 Method Not Allowed per MCP Streamable HTTP spec
++        resp_g = await mcp_b.get(
++            f"/mcp/agent/w/{ws_kanban_slug}",
++            headers={"Authorization": f"Bearer {token_b}"},
++        )
++        assert resp_g.status_code == 405
++        assert "POST" in resp_g.headers.get("allow", "")
++
++        # POST initialize 200 OK
++        resp_init_b = await mcp_b.post(
++            f"/mcp/agent/w/{ws_kanban_slug}",
++            headers={"Authorization": f"Bearer {token_b}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert resp_init_b.status_code == 200
++        sess_b = resp_init_b.headers["mcp-session-id"]
++
++        # POST tools/list 200 OK
++        resp_tl_b = await mcp_b.post(
++            f"/mcp/agent/w/{ws_kanban_slug}",
++            headers={"Authorization": f"Bearer {token_b}", "Mcp-Session-Id": sess_b},
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
++        )
++        assert resp_tl_b.status_code == 200
++
++        # POST to forbidden workspace -> 403 KEY_SCOPE_VIOLATION
++        resp_forbid_b = await mcp_b.post(
++            f"/mcp/agent/w/{ws_forbidden_slug}",
++            headers={"Authorization": f"Bearer {token_b}"},
++            json={"jsonrpc": "2.0", "id": 3, "method": "initialize"},
++        )
++        assert resp_forbid_b.status_code == 403
++        assert "KEY_SCOPE_VIOLATION" in resp_forbid_b.text
++    finally:
++        await mcp_b.aclose()
++
++    # =========================================================================
++    # GATE C: Project-Level Resource & Scoping Enforcement
++    # =========================================================================
++    as_principal(user)
++    verifier_c, challenge_c = _generate_pkce()
++    resp_auth_c = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge_c,
++            "code_challenge_method": "S256",
++            "state": "state-proj-kan",
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
++            "scope": "agent:read agent:write",
++        },
++    )
++    assert resp_auth_c.status_code == 200
++    csrf_c = _extract_csrf(resp_auth_c.text)
++
++    resp_dec_c = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
++            "code_challenge": challenge_c,
++            "code_challenge_method": "S256",
++            "state": "state-proj-kan",
++            "action": "approve",
++            "csrf_token": csrf_c,
++            "scopes": ["agent:read", "agent:write"],
++            "allowed_project_id": str(proj_kan_id),
++        },
++        follow_redirects=False,
++    )
++    assert resp_dec_c.status_code == 302
++    dec_loc_c = resp_dec_c.headers["location"]
++    code_c = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_c).query)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_tok_c = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code_c,
++            "code_verifier": verifier_c,
++            "redirect_uri": redirect_uri,
++            "resource": f"http://test/mcp/agent/w/{ws_kanban_slug}/p/KAN",
++        },
++    )
++    assert resp_tok_c.status_code == 200
++    token_c = resp_tok_c.json()["access_token"]
++    claims_c = verify_access_token(token_c)
++    assert claims_c["scope_tier"] == "project"
++    assert claims_c["allowed_projects"] == [str(proj_kan_id)]
++
++    mcp_c, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        # Accessing allowed project /p/KAN -> 200 OK
++        resp_p_kan = await mcp_c.post(
++            f"/mcp/agent/w/{ws_kanban_slug}/p/KAN",
++            headers={"Authorization": f"Bearer {token_c}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert resp_p_kan.status_code == 200
++
++        # Accessing other project /p/OTHER -> 403 KEY_SCOPE_VIOLATION
++        resp_p_other = await mcp_c.post(
++            f"/mcp/agent/w/{ws_kanban_slug}/p/OTHER",
++            headers={"Authorization": f"Bearer {token_c}"},
++            json={"jsonrpc": "2.0", "id": 2, "method": "initialize"},
++        )
++        assert resp_p_other.status_code == 403
++        assert "KEY_SCOPE_VIOLATION" in resp_p_other.text
++    finally:
++        await mcp_c.aclose()
++
++    # =========================================================================
++    # GATE D: Server-Level Resource & Global Access Enforcement
++    # =========================================================================
++    as_principal(user)
++    verifier_d, challenge_d = _generate_pkce()
++    resp_auth_d = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge_d,
++            "code_challenge_method": "S256",
++            "state": "state-server-level",
++            "resource": "http://test/mcp/agent",
++            "scope": "agent:read agent:write",
++        },
++    )
++    assert resp_auth_d.status_code == 200
++    csrf_d = _extract_csrf(resp_auth_d.text)
++
++    resp_dec_d = await client.post(
++        "/oauth/authorize/decision",
++        data={
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "resource": "http://test/mcp/agent",
++            "code_challenge": challenge_d,
++            "code_challenge_method": "S256",
++            "state": "state-server-level",
++            "action": "approve",
++            "csrf_token": csrf_d,
++            "scopes": ["agent:read", "agent:write"],
++            "allowed_project_id": "__ALL__",
++        },
++        follow_redirects=False,
++    )
++    assert resp_dec_d.status_code == 302
++    dec_loc_d = resp_dec_d.headers["location"]
++    code_d = urllib.parse.parse_qs(urllib.parse.urlparse(dec_loc_d).query)["code"][0]
++
++    api_env.resolver.principal = None
++    resp_tok_d = await client.post(
++        "/oauth/token",
++        data={
++            "grant_type": "authorization_code",
++            "client_id": client_id,
++            "code": code_d,
++            "code_verifier": verifier_d,
++            "redirect_uri": redirect_uri,
++            "resource": "http://test/mcp/agent",
++        },
++    )
++    assert resp_tok_d.status_code == 200
++    token_d = resp_tok_d.json()["access_token"]
++    claims_d = verify_access_token(token_d)
++    assert claims_d["scope_tier"] == "server"
++
++    mcp_d, _ = _setup_mcp_app(httpx.ASGITransport(app=raw_app), surface="agent")
++    try:
++        # Accessing server surface /mcp/agent -> 200 OK
++        resp_srv = await mcp_d.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token_d}"},
++            json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
++        )
++        assert resp_srv.status_code == 200
++
++        # Accessing workspace subpath /mcp/agent/w/{ws_kanban_slug} with server-tier token -> 200 OK
++        resp_srv_ws = await mcp_d.post(
++            f"/mcp/agent/w/{ws_kanban_slug}",
++            headers={"Authorization": f"Bearer {token_d}"},
++            json={"jsonrpc": "2.0", "id": 2, "method": "initialize"},
++        )
++        assert resp_srv_ws.status_code == 200
++    finally:
++        await mcp_d.aclose()
 diff --git a/kanban/tests/oauth/test_oauth_unit.py b/kanban/tests/oauth/test_oauth_unit.py
-index 1de54d52..f0ee8d5c 100644
+index 7e28f78e..f0ee8d5c 100644
 --- a/kanban/tests/oauth/test_oauth_unit.py
 +++ b/kanban/tests/oauth/test_oauth_unit.py
+@@ -16,7 +16,7 @@ from starlette.requests import Request
+ from database.models.oauth import OAuthClient
+ from kanban.api.deps import PrincipalContext
+ from kanban.api.problems import format_validation_error
+-from kanban.api.v1.oauth import oauth_authorize
++from kanban.api.v1.oauth import MAX_STATE_LEN, _redirect_with_params, oauth_authorize
+ from kanban.auth.ldap.config import LdapCardConfig
+ from kanban.auth.oidc.config import OidcCardConfig
+ from kanban.auth.sessions.csrf import verify_same_origin_request
 @@ -562,6 +562,7 @@ def test_render_consent_screen_security_headers_and_admin_surface() -> None:
      body = bytes(resp_admin.body).decode("utf-8")
      assert "admin@domain.local" in body
@@ -1454,8 +2628,181 @@ index 1de54d52..f0ee8d5c 100644
  
  
  def test_oauth_server_helpers_coverage() -> None:
+@@ -941,3 +942,159 @@ async def test_oauth_authorize_rejects_inactive_client_statuses() -> None:
+         )
+         assert resp.status_code == 302
+         assert f"error_description=client_{inactive_status}" in resp.headers["location"]
++
++
++@pytest.mark.asyncio
++async def test_oauth_authorize_state_length_boundaries_4096_accepted_4097_rejected() -> None:
++    """Test state length boundary: 4096 accepted, 4097 rejected (KAN-395)."""
++    assert MAX_STATE_LEN == 4096
++    mock_session = AsyncMock()
++    req = Request(
++        {
++            "type": "http",
++            "method": "GET",
++            "path": "/oauth/authorize",
++            "query_string": b"",
++            "headers": [(b"host", b"localhost:8000")],
++        }
++    )
++
++    # 1. 4097 chars -> rejected
++    state_4097 = "s" * 4097
++    with pytest.raises(OAuth2Error) as exc_info_over:
++        await oauth_authorize(
++            request=req,
++            session=mock_session,
++            response_type="code",
++            client_id="cid_1",
++            redirect_uri="http://127.0.0.1:8080/cb",
++            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++            code_challenge_method="S256",
++            state=state_4097,
++        )
++    assert exc_info_over.value.error == "invalid_request"
++    assert exc_info_over.value.description == "state parameter required and must be <= 4096 chars"
++    assert exc_info_over.value.status_code == 400
++
++    # 2. Empty state -> rejected
++    with pytest.raises(OAuth2Error) as exc_info_empty:
++        await oauth_authorize(
++            request=req,
++            session=mock_session,
++            response_type="code",
++            client_id="cid_1",
++            redirect_uri="http://127.0.0.1:8080/cb",
++            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++            code_challenge_method="S256",
++            state="",
++        )
++    assert exc_info_empty.value.error == "invalid_request"
++    assert exc_info_empty.value.description == "state parameter required and must be <= 4096 chars"
++
++    # 3. 4096 chars -> state validation passes, progresses to client lookup
++    state_4096 = "s" * 4096
++    result = MagicMock()
++    result.scalar_one_or_none.return_value = None
++    mock_session.execute.return_value = result
++
++    with pytest.raises(OAuth2Error) as exc_info_4096:
++        await oauth_authorize(
++            request=req,
++            session=mock_session,
++            response_type="code",
++            client_id="unknown_client",
++            redirect_uri="http://127.0.0.1:8080/cb",
++            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++            code_challenge_method="S256",
++            state=state_4096,
++        )
++    assert exc_info_4096.value.error == "invalid_client"
++
++
++def test_redirect_with_params_handles_existing_query_params() -> None:
++    """Test _redirect_with_params appends with & when ? exists, avoiding ?a=1?code= (KAN-395)."""
++    # 1. URI with existing query parameters
++    resp_with_query = _redirect_with_params(
++        "https://oauth.google.com/callback?authuser=0&prompt=consent",
++        {"code": "auth_code_123", "state": "state_xyz"},
++    )
++    assert resp_with_query.status_code == 302
++    loc = resp_with_query.headers["location"]
++    assert loc.startswith("https://oauth.google.com/callback?authuser=0&prompt=consent&")
++    assert "?code=" not in loc
++    assert "&code=auth_code_123" in loc
++    assert "&state=state_xyz" in loc
++
++    # 2. URI without query parameters
++    resp_no_query = _redirect_with_params(
++        "https://oauth.google.com/callback",
++        {"code": "auth_code_123", "state": "state_xyz"},
++    )
++    assert resp_no_query.status_code == 302
++    assert resp_no_query.headers["location"].startswith("https://oauth.google.com/callback?")
++    assert "?code=auth_code_123" in resp_no_query.headers["location"]
++
++
++def test_gemini_long_state_csrf_hmac_and_tamper_detection() -> None:
++    """Test HMAC CSRF token supports 1200-4096 char states and rejects tampering (KAN-395)."""
++    hmac_key = b"test-hmac-key-for-oauth-csrfs-32b!"
++    sess_id = uuid.uuid4()
++    long_state = "gemini_state_" + ("a" * 1200)
++
++    # 1. Generate and verify valid token with 1200+ char state
++    token = generate_consent_csrf_token(
++        session_hmac_key=hmac_key,
++        session_id=sess_id,
++        client_id="gemini_mcp_client",
++        redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
++        code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++        state=long_state,
++        surface="agent",
++    )
++    assert (
++        verify_consent_csrf_token(
++            token=token,
++            session_hmac_key=hmac_key,
++            session_id=sess_id,
++            client_id="gemini_mcp_client",
++            redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
++            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++            state=long_state,
++            surface="agent",
++        )
++        is True
++    )
++
++    # 2. Tampered state rejected
++    tampered_state = long_state[:-1] + "b"
++    assert (
++        verify_consent_csrf_token(
++            token=token,
++            session_hmac_key=hmac_key,
++            session_id=sess_id,
++            client_id="gemini_mcp_client",
++            redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
++            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
++            state=tampered_state,
++            surface="agent",
++        )
++        is False
++    )
++
++
++def test_resolve_public_base_url_reverse_proxy_comma_separated() -> None:
++    """Test resolve_public_base_url parses comma-separated proxy headers cleanly (KAN-395)."""
++    req_chained = Request(
++        {
++            "type": "http",
++            "method": "GET",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8080),
++            "path": "/",
++            "headers": [
++                (b"x-forwarded-proto", b"https, http"),
++                (b"x-forwarded-host", b"k.hackedyour.info, 192.168.1.101"),
++            ],
++        }
++    )
++    assert resolve_public_base_url(req_chained) == "https://k.hackedyour.info"
+diff --git a/kanban/web/src/features/auth/authApi.ts b/kanban/web/src/features/auth/authApi.ts
+index ad7452c1..24016888 100644
+--- a/kanban/web/src/features/auth/authApi.ts
++++ b/kanban/web/src/features/auth/authApi.ts
+@@ -55,7 +55,7 @@ export function resolveSafeNext(next: string | null | undefined): string {
+   if (!next || typeof next !== 'string') {
+     return '/';
+   }
+-  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%:+~]*$/;
++  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%:+~@,;!$'()*]*$/;
+   const [pathPart = ''] = next.split('?');
+   if (!SAFE_NEXT_REGEX.test(next) || next.includes('\\') || pathPart.includes(':')) {
+     return '/';
 diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.css b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
-index 09615965..acc35987 100644
+index 19a656f0..acc35987 100644
 --- a/kanban/web/src/features/settings/ConnectOAuthAppModal.css
 +++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
 @@ -9,7 +9,7 @@
@@ -1582,7 +2929,7 @@ index 09615965..acc35987 100644
    cursor: pointer;
  }
  
-@@ -124,45 +124,54 @@
+@@ -124,50 +124,61 @@
    background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
    border: 1px solid var(--kb-color-border-subtle, #30363d);
    border-radius: 8px;
@@ -1638,7 +2985,7 @@ index 09615965..acc35987 100644
 +  white-space: normal;
 +  word-break: break-all;
 +  overflow-wrap: anywhere;
-   min-width: 0;
++  min-width: 0;
 +  line-height: 1.25;
  }
  
@@ -1650,7 +2997,14 @@ index 09615965..acc35987 100644
    background-color: var(--kb-color-bg-surface-raised, #21262d);
    border: 1px solid var(--kb-color-border-subtle, #30363d);
    color: var(--kb-color-text-primary, #f0f6fc);
-@@ -178,23 +187,23 @@
+   border-radius: 4px;
+   cursor: pointer;
+   white-space: nowrap;
++  flex-shrink: 0;
+ }
+ 
+ .kb-connect-oauth-copy-btn:hover {
+@@ -176,23 +187,23 @@
  
  .kb-connect-oauth-tabs {
    display: flex;
@@ -1680,7 +3034,7 @@ index 09615965..acc35987 100644
    font-weight: 500;
    cursor: pointer;
    white-space: nowrap;
-@@ -219,27 +228,28 @@
+@@ -217,27 +228,28 @@
    position: relative;
    background-color: #0d1117;
    border: 1px solid var(--kb-color-border-subtle, #30363d);
@@ -1716,40 +3070,43 @@ index 09615965..acc35987 100644
    font-weight: 600;
    cursor: pointer;
  }
-@@ -249,22 +259,26 @@
+@@ -246,15 +258,47 @@
+   background-color: #2ea043;
  }
  
- .kb-connect-oauth-scope-hint {
--  font-size: 0.75rem;
++.kb-connect-oauth-scope-hint {
 +  font-size: 0.7rem;
-   color: var(--kb-color-text-secondary, #8b949e);
--  margin-top: 2px;
++  color: var(--kb-color-text-secondary, #8b949e);
 +  margin-top: 1px;
- }
- 
- .kb-connect-oauth-gemini-hint {
-   background-color: var(--bg-surface-raised, #161b22);
-   border: 1px solid var(--kb-color-border-subtle, #30363d);
-   border-radius: 6px;
--  padding: 10px 14px;
--  font-size: 0.8125rem;
++}
++
++.kb-connect-oauth-gemini-hint {
++  background-color: var(--bg-surface-raised, #161b22);
++  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  border-radius: 6px;
 +  padding: 5px 8px;
 +  font-size: 0.75rem;
-   color: var(--kb-color-text-secondary, #8b949e);
--  line-height: 1.5;
++  color: var(--kb-color-text-secondary, #8b949e);
 +  line-height: 1.25;
-   display: flex;
-   flex-direction: column;
--  gap: 6px;
++  display: flex;
++  flex-direction: column;
 +  gap: 2px;
 +}
 +
 +.kb-connect-oauth-gemini-hint p {
 +  margin: 0;
- }
- 
- .kb-connect-oauth-gemini-hint strong {
-@@ -280,11 +294,11 @@
++}
++
++.kb-connect-oauth-gemini-hint strong {
++  color: var(--kb-color-text-primary, #f0f6fc);
++}
++
++.kb-connect-oauth-gemini-hint code {
++  color: #58a6ff;
++  font-family: monospace;
++}
++
+ .kb-connect-oauth-headless-note {
    display: flex;
    align-items: center;
    justify-content: space-between;
@@ -1763,7 +3120,7 @@ index 09615965..acc35987 100644
  }
  
  .kb-connect-oauth-device-link {
-@@ -298,19 +312,19 @@
+@@ -268,19 +312,19 @@
  }
  
  .kb-connect-oauth-footer {
@@ -1786,7 +3143,7 @@ index 09615965..acc35987 100644
    font-weight: 500;
    cursor: pointer;
  }
-@@ -318,3 +332,35 @@
+@@ -288,3 +332,35 @@
  .kb-connect-oauth-btn:hover {
    background-color: var(--bg-hover, #30363d);
  }
@@ -1822,8 +3179,315 @@ index 09615965..acc35987 100644
 +}
 +
 +
+diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
+index edaaf996..588cded7 100644
+--- a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
++++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
+@@ -15,12 +15,12 @@ export interface ConnectOAuthAppModalProps {
+   } | null | undefined;
+   workspaceSlug?: string | undefined;
+   projectKey?: string | undefined;
+-  scopeTier?: 'server' | 'workspace' | 'project' | undefined;
++  scopeTier?: 'server' | 'workspace' | 'project' | 'all' | undefined;
+   onClose: () => void;
+ }
+ 
+ type SurfaceType = 'agent' | 'docs' | 'admin';
+-type ToolTab = 'claude' | 'cursor' | 'antigravity' | 'codex';
++type ToolTab = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'gemini';
+ 
+ const SCOPES_BY_SURFACE: Record<SurfaceType, readonly string[]> = {
+   agent: ['agent:read', 'agent:write'],
+@@ -40,40 +40,69 @@ export function ConnectOAuthAppModal({
+     user?.is_workspace_admin === true ||
+     user?.workspace_role === 'WORKSPACE_ADMIN' ||
+     user?.workspace_role === 'SERVER_ADMIN';
++
++  const [targetScope, setTargetScope] = useState<'workspace' | 'project' | 'server'>(() => {
++    if (scopeTier === 'server') return 'server';
++    if (scopeTier === 'project') return 'project';
++    if (scopeTier === 'workspace') return 'workspace';
++    if (!scopeTier && projectKey) return 'project';
++    return 'workspace';
++  });
++
++  const [projects, setProjects] = useState<{ key: string; name?: string }[]>([]);
++  const [selectedProjectKey, setSelectedProjectKey] = useState<string>(projectKey ?? '');
++  const [fetchedProjectKey, setFetchedProjectKey] = useState<string | null>(null);
++
+   const [surface, setSurface] = useState<SurfaceType>('agent');
+   const [selectedScopes, setSelectedScopes] = useState<string[]>([...SCOPES_BY_SURFACE.agent]);
+   const [activeTab, setActiveTab] = useState<ToolTab>('claude');
+   const [copiedField, setCopiedField] = useState<string | null>(null);
+-  const [fetchedProjectKey, setFetchedProjectKey] = useState<string | null>(null);
+ 
+   useEffect(() => {
+     const isMounted = { current: true };
+-    if (scopeTier === 'project' && !projectKey) {
+-      void (async () => {
+-        try {
+-          const res = await fetch('/api/v1/projects', {
+-            method: 'GET',
+-            headers: { Accept: 'application/json' },
+-            credentials: 'same-origin',
+-          });
+-          if (!res.ok || !isMounted.current) {
+-            return;
++    void (async () => {
++      try {
++        const res = await fetch('/api/v1/projects', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++        });
++        if (!res.ok || !isMounted.current) {
++          if (!projectKey && !fetchedProjectKey) {
++            setFetchedProjectKey('<PROJECT_KEY>');
+           }
+-          const data = (await res.json()) as
+-            | { items?: { key?: string; identifier?: string }[] }
+-            | { key?: string; identifier?: string }[];
+-          const items = Array.isArray(data) ? data : (data.items ?? []);
+-          const firstKey = items[0]?.key ?? items[0]?.identifier;
+-          setFetchedProjectKey(firstKey ?? '<PROJECT_KEY>');
+-        } catch {
++          return;
++        }
++        const data = (await res.json()) as
++          | { items?: { key?: string; identifier?: string; name?: string }[] }
++          | { key?: string; identifier?: string; name?: string }[];
++        const items = Array.isArray(data) ? data : (data.items ?? []);
++        const mapped = items
++          .map((p) => {
++            const k = p.key ?? p.identifier ?? '';
++            return { key: k, name: p.name ?? k };
++          })
++          .filter((p) => Boolean(p.key));
++        setProjects(mapped);
++        const firstKey = mapped[0]?.key;
++        if (firstKey) {
++          setFetchedProjectKey(firstKey);
++          if (!selectedProjectKey) {
++            setSelectedProjectKey(firstKey);
++          }
++        } else {
+           setFetchedProjectKey('<PROJECT_KEY>');
+         }
+-      })();
+-    }
++      } catch {
++        if (isMounted.current && !projectKey && !fetchedProjectKey) {
++          setFetchedProjectKey('<PROJECT_KEY>');
++        }
++      }
++    })();
+     return () => {
+       isMounted.current = false;
+     };
+-  }, [scopeTier, projectKey]);
++  }, [projectKey, fetchedProjectKey, selectedProjectKey]);
+ 
+   useEffect(() => {
+     const handleKeyDown = (e: KeyboardEvent): void => {
+@@ -108,17 +137,18 @@ export function ConnectOAuthAppModal({
+     }
+   };
+ 
+-  let resolvedProjectKey: string | null = null;
+-  if (scopeTier === 'project') {
+-    resolvedProjectKey = projectKey ?? fetchedProjectKey ?? '<PROJECT_KEY>';
+-  } else if (!scopeTier && projectKey) {
+-    resolvedProjectKey = projectKey;
+-  }
+-
+   const origin = window.location.origin;
+-  const resourceUrl = resolvedProjectKey
+-    ? `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${resolvedProjectKey}`
+-    : `${origin}/mcp/${surface}/w/${workspaceSlug}`;
++  const effectiveProject =
++    (selectedProjectKey ? selectedProjectKey : undefined) ??
++    projectKey ??
++    fetchedProjectKey ??
++    '<PROJECT_KEY>';
++  let resourceUrl = `${origin}/mcp/${surface}/w/${workspaceSlug}`;
++  if (targetScope === 'server') {
++    resourceUrl = `${origin}/mcp/${surface}`;
++  } else if (targetScope === 'project') {
++    resourceUrl = `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${effectiveProject}`;
++  }
+   const rfc8414Url = `${origin}/.well-known/oauth-authorization-server`;
+ 
+   let snippet = '';
+@@ -131,6 +161,7 @@ export function ConnectOAuthAppModal({
+           kanban: {
+             url: resourceUrl,
+             auth: 'oauth',
++            scopes: selectedScopes,
+           },
+         },
+       },
+@@ -144,6 +175,7 @@ export function ConnectOAuthAppModal({
+           kanban: {
+             serverUrl: resourceUrl,
+             auth: 'oauth',
++            scopes: selectedScopes,
+           },
+         },
+       },
+@@ -151,13 +183,14 @@ export function ConnectOAuthAppModal({
+       2,
+     );
+     snippet = `${agyJson}\n\n# Or register via agy CLI:\nagy mcp add kanban ${resourceUrl} --auth oauth`;
+-  } else {
++  } else if (activeTab === 'codex') {
+     const codexJson = JSON.stringify(
+       {
+         mcpServers: {
+           kanban: {
+             url: resourceUrl,
+             auth: 'oauth',
++            scopes: selectedScopes,
+           },
+         },
+       },
+@@ -165,6 +198,18 @@ export function ConnectOAuthAppModal({
+       2,
+     );
+     snippet = `${codexJson}\n\n# Or register via Codex CLI:\ncodex mcp add kanban ${resourceUrl} --auth oauth`;
++  } else {
++    const scopesList = selectedScopes.length > 0 ? selectedScopes.join(', ') : 'agent:read, agent:write';
++    snippet = `# Google Gemini Connected Apps (OAuth 2.1 PKCE)
++# 1. In Gemini (gemini.google.com), open Settings > Connected Apps > Add Custom MCP Server
++# 2. Set MCP Server URL to:
++${resourceUrl}
++
++# 3. Protocol: Streamable HTTP (SSE)
++# 4. Authentication: OAuth 2.1 Authorization Code with PKCE S256
++# 5. Requested Scopes: ${scopesList}
++#
++# Click 'Connect'. When prompted, sign into 👍kanban and click 'Approve' on the consent screen.`;
+   }
+ 
+   return (
+@@ -201,10 +246,56 @@ export function ConnectOAuthAppModal({
+ 
+         <div className="kb-connect-oauth-body">
+           <p className="kb-connect-oauth-desc">
+-            Connect external MCP clients (Claude Code, VS Code, Cursor, Codex, Antigravity) using
++            Connect external MCP clients (Google Gemini, Claude Code, VS Code, Cursor, Codex, Antigravity) using
+             OAuth 2.1 with PKCE S256 authorization code or headless RFC 8628 device flow.
+           </p>
+ 
++          <div className="kb-connect-oauth-field">
++            <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
++              Target Scope
++            </label>
++            <select
++              id="scope-tier-select"
++              className="kb-connect-oauth-select"
++              data-testid="scope-tier-select"
++              value={targetScope}
++              onChange={(e) => {
++                setTargetScope(e.target.value as 'workspace' | 'project' | 'server');
++              }}
++            >
++              <option value="workspace">Workspace ({workspaceSlug})</option>
++              <option value="project">Single Project</option>
++              <option value="server">Server (Global)</option>
++            </select>
++          </div>
++
++          {targetScope === 'project' && (
++            <div className="kb-connect-oauth-field">
++              <label htmlFor="project-select" className="kb-connect-oauth-label">
++                Target Project
++              </label>
++              <select
++                id="project-select"
++                className="kb-connect-oauth-select"
++                data-testid="project-select"
++                value={effectiveProject}
++                onChange={(e) => {
++                  setSelectedProjectKey(e.target.value);
++                }}
++              >
++                {projects.length > 0 ? (
++                  projects.map((p) => (
++                    <option key={p.key} value={p.key}>
++                      {p.name && p.name !== p.key ? `${p.name} (${p.key})` : p.key}
++                    </option>
++                  ))
++                ) : (
++                  <option value={effectiveProject}>{effectiveProject}</option>
++                )}
++              </select>
++            </div>
++          )}
++
+           <div className="kb-connect-oauth-field">
+             <label htmlFor="surface-select" className="kb-connect-oauth-label">
+               Target MCP Surface
+@@ -241,6 +332,9 @@ export function ConnectOAuthAppModal({
+                 </label>
+               ))}
+             </div>
++            <span className="kb-connect-oauth-scope-hint" data-testid="scope-hint">
++              Selected scopes: {selectedScopes.join(', ') || 'None'}
++            </span>
+           </div>
+ 
+           <div className="kb-connect-oauth-endpoints">
+@@ -284,6 +378,18 @@ export function ConnectOAuthAppModal({
+           </div>
+ 
+           <div className="kb-connect-oauth-tabs" role="tablist">
++            <button
++              type="button"
++              role="tab"
++              aria-selected={activeTab === 'gemini'}
++              className={`kb-connect-oauth-tab ${activeTab === 'gemini' ? 'kb-connect-oauth-tab-active' : ''}`}
++              data-testid="tab-gemini-app"
++              onClick={() => {
++                setActiveTab('gemini');
++              }}
++            >
++              Gemini App
++            </button>
+             <button
+               type="button"
+               role="tab"
+@@ -334,6 +440,17 @@ export function ConnectOAuthAppModal({
+             </button>
+           </div>
+ 
++          {activeTab === 'gemini' && (
++            <div className="kb-connect-oauth-gemini-hint" data-testid="gemini-app-instructions">
++              <p>
++                <strong>Google Gemini Connected Apps:</strong> Connect 👍kanban directly to Google Gemini via OAuth 2.1 PKCE. In Gemini, go to <em>Settings &gt; Connected Apps &gt; Add MCP Server</em> and enter the MCP OAuth Resource URL.
++              </p>
++              <p>
++                Authorization code flow will launch automatically with requested scopes: <code>{selectedScopes.join(', ') || 'agent:read, agent:write'}</code>.
++              </p>
++            </div>
++          )}
++
+           <div className="kb-connect-oauth-snippet-wrap">
+             <pre className="kb-connect-oauth-snippet" data-testid="command-snippet">
+               <code>{snippet}</code>
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 26e76fb8..aa1dd6f4 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -1694,6 +1694,7 @@ export function McpAccessStudio({
+           user={propUser ?? fetchedUser}
+           workspaceSlug={currentWorkspaceSlug}
+           projectKey={effectiveProjectKey}
++          scopeTier={activeScope === 'all' ? 'workspace' : activeScope}
+           onClose={() => {
+             setShowConnectOAuthModal(false);
+           }}
 diff --git a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
-index e4f32846..a39fd2af 100644
+index 747dbabe..a39fd2af 100644
 --- a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
 @@ -248,6 +248,10 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
@@ -1837,10 +3501,124 @@ index e4f32846..a39fd2af 100644
      // Escape key press
      fireEvent.keyDown(window, { key: 'Escape' });
      expect(handleClose).toHaveBeenCalledTimes(2);
-@@ -543,5 +547,74 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
-     // Check Gemini snippet reflects single scope
-     fireEvent.click(screen.getByTestId('tab-gemini-app'));
-     expect(screen.getByTestId('command-snippet').textContent).toContain('Requested Scopes: agent:read');
+@@ -429,4 +433,188 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
+ 
+     vi.unstubAllGlobals();
+   });
++
++  it('switches to Gemini App tab, displaying instructions and OAuth 2.1 details (KAN-395)', () => {
++    render(
++      <MemoryRouter>
++        <ConnectOAuthAppModal
++          user={{ is_workspace_admin: false }}
++          workspaceSlug="gemini-ws"
++          projectKey="GEM"
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Switch to Gemini App tab
++    fireEvent.click(screen.getByTestId('tab-gemini-app'));
++    expect(screen.getByTestId('gemini-app-instructions')).toBeDefined();
++    expect(screen.getByTestId('gemini-app-instructions').textContent).toContain('Google Gemini Connected Apps');
++
++    const snippet = screen.getByTestId('command-snippet').textContent;
++    expect(snippet).toContain('Google Gemini Connected Apps (OAuth 2.1 PKCE)');
++    expect(snippet).toContain('http://localhost:3000/mcp/agent/w/gemini-ws/p/GEM');
++    expect(snippet).toContain('agent:read, agent:write');
++  });
++
++  it('allows dynamically changing Target Scope between Workspace, Single Project, and Server (KAN-395)', async () => {
++    vi.stubGlobal(
++      'fetch',
++      vi.fn().mockResolvedValue({
++        ok: true,
++        json: () =>
++          Promise.resolve([
++            { key: 'PROJ-ALPHA', name: 'Alpha Project' },
++            { key: 'PROJ-BETA', name: 'Beta Project' },
++          ]),
++      }),
++    );
++
++    render(
++      <MemoryRouter>
++        <ConnectOAuthAppModal
++          workspaceSlug="dynamic-ws"
++          scopeTier="workspace"
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    await act(async () => {
++      await Promise.resolve();
++    });
++
++    const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
++    expect(scopeSelect.value).toBe('workspace');
++    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
++      'http://localhost:3000/mcp/agent/w/dynamic-ws',
++    );
++
++    // Switch to Server scope
++    act(() => {
++      fireEvent.change(scopeSelect, { target: { value: 'server' } });
++    });
++    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
++      'http://localhost:3000/mcp/agent',
++    );
++    expect(screen.queryByTestId('project-select')).toBeNull();
++
++    // Switch to Single Project scope
++    act(() => {
++      fireEvent.change(scopeSelect, { target: { value: 'project' } });
++    });
++    const projSelect = screen.getByTestId<HTMLSelectElement>('project-select');
++    expect(projSelect).toBeDefined();
++    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
++      'http://localhost:3000/mcp/agent/w/dynamic-ws/p/PROJ-ALPHA',
++    );
++
++    // Switch selected project to PROJ-BETA
++    act(() => {
++      fireEvent.change(projSelect, { target: { value: 'PROJ-BETA' } });
++    });
++    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
++      'http://localhost:3000/mcp/agent/w/dynamic-ws/p/PROJ-BETA',
++    );
++
++    vi.unstubAllGlobals();
++  });
++
++  it('wires selectedScopes into snippets and updates scope hint (KAN-395)', () => {
++    render(
++      <MemoryRouter>
++        <ConnectOAuthAppModal
++          workspaceSlug="scopes-ws"
++          projectKey="SCP"
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    expect(screen.getByTestId('scope-hint').textContent).toContain('Selected scopes: agent:read, agent:write');
++
++    // Uncheck agent:write
++    const writeCheck = screen.getByTestId<HTMLInputElement>('scope-check-agent:write');
++    fireEvent.click(writeCheck);
++
++    expect(screen.getByTestId('scope-hint').textContent).toBe('Selected scopes: agent:read');
++
++    // Check snippet reflects single scope
++    fireEvent.click(screen.getByTestId('tab-cursor'));
++    expect(screen.getByTestId('command-snippet').textContent).toContain('"agent:read"');
++    expect(screen.getByTestId('command-snippet').textContent).not.toContain('"agent:write"');
++
++    // Check Gemini snippet reflects single scope
++    fireEvent.click(screen.getByTestId('tab-gemini-app'));
++    expect(screen.getByTestId('command-snippet').textContent).toContain('Requested Scopes: agent:read');
 +
 +    // Uncheck agent:read as well (empty scopes fallback branches)
 +    const readCheck = screen.getByTestId<HTMLInputElement>('scope-check-agent:read');
@@ -1910,13 +3688,125 @@ index e4f32846..a39fd2af 100644
 +    expect(projectSelect.options[1]?.text).toBe('NONAME');
 +
 +    vi.unstubAllGlobals();
-   });
++  });
  });
+diff --git a/mcp/app.py b/mcp/app.py
+index c2c0e5e9..762f0251 100644
+--- a/mcp/app.py
++++ b/mcp/app.py
+@@ -34,16 +34,16 @@ def _build_surface_sub_app(
+     """Build an independent sub-app for a single MCP surface."""
+     return Starlette(
+         routes=[
+-            Route("/", handler.handle_request, methods=["GET", "POST", "DELETE"]),
++            Route("/", handler.handle_request, methods=["GET", "POST", "DELETE", "HEAD"]),
+             Route(
+                 "/w/{workspace_slug}",
+                 handler.handle_request,
+-                methods=["GET", "POST", "DELETE"],
++                methods=["GET", "POST", "DELETE", "HEAD"],
+             ),
+             Route(
+                 "/w/{workspace_slug}/p/{project_key}",
+                 handler.handle_request,
+-                methods=["GET", "POST", "DELETE"],
++                methods=["GET", "POST", "DELETE", "HEAD"],
+             ),
+         ]
+     )
+@@ -184,52 +184,64 @@ def create_mcp_app(  # noqa: PLR0913
+             methods=["GET"],
+         ),
+         # Bare /mcp routes (default to agent surface)
+-        Route("/mcp", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
++        Route("/mcp", agent_handler.handle_request, methods=["GET", "POST", "DELETE", "HEAD"]),
+         Route(
+             "/mcp/w/{workspace_slug}",
+             agent_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         Route(
+             "/mcp/w/{workspace_slug}/p/{project_key}",
+             agent_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         # Explicit direct routes for /mcp/<surface>
+-        Route("/mcp/agent", agent_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+-        Route("/mcp/docs", docs_handler.handle_request, methods=["GET", "POST", "DELETE"]),
+-        Route("/mcp/admin", admin_handler.handle_request, methods=["GET", "POST", "DELETE"]),
++        Route(
++            "/mcp/agent",
++            agent_handler.handle_request,
++            methods=["GET", "POST", "DELETE", "HEAD"],
++        ),
++        Route(
++            "/mcp/docs",
++            docs_handler.handle_request,
++            methods=["GET", "POST", "DELETE", "HEAD"],
++        ),
++        Route(
++            "/mcp/admin",
++            admin_handler.handle_request,
++            methods=["GET", "POST", "DELETE", "HEAD"],
++        ),
+         # Workspace-scoped routes
+         Route(
+             "/mcp/agent/w/{workspace_slug}",
+             agent_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         Route(
+             "/mcp/docs/w/{workspace_slug}",
+             docs_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         Route(
+             "/mcp/admin/w/{workspace_slug}",
+             admin_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         # Project-scoped routes
+         Route(
+             "/mcp/agent/w/{workspace_slug}/p/{project_key}",
+             agent_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         Route(
+             "/mcp/docs/w/{workspace_slug}/p/{project_key}",
+             docs_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         Route(
+             "/mcp/admin/w/{workspace_slug}/p/{project_key}",
+             admin_handler.handle_request,
+-            methods=["GET", "POST", "DELETE"],
++            methods=["GET", "POST", "DELETE", "HEAD"],
+         ),
+         # Mounts for sub-path routing
+         Mount("/mcp/agent", app=agent_app),
 diff --git a/mcp/metadata.py b/mcp/metadata.py
-index 7999355d..96ed8ec2 100644
+index ca7fbd80..96ed8ec2 100644
 --- a/mcp/metadata.py
 +++ b/mcp/metadata.py
-@@ -84,35 +84,56 @@ def build_protected_resource_metadata(
+@@ -35,6 +35,10 @@ def resolve_public_base_url(request: Request | None = None) -> str:
+     if request is not None:
+         proto = request.headers.get("x-forwarded-proto")
+         host = request.headers.get("x-forwarded-host") or request.headers.get("host")
++        if proto:
++            proto = proto.split(",")[0].strip()
++        if host:
++            host = host.split(",")[0].strip()
+         if proto and host:
+             return f"{proto}://{host}".rstrip("/")
+         if host:
+@@ -80,33 +84,56 @@ def build_protected_resource_metadata(
      }
  
  
@@ -1976,11 +3866,9 @@ index 7999355d..96ed8ec2 100644
 -        if parts:
 -            if parts[0] == "mcp":
 -                parts = parts[1:]
--            if parts and parts[0] in ("agent", "docs", "admin"):
+-            if parts and (parts[0] in ("agent", "docs", "admin") or not surface):
 -                surface = parts[0]
 -                parts = parts[1:]
--            else:
--                surface = surface or "agent"
 -            if parts and parts[0] == "w" and len(parts) >= 2:  # noqa: PLR2004
 -                workspace_slug = parts[1]
 -                if len(parts) >= 4 and parts[2] == "p":  # noqa: PLR2004
@@ -1995,3 +3883,302 @@ index 7999355d..96ed8ec2 100644
  
      base_url = resolve_public_base_url(request)
  
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index 8b423dcf..995c57c2 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -41,6 +41,7 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "PROTOCOL_VERSION",
++    "SUPPORTED_PROTOCOL_VERSIONS",
+     "UNTRUSTED_TAINT_BLOCKED_TOOLS",
+     "InMemorySessionStore",
+     "McpProtocolHandler",
+@@ -51,6 +52,9 @@ __all__ = [
+ ]
+ 
+ PROTOCOL_VERSION: Final[str] = "2025-06-18"
++SUPPORTED_PROTOCOL_VERSIONS: Final[frozenset[str]] = frozenset(
++    {"2025-11-25", "2025-06-18", "2025-03-26"}
++)
+ 
+ UNTRUSTED_TAINT_BLOCKED_TOOLS: Final[frozenset[str]] = frozenset(
+     {
+@@ -324,26 +328,26 @@ class McpProtocolHandler:
+ 
+     def _check_request_preconditions(self, request: Request) -> Response | None:
+         """Validate HTTP method, DNS-rebinding origin, and protocol version header."""
+-        if request.method == "GET":
+-            return Response(
+-                "Standalone SSE streams are not supported; use Streamable HTTP POST",
+-                status_code=405,
+-                headers={"Allow": "POST, DELETE"},
+-            )
+-
+         origin = request.headers.get("origin")
+         if origin and self.settings.allowed_origins and origin not in self.settings.allowed_origins:
+             return Response("Forbidden Origin", status_code=403)
+ 
++        if request.method == "HEAD":
++            return Response(
++                "",
++                status_code=200,
++                headers={"Content-Type": "application/json", "Allow": "POST, DELETE, HEAD"},
++            )
++
+         if request.method not in ("POST", "DELETE"):
+             return Response(
+                 f"Method {request.method} not allowed",
+                 status_code=405,
+-                headers={"Allow": "POST, DELETE"},
++                headers={"Allow": "POST, DELETE, HEAD"},
+             )
+ 
+         proto_ver = request.headers.get("mcp-protocol-version")
+-        if proto_ver is not None and proto_ver != PROTOCOL_VERSION:
++        if proto_ver is not None and proto_ver not in SUPPORTED_PROTOCOL_VERSIONS:
+             return Response(
+                 f"Unsupported MCP-Protocol-Version '{proto_ver}', expected '{PROTOCOL_VERSION}'",
+                 status_code=400,
+@@ -666,8 +670,15 @@ class McpProtocolHandler:
+             ):
+                 list_changed = False
+ 
++        req_proto = params.get("protocolVersion") if isinstance(params, dict) else None
++        negotiated_proto = (
++            req_proto
++            if isinstance(req_proto, str) and req_proto in SUPPORTED_PROTOCOL_VERSIONS
++            else PROTOCOL_VERSION
++        )
++
+         result: dict[str, Any] = {
+-            "protocolVersion": PROTOCOL_VERSION,
++            "protocolVersion": negotiated_proto,
+             "capabilities": {
+                 "tools": {
+                     "listChanged": list_changed,
+diff --git a/mcp/scoping.py b/mcp/scoping.py
+index d6b76f4c..06f71c13 100644
+--- a/mcp/scoping.py
++++ b/mcp/scoping.py
+@@ -271,7 +271,7 @@ def intersect_key_and_connection_scope(
+ 
+     # 1. Global connection mode
+     if scope.is_global:
+-        if token_tier == "global" or not token_ws:  # noqa: S105
++        if token_tier in ("global", "server") or not token_ws:
+             return scope
+ 
+         # Token is pinned to workspace or project: connection inherits token scope
+@@ -299,7 +299,7 @@ def intersect_key_and_connection_scope(
+         )
+ 
+         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+-        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
++        if token_tier not in ("global", "server") and has_boundary and not ws_match:
+             msg = (
+                 f"Requested workspace '{scope.workspace_slug}' is outside "
+                 f"the scope boundary of this API key."
+@@ -340,7 +340,7 @@ def intersect_key_and_connection_scope(
+         _validate_boundary_project(boundary, scope, auth_ctx)
+ 
+         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+-        if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
++        if token_tier not in ("global", "server") and has_boundary and not ws_match:
+             msg = (
+                 f"Requested workspace '{scope.workspace_slug}' is outside "
+                 f"the scope boundary of this API key."
+diff --git a/mcp/tests/test_metadata.py b/mcp/tests/test_metadata.py
+index 1719d9af..20e31bde 100644
+--- a/mcp/tests/test_metadata.py
++++ b/mcp/tests/test_metadata.py
+@@ -8,9 +8,13 @@ from typing import TYPE_CHECKING
+ 
+ import httpx
+ import pytest
++from starlette.requests import Request
+ 
+ from mcp.app import create_mcp_app
+-from mcp.metadata import build_protected_resource_metadata
++from mcp.metadata import (
++    build_protected_resource_metadata,
++    resolve_public_base_url,
++)
+ from mcp.settings import McpSettings
+ 
+ if TYPE_CHECKING:
+@@ -69,3 +73,78 @@ def test_build_protected_resource_metadata_helper() -> None:
+     assert meta is not None
+     assert meta["resource"] == "http://base/mcp/agent"
+     assert meta["authorization_servers"] == ["http://issuer"]
++
++
++@pytest.mark.asyncio
++async def test_protected_resource_metadata_endpoint_scoped_paths(mcp_app: ASGIApp) -> None:
++    """Test RFC 9728 discovery across bare, scoped /w/{ws}, and project paths (KAN-395)."""
++    transport = httpx.ASGITransport(app=mcp_app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # Bare /.well-known/oauth-protected-resource
++        resp_bare = await client.get("/.well-known/oauth-protected-resource")
++        assert resp_bare.status_code == 200
++        assert resp_bare.json()["resource"] == "http://testserver/mcp/agent"
++
++        # /mcp
++        resp_mcp = await client.get("/.well-known/oauth-protected-resource/mcp")
++        assert resp_mcp.status_code == 200
++        assert resp_mcp.json()["resource"] == "http://testserver/mcp/agent"
++
++        # /mcp/w/engineering
++        resp_ws = await client.get("/.well-known/oauth-protected-resource/mcp/w/engineering")
++        assert resp_ws.status_code == 200
++        assert resp_ws.json()["resource"] == "http://testserver/mcp/agent/w/engineering"
++
++        # /mcp/w/engineering/p/ENG
++        resp_proj = await client.get(
++            "/.well-known/oauth-protected-resource/mcp/w/engineering/p/ENG"
++        )
++        assert resp_proj.status_code == 200
++        assert resp_proj.json()["resource"] == "http://testserver/mcp/agent/w/engineering/p/ENG"
++
++        # /mcp/docs/w/engineering/p/ENG
++        resp_docs_proj = await client.get(
++            "/.well-known/oauth-protected-resource/mcp/docs/w/engineering/p/ENG"
++        )
++        assert resp_docs_proj.status_code == 200
++        assert resp_docs_proj.json()["resource"] == "http://testserver/mcp/docs/w/engineering/p/ENG"
++
++
++def test_resolve_public_base_url_variations(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test public base URL resolution across environment and proxy header matrix (KAN-395)."""
++    # 1. KANBAN_PUBLIC_ORIGIN env var
++    monkeypatch.setenv("KANBAN_PUBLIC_ORIGIN", "https://proxy.example.com/")
++    assert resolve_public_base_url() == "https://proxy.example.com"
++    monkeypatch.delenv("KANBAN_PUBLIC_ORIGIN", raising=False)
++
++    # 2. X-Forwarded-Proto and X-Forwarded-Host with chained proxies
++    req_fwd = Request(
++        {
++            "type": "http",
++            "method": "GET",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8080),
++            "path": "/",
++            "headers": [
++                (b"x-forwarded-proto", b"https, http"),
++                (b"x-forwarded-host", b"k.hackedyour.info, 127.0.0.1"),
++            ],
++        }
++    )
++    assert resolve_public_base_url(req_fwd) == "https://k.hackedyour.info"
++
++    # 3. Only Host header
++    req_host = Request(
++        {
++            "type": "http",
++            "method": "GET",
++            "scheme": "https",
++            "server": ("127.0.0.1", 8080),
++            "path": "/",
++            "headers": [(b"host", b"app.local:8443")],
++        }
++    )
++    assert resolve_public_base_url(req_host) == "https://app.local:8443"
++
++    # 4. None fallback
++    assert resolve_public_base_url(None) == "http://localhost:8000"
+diff --git a/mcp/tests/test_protocol.py b/mcp/tests/test_protocol.py
+index 17a8353b..39d4bc24 100644
+--- a/mcp/tests/test_protocol.py
++++ b/mcp/tests/test_protocol.py
+@@ -16,6 +16,8 @@ from starlette.routing import Route
+ from mcp.app import create_mcp_app
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.protocol import (
++    PROTOCOL_VERSION,
++    SUPPORTED_PROTOCOL_VERSIONS,
+     InMemorySessionStore,
+     McpProtocolHandler,
+     _format_flag_val,
+@@ -522,7 +524,7 @@ async def test_method_not_allowed_and_tool_result_types(mcp_client: httpx.AsyncC
+         # PUT reaches handler.handle_request line 180
+         resp_put = await client.put("/mcp/agent")
+         assert resp_put.status_code == 405
+-        assert resp_put.headers.get("allow") == "POST, DELETE"
++        assert resp_put.headers.get("allow") == "POST, DELETE, HEAD"
+ 
+         # Initialize
+         init_res = await client.post(
+@@ -1172,3 +1174,72 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
+     handler._validate_tool_arguments_schema(
+         spec_schema, {"mandatory": "ok", "nullable_str": None, "bad_prop": 123}
+     )
++
++
++@pytest.mark.asyncio
++async def test_mcp_protocol_version_negotiation_and_http_methods(
++    mcp_client: httpx.AsyncClient,
++) -> None:
++    """Verify MCP protocol version negotiation and HTTP method conformance."""
++    # 1. HEAD returns 200 OK with correct headers and empty body
++    head_resp = await mcp_client.head("/mcp/agent")
++    assert head_resp.status_code == 200
++    assert "POST" in head_resp.headers.get("allow", "")
++    assert head_resp.headers.get("content-type") == "application/json"
++    assert head_resp.text == ""
++
++    # 2. GET returns 405 Method Not Allowed
++    get_resp = await mcp_client.get("/mcp/agent")
++    assert get_resp.status_code == 405
++    assert "POST" in get_resp.headers.get("allow", "")
++
++    # 3. PUT returns 405 Method Not Allowed
++    put_resp = await mcp_client.put("/mcp/agent")
++    assert put_resp.status_code == 405
++    assert "POST" in put_resp.headers.get("allow", "")
++
++    # 4. Protocol version negotiation across all supported versions
++    for proto in sorted(SUPPORTED_PROTOCOL_VERSIONS):
++        resp = await mcp_client.post(
++            "/mcp/agent",
++            headers={"mcp-protocol-version": proto},
++            json={
++                "jsonrpc": "2.0",
++                "id": f"init-{proto}",
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": proto,
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0.0"},
++                },
++            },
++        )
++        assert resp.status_code == 200
++        data = resp.json()
++        assert data["result"]["protocolVersion"] == proto
++
++    # 5. Unsupported mcp-protocol-version header returns 400
++    bad_header_resp = await mcp_client.post(
++        "/mcp/agent",
++        headers={"mcp-protocol-version": "2024-11-05"},
++        json={"jsonrpc": "2.0", "id": "init-bad", "method": "initialize"},
++    )
++    assert bad_header_resp.status_code == 400
++    assert "Unsupported MCP-Protocol-Version" in bad_header_resp.text
++
++    # 6. Unknown protocolVersion in params falls back to PROTOCOL_VERSION
++    fallback_resp = await mcp_client.post(
++        "/mcp/agent",
++        json={
++            "jsonrpc": "2.0",
++            "id": "init-fallback",
++            "method": "initialize",
++            "params": {
++                "protocolVersion": "unknown-proto-9999",
++                "capabilities": {},
++                "clientInfo": {"name": "test-client", "version": "1.0.0"},
++            },
++        },
++    )
++    assert fallback_resp.status_code == 200
++    assert fallback_resp.json()["result"]["protocolVersion"] == PROTOCOL_VERSION

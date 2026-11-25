@@ -24,6 +24,7 @@ from sqlalchemy import text
 from starlette.responses import JSONResponse
 
 from database.session import RLSContext, RLSSessionFactory
+from kanban.api.deps import PrincipalContext  # noqa: TC001  # Required at runtime for FastAPI dependency analysis
 from kanban.api.problems import ProblemException, problem_exception_handler
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
@@ -37,8 +38,6 @@ from kanban.security.ratelimit.pg import PgRateLimiter
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
-
-    from kanban.api.deps import PrincipalContext
 
 PEPPER_KEY: Final[bytes] = b"p" * 32
 SESSION_HMAC_KEY: Final[bytes] = b"s" * 32

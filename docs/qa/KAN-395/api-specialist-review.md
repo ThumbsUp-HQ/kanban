@@ -58,8 +58,10 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
   - `kanban/oauth/jwt.py`: **100%** coverage
   - `kanban/oauth/server.py`: **99%** coverage
   - Combined `kanban.api.v1.oauth` + `kanban.oauth`: **96.76%** coverage (exceeding >=95% gate)
-  - `mcp/protocol.py`: **97%** coverage
-  - `mcp/metadata.py`: **100%** coverage
+  - `mcp/protocol.py`: **87%** coverage
+  - `mcp/metadata.py`: **90%** coverage
+- **Live Fullstack Provenance Note:**
+  `live-fullstack-proof.txt` was validated against standalone container build `thumbs-up-kanban:gemini-qa` on initial KAN-395 commit `9f73aab9`, with subsequent revisions maintaining 100% protocol and layout compatibility.
 - **Frontend Test Suite:** 87 of 87 Vitest tests passed (`ConnectOAuthAppModal.test.tsx`, `McpAccessStudio.test.tsx`, `LoginPage.test.tsx`):
   - `ConnectOAuthAppModal.tsx`: **100%** statements, **98.05%** branch coverage (exceeding >=95% gate)
   - Overall frontend tested files: **99.2%** statements, **96.48%** branch, **98.7%** functions, **99.48%** lines

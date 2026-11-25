@@ -135,7 +135,7 @@ def _build_elevated_response(
             elevated.csrf_token,
             persistent=elevated.is_persistent,
         )
-        if getattr(elevated, "aal2_expires_at", None) is not None:
+        if elevated.aal2_expires_at is not None:
             response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
     return response
 
@@ -203,7 +203,7 @@ async def _assert_can_register(  # noqa: C901
                 methods=methods,
                 preferred_method=preferred,
             )
-        principal.aal2_expires_at = exp_dt
+        object.__setattr__(principal, "aal2_expires_at", exp_dt)
         if request is not None:
             request.state.aal2_expires_at = exp_dt
     else:

@@ -184,9 +184,7 @@ class RequestIdMiddleware:
                 hdr_match = any(name.lower() == b"x-kb-aal2-expires-at" for name, _ in raw_headers)
                 if aal2_exp and not hdr_match:
                     exp_val = (
-                        aal2_exp.isoformat()
-                        if hasattr(aal2_exp, "isoformat")
-                        else str(aal2_exp)
+                        aal2_exp.isoformat() if hasattr(aal2_exp, "isoformat") else str(aal2_exp)
                     )
                     raw_headers.append((b"x-kb-aal2-expires-at", exp_val.encode("ascii")))
                 message["headers"] = raw_headers

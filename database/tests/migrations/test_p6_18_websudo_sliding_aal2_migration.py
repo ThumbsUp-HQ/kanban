@@ -175,4 +175,3 @@ async def test_p6_18_websudo_sliding_aal2_rpcs() -> None:  # noqa: PLR0915
         assert md_row["aal_level"] == 1
         assert md_row["aal2_last_active_at"] is None
         assert md_row["aal2_verified_at"] is None
-

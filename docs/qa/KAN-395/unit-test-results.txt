@@ -97,14 +97,6 @@ kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_succes
 kanban/tests/oauth/test_oauth_coverage.py::test_oauth_revoke_endpoint_scenarios PASSED [ 98%]
 kanban/tests/oauth/test_oauth_coverage.py::test_oauth_device_and_authorize_endpoints PASSED [100%]
 
-=============================== warnings summary ===============================
-kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_success
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8/kanban/api/v1/oauth.py:1350: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
-    session.add(new_rt_record)
-  Enable tracemalloc to get traceback where the object was allocated.
-  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
@@ -119,7 +111,7 @@ mcp/metadata.py               79      5     40      5    90%
 mcp/protocol.py              603     64    322     40    87%
 ------------------------------------------------------------
 TOTAL                       2052    100    750     71    93%
-======================== 90 passed, 1 warning in 29.22s ========================
+============================= 90 passed in 28.39s ==============================
 
 
 > @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8/kanban/web

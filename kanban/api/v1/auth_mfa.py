@@ -273,7 +273,7 @@ async def confirm_totp(
                 elevated.csrf_token,
                 persistent=elevated.is_persistent,
             )
-            if getattr(elevated, "aal2_expires_at", None) is not None:
+            if elevated.aal2_expires_at is not None:
                 response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
         return response
 
@@ -469,7 +469,7 @@ def _build_elevated_response(
             elevated.csrf_token,
             persistent=elevated.is_persistent,
         )
-        if getattr(elevated, "aal2_expires_at", None) is not None:
+        if elevated.aal2_expires_at is not None:
             response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
     return response
 
