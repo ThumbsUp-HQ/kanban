@@ -591,4 +591,3 @@ def test_workload_policy_validators(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValidationError) as exc_subj_update:
         WorkloadPolicyUpdateRequest(subject_pattern="bad:*")
     assert "Invalid subject pattern" in str(exc_subj_update.value)
-

@@ -782,9 +782,9 @@ async def test_admin_mcp_keys_helper_units(api_env: ApiEnv) -> None:
         project_id=None,
         allowed_project_ids=[p_id],
     )
-    assert _resolve_admin_key_project_list(
-        dummy_key_allowed, {p_id: "ALLOWED-KEY"}
-    ) == ["ALLOWED-KEY"]
+    assert _resolve_admin_key_project_list(dummy_key_allowed, {p_id: "ALLOWED-KEY"}) == [
+        "ALLOWED-KEY"
+    ]
 
     dummy_key_none = McpApiKey(
         workspace_id=uuid.uuid4(),
@@ -810,4 +810,3 @@ async def test_admin_mcp_keys_helper_units(api_env: ApiEnv) -> None:
             raise RuntimeError(msg)
 
     assert await _resolve_admin_project_id_to_key_map(BadSession(), {p_id}) == {}  # type: ignore[arg-type]
-

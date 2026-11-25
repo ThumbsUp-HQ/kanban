@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
+from kanban.api.v1.admin.link_auditor import require_workspace_or_server_admin
 from kanban.services.link_auditor_admin import _decode_cursor, purge_flagged_links
 from kanban.tests.security.helpers import add_role_binding
 
@@ -590,8 +591,6 @@ async def test_require_workspace_or_server_admin_forbidden(
     make_user: Callable[..., Awaitable[SeededUser]],
 ) -> None:
     """Test require_workspace_or_server_admin raises 403 INSUFFICIENT_CAPABILITY."""
-    from kanban.api.v1.admin.link_auditor import require_workspace_or_server_admin
-
     member_user = await make_user("link_member_unauth", workspace_role="WORKSPACE_MEMBER")
     caller = PrincipalContext(
         principal_id=member_user.id,
