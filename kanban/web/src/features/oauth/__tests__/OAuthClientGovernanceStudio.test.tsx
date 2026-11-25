@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router';
 import { OAuthClientGovernanceStudio } from '../OAuthClientGovernanceStudio';
 import * as oauthApi from '../oauthApi';
 import { ApiProblem } from '../../../api/problem';
+import { Aal2StepUpCancelledError } from '../../../api/client';
 import * as clipboardModule from '../../../utils/clipboard';
 
 const mockClients: oauthApi.OAuthClientItem[] = [
@@ -885,5 +886,405 @@ describe('OAuthClientGovernanceStudio', () => {
     unmount();
     resolvePromise(mockClients);
     await Promise.resolve();
+  });
+
+  it('handles row selection, select all, and bulk delete flows', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const bulkDeleteSpy = vi
+      .spyOn(oauthApi, 'bulkDeleteAdminOAuthClients')
+      .mockResolvedValue({ deleted_count: 2, deleted_client_ids: ['client_active_app', 'client_pending_app'] });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('select-all-clients-checkbox')).toBeDefined();
+    });
+
+    // Select all
+    fireEvent.click(screen.getByTestId('select-all-clients-checkbox'));
+    expect(screen.getByTestId('delete-selected-btn')).toBeDefined();
+
+    // Toggle select all off
+    fireEvent.click(screen.getByTestId('select-all-clients-checkbox'));
+    expect(screen.queryByTestId('delete-selected-btn')).toBeNull();
+
+    // Select single row
+    fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
+    expect(screen.getByTestId('delete-selected-btn')).toBeDefined();
+
+    // Unselect single row
+    fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
+    expect(screen.queryByTestId('delete-selected-btn')).toBeNull();
+
+    // Select single row and trigger bulk delete cancel
+    fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
+    fireEvent.click(screen.getByTestId('delete-selected-btn'));
+    expect(screen.getByTestId('cancel-bulk-delete-btn')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-bulk-delete-btn'));
+    expect(screen.queryByTestId('cancel-bulk-delete-btn')).toBeNull();
+
+    // Trigger bulk delete confirm
+    fireEvent.click(screen.getByTestId('delete-selected-btn'));
+    fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
+
+    await waitFor(() => {
+      expect(bulkDeleteSpy).toHaveBeenCalledWith({ client_ids: ['client_active_app'] });
+      expect(screen.getByTestId('success-alert').textContent).toContain('Permanently deleted 2 selected');
+    });
+
+    // Bulk delete error branch with Error and non-Error fallback
+    bulkDeleteSpy.mockRejectedValueOnce(new Error('Bulk delete forbidden'));
+    fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
+    fireEvent.click(screen.getByTestId('delete-selected-btn'));
+    fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Bulk delete forbidden');
+    });
+
+    bulkDeleteSpy.mockRejectedValueOnce('Raw bulk delete error');
+    fireEvent.click(screen.getByTestId('delete-selected-btn'));
+    fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Failed to delete selected OAuth clients.');
+    });
+  });
+
+  it('handles purge unused/revoked clients flow', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const purgeSpy = vi
+      .spyOn(oauthApi, 'bulkDeleteAdminOAuthClients')
+      .mockResolvedValue({ deleted_count: 5, deleted_client_ids: ['d1', 'd2', 'd3', 'd4', 'd5'] });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('purge-clients-btn')).toBeDefined();
+    });
+
+    // Click purge, then cancel
+    fireEvent.click(screen.getByTestId('purge-clients-btn'));
+    expect(screen.getByTestId('cancel-purge-btn')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-purge-btn'));
+    expect(screen.queryByTestId('cancel-purge-btn')).toBeNull();
+
+    // Click purge, then confirm
+    fireEvent.click(screen.getByTestId('purge-clients-btn'));
+    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
+
+    await waitFor(() => {
+      expect(purgeSpy).toHaveBeenCalledWith({ purge_unused_dcr: true, purge_revoked: true });
+      expect(screen.getByTestId('success-alert').textContent).toContain('Purged 5 unused DCR and revoked');
+    });
+
+    // Purge error branch with Error and non-Error fallback
+    purgeSpy.mockRejectedValueOnce(new Error('Purge database locked'));
+    fireEvent.click(screen.getByTestId('purge-clients-btn'));
+    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Purge database locked');
+    });
+
+    purgeSpy.mockRejectedValueOnce('Raw purge failure');
+    fireEvent.click(screen.getByTestId('purge-clients-btn'));
+    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Failed to purge stale OAuth clients.');
+    });
+  });
+
+  it('handles row-level permanent delete flow with cancel, confirm, and errors', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const deleteSpy = vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-btn-client_active_app')).toBeDefined();
+    });
+
+    // Click Delete, then Cancel
+    fireEvent.click(screen.getByTestId('delete-btn-client_active_app'));
+    expect(screen.getByTestId('cancel-delete-client_active_app')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-delete-client_active_app'));
+    expect(screen.queryByTestId('cancel-delete-client_active_app')).toBeNull();
+
+    // Click Delete, then Confirm
+    fireEvent.click(screen.getByTestId('delete-btn-client_active_app'));
+    fireEvent.click(screen.getByTestId('confirm-delete-client_active_app'));
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith('client_active_app', { permanent: true });
+      expect(screen.getByTestId('success-alert').textContent).toContain('permanently deleted');
+    });
+
+    // Delete error with Error and non-Error fallback
+    deleteSpy.mockRejectedValueOnce(new Error('Cannot delete client'));
+    fireEvent.click(screen.getByTestId('delete-btn-client_pending_app'));
+    fireEvent.click(screen.getByTestId('confirm-delete-client_pending_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Cannot delete client');
+    });
+
+    deleteSpy.mockRejectedValueOnce('Raw delete error');
+    fireEvent.click(screen.getByTestId('delete-btn-client_pending_app'));
+    fireEvent.click(screen.getByTestId('confirm-delete-client_pending_app'));
+    await waitFor(() => {
+      expect(screen.getByTestId('error-alert').textContent).toContain('Failed to delete client client_pending_app.');
+    });
+  });
+
+  it('handles search input, status filter pills, and pagination controls', async () => {
+    const fetchSpy = vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue({
+      items: mockClients,
+      total: 105,
+      limit: 50,
+      offset: 0,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('search-clients-input')).toBeDefined();
+    });
+
+    // Change search query
+    fireEvent.change(screen.getByTestId('search-clients-input'), {
+      target: { value: 'Claude' },
+    });
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'Claude' }),
+      );
+    });
+
+    // Change status filter pills
+    fireEvent.click(screen.getByTestId('filter-pill-active'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'active' }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('filter-pill-suspended'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'suspended' }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('filter-pill-revoked'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'revoked' }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('filter-pill-all'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'all' }),
+      );
+    });
+
+    // Pagination: Next and Prev
+    expect(screen.getByTestId('pagination-info').textContent).toContain('Showing 1-50 of 105');
+    fireEvent.click(screen.getByTestId('next-page-btn'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 50 }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('prev-page-btn'));
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 0 }),
+      );
+    });
+  });
+
+  it('ignores Aal2StepUpCancelledError gracefully in loadClients and actions', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockRejectedValueOnce(new Aal2StepUpCancelledError());
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    // No error alert rendered when step-up is cancelled
+    await waitFor(() => {
+      expect(screen.queryByTestId('error-alert')).toBeNull();
+    });
+
+    // Also in action handlers
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
+    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
+    vi.spyOn(oauthApi, 'bulkDeleteAdminOAuthClients').mockRejectedValue(new Aal2StepUpCancelledError());
+    vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('refresh-clients-btn'));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('suspend-btn-client_active_app')).toBeDefined();
+    });
+
+    // Suspend cancel
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Revoke cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Delete cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('delete-btn-client_active_app'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-delete-client_active_app'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Bulk delete cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
+      fireEvent.click(screen.getByTestId('delete-selected-btn'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Purge cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('purge-clients-btn'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('confirm-purge-btn'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Register cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('register-client-btn'));
+    });
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'http://127.0.0.1:9090/cb' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('submit-register-btn'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('register-error-alert')).toBeNull();
+
+    // Edit URIs cancel
+    act(() => {
+      fireEvent.click(screen.getByTestId('cancel-register-btn'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
+    });
+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('edit-uris-error')).toBeNull();
+  });
+
+  it('covers advanced registration options, disabled status, and fallback branches', async () => {
+    const disabledClient: oauthApi.OAuthClientItem = {
+      client_id: 'client_disabled_no_name',
+      client_name: undefined,
+      client_type: 'confidential',
+      token_endpoint_auth_method: 'client_secret_basic',
+      redirect_uris: ['http://127.0.0.1:9090/cb'],
+      status: 'disabled',
+      client_secret_prefix: 'sec_dis...',
+      created_at: '2026-03-29T10:00:00Z',
+    };
+
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue([disabledClient]);
+    const patchSpy = vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status-badge-disabled')).toBeDefined();
+    });
+
+    // Test approve with Aal2StepUpCancelledError
+    patchSpy.mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('approve-btn-client_disabled_no_name'));
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+
+    // Test Edit URIs with missing client_name (uses client_id in title)
+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_disabled_no_name'));
+    expect(screen.getByTestId('edit-uris-modal-title').textContent).toContain('Edit Redirect URIs: client_disabled_no_name');
+    fireEvent.click(screen.getByTestId('close-edit-uris-btn'));
+
+    // Open register modal and exercise advanced controls
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    // Switch to confidential then back to public
+    const clientTypeSelect = screen.getByTestId('select-client-type');
+    fireEvent.change(clientTypeSelect, { target: { value: 'confidential' } });
+    fireEvent.change(clientTypeSelect, { target: { value: 'public' } });
+
+    // Open Advanced Section
+    fireEvent.click(screen.getByTestId('advanced-oauth-parameters-toggle'));
+
+    // Toggle PKCE
+    const pkceToggle = screen.getByTestId('toggle-pkce-s256');
+    fireEvent.click(pkceToggle);
+
+    // TTL input with value then empty fallback
+    const ttlInput = screen.getByTestId('input-access-token-ttl');
+    fireEvent.change(ttlInput, { target: { value: '7200' } });
+    fireEvent.change(ttlInput, { target: { value: '' } });
+
+    // Grant types input
+    const grantTypesInput = screen.getByTestId('input-grant-types');
+    fireEvent.change(grantTypesInput, { target: { value: 'authorization_code,refresh_token' } });
+
+    fireEvent.click(screen.getByTestId('cancel-register-btn'));
   });
 });

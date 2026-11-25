@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import event, select, text
+from sqlalchemy import ColumnElement, delete, event, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 from database.models.oauth import (
     OAuthAuthorizationCode,
     OAuthClient,
+    OAuthDeviceCode,
     OAuthGrant,
     OAuthRefreshToken,
     OAuthRevokedJti,
@@ -279,9 +280,33 @@ class OAuthClientPatchRequest(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    status: Literal["active", "disabled", "suspended", "revoked"] | None = None
+    status: (
+        Literal["active", "pending_admin_approval", "disabled", "suspended", "revoked"] | None
+    ) = None
     redirect_uris: list[str] | None = None
     client_name: str | None = None
+
+
+class OAuthClientBulkDeleteRequest(BaseModel):
+    """Payload for admin bulk deleting or purging OAuth clients."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    client_ids: list[str] = Field(
+        default_factory=list,
+        description="Explicit client IDs to permanently delete",
+    )
+    purge_unused_dcr: bool = Field(
+        default=False,
+        description=(
+            "Purge dynamic client registration clients with no active non-expired "
+            "tokens or grants"
+        ),
+    )
+    purge_revoked: bool = Field(
+        default=False,
+        description="Purge revoked clients with no active non-expired tokens or grants",
+    )
 
 
 # =========================================================================
@@ -1870,6 +1895,57 @@ async def admin_register_oauth_client(
     return JSONResponse(resp, status_code=status.HTTP_201_CREATED)
 
 
+async def _permanently_delete_clients(
+    session: AsyncSession,
+    client_uuids: list[uuid.UUID],
+) -> int:
+    """Permanently delete OAuth clients and cascade dependent records across all 5 tables."""
+    if not client_uuids:
+        return 0
+
+    # 1. Fetch grant IDs for these clients
+    stmt_g = select(OAuthGrant.id).where(OAuthGrant.client_id.in_(client_uuids))
+    grant_ids = (await session.execute(stmt_g)).scalars().all()
+
+    # 2. oauth_revoked_jtis (FK -> oauth_grants.id)
+    if grant_ids:
+        await session.execute(
+            delete(OAuthRevokedJti).where(OAuthRevokedJti.grant_id.in_(grant_ids))
+        )
+
+    # 3. oauth_refresh_tokens (FK -> oauth_clients.id and oauth_grants.id)
+    await session.execute(
+        delete(OAuthRefreshToken).where(
+            (OAuthRefreshToken.client_id.in_(client_uuids))
+            | (OAuthRefreshToken.grant_id.in_(grant_ids) if grant_ids else False)
+        )
+    )
+
+    # 4. oauth_authorization_codes (FK -> oauth_clients.id and oauth_grants.id)
+    await session.execute(
+        delete(OAuthAuthorizationCode).where(
+            (OAuthAuthorizationCode.client_id.in_(client_uuids))
+            | (OAuthAuthorizationCode.grant_id.in_(grant_ids) if grant_ids else False)
+        )
+    )
+
+    # 5. oauth_device_codes (FK -> oauth_clients.id)
+    await session.execute(
+        delete(OAuthDeviceCode).where(OAuthDeviceCode.client_id.in_(client_uuids))
+    )
+
+    # 6. oauth_grants (FK -> oauth_clients.id)
+    await session.execute(
+        delete(OAuthGrant).where(OAuthGrant.client_id.in_(client_uuids))
+    )
+
+    # 7. oauth_clients
+    del_res = await session.execute(
+        delete(OAuthClient).where(OAuthClient.id.in_(client_uuids))
+    )
+    return del_res.rowcount or len(client_uuids)
+
+
 @oauth_v1_router.get(
     "/admin/oauth-clients",
     summary="Admin list registered OAuth 2.1 clients (AAL2)",
@@ -1880,31 +1956,87 @@ async def admin_register_oauth_client(
     include_in_schema=False,
     dependencies=[Depends(require_admin_aal2)],
 )
-async def admin_list_oauth_clients(
+async def admin_list_oauth_clients(  # noqa: PLR0913
     caller: Caller,
     session: Session,
+    *,
+    status: Annotated[
+        Literal["active", "pending_admin_approval", "disabled", "suspended", "revoked"] | None,
+        Query(description="Optional filter by client status"),
+    ] = None,
+    q: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Case-insensitive search query across client_name, client_id, and redirect_uris"
+            )
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        Query(ge=1, le=200, description="Pagination limit (1-200)"),
+    ] = 50,
+    offset: Annotated[
+        int,
+        Query(ge=0, description="Pagination offset"),
+    ] = 0,
+    envelope: Annotated[
+        bool,
+        Query(description="Wrap response in envelope containing items, total, limit, and offset"),
+    ] = False,
 ) -> JSONResponse:
     """Workspace/Server Admin list of all dynamically registered OAuth clients."""
     await _require_admin_aal2(caller, session)
 
-    stmt = select(OAuthClient).order_by(OAuthClient.created_at.desc())
+    stmt = select(OAuthClient)
+    count_stmt = select(func.count(OAuthClient.id))
+
+    if status is not None:
+        stmt = stmt.where(OAuthClient.status == status)
+        count_stmt = count_stmt.where(OAuthClient.status == status)
+
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        search_filter = (
+            OAuthClient.client_name.ilike(pattern)
+            | OAuthClient.client_id.ilike(pattern)
+            | func.array_to_string(OAuthClient.redirect_uris, " ").ilike(pattern)
+        )
+        stmt = stmt.where(search_filter)
+        count_stmt = count_stmt.where(search_filter)
+
+    total = (await session.execute(count_stmt)).scalar_one()
+
+    stmt = stmt.order_by(OAuthClient.created_at.desc()).offset(offset).limit(limit)
     records = (await session.execute(stmt)).scalars().all()
 
-    return JSONResponse(
-        [
+    items = [
+        {
+            "client_id": c.client_id,
+            "client_name": c.client_name,
+            "client_type": c.client_type,
+            "client_secret_prefix": c.client_secret_prefix,
+            "redirect_uris": c.redirect_uris,
+            "status": c.status,
+            "created_at": c.created_at.isoformat(),
+            "updated_at": c.updated_at.isoformat(),
+        }
+        for c in records
+    ]
+
+    resp_headers = {"X-Total-Count": str(total)}
+    if envelope:
+        return JSONResponse(
             {
-                "client_id": c.client_id,
-                "client_name": c.client_name,
-                "client_type": c.client_type,
-                "client_secret_prefix": c.client_secret_prefix,
-                "redirect_uris": c.redirect_uris,
-                "status": c.status,
-                "created_at": c.created_at.isoformat(),
-                "updated_at": c.updated_at.isoformat(),
-            }
-            for c in records
-        ]
-    )
+                "items": items,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            },
+            headers=resp_headers,
+        )
+
+    return JSONResponse(items, headers=resp_headers)
 
 
 @oauth_v1_router.patch(
@@ -1979,14 +2111,24 @@ async def admin_delete_oauth_client(
     client_id: str,
     caller: Caller,
     session: Session,
+    *,
+    permanent: Annotated[
+        bool,
+        Query(description="Whether to permanently hard-delete client and cascade tokens/grants"),
+    ] = False,
 ) -> Response:
-    """Admin revocation of OAuth client and all issued grants."""
+    """Admin revocation of OAuth client and all issued grants, or permanent cascade deletion."""
     await _require_admin_aal2(caller, session)
 
     stmt = select(OAuthClient).where(OAuthClient.client_id == client_id)
     client_record = (await session.execute(stmt)).scalar_one_or_none()
     if client_record is None:
         not_found()
+
+    if permanent:
+        await _permanently_delete_clients(session, [client_record.id])
+        await session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     stmt_g = select(OAuthGrant).where(
         OAuthGrant.client_id == client_record.id,
@@ -2001,6 +2143,120 @@ async def admin_delete_oauth_client(
     await session.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _has_active_grants_or_tokens(
+    session: AsyncSession,
+    client_internal_id: uuid.UUID,
+    now_ts: datetime,
+) -> bool:
+    """Check whether a client has active grants or non-expired refresh tokens."""
+    stmt_grants = select(func.count(OAuthGrant.id)).where(
+        OAuthGrant.client_id == client_internal_id,
+        OAuthGrant.revoked_at.is_(None),
+    )
+    if (await session.execute(stmt_grants)).scalar_one() > 0:
+        return True
+
+    stmt_tokens = select(func.count(OAuthRefreshToken.id)).where(
+        OAuthRefreshToken.client_id == client_internal_id,
+        OAuthRefreshToken.revoked_at.is_(None),
+        OAuthRefreshToken.expires_at > now_ts,
+    )
+    return (await session.execute(stmt_tokens)).scalar_one() > 0
+
+
+async def _collect_stale_clients(
+    session: AsyncSession,
+    where_clause: ColumnElement[bool],
+    already_selected: set[uuid.UUID],
+    now_ts: datetime,
+) -> dict[uuid.UUID, str]:
+    """Collect candidate clients matching where_clause that have zero active grants or tokens."""
+    stmt = select(OAuthClient).where(where_clause)
+    clients = (await session.execute(stmt)).scalars().all()
+    found: dict[uuid.UUID, str] = {}
+    for c in clients:
+        if c.id not in already_selected and not await _has_active_grants_or_tokens(
+            session, c.id, now_ts
+        ):
+            found[c.id] = c.client_id
+    return found
+
+
+@oauth_v1_router.post(
+    "/admin/oauth-clients/bulk-delete",
+    summary="Admin bulk delete or purge OAuth clients (AAL2)",
+    dependencies=[Depends(require_admin_aal2)],
+)
+@oauth_v1_router.post(
+    "/oauth/admin/oauth-clients/bulk-delete",
+    include_in_schema=False,
+    dependencies=[Depends(require_admin_aal2)],
+)
+async def admin_bulk_delete_oauth_clients(
+    payload: OAuthClientBulkDeleteRequest,
+    caller: Caller,
+    session: Session,
+) -> JSONResponse:
+    """Atomically hard-delete specific clients or purge stale DCR / revoked clients."""
+    await _require_admin_aal2(caller, session)
+
+    if not payload.client_ids and not payload.purge_unused_dcr and not payload.purge_revoked:
+        raise ProblemException(
+            code="INVALID_BULK_DELETE_REQUEST",
+            status=400,
+            title="Invalid Bulk Delete Request",
+            detail=(
+                "At least one target mode (client_ids, purge_unused_dcr, or purge_revoked) "
+                "must be specified."
+            ),
+        )
+
+    targets_to_delete: dict[uuid.UUID, str] = {}
+    now_ts = datetime.now(UTC)
+
+    # 1. Explicit client_ids
+    if payload.client_ids:
+        stmt_explicit = select(OAuthClient).where(OAuthClient.client_id.in_(payload.client_ids))
+        explicit_clients = (await session.execute(stmt_explicit)).scalars().all()
+        for c in explicit_clients:
+            targets_to_delete[c.id] = c.client_id
+
+    # 2. Purge unused DCR clients
+    if payload.purge_unused_dcr:
+        stale_dcr = await _collect_stale_clients(
+            session,
+            OAuthClient.created_by_id.is_(None),
+            set(targets_to_delete.keys()),
+            now_ts,
+        )
+        targets_to_delete.update(stale_dcr)
+
+    # 3. Purge revoked clients
+    if payload.purge_revoked:
+        stale_revoked = await _collect_stale_clients(
+            session,
+            OAuthClient.status == "revoked",
+            set(targets_to_delete.keys()),
+            now_ts,
+        )
+        targets_to_delete.update(stale_revoked)
+
+    target_uuids = list(targets_to_delete.keys())
+    deleted_client_ids = [targets_to_delete[uid] for uid in target_uuids]
+
+    if target_uuids:
+        await _permanently_delete_clients(session, target_uuids)
+
+    await session.commit()
+
+    return JSONResponse(
+        {
+            "deleted_count": len(deleted_client_ids),
+            "deleted_client_ids": sorted(deleted_client_ids),
+        }
+    )
 
 
 # =========================================================================

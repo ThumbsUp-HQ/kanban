@@ -9,6 +9,7 @@ import {
   fetchAdminOAuthClients,
   patchAdminOAuthClient,
   deleteAdminOAuthClient,
+  bulkDeleteAdminOAuthClients,
   registerAdminOAuthClient,
 } from '../oauthApi';
 
@@ -106,5 +107,67 @@ describe('oauthApi', () => {
       headers: { 'Content-Type': 'application/json' },
     });
     expect(res.client_id).toBe('client_new');
+  });
+
+  it('deleteAdminOAuthClient supports permanent deletion', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({});
+
+    await deleteAdminOAuthClient('c1', { permanent: true });
+    expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/oauth-clients/{client_id}', {
+      params: { client_id: 'c1' },
+      query: { permanent: true },
+    });
+  });
+
+  it('fetchAdminOAuthClients supports query parameters and envelope', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+      items: [{ client_id: 'c1', client_type: 'public', redirect_uris: [], status: 'active', created_at: '' }],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    });
+
+    const res = await fetchAdminOAuthClients({
+      q: 'search',
+      status: 'active',
+      limit: 10,
+      offset: 0,
+      envelope: true,
+    });
+
+    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/admin/oauth-clients', {
+      query: {
+        q: 'search',
+        status: 'active',
+        limit: 10,
+        offset: 0,
+        envelope: true,
+      },
+    });
+    expect((res as { total: number }).total).toBe(1);
+  });
+
+  it('bulkDeleteAdminOAuthClients calls POST /api/v1/admin/oauth-clients/bulk-delete', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+      deleted_count: 2,
+      deleted_client_ids: ['c1', 'c2'],
+    });
+
+    const res = await bulkDeleteAdminOAuthClients({
+      client_ids: ['c1', 'c2'],
+      purge_unused_dcr: true,
+      purge_revoked: true,
+    });
+
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/oauth-clients/bulk-delete', {
+      body: JSON.stringify({
+        client_ids: ['c1', 'c2'],
+        purge_unused_dcr: true,
+        purge_revoked: true,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(res.deleted_count).toBe(2);
+    expect(res.deleted_client_ids).toEqual(['c1', 'c2']);
   });
 });

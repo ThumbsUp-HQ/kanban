@@ -1,0 +1,157 @@
+================================================================================
+1. Backend Pytest & Coverage (OAuth Flow, Migration Lifecycle, Models, Security)
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan396-3eac6a36/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan396-3eac6a36
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 91 items
+
+database/tests/migrations/test_p6_20_oauth_clients_status_check_migration.py::test_p6_20_oauth_clients_status_check_migration_lifecycle PASSED [  1%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  2%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  3%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [  4%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [  5%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [  6%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [  7%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [  8%]
+kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [  9%]
+kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [ 10%]
+kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [ 12%]
+kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [ 13%]
+kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [ 14%]
+kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [ 15%]
+kanban/tests/oauth/test_oauth_coverage.py::test_check_no_token_in_query_scenarios PASSED [ 16%]
+kanban/tests/oauth/test_oauth_coverage.py::test_get_db_session_unconfigured_factory PASSED [ 17%]
+kanban/tests/oauth/test_oauth_coverage.py::test_parse_request_payload_scenarios PASSED [ 18%]
+kanban/tests/oauth/test_oauth_coverage.py::test_require_admin_aal2_scenarios PASSED [ 19%]
+kanban/tests/oauth/test_oauth_coverage.py::test_resolve_target_scope_scenarios PASSED [ 20%]
+kanban/tests/oauth/test_oauth_coverage.py::test_register_oauth_client_grant_types_validation PASSED [ 21%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_unsupported_grant_type PASSED [ 23%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_exchange_invalid_requests PASSED [ 24%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_exchange_policy_and_cidr_restrictions PASSED [ 25%]
+kanban/tests/oauth/test_oauth_coverage.py::test_user_oauth_grants_endpoints PASSED [ 26%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_oauth_grant_revocation PASSED [ 27%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_patch_oauth_client PASSED [ 28%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_delete_oauth_client PASSED [ 29%]
+kanban/tests/oauth/test_oauth_coverage.py::test_device_flow_poll_and_activate_errors PASSED [ 30%]
+kanban/tests/oauth/test_oauth_coverage.py::test_hash_client_secret_pepper_fallback PASSED [ 31%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_basic_auth_errors PASSED [ 32%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_missing_and_expired PASSED [ 34%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_client_inactive_and_redirect_uri PASSED [ 35%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_pkce_and_resource_mismatch PASSED [ 36%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_missing_and_expired PASSED [ 37%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_client_mismatch_and_revoked_parent PASSED [ 38%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_confidential_client_error PASSED [ 39%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_success PASSED [ 40%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_revoke_endpoint_scenarios PASSED [ 41%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_device_and_authorize_endpoints PASSED [ 42%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [ 43%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [ 45%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [ 46%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [ 47%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [ 48%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [ 49%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [ 50%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_8_rfc7591_dynamic_registration_metadata_and_validation PASSED [ 51%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api PASSED [ 52%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_10_scoped_resource_indicators_and_bare_mcp PASSED [ 53%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_11_mcp_api_key_label_and_project_scoping PASSED [ 54%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_12_decision_csrf_and_policy_hardening PASSED [ 56%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_13_admin_register_oauth_client PASSED [ 57%]
+kanban/tests/oauth/test_oauth_flow.py::test_oauth_authorize_decision_origin_null_referrer_policy_security PASSED [ 58%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr PASSED [ 59%]
+kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect PASSED [ 60%]
+kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_cross_workspace_scoping_and_mcp_gates PASSED [ 61%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_19_oauth_admin_revoke_purge_and_pagination PASSED [ 62%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 63%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 64%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 65%]
+kanban/tests/oauth/test_oauth_unit.py::test_client_secret_generation_hashing_and_verification PASSED [ 67%]
+kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 68%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 69%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 70%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 71%]
+kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 72%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 73%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 74%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 75%]
+kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 76%]
+kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 78%]
+kanban/tests/oauth/test_oauth_unit.py::test_consent_csrf_token_lifecycle PASSED [ 79%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_security_headers_and_admin_surface PASSED [ 80%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_server_helpers_coverage PASSED [ 81%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_same_origin_request_scenarios PASSED [ 82%]
+kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_and_parse_target PASSED [ 83%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_fail_closed_missing_key_material PASSED [ 84%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_rejects_inactive_client_statuses PASSED [ 85%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_state_length_boundaries_4096_accepted_4097_rejected PASSED [ 86%]
+kanban/tests/oauth/test_oauth_unit.py::test_redirect_with_params_handles_existing_query_params PASSED [ 87%]
+kanban/tests/oauth/test_oauth_unit.py::test_gemini_long_state_csrf_hmac_and_tamper_detection PASSED [ 89%]
+kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_reverse_proxy_comma_separated PASSED [ 90%]
+kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 91%]
+kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [ 92%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [ 93%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [ 94%]
+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [ 95%]
+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 96%]
+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 97%]
+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 98%]
+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [100%]
+
+============================= 91 passed in 39.45s ==============================
+
+Name                       Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------
+database/models/oauth.py      96      0      0      0   100%
+kanban/api/v1/oauth.py       915     28    264     21    96%   838->843, 897, 927->932, 930-931, 933-934, 959-961, 1010-1016, 1117, 1181->1184, 1312->1326, 1342-1345, 1394-1396, 1480-1482, 1484, 1489->1488, 1498->1531, 1510-1512, 1521-1522, 1565->1568, 1568->1571, 1644->1659, 1665->1669, 1904, 2249->2252
+----------------------------------------------------------------------
+TOTAL                       1011     28    264     21    96%
+
+================================================================================
+2. Frontend Vitest & Coverage (OAuth Governance Studio & API)
+================================================================================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan396-3eac6a36/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/oauth/__tests__/oauthApi.test.ts (8 tests) 14ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (29 tests) 2973ms
+   ✓ OAuthClientGovernanceStudio (29)
+     ✓ inspects client details in modal and closes modal 378ms
+     ✓ handles search input, status filter pills, and pagination controls 323ms
+
+ Test Files  2 passed (2)
+      Tests  37 passed (37)
+   Start at  05:20:10
+   Duration  4.21s (tests 64%, environment 28%, import 5%, worker 1%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    98.3 |    96.98 |      99 |   98.24 |                   
+ ...anceStudio.tsx |   98.18 |    96.64 |   98.93 |   98.12 | ...9,372,442,1325 
+ oauthApi.ts       |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+
+================================================================================
+3. 5-Viewport Playwright E2E Visual & Bounding-Box Verification
+================================================================================
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 5 tests using 5 workers
+
+  ✓  1 [desktop] › e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts:170:3 › KAN-396 Visual Verification: OAuth Governance Studio Layout and Actions › 01-oauth-governance-layout-and-unclipped-actions (1.8s)
+  ✓  3 [mobile] › e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts:170:3 › KAN-396 Visual Verification: OAuth Governance Studio Layout and Actions › 01-oauth-governance-layout-and-unclipped-actions (1.8s)
+  ✓  4 [mobile-landscape] › e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts:170:3 › KAN-396 Visual Verification: OAuth Governance Studio Layout and Actions › 01-oauth-governance-layout-and-unclipped-actions (1.8s)
+  ✓  2 [tablet-portrait] › e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts:170:3 › KAN-396 Visual Verification: OAuth Governance Studio Layout and Actions › 01-oauth-governance-layout-and-unclipped-actions (1.9s)
+  ✓  5 [tablet] › e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts:170:3 › KAN-396 Visual Verification: OAuth Governance Studio Layout and Actions › 01-oauth-governance-layout-and-unclipped-actions (1.9s)
+
+  5 passed (29.8s)

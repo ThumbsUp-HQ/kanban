@@ -4,7 +4,7 @@
 .kb-oauth-gov-container {
   padding: var(--prose-pad);
   width: 100%;
-  max-width: min(1100px, 100%);
+  max-width: min(1200px, 100%);
   min-width: 0;
   overflow-x: hidden;
   box-sizing: border-box;
@@ -41,6 +41,13 @@
   flex: 1 1 auto;
 }
 
+.kb-oauth-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .kb-oauth-gov-title {
   font-size: 1.75rem;
   font-weight: 600;
@@ -58,7 +65,7 @@
 .kb-oauth-gov-refresh-btn {
   height: var(--prop-row-h);
   padding: 0 16px;
-  min-height: 44px;
+  min-height: 40px;
   background-color: var(--kb-color-bg-surface-raised, #21262d);
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   color: var(--kb-color-text-primary, #f0f6fc);
@@ -80,7 +87,7 @@
   background-color: var(--kb-color-bg-surface, var(--bg-surface));
   border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
   border-radius: 8px;
-  padding: 24px 32px;
+  padding: 24px;
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -109,6 +116,162 @@
   min-width: 0;
 }
 
+.kb-oauth-gov-register-btn {
+  padding: 8px 16px;
+  min-height: 40px;
+  background-color: #238636;
+  color: #ffffff;
+  border: 1px solid rgba(240, 246, 252, 0.1);
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-gov-register-btn:hover {
+  background-color: #2ea043;
+}
+
+/* Toolbar & Bulk Controls */
+.kb-oauth-gov-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: var(--kb-color-bg-surface-raised, rgba(110, 118, 129, 0.06));
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 6px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kb-oauth-gov-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kb-oauth-gov-search-wrap {
+  position: relative;
+  min-width: 200px;
+  max-width: 340px;
+  flex: 1 1 200px;
+}
+
+.kb-oauth-gov-search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: var(--kb-color-bg-surface, #0d1117);
+  color: var(--kb-color-text-primary, #f0f6fc);
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.kb-oauth-gov-search-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.kb-oauth-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.kb-oauth-filter-pill {
+  padding: 4px 12px;
+  min-height: 32px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 16px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background: var(--kb-color-bg-surface, #161b22);
+  color: var(--kb-color-text-secondary, #8b949e);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-filter-pill:hover {
+  background: var(--bg-hover);
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-oauth-filter-pill-active {
+  background: #1f6feb;
+  color: #ffffff;
+  border-color: #58a6ff;
+}
+
+.kb-oauth-filter-pill-active:hover {
+  background: #388bfd;
+  color: #ffffff;
+}
+
+.kb-oauth-gov-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.kb-oauth-gov-bulk-delete-btn {
+  padding: 4px 12px;
+  min-height: 36px;
+  background-color: rgba(248, 81, 73, 0.15);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  color: #f85149;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-gov-bulk-delete-btn:hover {
+  background-color: rgba(248, 81, 73, 0.25);
+  border-color: #f85149;
+}
+
+.kb-oauth-gov-purge-btn {
+  padding: 4px 12px;
+  min-height: 36px;
+  background-color: var(--kb-color-bg-surface-raised, #21262d);
+  border: 1px solid var(--border-warning, #d29922);
+  color: #d29922;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-gov-purge-btn:hover {
+  background-color: rgba(210, 153, 34, 0.15);
+}
+
+.kb-oauth-gov-bulk-confirm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Table layout */
 .kb-oauth-gov-table-wrap {
   width: 100%;
   max-width: 100%;
@@ -120,13 +283,49 @@
 
 .kb-oauth-gov-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.875rem;
   text-align: left;
 }
 
+.kb-oauth-gov-col-select {
+  width: 44px;
+}
+
+.kb-oauth-gov-col-app {
+  width: 23%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.kb-oauth-gov-col-type {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-col-status {
+  width: 13%;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-col-uris {
+  width: 20%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.kb-oauth-gov-col-date {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-col-actions {
+  width: 20%;
+}
+
 .kb-oauth-gov-th {
-  padding: 12px 16px;
+  padding: 12px 14px;
   border-bottom: 2px solid var(--kb-color-border-subtle, #30363d);
   color: var(--kb-color-text-secondary, #8b949e);
   font-weight: 600;
@@ -134,7 +333,7 @@
 }
 
 .kb-oauth-gov-td {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
   vertical-align: middle;
 }
@@ -143,10 +342,19 @@
   background-color: var(--bg-hover);
 }
 
+.kb-oauth-gov-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #1f6feb;
+}
+
 .kb-oauth-gov-client-name {
   font-weight: 600;
   color: var(--kb-color-text-primary, #f0f6fc);
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .kb-oauth-gov-client-id {
@@ -156,6 +364,11 @@
   background-color: rgba(110, 118, 129, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .kb-oauth-gov-badge {
@@ -167,6 +380,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .kb-oauth-gov-badge-active {
@@ -193,11 +407,17 @@
   border: 1px solid rgba(248, 81, 73, 0.3);
 }
 
+.kb-oauth-gov-badge-pending {
+  background-color: rgba(56, 139, 253, 0.2);
+  color: #58a6ff;
+  border: 1px solid rgba(56, 139, 253, 0.3);
+}
+
 .kb-oauth-gov-uri-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-width: 280px;
+  max-width: 100%;
 }
 
 .kb-oauth-gov-uri-code {
@@ -207,17 +427,19 @@
   background-color: rgba(110, 118, 129, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
   display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
 }
 
+/* Action Buttons & Confirmation */
 .kb-oauth-gov-btn-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -232,6 +454,7 @@
   color: var(--kb-color-text-primary, #f0f6fc);
   cursor: pointer;
   transition: all 0.15s ease-in-out;
+  white-space: nowrap;
 }
 
 .kb-oauth-gov-btn:hover {
@@ -265,10 +488,21 @@
   background-color: rgba(248, 81, 73, 0.2);
 }
 
+.kb-oauth-gov-btn-delete {
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+
+.kb-oauth-gov-btn-delete:hover {
+  background-color: rgba(248, 81, 73, 0.25);
+}
+
 .kb-oauth-gov-confirm-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .kb-oauth-gov-confirm-revoke-btn {
@@ -281,6 +515,28 @@
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-confirm-revoke-btn:hover {
+  background-color: #b62324;
+}
+
+.kb-oauth-gov-confirm-delete-btn {
+  padding: 4px 8px;
+  min-height: 36px;
+  background-color: #da3633;
+  color: #ffffff;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-confirm-delete-btn:hover {
+  background-color: #b62324;
 }
 
 .kb-oauth-gov-cancel-btn {
@@ -292,6 +548,12 @@
   border-radius: 6px;
   font-size: 0.75rem;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-oauth-gov-cancel-btn:hover {
+  background: var(--bg-hover);
+  color: var(--kb-color-text-primary, #f0f6fc);
 }
 
 .kb-oauth-gov-alert {
@@ -299,6 +561,10 @@
   margin-bottom: 16px;
   border-radius: 6px;
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .kb-oauth-gov-alert-error {
@@ -320,52 +586,96 @@
   font-style: italic;
 }
 
-/* Modal details */
+/* Pagination */
+.kb-oauth-gov-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
+  flex-wrap: wrap;
+}
+
+.kb-oauth-gov-page-info {
+  font-size: 0.875rem;
+  color: var(--kb-color-text-secondary, #8b949e);
+}
+
+.kb-oauth-gov-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kb-oauth-gov-page-btn {
+  padding: 4px 12px;
+  min-height: 36px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background: var(--kb-color-bg-surface-raised, #21262d);
+  color: var(--kb-color-text-primary, #f0f6fc);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-oauth-gov-page-btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+}
+
+.kb-oauth-gov-page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal styles */
 .kb-oauth-modal-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(2px);
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 16px;
+  box-sizing: border-box;
 }
 
 .kb-oauth-modal-card {
   background-color: var(--kb-color-bg-surface, #161b22);
   border: 1px solid var(--kb-color-border-subtle, #30363d);
-  border-radius: 10px;
+  border-radius: 8px;
   width: 100%;
   max-width: 600px;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 64px);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-sizing: border-box;
+  color: var(--kb-color-text-primary, #f0f6fc);
 }
 
 .kb-oauth-modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
+}
+
+.kb-oauth-section-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 .kb-oauth-modal-body {
-  padding: 20px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.kb-oauth-modal-footer {
-  padding: 12px 20px;
-  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
-  display: flex;
-  justify-content: flex-end;
 }
 
 .kb-oauth-detail-row {
@@ -375,77 +685,16 @@
 }
 
 .kb-oauth-detail-label {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  text-transform: uppercase;
   color: var(--kb-color-text-secondary, #8b949e);
+  text-transform: uppercase;
 }
 
 .kb-oauth-detail-value {
-  font-size: 0.875rem;
-  color: var(--kb-color-text-primary, #f0f6fc);
-}
-
-.kb-oauth-gov-register-btn {
-  height: var(--prop-row-h);
-  padding: 0 16px;
-  min-height: 40px;
-  background-color: var(--brand-primary, #238636);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease-in-out;
-}
-
-.kb-oauth-gov-register-btn:hover {
-  background-color: #2ea043;
-}
-
-.kb-oauth-copy-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.kb-oauth-id-code {
-  font-family: monospace;
-  background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #0d1117));
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
-  color: #58a6ff;
-  font-size: 0.875rem;
-  user-select: all;
-  word-break: break-all;
-}
-
-.kb-oauth-copy-btn {
-  padding: 6px 12px;
-  font-size: 0.8125rem;
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
-  color: var(--kb-color-text-primary, #f0f6fc);
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.15s;
-}
-
-.kb-oauth-copy-btn:hover {
-  background-color: var(--bg-hover, #30363d);
-}
-
-.kb-oauth-modal-desc {
-  font-size: 0.875rem;
-  color: var(--kb-color-text-secondary, #8b949e);
-  margin: 0;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .kb-oauth-form-field {
@@ -454,49 +703,57 @@
   gap: 6px;
 }
 
-.kb-oauth-form-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
+.kb-oauth-label {
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--kb-color-text-primary, #f0f6fc);
 }
 
-.kb-oauth-form-input,
-.kb-oauth-form-textarea,
-.kb-oauth-form-select {
+.kb-oauth-input,
+.kb-oauth-textarea,
+.kb-oauth-select {
+  width: 100%;
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid var(--kb-color-border-subtle, #30363d);
-  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
-  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
+  background-color: var(--kb-color-bg-surface-raised, #0d1117);
+  color: var(--kb-color-text-primary, #f0f6fc);
   font-size: 0.875rem;
-  font-family: inherit;
+  box-sizing: border-box;
 }
 
-.kb-oauth-form-textarea {
-  font-family: monospace;
-  resize: vertical;
-}
-
-.kb-oauth-form-input:focus,
-.kb-oauth-form-textarea:focus,
-.kb-oauth-form-select:focus {
+.kb-oauth-input:focus,
+.kb-oauth-textarea:focus,
+.kb-oauth-select:focus {
   outline: none;
   border-color: #58a6ff;
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
 }
 
-.kb-oauth-gov-btn-primary {
-  background-color: var(--brand-primary, #238636);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.1);
+.kb-oauth-textarea {
+  min-height: 80px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  resize: vertical;
 }
 
-.kb-oauth-gov-btn-primary:hover:not(:disabled) {
-  background-color: #2ea043;
+.kb-oauth-help-text {
+  font-size: 0.75rem;
+  color: var(--kb-color-text-secondary, #8b949e);
 }
 
-.kb-oauth-client-secret-panel {
-  margin: 16px 0;
+.kb-oauth-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
+}
+
+.kb-oauth-secret-banner {
+  margin-top: 16px;
   padding: 16px;
   background-color: var(--kb-color-bg-surface-raised, #161b22);
   border: 1px solid var(--border-warning, #d29922);
@@ -523,10 +780,12 @@
   flex: 1;
 }
 
-@media (max-width: 768px) {
+/* Responsive Styles */
+@media (max-width: 900px) {
   .kb-oauth-gov-container {
     width: 100%;
     max-width: 100%;
+    padding: 16px 12px;
     overflow-x: hidden;
     box-sizing: border-box;
   }
@@ -544,7 +803,7 @@
   }
 
   .kb-oauth-gov-section {
-    padding: 16px 14px;
+    padding: 16px 12px;
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -554,101 +813,136 @@
   .kb-oauth-gov-section-header {
     width: 100%;
     min-width: 0;
-  }
-
-  .kb-oauth-gov-table-wrap {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-@media (max-width: 640px) {
-  .kb-oauth-gov-container {
-    padding: 16px 12px;
-    width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
-    box-sizing: border-box;
-  }
-
-  .kb-oauth-gov-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .kb-oauth-gov-header > div {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .kb-oauth-gov-title {
-    width: 100%;
-    white-space: normal;
-    overflow-wrap: break-word;
-    word-break: break-word;
-  }
-
-  .kb-oauth-gov-subtitle {
-    width: 100%;
-    white-space: normal;
-    overflow-wrap: break-word;
-    word-break: break-word;
-  }
-
-  .kb-oauth-gov-refresh-btn {
-    width: 100%;
-    justify-content: center;
-    white-space: normal;
-  }
-
-  .kb-mcp-admin-subnav {
-    width: 100%;
-    min-width: 0;
-    gap: 6px;
-  }
-
-  .kb-oauth-gov-section {
-    padding: 16px 12px;
-    border-radius: 6px;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .kb-oauth-gov-section-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .kb-oauth-gov-section-title {
-    width: 100%;
-    white-space: normal;
-    min-width: 0;
-  }
-
-  .kb-oauth-gov-table-wrap {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
   }
 
   .kb-oauth-gov-register-btn {
     width: 100%;
     justify-content: center;
-    white-space: normal;
   }
+
+  .kb-oauth-gov-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kb-oauth-gov-toolbar-left {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .kb-oauth-gov-search-wrap {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .kb-oauth-filter-pills {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .kb-oauth-gov-toolbar-right {
+    width: 100%;
+    justify-content: stretch;
+    flex-direction: column;
+  }
+
+  .kb-oauth-gov-bulk-delete-btn,
+  .kb-oauth-gov-purge-btn {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+  }
+
+  /* Responsive Stacked Cards for Mobile / Small Tablet Viewports */
+  .kb-oauth-gov-table {
+    display: block;
+    width: 100%;
+    table-layout: auto;
+  }
+
+  .kb-oauth-gov-table thead {
+    display: none;
+  }
+
+  .kb-oauth-gov-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .kb-oauth-gov-table .kb-oauth-gov-tr {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 14px;
+    background-color: var(--kb-color-bg-surface-raised, #161b22);
+    border: 1px solid var(--kb-color-border-subtle, #30363d);
+    border-radius: 8px;
+    box-sizing: border-box;
+    gap: 8px;
+  }
+
+  .kb-oauth-gov-table .kb-oauth-gov-td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: none;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+  }
+
+  .kb-oauth-gov-table .kb-oauth-gov-col-app,
+  .kb-oauth-gov-table .kb-oauth-gov-col-uris {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .kb-oauth-gov-table .kb-oauth-gov-col-app .kb-oauth-gov-client-id {
+    max-width: 100%;
+    width: fit-content;
+  }
+
+  .kb-oauth-gov-td-actions {
+    margin-top: 8px;
+    padding-top: 8px !important;
+    border-top: 1px solid var(--kb-color-border-subtle, #30363d) !important;
+  }
+
+  .kb-oauth-gov-btn-group,
+  .kb-oauth-gov-confirm-bar {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .kb-oauth-gov-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .kb-oauth-gov-page-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+/* QA Full-Content Capture Modifier for CSP-Compliant Screenshots */
+html.qa-fullpage-capture,
+html.qa-fullpage-capture body,
+html.qa-fullpage-capture #root,
+html.qa-fullpage-capture .kb-app-shell,
+html.qa-fullpage-capture .kb-main-canvas {
+  height: auto !important;
+  min-height: 100vh !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
