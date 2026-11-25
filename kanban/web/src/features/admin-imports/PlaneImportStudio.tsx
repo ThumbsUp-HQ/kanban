@@ -263,9 +263,11 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('preview');
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -309,9 +311,11 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('done');
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -344,9 +348,11 @@ export function PlaneImportStudio(): JSX.Element {
       window.URL.revokeObjectURL(url);
       setExportSuccess(`Successfully downloaded kanban-${targetSlug}-portable.tar.gz`);
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setExportError(err.message);

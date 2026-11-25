@@ -17,8 +17,12 @@ from scripts import sync_wiki_bundle
 def get_wiki_and_public_paths() -> tuple[Path, Path, Path]:
     """Resolve wiki dir, web public images dir, and README path."""
     repo_root = Path(__file__).resolve().parent.parent.parent
+    local_wiki = repo_root / "thumbs-up-kanban.wiki"
     wiki_dir = Path(
-        os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki")
+        os.environ.get(
+            "KANBAN_WIKI_PATH",
+            str(local_wiki) if local_wiki.is_dir() else "/home/adamoutler/kanban/thumbs-up-kanban.wiki",
+        )
     )
     public_images_dir = repo_root / "kanban" / "web" / "public" / "docs-images"
     readme_path = repo_root / "README.md"

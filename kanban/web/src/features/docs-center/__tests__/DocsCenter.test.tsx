@@ -1589,6 +1589,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
           content={
             '<details><summary>Inline Appendix</summary>\n\n- [[Arch] Delta](Architecture-Delta-and-Missing-Features.md)\n</details>\n\n<details>\n<summary></summary>\n</details>'
           }
+          onNavigateDoc={vi.fn()}
         />,
       );
       const standaloneLink = screen.getByRole('link', { name: '[Arch] Delta' });
@@ -1696,6 +1697,42 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       document.body.appendChild(mainEl);
       fireEvent.click(skipLink);
       document.body.removeChild(mainEl);
+
+      unmount();
+    });
+
+    it('covers DocsCenterPage mobile chapters drawer, last chapter, search click outside and selection', () => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={['/docs/configuration-value-reference']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      // Verify last chapter has no next chapter button
+      expect(screen.queryByTestId('docs-next-chapter')).toBeNull();
+      expect(screen.getByTestId('docs-prev-chapter')).toBeDefined();
+
+      // Mobile chapters drawer toggle
+      const mobileBtn = screen.getByTestId('docs-mobile-chapters-btn');
+      fireEvent.click(mobileBtn);
+      expect(screen.getByTestId('docs-mobile-chapters-drawer')).toBeDefined();
+
+      // Click close button inside mobile drawer to close it
+      const closeBtn = screen.getByTestId('docs-mobile-drawer-close');
+      fireEvent.click(closeBtn);
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // Search input interaction & click outside
+      const searchInput = screen.getByTestId('docs-search-input');
+      fireEvent.change(searchInput, { target: { value: 'Migration' } });
+      const dropdown = screen.getByTestId('docs-search-results');
+      expect(dropdown).toBeDefined();
+
+      // Click outside search container
+      fireEvent.click(document.body);
+      expect(screen.queryByTestId('docs-search-results')).toBeNull();
 
       unmount();
     });

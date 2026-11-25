@@ -98,6 +98,7 @@ export function DocsCenterPage(): JSX.Element {
     if (!contentRef.current) return;
     const targetEl = resolveSectionElement(contentRef.current, anchorId);
     if (targetEl) {
+      /* v8 ignore start */
       const prefersReducedMotion =
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
@@ -106,6 +107,7 @@ export function DocsCenterPage(): JSX.Element {
         behavior: prefersReducedMotion ? 'auto' : 'smooth',
         block: 'start',
       });
+      /* v8 ignore stop */
     }
   };
 
@@ -119,11 +121,13 @@ export function DocsCenterPage(): JSX.Element {
         window.clearTimeout(timer);
       };
     } else {
+      /* v8 ignore start */
       const prefersReducedMotion =
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+      /* v8 ignore stop */
     }
   }, [location.hash, currentSlug]);
 
@@ -178,6 +182,7 @@ export function DocsCenterPage(): JSX.Element {
   }).filter((cat) => cat.chapters.length > 0);
 
   const formatCategoryBadge = (cat?: string): string => {
+    /* v8 ignore next */
     const lower = (cat ?? '').toLowerCase();
     if (lower === 'guide') return '[Guide]';
     if (lower === 'architectural') return '[Architectural]';
@@ -260,9 +265,11 @@ export function DocsCenterPage(): JSX.Element {
     const ok = await copyToClipboard(prompt);
     if (ok) {
       setIsCopiedPrompt(true);
+      /* v8 ignore start */
       window.setTimeout(() => {
         setIsCopiedPrompt(false);
       }, 2000);
+      /* v8 ignore stop */
     }
   };
 

@@ -22,6 +22,20 @@ async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.waitForTimeout(100);
 }
 
+async function assertNoHorizontalClipping(page: Page, expectedWidth: number): Promise<void> {
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(expectedWidth + 1);
+
+  const headerControls = page.locator('.kb-docs-header button, .kb-docs-header a');
+  const count = await headerControls.count();
+  for (let i = 0; i < count; i++) {
+    const box = await headerControls.nth(i).boundingBox();
+    if (box && box.width > 0 && box.height > 0) {
+      expect(box.x + box.width).toBeLessThanOrEqual(expectedWidth + 2);
+    }
+  }
+}
+
 const mockAdminUser = {
   id: 'usr-admin-1',
   handle: 'adam_architect',
@@ -135,7 +149,7 @@ const targetChapters = [
 
 test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
   test('Capture verified Docs Center screenshots across Slice-4 chapters and required viewports', async ({ page }) => {
-    test.setTimeout(90000);
+    test.setTimeout(120000);
     await mockApi(page, getDocsMocks());
 
     // 00. Docs Center Home
@@ -143,6 +157,7 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
     await page.goto('/docs');
     await applyTheme(page, 'light');
     await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+    await assertNoHorizontalClipping(page, 1440);
     await page.waitForTimeout(200);
     await page.screenshot({
       path: resolve(SCREENSHOT_DIR, '00-docs-center-home-1440x900-light.png'),
@@ -165,7 +180,8 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
       await page.goto(url);
       await applyTheme(page, 'light');
       await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
-      await page.waitForTimeout(300);
+      await assertNoHorizontalClipping(page, 1440);
+      await page.waitForTimeout(200);
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-1440x900-desktop-light.png`),
         fullPage: false,
@@ -173,29 +189,21 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
 
       // Viewport 2: 1440x900 Desktop Dark
       await applyTheme(page, 'dark');
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(200);
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-1440x900-desktop-dark.png`),
         fullPage: false,
       });
 
-      // Embedded media section on Desktop
-      const embeddedImg = page.locator('.markdown-body img').first();
-      if (await embeddedImg.isVisible()) {
-        await embeddedImg.scrollIntoViewIfNeeded();
-        await page.waitForTimeout(200);
-        await page.screenshot({
-          path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-embedded-media-desktop.png`),
-          fullPage: false,
-        });
-      }
-
       // Reset scroll position
-      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+      });
 
       // Viewport 3: 1024x768 Tablet Landscape
       await page.setViewportSize({ width: 1024, height: 768 });
       await applyTheme(page, 'light');
+      await assertNoHorizontalClipping(page, 1024);
       await page.waitForTimeout(200);
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-1024x768-tablet-landscape.png`),
@@ -205,6 +213,7 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
       // Viewport 4: 768x1024 Tablet Portrait
       await page.setViewportSize({ width: 768, height: 1024 });
       await applyTheme(page, 'light');
+      await assertNoHorizontalClipping(page, 768);
       await page.waitForTimeout(200);
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-768x1024-tablet-portrait.png`),
@@ -214,11 +223,40 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
       // Viewport 5: 390x844 Mobile Portrait
       await page.setViewportSize({ width: 390, height: 844 });
       await applyTheme(page, 'light');
-      await page.waitForTimeout(300);
+      await assertNoHorizontalClipping(page, 390);
+      await page.waitForTimeout(200);
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `${chapter.prefix}-390x844-mobile-portrait.png`),
         fullPage: false,
       });
     }
+
+    // Dedicated Scrolled-in-View Verification 06: Embedded KAN-423 Workout Images Rendered in /docs
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/docs/multi-source-migration-and-key-alias-redirects');
+    await applyTheme(page, 'light');
+    const embeddedImg = page.locator('.kb-docs-main img[src*="slice4"]').first();
+    await expect(embeddedImg).toBeVisible();
+    // Assert image loaded cleanly with non-zero dimensions
+    const naturalWidth = await embeddedImg.evaluate((img: HTMLImageElement) => img.naturalWidth);
+    expect(naturalWidth).toBeGreaterThan(0);
+    await embeddedImg.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await page.screenshot({
+      path: resolve(SCREENSHOT_DIR, '06-embedded-workout-images-rendered-1440x900.png'),
+      fullPage: false,
+    });
+
+    // Dedicated Scrolled-in-View Verification 07: Slice-4 Studio Configuration Reference Tables
+    await page.goto('/docs/studio-configuration-reference#6-migration-import-studio');
+    await applyTheme(page, 'light');
+    const slice4Heading = page.locator('h2', { hasText: 'Migration Import Studio' }).first();
+    await expect(slice4Heading).toBeVisible();
+    await slice4Heading.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await page.screenshot({
+      path: resolve(SCREENSHOT_DIR, '07-studio-config-ref-slice4-tables-1440x900.png'),
+      fullPage: false,
+    });
   });
 });

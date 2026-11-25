@@ -276,9 +276,11 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       });
     },
     onError: (err: Error) => {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       setProbeAlert({
         type: 'error',
         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',

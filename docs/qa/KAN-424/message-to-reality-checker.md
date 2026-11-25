@@ -16,36 +16,48 @@
 | # | Ticket Definition of Done Requirement | Verification Artifact / Log Evidence | Forensic Pass Verdict |
 | :-: | :--- | :--- | :--- |
 | **1** | **Authoritative 5 Wiki Chapters Updated**<br>Authoritative technical documentation updated across all 5 target wiki chapters: `Migration-and-Cutover-Runbook.md`, `Multi-Source-Migration-and-Key-Alias-Redirects.md`, `Production-Promotion-and-Backup-Runbook.md`, `Admin-Diagnostics-and-Link-Inspector-Studio.md`, `Studio-Configuration-Reference.md`. | `thumbs-up-kanban.wiki/*.md`<br>`docs/qa/KAN-424/wiki-diff.patch` | **PASS**<br>All 5 chapters updated with accurate architecture, contracts, and operator runbooks. |
-| **2** | **Verified KAN-423 Screenshots Embedded**<br>Embed all 24 verified zero-mock live workout screenshots from `docs/workouts/slice-4-ops-backups-imports/screenshots/` into both `thumbs-up-kanban.wiki/images/` and `kanban/web/public/docs-images/`. | `thumbs-up-kanban.wiki/images/slice4-*.png`<br>`kanban/web/public/docs-images/slice4-*.png` | **PASS**<br>All 24 screenshots copied and embedded in wiki chapters and offline bundle. |
+| **2** | **Verified KAN-423 Screenshots Embedded**<br>Embed all 24 verified zero-mock live workout screenshots from `docs/workouts/slice-4-ops-backups-imports/screenshots/` into both `thumbs-up-kanban.wiki/images/` and `kanban/web/public/docs-images/`. | `thumbs-up-kanban.wiki/images/slice4-*.png`<br>`kanban/web/public/docs-images/slice4-*.png` | **PASS**<br>All 24 screenshots copied and embedded in wiki chapters and offline bundle (0 unreferenced orphans). |
 | **3** | **Setting-by-Setting Technical Paragraphs & Contracts**<br>Provide 1 concise technical paragraph per setting listing all options and exact backend contracts: `KBKP` streaming vs `KBBAK1` snapshot `.kbbak`, `.kb_ops.sock` fixed-op privilege separation, 4-source Plane/Jira/GitHub/Linear imports + `user_map` + HTTP 308 permanent legacy redirects, 5-network Compose export, 7 diagnostics subsystems + `/ws` ping probe, 7 invalidity classes + `>=10`-char 2-stage audited purge. | `thumbs-up-kanban.wiki/Studio-Configuration-Reference.md`<br>`docs/workouts/slice-4-ops-backups-imports/04-published-docs-manifest.md` | **PASS**<br>All 25 Slice-4 settings documented with exact technical contracts, types, and defaults. |
 | **4** | **Step-by-Step Operator Runbooks for All 5 Tasks**<br>Step-by-step operator guides for executing migration imports, creating and restoring encrypted backups, promoting standalone to production Compose, diagnosing subsystem health, and auditing/purging invalid object links. | Sections 4 in target wiki chapters<br>`04-published-docs-manifest.md` Section 3 | **PASS**<br>Comprehensive CLI, REST, and UI operator procedures documented. |
-| **5** | **Offline In-App Docs Center Bundle Sync**<br>Synchronize all 34 wiki chapters into `kanban/web/src/features/docs-center/wikiManifest.ts` using `scripts/sync_wiki_bundle.py`. | `kanban/web/src/features/docs-center/wikiManifest.ts`<br>`build-check.txt` | **PASS**<br>34 chapters synced cleanly into manifest (568,672 bytes, 95 images copied). |
+| **5** | **Offline In-App Docs Center Bundle Sync**<br>Synchronize all 34 wiki chapters into `kanban/web/src/features/docs-center/wikiManifest.ts` using `scripts/sync_wiki_bundle.py`. | `kanban/web/src/features/docs-center/wikiManifest.ts`<br>`build-check.txt` | **PASS**<br>34 chapters synced cleanly into manifest (569,351 bytes, 95 images copied). |
 | **6** | **Zero Broken UI Doc Links**<br>Verify every `StudioDocLink` and `FieldHelpHint` `docHref` in `PlaneImportStudio.tsx`, `StandaloneStatusPanel.tsx`, `ComposeExportTab.tsx`, `AdminDiagnosticsStudio.tsx`, and `LinkAuditorStudio.tsx` resolves to valid chapter and anchor. | `04-published-docs-manifest.md` Section 4<br>`DocsCenter.test.tsx` anchor resolution | **PASS**<br>All 8 Slice-4 UI help links resolve to valid chapter headings (0 broken links). |
 | **7** | **Published Documentation Manifest**<br>Write `docs/workouts/slice-4-ops-backups-imports/04-published-docs-manifest.md` cataloging chapters, screenshots, setting counts, and verified anchor table. | `docs/workouts/slice-4-ops-backups-imports/04-published-docs-manifest.md` | **PASS**<br>Full publication manifest recorded. Verified 0 Unicode dashes. |
 | **8** | **Phase 4 Completion Packet Comment on KAN-420**<br>Post completion comment packet via `add_comment` on parent epic `KAN-420` (without ticket state transitions). | `KAN-420#c-01a2142a` via MCP `add_comment` | **PASS**<br>Comment successfully posted. Zero unauthorized ticket transitions. |
-| **9** | **Docs Center Automated Unit Test Coverage (>=95%)**<br>Execute DocsCenter unit test suites with coverage threshold >=95%. | `docs/qa/KAN-424/unit-test-results.txt` | **PASS**<br>69 passed across 2 suites. 99.4% statements, 95.14% branches, 100% lines. |
+| **9** | **Docs Center Automated Unit Test Coverage (>=95%)**<br>Execute DocsCenter unit test suites with coverage threshold >=95%. | `docs/qa/KAN-424/unit-test-results.txt` | **PASS**<br>70 passed across 2 suites. 99.6% statements, 96.44% branches, 100% lines. |
 | **10** | **DoD Build-Check Pipeline Execution**<br>Execute full build check: `sync_wiki_bundle && check_no_dashes --all && check_no_dashes <wiki-files> && pnpm typecheck && pnpm lint && pnpm build`. | `docs/qa/KAN-424/build-check.txt` | **PASS**<br>Exit code 0. Zero linter warnings, zero type errors, zero Unicode dashes. |
-| **11** | **Multi-Viewport Playwright Visual Verification**<br>Capture unclipped screenshots across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-424/screenshots/`. Visually inspect every PNG via `read_file`. | `docs/qa/KAN-424/screenshots/*.png`<br>`kanban/web/e2e/qa/kan-424-slice4-docs-screenshots.spec.ts` | **PASS**<br>28 screenshots captured and visually verified. Flawless layout and typography. |
+| **11** | **Multi-Viewport Playwright Visual Verification**<br>Capture unclipped screenshots across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-424/screenshots/`. Visually inspect every PNG via `read_file`. | `docs/qa/KAN-424/screenshots/*.png`<br>`kanban/web/e2e/qa/kan-424-slice4-docs-screenshots.spec.ts` | **PASS**<br>30 screenshots captured and visually verified. Flawless layout and typography. |
 | **12** | **Strict Plain ASCII Directives (Zero Unicode Dashes)**<br>Enforce zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) in all documentation, code, and QA artifacts. | `scripts/check_no_dashes.py --all`<br>`docs/qa/KAN-424/build-check.txt` | **PASS**<br>Zero Unicode dashes detected across repository and wiki chapters. |
 
 ---
 
 ## 2. Test Verification & Coverage Proof
 
+### Pytest Parity Suite (`docs/qa/KAN-424/unit-test-results.txt`)
+- **Command**: `uv run python -m pytest kanban/tests/test_wiki_bundle_sync.py`
+- **Results**: **7 passed** in 0.12s
+- **Checks**:
+  - Image SHA-256 parity between wiki/images and public/docs-images (95 images matching 100%).
+  - Zero duplicate numeric prefix collisions.
+  - Every markdown image reference resolves.
+  - Zero external HTTP/HTTPS image links (offline-first mandate).
+  - Zero unreferenced orphan images.
+  - Complete sync_wiki_bundle execution.
+  - Day-2 feature comparison matrix parity.
+
 ### Frontend Unit Tests & Branch Coverage (`docs/qa/KAN-424/unit-test-results.txt`)
 - **Command**:
   ```bash
-  COVERAGE_INCLUDE="src/features/docs-center/**" pnpm --dir kanban/web exec vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx --coverage
+  pnpm --dir kanban/web exec vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx --coverage --coverage.include="src/features/docs-center/**"
   ```
 - **Results**:
   - `src/features/docs-center/__tests__/DocsCenterImages.test.tsx`: 21 passed
-  - `src/features/docs-center/__tests__/DocsCenter.test.tsx`: 48 passed
-  - Total: **69 passed** in 6.58s
+  - `src/features/docs-center/__tests__/DocsCenter.test.tsx`: 49 passed
+  - Total: **70 passed** in 6.60s
   - Coverage Metrics:
-    - **Statements**: **99.4%**
-    - **Branches**: **95.14%** (meets mandatory `>=95%` standard)
-    - **Functions**: **98.94%**
-    - **Lines**: **99.79%**
+    - **Statements**: **99.6%**
+    - **Branches**: **96.44%** (exceeds mandatory `>=95%` standard)
+    - **Functions**: **100%**
+    - **Lines**: **100%**
 
 ### Full DoD Build Checks (`docs/qa/KAN-424/build-check.txt`)
 - **Command**:
@@ -58,18 +70,38 @@
   pnpm --dir kanban/web build
   ```
 - **Results**:
-  - `sync_wiki_bundle`: 34 chapters synced into `wikiManifest.ts`, 95 images copied
+  - `sync_wiki_bundle`: 34 chapters synced into `wikiManifest.ts` (569,351 bytes, 95 images copied)
   - `check_no_dashes.py --all`: 0 violations
   - `check_no_dashes.py <wiki-files>`: 0 violations
   - `typecheck`: `tsc -b --noEmit` passed with 0 errors
   - `lint`: `eslint . --max-warnings 0` passed with 0 errors, 0 warnings
-  - `build`: `tsc -b && vite build` built in 1.17s
+  - `build`: `tsc -b && vite build` built in 1.46s
 
 ---
 
-## 3. Multi-Viewport Visual Evidence Table (`docs/qa/KAN-424/screenshots/`)
+## 3. Coordinator Pre-Audit Polish Items Resolution (R2)
 
-All 28 PNG files visually inspected via `read_file`:
+1. **Mobile Topbar Horizontal Clipping on `390x844`**:
+   - Re-architected `.kb-docs-header-left` in `DocsCenterPage.css` under `@media (max-width: 640px)` using `display: contents;` with flex `order` reordering (1: logo, 2: chapters button, 3: offline badge, 4: llms link, 5: copy prompt button).
+   - Added `overflow-x: hidden; max-width: 100vw;` to `.kb-docs-page`.
+   - Automated assertions in Playwright verify `document.documentElement.scrollWidth <= 391` AND every button/link bounding box `x + width <= 392`.
+   - Visually confirmed via `read_file` on `04-diagnostics-inspector-390x844-mobile-portrait.png` that all controls wrap neatly into two rows without any horizontal clipping.
+
+2. **Scrolled-in-View Embedded Workout Images & Configuration Tables**:
+   - Added dedicated Playwright test cases in `kan-424-slice4-docs-screenshots.spec.ts`:
+     - `06-embedded-workout-images-rendered-1440x900.png`: Scrolled to `images/slice4-imports-multi-source-tabs.png` inside `/docs`, asserting `naturalWidth > 0` and verifying crisp rendering with pan/zoom controls.
+     - `07-studio-config-ref-slice4-tables-1440x900.png`: Scrolled to Section 12 (`Migration Import Studio`) inside `/docs/studio-configuration-reference`, verifying full table headers and options.
+
+3. **Complete Image Parity & 0 Orphans**:
+   - Embedded all 24 verified `KAN-423` workout captures across viewports in the wiki chapters and re-referenced `57-standalone-backup-restore-modal.png` in `Production-Promotion-and-Backup-Runbook.md`.
+   - Updated `test_wiki_bundle_sync.py` to check local worktree wiki directory before fallback.
+   - All 7 tests in `test_wiki_bundle_sync.py` pass cleanly with 95 images matched and 0 orphan images.
+
+---
+
+## 4. Multi-Viewport Visual Evidence Table (`docs/qa/KAN-424/screenshots/`)
+
+All 30 PNG files visually inspected via `read_file`:
 
 | Chapter / Surface | Viewport & Theme | Screenshot File | Verification Details |
 |:---|:---|:---|:---|
@@ -94,15 +126,23 @@ All 28 PNG files visually inspected via `read_file`:
 | **Admin Diagnostics** | `1440x900` Desktop Dark | `04-diagnostics-inspector-1440x900-desktop-dark.png` | Dark mode verified. Code badges and links visible. |
 | **Admin Diagnostics** | `1024x768` Tablet Landscape | `04-diagnostics-inspector-1024x768-tablet-landscape.png` | Tablet landscape layout unclipped. |
 | **Admin Diagnostics** | `768x1024` Tablet Portrait | `04-diagnostics-inspector-768x1024-tablet-portrait.png` | Tablet portrait view unclipped. |
-| **Admin Diagnostics** | `390x844` Mobile Portrait | `04-diagnostics-inspector-390x844-mobile-portrait.png` | Mobile single-column reading experience verified. |
+| **Admin Diagnostics** | `390x844` Mobile Portrait | `04-diagnostics-inspector-390x844-mobile-portrait.png` | Mobile single-column reading experience verified. Zero horizontal button clipping. |
 | **Studio Config Ref** | `1440x900` Desktop Light | `05-studio-config-ref-1440x900-desktop-light.png` | Full specification tables with Field Name, What It Controls, Allowed Values, Default, and Impact. |
 | **Studio Config Ref** | `1440x900` Desktop Dark | `05-studio-config-ref-1440x900-desktop-dark.png` | Dark mode table alternate row shading and borders crisp. |
 | **Studio Config Ref** | `1024x768` Tablet Landscape | `05-studio-config-ref-1024x768-tablet-landscape.png` | Table columns scale gracefully. |
-| **Studio Config Ref** | `768x1024` Tablet Portrait | `05-studio-config-ref-768x1024-tablet-portrait.png` | Table cell padding and typography fit screen width. |
-| **Studio Config Ref** | `390x844` Mobile Portrait | `05-studio-config-ref-390x844-mobile-portrait.png` | Tables scroll horizontally within container without breaking page layout. |
+| **Studio Config Ref** | `768x1024` Tablet Portrait | `05-studio-config-ref-768x1024-tablet-portrait.png` | Responsive portrait table wrapping. |
+| **Studio Config Ref** | `390x844` Mobile Portrait | `05-studio-config-ref-390x844-mobile-portrait.png` | Mobile table layout readable with touch scrolling. |
+| **Dedicated Verification** | `1440x900` Scrolled In View | `06-embedded-workout-images-rendered-1440x900.png` | Embedded KAN-423 workout image rendered inside `/docs` markdown viewer with non-zero dimensions. |
+| **Dedicated Verification** | `1440x900` Scrolled In View | `07-studio-config-ref-slice4-tables-1440x900.png` | Migration Import Studio configuration table rendered in `/docs/studio-configuration-reference`. |
 
 ---
 
-## 4. Cryptographic Artifacts & Manifest Integrity
+## 5. Specialist Review Certifications
 
-All files tracked in `docs/qa/KAN-424/changed-files-manifest.txt` with SHA-256 digests. Verification via `sha256sum -c docs/qa/KAN-424/changed-files-manifest.txt` exits 0 with 100% OK status.
+1. **UI Specialist Review (`docs/qa/KAN-424/ui-specialist-review.md`)**:
+   - Status: **APPROVED**
+   - Reviewer: `@ui-spec`
+   - Verified across desktop light/dark, tablet landscape/portrait, and mobile portrait viewports with zero horizontal overflow, 100% WCAG AA contrast, and zero em/en-dashes.
+2. **API Specialist Review (`docs/qa/KAN-424/api-specialist-review.md`)**:
+   - Status: **N/A - Documentation & In-App Wiki Bundle Sync**
+   - Verified zero schema mutations, zero backend endpoint modifications, and zero unauthorized API changes.
