@@ -4,11 +4,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
-import { AiProviderEditorDrawer } from '../AiProviderEditorDrawer';
+import {
+  AiProviderEditorDrawer,
+  computeNextApiKey,
+  MASK_BULLET,
+} from '../AiProviderEditorDrawer';
 import * as aiApi from '../aiAdminApi';
 import type { ProviderConfigPublic } from '../aiAdminApi';
 
-describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
+describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
   const mockExistingProvider: ProviderConfigPublic = {
     id: 'prov-existing-1',
     provider_kind: 'gemini',
@@ -21,6 +25,40 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
       timeout_ms: 45000,
     },
     api_key_set: true,
+    is_enabled: true,
+    project_id: null,
+  };
+
+  const mockProviderWithFullSettings: ProviderConfigPublic = {
+    id: 'prov-full-1',
+    provider_kind: 'openai',
+    display_name: 'OpenAI Full Settings',
+    base_url: 'https://api.openai.com/v1',
+    model_allowlist: ['gpt-4o'],
+    residency_tier: 'cloud', // tests legacy 'cloud' -> 'cloud_standard'
+    priority: 20,
+    settings: {
+      timeout_ms: 20000,
+      temperature: 0.5,
+      top_p: 0.8,
+      max_tokens: 2048,
+      mtls_client_cert_pem: '-----BEGIN CERTIFICATE-----\nCERT\n-----END CERTIFICATE-----',
+    },
+    api_key_set: true,
+    is_enabled: true,
+    project_id: null,
+  };
+
+  const mockProviderLocalTier: ProviderConfigPublic = {
+    id: 'prov-local-1',
+    provider_kind: 'ollama',
+    display_name: 'Local Ollama',
+    base_url: 'http://127.0.0.1:11434',
+    model_allowlist: ['llama3.2:3b'],
+    residency_tier: 'local', // tests legacy 'local' -> 'local_only'
+    priority: 30,
+    settings: {},
+    api_key_set: false,
     is_enabled: true,
     project_id: null,
   };
@@ -82,6 +120,10 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
     fireEvent.change(kindSelect, { target: { value: 'ollama' } });
     expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
     expect(screen.getByLabelText('API Secret Key (Optional for Local Endpoints)')).toBeDefined();
+
+    // Switching back to openai
+    fireEvent.change(kindSelect, { target: { value: 'openai' } });
+    expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
   });
 
   it('hydrates Cutoff Timeout (ms) from existing provider and saves updated timeout', async () => {
@@ -191,6 +233,14 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
     fireEvent.click(screen.getByTestId('probe-chip-gemini-2.5-pro'));
     expect(modelsInput.value).toBe('gemini-2.5-flash-lite, gemini-2.5-flash');
 
+    // Toggle chip back on (covers exists === false in toggleModel)
+    fireEvent.click(screen.getByTestId('probe-chip-gemini-2.5-pro'));
+    expect(modelsInput.value).toBe('gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro');
+
+    // Toggle off again before save
+    fireEvent.click(screen.getByTestId('probe-chip-gemini-2.5-pro'));
+    expect(modelsInput.value).toBe('gemini-2.5-flash-lite, gemini-2.5-flash');
+
     // Save and verify payload
     fireEvent.click(screen.getByTestId('save-provider-btn'));
 
@@ -288,5 +338,1216 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
     // Temperature and mTLS cert fields are now accessible
     expect(screen.getByTestId('provider-temperature-input')).toBeDefined();
     expect(screen.getByTestId('provider-mtls-cert-input')).toBeDefined();
+  });
+
+  // =========================================================================
+  // KAN-400: Browser Password-Manager Suppression & Zero input[type=password]
+  // =========================================================================
+
+  describe('KAN-400: Browser Password-Manager Suppression & Masking', () => {
+    it('renders form and inputs with strict password-manager suppression attributes and zero input[type=password]', () => {
+      const { container } = render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // 1. Form must declare autoComplete="off" and data-form-type="other"
+      const form = container.querySelector('form');
+      expect(form).not.toBeNull();
+      expect(form?.getAttribute('autocomplete')).toBe('off');
+      expect(form?.getAttribute('data-form-type')).toBe('other');
+
+      // 2. provider-name-input must have anti-credential-manager attributes
+      const nameInput = screen.getByTestId('provider-name-input');
+      expect(nameInput.getAttribute('type')).toBe('text');
+      expect(nameInput.getAttribute('autocomplete')).toBe('off');
+      expect(nameInput.getAttribute('data-1p-ignore')).toBe('true');
+      expect(nameInput.getAttribute('data-lpignore')).toBe('true');
+      expect(nameInput.getAttribute('data-bwignore')).toBe('true');
+      expect(nameInput.getAttribute('data-form-type')).toBe('other');
+
+      // 3. provider-key-input must strictly be type="text" and have ignore attributes
+      const keyInput = screen.getByTestId('provider-key-input');
+      expect(keyInput.getAttribute('type')).toBe('text');
+      expect(keyInput.getAttribute('autocomplete')).toBe('off');
+      expect(keyInput.getAttribute('spellcheck')).toBe('false');
+      expect(keyInput.getAttribute('autocorrect')).toBe('off');
+      expect(keyInput.getAttribute('autocapitalize')).toBe('off');
+      expect(keyInput.getAttribute('inputmode')).toBe('text');
+      expect(keyInput.getAttribute('data-1p-ignore')).toBe('true');
+      expect(keyInput.getAttribute('data-lpignore')).toBe('true');
+      expect(keyInput.getAttribute('data-bwignore')).toBe('true');
+      expect(keyInput.getAttribute('data-form-type')).toBe('other');
+
+      // 4. In both masked and revealed states, ZERO input[type=password] elements exist anywhere in the drawer
+      expect(container.querySelectorAll('input[type="password"]').length).toBe(0);
+
+      // Toggle show key to revealed state
+      const toggleBtn = screen.getByTestId('toggle-show-key-btn');
+      fireEvent.click(toggleBtn);
+      expect(keyInput.getAttribute('type')).toBe('text');
+      expect(container.querySelectorAll('input[type="password"]').length).toBe(0);
+
+      // Toggle back to masked state
+      fireEvent.click(toggleBtn);
+      expect(keyInput.getAttribute('type')).toBe('text');
+      expect(container.querySelectorAll('input[type="password"]').length).toBe(0);
+    });
+
+    it('Chromium / WebKit mode (CSS.supports true): applies .kb-masked-api-key without modifying DOM value', async () => {
+      // Mock Chromium CSS.supports('-webkit-text-security', 'disc') === true
+      const origCSS = globalThis.CSS;
+      globalThis.CSS = {
+        supports: vi.fn().mockImplementation((prop: string, val: string) => {
+          return prop === '-webkit-text-security' && val === 'disc';
+        }),
+      } as unknown as typeof CSS;
+
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+        ...mockExistingProvider,
+        id: 'prov-created-1',
+      });
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      try {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={onClose}
+            provider={null}
+            airGapMode={false}
+            onSaved={onSaved}
+          />,
+        );
+
+        const keyInput = screen.getByTestId<HTMLInputElement>('provider-key-input');
+        const toggleBtn = screen.getByTestId('toggle-show-key-btn');
+
+        // Enter key in Chromium mode
+        fireEvent.change(keyInput, { target: { value: 'sk-chromium-gemini-secret-12345' } });
+
+        // DOM value stays exact plaintext while .kb-masked-api-key handles visual masking natively
+        expect(keyInput.value).toBe('sk-chromium-gemini-secret-12345');
+        expect(keyInput.className).toContain('kb-masked-api-key');
+
+        // Toggle revealed -> .kb-masked-api-key removed
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('sk-chromium-gemini-secret-12345');
+        expect(keyInput.className).not.toContain('kb-masked-api-key');
+
+        // Toggle back to masked -> .kb-masked-api-key re-added
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('sk-chromium-gemini-secret-12345');
+        expect(keyInput.className).toContain('kb-masked-api-key');
+
+        // Submit form -> uncorrupted exact api_key submitted
+        fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(createSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              api_key: 'sk-chromium-gemini-secret-12345',
+            }),
+          );
+          expect(onSaved).toHaveBeenCalled();
+          expect(onClose).toHaveBeenCalled();
+        });
+      } finally {
+        globalThis.CSS = origCSS;
+      }
+    });
+
+    it('Firefox / Gecko mode (CSS.supports false): renders bullet mask and submits exact uncorrupted api_key', async () => {
+      // Mock Firefox where CSS.supports returns false
+      const origCSS = globalThis.CSS;
+      globalThis.CSS = {
+        supports: vi.fn().mockReturnValue(false),
+      } as unknown as typeof CSS;
+
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+        ...mockExistingProvider,
+        id: 'prov-created-ff',
+      });
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      try {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={onClose}
+            provider={null}
+            airGapMode={false}
+            onSaved={onSaved}
+          />,
+        );
+
+        const keyInput = screen.getByTestId<HTMLInputElement>('provider-key-input');
+        const toggleBtn = screen.getByTestId('toggle-show-key-btn');
+
+        // Enter key in Firefox mode
+        const testKey = 'sk-firefox-test-key-999';
+        fireEvent.change(keyInput, { target: { value: testKey } });
+
+        // When masked, DOM value displays exact bullets matching key length
+        expect(keyInput.value).toBe(MASK_BULLET.repeat(testKey.length));
+        expect(keyInput.className).toContain('kb-masked-api-key');
+
+        // Reveal key -> displays plaintext
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe(testKey);
+        expect(keyInput.className).not.toContain('kb-masked-api-key');
+
+        // Re-mask key -> displays bullets again
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe(MASK_BULLET.repeat(testKey.length));
+        expect(keyInput.className).toContain('kb-masked-api-key');
+
+        // Submit form -> submits exact plaintext key, NEVER bullet glyphs!
+        fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(createSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              api_key: testKey,
+            }),
+          );
+          expect(onSaved).toHaveBeenCalled();
+          expect(onClose).toHaveBeenCalled();
+        });
+      } finally {
+        globalThis.CSS = origCSS;
+      }
+    });
+
+    it('Firefox / Gecko mode: handles character typing, backspace, and pasting over masked input', () => {
+      const origCSS = globalThis.CSS;
+      globalThis.CSS = {
+        supports: vi.fn().mockReturnValue(false),
+      } as unknown as typeof CSS;
+
+      try {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        const keyInput = screen.getByTestId<HTMLInputElement>('provider-key-input');
+        const toggleBtn = screen.getByTestId('toggle-show-key-btn');
+
+        // 1. Initial typing from empty
+        fireEvent.change(keyInput, { target: { value: 'abc' } });
+        expect(keyInput.value).toBe('•••');
+
+        // 2. Typing 'd' at end of masked value
+        fireEvent.change(keyInput, {
+          target: { value: '•••d', selectionStart: 4 },
+        });
+        expect(keyInput.value).toBe('••••');
+
+        // Reveal to verify 'abcd'
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('abcd');
+        fireEvent.click(toggleBtn); // re-mask
+
+        // 3. Backspace at end (cursor at 3, value is '•••')
+        fireEvent.change(keyInput, {
+          target: { value: '•••', selectionStart: 3 },
+        });
+        expect(keyInput.value).toBe('•••');
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('abc');
+        fireEvent.click(toggleBtn); // re-mask
+
+        // 4. Backspace in middle (deleting 'b', cursor at 1, value is '••')
+        fireEvent.change(keyInput, {
+          target: { value: '••', selectionStart: 1 },
+        });
+        expect(keyInput.value).toBe('••');
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('ac');
+        fireEvent.click(toggleBtn); // re-mask
+
+        // 5. Pasting replacement token over whole masked string
+        fireEvent.change(keyInput, {
+          target: { value: 'pasted-replacement-secret', selectionStart: 25 },
+        });
+        expect(keyInput.value).toBe(MASK_BULLET.repeat('pasted-replacement-secret'.length));
+        fireEvent.click(toggleBtn);
+        expect(keyInput.value).toBe('pasted-replacement-secret');
+
+        // 6. Clear input completely
+        fireEvent.change(keyInput, {
+          target: { value: '', selectionStart: 0 },
+        });
+        expect(keyInput.value).toBe('');
+      } finally {
+        globalThis.CSS = origCSS;
+      }
+    });
+  });
+
+  // =========================================================================
+  // computeNextApiKey Unit Tests
+  // =========================================================================
+
+  describe('computeNextApiKey unit logic', () => {
+    it('handles empty inputs and identical mask', () => {
+      expect(computeNextApiKey('', '')).toBe('');
+      expect(computeNextApiKey('', 'new-key')).toBe('new-key');
+      expect(computeNextApiKey('existing', '')).toBe('');
+      expect(computeNextApiKey('abc', '•••')).toBe('abc');
+    });
+
+    it('handles typing append, prepend, and middle insertion', () => {
+      expect(computeNextApiKey('abc', '•••d', 4)).toBe('abcd');
+      expect(computeNextApiKey('abc', 'd•••', 1)).toBe('dabc');
+      expect(computeNextApiKey('abcd', '••X••', 3)).toBe('abXcd');
+    });
+
+    it('handles backspace and deletion with cursor positions', () => {
+      expect(computeNextApiKey('abcd', '•••', 3)).toBe('abc');
+      expect(computeNextApiKey('abcd', '•••', 2)).toBe('abd');
+      expect(computeNextApiKey('abcd', '•••', 1)).toBe('acd');
+      expect(computeNextApiKey('abcd', '•••', 0)).toBe('bcd');
+      expect(computeNextApiKey('abcd', '••', 1)).toBe('ad');
+      expect(computeNextApiKey('abcd', '•••', null)).toBe('abc'); // default to end delete
+      expect(computeNextApiKey('abcd', '•••', -1)).toBe('abc');
+      expect(computeNextApiKey('abcd', '•••', 10)).toBe('abc');
+    });
+
+    it('handles full replacement paste and partial paste replacement', () => {
+      expect(computeNextApiKey('old-secret', 'completely-new-token', 20)).toBe('completely-new-token');
+      expect(computeNextApiKey('abcd', '•XYZ•', 4)).toBe('aXYZd');
+      expect(computeNextApiKey('abcd', '••••••', 6)).toBe('abcd••');
+    });
+  });
+
+  // =========================================================================
+  // Comprehensive Branch & Function Coverage Booster
+  // =========================================================================
+
+  describe('Comprehensive Coverage Booster', () => {
+    it('returns null when isOpen is false', () => {
+      const { container } = render(
+        <AiProviderEditorDrawer
+          isOpen={false}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+      expect(container.firstChild).toBeNull();
+    });
+
+    it('displays error and halts submit when display name is blank', async () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const nameInput = screen.getByTestId('provider-name-input');
+      fireEvent.change(nameInput, { target: { value: '   ' } });
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-editor-error')).toBeDefined();
+        expect(screen.getByTestId('provider-editor-error').textContent).toContain('Display name is required');
+      });
+    });
+
+    it('enforces Air-Gap mode restrictions against cloud providers', async () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={true} // airGapMode active
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Default kind in airGapMode is ollama
+      const kindSelect = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+      expect(kindSelect.value).toBe('ollama');
+      expect(screen.getByTestId('drawer-air-gap-alert')).toBeDefined();
+
+      // Attempting to change to openai displays error
+      fireEvent.change(kindSelect, { target: { value: 'openai' } });
+      expect(screen.getByTestId('provider-editor-error').textContent).toContain(
+        'Air-Gap mode prohibits configuring cloud providers',
+      );
+
+      // Submitting while in invalid air gap state prevents save
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-editor-error').textContent).toContain(
+          'Air-Gap mode prohibits configuring cloud providers',
+        );
+      });
+
+      // Switching to gemini also displays error
+      fireEvent.change(kindSelect, { target: { value: 'gemini' } });
+      expect(screen.getByTestId('provider-editor-error').textContent).toContain(
+        'Air-Gap mode prohibits configuring cloud providers',
+      );
+
+      // Switching back to ollama clears error
+      fireEvent.change(kindSelect, { target: { value: 'ollama' } });
+      expect(screen.queryByTestId('provider-editor-error')).toBeNull();
+    });
+
+    it('hydrates full settings from existing provider and saves with updated key', async () => {
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockProviderWithFullSettings);
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          provider={mockProviderWithFullSettings}
+          airGapMode={false}
+          onSaved={onSaved}
+        />,
+      );
+
+      // Verify hydration of full settings
+      expect(screen.getByTestId<HTMLInputElement>('provider-temperature-input').value).toBe('0.5');
+      expect(screen.getByTestId<HTMLInputElement>('provider-top-p-input').value).toBe('0.8');
+      expect(screen.getByTestId<HTMLInputElement>('provider-max-tokens-input').value).toBe('2048');
+      expect(screen.getByTestId<HTMLTextAreaElement>('provider-mtls-cert-input').value).toContain('CERT');
+
+      // Enter a new API key without checking clear key (covers else if (apiKey.trim()) branch)
+      const keyInput = screen.getByTestId('provider-key-input');
+      fireEvent.change(keyInput, { target: { value: 'sk-updated-new-secret' } });
+
+      // Save
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        const lastCall = updateSpy.mock.lastCall;
+        expect(lastCall?.[0]).toBe('prov-full-1');
+        expect(lastCall?.[1].api_key).toBe('sk-updated-new-secret');
+        expect(lastCall?.[1].residency_tier).toBe('cloud_standard');
+        expect(lastCall?.[1].settings).toMatchObject({
+          temperature: 0.5,
+          top_p: 0.8,
+          max_tokens: 2048,
+        });
+        expect(onSaved).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
+      });
+    });
+
+    it('hydrates local residency tier and handles clearExistingKey toggle', async () => {
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockProviderLocalTier);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProviderLocalTier}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      expect(residencySelect.value).toBe('local_only');
+
+      // Save
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'prov-local-1',
+          expect.objectContaining({
+            residency_tier: 'local_only',
+          }),
+        );
+      });
+    });
+
+    it('handles clear-key checkbox toggled on and then toggled off', async () => {
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const clearCheckbox = screen.getByTestId<HTMLInputElement>('clear-key-checkbox');
+
+      // Check on -> clearExistingKey true
+      fireEvent.click(clearCheckbox);
+      expect(clearCheckbox.checked).toBe(true);
+
+      // Check off -> clearExistingKey false (covers if (e.target.checked) false branch)
+      fireEvent.click(clearCheckbox);
+      expect(clearCheckbox.checked).toBe(false);
+
+      // Save provider without key change -> api_key omitted in update payload
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        const lastCall = updateSpy.mock.lastCall;
+        expect(lastCall?.[0]).toBe('prov-existing-1');
+        expect(lastCall?.[1].api_key).toBeUndefined();
+      });
+    });
+
+    it('handles numeric input parsing fallbacks when empty string is provided', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Expand advanced
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+
+      // 1. Timeout ms fallback
+      const timeoutInput = screen.getByTestId<HTMLInputElement>('provider-timeout-ms-input');
+      fireEvent.change(timeoutInput, { target: { value: '' } });
+      expect(timeoutInput.value).toBe('30000');
+
+      // 2. Temperature fallback
+      const tempInput = screen.getByTestId<HTMLInputElement>('provider-temperature-input');
+      fireEvent.change(tempInput, { target: { value: '' } });
+      expect(tempInput.value).toBe('0.7');
+
+      // 3. Top-P fallback
+      const topPInput = screen.getByTestId<HTMLInputElement>('provider-top-p-input');
+      fireEvent.change(topPInput, { target: { value: '' } });
+      expect(topPInput.value).toBe('1');
+
+      // 4. Max Tokens fallback
+      const maxTokensInput = screen.getByTestId<HTMLInputElement>('provider-max-tokens-input');
+      fireEvent.change(maxTokensInput, { target: { value: '' } });
+      expect(maxTokensInput.value).toBe('4096');
+    });
+
+    it('handles probe models and test connection for existing provider without draft modifications', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 15,
+        models: ['probed-model-1'],
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 22,
+        models: ['probed-model-1'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Probe existing provider
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            settings_json: { timeout_ms: 45000 },
+          }),
+          'prov-existing-1',
+        );
+      });
+
+      // Test connection existing provider
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            settings_json: { timeout_ms: 45000 },
+          }),
+          'prov-existing-1',
+        );
+      });
+    });
+
+    it('handles non-Error rejection on save, probe, and test connection', async () => {
+      vi.spyOn(aiApi, 'createAiProvider').mockRejectedValueOnce('raw string error on create');
+      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValueOnce('raw string error on probe');
+      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValueOnce('raw string error on test');
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Probe non-Error catch
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('Failed to probe models');
+      });
+
+      // Test connection non-Error catch
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection test failed');
+      });
+
+      // Save non-Error catch
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-editor-error').textContent).toContain('Failed to save provider configuration');
+      });
+    });
+
+    it('handles server error response without message on test connection', async () => {
+      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: 'ERR_UNAVAILABLE',
+        // message intentionally omitted
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toBe(
+          'Connection failed: ERR_UNAVAILABLE',
+        );
+      });
+    });
+
+    it('handles probe error response without message on probe models', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: 'CODE_PROBE_FAILED',
+        // message intentionally omitted
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toBe('CODE_PROBE_FAILED');
+      });
+    });
+
+    it('handles probed models filter with zero matching items', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 60,
+        models: ['gpt-4o'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('probed-models-picker')).toBeDefined();
+      });
+
+      // Filter with non-matching pattern
+      fireEvent.change(screen.getByTestId('probe-model-search-input'), {
+        target: { value: 'nonexistent-model-xyz' },
+      });
+
+      expect(screen.getByText('No matching models found.')).toBeDefined();
+    });
+
+    it('invokes onClose when clicking close or cancel buttons', () => {
+      const onClose = vi.fn();
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('close-provider-drawer-btn'));
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByTestId('cancel-provider-drawer-btn'));
+      expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
+    it('calculates priority when providersCount is provided', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+        ...mockExistingProvider,
+        id: 'prov-with-count',
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+          providersCount={4} // next priority: (4 + 1) * 10 = 50
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            priority: 50,
+          }),
+        );
+      });
+    });
+
+    it('auto-infers residency tier when changing baseUrl and not overridden', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Expand advanced
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+      const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      const baseUrlInput = screen.getByTestId('provider-base-url-input');
+
+      // Change baseUrl to local address -> inferred as local_only
+      fireEvent.change(baseUrlInput, { target: { value: 'http://127.0.0.1:8000/v1' } });
+      expect(residencySelect.value).toBe('local_only');
+
+      // Change baseUrl back to cloud -> inferred as cloud_standard
+      fireEvent.change(baseUrlInput, { target: { value: 'https://api.openai.com/v1' } });
+      expect(residencySelect.value).toBe('cloud_standard');
+    });
+
+    it('handles manual model allowlist edit, mtls cert, and advanced parameter modification and save', async () => {
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Manual model input edit (covers onChange on provider-models-input)
+      const modelsInput = screen.getByTestId('provider-models-input');
+      fireEvent.change(modelsInput, { target: { value: 'custom-model-alpha, custom-model-beta' } });
+
+      // Expand advanced
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+
+      // Change mtls cert
+      const mtlsInput = screen.getByTestId('provider-mtls-cert-input');
+      fireEvent.change(mtlsInput, { target: { value: '-----BEGIN CERTIFICATE-----\nFOO\n-----END CERTIFICATE-----' } });
+
+      // Change residency select
+      const residencySelect = screen.getByTestId('provider-residency-select');
+      fireEvent.change(residencySelect, { target: { value: 'eu-central' } });
+
+      // Change temperature, top-p, max-tokens
+      fireEvent.change(screen.getByTestId('provider-temperature-input'), { target: { value: '0.3' } });
+      fireEvent.change(screen.getByTestId('provider-top-p-input'), { target: { value: '0.4' } });
+      fireEvent.change(screen.getByTestId('provider-max-tokens-input'), { target: { value: '1024' } });
+
+      // Save
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        const lastCall = updateSpy.mock.lastCall;
+        expect(lastCall?.[0]).toBe('prov-existing-1');
+        expect(lastCall?.[1].model_allowlist).toEqual(['custom-model-alpha', 'custom-model-beta']);
+        expect(lastCall?.[1].residency_tier).toBe('eu-central');
+        expect(lastCall?.[1].settings).toMatchObject({
+          temperature: 0.3,
+          top_p: 0.4,
+          max_tokens: 1024,
+          mtls_client_cert_pem: '-----BEGIN CERTIFICATE-----\nFOO\n-----END CERTIFICATE-----',
+        });
+      });
+    });
+
+    it('probes and tests connection when endpoint is modified on existing provider with api key', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 30,
+        models: ['model-draft-1'],
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 25,
+        models: ['model-draft-1'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Modify baseUrl and apiKey on existing provider
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), {
+        target: { value: 'https://new-endpoint.api.com' },
+      });
+      fireEvent.change(screen.getByTestId('provider-key-input'), {
+        target: { value: 'sk-new-key-draft' },
+      });
+
+      // Probe models (useDraftEndpoint === true)
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            base_url: 'https://new-endpoint.api.com',
+            api_key: 'sk-new-key-draft',
+          }),
+          undefined, // draft endpoint has no targetProviderId
+        );
+      });
+
+      // Test connection (useDraftEndpoint === true)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            base_url: 'https://new-endpoint.api.com',
+            api_key: 'sk-new-key-draft',
+          }),
+          undefined,
+        );
+      });
+    });
+
+    it('handles probe failure with empty error fields and clear models button', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: null,
+        message: null,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toBe('Model probing failed');
+      });
+    });
+
+    it('covers kind change on existing provider and non-draft probe with apiKey', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        models: ['model-1'],
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        models: ['model-1'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Change kind on existing provider (covers isEditing branch in handleKindChange)
+      const kindSelect = screen.getByTestId('provider-kind-select');
+      fireEvent.change(kindSelect, { target: { value: 'openai' } });
+
+      // Enter key without modifying baseUrl (isEndpointModified is true because providerKind modified)
+      const keyInput = screen.getByTestId('provider-key-input');
+      fireEvent.change(keyInput, { target: { value: 'sk-existing-reauth' } });
+
+      // Probe models
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalled();
+      });
+
+      // Test connection
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalled();
+      });
+    });
+
+    it('covers non-draft probe and connection test with apiKey typed on existing provider', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        models: ['m1'],
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        models: ['m1'],
+        model_count: 1,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Enter apiKey on existing provider without changing endpoint
+      // isEndpointModified is false -> useDraftEndpoint is false
+      fireEvent.change(screen.getByTestId('provider-key-input'), {
+        target: { value: 'sk-direct-key' },
+      });
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            api_key: 'sk-direct-key',
+          }),
+          'prov-existing-1',
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            api_key: 'sk-direct-key',
+          }),
+          'prov-existing-1',
+        );
+      });
+    });
+
+    it('submits null base_url when base_url input is empty on create and update', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockExistingProvider);
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
+
+      // 1. Create with empty base_url
+      const { unmount } = render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), { target: { value: '   ' } });
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            base_url: null,
+          }),
+        );
+      });
+
+      unmount();
+
+      // 2. Update with empty base_url
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'prov-existing-1',
+          expect.objectContaining({
+            base_url: null,
+          }),
+        );
+      });
+    });
+
+    it('handles test connection error response without error_code', async () => {
+      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: null,
+        message: 'Network socket closed',
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toBe(
+          'Connection failed: ERROR - Network socket closed',
+        );
+      });
+    });
+
+    it('submits api_key null when clearExistingKey is checked on update', async () => {
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockExistingProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('clear-key-checkbox'));
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'prov-existing-1',
+          expect.objectContaining({ api_key: null }),
+        );
+      });
+    });
+
+    it('handles probe models returning zero models warning message', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
+        ok: true,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain(
+          'Connected successfully, but 0 models were discovered.',
+        );
+      });
+    });
+
+    it('handles Error instance on save and surfaces error.message', async () => {
+      vi.spyOn(aiApi, 'createAiProvider').mockRejectedValueOnce(new Error('KMS encryption timeout'));
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-editor-error').textContent).toContain('KMS encryption timeout');
+      });
+    });
+
+    it('handles probe error with res.message', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: null,
+        message: 'Endpoint rejected TLS handshake',
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toBe('Endpoint rejected TLS handshake');
+      });
+    });
+
+    it('creates local ollama provider with api_key null when empty key', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockProviderLocalTier);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={true}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider_kind: 'ollama',
+            api_key: null,
+          }),
+        );
+      });
+    });
+
+    it('clears models allowlist when clicking probe-clear-all-btn', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        models: ['gpt-4o', 'o1'],
+        model_count: 2,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-clear-all-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('probe-clear-all-btn'));
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+    });
   });
 });
