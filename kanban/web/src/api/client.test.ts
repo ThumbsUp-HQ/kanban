@@ -6,6 +6,7 @@ import {
   apiFetchBlob,
   parseContentDispositionFilename,
   registerAal2StepUpHandler,
+  getActiveAal2StepUpHandler,
   Aal2StepUpCancelledError,
   bootstrapCsrfToken,
   getCsrfToken,
@@ -585,5 +586,30 @@ describe('apiFetchBlob', () => {
       status: 500,
       detail: 'Internal failure',
     });
+  });
+
+  it('handles malformed URI in parseContentDispositionFilename and manages active handler registration', () => {
+    expect(parseContentDispositionFilename("attachment; filename*=UTF-8''%ZZ")).toBe('%ZZ');
+    expect(parseContentDispositionFilename(null)).toBeUndefined();
+
+    const dummyHandler = vi.fn().mockResolvedValue(true);
+    registerAal2StepUpHandler(dummyHandler);
+    expect(getActiveAal2StepUpHandler()).toBe(dummyHandler);
+    registerAal2StepUpHandler(null);
+    expect(getActiveAal2StepUpHandler()).toBeNull();
+  });
+
+  it('apiClient helper methods dispatch corresponding HTTP methods', async () => {
+    setCookie('api-client-cookie');
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+
+    await apiClient.patch('/api/v1/issues/{issue_key}', {
+      params: { issue_key: 'KAN-99' },
+      body: { summary: 'updated' },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/v1/issues/KAN-99');
+    expect(init.method).toBe('PATCH');
   });
 });

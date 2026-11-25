@@ -35,8 +35,8 @@ export function isAal2StepUpCancelled(err: unknown): boolean {
 }
 
 export type Aal2StepUpHandler = (challenge: {
-  challengeId?: string;
-  methods?: string[];
+  challengeId?: string | undefined;
+  methods?: string[] | undefined;
 }) => Promise<boolean>;
 
 let activeAal2StepUpHandler: Aal2StepUpHandler | null = null;
@@ -44,6 +44,10 @@ let pendingAal2StepUp: Promise<boolean> | null = null;
 
 export function registerAal2StepUpHandler(handler: Aal2StepUpHandler | null): void {
   activeAal2StepUpHandler = handler;
+}
+
+export function getActiveAal2StepUpHandler(): Aal2StepUpHandler | null {
+  return activeAal2StepUpHandler;
 }
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -291,7 +295,7 @@ async function executeRequest(
       if (!pendingAal2StepUp) {
         const bodyObj = problemBody as Record<string, unknown>;
         const challengeId =
-          typeof bodyObj.challenge_id === 'string' ? bodyObj.challenge_id : 'aal2-stepup';
+          typeof bodyObj.challenge_id === 'string' ? bodyObj.challenge_id : undefined;
         const methods = Array.isArray(bodyObj.methods)
           ? (bodyObj.methods as string[])
           : ['webauthn', 'totp'];

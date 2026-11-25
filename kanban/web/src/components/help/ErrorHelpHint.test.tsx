@@ -289,6 +289,15 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     secondAlert.innerHTML = '<span class="kb-error-help-container">Existing</span>';
     document.body.appendChild(secondAlert);
 
+    // Alert inside popup to test ignored container branch
+    const popupParent = document.createElement('div');
+    popupParent.className = 'kb-field-help-popup';
+    const popupAlert = document.createElement('div');
+    popupAlert.setAttribute('role', 'alert');
+    popupAlert.textContent = 'Inside popup error';
+    popupParent.appendChild(popupAlert);
+    document.body.appendChild(popupParent);
+
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:open-aal2-stepup'));
     });

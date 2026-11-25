@@ -11,6 +11,7 @@ import {
   getCsrfToken,
   setCsrfToken,
   registerAal2StepUpHandler,
+  getActiveAal2StepUpHandler,
   Aal2StepUpCancelledError,
 } from '../client';
 import { ApiProblem } from '../problem';
@@ -844,5 +845,202 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
       await Promise.resolve();
     });
     u2?.();
+  });
+
+  it('covers all WebSudoModalHost keyboard navigation branches and replay expires-at header', async () => {
+    vi.useRealTimers();
+    const qc = new QueryClient();
+
+    let expiresAtDetail: string | null = null;
+    const expiresListener = (e: Event): void => {
+      expiresAtDetail = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
+    };
+    window.addEventListener('kb:aal2-expires-at', expiresListener);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <WebSudoModalHost />
+      </QueryClientProvider>,
+    );
+
+    let stepUpInvoked = false;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/branch-test') {
+        if (!stepUpInvoked) {
+          stepUpInvoked = true;
+          // No challenge_id provided to test line 55 fallback
+          return Promise.resolve(new Response(
+            JSON.stringify({ code: 'AAL2_REQUIRED' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ replayed: true }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-kb-aal2-expires-at': '2026-11-25T15:00:00Z',
+            },
+          },
+        ));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const reqPromise = apiFetch('POST', '/api/v1/admin/branch-test' as never);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    const modal = screen.getByTestId('websudo-stepup-modal');
+    const buttons = modal.querySelectorAll('button');
+    const firstBtn = buttons[0];
+    const middleBtn = buttons[1];
+    const lastBtn = buttons[buttons.length - 1];
+
+    // Non-Tab non-Escape key (line 133 false branch)
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    // Tab without Shift on middle button (line 147 false branch)
+    middleBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+
+    // Tab with Shift on middle button (line 144 false branch)
+    middleBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+    // Tab with Shift on last button (line 144 false branch)
+    lastBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+    // Tab without Shift on first button (line 147 false branch)
+    firstBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+
+    // Tab without Shift on last button -> wraps to first
+    lastBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(firstBtn);
+
+    // Tab with Shift on first button -> wraps to last
+    firstBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(lastBtn);
+
+    // Complete step-up successfully to verify replay with x-kb-aal2-expires-at header
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+
+    const result = await reqPromise;
+    expect(result).toEqual({ replayed: true });
+    expect(expiresAtDetail).toBe('2026-11-25T15:00:00Z');
+
+    window.removeEventListener('kb:aal2-expires-at', expiresListener);
+  });
+
+  it('WebSudoModalHost handles direct invocation without challengeId', async () => {
+    vi.useRealTimers();
+    render(<WebSudoModalHost />);
+    const handler = getActiveAal2StepUpHandler();
+    expect(handler).toBeDefined();
+
+    let p: Promise<boolean> | undefined;
+    await act(async () => {
+      p = handler?.({ methods: ['totp'] });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    const success = await p;
+    expect(success).toBe(false);
+  });
+
+  it('replays successfully when getCsrfToken is null and bootstrapCsrfToken returns null', async () => {
+    vi.useRealTimers();
+    setCsrfToken(null);
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+    document.cookie = '__Host-kb_csrf=; Path=/; Max-Age=0';
+
+    registerAal2StepUpHandler(async () => {
+      await Promise.resolve();
+      return true;
+    });
+
+    let attempt = 0;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/auth/csrf') {
+        return Promise.resolve(new Response(null, { status: 500 }));
+      }
+      if (url === '/api/v1/admin/null-csrf-test') {
+        attempt++;
+        if (attempt === 1) {
+          return Promise.resolve(new Response(
+            JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-null-csrf' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ replayedWithoutCsrf: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const res = await apiFetch('GET', '/api/v1/admin/null-csrf-test' as never);
+    expect(res).toEqual({ replayedWithoutCsrf: true });
+  });
+
+  it('dispatches kb:aal2-expires-at on initial request response header', async () => {
+    let capturedExp: string | null = null;
+    const l = (e: Event): void => {
+      capturedExp = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
+    };
+    window.addEventListener('kb:aal2-expires-at', l);
+
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ ok: true }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-kb-aal2-expires-at': '2026-11-25T16:00:00Z',
+        },
+      },
+    ));
+
+    await apiFetch('GET', '/api/v1/auth/session' as never);
+    expect(capturedExp).toBe('2026-11-25T16:00:00Z');
+    window.removeEventListener('kb:aal2-expires-at', l);
+  });
+
+  it('throws ApiProblem when AAL2 step-up is required but no handler is registered', async () => {
+    registerAal2StepUpHandler(null);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-unhandled' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(
+      apiFetch('GET', '/api/v1/admin/unhandled-stepup' as never),
+    ).rejects.toBeInstanceOf(ApiProblem);
+  });
+
+  it('treats rejected step-up handler promise as cancellation', async () => {
+    registerAal2StepUpHandler(() => Promise.reject(new Error('Step-up rejected')));
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-reject' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(
+      apiFetch('GET', '/api/v1/admin/reject-stepup' as never),
+    ).rejects.toBeInstanceOf(Aal2StepUpCancelledError);
   });
 });
