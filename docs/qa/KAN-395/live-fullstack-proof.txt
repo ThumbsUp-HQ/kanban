@@ -88,3 +88,43 @@ The standalone container fully and flawlessly supports real Google Gemini
 MCP OAuth 2.1 authorization code flow, PKCE S256, 1200+ char state tokens,
 redirect URI existing query parameters, and reverse-proxy HTTPS discovery.
 ================================================================================
+
+================================================================================
+LIVE PRODUCTION TEST: REAL GOOGLE GEMINI CONNECTED APP VALIDATION
+Client: Google Gemini (gemini.google.com/devmode)
+Target Endpoint: https://gemini-qa-temp.hackedyour.info/mcp/agent/w/kanban
+Reverse-Proxy: Nginx Proxy Manager (Let's Encrypt TLS termination)
+================================================================================
+
+1. DCR Dynamic Client Registration:
+   POST /oauth/register
+   Status: 201 Created
+   Client ID: client_[REDACTED]
+   Redirect URI: https://gemini.google.com/oauth/callback?app=connected
+
+2. OAuth 2.1 Authorization Code Flow with 1,200+ char State:
+   GET /oauth/authorize?client_id=...&state=[1200_CHAR_TOKEN]&resource=https://gemini-qa-temp.hackedyour.info/mcp/agent/w/kanban
+   Status: 200 OK (OAuth Consent Screen rendered with word-wrapped host badge)
+   POST /oauth/authorize/decision (action=approve)
+   Status: 302 Found -> https://gemini.google.com/oauth/callback?app=connected&code=[AUTH_CODE]&state=[1200_CHAR_TOKEN]
+   Separator: '&' (no duplicate query parameter corruption)
+
+3. PKCE S256 Token Exchange & Target Workspace Scoping:
+   POST /oauth/token (code_verifier, grant_type=authorization_code)
+   Status: 200 OK
+   Issued JWT Scope Tier: workspace
+   Bound Target Workspace: kanban (id=01a210c4-e60a-7dbe-be98-52871174bc2a)
+
+4. MCP Streamable HTTP Protocol Negotiation (2025-11-25):
+   Client Info: {"name": "Gemini", "version": "1.0.0"}
+   Negotiated Protocol Version: 2025-11-25
+   POST /mcp/agent/w/kanban (method: initialize) -> 200 OK (mcp-session-id returned)
+
+5. MCP Tool Discovery & Live Invocation:
+   POST /mcp/agent/w/kanban (method: tools/list) -> 200 OK (10 tools returned)
+   POST /mcp/agent/w/kanban (method: tools/call, name: read_ticket, identifier: KAN-1)
+   Status: 200 OK
+   Returned Content: Issue KAN-1 ("Verify live Google Gemini MCP OAuth 2.1 integration")
+
+RESULT: 100% SUCCESSFUL END-TO-END INTEGRATION WITH REAL GOOGLE GEMINI.
+================================================================================

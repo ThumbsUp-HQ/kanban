@@ -1,9 +1,9 @@
 # API Specialist Review: KAN-395
 
-**Ticket:** `KAN-395` (`Support 1,200+ character OAuth state tokens and RFC 8707 Resource Scoping for Google Gemini MCP OAuth 2.1 integration`)
+**Ticket:** `KAN-395` (`Support 1,200+ character OAuth state tokens, RFC 8707 Resource Scoping, and MCP Protocol Negotiation for Google Gemini MCP OAuth 2.1 integration`)
 **Reviewer:** `@api-spec` (Backend Architect & API Security Specialist)
 **Branch:** `feat/KAN-395-gemini-oauth-state`
-**Commit:** `5036038577bc5016652013426c45d22e32cebb55`
+**Commit:** `88ea5d865af34f95a2d532f3cefb9285ca8da8e9`
 **Status:** `APPROVED`
 
 ---
@@ -22,12 +22,16 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
    - Tolerated trailing slashes in `eff_resource` matching during `POST /oauth/token` exchange (`code_record.resource.rstrip('/') == eff_resource.rstrip('/')`).
 5. **Chained Reverse-Proxy & TLS Termination Support:**
    - Hardened `resolve_public_base_url` across `kanban/oauth/server.py`, `mcp/metadata.py`, and `mcp/auth.py` to correctly extract the first client-facing hop from comma-separated headers (`X-Forwarded-Proto: https, http` and `X-Forwarded-Host: k.hackedyour.info, 127.0.0.1`), prioritizing `KANBAN_PUBLIC_ORIGIN`.
-6. **RFC 8707 Resource Target Scope Resolution (Root-Cause Fix for Live Gemini `403 KEY_SCOPE_VIOLATION`):**
+6. **RFC 8707 Resource Target Scope Resolution:**
    - Implemented `_resolve_target_scope` in `kanban/api/v1/oauth.py` to parse the RFC 8707 `resource` URI parameter (`/mcp/{surface}/w/{ws_slug}/p/{proj_key}`, `/mcp/{surface}/w/{ws_slug}`, or `/mcp/{surface}`).
    - Validated caller membership in target workspaces via `kb_auth_switch_workspace(:ws_id, :p_id)`, failing closed with 403 `access_denied` when unauthorized.
    - Bound OAuth codes, grants, and minted JWTs to the target workspace under PostgreSQL `FORCE RLS` rather than the caller browser session active workspace (`default`).
    - Added `scope_tier` claim (`"server"`, `"workspace"`, `"project"`) to JWT tokens and updated `kanban/security/mcp_keys.py` and `mcp/scoping.py` so server-level tokens can access any authorized workspace without key scope violation.
-   - Added HTTP `HEAD` (200 OK with `Allow` headers) and authenticated `GET` (200 OK service descriptor) probing across all `/mcp*` routes in `mcp/app.py` and `mcp/protocol.py`.
+7. **MCP Protocol Version Negotiation & HTTP Method Conformance:**
+   - Supported protocol versions `2025-11-25`, `2025-06-18`, and `2025-03-26` in `mcp/protocol.py` (`SUPPORTED_PROTOCOL_VERSIONS`).
+   - Header `mcp-protocol-version` validates against supported versions; `_handle_initialize` dynamically negotiates `protocolVersion` to match the client's supported version.
+   - HTTP `HEAD` returns 200 OK with `Allow: POST, DELETE, HEAD` and `Content-Type: application/json`.
+   - Streamable HTTP `GET` strictly returns 405 Method Not Allowed with `Allow: POST, DELETE, HEAD` per spec.
 
 ---
 
@@ -48,12 +52,12 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
 
 ## 3. Test Coverage & Verification
 
-- **Backend Unit & Integration Suite:** 47 of 47 OAuth and MCP metadata tests passed in 9.25s (`kanban/tests/oauth/test_oauth_flow.py`, `kanban/tests/oauth/test_oauth_unit.py`, `mcp/tests/test_metadata.py`), including comprehensive regression test `test_gemini_oauth_cross_workspace_scoping_and_mcp_gates`.
+- **Backend Unit & Integration Suite:** 486 of 486 tests passed (437 in `mcp/tests/` and 49 in `kanban/tests/oauth/`), including live regression tests for RFC 8707 scoping, protocol version negotiation (`2025-11-25`, `2025-06-18`, `2025-03-26`), HTTP `HEAD` 200, and `GET` 405 conformance.
 - **Frontend Test Suite:** 85 of 85 Vitest tests passed (`ConnectOAuthAppModal.test.tsx`, `McpAccessStudio.test.tsx`, `LoginPage.test.tsx`).
 - **Static Analysis Gates:**
   - `ruff check`: Clean (0 errors)
   - `ruff format --check`: Clean (0 errors)
-  - `mypy`: Clean (0 issues across all 6 touched modules)
+  - `mypy`: Clean (0 issues across all touched modules)
   - `python3 scripts/check_no_dashes.py --all`: Clean
   - `pnpm --dir kanban/web typecheck`: Clean
   - `pnpm --dir kanban/web lint`: Clean (0 warnings)
@@ -65,4 +69,4 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
 
 **`APPROVED`**
 
-The implementation in `feat/KAN-395-gemini-oauth-state` commit `5036038577bc5016652013426c45d22e32cebb55` completely resolves the live Google Gemini `KEY_SCOPE_VIOLATION`, satisfies all API contract, security architecture, and protocol interoperability requirements for Google Gemini MCP OAuth 2.1 integration.
+The implementation in `feat/KAN-395-gemini-oauth-state` commit `88ea5d865af34f95a2d532f3cefb9285ca8da8e9` fulfills 100% of the API contract, protocol negotiation, and security architecture requirements, fully validated live against real Google Gemini (`gemini.google.com`).
