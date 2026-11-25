@@ -2,7 +2,7 @@
 
 - **Ticket ID:** KAN-404 (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona:** Senior Backend & API Security Architect (`@api-spec`)
-- **Branch:** `fix/KAN-404-rc1` (commit `4a827901`)
+- **Branch:** `fix/KAN-404-rc1` (commit `f50e8d82`)
 - **Status:** APPROVED
 - **Date:** 2026-11-25
 
@@ -55,8 +55,8 @@
 ## 3. Quality Gates & Test Results
 
 - **Unit Tests**:
-  - 38 Pytest backend tests passing in 21.68s with >= 95% coverage on all target modules (database.models.auth: 100%, kanban.api.v1.auth_session: 96%, kanban.auth.mfa.policy: 97%, kanban.custom_fields.approvals: 96%; Total: 97%).
-  - 606 Vitest frontend tests passing across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines; WebSudoModalHost: 100% stmts / 100% branch; AdminStudioSubnav: 100% stmts / 100% branch; client.ts: 99.45% lines / 95.08% branch).
+  - 38 Pytest backend tests passing in 20.92s with >= 95% coverage on all target modules (database.models.auth: 100%, kanban.api.v1.auth_session: 96%, kanban.auth.mfa.policy: 97%, kanban.custom_fields.approvals: 96%; Total: 97%).
+  - 609 Vitest frontend tests passing across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines; WebSudoModalHost: 100% stmts / 100% branch; AdminStudioSubnav: 100% stmts / 100% branch; client.ts: 99.45% lines / 95.08% branch).
 - **Static Analysis & Build**:
   - 0 ruff errors (`uv run ruff check .`).
   - 0 mypy errors in 1369 source files (`uv run mypy`).

@@ -1,60 +1,21 @@
 OK: All 82 migrations valid. Single head: p6_20_oauth_clients_status_check
 
-
-=======================================================
-BACKEND PYTEST UNIT TESTS
-=======================================================
-
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/.venv/bin/python3
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260
 configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 38 items
+collected 38 items
 
-database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  2%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  5%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [  7%]
-database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 10%]
-database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 13%]
-database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 15%]
-database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 18%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow PASSED [ 21%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap PASSED [ 23%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_session_and_me_do_not_advance_sliding_window PASSED [ 26%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_db_write_throttling_30s PASSED [ 28%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_approvals_strictly_rejects_none_aal2_verified_at PASSED [ 31%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_auth_models_repr_and_str PASSED [ 34%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_aal2_policy_coverage_edges PASSED [ 36%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_auth_session_endpoints_coverage_edges PASSED [ 39%]
-kanban/tests/auth/test_aal2_policy.py::test_case_9_aal2_policy_enforcement PASSED [ 42%]
-kanban/tests/auth/test_aal2_policy.py::test_require_admin_aal2_missing_factory PASSED [ 44%]
-kanban/tests/auth/test_aal2_policy.py::test_case_10_assert_admin_routes_protected PASSED [ 47%]
-kanban/tests/auth/test_aal2_policy.py::test_aal2_stale_human_readable_and_problem_doc_links PASSED [ 50%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_01_request_approval_lifecycle_and_boundaries PASSED [ 52%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_02_project_admin_sp_approval PASSED [ 55%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_03_workspace_admin_approval_and_tier_enforcement PASSED [ 57%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_04_server_admin_dual_control_and_self_approval_block PASSED [ 60%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_05_aal2_freshness_enforcement PASSED [ 63%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_06_toctou_manifest_mismatch_and_single_byte_tamper_auto_revocation PASSED [ 65%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_07_list_approvals_and_anti_enumeration PASSED [ 68%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py::test_08_approval_api_edge_cases_and_coverage PASSED [ 71%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_01_scope_principal_matrix_valid_tuples PASSED [ 73%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_02_scope_principal_matrix_invalid_tuples PASSED [ 76%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_03_compute_approval_signature_hmac PASSED [ 78%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_04_compute_cache_partition_key PASSED [ 81%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_05_assert_execution_authorized_passthrough PASSED [ 84%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_06_assert_execution_authorized_escalated PASSED [ 86%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_08_assert_execution_authorized_missing_signature_fields PASSED [ 89%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_09_get_active_approval_summary PASSED [ 92%]
-kanban/tests/custom_fields/test_approvals_matrix.py::test_07_approval_service_serialization PASSED [ 94%]
-kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 97%]
-kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [100%]
+database/tests/test_p1_17_models.py .......                              [ 18%]
+kanban/tests/auth/test_websudo_sliding_aal2.py ........                  [ 39%]
+kanban/tests/auth/test_aal2_policy.py ....                               [ 50%]
+kanban/tests/custom_fields/test_approvals_matrix.py .........            [ 73%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 94%]
+kanban/tests/security/test_admin_routes_protected.py ..                  [100%]
 
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
-
+============================= 38 passed in 20.92s ==============================
 Name                                Stmts   Miss Branch BrPart  Cover   Missing
 -------------------------------------------------------------------------------
 database/models/auth.py               194      0      0      0   100%
@@ -63,487 +24,105 @@ kanban/auth/mfa/policy.py             162      1     78      7    97%   56->58, 
 kanban/custom_fields/approvals.py     202      4     72      6    96%   335, 380->383, 392->394, 419->422, 443-444, 572
 -------------------------------------------------------------------------------
 TOTAL                                 726      5    208     22    97%
-============================= 38 passed in 21.91s ==============================
 
 
-=======================================================
-FRONTEND VITEST UNIT & INTEGRATION TESTS
-=======================================================
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
+> vitest run src/api/client.test.ts src/components/help/ErrorHelpHint.test.tsx src/api/__tests__/websudoReplay.test.tsx src/features/admin/__tests__/AdminMobileLayout.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx src/features/settings/__tests__/McpAccessStudio.test.tsx src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/workflows/__tests__/WorkflowStudioPage.test.tsx --coverage --coverage.thresholds.branches=95
 
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
       Coverage enabled with v8
 
- ✓ src/api/client.test.ts (33 tests) 272ms
+ ✓ src/api/client.test.ts (33 tests) 152ms
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/components/help/ErrorHelpHint.test.tsx (13 tests) 278ms
- ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 446ms
+ ✓ src/components/help/ErrorHelpHint.test.tsx (13 tests) 294ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 431ms
 Not implemented: navigation to another Document
- ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (14 tests) 1510ms
- ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (28 tests) 1398ms
- ✓ src/api/__tests__/websudoReplay.test.tsx (31 tests) 2045ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (14 tests) 1506ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (28 tests) 1307ms
+ ✓ src/api/__tests__/websudoReplay.test.tsx (31 tests) 1973ms
    ✓ AdminStudioSubnav Sudo Pill (KAN-404) (13)
-     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1134ms
- ✓ src/features/admin/__tests__/AdminMobileLayout.test.tsx (12 tests) 649ms
+     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1137ms
+ ✓ src/features/admin/__tests__/AdminMobileLayout.test.tsx (12 tests) 661ms
    ✓ Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) (12)
      ✓ Case 1: Horizontal swipe tabs & touch scrolling navigation (6)
-       ✓ renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets 342ms
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (46 tests) 2845ms
- ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (46 tests) 3190ms
+       ✓ renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets 385ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (46 tests) 2760ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (46 tests) 3052ms
    ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (46)
      ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
-       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 525ms
- ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (21 tests) 3403ms
-   ✓ RunnerStudioPage & Components (KANBA-219) (21)
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 478ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 3291ms
+   ✓ RunnerStudioPage & Components (KANBA-219) (22)
      ✓ RunnerStudioPage component (9)
-       ✓ renders runner cards, status filters, and handles revocation flow 381ms
-     ✓ MintEnrollmentTokenModal component (11)
-       ✓ resets copied state after 2 seconds 2157ms
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > closes mint modal via cancel button and backdrop click, handles empty label and load error
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > hides unlimited option when allow_unlimited_mcp_keys is false
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 2218ms
+       ✓ renders runner cards, status filters, and handles revocation flow 432ms
+     ✓ MintEnrollmentTokenModal component (12)
+       ✓ resets copied state after 2 seconds 2139ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 2040ms
    ✓ WorkflowStudioPage (KB-P5-24, S14.4) (14)
-     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 437ms
-     ✓ handles edit hook, detach hook, and AAL2 cancellation without error banners 494ms
- ✓ src/features/admin/LinkAuditorStudio.test.tsx (14 tests) 2664ms
+     ✓ renders In Review -> Done card with the 3 S14.4 hooks matching wireframe (Mandatory Test Case 1) 365ms
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 446ms
+     ✓ handles edit hook, detach hook, and AAL2 cancellation without error banners 380ms
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (14 tests) 2332ms
    ✓ LinkAuditorStudio (14)
-     ✓ handles inspect drawer view with JSON snapshots 514ms
-     ✓ handles bulk selection and purge 371ms
-     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 680ms
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > validates CIDR input client-side, showing inline accessible error on malformed CIDR and disabling submit (KAN-68 Negative)
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > supports granular capability bit toggles and switches preset to custom (KAN-68 Edge)
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (39 tests) 4988ms
-   ✓ WorkspaceSettingsPage (KANBA-202) (39)
-     ✓ renders workspace settings page and updates workspace name and slug 842ms
-     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 322ms
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (29 tests) 5229ms
+     ✓ handles inspect drawer view with JSON snapshots 513ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 605ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (29 tests) 4756ms
    ✓ OAuthClientGovernanceStudio (29)
-     ✓ inspects client details in modal and closes modal 746ms
-     ✓ handles action patch and delete error branches 301ms
-     ✓ registers a confidential OAuth client and displays one-time client_secret copy panel 313ms
-     ✓ handles search input, status filter pills, and pagination controls 362ms
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > structures modal around the 4 plain-English questions and live summary
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > expands Advanced Capability & Network Restrictions revealing capability-preset-select, updating overrides and summary
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to WorkloadFederationSection inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (41 tests) 5934ms
-   ✓ ProjectSettingsPage (KANBA-202) (41)
-     ✓ renders project settings page tabs and switches between them 506ms
-     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 347ms
-     ✓ handles error states on workflow states, priorities, labels, and trash restore 589ms
-     ✓ covers fallback error messages when error object has no message property 379ms
-     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 380ms
- ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (46 tests) 4287ms
+     ✓ inspects client details in modal and closes modal 760ms
+     ✓ handles action patch and delete error branches 358ms
+     ✓ handles search input, status filter pills, and pagination controls 370ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (39 tests) 4668ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (39)
+     ✓ renders workspace settings page and updates workspace name and slug 694ms
+     ✓ supports Groups tab, creating groups, listing members, adding nested groups and cycle rejection (KANBA-210) 309ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 324ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (46 tests) 3997ms
    ✓ McpAccessStudio & McpConfigSnippetModal (KB-P4-16) (46)
-     ✓ renders scope tiers correctly across all 4 mount routes 408ms
- ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (69 tests) 7747ms
+     ✓ renders scope tiers correctly across all 4 mount routes 388ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (41 tests) 5806ms
+   ✓ ProjectSettingsPage (KANBA-202) (41)
+     ✓ renders project settings page tabs and switches between them 563ms
+     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 333ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 535ms
+     ✓ covers fallback error messages when error object has no message property 423ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 340ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (69 tests) 7350ms
    ✓ PersonalSettingsPage (69)
-     ✓ regenerates recovery codes and displays modal 2237ms
-     ✓ cancels passkey rename modal when clicking cancel 465ms
-     ✓ covers show/hide password toggle and TOTP setup modal cancel 302ms
- ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (55 tests) 8900ms
+     ✓ regenerates recovery codes and displays modal 2206ms
+     ✓ cancels passkey rename modal when clicking cancel 502ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (55 tests) 8277ms
    ✓ AuthCardEditorDrawer (KB-P3-36) (55)
-     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 687ms
-     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 412ms
-     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 532ms
-     ✓ supports OAuth2 provider configuration with issuer_url 383ms
-     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 379ms
-     ✓ displays form error when onSave throws an error 317ms
-     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 651ms
-     ✓ validates empty slug on create and allows typing secret on create 378ms
-     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 461ms
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 671ms
+     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 347ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 538ms
+     ✓ supports OAuth2 provider configuration with issuer_url 356ms
+     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 348ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 423ms
+     ✓ validates empty slug on create and allows typing secret on create 327ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 432ms
+     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 319ms
      ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
-       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 436ms
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 420ms
      ✓ Progressive Disclosure & AdvancedSection (KAN-319) (13)
-       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 393ms
-stderr | src/features/admin-auth/AuthStudioPage.test.tsx > AuthStudioPage (KB-P3-36) > MFA Enrollment Required Banner (KAN-398) > switches to Roles tab when tab-roles is clicked
-An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/admin-auth/AuthStudioPage.test.tsx (50 tests) 9111ms
-   ✓ AuthStudioPage (KB-P3-36) (50)
-     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 684ms
-     ✓ opens drawer to add a new auth card and appends created card 1147ms
-     ✓ opens drawer to edit an existing card and updates it 579ms
-     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 441ms
-     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 593ms
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 359ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (52 tests) 8369ms
+   ✓ AuthStudioPage (KB-P3-36) (52)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 587ms
+     ✓ opens drawer to add a new auth card and appends created card 1127ms
+     ✓ opens drawer to edit an existing card and updates it 547ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 415ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 560ms
      ✓ Users & Permissions Tab (KANBA-176) (16)
-       ✓ opens + Add Local User modal and creates user successfully 300ms
-       ✓ opens Reset Password modal and resets user password 401ms
-       ✓ covers role change in add user modal and cancelling reset password modal 386ms
-       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 809ms
+       ✓ opens Reset Password modal and resets user password 346ms
+       ✓ covers role change in add user modal and cancelling reset password modal 348ms
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 714ms
 
  Test Files  19 passed (19)
-      Tests  606 passed (606)
-   Start at  10:55:40
-   Duration  12.22s (tests 55%, environment 26%, import 11%, transform 6%, worker 2%)
+      Tests  609 passed (609)
+   Start at  12:11:56
+   Duration  11.29s (tests 55%, environment 26%, import 11%, transform 6%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------

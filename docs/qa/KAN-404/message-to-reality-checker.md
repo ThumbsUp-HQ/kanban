@@ -75,8 +75,8 @@ Ticket KAN-404 delivers enterprise-grade sliding-window WebSudo (AAL2) authentic
    - Enforced strict `caller.aal2_verified_at is None` check in `kanban/custom_fields/approvals.py:310` raising 403 `AAL2_REQUIRED`.
 5. **Complete Automated Test Suites & Coverage:**
    - Expanded `test_websudo_sliding_aal2.py` testing non-advancement of sliding window on session read, 30s write throttle, 14,400s absolute cap, and `approvals.py` None verification guard.
-   - Pytest: 38 backend tests passed with 100% success in 21.68s with >= 95% coverage on all target modules.
-   - Vitest: 606 frontend tests across 19 test suites passed with 100% success with >= 95% branch coverage.
+   - Pytest: 38 backend tests passed with 100% success in 20.92s with >= 95% coverage on all target modules.
+   - Vitest: 609 frontend tests across 19 test suites passed with 100% success with >= 95% branch coverage.
    - Static checks: check-migrations, ruff, mypy, no-dashes, typecheck, lint, build all 100% clean.
 
 ---
@@ -88,8 +88,8 @@ All raw test logs, static check logs, screenshot captures, and cryptographic che
 1. `docs/qa/KAN-404/unit-test-results.txt`:
    - Static migration check: 82 migrations valid, single head `p6_20_oauth_clients_status_check`.
    - Raw output of 38 backend unit tests (`database/tests/test_p1_17_models.py`, `kanban/tests/auth/test_websudo_sliding_aal2.py`, `kanban/tests/auth/test_aal2_policy.py`, `kanban/tests/custom_fields/test_custom_field_approvals_api.py`, `kanban/tests/custom_fields/test_approvals_matrix.py`, `kanban/tests/security/test_admin_routes_protected.py`).
-   - Raw output of 606 Vitest frontend tests across 19 test suites.
-   - Total: 644 automated tests passed, 0 failures, 0 warnings.
+   - Raw output of 609 Vitest frontend tests across 19 test suites.
+   - Total: 647 automated tests passed, 0 failures, 0 warnings.
    - Code coverage on target modules:
      - Backend: `database.models.auth`: 100%, `kanban.api.v1.auth_session`: 96%, `kanban.auth.mfa.policy`: 97%, `kanban.custom_fields.approvals`: 96% (Total: 97%).
      - Frontend: All files: 99.36% Statements, 96.29% Branches, 99.60% Functions, 99.41% Lines.

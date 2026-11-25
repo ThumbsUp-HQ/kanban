@@ -4,7 +4,7 @@
 - **Ticket ID**: `KAN-404` (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `fix/KAN-404-rc1`
-- **Commit**: `ef4c957b`
+- **Commit**: `f50e8d82`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -75,11 +75,11 @@ All screenshots visually inspected via `read_file` confirming zero text clipping
 ## 4. Test Verification Summary
 
 - **Vitest Suite**:
-  - 606 passed across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines).
+  - 609 passed across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines).
   - 100% statement, function, branch, and line coverage on `WebSudoModalHost.tsx`.
   - 100% branch coverage and 100% statement/line coverage on `AdminStudioSubnav.tsx`.
 - **Python Backend Suite**:
-  - 38 Pytest backend tests passed in 21.68s with >= 95% coverage on all target modules.
+  - 38 Pytest backend tests passed in 20.92s with >= 95% coverage on all target modules.
   - 100% of admin routes pass `test_admin_routes_protected.py`.
 
 ---

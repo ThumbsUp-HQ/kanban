@@ -2776,9 +2776,16 @@ index 34ddb929..06fd4a14 100644
      }
    };
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
-index 70b9b1a5..569d771f 100644
+index 70b9b1a5..bdc527f6 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+ import React from 'react';
+ import { MemoryRouter } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 @@ -8,6 +8,7 @@ import * as client from '../../api/client';
  import * as adminAuthApi from './adminAuthApi';
  import type { AdminAuthCard } from './adminAuthApi';
@@ -2943,17 +2950,17 @@ index 70b9b1a5..569d771f 100644
  
      await waitFor(() => {
 -      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-+      expect(screen.queryByText(/Failed to update card status/i)).toBeNull();
-     });
- 
+-    });
+-
 -    // Click Cancel in modal
 -    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
 -    fireEvent.click(cancelBtn);
 -
 -    await waitFor(() => {
 -      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
--    });
--
++      expect(screen.queryByText(/Failed to update card status/i)).toBeNull();
+     });
+ 
 -    // Trigger AAL2 on delete and test session expired
 -    vi.spyOn(adminAuthApi, 'deleteAdminAuthCard').mockRejectedValueOnce(
 -      new ApiProblem(403, {
@@ -3022,12 +3029,12 @@ index 70b9b1a5..569d771f 100644
 -    await waitFor(() => {
 -      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
 -    });
+-
+-    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
+-    fireEvent.change(totpInput, { target: { value: '999999' } });
 +    const usersTab = screen.getByRole('tab', { name: /Users/i });
 +    fireEvent.click(usersTab);
  
--    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
--    fireEvent.change(totpInput, { target: { value: '999999' } });
--
 -    await waitFor(() => {
 -      expect(screen.getByText('Session expired. Please sign in again.')).toBeDefined();
 -    });
@@ -3053,7 +3060,22 @@ index 70b9b1a5..569d771f 100644
      });
  
      // 7. Move down on index 1 to cover nextNext === null
-@@ -2247,9 +2150,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+@@ -2232,10 +2135,11 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+         expect(screen.getByTestId('tab-roles')).toBeDefined();
+       });
+ 
+-      act(() => {
+-        fireEvent.click(screen.getByTestId('tab-roles'));
++      fireEvent.click(screen.getByTestId('tab-roles'));
++      await waitFor(() => {
++        expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
++        expect(screen.getByTestId('rbac-policy-builder')).toBeDefined();
+       });
+-      expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
+     });
+ 
+     it('handles AAL2 step up during loadCards and replays load mutation on success', async () => {
+@@ -2247,9 +2151,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
          if ((path as string) === '/api/v1/admin/auth-cards') {
            cardsCalls++;
            if (cardsCalls === 1) {
@@ -3064,26 +3086,26 @@ index 70b9b1a5..569d771f 100644
            }
            return { cards: mockCards };
          }
-@@ -2262,16 +2163,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+@@ -2262,16 +2164,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
        render(<AuthStudioPage />);
  
        await waitFor(() => {
 -        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-+        expect(cardsCalls).toBeGreaterThanOrEqual(1);
-       });
+-      });
 -
 -      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
 -      fireEvent.change(totpInput, { target: { value: '123456' } });
 -
 -      await waitFor(() => {
 -        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
--      });
++        expect(cardsCalls).toBeGreaterThanOrEqual(1);
+       });
 -      expect(cardsCalls).toBeGreaterThanOrEqual(2);
 +      expect(screen.queryByText(/Failed to load/i)).toBeNull();
      });
  
      it('handles AAL2 step up during loadUsers and replays load mutation on success', async () => {
-@@ -2284,9 +2178,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+@@ -2284,9 +2179,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
          if ((path as string).startsWith('/api/v1/admin/principals')) {
            principalCalls++;
            if (principalCalls === 1) {
@@ -3094,30 +3116,84 @@ index 70b9b1a5..569d771f 100644
            }
            return { principals: [] };
          }
-@@ -2296,16 +2188,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+@@ -2296,16 +2189,65 @@ describe('AuthStudioPage (KB-P3-36)', () => {
        render(<AuthStudioPage />);
  
        await waitFor(() => {
 -        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
--      });
--
++        expect(principalCalls).toBeGreaterThanOrEqual(1);
++      });
++      expect(screen.queryByText(/Failed to load/i)).toBeNull();
++    });
++
++    it('preserves card health and produces zero error alerts on Aal2StepUpCancelledError during handshake test (KAN-404)', async () => {
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        if ((path as string) === '/api/v1/auth/me') return adminUser;
++        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
++        if ((path as string).startsWith('/api/v1/admin/auth-cards/c-okta/test-handshake')) {
++          throw new Aal2StepUpCancelledError();
++        }
++        if ((path as string).startsWith('/api/v1/admin/principals')) {
++          return { principals: [] };
++        }
++        return {};
++      });
++
++      render(<AuthStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('test-handshake-okta')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('test-handshake-okta'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('health-chip-okta').textContent).toContain('UNVERIFIED');
++      });
++      expect(screen.queryByRole('alert')).toBeNull();
++    });
++
++    it('preserves card order and produces zero error alerts on Aal2StepUpCancelledError during reorder (KAN-404)', async () => {
++      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        if ((path as string) === '/api/v1/auth/me') return adminUser;
++        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
++        if ((path as string).includes('/reorder')) {
++          throw new Aal2StepUpCancelledError();
++        }
++        if ((path as string).startsWith('/api/v1/admin/principals')) {
++          return { principals: [] };
++        }
++        return {};
++      });
++
++      render(<AuthStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByLabelText('Move Okta SSO down')).toBeDefined();
+       });
+ 
 -      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
 -      fireEvent.change(totpInput, { target: { value: '123456' } });
--
--      await waitFor(() => {
++      fireEvent.click(screen.getByLabelText('Move Okta SSO down'));
+ 
+       await waitFor(() => {
 -        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-+        expect(principalCalls).toBeGreaterThanOrEqual(1);
++        expect(screen.queryByText('Failed to reorder card.')).toBeNull();
        });
 -      expect(principalCalls).toBeGreaterThanOrEqual(2);
-+      expect(screen.queryByText(/Failed to load/i)).toBeNull();
++      expect(screen.queryByRole('alert')).toBeNull();
      });
    });
  });
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-index 19d52ac1..f634da32 100644
+index 19d52ac1..0325e3e4 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, type JSX } from 'react';
+@@ -1,8 +1,8 @@
+-import React, { useState, useEffect, useCallback, type JSX } from 'react';
++import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
  import { Link, useInRouterContext } from 'react-router';
  import { QueryClientContext } from '@tanstack/react-query';
  import { apiFetch } from '../../api/client';
@@ -3149,7 +3225,7 @@ index 19d52ac1..f634da32 100644
  function parseLockoutError(
    err: unknown,
  ): { reasonCode: string | null; detail?: string | null | undefined } | null {
-@@ -166,13 +159,6 @@ export function AuthStudioPage(): JSX.Element {
+@@ -166,12 +159,13 @@ export function AuthStudioPage(): JSX.Element {
    // Drag and drop state
    const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
  
@@ -3159,14 +3235,58 @@ index 19d52ac1..f634da32 100644
 -    methods: MfaMethod[];
 -  } | null>(null);
 -  const [pendingMutation, setPendingMutation] = useState<PendingMutation | null>(null);
--
++  const isMountedRef = useRef(true);
++  useEffect(() => {
++    isMountedRef.current = true;
++    return () => {
++      isMountedRef.current = false;
++    };
++  }, []);
+ 
    // 1. Fetch current user and verify Server Admin access
    useEffect(() => {
-     async function checkAccess() {
-@@ -208,14 +194,11 @@ export function AuthStudioPage(): JSX.Element {
+@@ -182,18 +176,22 @@ export function AuthStudioPage(): JSX.Element {
+           '/api/v1/auth/me' as never,
+         );
+         const me = rawMe as CurrentUserResponse;
++        if (!isMountedRef.current) return;
+         setCurrentUser(me);
+         if (!me.is_server_admin) {
+           setAccessDenied(true);
+         }
+       } catch (err: unknown) {
++        if (!isMountedRef.current) return;
+         if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
+           setMfaEnrollmentRequired(true);
+         } else {
+           setAccessDenied(true);
+         }
+       } finally {
+-        setIsUserLoading(false);
++        if (isMountedRef.current) {
++          setIsUserLoading(false);
++        }
+       }
+     }
+ 
+@@ -202,20 +200,22 @@ export function AuthStudioPage(): JSX.Element {
+ 
+   // 2. Fetch cards if admin access confirmed
+   const loadCards = useCallback(async () => {
+-    setIsLoadingCards(true);
+-    setGeneralError(null);
++    if (isMountedRef.current) {
++      setIsLoadingCards(true);
++      setGeneralError(null);
++    }
+     try {
        const res = await fetchAdminAuthCards();
-       setCards(res.cards);
+-      setCards(res.cards);
++      if (isMountedRef.current) {
++        setCards(res.cards);
++      }
      } catch (err: unknown) {
++      if (!isMountedRef.current) return;
 +      if (isAal2StepUpCancelled(err)) {
 +        return;
 +      }
@@ -3181,10 +3301,34 @@ index 19d52ac1..f634da32 100644
        } else if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
          setAccessDenied(true);
        } else if (err instanceof Error) {
-@@ -237,14 +220,11 @@ export function AuthStudioPage(): JSX.Element {
+@@ -224,27 +224,31 @@ export function AuthStudioPage(): JSX.Element {
+         setGeneralError('Failed to load authentication cards.');
+       }
+     } finally {
+-      setIsLoadingCards(false);
++      if (isMountedRef.current) {
++        setIsLoadingCards(false);
++      }
+     }
+   }, []);
+ 
+   // 3. Fetch principals if admin access confirmed
+   const loadUsers = useCallback(async (filter?: string) => {
+-    setIsLoadingUsers(true);
+-    setUserActionError(null);
++    if (isMountedRef.current) {
++      setIsLoadingUsers(true);
++      setUserActionError(null);
++    }
+     try {
+       const activeFilter = filter !== undefined ? (filter === 'ALL' ? undefined : filter) : (principalKindFilter === 'ALL' ? undefined : principalKindFilter);
        const principals = await fetchAdminPrincipals(activeFilter);
-       setUsers(Array.isArray(principals) ? principals : []);
+-      setUsers(Array.isArray(principals) ? principals : []);
++      if (isMountedRef.current) {
++        setUsers(Array.isArray(principals) ? principals : []);
++      }
      } catch (err: unknown) {
++      if (!isMountedRef.current) return;
 +      if (isAal2StepUpCancelled(err)) {
 +        return;
 +      }
@@ -3199,7 +3343,18 @@ index 19d52ac1..f634da32 100644
        } else if (err instanceof ApiProblem && (err.status === 403 || err.status === 404)) {
          setAccessDenied(true);
        } else if (err instanceof Error) {
-@@ -274,36 +254,6 @@ export function AuthStudioPage(): JSX.Element {
+@@ -253,7 +257,9 @@ export function AuthStudioPage(): JSX.Element {
+         setUserActionError('Failed to load user principals.');
+       }
+     } finally {
+-      setIsLoadingUsers(false);
++      if (isMountedRef.current) {
++        setIsLoadingUsers(false);
++      }
+     }
+   }, [principalKindFilter]);
+ 
+@@ -274,36 +280,6 @@ export function AuthStudioPage(): JSX.Element {
    // First enabled external card gets Primary badge
    const primaryCardId = externalCards.find((c) => c.is_enabled)?.id;
  
@@ -3236,7 +3391,7 @@ index 19d52ac1..f634da32 100644
    // Toggle card enabled state
    const handleToggleEnabled = async (card: AdminAuthCard, enabled: boolean) => {
      const previousCards = [...cards];
-@@ -319,7 +269,7 @@ export function AuthStudioPage(): JSX.Element {
+@@ -319,7 +295,7 @@ export function AuthStudioPage(): JSX.Element {
      } catch (err: unknown) {
        setCards(previousCards);
  
@@ -3245,7 +3400,37 @@ index 19d52ac1..f634da32 100644
          return;
        }
  
-@@ -502,7 +452,7 @@ export function AuthStudioPage(): JSX.Element {
+@@ -360,6 +336,7 @@ export function AuthStudioPage(): JSX.Element {
+         ),
+       );
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setCards((prev) =>
+         prev.map((c) =>
+           c.id === card.id
+@@ -420,8 +397,9 @@ export function AuthStudioPage(): JSX.Element {
+         sort_rank: newRank,
+       });
+       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+-    } catch {
++    } catch (err: unknown) {
+       setCards(previousCards);
++      if (isAal2StepUpCancelled(err)) return;
+       setGeneralError('Failed to reorder card.');
+     }
+   };
+@@ -483,8 +461,9 @@ export function AuthStudioPage(): JSX.Element {
+         sort_rank: newRank,
+       });
+       setCards((prev) => prev.map((c) => (c.id === draggedCard.id ? updated : c)));
+-    } catch {
++    } catch (err: unknown) {
+       setCards(previousCards);
++      if (isAal2StepUpCancelled(err)) return;
+       setGeneralError('Failed to reorder card.');
+     }
+   };
+@@ -502,7 +481,7 @@ export function AuthStudioPage(): JSX.Element {
      } catch (err: unknown) {
        setCards(previousCards);
  
@@ -3254,7 +3439,7 @@ index 19d52ac1..f634da32 100644
          return;
        }
  
-@@ -554,6 +504,9 @@ export function AuthStudioPage(): JSX.Element {
+@@ -554,6 +533,9 @@ export function AuthStudioPage(): JSX.Element {
        );
        setUserActionSuccess('User role updated successfully.');
      } catch (err: unknown) {
@@ -3264,7 +3449,7 @@ index 19d52ac1..f634da32 100644
        setUserActionError(err instanceof Error ? err.message : 'Failed to update user role.');
      }
    };
-@@ -615,6 +568,9 @@ export function AuthStudioPage(): JSX.Element {
+@@ -615,6 +597,9 @@ export function AuthStudioPage(): JSX.Element {
        setNewUserPassword('');
        setNewUserRole('WORKSPACE_MEMBER');
      } catch (err: unknown) {
@@ -3274,7 +3459,7 @@ index 19d52ac1..f634da32 100644
        setUserActionError(err instanceof Error ? err.message : 'Failed to create principal.');
      } finally {
        setIsSubmittingUser(false);
-@@ -642,6 +598,9 @@ export function AuthStudioPage(): JSX.Element {
+@@ -642,6 +627,9 @@ export function AuthStudioPage(): JSX.Element {
        setNewPassword('');
        setConfirmPassword('');
      } catch (err: unknown) {
@@ -3284,7 +3469,20 @@ index 19d52ac1..f634da32 100644
        setUserActionError(err instanceof Error ? err.message : 'Failed to reset password.');
      } finally {
        setIsSubmittingPassword(false);
-@@ -1271,41 +1230,6 @@ export function AuthStudioPage(): JSX.Element {
+@@ -796,12 +784,6 @@ export function AuthStudioPage(): JSX.Element {
+         </div>
+       )}
+ 
+-      {activeTab === 'roles' && (
+-        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
+-          <RbacPolicyBuilder isServerAdmin={true} />
+-        </div>
+-      )}
+-
+       {/* LOCKOUT_PREVENTED Alert Banner */}
+       {lockoutError ? (
+         <LockoutPreventedBanner
+@@ -1271,41 +1253,6 @@ export function AuthStudioPage(): JSX.Element {
            </div>
          </div>
        ) : null}
@@ -3422,7 +3620,7 @@ index 2b1b78f0..c2a4466a 100644
 +  });
  });
 diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
-index cf12779a..236be191 100644
+index cf12779a..99ed59ab 100644
 --- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
 +++ b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
 @@ -8,8 +8,7 @@ import {
@@ -3449,7 +3647,15 @@ index cf12779a..236be191 100644
    const [reloadCounter, setReloadCounter] = useState<number>(0);
  
    useEffect(() => {
-@@ -75,36 +67,13 @@ export function RunnerStudioPage(): JSX.Element {
+@@ -46,6 +38,7 @@ export function RunnerStudioPage(): JSX.Element {
+         setRunners(list);
+       } catch (err: unknown) {
+         if (!active) return;
++        if (isAal2StepUpCancelled(err)) return;
+         setError(err instanceof Error ? err.message : 'Failed to load remote runners');
+       } finally {
+         if (active) {
+@@ -75,36 +68,13 @@ export function RunnerStudioPage(): JSX.Element {
        refreshRunners();
      } catch (err: unknown) {
        setIsRevoking(false);
@@ -3487,7 +3693,7 @@ index cf12779a..236be191 100644
    return (
      <section className="kb-runner-studio" data-testid="runner-studio-page">
        <AdminStudioSubnav activeTab="runners" />
-@@ -359,54 +328,7 @@ export function RunnerStudioPage(): JSX.Element {
+@@ -359,54 +329,7 @@ export function RunnerStudioPage(): JSX.Element {
          </div>
        )}
  
@@ -3544,7 +3750,7 @@ index cf12779a..236be191 100644
    );
  }
 diff --git a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
-index c5e8e561..95d0de0c 100644
+index c5e8e561..a4f9f889 100644
 --- a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
 @@ -8,7 +8,6 @@ import { RunnerStudioPage } from '../RunnerStudioPage';
@@ -3652,6 +3858,24 @@ index c5e8e561..95d0de0c 100644
      });
    });
  
+@@ -645,5 +600,17 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+ 
+       expect(screen.getByText(/kanban-agent-runner enroll --server-url/)).toBeDefined();
+     });
++
++    it('silently ignores Aal2StepUpCancelledError during load with zero error alerts (KAN-404)', async () => {
++      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockRejectedValueOnce(
++        new clientModule.Aal2StepUpCancelledError(),
++      );
++      render(<RunnerStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.queryByTestId('runner-studio-error')).toBeNull();
++      });
++      expect(screen.queryByRole('alert')).toBeNull();
++    });
+   });
+ });
 diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
 index 9cacc5b1..6bed8f69 100644
 --- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
@@ -4308,10 +4532,66 @@ index 6fda86fd..045d0953 100644
  
      // Test Edit URIs with missing client_name (uses client_id in title)
      fireEvent.click(screen.getByTestId('edit-uris-btn-client_disabled_no_name'));
+diff --git a/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx b/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
+index 7e76a3e9..5868e4fd 100644
+--- a/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
++++ b/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
+@@ -11,7 +11,7 @@
+  */
+ 
+ import React, { useEffect, useRef, useState, type JSX, type ChangeEvent, type SyntheticEvent } from 'react';
+-import { apiFetch } from '../../api/client';
++import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import './RbacPolicyBuilder.css';
+ 
+ export interface RbacRole {
+@@ -102,14 +102,23 @@ export function RbacPolicyBuilder({
+   const [isCreating, setIsCreating] = useState(false);
+ 
+   const checkboxRefs = useRef<Record<string, HTMLInputElement | null>>({});
++  const isMountedRef = useRef(true);
++
++  useEffect(() => {
++    isMountedRef.current = true;
++    return () => {
++      isMountedRef.current = false;
++    };
++  }, []);
+ 
+   // Fetch roles
+   const loadRoles = async (): Promise<void> => {
+-    setErrorMsg(null);
++    if (isMountedRef.current) setErrorMsg(null);
+     try {
+       const fetched = (await apiFetch('GET', '/api/v1/admin/rbac/roles' as never)) as RbacRole[];
+       /* v8 ignore next */
+       const safeFetched = Array.isArray(fetched) ? fetched : [];
++      if (!isMountedRef.current) return;
+       setRoles(safeFetched);
+ 
+       // Load permissions for each role
+@@ -142,6 +151,8 @@ export function RbacPolicyBuilder({
+         }
+       }
+     } catch (err: unknown) {
++      if (!isMountedRef.current) return;
++      if (isAal2StepUpCancelled(err)) return;
+       const e = err as { detail?: string; message?: string };
+       /* v8 ignore next */
+       setErrorMsg(e.detail ?? e.message ?? 'Failed to load RBAC roles.');
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
-index b1a7e31e..059f5763 100644
+index b1a7e31e..0da33a20 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.tsx
 +++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, useEffect, useCallback, useContext, type JSX } from 'react';
++import React, { useState, useEffect, useCallback, useContext, useRef, type JSX } from 'react';
+ import { useParams, useSearchParams, Link } from 'react-router';
+ import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
+ import { qk } from '../../api/queryKeys';
 @@ -20,12 +20,9 @@ import {
  import { McpConfigSnippetModal } from './McpConfigSnippetModal';
  import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
@@ -4326,9 +4606,11 @@ index b1a7e31e..059f5763 100644
  import { NotFoundView } from '../../app/routes';
  import { FieldHelpHint } from '../../components/help/FieldHelpHint';
  import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
-@@ -422,13 +419,6 @@ export function McpAccessStudio({
+@@ -421,20 +418,21 @@ export function McpAccessStudio({
+   // 2-step inline revocation confirmation states
    const [confirmRevokeKeyId, setConfirmRevokeKeyId] = useState<string | null>(null);
    const [confirmRevokeAppId, setConfirmRevokeAppId] = useState<string | null>(null);
++  const isMountedRef = useRef(true);
  
 -  // Inline AAL2 challenge state
 -  const [aal2Challenge, setAal2Challenge] = useState<{
@@ -4336,12 +4618,47 @@ index b1a7e31e..059f5763 100644
 -    methods: MfaMethod[];
 -  } | null>(null);
 -  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
--
++  useEffect(() => {
++    isMountedRef.current = true;
++    return () => {
++      isMountedRef.current = false;
++    };
++  }, []);
+ 
    const loadData = useCallback(async (): Promise<void> => {
      if (isDenied) {
-       setLoading(false);
-@@ -457,16 +447,8 @@ export function McpAccessStudio({
-         setConnectedApps(fetchedApps);
+-      setLoading(false);
++      if (isMountedRef.current) setLoading(false);
+       return;
+     }
+-    setLoading(true);
++    if (isMountedRef.current) setLoading(true);
+     try {
+       if (activeView === 'governance') {
+         const fetched = await fetchUnifiedMcpKeys({
+@@ -442,8 +440,10 @@ export function McpAccessStudio({
+           scope_tier: activeScope !== 'all' ? activeScope : undefined,
+           project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
+         });
+-        setKeys(fetched);
+-        setConnectedApps([]);
++        if (isMountedRef.current) {
++          setKeys(fetched);
++          setConnectedApps([]);
++        }
+       } else {
+         const [fetchedKeys, fetchedApps] = await Promise.all([
+           fetchUnifiedMcpKeys({
+@@ -453,27 +453,24 @@ export function McpAccessStudio({
+           }),
+           fetchConnectedApps(),
+         ]);
+-        setKeys(fetchedKeys);
+-        setConnectedApps(fetchedApps);
++        if (isMountedRef.current) {
++          setKeys(fetchedKeys);
++          setConnectedApps(fetchedApps);
++        }
        }
      } catch (err: unknown) {
 -      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
@@ -4358,8 +4675,11 @@ index b1a7e31e..059f5763 100644
 +        return;
        }
      } finally {
-       setLoading(false);
-@@ -474,6 +456,7 @@ export function McpAccessStudio({
+-      setLoading(false);
++      if (isMountedRef.current) {
++        setLoading(false);
++      }
+     }
    }, [activeView, activeScope, effectiveProjectKey, tier, isDenied]);
  
    useEffect(() => {
@@ -4367,7 +4687,7 @@ index b1a7e31e..059f5763 100644
      void loadData();
    }, [loadData]);
  
-@@ -612,16 +595,7 @@ export function McpAccessStudio({
+@@ -612,16 +609,7 @@ export function McpAccessStudio({
      try {
        await mintAction();
      } catch (err: unknown) {
@@ -4385,7 +4705,7 @@ index b1a7e31e..059f5763 100644
          return;
        }
        if (err instanceof Error) {
-@@ -646,16 +620,7 @@ export function McpAccessStudio({
+@@ -646,16 +634,7 @@ export function McpAccessStudio({
      try {
        await revokeAction();
      } catch (err: unknown) {
@@ -4403,7 +4723,7 @@ index b1a7e31e..059f5763 100644
          return;
        }
        if (err instanceof Error) {
-@@ -672,22 +637,16 @@ export function McpAccessStudio({
+@@ -672,22 +651,16 @@ export function McpAccessStudio({
      try {
        await revokeConnectedApp(grantId);
        setConnectedApps((prev) => prev.filter((app) => app.id !== grantId));
@@ -4430,7 +4750,7 @@ index b1a7e31e..059f5763 100644
    const getTierBadge = (
      keyTier: ScopeTier,
      allowedProjects?: string[] | null,
-@@ -1641,54 +1600,6 @@ export function McpAccessStudio({
+@@ -1641,54 +1614,6 @@ export function McpAccessStudio({
          />
        )}
  
@@ -4486,17 +4806,19 @@ index b1a7e31e..059f5763 100644
          <ConnectOAuthAppModal
            user={propUser ?? fetchedUser}
 diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
-index b84bd4f9..c2fa7263 100644
+index b84bd4f9..4cf87cea 100644
 --- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
 +++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
-@@ -2,10 +2,7 @@
+@@ -1,11 +1,8 @@
+ // Copyright 2026 Kanban Platform Contributors
  // Apache-2.0 License. See LICENSE for details.
  
- import React, { useState, useEffect, useCallback, type JSX } from 'react';
+-import React, { useState, useEffect, useCallback, type JSX } from 'react';
 -import { apiFetch } from '../../api/client';
 -import { ApiProblem } from '../../api/problem';
 -import { SecondFactorStep } from '../auth/SecondFactorStep';
 -import type { MfaMethod } from '../auth/authApi';
++import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 +import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
  import { FieldHelpHint } from '../../components/help/FieldHelpHint';
  import { McpAccessStudio } from './McpAccessStudio';
@@ -4520,9 +4842,11 @@ index b84bd4f9..c2fa7263 100644
  export function WorkloadFederationSection({
    isAdmin = false,
  }: WorkloadFederationSectionProps): JSX.Element {
-@@ -96,13 +81,6 @@ export function WorkloadFederationSection({
+@@ -95,40 +80,43 @@ export function WorkloadFederationSection({
+   const [formCidrs, setFormCidrs] = useState('');
    const [formTtl, setFormTtl] = useState('3600');
    const [submitting, setSubmitting] = useState(false);
++  const isMountedRef = useRef(true);
  
 -  // AAL2 state
 -  const [aal2Challenge, setAal2Challenge] = useState<{
@@ -4530,13 +4854,30 @@ index b84bd4f9..c2fa7263 100644
 -    methods: MfaMethod[];
 -  } | null>(null);
 -  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
--
++  useEffect(() => {
++    isMountedRef.current = true;
++    return () => {
++      isMountedRef.current = false;
++    };
++  }, []);
+ 
    const fetchPolicies = useCallback(async (): Promise<void> => {
      if (!isAdmin) return;
-     setLoading(true);
-@@ -114,21 +92,15 @@ export function WorkloadFederationSection({
+-    setLoading(true);
+-    setError(null);
++    if (isMountedRef.current) {
++      setLoading(true);
++      setError(null);
++    }
+     try {
+       const data = (await apiFetch(
+         'GET',
+         '/api/v1/admin/workload-identities',
        )) as WorkloadIdentityPolicyItem[] | undefined;
-       setPolicies(Array.isArray(data) ? data : []);
+-      setPolicies(Array.isArray(data) ? data : []);
++      if (isMountedRef.current) {
++        setPolicies(Array.isArray(data) ? data : []);
++      }
      } catch (err) {
 -      const challenge = extractAal2Challenge(err);
 -      if (challenge) {
@@ -4545,12 +4886,15 @@ index b84bd4f9..c2fa7263 100644
 -          await fetchPolicies();
 -        });
 -      } else {
--        setError(err instanceof Error ? err.message : 'Failed to load workload policies');
--      }
-+      if (isAal2StepUpCancelled(err)) return;
-+      setError(err instanceof Error ? err.message : 'Failed to load workload policies');
++      if (isMountedRef.current) {
++        if (isAal2StepUpCancelled(err)) return;
+         setError(err instanceof Error ? err.message : 'Failed to load workload policies');
+       }
      } finally {
-       setLoading(false);
+-      setLoading(false);
++      if (isMountedRef.current) {
++        setLoading(false);
++      }
      }
    }, [isAdmin]);
  
@@ -4559,7 +4903,7 @@ index b84bd4f9..c2fa7263 100644
      void fetchPolicies();
    }, [fetchPolicies]);
  
-@@ -209,15 +181,8 @@ export function WorkloadFederationSection({
+@@ -209,15 +197,8 @@ export function WorkloadFederationSection({
          setShowModal(false);
          await fetchPolicies();
        } catch (err) {
@@ -4577,7 +4921,7 @@ index b84bd4f9..c2fa7263 100644
        } finally {
          setSubmitting(false);
        }
-@@ -227,58 +192,31 @@ export function WorkloadFederationSection({
+@@ -227,58 +208,31 @@ export function WorkloadFederationSection({
    };
  
    const handleToggle = async (pol: WorkloadIdentityPolicyItem): Promise<void> => {
@@ -4658,7 +5002,7 @@ index b84bd4f9..c2fa7263 100644
      }
    };
  
-@@ -597,55 +535,6 @@ export function WorkloadFederationSection({
+@@ -597,55 +551,6 @@ export function WorkloadFederationSection({
            </div>
          </div>
        )}
@@ -4715,7 +5059,7 @@ index b84bd4f9..c2fa7263 100644
    );
  }
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-index 98a168ee..3694d9dc 100644
+index 98a168ee..8a624087 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 @@ -30,7 +30,7 @@ import {
@@ -4772,7 +5116,27 @@ index 98a168ee..3694d9dc 100644
    };
  
    const handleTestKey = async (cred: WebauthnCredentialItem): Promise<void> => {
-@@ -1405,60 +1392,7 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -423,7 +410,8 @@ export function PersonalSettingsPage(): JSX.Element {
+       if (res.recovery_codes.length > 0) {
+         setRecoveryModalCodes(res.recovery_codes);
+       }
+-    } catch (err) {
++    } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setErrorMsg(err instanceof Error ? err.message : 'Invalid TOTP code.');
+     }
+   };
+@@ -473,7 +461,8 @@ export function PersonalSettingsPage(): JSX.Element {
+       setSuccessMsg('Passkey renamed.');
+       setErrorMsg(null);
+       void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
+-    } catch (err) {
++    } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setErrorMsg(err instanceof Error ? err.message : 'Failed to rename passkey.');
+     }
+   };
+@@ -1405,60 +1394,7 @@ export function PersonalSettingsPage(): JSX.Element {
          </div>
        )}
  
@@ -5113,7 +5477,7 @@ index f04c56f1..540c3389 100644
        setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to remove group member.');
      }
 diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
-index 731d415c..38c3717e 100644
+index 731d415c..daf6a1e9 100644
 --- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 @@ -14,7 +14,6 @@ import {
@@ -5124,7 +5488,18 @@ index 731d415c..38c3717e 100644
  
  vi.mock('../../auth/SecondFactorStep', () => ({
    SecondFactorStep: ({
-@@ -1378,14 +1377,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -53,6 +52,10 @@ vi.mock('../../../app/useSystemStatus', () => ({
+   })),
+ }));
+ 
++vi.mock('../McpUnifiedStudio', () => ({
++  WorkloadFederationSection: () => <div data-testid="mock-workload-federation" />,
++}));
++
+ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+   const mockKeys: settingsApi.McpApiKeyItem[] = [
+     {
+@@ -1378,14 +1381,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      expect(deleteBit.checked).toBe(true);
    });
  
@@ -5142,7 +5517,7 @@ index 731d415c..38c3717e 100644
      );
      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
  
-@@ -1396,26 +1391,17 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1396,26 +1395,17 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      );
  
      await waitFor(() => {
@@ -5173,13 +5548,12 @@ index 731d415c..38c3717e 100644
        .mockResolvedValueOnce({
          id: 'k-stepped-up',
          label: 'Step-Up Key',
-@@ -1448,57 +1434,36 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1448,57 +1438,36 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      fireEvent.click(screen.getByTestId('mint-submit-btn'));
  
      await waitFor(() => {
 -      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-+      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalledTimes(1);
-     });
+-    });
 -
 -    // Test error and cancel
 -    fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
@@ -5190,7 +5564,8 @@ index 731d415c..38c3717e 100644
 -    fireEvent.click(screen.getByTestId('mint-submit-btn'));
 -    await waitFor(() => {
 -      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
--    });
++      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalledTimes(1);
+     });
 -    fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
 -    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
 +    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
@@ -5240,7 +5615,47 @@ index 731d415c..38c3717e 100644
      });
    });
  
-@@ -1625,10 +1590,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1550,17 +1519,32 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+     });
+ 
+     // Toggle views
+-    fireEvent.click(screen.getByTestId('view-governance-btn'));
+-    fireEvent.click(screen.getByTestId('view-mine-btn'));
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('view-governance-btn'));
++      await Promise.resolve();
++    });
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('view-mine-btn'));
++      await Promise.resolve();
++    });
+ 
+     // Toggle scope pills
+-    fireEvent.click(screen.getByTestId('scope-pill-project'));
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('scope-pill-project'));
++      await Promise.resolve();
++    });
+     expect(screen.getByTestId('scope-project-container')).not.toBeNull();
+-    fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
++    await act(async () => {
++      fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
++      await Promise.resolve();
++    });
+ 
+-    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
+-    fireEvent.click(screen.getByTestId('scope-pill-server'));
+-    fireEvent.click(screen.getByTestId('scope-pill-all'));
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('scope-pill-workspace'));
++      fireEvent.click(screen.getByTestId('scope-pill-server'));
++      fireEvent.click(screen.getByTestId('scope-pill-all'));
++      await Promise.resolve();
++    });
+   });
+ 
+   it('supports minting personal_user and project scoped keys with custom CIDRs', async () => {
+@@ -1625,10 +1609,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      });
    });
  
@@ -5254,7 +5669,7 @@ index 731d415c..38c3717e 100644
      );
      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
  
-@@ -1639,15 +1604,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1639,15 +1623,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      );
  
      await waitFor(() => {
@@ -5274,7 +5689,7 @@ index 731d415c..38c3717e 100644
      );
  
      const { unmount: unmount2 } = render(
-@@ -1665,12 +1630,12 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1665,12 +1649,12 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      fireEvent.click(screen.getByTestId('mint-submit-btn'));
  
      await waitFor(() => {
@@ -5290,7 +5705,7 @@ index 731d415c..38c3717e 100644
      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
        {
          id: 'k-stale-rev',
-@@ -1687,7 +1652,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1687,7 +1671,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
        },
      ]);
      const revokeSpy = vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce(
@@ -5299,7 +5714,7 @@ index 731d415c..38c3717e 100644
      );
  
      render(
-@@ -1704,9 +1669,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1704,9 +1688,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
  
      await waitFor(() => {
@@ -5311,7 +5726,7 @@ index 731d415c..38c3717e 100644
  
      // Also cover regular Error on revoke
      revokeSpy.mockRejectedValueOnce(new Error('Generic revoke failure'));
-@@ -1798,11 +1763,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1798,11 +1782,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      });
    });
  
@@ -5325,7 +5740,7 @@ index 731d415c..38c3717e 100644
      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
  
      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-@@ -1815,14 +1777,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -1815,14 +1796,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
      );
  
      await waitFor(() => {
@@ -6166,13 +6581,43 @@ index 885ac132..fd36d57b 100644
  
      it('renders empty providers notice and admin link for server admins when no external cards enabled', async () => {
 diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-index 6eb13101..788cc650 100644
+index 6eb13101..0981e220 100644
 --- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-@@ -3668,5 +3668,35 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+@@ -3647,13 +3647,15 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+       const nameHint = await screen.findByTestId('proj-name-help');
+       fireEvent.focus(nameHint);
+-      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('Default:');
+-      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('My Project');
++      const namePopover = await screen.findByTestId('proj-name-help-popover');
++      expect(namePopover.textContent).toContain('Default:');
++      expect(namePopover.textContent).toContain('My Project');
+       fireEvent.blur(nameHint);
+ 
+       const modulesHint = screen.getByTestId('proj-modules-help');
+       fireEvent.focus(modulesHint);
+-      expect(screen.getByTestId('proj-modules-help-popover').textContent).toContain('Enabled (true)');
++      const modulesPopover = await screen.findByTestId('proj-modules-help-popover');
++      expect(modulesPopover.textContent).toContain('Enabled (true)');
+       fireEvent.blur(modulesHint);
+ 
+       // Expand advanced section
+@@ -3661,12 +3663,44 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+ 
+       const skipHint = screen.getByTestId('proj-skip-seq-help');
+       fireEvent.focus(skipHint);
+-      expect(screen.getByTestId('proj-skip-seq-help-popover').textContent).toContain('Inherits Workspace Default (Enabled)');
++      const skipPopover = await screen.findByTestId('proj-skip-seq-help-popover');
++      expect(skipPopover.textContent).toContain('Inherits Workspace Default (Enabled)');
+       fireEvent.blur(skipHint);
+ 
+       const autoArchiveHint = screen.getByTestId('proj-auto-archive-help');
        fireEvent.focus(autoArchiveHint);
-       expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
-     });
+-      expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
++      const autoArchivePopover = await screen.findByTestId('proj-auto-archive-help-popover');
++      expect(autoArchivePopover.textContent).toContain('Disabled (blank; e.g. 30 days)');
++    });
 +
 +    it('silently ignores Aal2StepUpCancelledError during save with zero role="alert" banners (KAN-404)', async () => {
 +      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
@@ -6202,7 +6647,7 @@ index 6eb13101..788cc650 100644
 +      await waitFor(() => {
 +        expect(screen.queryByRole('alert')).toBeNull();
 +      });
-+    });
+     });
    });
  });
 diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
@@ -6302,7 +6747,7 @@ index a5d807fa..4c5b5695 100644
        }
        const msg = err instanceof Error ? err.message : 'Failed to bind git repository.';
 diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-index 3171de17..8b977bde 100644
+index 3171de17..19fddfd9 100644
 --- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 +++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 @@ -5,12 +5,9 @@ import React, { useState, useMemo, type JSX } from 'react';
@@ -6331,7 +6776,19 @@ index 3171de17..8b977bde 100644
  export function WorkflowStudioPage({
    projectKeyOverride,
    workspaceSlugOverride,
-@@ -120,12 +112,6 @@ export function WorkflowStudioPage({
+@@ -101,7 +93,10 @@ export function WorkflowStudioPage({
+ 
+   const rules = rulesQuery.data ?? [];
+   const isLoading = rulesQuery.isLoading;
+-  const generalError = rulesQuery.error ? rulesQuery.error.message : null;
++  const generalError =
++    rulesQuery.error && !isAal2StepUpCancelled(rulesQuery.error)
++      ? rulesQuery.error.message
++      : null;
+ 
+   // Dialog and drawer state
+   const attachParam = searchParams.get('attach');
+@@ -120,12 +115,6 @@ export function WorkflowStudioPage({
      to_state: string;
    } | null>(null);
  
@@ -6344,7 +6801,7 @@ index 3171de17..8b977bde 100644
  
    // Auxiliary data queries
    const statesQuery = useQuery({
-@@ -160,30 +146,6 @@ export function WorkflowStudioPage({
+@@ -160,30 +149,6 @@ export function WorkflowStudioPage({
      return <NotFoundView />;
    }
  
@@ -6375,7 +6832,7 @@ index 3171de17..8b977bde 100644
    // Reorder hooks handler
    const handleReorder = async (
      transition: { from_state: string | null; to_state: string },
-@@ -202,7 +164,7 @@ export function WorkflowStudioPage({
+@@ -202,7 +167,7 @@ export function WorkflowStudioPage({
      try {
        await action();
      } catch (err: unknown) {
@@ -6384,7 +6841,7 @@ index 3171de17..8b977bde 100644
          return;
        }
        throw err;
-@@ -223,7 +185,7 @@ export function WorkflowStudioPage({
+@@ -223,7 +188,7 @@ export function WorkflowStudioPage({
      try {
        await action();
      } catch (err: unknown) {
@@ -6393,7 +6850,7 @@ index 3171de17..8b977bde 100644
          return;
        }
      }
-@@ -239,7 +201,7 @@ export function WorkflowStudioPage({
+@@ -239,7 +204,7 @@ export function WorkflowStudioPage({
      try {
        await action();
      } catch (err: unknown) {
@@ -6402,7 +6859,7 @@ index 3171de17..8b977bde 100644
          return;
        }
      }
-@@ -266,7 +228,7 @@ export function WorkflowStudioPage({
+@@ -266,7 +231,7 @@ export function WorkflowStudioPage({
      try {
        await action();
      } catch (err: unknown) {
@@ -6411,7 +6868,7 @@ index 3171de17..8b977bde 100644
          return;
        }
        throw err;
-@@ -350,7 +312,6 @@ export function WorkflowStudioPage({
+@@ -350,7 +315,6 @@ export function WorkflowStudioPage({
        <GitRepoBindingsSection
          projectKey={projectKey}
          isUserAdmin={isUserAdmin}
@@ -6419,7 +6876,7 @@ index 3171de17..8b977bde 100644
        />
  
        {/* Attach / Edit Hook Dialog */}
-@@ -382,43 +343,7 @@ export function WorkflowStudioPage({
+@@ -382,43 +346,7 @@ export function WorkflowStudioPage({
          />
        )}
  
@@ -6596,7 +7053,7 @@ index 79e337f4..a7e12676 100644
  
    it('renders rules with from_state === null, handles non-AAL2 error on toggle, and resolves route projectKey param', async () => {
 diff --git a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
-index bdb65a6e..48443291 100644
+index bdb65a6e..3e2c8a8d 100644
 --- a/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
 +++ b/kanban/web/src/features/workflows/__tests__/workflowCoverageBooster.test.tsx
 @@ -912,26 +912,11 @@ describe('Workflow Studio Coverage Booster', () => {
@@ -6628,7 +7085,7 @@ index bdb65a6e..48443291 100644
  
        render(
          <QueryClientProvider client={queryClient}>
-@@ -945,33 +930,18 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -945,33 +930,36 @@ describe('Workflow Studio Coverage Booster', () => {
          expect(screen.getByText('require-qa-proof-link')).toBeDefined();
        });
  
@@ -6655,40 +7112,66 @@ index bdb65a6e..48443291 100644
      });
  
 -    it('exercises AAL2 challenge cancel and session expired handlers', async () => {
-+    it('exercises Aal2StepUpCancelledError on hook enable', async () => {
-       vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
+-      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
 -      const aal2Err = new ApiProblem(403, {
 -        code: 'AAL2_REQUIRED',
 -        challenge_id: 'stepup-1',
 -        methods: ['totp'],
 -      });
 -      vi.spyOn(api, 'disableWorkflowHook').mockRejectedValue(aal2Err);
-+      vi.spyOn(api, 'enableWorkflowHook').mockRejectedValue(new client.Aal2StepUpCancelledError());
++    it('exercises Aal2StepUpCancelledError on hook enable', async () => {
++      const disabledRule: api.TransitionRule = {
++        from_state: 'In Review',
++        to_state: 'Done',
++        active_hook_count: 0,
++        hooks: [
++          {
++            id: 'hook-cancel-test',
++            name: 'test-cancel-hook',
++            from_state: 'In Review',
++            to_state: 'Done',
++            hook_kind: 'sync_validator',
++            sort_rank: '01',
++            failure_policy: 'fail_closed',
++            manifest_sha256: 'deadbeef123',
++            is_enabled: false,
++          },
++        ],
++      };
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([disabledRule]);
++      const enableSpy = vi.spyOn(api, 'enableWorkflowHook').mockRejectedValue(new client.Aal2StepUpCancelledError());
  
        render(
          <QueryClientProvider client={queryClient}>
-@@ -984,19 +954,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -982,21 +970,17 @@ describe('Workflow Studio Coverage Booster', () => {
+       );
+ 
        await waitFor(() => {
-         expect(screen.getByText('require-qa-proof-link')).toBeDefined();
+-        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
++        expect(screen.getByText('test-cancel-hook')).toBeDefined();
        });
--
+ 
 -      // Toggle hook -> triggers AAL2 modal
 -      fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' }));
 -
 -      await waitFor(() => {
 -        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
 -      });
--
++      const toggle = screen.getByRole('checkbox', { name: 'Toggle test-cancel-hook' });
++      fireEvent.click(toggle);
+ 
 -      // Click Cancel in AAL2 modal
 -      fireEvent.click(screen.getByRole('button', { name: /Cancel and return to sign-in/i }));
--      await waitFor(() => {
+       await waitFor(() => {
 -        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
--      });
++        expect(enableSpy).toHaveBeenCalledWith('hook-cancel-test');
+       });
 +      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
++      expect(screen.queryByRole('alert')).toBeNull();
      });
  
      it('exercises enabling a disabled hook and AAL2 challenge on update with session expiration', async () => {
-@@ -1023,21 +981,7 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1023,21 +1007,7 @@ describe('Workflow Studio Coverage Booster', () => {
        const enableSpy = vi.spyOn(api, 'enableWorkflowHook').mockResolvedValue(undefined);
        const updateSpy = vi
          .spyOn(api, 'updateWorkflowHook')
@@ -6711,7 +7194,7 @@ index bdb65a6e..48443291 100644
  
        render(
          <QueryClientProvider client={queryClient}>
-@@ -1058,26 +1002,16 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1058,26 +1028,16 @@ describe('Workflow Studio Coverage Booster', () => {
          expect(enableSpy).toHaveBeenCalledWith('hook-disabled');
        });
  
@@ -6723,7 +7206,7 @@ index bdb65a6e..48443291 100644
        fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
  
 -      // AAL2 modal opens
--      await waitFor(() => {
+       await waitFor(() => {
 -        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
 -      });
 -      expect(updateSpy).toHaveBeenCalled();
@@ -6733,7 +7216,7 @@ index bdb65a6e..48443291 100644
 -        target: { value: '999999' },
 -      });
 -
-       await waitFor(() => {
+-      await waitFor(() => {
 -        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
 +        expect(updateSpy).toHaveBeenCalled();
        });
@@ -6741,7 +7224,7 @@ index bdb65a6e..48443291 100644
      });
  
      it('exercises projectQuery capabilities success, failure, and non-admin states', async () => {
-@@ -1154,12 +1088,9 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1154,12 +1114,9 @@ describe('Workflow Studio Coverage Booster', () => {
  
        // Test reorder AAL2 challenge
        vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
@@ -6757,7 +7240,7 @@ index bdb65a6e..48443291 100644
  
        const qcReorder = new QueryClient({ defaultOptions: { queries: { retry: false } } });
        render(
-@@ -1174,11 +1105,12 @@ describe('Workflow Studio Coverage Booster', () => {
+@@ -1174,11 +1131,12 @@ describe('Workflow Studio Coverage Booster', () => {
          expect(screen.getByText('require-qa-proof-link')).toBeDefined();
        });
  
@@ -6773,19 +7256,40 @@ index bdb65a6e..48443291 100644
  
      it('renders empty studio state when rules array is empty', async () => {
 diff --git a/scripts/capture_kan404_screenshots.mjs b/scripts/capture_kan404_screenshots.mjs
-index 05224706..db6efb7b 100644
+index 05224706..69b0ad1d 100644
 --- a/scripts/capture_kan404_screenshots.mjs
 +++ b/scripts/capture_kan404_screenshots.mjs
-@@ -677,6 +677,18 @@ async function main() {
+@@ -70,6 +70,26 @@ async function waitForServer(url, timeoutMs = 30000) {
+ }
+ 
+ async function setupInterceptions(page, state) {
++  await page.addInitScript(() => {
++    class MockWS extends EventTarget {
++      constructor(url, protocols) {
++        super();
++        this.url = url;
++        this.protocols = protocols;
++        this.readyState = 1;
++        setTimeout(() => {
++          this.dispatchEvent(new Event('open'));
++        }, 10);
++      }
++      send() {}
++      close() {
++        this.readyState = 3;
++        this.dispatchEvent(new Event('close'));
++      }
++    }
++    window.WebSocket = MockWS;
++  });
++
+   await page.route('**/*', async (route) => {
+     const url = route.request().url();
+     const method = route.request().method();
+@@ -677,6 +697,12 @@ async function main() {
        const sudoPill = page.locator('[data-testid="admin-sudo-pill"]');
        await sudoPill.waitFor({ state: 'visible', timeout: 5000 });
  
-+      await page.evaluate(() => {
-+        document.querySelectorAll('.realtime-status-chip').forEach((el) => {
-+          el.style.display = 'none';
-+        });
-+      });
-+
 +      // Scroll so both the sudo pill and the AuthCardRow are visible
 +      const authCard = page.locator('.auth-card-row').first();
 +      if (await authCard.count()) {
