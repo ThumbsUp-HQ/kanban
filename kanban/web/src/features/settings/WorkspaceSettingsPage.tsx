@@ -593,6 +593,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         // Notify topbar header pills of air-gap status update
         window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
       } finally {
@@ -651,6 +652,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setSuccessMessage(`User ${newDisplayName} created successfully.`);
         await refreshPrincipals();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create workspace user.');
       } finally {
@@ -681,6 +683,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         prev.map((p) => (p.id === principalId ? { ...p, role, role_name: role } : p)),
       );
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update member role.');
     }
@@ -708,6 +711,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSuccessMessage('Member removed from workspace.');
       setPrincipals((prev) => prev.filter((p) => p.id !== principalId));
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to remove workspace member.');
     }
@@ -746,6 +750,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         }
         await refreshPrincipals();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create group.');
       } finally {
@@ -769,6 +774,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSelectedAddMemberId('');
       void loadGroupMembers(groupId);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string; code?: string };
       const msg =
         errObj.detail ??
@@ -791,6 +797,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSuccessMessage('Member removed from group.');
       void loadGroupMembers(groupId);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to remove group member.');
     }

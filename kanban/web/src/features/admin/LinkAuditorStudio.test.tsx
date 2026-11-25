@@ -7,7 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { LinkAuditorStudio, formatEntitySummary } from './LinkAuditorStudio';
-import { apiFetch } from '../../api/client';
+import { apiFetch, Aal2StepUpCancelledError } from '../../api/client';
 
 vi.mock('../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../api/client')>(
@@ -741,5 +741,42 @@ describe('LinkAuditorStudio', () => {
     );
 
     expect(screen.getByTestId('link-auditor-loading')).toBeDefined();
+  });
+
+  it('silently ignores Aal2StepUpCancelledError during purge with zero role="alert" banners (KAN-404)', async () => {
+    vi.mocked(apiFetch).mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path === '/api/v1/auth/me') return mockAdminUser;
+      if (path === '/api/v1/admin/object-links/audits') {
+        return { items: mockAuditItems, has_more: false };
+      }
+      if (path === '/api/v1/admin/object-links:purge') {
+        throw new Aal2StepUpCancelledError();
+      }
+      return [];
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/admin/link-auditor']}>
+          <LinkAuditorStudio />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('purge-single-btn-aud-1')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('purge-single-btn-aud-1'));
+    fireEvent.change(screen.getByTestId('purge-reason-input'), {
+      target: { value: 'Valid administrative reason for purge' },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-purge-btn')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 });

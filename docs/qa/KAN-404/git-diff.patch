@@ -3385,6 +3385,42 @@ index e1f25a13..dfb94afc 100644
        /* v8 ignore next 5 */
        if (err instanceof Error) {
          setExportError(err.message);
+diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+index 2b1b78f0..c2a4466a 100644
+--- a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
++++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { MemoryRouter } from 'react-router';
+ import { PlaneImportStudio, extractEntityCounts } from '../PlaneImportStudio';
+ import * as planeImportApi from '../planeImportApi';
++import { Aal2StepUpCancelledError } from '../../../api/client';
+ 
+ const sampleBundle = {
+   projects: [{ id: 'p1', identifier: 'KB', name: 'Kanban Project' }],
+@@ -529,4 +530,23 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+     fireEvent.click(dryRunBtn);
+     expect(screen.getAllByText(/Invalid User Mapping JSON/i).length).toBeGreaterThan(0);
+   });
++
++  it('silently ignores Aal2StepUpCancelledError during import with zero role="alert" banners (KAN-404)', async () => {
++    vi.spyOn(planeImportApi, 'submitPlaneImport').mockRejectedValue(
++      new Aal2StepUpCancelledError(),
++    );
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    const textarea = screen.getByTestId('paste-textarea');
++    fireEvent.change(textarea, { target: { value: JSON.stringify(sampleBundle) } });
++
++    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
++    await waitFor(() => {
++      expect(screen.queryByRole('alert')).toBeNull();
++    });
++  });
+ });
 diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
 index cf12779a..236be191 100644
 --- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
@@ -3778,6 +3814,61 @@ index 418f081c..c85c2c6b 100644
      try {
        const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
          authenticated?: boolean;
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+index 8fcd6543..484c67ed 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+@@ -7,7 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { LinkAuditorStudio, formatEntitySummary } from './LinkAuditorStudio';
+-import { apiFetch } from '../../api/client';
++import { apiFetch, Aal2StepUpCancelledError } from '../../api/client';
+ 
+ vi.mock('../../api/client', async () => {
+   const actual = await vi.importActual<typeof import('../../api/client')>(
+@@ -742,4 +742,41 @@ describe('LinkAuditorStudio', () => {
+ 
+     expect(screen.getByTestId('link-auditor-loading')).toBeDefined();
+   });
++
++  it('silently ignores Aal2StepUpCancelledError during purge with zero role="alert" banners (KAN-404)', async () => {
++    vi.mocked(apiFetch).mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      if (path === '/api/v1/auth/me') return mockAdminUser;
++      if (path === '/api/v1/admin/object-links/audits') {
++        return { items: mockAuditItems, has_more: false };
++      }
++      if (path === '/api/v1/admin/object-links:purge') {
++        throw new Aal2StepUpCancelledError();
++      }
++      return [];
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/admin/link-auditor']}>
++          <LinkAuditorStudio />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('purge-single-btn-aud-1')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('purge-single-btn-aud-1'));
++    fireEvent.change(screen.getByTestId('purge-reason-input'), {
++      target: { value: 'Valid administrative reason for purge' },
++    });
++    await waitFor(() => {
++      expect(screen.getByTestId('confirm-purge-btn')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
++    await waitFor(() => {
++      expect(screen.queryByRole('alert')).toBeNull();
++    });
++  });
+ });
 diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
 index aef3c596..5521eb78 100644
 --- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
@@ -4135,7 +4226,7 @@ index 4925c573..2cc0acb5 100644
          setEditError(err.message);
        } else {
 diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-index 6fda86fd..72d53d13 100644
+index 6fda86fd..045d0953 100644
 --- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
 +++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
 @@ -246,10 +246,7 @@ describe('OAuthClientGovernanceStudio', () => {
@@ -4160,6 +4251,63 @@ index 6fda86fd..72d53d13 100644
    });
  
    it('handles action patch and delete error branches', async () => {
+@@ -1131,6 +1125,8 @@ describe('OAuthClientGovernanceStudio', () => {
+     // No error alert rendered when step-up is cancelled
+     await waitFor(() => {
+       expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
++      expect(screen.queryByRole('alert')).toBeNull();
+     });
+ 
+     // Also in action handlers
+@@ -1153,6 +1149,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Revoke cancel
+     act(() => {
+@@ -1163,6 +1160,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Delete cancel
+     act(() => {
+@@ -1173,6 +1171,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Bulk delete cancel
+     act(() => {
+@@ -1184,6 +1183,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Purge cancel
+     act(() => {
+@@ -1194,6 +1194,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Register cancel
+     act(() => {
+@@ -1255,6 +1256,7 @@ describe('OAuthClientGovernanceStudio', () => {
+       await Promise.resolve();
+     });
+     expect(screen.queryByTestId('error-alert')).toBeNull();
++    expect(screen.queryByRole('alert')).toBeNull();
+ 
+     // Test Edit URIs with missing client_name (uses client_id in title)
+     fireEvent.click(screen.getByTestId('edit-uris-btn-client_disabled_no_name'));
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
 index b1a7e31e..059f5763 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.tsx
@@ -4834,7 +4982,7 @@ index c7d5b9ee..68789e31 100644
          setDangerError(errObj.message ?? 'Failed to execute project deletion.');
          setDangerStage('requested');
 diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
-index f04c56f1..81f4ffd8 100644
+index f04c56f1..540c3389 100644
 --- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
 @@ -14,7 +14,7 @@
@@ -4908,6 +5056,62 @@ index f04c56f1..81f4ffd8 100644
        setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
      } finally {
        setIsExecutingPurge(false);
+@@ -588,6 +593,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         // Notify topbar header pills of air-gap status update
+         window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string };
+         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
+       } finally {
+@@ -646,6 +652,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         setSuccessMessage(`User ${newDisplayName} created successfully.`);
+         await refreshPrincipals();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string };
+         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create workspace user.');
+       } finally {
+@@ -676,6 +683,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         prev.map((p) => (p.id === principalId ? { ...p, role, role_name: role } : p)),
+       );
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string; detail?: string };
+       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update member role.');
+     }
+@@ -703,6 +711,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setSuccessMessage('Member removed from workspace.');
+       setPrincipals((prev) => prev.filter((p) => p.id !== principalId));
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string; detail?: string };
+       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to remove workspace member.');
+     }
+@@ -741,6 +750,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         }
+         await refreshPrincipals();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string };
+         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create group.');
+       } finally {
+@@ -764,6 +774,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setSelectedAddMemberId('');
+       void loadGroupMembers(groupId);
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string; detail?: string; code?: string };
+       const msg =
+         errObj.detail ??
+@@ -786,6 +797,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setSuccessMessage('Member removed from group.');
+       void loadGroupMembers(groupId);
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string; detail?: string };
+       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to remove group member.');
+     }
 diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 index 731d415c..38c3717e 100644
 --- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
@@ -5961,6 +6165,100 @@ index 885ac132..fd36d57b 100644
      });
  
      it('renders empty providers notice and admin link for server admins when no external cards enabled', async () => {
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index 6eb13101..788cc650 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -3668,5 +3668,35 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       fireEvent.focus(autoArchiveHint);
+       expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
+     });
++
++    it('silently ignores Aal2StepUpCancelledError during save with zero role="alert" banners (KAN-404)', async () => {
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        const url: string = path;
++        const m = method.toUpperCase();
++        if (url.includes('/api/v1/auth/me')) {
++          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
++        }
++        if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
++          throw new clientModule.Aal2StepUpCancelledError();
++        }
++        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
++        if (url.includes('/api/v1/projects/KAN/modules')) return [];
++        if (url.includes('/api/v1/projects/KAN/states')) return [];
++        if (url.includes('/api/v1/projects/KAN/labels')) return [];
++        if (url.includes('/api/v1/projects/KAN/members')) return [];
++        if (url.includes('/api/v1/projects/KAN')) {
++          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
++        }
++        return {};
++      });
++
++      renderComponent('KAN');
++      const saveBtn = await screen.findByTestId('save-general-btn');
++      fireEvent.click(saveBtn);
++      await waitFor(() => {
++        expect(screen.queryByRole('alert')).toBeNull();
++      });
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index d1567cd5..4f0b3928 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -2818,4 +2818,49 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     fireEvent.focus(skipHint);
+     expect(screen.getByTestId('ws-skip-seq-help-popover').textContent).toContain('Enabled (true)');
+   });
++
++  it('silently ignores Aal2StepUpCancelledError during general settings save with zero role="alert" banners (KAN-404)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/auth/me')) {
++        return {
++          id: 'user-admin',
++          is_server_admin: true,
++          is_workspace_admin: true,
++          workspace_role: 'SERVER_ADMIN',
++        };
++      }
++      if (url.includes('/api/v1/workspaces/current')) {
++        return {
++          id: 'ws-1',
++          name: 'Primary Workspace',
++          slug: 'primary-workspace',
++        };
++      }
++      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
++        return {
++          workspace_id: 'ws-1',
++          name: 'Primary Workspace',
++          slug: 'primary-workspace',
++          issue_import_enabled: true,
++          issue_export_allowed_roles: ['workspace_admin', 'project_admin', 'member'],
++        };
++      }
++      if (url.includes('/api/v1/admin/workspace-settings') && m === 'PATCH') {
++        throw new clientModule.Aal2StepUpCancelledError();
++      }
++      return [];
++    });
++
++    renderComponent();
++    const saveBtn = await screen.findByTestId('save-workspace-btn');
++    fireEvent.click(saveBtn);
++    await waitFor(() => {
++      expect(screen.queryByRole('alert')).toBeNull();
++      expect(screen.queryByTestId('workspace-settings-error')).toBeNull();
++    });
++  });
+ });
 diff --git a/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx b/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
 index a5d807fa..4c5b5695 100644
 --- a/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx

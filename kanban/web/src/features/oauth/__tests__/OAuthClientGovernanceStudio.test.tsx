@@ -1125,6 +1125,8 @@ describe('OAuthClientGovernanceStudio', () => {
     // No error alert rendered when step-up is cancelled
     await waitFor(() => {
       expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     // Also in action handlers
@@ -1147,6 +1149,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Revoke cancel
     act(() => {
@@ -1157,6 +1160,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Delete cancel
     act(() => {
@@ -1167,6 +1171,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Bulk delete cancel
     act(() => {
@@ -1178,6 +1183,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Purge cancel
     act(() => {
@@ -1188,6 +1194,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Register cancel
     act(() => {
@@ -1249,6 +1256,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Test Edit URIs with missing client_name (uses client_id in title)
     fireEvent.click(screen.getByTestId('edit-uris-btn-client_disabled_no_name'));

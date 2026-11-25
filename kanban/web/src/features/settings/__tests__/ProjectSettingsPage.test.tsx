@@ -3668,5 +3668,35 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       fireEvent.focus(autoArchiveHint);
       expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
     });
+
+    it('silently ignores Aal2StepUpCancelledError during save with zero role="alert" banners (KAN-404)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url: string = path;
+        const m = method.toUpperCase();
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
+          throw new clientModule.Aal2StepUpCancelledError();
+        }
+        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/states')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        if (url.includes('/api/v1/projects/KAN/members')) return [];
+        if (url.includes('/api/v1/projects/KAN')) {
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      const saveBtn = await screen.findByTestId('save-general-btn');
+      fireEvent.click(saveBtn);
+      await waitFor(() => {
+        expect(screen.queryByRole('alert')).toBeNull();
+      });
+    });
   });
 });

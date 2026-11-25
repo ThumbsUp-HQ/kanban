@@ -55,13 +55,13 @@
 ## 3. Quality Gates & Test Results
 
 - **Unit Tests**:
-  - 89 Pytest backend tests passing in 38.06s with >= 95% coverage on all target modules (database.models.auth: 100%, kanban.api.v1.auth_session: 97%, kanban.auth.mfa.policy: 97%, kanban.custom_fields.approvals: 96%; Total: 97%).
-  - 217 Vitest frontend tests passing across 8 test suites with branch coverage >= 95% (All files: 99.4% stmts / 95.75% branch / 99.57% funcs / 99.46% lines; WebSudoModalHost: 100% stmts / 100% branch; AdminStudioSubnav: 100% stmts / 95.55% branch; client.ts: 99.45% lines / 95.08% branch).
+  - 38 Pytest backend tests passing in 21.68s with >= 95% coverage on all target modules (database.models.auth: 100%, kanban.api.v1.auth_session: 96%, kanban.auth.mfa.policy: 97%, kanban.custom_fields.approvals: 96%; Total: 97%).
+  - 606 Vitest frontend tests passing across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines; WebSudoModalHost: 100% stmts / 100% branch; AdminStudioSubnav: 100% stmts / 100% branch; client.ts: 99.45% lines / 95.08% branch).
 - **Static Analysis & Build**:
   - 0 ruff errors (`uv run ruff check .`).
   - 0 mypy errors in 1369 source files (`uv run mypy`).
   - 0 tsc errors, 0 linter warnings (`pnpm typecheck`, `pnpm lint`).
-  - Clean production build (1.42s, 762 modules transformed).
+  - Clean production build (1.26s, 762 modules transformed).
   - 0 forbidden Unicode dashes (`python3 scripts/check_no_dashes.py --all`).
   - Manifest verified 100% OK with `sha256sum -c`.
 
