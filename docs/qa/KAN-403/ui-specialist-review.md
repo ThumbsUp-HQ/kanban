@@ -5,7 +5,7 @@
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f`
-- **Head Commit**: `2ec6204a`
+- **Head Commit**: `cac0ea4e`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
