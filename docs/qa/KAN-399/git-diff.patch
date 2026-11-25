@@ -1,0 +1,580 @@
+diff --git a/agent/remote_runner/cli.py b/agent/remote_runner/cli.py
+index 1be88cbc..e96ac0aa 100644
+--- a/agent/remote_runner/cli.py
++++ b/agent/remote_runner/cli.py
+@@ -36,7 +36,13 @@ from agent.remote_runner.daemon import (
+ )
+ from kanban.logging import configure_logging
+ 
+-__all__ = ["enroll_runner", "main", "run_daemon"]
++__all__ = [
++    "default_runner_config_path",
++    "default_runner_state_dir",
++    "enroll_runner",
++    "main",
++    "run_daemon",
++]
+ 
+ _HTTP_CREATED: Final[int] = 201
+ 
+@@ -84,6 +90,44 @@ def _write_secure_file(path: Path, data: bytes | str, mode: int = 0o600) -> None
+         raise
+ 
+ 
++def default_runner_state_dir() -> Path:
++    """Return default runner state directory with 0o700 permissions."""
++    env_override = os.environ.get("KB_RUNNER_STATE_DIR")
++    if env_override:
++        state_dir = Path(env_override)
++    elif hasattr(os, "geteuid") and os.geteuid() == 0:
++        state_dir = Path("/var/lib/kanban-runner")
++    else:
++        state_dir = (
++            Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
++            / "kanban-runner"
++        )
++
++    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
++    with contextlib.suppress(OSError):
++        os.chmod(state_dir, 0o700)
++    return state_dir
++
++
++def default_runner_config_path() -> Path:
++    """Return default runner configuration file path."""
++    env_config = os.environ.get("KB_RUNNER_CONFIG")
++    if env_config:
++        return Path(env_config)
++
++    state_dir = default_runner_state_dir()
++    for candidate in (
++        state_dir / "runner.toml",
++        state_dir / "config.yaml",
++        Path("/etc/kanban-runner/runner.toml"),
++        Path("/etc/kanban-runner/config.yaml"),
++    ):
++        if candidate.is_file():
++            return candidate
++
++    return state_dir / "runner.toml"
++
++
+ def enroll_runner(  # noqa: PLR0913
+     server_url: str,
+     enrollment_token: str,
+@@ -232,7 +276,11 @@ def main(argv: list[str] | None = None) -> int:
+     # Enroll subcommand
+     enroll_parser = subparsers.add_parser("enroll", help="Enroll runner with server using token")
+     enroll_parser.add_argument(
+-        "--server-url", required=True, help="Base HTTPS URL of 👍kanban server"
++        "--server-url",
++        "--url",
++        dest="server_url",
++        required=True,
++        help="Base HTTPS URL of 👍kanban server",
+     )
+     enroll_parser.add_argument(
+         "--token-stdin",
+@@ -244,8 +292,8 @@ def main(argv: list[str] | None = None) -> int:
+     enroll_parser.add_argument(
+         "--state-dir",
+         type=Path,
+-        default=Path("/var/lib/kanban-runner"),
+-        help="Directory to store certificates and config",
++        default=None,
++        help="Directory to store certificates and config (defaults to system or user state dir)",
+     )
+     enroll_parser.add_argument("--hostname", help="Node hostname for CSR common name")
+     enroll_parser.add_argument(
+@@ -257,20 +305,21 @@ def main(argv: list[str] | None = None) -> int:
+     run_parser.add_argument(
+         "--config",
+         type=Path,
+-        default=Path("/etc/kanban-runner/config.yaml"),
+-        help="Path to runner config.yaml",
++        default=None,
++        help="Path to runner config.yaml or runner.toml (defaults to auto-detected runner config)",
+     )
+ 
+     args = parser.parse_args(raw_args)
+ 
+     if args.subcommand == "enroll":
++        state_dir = args.state_dir if args.state_dir is not None else default_runner_state_dir()
+         token = sys.stdin.read().strip()
+         try:
+             cfg_path = enroll_runner(
+                 server_url=args.server_url,
+                 enrollment_token=token,
+                 pool_slug=args.pool_slug,
+-                state_dir=args.state_dir,
++                state_dir=state_dir,
+                 hostname=args.hostname,
+                 ca_cert_path=args.ca_cert_path,
+             )
+@@ -282,8 +331,9 @@ def main(argv: list[str] | None = None) -> int:
+             return 0
+ 
+     if args.subcommand == "run":
++        config_path = args.config if args.config is not None else default_runner_config_path()
+         try:
+-            return run_daemon(args.config)
++            return run_daemon(config_path)
+         except KeyPermissionsError as exc:
+             sys.stderr.write(f"Security error: {exc}\n")
+         except Exception as exc:
+diff --git a/agent/tests/test_remote_runner.py b/agent/tests/test_remote_runner.py
+index efb6f5db..21b5262b 100644
+--- a/agent/tests/test_remote_runner.py
++++ b/agent/tests/test_remote_runner.py
+@@ -1,13 +1,16 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-# ruff: noqa: D102, D105, D107, SLF001, ARG005, ASYNC110, TC003, S106, E501
++# ruff: noqa: D102, D105, D107, SLF001, ARG005, ASYNC110, S106, E501
+ """Unit and E2E tests for KAN-64: runner.toml, ca.pem 0600, and daemon PoP challenge."""
+ 
+ from __future__ import annotations
+ 
+ import asyncio
+ import base64
++import io
+ import json
++import os
++import sys
+ import uuid
+ from datetime import UTC, datetime, timedelta
+ from pathlib import Path
+@@ -19,7 +22,12 @@ from cryptography.hazmat.primitives import hashes, serialization
+ from cryptography.hazmat.primitives.asymmetric import ec
+ from cryptography.x509.oid import NameOID
+ 
+-from agent.remote_runner.cli import enroll_runner
++from agent.remote_runner.cli import (
++    default_runner_config_path,
++    default_runner_state_dir,
++    enroll_runner,
++    main,
++)
+ from agent.remote_runner.config import (
+     RunnerConfig,
+     load_runner_config,
+@@ -306,3 +314,221 @@ async def test_daemon_full_pop_handshake_flow(tmp_path: Path) -> None:
+     pubkey = cert.public_key()
+     assert isinstance(pubkey, ec.EllipticCurvePublicKey)
+     pubkey.verify(sig_bytes, expected_msg, ec.ECDSA(hashes.SHA256()))
++
++
++def test_default_runner_state_dir_env_override(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Verify KB_RUNNER_STATE_DIR env override returns configured path with 0o700 mode."""
++    custom_dir = tmp_path / "custom-state"
++    monkeypatch.setenv("KB_RUNNER_STATE_DIR", str(custom_dir))
++    res = default_runner_state_dir()
++    assert res == custom_dir
++    assert res.is_dir()
++    assert (res.stat().st_mode & 0o777) == 0o700
++
++
++def test_default_runner_state_dir_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify default runner state directory for root user returns /var/lib/kanban-runner."""
++    monkeypatch.delenv("KB_RUNNER_STATE_DIR", raising=False)
++    monkeypatch.setattr(os, "geteuid", lambda: 0)
++    mock_target = tmp_path / "var-lib-kanban-runner"
++    orig_mkdir = Path.mkdir
++    orig_chmod = os.chmod
++
++    def mock_mkdir(
++        self: Path,
++        mode: int = 0o777,
++        parents: bool = False,  # noqa: FBT001, FBT002
++        exist_ok: bool = False,  # noqa: FBT001, FBT002
++    ) -> None:
++        target = mock_target if self == Path("/var/lib/kanban-runner") else self
++        orig_mkdir(target, mode=mode, parents=parents, exist_ok=exist_ok)
++
++    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
++    monkeypatch.setattr(
++        os,
++        "chmod",
++        lambda p, m: orig_chmod(mock_target if Path(p) == Path("/var/lib/kanban-runner") else p, m),
++    )
++    res = default_runner_state_dir()
++    assert res == Path("/var/lib/kanban-runner")
++
++
++def test_default_runner_state_dir_user_with_and_without_xdg(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Verify default runner state directory for non-root user with and without XDG_DATA_HOME."""
++    monkeypatch.delenv("KB_RUNNER_STATE_DIR", raising=False)
++    monkeypatch.setattr(os, "geteuid", lambda: 1000)
++
++    # 1. With XDG_DATA_HOME
++    xdg_dir = tmp_path / "xdg-data"
++    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_dir))
++    res_xdg = default_runner_state_dir()
++    assert res_xdg == xdg_dir / "kanban-runner"
++    assert res_xdg.is_dir()
++    assert (res_xdg.stat().st_mode & 0o777) == 0o700
++
++    # 2. Without XDG_DATA_HOME
++    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
++    fake_home = tmp_path / "fake-home"
++    monkeypatch.setattr(Path, "home", lambda: fake_home)
++    res_home = default_runner_state_dir()
++    assert res_home == fake_home / ".local" / "share" / "kanban-runner"
++    assert res_home.is_dir()
++    assert (res_home.stat().st_mode & 0o777) == 0o700
++
++
++def test_default_runner_config_path_variations(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Verify auto-detection order for default runner configuration path."""
++    state_dir = tmp_path / "state"
++    monkeypatch.setenv("KB_RUNNER_STATE_DIR", str(state_dir))
++
++    # 1. KB_RUNNER_CONFIG env override
++    custom_cfg = tmp_path / "my-config.toml"
++    monkeypatch.setenv("KB_RUNNER_CONFIG", str(custom_cfg))
++    assert default_runner_config_path() == custom_cfg
++    monkeypatch.delenv("KB_RUNNER_CONFIG")
++
++    # 2. Default fallback when no config exists
++    assert default_runner_config_path() == state_dir / "runner.toml"
++
++    # 3. runner.toml in state_dir exists
++    (state_dir / "runner.toml").write_text("server_url = 'test'")
++    assert default_runner_config_path() == state_dir / "runner.toml"
++
++    # 4. config.yaml in state_dir exists when runner.toml is absent
++    (state_dir / "runner.toml").unlink()
++    (state_dir / "config.yaml").write_text("server_url: test")
++    assert default_runner_config_path() == state_dir / "config.yaml"
++
++    # 5. /etc/kanban-runner fallback check
++    (state_dir / "config.yaml").unlink()
++    etc_runner = tmp_path / "etc-kanban-runner"
++    etc_runner.mkdir(parents=True, exist_ok=True)
++    etc_toml = etc_runner / "runner.toml"
++    etc_toml.write_text("server_url = 'etc'")
++
++    orig_is_file = Path.is_file
++
++    def mock_is_file(self: Path) -> bool:
++        if self == Path("/etc/kanban-runner/runner.toml"):
++            return True
++        return orig_is_file(self)
++
++    monkeypatch.setattr(Path, "is_file", mock_is_file)
++    assert default_runner_config_path() == Path("/etc/kanban-runner/runner.toml")
++
++
++def test_cli_enroll_server_url_and_url_alias(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Verify CLI enroll accepts canonical --server-url and backwards-compatible --url alias."""
++    state_dir = tmp_path / "cli-state"
++    monkeypatch.setattr(sys, "stdin", io.StringIO("enroll_secret_123\n"))
++    orig_client = httpx.Client
++
++    def mock_client_factory(*_a: object, **_k: object) -> httpx.Client:
++        return orig_client(
++            transport=httpx.MockTransport(
++                lambda _req: httpx.Response(
++                    201,
++                    json={
++                        "runner_id": str(uuid.uuid4()),
++                        "client_cert_pem": "---CERT---",
++                        "ca_cert_pem": "---CA---",
++                        "wss_url": "wss://test/ws",
++                    },
++                )
++            )
++        )
++
++    monkeypatch.setattr(httpx, "Client", mock_client_factory)
++
++    # 1. Using canonical --server-url
++    rc = main(
++        [
++            "enroll",
++            "--server-url",
++            "https://kanban.internal",
++            "--token-stdin",
++            "--pool",
++            "default",
++            "--state-dir",
++            str(state_dir),
++        ]
++    )
++    assert rc == 0
++    assert (state_dir / "runner.toml").is_file()
++
++    # 2. Using alias --url
++    state_dir_alias = tmp_path / "cli-state-alias"
++    monkeypatch.setattr(sys, "stdin", io.StringIO("enroll_secret_456\n"))
++    rc_alias = main(
++        [
++            "enroll",
++            "--url",
++            "https://kanban.internal",
++            "--token-stdin",
++            "--pool",
++            "default",
++            "--state-dir",
++            str(state_dir_alias),
++        ]
++    )
++    assert rc_alias == 0
++    assert (state_dir_alias / "runner.toml").is_file()
++
++
++def test_cli_enroll_and_run_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify CLI enroll and run subcommands default cleanly without explicit paths."""
++    state_dir = tmp_path / "default-state"
++    monkeypatch.setenv("KB_RUNNER_STATE_DIR", str(state_dir))
++    monkeypatch.setattr(sys, "stdin", io.StringIO("enroll_secret_789\n"))
++    orig_client = httpx.Client
++
++    def mock_client_factory(*_a: object, **_k: object) -> httpx.Client:
++        return orig_client(
++            transport=httpx.MockTransport(
++                lambda _req: httpx.Response(
++                    201,
++                    json={
++                        "runner_id": str(uuid.uuid4()),
++                        "client_cert_pem": "---CERT---",
++                        "ca_cert_pem": "---CA---",
++                        "wss_url": "wss://test/ws",
++                    },
++                )
++            )
++        )
++
++    monkeypatch.setattr(httpx, "Client", mock_client_factory)
++
++    # Enroll without --state-dir defaults to default_runner_state_dir()
++    rc = main(
++        [
++            "enroll",
++            "--server-url",
++            "https://kanban.internal",
++            "--token-stdin",
++            "--pool",
++            "default",
++        ]
++    )
++    assert rc == 0
++    assert (state_dir / "runner.toml").is_file()
++
++    # Run without --config uses default_runner_config_path()
++    mock_ran_path: list[Path] = []
++
++    def mock_run_daemon(path: Path) -> int:
++        mock_ran_path.append(path)
++        return 0
++
++    monkeypatch.setattr("agent.remote_runner.cli.run_daemon", mock_run_daemon)
++    rc_run = main(["run"])
++    assert rc_run == 0
++    assert mock_ran_path == [state_dir / "runner.toml"]
+diff --git a/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx b/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
+index e651affc..e13eaf31 100644
+--- a/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
++++ b/kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx
+@@ -27,6 +27,7 @@ function MintEnrollmentTokenContent({
+   const [error, setError] = useState<string | null>(null);
+   const [mintedToken, setMintedToken] = useState<EnrollmentTokenResponse | null>(null);
+   const [copied, setCopied] = useState<boolean>(false);
++  const [copiedCli, setCopiedCli] = useState<boolean>(false);
+ 
+   const handleMint = async (e: React.SyntheticEvent): Promise<void> => {
+     e.preventDefault();
+@@ -68,9 +69,28 @@ function MintEnrollmentTokenContent({
+   const handleClose = (): void => {
+     // Purge token plaintext from state
+     setMintedToken(null);
++    setCopied(false);
++    setCopiedCli(false);
+     onClose();
+   };
+ 
++  const getCliCommand = (token: string, pool: string): string => {
++    return `echo "${token}" | uv run kanban-agent-runner enroll --server-url ${window.location.origin} --token-stdin --pool ${pool}`;
++  };
++
++  const handleCopyCli = async (command: string): Promise<void> => {
++    try {
++      await navigator.clipboard.writeText(command);
++    } catch {
++      // Fallback
++    } finally {
++      setCopiedCli(true);
++      setTimeout(() => {
++        setCopiedCli(false);
++      }, 2000);
++    }
++  };
++
+   return (
+     <div className="kb-modal-card">
+       <div className="kb-modal-header">
+@@ -191,9 +211,33 @@ function MintEnrollmentTokenContent({
+           </div>
+ 
+           <div className="kb-form-group">
+-            <label className="kb-form-label">Example Runner CLI Ingestion:</label>
++            <div
++              className="kb-token-label-row"
++              style={{
++                display: 'flex',
++                justifyContent: 'space-between',
++                alignItems: 'center',
++                marginBottom: '8px',
++              }}
++            >
++              <label className="kb-form-label" style={{ marginBottom: 0 }}>
++                Example Runner CLI Ingestion:
++              </label>
++              <button
++                type="button"
++                className="kb-btn kb-btn-secondary"
++                onClick={() => {
++                  void handleCopyCli(
++                    getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug),
++                  );
++                }}
++                data-testid="copy-runner-cli-btn"
++              >
++                {copiedCli ? '✓ Copied!' : 'Copy CLI Command'}
++              </button>
++            </div>
+             <pre className="kb-runner-cli-pre" data-testid="runner-cli-command">
+-              {`echo "${mintedToken.enrollment_token}" | uv run kanban-agent-runner enroll --url ${window.location.origin} --token-stdin --pool ${mintedToken.pool_slug}`}
++              {getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug)}
+             </pre>
+             <div className="kb-form-hint kb-runner-mtls-notice" data-testid="runner-mtls-notice">
+               <strong>Dedicated mTLS Endpoint Notice:</strong> Autonomous runners communicate over a dedicated mutual TLS port (default :8444) for Proof-of-Possession handshakes and real-time WebSocket job coordination.
+@@ -207,7 +251,7 @@ function MintEnrollmentTokenContent({
+               onClick={handleClose}
+               data-testid="dismiss-mint-modal-btn"
+             >
+-              I have safely stored the token
++              Done
+             </button>
+           </div>
+         </div>
+diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+index 08b4865d..9a8d4dce 100644
+--- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
++++ b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+@@ -155,7 +155,7 @@ export function RunnerStudioPage(): JSX.Element {
+         <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'var(--text-secondary, #94a3b8)' }}>
+           <li>Revoke the target runner using 1-Click Revoke (AAL2 verification required).</li>
+           <li>Mint a fresh single-use enrollment token for the designated runner pool.</li>
+-          <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --url {typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com'} --token-stdin --pool &lt;pool&gt;</code></li>
++          <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --server-url {window.location.origin} --token-stdin --pool &lt;pool&gt;</code></li>
+         </ol>
+       </div>
+ 
+diff --git a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
+index 326fa860..1a695f09 100644
+--- a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
+@@ -461,8 +461,20 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+         expect(screen.getByTestId('copy-token-btn').textContent).toContain('Copied');
+       });
+ 
+-      // Dismiss modal
+-      fireEvent.click(screen.getByTestId('dismiss-mint-modal-btn'));
++      // Click copy CLI command button
++      fireEvent.click(screen.getByTestId('copy-runner-cli-btn'));
++      expect(writeTextMock).toHaveBeenCalledWith(
++        'echo "kb_enroll_secret_token_1234567890" | uv run kanban-agent-runner enroll --server-url http://localhost:3000 --token-stdin --pool ci-cluster',
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('✓ Copied!');
++      });
++
++      // Dismiss modal has label "Done"
++      const dismissBtn = screen.getByTestId('dismiss-mint-modal-btn');
++      expect(dismissBtn.textContent).toBe('Done');
++      fireEvent.click(dismissBtn);
+       expect(onClose).toHaveBeenCalled();
+       expect(onTokenMinted).toHaveBeenCalled();
+     });
+@@ -488,6 +500,11 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+         expect(screen.getByTestId('copy-token-btn').textContent).toContain('Copied');
+       });
+ 
++      fireEvent.click(screen.getByTestId('copy-runner-cli-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('✓ Copied!');
++      });
++
+       // Dismiss without onTokenMinted callback provided
+       fireEvent.click(screen.getByTestId('dismiss-mint-modal-btn'));
+     });
+@@ -583,7 +600,7 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+       expect(onClose).toHaveBeenCalled();
+     });
+ 
+-    it('renders exact kanban-agent-runner enroll CLI snippet with --url and dedicated :8444 notice (KAN-68 Positive)', async () => {
++    it('renders exact kanban-agent-runner enroll CLI snippet with --server-url and dedicated :8444 notice (KAN-68 / KAN-399 Positive)', async () => {
+       vi.spyOn(runnersApi, 'mintEnrollmentToken').mockResolvedValue(mockTokenResponse);
+ 
+       render(
+@@ -605,13 +622,27 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+ 
+       const cliText = screen.getByTestId('runner-cli-command').textContent;
+       expect(cliText).toContain('uv run kanban-agent-runner enroll');
+-      expect(cliText).toContain('--url http://localhost:3000');
++      expect(cliText).toContain('--server-url http://localhost:3000');
+       expect(cliText).toContain('--token-stdin');
+       expect(cliText).toContain('--pool ci-cluster');
+ 
++      expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('Copy CLI Command');
++      expect(screen.getByTestId('dismiss-mint-modal-btn').textContent).toBe('Done');
++
+       expect(screen.getByTestId('runner-mtls-notice').textContent).toContain(
+         'dedicated mutual TLS port (default :8444)',
+       );
+     });
++
++    it('renders certificate rotation guidance with canonical --server-url in RunnerStudioPage', async () => {
++      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([]);
++      render(<RunnerStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByText(/Certificate Rotation & Runner Lifecycle Guidance/)).toBeDefined();
++      });
++
++      expect(screen.getByText(/kanban-agent-runner enroll --server-url/)).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
+index e980612a..c5700205 100644
+--- a/kanban/web/src/features/docs-center/wikiManifest.ts
++++ b/kanban/web/src/features/docs-center/wikiManifest.ts
+@@ -1585,7 +1585,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       }
+     ],
+-    "content": "# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners\n\n## Overview\n\nUnlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.\n\nSupported provider ecosystems:\n- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.\n- **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.\n- **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.\n- **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.\n\n```mermaid\nflowchart TD\n    subgraph Core[\"\ud83d\udc4dkanban Agent Runtime\"]\n        App[\"FastAPI & Worker Dispatcher\"]\n        Protocol[\"LLMProvider Interface (agent/providers/base.py)\"]\n    end\n\n    subgraph Providers[\"Multi-Provider Implementations\"]\n        OpenAI[\"OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways\"]\n        Gemini[\"Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)\"]\n        Ollama[\"Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5\"]\n        CLIPipe[\"Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail\"]\n        Runner[\"Remote mTLS Runner<br/>Encrypted WSS, read-only repo\"]\n    end\n\n    App --> Protocol\n    Protocol --> OpenAI\n    Protocol --> Gemini\n    Protocol --> Ollama\n    Protocol --> CLIPipe\n    Protocol --> Runner\n```\n\n![Async Agent Gate Card States and Transition Lifecycle](images/16-async-agent-gate-states.png)\n\n---\n\n## Provider Architecture and Abstraction Layer\n\nThe engine abstracts all AI interactions behind a clean, asynchronous provider protocol (`agent/providers/base.py`):\n\n```python\nclass LLMProvider(ABC):\n    @abstractmethod\n    async def complete(self, prompt: str, system: str | None = None, **kwargs) -> CompletionResult:\n        \"\"\"Execute a text completion or FIM generation.\"\"\"\n\n    @abstractmethod\n    async def chat(self, messages: list[ChatMessage], **kwargs) -> ChatResult:\n        \"\"\"Execute a multi-turn conversation with tool calling.\"\"\"\n\n    @abstractmethod\n    async def embed(self, texts: list[str]) -> list[list[float]]:\n        \"\"\"Generate vector embeddings for semantic search.\"\"\"\n```\n\n<a id=\"supported-runtimes\"></a>\n### Supported Providers Matrix\n\n| Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |\n| :--- | :--- | :---: | :---: | :--- |\n| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |\n| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |\n| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |\n| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |\n| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |\n\n---\n\n<a id=\"execution-harnesses\"></a>\n## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)\n\n```mermaid\nsequenceDiagram\n    autonumber\n    participant Engine as AI Orchestrator\n    participant Sandbox as nsjail Sandbox Runner\n    participant Model as CLI Pipe (agy -p / codex -p)\n\n    Engine->>Sandbox: Spawn isolated container (CLONE_NEWNET, read-only FS, 512MB RAM)\n    Engine->>Sandbox: Pipe prompt.json over STDIN\n    Sandbox->>Model: Execute deterministic harness without shell/bash\n    Model->>Sandbox: Generate tool call / response JSON over STDOUT\n    Sandbox-->>Engine: Structured JSON stream (Zero bash exposure)\n    Engine->>Engine: Validate response against Pydantic schema\n```\n\nAutonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.\n\n\ud83d\udc4dkanban resolves this with **Zero-Shell CLI Pipes**:\n- Agents do not receive an interactive shell or bash process.\n- Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.\n- Commands run inside a sandboxed Linux jail (`nsjail` / `setpriv`):\n  - Read-only root filesystem.\n  - Network namespace disabled (`CLONE_NEWNET`).\n  - Memory limit capped at 512 MB.\n  - Execution time limited to 15 seconds.\n\n```bash\n# Example invocation of pipe harness:\ncat prompt.json | agy -p --sandbox-jail > response.json\n```\n\n---\n\n## AI Providers and Token Caps Studio (`/admin/ai`)\n\nWorkspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.\n\n```mermaid\nflowchart TD\n    subgraph AIStudio[\"AI Providers & Token Caps Architecture\"]\n        AdminUser[\"Administrator (AAL2)\"] --> Reg[\"Register / Edit Provider\"]\n        Reg --> ProvidersList[\"Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)\"]\n        \n        ProvidersList --> AirGapCheck{\"Air-Gap Policy Active?\"}\n        AirGapCheck -->|Yes| BlockCloud[\"Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed\"]\n        AirGapCheck -->|No| AllowCloud[\"Dispatched by Priority Tier\"]\n        \n        AllowCloud --> BudgetGate{\"Monthly Token Budget Gate\"}\n        BlockCloud --> BudgetGate\n        \n        BudgetGate -->|Within Cap| Exec[\"Execute Completion / Tool Call\"]\n        BudgetGate -->|Cap Exceeded| Reject[\"429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap\"]\n    end\n```\n\n![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)\n\n### Key Provider Governance Features:\n1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.\n2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.\n3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.\n\n---\n\n## Agent Definitions Studio (`/admin/agents`)\n\nAdministrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.\n\n```mermaid\nflowchart LR\n    subgraph AgentDefFlow[\"Agent Definition & Validation Lifecycle\"]\n        Def[\"Agent Definition<br/>Name, Slug, Model, Prompt Template\"] --> Scope[\"Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)\"]\n        Scope --> Modal[\"Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema\"]\n        Modal --> Verdict{\"Validation Passes?\"}\n        Verdict -->|Yes| Active[\"Registered as Active Agent Principal\"]\n        Verdict -->|No| Fix[\"Report Schema / Prompt Errors for Correction\"]\n    end\n```\n\n![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)\n\n![Agent Validation Modal](images/60-agent-validation-modal.png)\n\n### Definition Capabilities:\n- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).\n- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.\n- **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.\n\n---\n\n## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)\n\nFor heavy build verification, sandbox test execution, and isolated code review, \ud83d\udc4dkanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Server Administrator\n    participant Studio as Runner Studio (/admin/agent-runners)\n    participant Server as \ud83d\udc4dkanban Orchestrator\n    participant Daemon as Remote Runner Daemon\n\n    Admin->>Studio: Click \"+ Mint Runner Token\"\n    Studio->>Server: Generate single-use enrollment token (Max 15 min TTL)\n    Server-->>Studio: Return copyable CLI enrollment snippet\n    Admin->>Daemon: Execute enrollment on runner host\n    Daemon->>Server: Connect to dedicated mTLS port :8444 with PoP handshake\n    Server->>Server: Verify token & bind X.509 client certificate\n    Server-->>Daemon: Channel verified: Runner enters \"ONLINE\"\n    Daemon->>Server: Heartbeat ping every 15s over :8444 (CPU, RAM, active jobs)\n```\n\n![Agent Runner Studio Overview](images/45-admin-runner-studio.png)\n\n![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)\n\n### Runner Infrastructure and Protocol Security\n\n- **Dedicated Port `:8444` and Proof-of-Possession Handshake:** Distributed runners connect exclusively over dedicated mutual TLS port `:8444`. Port `:8444` rejects standard HTTP requests and unauthenticated TLS handshakes, demanding a valid X.509 client certificate verified via a cryptographic Proof-of-Possession (PoP) challenge.\n- **Single-Use Enrollment Token (Max 15-Minute TTL):** When an administrator clicks `+ Mint Runner Token` in `/admin/agent-runners` (requiring AAL2 step-up authentication), the orchestrator mints an ephemeral enrollment token valid for at most 15 minutes (900 seconds). Upon first enrollment or expiration, the token is permanently invalidated.\n- **CLI Enrollment Syntax:** The studio generates an exact command to enroll the host daemon:\n  ```bash\n  echo \"${ENROLLMENT_TOKEN}\" | uv run kanban-agent-runner enroll \\\n    --url https://kanban.example.com \\\n    --token-stdin \\\n    --pool default\n  ```\n- **Hardware-Bound Certificate Rotation Guidance:** Runner client certificates are hardware-bound to the host and cannot be renewed in place. To rotate a certificate or decommission a host:\n  1. Revoke the existing runner in `/admin/agent-runners` (AAL2 challenge confirmed).\n  2. Mint a fresh enrollment token (15-minute TTL).\n  3. Re-enroll the runner daemon using the CLI command above.\n- **Private `/internal/v1/mcp/*` Runner Ingress Isolation:** All daemon polling, task dispatch, and execution telemetry endpoints (`/internal/v1/mcp/*`) are strictly segregated from public edge networks. They are reachable only over the internal container network via authenticated mTLS.\n\n---\n\n## Agent Revocation and Security Controls\n\nWhen an agent session exhibits anomalous activity or a credential leak is detected, administrators can invoke an instant Kill Switch across all surfaces:\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\n---\n\n## Remote mTLS Repository Runners\n\nFor long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:\n- **Mutual TLS Authentication (mTLS):** Both the \ud83d\udc4dkanban server and the runner verify cryptographic X.509 certificates over dedicated port `:8444`.\n- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.\n- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.\n\n---\n\n## Testable AI: Pluggable Fixtures and CLI Validation\n\nAI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. \ud83d\udc4dkanban enforces **100% Deterministic AI Testing**:\n\n### Pluggable AI Response Fixtures\nIn test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIRunner`:\n- Replays recorded, deterministic JSON responses without making network calls.\n- Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.\n\n### Local Agent CLI Diagnostics\nEngineers can validate transition helpers and AI workflows locally via the command line:\n\n```bash\n# Validate a transition helper against a ticket fixture\nkanban-agent validate-transition \\\n  --ticket-file test_ticket.json \\\n  --from-state in_progress \\\n  --to-state done \\\n  --dry-run\n```\n\n---\n\n## Multi-Provider Benchmark & Cutoff Timeout Guide\n\nEvery AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.\n\n### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)\n\nMeasured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: \"Build a rocket ship and serve ice cream on Saturn\"`):\n\n| Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |\n| :--- | :---: | :--- | :---: | :--- | :---: | :--- |\n| **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |\n| **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |\n| **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |\n| **Local Ollama GPU/CPU** (`gemma3:4b`) | `20000` / `35000` | `timed_out` (20s) / `approve` (35s) | `20,929 ms` / `31,431 ms` | `reject` (`In Progress`) | `16,630 ms` | If VRAM is shared with another pinned model (CPU fallback), set `timeout_ms >= 35000`. |\n| **Local Ollama GPU/CPU** (`granite3.3:2b`) | `20000` | `timed_out` (fail-closed) | `20,321 ms` | `reject` (`In Progress`) | `12,691 ms` | Warm-keep or `25000 ms` cutoff avoids cold-load timeout on long prompts. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `5000` (Strict) | N/A | N/A | `GATE_TIMEOUT` (fail-closed) | `6,023 ms` | Validates hard 5s cutoff protection with clean fail-closed veto. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |\n\n### Choosing a Cutoff Timeout\n- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.\n- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).\n- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.\n\n<a id=\"remote-runners\"></a>\n<a id=\"repository-access\"></a>\n"
++    "content": "# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners\n\n## Overview\n\nUnlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.\n\nSupported provider ecosystems:\n- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.\n- **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.\n- **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.\n- **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.\n\n```mermaid\nflowchart TD\n    subgraph Core[\"\ud83d\udc4dkanban Agent Runtime\"]\n        App[\"FastAPI & Worker Dispatcher\"]\n        Protocol[\"LLMProvider Interface (agent/providers/base.py)\"]\n    end\n\n    subgraph Providers[\"Multi-Provider Implementations\"]\n        OpenAI[\"OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways\"]\n        Gemini[\"Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)\"]\n        Ollama[\"Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5\"]\n        CLIPipe[\"Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail\"]\n        Runner[\"Remote mTLS Runner<br/>Encrypted WSS, read-only repo\"]\n    end\n\n    App --> Protocol\n    Protocol --> OpenAI\n    Protocol --> Gemini\n    Protocol --> Ollama\n    Protocol --> CLIPipe\n    Protocol --> Runner\n```\n\n![Async Agent Gate Card States and Transition Lifecycle](images/16-async-agent-gate-states.png)\n\n---\n\n## Provider Architecture and Abstraction Layer\n\nThe engine abstracts all AI interactions behind a clean, asynchronous provider protocol (`agent/providers/base.py`):\n\n```python\nclass LLMProvider(ABC):\n    @abstractmethod\n    async def complete(self, prompt: str, system: str | None = None, **kwargs) -> CompletionResult:\n        \"\"\"Execute a text completion or FIM generation.\"\"\"\n\n    @abstractmethod\n    async def chat(self, messages: list[ChatMessage], **kwargs) -> ChatResult:\n        \"\"\"Execute a multi-turn conversation with tool calling.\"\"\"\n\n    @abstractmethod\n    async def embed(self, texts: list[str]) -> list[list[float]]:\n        \"\"\"Generate vector embeddings for semantic search.\"\"\"\n```\n\n<a id=\"supported-runtimes\"></a>\n### Supported Providers Matrix\n\n| Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |\n| :--- | :--- | :---: | :---: | :--- |\n| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |\n| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |\n| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |\n| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |\n| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |\n\n---\n\n<a id=\"execution-harnesses\"></a>\n## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)\n\n```mermaid\nsequenceDiagram\n    autonumber\n    participant Engine as AI Orchestrator\n    participant Sandbox as nsjail Sandbox Runner\n    participant Model as CLI Pipe (agy -p / codex -p)\n\n    Engine->>Sandbox: Spawn isolated container (CLONE_NEWNET, read-only FS, 512MB RAM)\n    Engine->>Sandbox: Pipe prompt.json over STDIN\n    Sandbox->>Model: Execute deterministic harness without shell/bash\n    Model->>Sandbox: Generate tool call / response JSON over STDOUT\n    Sandbox-->>Engine: Structured JSON stream (Zero bash exposure)\n    Engine->>Engine: Validate response against Pydantic schema\n```\n\nAutonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.\n\n\ud83d\udc4dkanban resolves this with **Zero-Shell CLI Pipes**:\n- Agents do not receive an interactive shell or bash process.\n- Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.\n- Commands run inside a sandboxed Linux jail (`nsjail` / `setpriv`):\n  - Read-only root filesystem.\n  - Network namespace disabled (`CLONE_NEWNET`).\n  - Memory limit capped at 512 MB.\n  - Execution time limited to 15 seconds.\n\n```bash\n# Example invocation of pipe harness:\ncat prompt.json | agy -p --sandbox-jail > response.json\n```\n\n---\n\n## AI Providers and Token Caps Studio (`/admin/ai`)\n\nWorkspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.\n\n```mermaid\nflowchart TD\n    subgraph AIStudio[\"AI Providers & Token Caps Architecture\"]\n        AdminUser[\"Administrator (AAL2)\"] --> Reg[\"Register / Edit Provider\"]\n        Reg --> ProvidersList[\"Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)\"]\n        \n        ProvidersList --> AirGapCheck{\"Air-Gap Policy Active?\"}\n        AirGapCheck -->|Yes| BlockCloud[\"Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed\"]\n        AirGapCheck -->|No| AllowCloud[\"Dispatched by Priority Tier\"]\n        \n        AllowCloud --> BudgetGate{\"Monthly Token Budget Gate\"}\n        BlockCloud --> BudgetGate\n        \n        BudgetGate -->|Within Cap| Exec[\"Execute Completion / Tool Call\"]\n        BudgetGate -->|Cap Exceeded| Reject[\"429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap\"]\n    end\n```\n\n![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)\n\n### Key Provider Governance Features:\n1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.\n2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.\n3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.\n\n---\n\n## Agent Definitions Studio (`/admin/agents`)\n\nAdministrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.\n\n```mermaid\nflowchart LR\n    subgraph AgentDefFlow[\"Agent Definition & Validation Lifecycle\"]\n        Def[\"Agent Definition<br/>Name, Slug, Model, Prompt Template\"] --> Scope[\"Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)\"]\n        Scope --> Modal[\"Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema\"]\n        Modal --> Verdict{\"Validation Passes?\"}\n        Verdict -->|Yes| Active[\"Registered as Active Agent Principal\"]\n        Verdict -->|No| Fix[\"Report Schema / Prompt Errors for Correction\"]\n    end\n```\n\n![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)\n\n![Agent Validation Modal](images/60-agent-validation-modal.png)\n\n### Definition Capabilities:\n- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).\n- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.\n- **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.\n\n---\n\n## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)\n\nFor heavy build verification, sandbox test execution, and isolated code review, \ud83d\udc4dkanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Server Administrator\n    participant Studio as Runner Studio (/admin/agent-runners)\n    participant Server as \ud83d\udc4dkanban Orchestrator\n    participant Daemon as Remote Runner Daemon\n\n    Admin->>Studio: Click \"+ Mint Runner Token\"\n    Studio->>Server: Generate single-use enrollment token (Max 15 min TTL)\n    Server-->>Studio: Return copyable CLI enrollment snippet\n    Admin->>Daemon: Execute enrollment on runner host\n    Daemon->>Server: Connect to dedicated mTLS port :8444 with PoP handshake\n    Server->>Server: Verify token & bind X.509 client certificate\n    Server-->>Daemon: Channel verified: Runner enters \"ONLINE\"\n    Daemon->>Server: Heartbeat ping every 15s over :8444 (CPU, RAM, active jobs)\n```\n\n![Agent Runner Studio Overview](images/45-admin-runner-studio.png)\n\n![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)\n\n### Runner Infrastructure and Protocol Security\n\n- **Dedicated Port `:8444` and Proof-of-Possession Handshake:** Distributed runners connect exclusively over dedicated mutual TLS port `:8444`. Port `:8444` rejects standard HTTP requests and unauthenticated TLS handshakes, demanding a valid X.509 client certificate verified via a cryptographic Proof-of-Possession (PoP) challenge.\n- **Single-Use Enrollment Token (Max 15-Minute TTL):** When an administrator clicks `+ Mint Runner Token` in `/admin/agent-runners` (requiring AAL2 step-up authentication), the orchestrator mints an ephemeral enrollment token valid for at most 15 minutes (900 seconds). Upon first enrollment or expiration, the token is permanently invalidated.\n- **CLI Enrollment Syntax:** The studio generates an exact command to enroll the host daemon:\n  ```bash\n  echo \"${ENROLLMENT_TOKEN}\" | uv run kanban-agent-runner enroll \\\n    --server-url https://kanban.example.com \\\n    --token-stdin \\\n    --pool default\n  ```\n- **Hardware-Bound Certificate Rotation Guidance:** Runner client certificates are hardware-bound to the host and cannot be renewed in place. To rotate a certificate or decommission a host:\n  1. Revoke the existing runner in `/admin/agent-runners` (AAL2 challenge confirmed).\n  2. Mint a fresh enrollment token (15-minute TTL).\n  3. Re-enroll the runner daemon using the CLI command above.\n- **Private `/internal/v1/mcp/*` Runner Ingress Isolation:** All daemon polling, task dispatch, and execution telemetry endpoints (`/internal/v1/mcp/*`) are strictly segregated from public edge networks. They are reachable only over the internal container network via authenticated mTLS.\n\n---\n\n## Agent Revocation and Security Controls\n\nWhen an agent session exhibits anomalous activity or a credential leak is detected, administrators can invoke an instant Kill Switch across all surfaces:\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\n---\n\n## Remote mTLS Repository Runners\n\nFor long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:\n- **Mutual TLS Authentication (mTLS):** Both the \ud83d\udc4dkanban server and the runner verify cryptographic X.509 certificates over dedicated port `:8444`.\n- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.\n- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.\n\n---\n\n## Testable AI: Pluggable Fixtures and CLI Validation\n\nAI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. \ud83d\udc4dkanban enforces **100% Deterministic AI Testing**:\n\n### Pluggable AI Response Fixtures\nIn test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIRunner`:\n- Replays recorded, deterministic JSON responses without making network calls.\n- Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.\n\n### Local Agent CLI Diagnostics\nEngineers can validate transition helpers and AI workflows locally via the command line:\n\n```bash\n# Validate a transition helper against a ticket fixture\nkanban-agent validate-transition \\\n  --ticket-file test_ticket.json \\\n  --from-state in_progress \\\n  --to-state done \\\n  --dry-run\n```\n\n---\n\n## Multi-Provider Benchmark & Cutoff Timeout Guide\n\nEvery AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.\n\n### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)\n\nMeasured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: \"Build a rocket ship and serve ice cream on Saturn\"`):\n\n| Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |\n| :--- | :---: | :--- | :---: | :--- | :---: | :--- |\n| **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |\n| **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |\n| **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |\n| **Local Ollama GPU/CPU** (`gemma3:4b`) | `20000` / `35000` | `timed_out` (20s) / `approve` (35s) | `20,929 ms` / `31,431 ms` | `reject` (`In Progress`) | `16,630 ms` | If VRAM is shared with another pinned model (CPU fallback), set `timeout_ms >= 35000`. |\n| **Local Ollama GPU/CPU** (`granite3.3:2b`) | `20000` | `timed_out` (fail-closed) | `20,321 ms` | `reject` (`In Progress`) | `12,691 ms` | Warm-keep or `25000 ms` cutoff avoids cold-load timeout on long prompts. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `5000` (Strict) | N/A | N/A | `GATE_TIMEOUT` (fail-closed) | `6,023 ms` | Validates hard 5s cutoff protection with clean fail-closed veto. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |\n\n### Choosing a Cutoff Timeout\n- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.\n- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).\n- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.\n\n<a id=\"remote-runners\"></a>\n<a id=\"repository-access\"></a>\n"
+   },
+   {
+     "slug": "multi-source-migration-and-key-alias-redirects",
+@@ -2332,7 +2332,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       }
+     ],
+-    "content": "# [Informational] Studio Configuration Reference\n\nAuthoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.\n\n---\n\n## 1. Workspace Studio\nThe Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.\n\n\n### Workspace Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |\n| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |\n| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |\n| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |\n| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |\n| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |\n| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |\n| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |\n\n---\n\n## 2. Project Studio\nThe Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.\n\n\n### Project Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |\n| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |\n| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |\n| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |\n| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |\n| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |\n| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |\n| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |\n| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |\n\n---\n\n## 3. Workflow Transition Studio\nThe Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.\n\n\n### Workflow Transition Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |\n| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |\n| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |\n| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |\n| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |\n| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |\n| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |\n\n---\n\n## 4. Custom Fields Studio\nThe Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.\n\n\n### Custom Fields Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`\ud83e\uddea`) |\n| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |\n| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |\n| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |\n| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |\n| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |\n| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |\n| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |\n| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |\n| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |\n\n---\n\n## 5. Authentication Studio\nThe Multi-Card Authentication Studio (`/admin/auth`) configures enterprise identity providers, WebAuthn Passkeys, LDAP trees, and break-glass recovery.\n\n\n### Authentication Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_type` | Underlying identity protocol card | `LOCAL_ADMIN`, `OAUTH2`, `OIDC`, `LDAP`, `WEBAUTHN`, `TOTP` | Required | Determines credential validation handshake and token exchange |\n| `card_enabled` | Master active toggle for the authentication card | Boolean (`true` / `false`) | `true` | Disabled cards reject authentication attempts immediately |\n| `sort_rank` | Order in which login cards appear on `/login` screen | Non-negative integer (lower ranks appear first) | 10 | Allows organizations to prioritize SSO while preserving local admin cards |\n| `rp_name` | WebAuthn Relying Party display name | String (Always canonical `\ud83d\udc4dkanban`) | `\ud83d\udc4dkanban` | Displayed by browser and hardware security keys during passkey prompts |\n| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or spoofing |\n| `issuer_url` | OIDC discovery endpoint URL | Valid HTTPS URL | None | Fetches `/.well-known/openid-configuration` and cryptographic keys |\n| `client_id` | OAuth/OIDC application client identifier | ASCII string | None | Public identifier registered with enterprise identity provider |\n| `client_secret` | OAuth/OIDC client secret credential | Encrypted string (write-only custody) | None | Stored encrypted in PostgreSQL; never exposed over REST API |\n| `ldap_host` | LDAPS directory hostname or IP address | Hostname or IP | None | LDAPS on port 636 or StartTLS required; plaintext LDAP rejected |\n| `ldap_bind_dn` | Distinguished Name used for directory lookup | LDAP DN string (e.g. `cn=admin,dc=corp,dc=com`) | None | Service account with read-only search permissions across user tree |\n| `break_glass_active` | Emergency lockout prevention bypass trigger | Boolean (`true` / `false`) | `false` | Allows emergency local admin access when SSO is offline |\n\n---\n\n## 6. MCP Access Studio\nThe MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.\n\n\n### MCP Access Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |\n| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |\n| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |\n| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |\n| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |\n| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |\n| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |\n| `capability_mask` | Operational capability bitmask ceiling | Integer bitmask (1=View, 3=Comment, 31=Member, 255=Admin) | 255 (Full) | Monotonic `CredentialBoundary` ceiling; mask 1 restricts scopes to `${surface}:read` |\n| `allowed_cidrs` | Subnet IP allowlist for incoming MCP invocations | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Rejects calls originating outside specified subnets with `403 FORBIDDEN_CIDR` |\n\n---\n\n## 7. OAuth 2.1 Governance Studio\nThe OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications, enforces PKCE code challenges, and configures token lifetimes.\n\n\n### OAuth 2.1 Governance Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |\n| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |\n| `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |\n| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |\n| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |\n| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |\n| `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |\n\n---\n\n## 8. AI Providers Studio\nThe AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.\n\n\n### AI Providers Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |\n| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |\n| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |\n| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |\n| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |\n| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |\n| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |\n\n---\n\n## 9. Agent Definitions Studio\nThe Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.\n\n\n### Agent Definitions Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |\n| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |\n| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |\n| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |\n| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |\n| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |\n\n---\n\n## 10. Remote Runners Studio\nThe Remote Runners Studio (`/admin/agent-runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats over dedicated port `:8444`.\n\n\n### Remote Runners Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |\n| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 15 minutes (900 seconds max); grants certificate signing request (CSR) |\n| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection over port :8444 |\n| `runner_cli_command` | Standard enrollment invocation command | Shell command string | Generated on mint | Syntax: `echo \"$TOKEN\" \\| uv run kanban-agent-runner enroll --url <origin> --token-stdin --pool <pool>` |\n| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |\n| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |\n| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |\n\n> [!NOTE]\n> **Runner Certificate Rotation Lifecycle:** Runner client certificates are hardware-bound and cannot be silently renewed. To rotate a certificate, revoke the runner in `/admin/agent-runners` (AAL2 challenge confirmed), mint a fresh enrollment token (15-minute TTL), and re-enroll the runner daemon.\n\n---\n\n## 11. Standalone & Promotion Studio\nThe Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.\n\n\n### Standalone & Promotion Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |\n| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |\n| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |\n| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |\n| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |\n| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |\n"
++    "content": "# [Informational] Studio Configuration Reference\n\nAuthoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.\n\n---\n\n## 1. Workspace Studio\nThe Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.\n\n\n### Workspace Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |\n| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |\n| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |\n| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |\n| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |\n| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |\n| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |\n| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |\n\n---\n\n## 2. Project Studio\nThe Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.\n\n\n### Project Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |\n| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |\n| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |\n| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |\n| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |\n| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |\n| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |\n| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |\n| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |\n\n---\n\n## 3. Workflow Transition Studio\nThe Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.\n\n\n### Workflow Transition Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |\n| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |\n| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |\n| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |\n| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |\n| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |\n| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |\n\n---\n\n## 4. Custom Fields Studio\nThe Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.\n\n\n### Custom Fields Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`\ud83e\uddea`) |\n| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |\n| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |\n| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |\n| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |\n| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |\n| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |\n| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |\n| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |\n| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |\n\n---\n\n## 5. Authentication Studio\nThe Multi-Card Authentication Studio (`/admin/auth`) configures enterprise identity providers, WebAuthn Passkeys, LDAP trees, and break-glass recovery.\n\n\n### Authentication Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_type` | Underlying identity protocol card | `LOCAL_ADMIN`, `OAUTH2`, `OIDC`, `LDAP`, `WEBAUTHN`, `TOTP` | Required | Determines credential validation handshake and token exchange |\n| `card_enabled` | Master active toggle for the authentication card | Boolean (`true` / `false`) | `true` | Disabled cards reject authentication attempts immediately |\n| `sort_rank` | Order in which login cards appear on `/login` screen | Non-negative integer (lower ranks appear first) | 10 | Allows organizations to prioritize SSO while preserving local admin cards |\n| `rp_name` | WebAuthn Relying Party display name | String (Always canonical `\ud83d\udc4dkanban`) | `\ud83d\udc4dkanban` | Displayed by browser and hardware security keys during passkey prompts |\n| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or spoofing |\n| `issuer_url` | OIDC discovery endpoint URL | Valid HTTPS URL | None | Fetches `/.well-known/openid-configuration` and cryptographic keys |\n| `client_id` | OAuth/OIDC application client identifier | ASCII string | None | Public identifier registered with enterprise identity provider |\n| `client_secret` | OAuth/OIDC client secret credential | Encrypted string (write-only custody) | None | Stored encrypted in PostgreSQL; never exposed over REST API |\n| `ldap_host` | LDAPS directory hostname or IP address | Hostname or IP | None | LDAPS on port 636 or StartTLS required; plaintext LDAP rejected |\n| `ldap_bind_dn` | Distinguished Name used for directory lookup | LDAP DN string (e.g. `cn=admin,dc=corp,dc=com`) | None | Service account with read-only search permissions across user tree |\n| `break_glass_active` | Emergency lockout prevention bypass trigger | Boolean (`true` / `false`) | `false` | Allows emergency local admin access when SSO is offline |\n\n---\n\n## 6. MCP Access Studio\nThe MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.\n\n\n### MCP Access Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |\n| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |\n| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |\n| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |\n| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |\n| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |\n| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |\n| `capability_mask` | Operational capability bitmask ceiling | Integer bitmask (1=View, 3=Comment, 31=Member, 255=Admin) | 255 (Full) | Monotonic `CredentialBoundary` ceiling; mask 1 restricts scopes to `${surface}:read` |\n| `allowed_cidrs` | Subnet IP allowlist for incoming MCP invocations | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Rejects calls originating outside specified subnets with `403 FORBIDDEN_CIDR` |\n\n---\n\n## 7. OAuth 2.1 Governance Studio\nThe OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications, enforces PKCE code challenges, and configures token lifetimes.\n\n\n### OAuth 2.1 Governance Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |\n| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |\n| `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |\n| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |\n| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |\n| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |\n| `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |\n\n---\n\n## 8. AI Providers Studio\nThe AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.\n\n\n### AI Providers Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |\n| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |\n| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |\n| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |\n| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |\n| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |\n| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |\n\n---\n\n## 9. Agent Definitions Studio\nThe Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.\n\n\n### Agent Definitions Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |\n| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |\n| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |\n| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |\n| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |\n| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |\n\n---\n\n## 10. Remote Runners Studio\nThe Remote Runners Studio (`/admin/agent-runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats over dedicated port `:8444`.\n\n\n### Remote Runners Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |\n| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 15 minutes (900 seconds max); grants certificate signing request (CSR) |\n| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection over port :8444 |\n| `runner_cli_command` | Standard enrollment invocation command | Shell command string | Generated on mint | Syntax: `echo \"$TOKEN\" \\| uv run kanban-agent-runner enroll --server-url <origin> --token-stdin --pool <pool>` |\n| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |\n| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |\n| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |\n\n> [!NOTE]\n> **Runner Certificate Rotation Lifecycle:** Runner client certificates are hardware-bound and cannot be silently renewed. To rotate a certificate, revoke the runner in `/admin/agent-runners` (AAL2 challenge confirmed), mint a fresh enrollment token (15-minute TTL), and re-enroll the runner daemon.\n\n---\n\n## 11. Standalone & Promotion Studio\nThe Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.\n\n\n### Standalone & Promotion Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |\n| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |\n| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |\n| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |\n| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |\n| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |\n"
+   },
+   {
+     "slug": "system-topology-and-multi-container-architecture",

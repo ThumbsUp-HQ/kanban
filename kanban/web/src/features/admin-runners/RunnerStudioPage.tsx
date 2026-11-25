@@ -155,7 +155,7 @@ export function RunnerStudioPage(): JSX.Element {
         <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'var(--text-secondary, #94a3b8)' }}>
           <li>Revoke the target runner using 1-Click Revoke (AAL2 verification required).</li>
           <li>Mint a fresh single-use enrollment token for the designated runner pool.</li>
-          <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --url {typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com'} --token-stdin --pool &lt;pool&gt;</code></li>
+          <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --server-url {window.location.origin} --token-stdin --pool &lt;pool&gt;</code></li>
         </ol>
       </div>
 

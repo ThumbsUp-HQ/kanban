@@ -36,7 +36,13 @@ from agent.remote_runner.daemon import (
 )
 from kanban.logging import configure_logging
 
-__all__ = ["enroll_runner", "main", "run_daemon"]
+__all__ = [
+    "default_runner_config_path",
+    "default_runner_state_dir",
+    "enroll_runner",
+    "main",
+    "run_daemon",
+]
 
 _HTTP_CREATED: Final[int] = 201
 
@@ -82,6 +88,44 @@ def _write_secure_file(path: Path, data: bytes | str, mode: int = 0o600) -> None
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         raise
+
+
+def default_runner_state_dir() -> Path:
+    """Return default runner state directory with 0o700 permissions."""
+    env_override = os.environ.get("KB_RUNNER_STATE_DIR")
+    if env_override:
+        state_dir = Path(env_override)
+    elif hasattr(os, "geteuid") and os.geteuid() == 0:
+        state_dir = Path("/var/lib/kanban-runner")
+    else:
+        state_dir = (
+            Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+            / "kanban-runner"
+        )
+
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with contextlib.suppress(OSError):
+        os.chmod(state_dir, 0o700)
+    return state_dir
+
+
+def default_runner_config_path() -> Path:
+    """Return default runner configuration file path."""
+    env_config = os.environ.get("KB_RUNNER_CONFIG")
+    if env_config:
+        return Path(env_config)
+
+    state_dir = default_runner_state_dir()
+    for candidate in (
+        state_dir / "runner.toml",
+        state_dir / "config.yaml",
+        Path("/etc/kanban-runner/runner.toml"),
+        Path("/etc/kanban-runner/config.yaml"),
+    ):
+        if candidate.is_file():
+            return candidate
+
+    return state_dir / "runner.toml"
 
 
 def enroll_runner(  # noqa: PLR0913
@@ -232,7 +276,11 @@ def main(argv: list[str] | None = None) -> int:
     # Enroll subcommand
     enroll_parser = subparsers.add_parser("enroll", help="Enroll runner with server using token")
     enroll_parser.add_argument(
-        "--server-url", required=True, help="Base HTTPS URL of 👍kanban server"
+        "--server-url",
+        "--url",
+        dest="server_url",
+        required=True,
+        help="Base HTTPS URL of 👍kanban server",
     )
     enroll_parser.add_argument(
         "--token-stdin",
@@ -244,8 +292,8 @@ def main(argv: list[str] | None = None) -> int:
     enroll_parser.add_argument(
         "--state-dir",
         type=Path,
-        default=Path("/var/lib/kanban-runner"),
-        help="Directory to store certificates and config",
+        default=None,
+        help="Directory to store certificates and config (defaults to system or user state dir)",
     )
     enroll_parser.add_argument("--hostname", help="Node hostname for CSR common name")
     enroll_parser.add_argument(
@@ -257,20 +305,21 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--config",
         type=Path,
-        default=Path("/etc/kanban-runner/config.yaml"),
-        help="Path to runner config.yaml",
+        default=None,
+        help="Path to runner config.yaml or runner.toml (defaults to auto-detected runner config)",
     )
 
     args = parser.parse_args(raw_args)
 
     if args.subcommand == "enroll":
+        state_dir = args.state_dir if args.state_dir is not None else default_runner_state_dir()
         token = sys.stdin.read().strip()
         try:
             cfg_path = enroll_runner(
                 server_url=args.server_url,
                 enrollment_token=token,
                 pool_slug=args.pool_slug,
-                state_dir=args.state_dir,
+                state_dir=state_dir,
                 hostname=args.hostname,
                 ca_cert_path=args.ca_cert_path,
             )
@@ -282,8 +331,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     if args.subcommand == "run":
+        config_path = args.config if args.config is not None else default_runner_config_path()
         try:
-            return run_daemon(args.config)
+            return run_daemon(config_path)
         except KeyPermissionsError as exc:
             sys.stderr.write(f"Security error: {exc}\n")
         except Exception as exc:
