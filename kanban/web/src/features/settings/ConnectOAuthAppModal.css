@@ -19,7 +19,7 @@
   border-radius: 12px;
   width: 100%;
   max-width: 640px;
-  max-height: calc(100vh - 48px);
+  max-height: min(94vh, 860px);
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
@@ -27,7 +27,7 @@
 }
 
 .kb-connect-oauth-header {
-  padding: 16px 20px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
   display: flex;
   align-items: center;
@@ -56,11 +56,11 @@
 }
 
 .kb-connect-oauth-body {
-  padding: 20px;
+  padding: 12px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .kb-connect-oauth-body > * {
@@ -71,13 +71,13 @@
   font-size: 0.875rem;
   color: var(--kb-color-text-secondary, #8b949e);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .kb-connect-oauth-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .kb-connect-oauth-label {
@@ -87,12 +87,12 @@
 }
 
 .kb-connect-oauth-select {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
   color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .kb-connect-oauth-select:focus {
@@ -124,10 +124,10 @@
   background-color: var(--bg-surface-raised, var(--kb-color-bg-surface, #f8fafc));
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .kb-connect-oauth-endpoint-row {
@@ -155,8 +155,9 @@
   font-family: monospace;
   font-size: 0.8125rem;
   color: #58a6ff;
-  overflow-x: auto;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-all;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
@@ -178,23 +179,23 @@
 
 .kb-connect-oauth-tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
   flex-shrink: 0;
   flex-wrap: wrap;
   align-items: center;
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .kb-connect-oauth-tab {
-  min-height: 36px;
-  height: 36px;
-  padding: 8px 14px;
+  min-height: 32px;
+  height: 32px;
+  padding: 4px 10px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--kb-color-text-secondary, #8b949e);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -220,7 +221,7 @@
   background-color: #0d1117;
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px 12px;
 }
 
 .kb-connect-oauth-snippet {
@@ -233,13 +234,13 @@
 }
 
 .kb-connect-oauth-snippet-copy {
-  margin-top: 10px;
-  padding: 6px 12px;
+  margin-top: 6px;
+  padding: 4px 10px;
   background-color: var(--brand-primary, #238636);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #ffffff;
   border-radius: 6px;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -258,13 +259,17 @@
   background-color: var(--bg-surface-raised, #161b22);
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   border-radius: 6px;
-  padding: 10px 14px;
+  padding: 6px 10px;
   font-size: 0.8125rem;
   color: var(--kb-color-text-secondary, #8b949e);
-  line-height: 1.5;
+  line-height: 1.35;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
+}
+
+.kb-connect-oauth-gemini-hint p {
+  margin: 0;
 }
 
 .kb-connect-oauth-gemini-hint strong {
@@ -318,3 +323,34 @@
 .kb-connect-oauth-btn:hover {
   background-color: var(--bg-hover, #30363d);
 }
+
+@media (max-width: 640px) {
+  .kb-connect-oauth-backdrop {
+    padding: 8px;
+  }
+
+  .kb-connect-oauth-card {
+    max-height: min(94vh, 860px);
+  }
+
+  .kb-connect-oauth-header {
+    padding: 12px 14px;
+  }
+
+  .kb-connect-oauth-body {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .kb-connect-oauth-tabs {
+    gap: 4px;
+  }
+
+  .kb-connect-oauth-tab {
+    padding: 6px 10px;
+    font-size: 0.8125rem;
+    height: 32px;
+    min-height: 32px;
+  }
+}
+

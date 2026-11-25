@@ -562,6 +562,7 @@ def test_render_consent_screen_security_headers_and_admin_surface() -> None:
     body = bytes(resp_admin.body).decode("utf-8")
     assert "admin@domain.local" in body
     assert "ADMIN" in body
+    assert "@media (prefers-color-scheme: light)" in body
 
 
 def test_oauth_server_helpers_coverage() -> None:
