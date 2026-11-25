@@ -5,6 +5,7 @@
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `docs/KAN-424-slice4-ops-docs`
 - **Base Commit**: `8c6a77e2`
+- **QA Commit**: `e26e847c`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -26,7 +27,7 @@ This review audits the rendered typography, component styling, layout responsive
 
 ## 2. Multi-Viewport Responsive Proof Audit
 
-Audited all 28 Playwright screenshots in `docs/qa/KAN-424/screenshots/`:
+Audited all 30 Playwright screenshots in `docs/qa/KAN-424/screenshots/`:
 
 | Chapter / Surface | Viewport & Theme | Visual & UX Verification |
 |:---|:---|:---|
@@ -39,9 +40,11 @@ Audited all 28 Playwright screenshots in `docs/qa/KAN-424/screenshots/`:
 | **Production Promotion** | `1440x900` Light & Dark (`03-production-promotion-*.png`) | 5-network production stack and backup framing (`KBKP` streaming vs `KBBAK1` snapshot) clearly contrasted. Promotion sequence diagram legible. |
 | **Diagnostics & Link Inspector** | `1440x900` Light & Dark (`04-diagnostics-inspector-*.png`) | Comprehensive walkthrough of 7 diagnostic subsystems and 7 invalidity classes. Embedded live workout screenshots render sharply. |
 | **Studio Config Reference** | `1440x900` Light & Dark (`05-studio-config-ref-*.png`) | Clean tabular reference specification for all Slice 4 configuration fields (`Field Name`, `What It Controls`, `Allowed Values`, `Default`, `Impact`). |
-| **All Chapters** | Mobile Portrait (`*-390x844-mobile-portrait.png`) | Reading typography optimized for small screens (font size, line height, paragraph spacing). Interactive buttons (`Chapters`, `Copy Agent Prompt`) maintain >=44px touch targets. |
+| **All Chapters** | Mobile Portrait (`*-390x844-mobile-portrait.png`) | Reading typography optimized for small screens (font size, line height, paragraph spacing). Interactive buttons (`Chapters`, `Copy Agent Prompt`) wrap neatly in 2 rows without horizontal clipping or button cutoffs (`bounding box right <= 392px`). |
+| **Dedicated Verification** | `1440x900` Scrolled In View (`06-embedded-workout-images-rendered-1440x900.png`) | Embedded KAN-423 workout image rendered inside `/docs` markdown viewer with non-zero natural dimensions. |
+| **Dedicated Verification** | `1440x900` Scrolled In View (`07-studio-config-ref-slice4-tables-1440x900.png`) | Migration Import Studio configuration table rendered in `/docs/studio-configuration-reference`. |
 
-All 28 screenshots visually inspected via `read_file` confirming zero text clipping, zero button label cut-offs, zero broken image icons, and 100% WCAG 2.2 AA design system adherence.
+All 30 screenshots visually inspected via `read_file` confirming zero text clipping, zero button label cut-offs, zero broken image icons, and 100% WCAG 2.2 AA design system adherence.
 
 ---
 
@@ -61,10 +64,14 @@ All 28 screenshots visually inspected via `read_file` confirming zero text clipp
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - `src/features/docs-center/__tests__/DocsCenter.test.tsx` & `DocsCenterImages.test.tsx`: 69 passed in 5.61s with 0 warnings.
-  - Coverage: 99.4% Statements, 95.14% Branches, 100% Lines.
+  - `src/features/docs-center/__tests__/DocsCenter.test.tsx` & `DocsCenterImages.test.tsx`: 70 passed in 6.60s with 0 warnings.
+  - Coverage: 99.6% Statements, 96.44% Branches, 100% Lines.
+- **Backend Pytest Parity Suite**:
+  - `kanban/tests/test_wiki_bundle_sync.py`: 7 passed in 0.12s. Verified 100% image parity (95 images matching SHA-256) and 0 unreferenced orphans.
+- **Playwright Visual Verification**:
+  - `e2e/qa/kan-424-slice4-docs-screenshots.spec.ts`: 1 passed (46.4s) capturing 30 unclipped multi-viewport screenshots and validating 0 horizontal overflow at 390px.
 - **Offline Wiki Bundle Sync**:
-  - `scripts/sync_wiki_bundle.py`: 34 chapters synced into `wikiManifest.ts` (568,672 bytes) and 95 images copied into `public/docs-images/`.
+  - `scripts/sync_wiki_bundle.py`: 34 chapters synced into `wikiManifest.ts` (569,351 bytes) and 95 images copied into `public/docs-images/`.
   - Zero broken UI doc links across all 8 Slice-4 help links (`docHref` verification passed).
 - **Static Quality & Build Gates**:
   - `check_no_dashes.py --all`: 0 violations.
