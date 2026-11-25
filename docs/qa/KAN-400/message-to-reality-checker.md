@@ -69,7 +69,7 @@ All verification artifacts are located in `docs/qa/KAN-400/`:
   - `python3 scripts/check_no_dashes.py --all`: 0 violations across all files.
   - `pnpm --dir kanban/web typecheck`: 0 errors.
   - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings across all files.
-  - `pnpm --dir kanban/web build`: Vite production build passed cleanly in 1.34s.
+  - `pnpm --dir kanban/web build`: Vite production build passed cleanly in 1.36s (and `scripts/capture_kan400_screenshots.mjs` renders the real Vite production build).
 
 - `docs/qa/KAN-400/api-specialist-review.md`:
   - Signed by API Specialist (`@api-spec`) with STATUS: APPROVED.

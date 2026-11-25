@@ -41,7 +41,7 @@
   - The secret visibility toggle button remains easily accessible without colliding with adjacent form elements.
 - **Accessibility & ARIA Validation**:
   - The toggle button features accessible dynamic `aria-label` attribute (`"Show secret key"` vs `"Hide secret key"`).
-  - Both `provider-name-input` and `provider-key-input` include `aria-label` attributes (`"Provider Name"` and `"API Key"`).
+  - Accessible names are bound via `<label htmlFor="provider-name-input">` (`Display Name`) and `<label htmlFor="provider-key-input">` (`API Secret Key`).
   - Error and helper messages are bound with accessible contrast conforming to WCAG 2.1 AA.
 
 ### 3. Automated Test Verification
