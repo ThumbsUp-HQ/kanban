@@ -41,15 +41,16 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
   const [qaRigorInput, setQaRigorInput] = useState<'standard' | 'strict_forensic' | null>(null);
   const [customNotesInput, setCustomNotesInput] = useState<string | null>(null);
 
-  const scope = scopeInput ?? prefData?.agent_onboarding_prefs.scope ?? 'local_only';
-  const executionMode =
-    executionModeInput ?? prefData?.agent_onboarding_prefs.execution_mode ?? 'swarm';
+  const prefs = (
+    prefData as { agent_onboarding_prefs?: Partial<AgentOnboardingPrefs> } | undefined
+  )?.agent_onboarding_prefs;
+
+  const scope = scopeInput ?? prefs?.scope ?? 'local_only';
+  const executionMode = executionModeInput ?? prefs?.execution_mode ?? 'swarm';
   const modelStrategy =
-    modelStrategyInput ??
-    prefData?.agent_onboarding_prefs.model_strategy ??
-    'quota_sipping_flash';
-  const qaRigor = qaRigorInput ?? prefData?.agent_onboarding_prefs.qa_rigor ?? 'strict_forensic';
-  const customNotes = customNotesInput ?? prefData?.agent_onboarding_prefs.custom_notes ?? '';
+    modelStrategyInput ?? prefs?.model_strategy ?? 'quota_sipping_flash';
+  const qaRigor = qaRigorInput ?? prefs?.qa_rigor ?? 'strict_forensic';
+  const customNotes = customNotesInput ?? prefs?.custom_notes ?? '';
 
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
