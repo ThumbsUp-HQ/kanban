@@ -1,0 +1,266 @@
+diff --git a/docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md b/docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md
+new file mode 100644
+index 00000000..f4041ac8
+--- /dev/null
++++ b/docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md
+@@ -0,0 +1,260 @@
++# Slice 2 (AI Providers, Budgets, Autonomous Agents & Remote Runners): Phase 1 Inventory & Simplification Audit
++
++**Author:** s2-p1 (UX & Systems Security Auditor)  
++**Date:** 2026-11-25  
++**Tracking Ticket:** KAN-411 ([SLICE-2-P1][KB-AI-AUDIT])  
++**Parent Epic:** KAN-410 ([EPIC][SLICE-2-AI-AGENTS-RUNNERS])  
++**Requirement Traceability:** docs/ARCHITECTURE_AND_PRODUCT_SPEC.md Section 9, Section 10, Section 11, Section 14  
++**Target Next Phase:** KAN-412 (Phase 2 Implementation)
++
++---
++
++## 1. Executive Summary & Audit Scope
++
++This document provides a setting-by-setting audit, UX simplification proposal, and phase handoff plan for **Slice 2: AI Providers, Token Caps, Autonomous Agents, Remote mTLS Runners & Local-Folder Onboarding**.
++
++The audit covers 100% of user-facing screens, drawers, modals, validation rules, and backend bindings across:
++- **Frontend Surfaces (8 components):**
++  - `kanban/web/src/features/admin-ai/AiStudioPage.tsx`
++  - `kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx`
++  - `kanban/web/src/features/admin-ai/AiBudgetModal.tsx`
++  - `kanban/web/src/features/admin-agents/AgentStudioPage.tsx`
++  - `kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx`
++  - `kanban/web/src/features/admin-agents/AgentValidationModal.tsx`
++  - `kanban/web/src/features/admin-runners/RunnerStudioPage.tsx`
++  - `kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx`
++- **Backend & CLI Components (5 modules):**
++  - `kanban/api/v1/admin/ai_providers.py`
++  - `kanban/api/v1/agent_definitions.py`
++  - `kanban/api/v1/remote_runners.py`
++  - `agent/remote_runner/cli.py`
++  - `kanban/ops/llms_txt.py`
++
++In accordance with Phase 1 instructions, zero source-code mutations were made during this audit.
++
++---
++
++## 2. Setting-by-Setting Inventory Table
++
++Dispositions are categorized as:
++- **KEEP:** Retain in current place with verified backend wiring.
++- **SIMPLIFY:** Streamline label, helper text, or input ergonomics.
++- **MERGE:** Combine redundant controls or actions.
++- **MOVE_TO_ADVANCED:** Collapse beneath an Advanced Section disclosure.
++- **CUT:** Deprecate or remove unused or confusing options.
++
++| Screen/Drawer | Setting Label & Key | Options / Type | 1-Sentence Plain-English Meaning | Backend Wiring Status | Disposition |
++| :--- | :--- | :--- | :--- | :--- | :--- |
++| `AiStudioPage` | Studio Navigation (`activeTab="ai"`) | Tab item in `AdminStudioSubnav` | Navigates between administrative studio surfaces. | Wired to React Router `/admin/ai`. | KEEP |
++| `AiStudioPage` | Documentation Link (`ai-studio-doc-link`) | Hyperlink button (`StudioDocLink`) | Opens the multi-provider AI engine technical documentation. | Wired to `/docs/multi-provider-ai-engine-and-runners`. | KEEP |
++| `AiStudioPage` | Register Provider Action (`register-provider-btn`) | Primary Action Button | Opens the provider registration drawer in create mode. | Wired to internal drawer state `isDrawerOpen=true`. | KEEP |
++| `AiStudioPage` | Air-Gap Active Banner (`air-gap-active-banner`) | Informational Security Alert | Informs admin that enterprise zero-egress policy blocks cloud LLMs. | Wired to `GET /admin/ai/providers` air-gap check. | KEEP |
++| `AiStudioPage` | Drag & Drop Reorder Handle (`drag-handle-${id}`) | Drag handle (`⋮⋮`) | Allows visual reordering of provider failover priority. | Wired to HTML5 drag-and-drop state. | KEEP |
++| `AiStudioPage` | Up / Down Reorder Buttons (`move-up-btn`, `move-down-btn`) | Secondary Action Buttons | Accessible step-by-step priority reordering without drag-and-drop. | Wired to `PUT /api/v1/admin/ai/providers/order`. | KEEP |
++| `AiStudioPage` | Provider Kind Badge (`provider-kind-badge`) | Color-coded status badge | Displays provider runtime protocol (`gemini`, `openai`, `ollama`). | Bound to `p.provider_kind`. | KEEP |
++| `AiStudioPage` | Residency Tier Badge (`residency-badge`) | Semantic badge (`🏠 Local` / `☁️ Cloud`) | Indicates whether provider operates on loopback/LAN or external cloud. | Inferred via `isLocalEndpoint(provider_kind, base_url)`. | KEEP |
++| `AiStudioPage` | Enable / Disable Toggle (`toggle-enable-btn`) | State Toggle Button | Enables or suspends completions through this specific provider. | Wired to `POST ...:disable` and `PATCH ...`. | KEEP |
++| `AiStudioPage` | Provider Display Name | Plain text header (`h3`) | Friendly name of the configured AI provider. | Bound to `p.display_name`. | KEEP |
++| `AiStudioPage` | Priority & Tier Metadata | Metadata chips | Displays priority rank and configured data residency tier. | Bound to `p.priority` and `p.residency_tier`. | KEEP |
++| `AiStudioPage` | HTTP Base URL Metadata | Inline monospace URL | Displays upstream provider gateway endpoint. | Bound to `p.base_url`. | KEEP |
++| `AiStudioPage` | API Key Status Indicator (`key-status`) | Status chip | Shows whether write-only envelope encryption key is installed. | Bound to `p.api_key_set`. | KEEP |
++| `AiStudioPage` | Allowed Models List | Chip tags array | Displays models authorized for completions through this provider. | Bound to `p.model_allowlist`. | KEEP |
++| `AiStudioPage` | Test Connection Action (`test-connection-btn`) | Card Action Button | Tests roundtrip connectivity and latency for saved provider. | Wired to `POST /api/v1/admin/ai/providers/{id}/test-connection`. | KEEP |
++| `AiStudioPage` | Manage Token Budget Action (`manage-budget-btn`) | Card Action Button | Opens the budget and consumption modal for this provider. | Wired to `selectedBudgetProvider` modal state. | KEEP |
++| `AiStudioPage` | Edit Provider Action (`edit-provider-btn`) | Card Action Button | Opens the editor drawer with populated provider settings. | Wired to `editingProvider` drawer state. | KEEP |
++| `AiStudioPage` | Delete Provider Action (`delete-provider-btn`) | Danger Action Button | Prompts for confirmation and deletes provider configuration. | Wired to `DELETE /api/v1/admin/ai/providers/{id}`. | KEEP |
++| `AiProviderEditorDrawer` | Protocol & Provider Engine (`provider-kind-select`) | Select: `ollama`, `openai`, `gemini` | Selects underlying client protocol and API format. | Bound to `body.provider_kind` on `POST /admin/ai/providers`. | KEEP |
++| `AiProviderEditorDrawer` | Display Name (`provider-name-input`) | Text Input (Required) | Administrator label for the provider instance. | Bound to `body.display_name`. | KEEP |
++| `AiProviderEditorDrawer` | API Secret Key (`provider-key-input`) | Text Input (Masked) | Bearer secret or API key stored in write-only envelope custody. | Bound to `body.api_key`. | SIMPLIFY |
++| `AiProviderEditorDrawer` | Show/Hide API Key Toggle (`toggle-show-key-btn`) | Button Toggle | Toggles masking for manual inspection before saving. | Local component state `showApiKey`. | KEEP |
++| `AiProviderEditorDrawer` | Clear Existing Key (`clear-key-checkbox`) | Checkbox | Instructs backend to erase stored wrapped DEK and envelope key. | Bound to `clear_api_key` in `PATCH /admin/ai/providers/{id}`. | KEEP |
++| `AiProviderEditorDrawer` | Cutoff Timeout (`provider-timeout-ms-input`) | Number Input (1000..300000 ms) | Inference deadline before aborting or triggering failover. | Bound to `settings_json.timeout_ms`. | KEEP |
++| `AiProviderEditorDrawer` | Probe Models Action (`probe-models-btn`) | Secondary Button | Connects to endpoint and discovers available model IDs automatically. | Wired to `POST /admin/ai/providers/probe-models`. | KEEP |
++| `AiProviderEditorDrawer` | Probed Models Picker (`probed-models-picker`) | Searchable multi-chip selector | Quick-select interface to add discovered models to allowlist. | Local component state populated from probe response. | KEEP |
++| `AiProviderEditorDrawer` | Model Allowlist Input (`provider-models-input`) | Comma-separated Text Input | Explicit list of models permitted for completion and agent calls. | Bound to `body.model_allowlist` (list of strings). | KEEP |
++| `AiProviderEditorDrawer` | HTTP Base URL (`provider-base-url-input`) | URL Input | Base address for API requests (Ollama, OpenAI, or Gemini endpoint). | Bound to `body.base_url`. | SIMPLIFY |
++| `AiProviderEditorDrawer` | Temperature (`provider-temperature-input`) | Number Input (0.0..2.0) | Sampling randomness governing creative variance versus determinism. | Bound to `settings_json.temperature`. | MOVE_TO_ADVANCED |
++| `AiProviderEditorDrawer` | Top-P (Nucleus) (`provider-top-p-input`) | Number Input (0.0..1.0) | Cumulative probability cutoff for nucleus token sampling. | Bound to `settings_json.top_p`. | MOVE_TO_ADVANCED |
++| `AiProviderEditorDrawer` | Max Tokens (`provider-max-tokens-input`) | Number Input (1..128000) | Maximum token ceiling for model generation responses. | Bound to `settings_json.max_tokens`. | MOVE_TO_ADVANCED |
++| `AiProviderEditorDrawer` | mTLS Client Certificate PEM (`provider-mtls-cert-input`) | Textarea (PEM format) | Client certificate for mutual TLS authentication against gateways. | Bound to `settings_json.mtls_client_cert_pem`. | MOVE_TO_ADVANCED |
++| `AiProviderEditorDrawer` | Data Residency Tier Override (`provider-residency-select`) | Select: `local_only`, `cloud_standard`, etc. | Overrides auto-inferred local vs cloud classification. | Bound to `body.residency_tier`. | SIMPLIFY |
++| `AiBudgetModal` | Accounting Period (`budget-period-select`) | Select: `monthly`, `daily` | Window duration for token consumption tracking and quotas. | Bound to `period_kind` in `PUT /admin/ai/budgets`. | KEEP |
++| `AiBudgetModal` | Maximum Token Cap (`budget-token-cap-input`) | Number Input (0..10,000,000,000) | Hard quota ceiling; 0 freezes provider completions. | Bound to `token_cap` in `PUT /admin/ai/budgets`. | KEEP |
++| `AiBudgetModal` | Consumption Progress (`budget-progress-bar`) | HTML `<progress>` indicator | Visual depiction of tokens consumed plus reserved against quota. | Computed from `tokens_used` and `tokens_reserved`. | KEEP |
++| `AgentStudioPage` | Studio Navigation Subnav | Missing Component | Unified navigation bar for administrative studios. | Currently missing from component; must be added. | SIMPLIFY |
++| `AgentStudioPage` | Documentation Link (`agent-studio-doc-link`) | Hyperlink button (`StudioDocLink`) | Opens documentation for autonomous agent runtime. | Wired to `/docs/multi-provider-ai-engine-and-runners`. | KEEP |
++| `AgentStudioPage` | Register Agent Action (`register-agent-btn`) | Primary Action Button | Opens the agent definition registration drawer in create mode. | Wired to `isDrawerOpen=true`. | KEEP |
++| `AgentStudioPage` | Agent Harness Badge (`harness-badge`) | Status Badge | Indicates execution harness (`in_app_sdk`, `cli_pipe`, `remote_runner`). | Bound to `ag.harness_kind`. | KEEP |
++| `AgentStudioPage` | Agent Slug Handle (`agent-handle`) | Monospace Badge (`@slug`) | Permanent handle used in workflow transitions and mentions. | Bound to `ag.slug`. | KEEP |
++| `AgentStudioPage` | Agent Display Name | Plain text header (`h3`) | Friendly human-readable name of the autonomous agent. | Bound to `ag.display_name`. | KEEP |
++| `AgentStudioPage` | Execution Details (Model / CLI / Pool) | Dynamic Metadata Row | Displays model ID for SDK, binary and args for CLI, or pool for runner. | Bound to respective harness configuration fields. | KEEP |
++| `AgentStudioPage` | Timeout & Repo Mode Metadata | Metadata Row | Displays execution timeout limit and repository filesystem access mode. | Bound to `ag.timeout_ms` and `ag.repo_access_mode`. | KEEP |
++| `AgentStudioPage` | Allowed MCP Tools Chips | Chip tags array | Displays specific MCP tools this agent is permitted to execute. | Bound to `ag.mcp_allowed_tools`. | KEEP |
++| `AgentStudioPage` | Test Validation Action (`validate-agent-btn`) | Primary Green Action Button | Runs `validate-echo` test to verify schema, policy, and tool permissions. | Wired to `POST /api/v1/admin/agent-definitions/{id}:validate`. | KEEP |
++| `AgentStudioPage` | Edit Agent Action (`edit-agent-btn`) | Secondary Action Button | Opens the editor drawer with populated agent definition. | Wired to `editingAgent` drawer state. | KEEP |
++| `AgentStudioPage` | Delete Agent Action (`delete-agent-btn`) | Danger Action Button | Prompts for confirmation and removes agent definition. | Wired to `DELETE /api/v1/agent-definitions/{id}`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Agent Slug (`agent-slug-input`) | Text Input (`^[a-z0-9][a-z0-9-]{1,62}$`) | Permanent handle identifier (disabled when editing). | Bound to `body.slug`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Display Name (`agent-name-input`) | Text Input (Required) | Human-readable name for the autonomous agent. | Bound to `body.display_name`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Autonomous Harness (`agent-harness-select`) | Select: `in_app_sdk`, `cli_pipe`, `remote_runner` | Selects execution harness architecture (disabled when editing). | Bound to `body.harness_kind`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Provider Kind (`agent-provider-select`) | Select: `gemini`, `openai`, `ollama`, `fixture` | Selects AI provider kind when using In-App SDK harness. | Bound to `body.provider_kind`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Model Identifier (`agent-model-input`) | Text Input with Datalist | Target model ID with quickpick chips from active providers. | Bound to `body.model_id`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Allowlisted CLI Binary (`agent-cli-binary-select`) | Select: `agy`, `codex` | Allowlisted system binary when using CLI Pipe harness. | Bound to `body.cli_binary_allowlist_id`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Remote Runner Pool (`agent-runner-pool-input`) | Text Input (Slug) | Target runner pool slug when using Remote Runner harness. | Bound to `body.remote_runner_pool_slug`. | KEEP |
++| `AgentDefinitionEditorDrawer` | CLI Arguments (`agent-cli-args-input`) | Text Input | Command arguments enforcing pinned prefix (`exec -s read-only -`). | Bound to `body.cli_args` (list of strings). | KEEP |
++| `AgentDefinitionEditorDrawer` | Execution Timeout (`agent-timeout-input`) | Number Input (1000..300000 ms) | Execution deadline before aborting agent execution. | Bound to `body.timeout_ms`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Repo Access Mode (`agent-repo-mode-select`) | Select: `none`, `bare_git_tools`, `ro_vfs_mount` | Filesystem access policy for this agent. | Bound to `body.repo_access_mode`. | KEEP |
++| `AgentDefinitionEditorDrawer` | Allowed MCP Tools (`tool-checkbox-${tool}`) | Checkbox Grid | Fine-grained tool permission filters for this agent principal. | Bound to `body.mcp_allowed_tools`. | KEEP |
++| `AgentDefinitionEditorDrawer` | System Instructions (`agent-instructions-textarea`) | Markdown Textarea | Prompt instructions and behavioural rules for the agent. | Bound to `body.system_instructions_md`. | KEEP |
++| `AgentValidationModal` | Validation Report Output (`validation-report-output`) | Monospace `<pre>` Display | Displays structured 4-section verification report (`validate-echo`). | Populated from `AgentValidationResponse.report_text`. | KEEP |
++| `RunnerStudioPage` | Studio Navigation (`activeTab="runners"`) | Tab item in `AdminStudioSubnav` | Navigates between administrative studio surfaces. | Wired to React Router `/admin/agent-runners`. | KEEP |
++| `RunnerStudioPage` | Documentation Link (`runner-studio-doc-link`) | Hyperlink button (`StudioDocLink`) | Opens remote runner mTLS architecture guide. | Wired to `/docs/multi-provider-ai-engine-and-runners#remote-runners`. | KEEP |
++| `RunnerStudioPage` | Mint Enrollment Token Action (`open-mint-modal-btn`) | Primary Action Button | Opens the token minting modal for daemon onboarding. | Wired to `isMintModalOpen=true`. | KEEP |
++| `RunnerStudioPage` | Rotation Guidance Panel (`runner-rotation-guidance`) | Informational Advisory Box | Documents certificate lifecycle and non-destructive rotation steps. | Static UX guidance component. | KEEP |
++| `RunnerStudioPage` | Status Filter Pills (`runner-status-filters`) | Filter Button Group | Filters displayed runners by `all`, `active`, `revoked`, or `offline`. | Bound to `statusFilter` query parameter state. | KEEP |
++| `RunnerStudioPage` | Runner Status Badge (`runner-status-${id}`) | Status Badge | Indicates online, offline, or revoked operational state. | Bound to `r.status`. | KEEP |
++| `RunnerStudioPage` | Runner Hostname (`kb-runner-hostname`) | Monospace Header (`h3`) | System hostname reported by daemon during enrollment. | Bound to `r.hostname`. | KEEP |
++| `RunnerStudioPage` | Cert Expiration & Heartbeat Metadata | Metadata Rows | Displays certificate validity end date and last WebSocket heartbeat. | Bound to `r.cert_expires_at` and `r.last_heartbeat_at`. | KEEP |
++| `RunnerStudioPage` | Full Cert SHA-256 (`runner-advanced-details`) | Monospace Code Display | Displays complete SHA-256 fingerprint of client leaf certificate. | Bound to `r.client_cert_sha256_hex`. | KEEP |
++| `RunnerStudioPage` | Runner Capabilities Chips | Chip tags array | Displays capabilities dictionary reported by runner daemon. | Bound to `r.capabilities`. | KEEP |
++| `RunnerStudioPage` | 1-Click Revoke Action (`revoke-runner-btn`) | Danger Action Button | Terminates runner connection and invalidates certificate (requires AAL2). | Wired to `POST /api/v1/admin/agent-runners/{id}:revoke`. | KEEP |
++| `MintEnrollmentTokenModal` | Target Runner Pool Slug (`token-pool-slug-input`) | Text Input (`^[a-z0-9][a-z0-9-]{1,62}$`) | Pool identifier where daemon will register (default: `default`). | Bound to `body.pool_slug`. | KEEP |
++| `MintEnrollmentTokenModal` | Token Expiration TTL (`token-ttl-select`) | Select: `300`, `600`, `900` seconds | Lifetime before single-use token expires (max 15 minutes). | Bound to `body.ttl_seconds`. | KEEP |
++| `MintEnrollmentTokenModal` | Single-Reveal Plaintext Token (`token-plaintext`) | Monospace Display Box | Displays raw cryptographically signed enrollment token once. | Populated from `EnrollmentTokenResponse.enrollment_token`. | KEEP |
++| `MintEnrollmentTokenModal` | Copy Token Action (`copy-token-btn`) | Action Button | Copies plaintext enrollment token to system clipboard. | Wired to `navigator.clipboard.writeText`. | KEEP |
++| `MintEnrollmentTokenModal` | Example CLI Ingestion Command (`runner-cli-command`) | Monospace `<pre>` Block | Shell command example to enroll runner daemon via stdin. | Formatted template string. | SIMPLIFY |
++| `MintEnrollmentTokenModal` | Dismiss Mint Modal Action (`dismiss-mint-modal-btn`) | Primary Action Button | Closes single-reveal view and purges token from React state. | Local modal state `handleClose`. | SIMPLIFY |
++
++---
++
++## 3. Simplification Proposals & Focus Areas
++
++### 3.1 1-Click Provider Presets (Gemini, OpenAI, Ollama)
++- **Current State:** When a user selects a provider kind in `AiProviderEditorDrawer.tsx`, default display names and base URLs are set only on initial dropdown change if not editing. Base URL is tucked away under the Advanced Section.
++- **Proposed Simplification:**
++  - Provide explicit 1-click Preset Buttons for the 3 core supported runtimes:
++    - **Google Gemini:** Pre-fills `display_name="Google Gemini Workspace"`, `base_url="https://generativelanguage.googleapis.com"`, `residency_tier="cloud_standard"`, and suggested models (`gemini-2.5-flash`, `gemini-2.5-pro`).
++    - **OpenAI:** Pre-fills `display_name="OpenAI GPT-4o"`, `base_url="https://api.openai.com/v1"`, `residency_tier="cloud_standard"`, and suggested models (`gpt-4o`, `gpt-4o-mini`).
++    - **Ollama (Zero-Egress):** Pre-fills `display_name="Local Ollama Runtime"`, `base_url="http://127.0.0.1:11434"`, `residency_tier="local_only"`, and marks API key as optional.
++  - Move the **HTTP Base URL** field out of the Advanced Section into the primary connection settings group directly below Protocol & Provider Engine, so users configuring custom endpoints (e.g. LAN Ollama at `http://192.168.1.50:11434` or vLLM at `http://127.0.0.1:8000/v1`) can view and edit the URL without expanding Advanced Settings.
++
++### 3.2 Token Budget UX & Quota Clarity
++- **Current State:** `AiBudgetModal.tsx` allows setting daily and monthly caps. Entering `0` freezes completions, but there is no explicit visual indicator distinguishing between "unlimited" and "freeze".
++- **Proposed Simplification:**
++  - Add explicit radio or toggle pills: `Enforce Token Cap` vs `Unlimited Quota (No Cap)`.
++  - When quota is enabled, provide numeric helper presets (`1M`, `5M`, `25M`, `100M tokens`).
++  - Add an explicit banner warning when token cap is set to `0`: `"0 tokens set: Completions through this provider are completely frozen."`
++
++### 3.3 Missing Studio Subnav on `AgentStudioPage.tsx`
++- **Current State:** `AgentStudioPage.tsx` does not render `AdminStudioSubnav`. Furthermore, `AdminStudioSubnav.tsx` defines 8 tabs (`auth`, `ai`, `runners`, `mcp`, `oauth`, `imports`, `standalone`, `diagnostics`) but completely lacks an `agents` tab for `/admin/agents`.
++- **Proposed Simplification:**
++  - Add `{ id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' }` to `ADMIN_TABS` in `AdminStudioSubnav.tsx`.
++  - Mount `<AdminStudioSubnav activeTab="agents" />` at the top of `AgentStudioPage.tsx`.
++
++### 3.4 CLI Pipe vs Remote mTLS Runner Clarity
++- **Current State:** `AgentDefinitionEditorDrawer.tsx` presents `cli_pipe` and `remote_runner` without clarifying that CLI Pipe executes a sandboxed local process via stdin/stdout pipe (`agy` or `codex`), whereas Remote Runner connects outbound via mutual TLS over WebSocket.
++- **Proposed Simplification:**
++  - In `AgentDefinitionEditorDrawer.tsx`, add concise inline helper callouts under `agent-harness-select`:
++    - **In-App SDK:** Direct API calls from server to configured AI provider.
++    - **CLI Pipe:** Local sandboxed CLI process on server (`agy -p` or `codex exec -s read-only -`).
++    - **Remote Runner:** Distributed worker node connecting via outbound mTLS.
++  - In `MintEnrollmentTokenModal.tsx`:
++    - Fix the CLI ingestion snippet to use `--server-url` (canonical) instead of `--url`.
++    - Add a dedicated `Copy CLI Command` button (`data-testid="copy-runner-cli-btn"`) with `"✓ Copied!"` feedback.
++    - Change dismiss button label from `"I have safely stored the token"` to plain `"Done"` (`data-testid="dismiss-mint-modal-btn"`).
++
++### 3.5 Air-Gap Mode Enforcement & Indicators
++- **Current State:** Both `AiStudioPage.tsx` and `AiProviderEditorDrawer.tsx` display air-gap warning banners, but in the drawer dropdown, OpenAI and Gemini remain clickable before triggering an error message on submit.
++- **Proposed Simplification:**
++  - In `AiProviderEditorDrawer.tsx`, visually disable (`disabled={airGapMode}`) the cloud provider options (`openai`, `gemini`) in `provider-kind-select` when `airGapMode` is active, appending `"(Blocked by Air-Gap Policy)"` to the option labels.
++  - Default selection strictly to `ollama` when `airGapMode` is true.
++
++### 3.6 Password Manager Auto-Save Prevention (Alignment with KAN-400)
++- **Current State:** `AiProviderEditorDrawer.tsx:447` mounts `<input id="provider-key-input" type={showApiKey ? 'text' : 'password'} ... />`. Chromium and password managers (1Password, Bitwarden, LastPass) treat any form containing `type="text"` followed by `type="password"` as a site login credential, prompting users to overwrite their `k.hackedyour.info` account password with the API key.
++- **Proposed Simplification:**
++  - Ensure `AiProviderEditorDrawer.tsx` renders zero `input[type="password"]` elements.
++  - Implement masked text representation with `-webkit-text-security: disc;` and browser ignore attributes (`data-1p-ignore="true"`, `data-lpignore="true"`, `data-bwignore="true"`, `autoComplete="off"`).
++
++### 3.7 WebSudo (AAL2) Session Keepalive in Drawers
++- **Current State:** While drafting provider or agent configurations in drawers, the administrator AAL2 session token may expire, causing save actions to fail with `403 AAL2_REQUIRED` and losing uncommitted form changes.
++- **Proposed Simplification:**
++  - Mount `useAal2DirtyKeepalive()` in both `AiProviderEditorDrawer` and `AgentDefinitionEditorDrawer` so active typing keeps the admin session fresh.
++
++---
++
++## 4. Phase 2 (KAN-412) File-Scoped Action Checklist
++
++This checklist defines the exact implementation tasks for Phase 2 (`KAN-412`), deduplicated against existing tickets:
++- **KAN-404:** WebSudo sliding window and replay.
++- **KAN-399:** Runner enroll UX and CLI defaults.
++- **KAN-400:** Password manager auto-save prevention in AI provider editor drawer.
++- **KAN-401 / KAN-402:** Promoting AI providers and agents to workspace and project scopes.
++- **KAN-403:** Restricting `/llms.txt` onboarding prompt strictly to local project folder.
++
++### 4.1 Frontend Tasks
++- [ ] **`kanban/web/src/features/admin/AdminStudioSubnav.tsx`:**
++  - Add `{ id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' }` to `ADMIN_TABS`.
++- [ ] **`kanban/web/src/features/admin-agents/AgentStudioPage.tsx`:**
++  - Import and render `<AdminStudioSubnav activeTab="agents" />` at the top of the section.
++- [ ] **`kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx`:**
++  - Promote **HTTP Base URL** (`provider-base-url-input`) out of the Advanced Section into the primary connection settings group.
++  - Add 1-click Preset Buttons for Gemini, OpenAI, and Ollama.
++  - In air-gap mode, disable cloud options in `provider-kind-select` with visual indicators.
++  - Mount `useAal2DirtyKeepalive()` to protect in-flight drawer edits.
++- [ ] **`kanban/web/src/features/admin-ai/AiBudgetModal.tsx`:**
++  - Add token budget presets (`1M`, `5M`, `25M`, `100M`) and zero-cap freeze alert.
++- [ ] **`kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx`:**
++  - Add inline helper descriptions for each execution harness (`in_app_sdk`, `cli_pipe`, `remote_runner`).
++  - Mount `useAal2DirtyKeepalive()` during form editing.
++- [ ] **`kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx`:**
++  - In accordance with KAN-399: emit `--server-url` instead of `--url`, add Copy CLI Command button (`data-testid="copy-runner-cli-btn"`), and change dismiss button label to `"Done"`.
++
++### 4.2 Backend & CLI Tasks
++- [ ] **`agent/remote_runner/cli.py`:**
++  - In accordance with KAN-399: add `default_runner_state_dir() -> Path` (`0o700`), `default_runner_config_path() -> Path`, and accept `--server-url` as canonical with `--url` backward-compatible alias.
++- [ ] **`kanban/api/v1/admin/ai_providers.py`:**
++  - Ensure all endpoints validate air-gap enforcement cleanly and reject cloud URLs with `409 AIR_GAP_EGRESS_DENIED`.
++- [ ] **`kanban/ops/llms_txt.py`:**
++  - In accordance with KAN-403: update `ONBOARDING_PROMPT_TEMPLATE` and skills catalog to mandate local project folder persistence by default.
++
++---
++
++## 5. Phase 3 (KAN-413) Credential & Container Checklist
++
++Phase 3 executes live workouts on isolated local TLS staging without destructive mutations on `k.hackedyour.info`. The following prerequisites and credentials must be prepared:
++
++### 5.1 Cloud & Local AI Credentials
++1. **Google Gemini API Key:**
++   - Valid key with access to `gemini-2.5-flash` or `gemini-1.5-flash`.
++   - Used for live provider registration, model probing, and completion testing.
++2. **OpenAI API Key (or vLLM / LiteLLM Proxy):**
++   - Valid key or local OpenAI-compatible endpoint.
++   - Used for failover priority stack validation.
++3. **Local Ollama Runtime:**
++   - Active Ollama daemon listening on `http://127.0.0.1:11434` or local network host.
++   - At least 1 pulled model (e.g. `llama3.2`, `qwen2.5-coder`, or `smollm2`).
++   - Required for testing zero-egress completions in Enterprise Air-Gap mode.
++
++### 5.2 Isolated Local TLS Container Environment
++1. **Hermetic Test DB & Server:**
++   - Run local application server on test port (e.g. `http://127.0.0.1:8080`).
++   - Dedicated mTLS port (default: `8444`) for remote runner WebSocket hub.
++2. **Strict Invariant on Protected Instances:**
++   - **Zero Destructive Actions on `k.hackedyour.info` / `192.168.1.101`:** Do not alter existing provider configurations, reset database state, or delete production runners.
++   - All tests and screenshots must run against local fixtures or strictly non-destructive workspace scopes.
++
++### 5.3 Remote Runner Daemon Test Node
++1. **Non-Root Execution Environment:**
++   - Verify daemon executes as regular user utilizing XDG data directory:
++     `~/.local/share/kanban-runner` (permissions `0o700`).
++2. **Enrollment & Proof-of-Possession:**
++   - Mint single-use token from local server.
++   - Run `echo "<token>" | uv run kanban-agent-runner enroll --server-url https://127.0.0.1:8080 --token-stdin --pool default`.
++   - Start daemon `uv run kanban-agent-runner run` and verify heartbeat shows `online` in `RunnerStudioPage`.
++
++---
++
++## 6. Verification and Compliance
++
++- **No Unicode Dashes:** Validated with `python3 scripts/check_no_dashes.py --all docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md`. All dashes are standard ASCII hyphens (`-`).
++- **File Existence:** 100% of cited paths in Section 1 have been checked and confirmed to exist in the repository tree.
++- **Traceability:** Aligns 1:1 with KAN-410, KAN-411, KAN-412, and KAN-413.
