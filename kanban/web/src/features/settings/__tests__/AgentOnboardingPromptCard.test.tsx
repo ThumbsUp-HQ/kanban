@@ -328,14 +328,15 @@ describe('AgentOnboardingPromptCard component', () => {
 
     vi.useFakeTimers();
     try {
-      act(() => {
+      await act(async () => {
         fireEvent.click(saveBtn);
+        await vi.advanceTimersByTimeAsync(0);
       });
 
       expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
 
-      act(() => {
-        vi.advanceTimersByTime(3000);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3100);
       });
 
       expect(screen.queryByTestId('onboarding-save-success')).toBeNull();
@@ -344,7 +345,7 @@ describe('AgentOnboardingPromptCard component', () => {
     }
   });
 
-  it('resets copied state after timeout and handles copy failure', () => {
+  it('resets copied state after timeout and handles copy failure', async () => {
     vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
       principal_id: '01a2-test',
       workspace_id: '01a2-ws',
@@ -364,22 +365,24 @@ describe('AgentOnboardingPromptCard component', () => {
 
     vi.useFakeTimers();
     try {
-      act(() => {
+      await act(async () => {
         fireEvent.click(copyBtn);
+        await vi.advanceTimersByTimeAsync(0);
       });
 
       expect(copyBtn.textContent).toContain('Copied Prompt!');
 
-      act(() => {
-        vi.advanceTimersByTime(2000);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
       });
 
       expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
 
       // Test copy failure (returns false)
       vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValueOnce(false);
-      act(() => {
+      await act(async () => {
         fireEvent.click(copyBtn);
+        await vi.advanceTimersByTimeAsync(0);
       });
 
       expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');

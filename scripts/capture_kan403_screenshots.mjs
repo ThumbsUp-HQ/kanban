@@ -272,7 +272,15 @@ async function main() {
       const saveBtn = page.locator('[data-testid="save-agent-onboarding-prefs-btn"]');
       await copyBtn.scrollIntoViewIfNeeded();
       await saveBtn.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300);
+
+      // Scroll back to top so static topbar sits cleanly at y=0 without overlapping the card
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        const canvas = document.querySelector('.kb-main-canvas');
+        if (canvas) canvas.scrollTop = 0;
+      });
+      await page.waitForTimeout(300);
 
       await page.screenshot({
         path: path.join(OUT_DIR, filename),
