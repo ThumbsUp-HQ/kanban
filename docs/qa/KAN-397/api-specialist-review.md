@@ -5,6 +5,7 @@
 - **Ticket**: KAN-397 (`[KB-MIGRATION-STUDIO-RENAME] Rename "Plane Migration Import Studio" and "Plane Migration" to "Migration Import Studio" and "Migration"`)
 - **Module**: `kanban/web/src/features/admin-imports/`, `kanban/web/src/features/admin/`, `kanban/web/src/app/`
 - **Reviewed By**: API Specialist (`@api-spec`)
+- **Branch**: `fix/KAN-397-rc1`
 - **Status**: STATUS: APPROVED
 - **Verdict**: APPROVED
 
@@ -31,7 +32,8 @@
   - Zero modifications to backend database access, permissions, or RLS policies.
 
 ### 3. Automated Test Verification
-- All 37 unit tests pass with 100% statement, 95.56% branch, 100% function, and 100% line coverage.
+- All 86 unit tests pass with 99.31% statement, 95.30% branch, 99.01% function, and 99.76% line coverage across the 4 modified source files.
+- Verified explicit negative assertions in `MenuConsolidation_KAN362.test.tsx` verifying that `tab-admin-imports` and `topbar-admin-imports-link` do NOT contain `'Plane Migration'` or `'Plane Migration Import Studio'`.
 - Positive and negative cases verified across positive input, source switching, dry-run simulation, and live import execution.
 
 ### 4. Specialist Verdict

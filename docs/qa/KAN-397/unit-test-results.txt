@@ -1,23 +1,37 @@
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan397-1183e5ab/kanban/web
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan397-rc1-0563eac0/kanban/web
+> vitest run --coverage src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/app/__tests__/MenuConsolidation_KAN362.test.tsx src/app/Topbar.test.tsx src/app/AppShell.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan397-rc1-0563eac0/kanban/web
       Coverage enabled with v8
 
 Not implemented: navigation to another Document
- ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (12 tests) 1017ms
- ✓ src/app/__tests__/MenuConsolidation_KAN362.test.tsx (25 tests) 725ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (12 tests) 1066ms
+ ✓ src/app/Topbar.test.tsx (24 tests) 1893ms
+   ✓ Topbar (24)
+     ✓ navigates via avatar menu admin links and closes menu on click 496ms
+ ✓ src/app/AppShell.test.tsx (9 tests) 1448ms
+   ✓ AppShell (9)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 467ms
+     ✓ toggles mobile sidebar via hamburger button and closes it 320ms
+ ✓ src/app/__tests__/MenuConsolidation_KAN362.test.tsx (41 tests) 1459ms
 
- Test Files  2 passed (2)
-      Tests  37 passed (37)
-   Start at  00:54:58
-   Duration  3.14s (tests 36%, environment 29%, import 22%, transform 10%, worker 2%)
+ Test Files  4 passed (4)
+      Tests  86 passed (86)
+   Start at  01:51:58
+   Duration  3.81s (tests 50%, environment 25%, import 16%, transform 8%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |     100 |    95.56 |     100 |     100 |                   
- admin             |     100 |      100 |     100 |     100 |                   
+All files          |   99.31 |     95.3 |   99.01 |   99.76 |                   
+ app               |   98.86 |    95.01 |   98.36 |    99.6 |                   
+  AppShell.tsx     |     100 |    95.55 |     100 |     100 | ...50,170,220,248 
+  Topbar.tsx       |   97.56 |    94.44 |   96.77 |   99.13 | 371               
+ features/admin    |     100 |      100 |     100 |     100 |                   
   ...dioSubnav.tsx |     100 |      100 |     100 |     100 |                   
- admin-imports     |     100 |    95.13 |     100 |     100 |                   
+ .../admin-imports |     100 |    95.13 |     100 |     100 |                   
   ...ortStudio.tsx |     100 |    95.13 |     100 |     100 | ...82-288,633,922 
 -------------------|---------|----------|---------|---------|-------------------

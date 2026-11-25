@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -70,6 +70,24 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
         expect(tabEl.textContent).toContain(tab.label);
         expect(tabEl.getAttribute('href')).toBe(tab.path);
       }
+
+      // Explicit negative and exact string assertions for tab-admin-imports
+      const importsTab = screen.getByTestId('tab-admin-imports');
+      expect(importsTab.textContent).toContain('Migration');
+      expect(importsTab.textContent).not.toContain('Plane Migration');
+      expect(importsTab.textContent).not.toContain('Plane Migration Import Studio');
+      expect(importsTab.textContent.replace(/\s+/g, ' ').trim()).toBe('📥Migration');
+    });
+
+    it('filters out server-only tabs when isServerAdmin is false', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/diagnostics']}>
+          <AdminStudioSubnav isServerAdmin={false} />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('tab-admin-diagnostics')).toBeDefined();
+      expect(screen.queryByTestId('tab-admin-imports')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
     });
 
     it.each(allTabs)('activates tab "%s" when activeTab prop is passed', (tab) => {
@@ -163,6 +181,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       id?: string;
       handle?: string;
       display_name?: string;
+      avatar_url?: string | null;
       is_server_admin?: boolean;
       is_workspace_admin?: boolean;
     } | null) {
@@ -214,8 +233,12 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(screen.getByTestId('topbar-admin-agents-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-runners-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-oauth-link')).toBeDefined();
-      expect(screen.getByTestId('topbar-admin-imports-link')).toBeDefined();
-      expect(screen.getByTestId('topbar-admin-imports-link').textContent).toContain('Migration Import Studio');
+      const importsLink = screen.getByTestId('topbar-admin-imports-link');
+      expect(importsLink).toBeDefined();
+      expect(importsLink.textContent).toContain('Migration Import Studio');
+      expect(importsLink.textContent).not.toContain('Plane Migration');
+      expect(importsLink.textContent).not.toContain('Plane Migration Import Studio');
+      expect(importsLink.textContent.replace(/\s+/g, ' ').trim()).toBe('📥Migration Import Studio');
       expect(screen.getByTestId('topbar-admin-standalone-link')).toBeDefined();
 
       // Documentation & About
@@ -240,8 +263,12 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(screen.getByTestId('topbar-admin-auth-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-ai-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-oauth-link')).toBeDefined();
-      expect(screen.getByTestId('topbar-admin-imports-link')).toBeDefined();
-      expect(screen.getByTestId('topbar-admin-imports-link').textContent).toContain('Migration Import Studio');
+      const srvImportsLink = screen.getByTestId('topbar-admin-imports-link');
+      expect(srvImportsLink).toBeDefined();
+      expect(srvImportsLink.textContent).toContain('Migration Import Studio');
+      expect(srvImportsLink.textContent).not.toContain('Plane Migration');
+      expect(srvImportsLink.textContent).not.toContain('Plane Migration Import Studio');
+      expect(srvImportsLink.textContent.replace(/\s+/g, ' ').trim()).toBe('📥Migration Import Studio');
 
       // Should NOT have workspace-level settings link
       expect(screen.queryByTestId('topbar-workspace-settings-link')).toBeNull();
@@ -333,6 +360,84 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       fireEvent.mouseDown(document.body);
       expect(screen.queryByTestId('topbar-personal-settings-link')).toBeNull();
     });
+
+    it.each([
+      { testId: 'topbar-admin-imports-link', label: 'Migration Import Studio', path: '/admin/imports' },
+      { testId: 'topbar-admin-auth-link', label: 'Admin Auth Studio', path: '/admin/auth' },
+      { testId: 'topbar-admin-ai-link', label: 'AI Providers & Token Caps', path: '/admin/ai' },
+      { testId: 'topbar-admin-agents-link', label: 'Autonomous Agents', path: '/admin/agents' },
+      { testId: 'topbar-admin-runners-link', label: 'Remote mTLS Runners', path: '/admin/agent-runners' },
+      { testId: 'topbar-admin-oauth-link', label: 'OAuth 2.1 Clients', path: '/admin/oauth' },
+      { testId: 'topbar-admin-standalone-link', label: 'System Storage, Backups & Deployment', path: '/admin/standalone' },
+      { testId: 'topbar-link-auditor-link', label: 'Diagnostics & Link Inspector', path: '/admin/diagnostics' },
+      { testId: 'topbar-avatar-docs-link', label: 'Documentation', path: '/docs' },
+      { testId: 'topbar-about-link', label: 'About 👍kanban', path: '/about' },
+      { testId: 'topbar-personal-settings-link', label: 'Personal Profile & Security', path: '/settings/profile' },
+      { testId: 'topbar-mcp-studio-link', label: 'Bot Keys & MCP Tools', path: '/settings/mcp' },
+      { testId: 'topbar-workspace-settings-link', label: 'Workspace Configuration', path: '/workspaces/settings' },
+    ])('clicks link "$testId", verifies href, and closes menu', ({ testId, path }) => {
+      renderTopbarWithUser({
+        id: 'u-admin',
+        handle: 'admin',
+        is_server_admin: true,
+        is_workspace_admin: true,
+      });
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      fireEvent.click(avatarBtn);
+
+      const linkEl = screen.getByTestId(testId);
+      expect(linkEl.getAttribute('href')).toBe(path);
+      fireEvent.click(linkEl);
+      expect(screen.queryByTestId(testId)).toBeNull();
+    });
+
+    it('covers Home/End keys in menu and avatar error fallback', () => {
+      renderTopbarWithUser({
+        id: 'u-admin',
+        handle: 'admin',
+        avatar_url: '/bad-avatar.png',
+        is_server_admin: true,
+      });
+
+      const avatarImg = screen.getByTestId('topbar-avatar-img');
+      fireEvent.error(avatarImg);
+      expect(screen.getByTestId('topbar-avatar-initial')).toBeDefined();
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      fireEvent.click(avatarBtn);
+
+      const menuAvatarImgs = screen.queryAllByRole('img');
+      const firstImg = menuAvatarImgs[0];
+      if (firstImg) {
+        fireEvent.error(firstImg);
+      }
+
+      const menu = screen.getByRole('menu');
+      fireEvent.keyDown(menu, { key: 'Home' });
+      fireEvent.keyDown(menu, { key: 'End' });
+    });
+
+    it('handles logout network error gracefully and still navigates to /login', async () => {
+      const fetchSpy = vi.spyOn(window, 'fetch').mockRejectedValueOnce(new Error('Network error'));
+      renderTopbarWithUser({
+        id: 'u-admin',
+        handle: 'admin',
+        is_server_admin: true,
+      });
+
+      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+      fireEvent.click(avatarBtn);
+
+      const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
+      await act(async () => {
+        fireEvent.click(logoutBtn);
+        await Promise.resolve();
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
   });
 
   describe('3. AdminMcpRedirect Route Behavior', () => {
@@ -405,6 +510,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
   describe('5. AppShell computeCurrentSection Mappings (KAN-397)', () => {
     it('correctly maps server admin routes to descriptive section labels', () => {
       expect(computeCurrentSection('/admin/imports')).toBe('Migration Import Studio');
+      expect(computeCurrentSection('/admin/imports/')).toBe('Migration Import Studio');
       expect(computeCurrentSection('/admin/auth')).toBe('Auth Cards');
       expect(computeCurrentSection('/admin/oauth')).toBe('OAuth Clients');
       expect(computeCurrentSection('/admin/agent-runners')).toBe('Agent Runners');
@@ -412,6 +518,17 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(computeCurrentSection('/admin/agents')).toBe('Autonomous Agents');
       expect(computeCurrentSection('/admin/diagnostics')).toBe('Diagnostics');
       expect(computeCurrentSection('/admin/link-auditor')).toBe('Diagnostics');
+      expect(computeCurrentSection('/docs')).toBe('Docs');
+      expect(computeCurrentSection('/settings/profile')).toBe('Settings');
+      expect(computeCurrentSection('/settings/mcp')).toBe('Settings');
+      expect(computeCurrentSection('/workspaces/settings')).toBe('Settings');
+      expect(computeCurrentSection('/projects/KAN/cycles')).toBe('Cycles');
+      expect(computeCurrentSection('/projects/KAN/modules')).toBe('Modules');
+      expect(computeCurrentSection('/projects/KAN/stickies')).toBe('Stickies');
+      expect(computeCurrentSection('/projects/KAN/views')).toBe('Views');
+      expect(computeCurrentSection('/projects/KAN/activity')).toBe('Activity');
+      expect(computeCurrentSection('/projects/KAN/overview')).toBe('Overview');
+      expect(computeCurrentSection('/projects/KAN/issues')).toBe('Work Items');
     });
 
     it('falls back to provided fallback or Work Items', () => {
