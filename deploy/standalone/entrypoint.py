@@ -595,9 +595,19 @@ class OpsSocketServer:
                         req_json_str,
                     ]
                     proc = run_as_postgres(cmd, timeout=300.0, check=False)
-                    out_text = proc.stdout.strip()
+                    raw_stdout: str | bytes = proc.stdout or ""
+                    if isinstance(raw_stdout, bytes):
+                        out_text = raw_stdout.decode("utf-8", errors="replace").strip()
+                    else:
+                        out_text = raw_stdout.strip()
+
                     if not out_text:
-                        err_msg = proc.stderr or "Empty response from privileged op"
+                        raw_stderr: str | bytes = proc.stderr or ""
+                        err_msg = (
+                            raw_stderr.decode("utf-8", errors="replace").strip()
+                            if isinstance(raw_stderr, bytes)
+                            else str(raw_stderr).strip()
+                        ) or "Empty response from privileged op"
                         out_text = json.dumps(
                             {
                                 "status": "error",

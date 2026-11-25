@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import {
@@ -52,6 +52,12 @@ vi.mock('../../features/auth/SecondFactorStep', () => ({
     </div>
   ),
 }));
+
+afterEach(() => {
+  cleanup();
+  registerAal2StepUpHandler(null as never);
+  vi.restoreAllMocks();
+});
 
 describe('WebSudo CSRF cookie-first resolution (KAN-404)', () => {
   beforeEach(() => {
@@ -286,7 +292,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -343,7 +349,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -385,7 +391,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
       value: { assign: assignMock, search: '', href: 'http://localhost/' },
     });
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -470,7 +476,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -862,7 +868,7 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     };
     window.addEventListener('kb:aal2-expires-at', expiresListener);
 
-    render(
+    const { unmount } = render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,

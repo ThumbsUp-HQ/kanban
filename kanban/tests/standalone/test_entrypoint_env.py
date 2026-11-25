@@ -349,7 +349,10 @@ async def test_ops_socket_export_service_dump(tmp_path: Path) -> None:
     server = OpsSocketServer(run_dir=str(tmp_path))
     server.start()
     try:
-        with patch.dict(os.environ, {"KB_OPS_SOCK": str(server.sock_path)}):
+        with (
+            patch("os.geteuid", return_value=1000),
+            patch.dict(os.environ, {"KB_OPS_SOCK": str(server.sock_path)}),
+        ):
             mock_proc = SimpleNamespace(stdout=b"DUMP_OUTPUT", returncode=0)
             with patch("deploy.standalone.entrypoint.subprocess.run", return_value=mock_proc):
                 data = await run_pg_dump(socket_dir=str(tmp_path))
@@ -373,7 +376,10 @@ async def test_ops_socket_system_status_endpoints(tmp_path: Path) -> None:
     server = OpsSocketServer(run_dir=str(tmp_path))
     server.start()
     try:
-        with patch.dict(os.environ, {"KB_OPS_SOCK": str(server.sock_path)}):
+        with (
+            patch("os.geteuid", return_value=1000),
+            patch.dict(os.environ, {"KB_OPS_SOCK": str(server.sock_path)}),
+        ):
             # 1. run_backup_now_endpoint success
             mock_report = MagicMock()
             mock_report.size_bytes = 2048
