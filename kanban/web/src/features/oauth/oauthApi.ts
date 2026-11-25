@@ -41,7 +41,12 @@ export async function submitDeviceActivation(
   })) as DeviceActivateResponse;
 }
 
-export type OAuthClientStatus = 'active' | 'suspended' | 'disabled' | 'revoked';
+export type OAuthClientStatus =
+  | 'active'
+  | 'pending_admin_approval'
+  | 'suspended'
+  | 'disabled'
+  | 'revoked';
 
 export interface OAuthClientItem {
   client_id: string;
@@ -61,14 +66,56 @@ export interface OAuthClientItem {
   updated_at?: string | null | undefined;
 }
 
+export interface AdminOAuthClientsParams {
+  status?: OAuthClientStatus | 'all' | undefined;
+  q?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  envelope?: boolean | undefined;
+}
+
+export interface AdminOAuthClientsEnvelope {
+  items: OAuthClientItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function fetchAdminOAuthClients(
+  params?: AdminOAuthClientsParams,
+): Promise<OAuthClientItem[] | AdminOAuthClientsEnvelope> {
+  const query: Record<string, string | number | boolean> = {};
+  if (params?.status && params.status !== 'all') {
+    query.status = params.status;
+  }
+  if (params?.q) {
+    query.q = params.q;
+  }
+  if (params?.limit !== undefined) {
+    query.limit = params.limit;
+  }
+  if (params?.offset !== undefined) {
+    query.offset = params.offset;
+  }
+  if (params?.envelope !== undefined) {
+    query.envelope = params.envelope;
+  }
+
+  const opts = Object.keys(query).length > 0 ? { query } : undefined;
+  if (opts) {
+    return (await apiFetch('GET', '/api/v1/admin/oauth-clients' as never, opts)) as
+      | OAuthClientItem[]
+      | AdminOAuthClientsEnvelope;
+  }
+  return (await apiFetch('GET', '/api/v1/admin/oauth-clients' as never)) as
+    | OAuthClientItem[]
+    | AdminOAuthClientsEnvelope;
+}
+
 export interface PatchOAuthClientRequest {
   status?: OAuthClientStatus | undefined;
   client_name?: string | undefined;
   redirect_uris?: string[] | undefined;
-}
-
-export async function fetchAdminOAuthClients(): Promise<OAuthClientItem[]> {
-  return (await apiFetch('GET', '/api/v1/admin/oauth-clients' as never)) as OAuthClientItem[];
 }
 
 export async function patchAdminOAuthClient(
@@ -80,15 +127,6 @@ export async function patchAdminOAuthClient(
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' },
   });
-}
-
-export async function registerAdminOAuthClient(
-  payload: RegisterOAuthClientRequest,
-): Promise<OAuthClientItem> {
-  return (await apiFetch('POST', '/api/v1/admin/oauth-clients' as never, {
-    body: JSON.stringify(payload),
-    headers: { 'Content-Type': 'application/json' },
-  })) as OAuthClientItem;
 }
 
 export interface RegisterOAuthClientRequest {
@@ -105,8 +143,42 @@ export interface RegisterOAuthClientRequest {
   response_types?: string[] | undefined;
 }
 
-export async function deleteAdminOAuthClient(clientId: string): Promise<void> {
+export async function registerAdminOAuthClient(
+  payload: RegisterOAuthClientRequest,
+): Promise<OAuthClientItem> {
+  return (await apiFetch('POST', '/api/v1/admin/oauth-clients' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as OAuthClientItem;
+}
+
+export async function deleteAdminOAuthClient(
+  clientId: string,
+  opts?: { permanent?: boolean },
+): Promise<void> {
+  const query = opts?.permanent ? { permanent: true } : undefined;
   await apiFetch('DELETE', '/api/v1/admin/oauth-clients/{client_id}' as never, {
     params: { client_id: clientId },
+    ...(query ? { query } : {}),
   });
+}
+
+export interface BulkDeleteOAuthClientsRequest {
+  client_ids?: string[];
+  purge_unused_dcr?: boolean;
+  purge_revoked?: boolean;
+}
+
+export interface BulkDeleteOAuthClientsResponse {
+  deleted_count: number;
+  deleted_client_ids: string[];
+}
+
+export async function bulkDeleteAdminOAuthClients(
+  payload: BulkDeleteOAuthClientsRequest,
+): Promise<BulkDeleteOAuthClientsResponse> {
+  return (await apiFetch('POST', '/api/v1/admin/oauth-clients/bulk-delete' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as BulkDeleteOAuthClientsResponse;
 }

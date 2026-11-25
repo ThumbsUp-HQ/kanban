@@ -13,18 +13,22 @@ import secrets
 import time
 import urllib.parse
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
 from joserfc import jwt
 from joserfc.jwk import OctKey
-from sqlalchemy import text, update
+from sqlalchemy import select, text, update
 
 from database.models.oauth import (
     OAuthAuthorizationCode,
     OAuthClient,
+    OAuthDeviceCode,
+    OAuthGrant,
+    OAuthRefreshToken,
+    OAuthRevokedJti,
 )
 from kanban.api.deps import PrincipalContext
 from kanban.app import create_internal_app
@@ -2987,3 +2991,342 @@ async def test_gemini_oauth_cross_workspace_scoping_and_mcp_gates(  # noqa: PLR0
         assert resp_srv_ws.status_code == 200
     finally:
         await mcp_d.aclose()
+
+
+# =========================================================================
+# Test Case 19: OAuth Admin Revoke/Suspend, Permanent Delete, Bulk Delete,
+# Purge Stale DCR, and Pagination/Search (KAN-396)
+# =========================================================================
+
+
+async def test_case_19_oauth_admin_revoke_purge_and_pagination(
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+) -> None:
+    """Test Case 19: Verify OAuth client status checks (suspended/revoked),
+
+    permanent delete with dependent cascading, bulk delete, stale DCR purge,
+    filtering, pagination, and admin AAL2 access controls (KAN-396).
+    """
+    client = api_env.client
+
+    # 1. Setup AAL2 Admin User first
+    admin_user = await make_user("admin_oauth_gov", workspace_role="WORKSPACE_ADMIN")
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-admin')"),
+        {
+            "p_id": admin_user.id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res_mfa = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": admin_user.id},
+    )
+    p_row = res_mfa.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    # 2. Unauthenticated or non-admin attempts are rejected
+    resp_unauth_list = await client.get("/api/v1/admin/oauth-clients")
+    assert resp_unauth_list.status_code in (401, 403)
+
+    resp_unauth_bulk = await client.post(
+        "/api/v1/admin/oauth-clients/bulk-delete",
+        json={"purge_revoked": True},
+    )
+    assert resp_unauth_bulk.status_code in (401, 403)
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+
+    # 3. Validation: Bulk delete requires at least one mode
+    resp_empty_bulk = await client.post(
+        "/api/v1/admin/oauth-clients/bulk-delete",
+        json={},
+    )
+    assert resp_empty_bulk.status_code == 400
+    assert "At least one target mode" in resp_empty_bulk.json()["detail"]
+
+    # 4. Register several clients for pagination, search, revoke, and purge tests
+    # 4a. Client Active App
+    resp_ca = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Active Primary App",
+            "redirect_uris": ["https://primary.example.com/oauth/callback"],
+        },
+    )
+    assert resp_ca.status_code == 201
+    cid_active = resp_ca.json()["client_id"]
+
+    # 4b. Client Suspend App
+    resp_cs = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "Suspension Candidate App",
+            "redirect_uris": ["https://suspend.example.com/oauth/callback"],
+        },
+    )
+    assert resp_cs.status_code == 201
+    cid_suspend = resp_cs.json()["client_id"]
+
+    # 4c. Client Search App
+    resp_cq = await client.post(
+        "/api/v1/admin/oauth-clients",
+        json={
+            "client_name": "UniqueZebraApp",
+            "redirect_uris": ["https://zebra.example.com/oauth/callback"],
+        },
+    )
+    assert resp_cq.status_code == 201
+    cid_zebra = resp_cq.json()["client_id"]
+
+    # 4d. Register DCR Client via public endpoint /oauth/register
+    resp_dcr = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Stale DCR Client",
+            "redirect_uris": ["http://127.0.0.1:8888/cb"],
+        },
+    )
+    assert resp_dcr.status_code == 201
+    cid_dcr_stale = resp_dcr.json()["client_id"]
+
+    # 4e. Register another DCR Client that WILL have an active token
+    resp_dcr_active = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Active DCR Client",
+            "redirect_uris": ["http://127.0.0.1:8889/cb"],
+        },
+    )
+    assert resp_dcr_active.status_code == 201
+    cid_dcr_active = resp_dcr_active.json()["client_id"]
+
+    # Seed an active grant and refresh token for cid_dcr_active so purge skips it
+    session = api_env.seed
+    c_obj = (
+        await session.execute(
+            select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active)
+        )
+    ).scalar_one()
+
+    grant = OAuthGrant(
+        workspace_id=admin_user.workspace_id,
+        principal_id=admin_user.id,
+        client_id=c_obj.id,
+        surface="agent",
+        scopes=["agent:read"],
+    )
+    session.add(grant)
+    await session.flush()
+
+    rt = OAuthRefreshToken(
+        token_sha256=hashlib.sha256(b"active-dcr-token").digest(),
+        grant_id=grant.id,
+        workspace_id=admin_user.workspace_id,
+        client_id=c_obj.id,
+        principal_id=admin_user.id,
+        expires_at=datetime.now(UTC) + timedelta(days=30),
+    )
+    session.add(rt)
+    await session.commit()
+
+    # 5. Test PATCH status with 'suspended' and 'revoked' (reproduced PG status CHECK 500 in KAN-396)
+    resp_patch_suspend = await client.patch(
+        f"/api/v1/admin/oauth-clients/{cid_suspend}",
+        json={"status": "suspended"},
+    )
+    assert resp_patch_suspend.status_code == 200
+    assert resp_patch_suspend.json()["status"] == "suspended"
+
+    resp_patch_revoke = await client.patch(
+        f"/api/v1/admin/oauth-clients/{cid_suspend}",
+        json={"status": "revoked"},
+    )
+    assert resp_patch_revoke.status_code == 200
+    assert resp_patch_revoke.json()["status"] == "revoked"
+
+    # 6. Test GET filtering, search, and pagination
+    # Search query
+    resp_search = await client.get(
+        "/api/v1/admin/oauth-clients",
+        params={"q": "UniqueZebraApp"},
+    )
+    assert resp_search.status_code == 200
+    zebra_items = resp_search.json()
+    assert len(zebra_items) == 1
+    assert zebra_items[0]["client_id"] == cid_zebra
+    assert resp_search.headers.get("X-Total-Count") == "1"
+
+    # Status filter
+    resp_filter_revoked = await client.get(
+        "/api/v1/admin/oauth-clients",
+        params={"status": "revoked"},
+    )
+    assert resp_filter_revoked.status_code == 200
+    revoked_items = resp_filter_revoked.json()
+    assert any(c["client_id"] == cid_suspend for c in revoked_items)
+    assert all(c["status"] == "revoked" for c in revoked_items)
+
+    # Envelope pagination
+    resp_env = await client.get(
+        "/api/v1/admin/oauth-clients",
+        params={"limit": 2, "offset": 0, "envelope": "true"},
+    )
+    assert resp_env.status_code == 200
+    env_data = resp_env.json()
+    assert "items" in env_data
+    assert "total" in env_data
+    assert len(env_data["items"]) == 2
+    assert env_data["total"] >= 5
+    assert env_data["limit"] == 2
+    assert env_data["offset"] == 0
+
+    # 7. Test DELETE default soft-revoke
+    resp_del_soft = await client.delete(
+        f"/api/v1/admin/oauth-clients/{cid_zebra}",
+    )
+    assert resp_del_soft.status_code == 204
+    c_zebra_check = (
+        await session.execute(
+            select(OAuthClient).where(OAuthClient.client_id == cid_zebra)
+        )
+    ).scalar_one()
+    assert c_zebra_check.status == "revoked"
+
+    # 8. Test DELETE with ?permanent=true and dependent table cascading
+    # Create dependent rows for cid_active: grant, code, rt, revoked_jti, device_code
+    c_active_obj = (
+        await session.execute(
+            select(OAuthClient).where(OAuthClient.client_id == cid_active)
+        )
+    ).scalar_one()
+
+    grant_a = OAuthGrant(
+        workspace_id=admin_user.workspace_id,
+        principal_id=admin_user.id,
+        client_id=c_active_obj.id,
+        surface="agent",
+        scopes=["agent:read", "agent:write"],
+    )
+    session.add(grant_a)
+    await session.flush()
+
+    code_a = OAuthAuthorizationCode(
+        code_sha256=hashlib.sha256(b"perm-delete-code").digest(),
+        grant_id=grant_a.id,
+        client_id=c_active_obj.id,
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        code_challenge="challenge_xyz",
+        code_challenge_method="S256",
+        resource="http://test/mcp/agent",
+        redirect_uri="https://primary.example.com/oauth/callback",
+        surface="agent",
+        scopes=["agent:read"],
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    session.add(code_a)
+
+    rt_a = OAuthRefreshToken(
+        token_sha256=hashlib.sha256(b"perm-delete-rt").digest(),
+        grant_id=grant_a.id,
+        workspace_id=admin_user.workspace_id,
+        client_id=c_active_obj.id,
+        principal_id=admin_user.id,
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    session.add(rt_a)
+
+    jti_a = OAuthRevokedJti(
+        jti=uuid.uuid4(),
+        grant_id=grant_a.id,
+        workspace_id=admin_user.workspace_id,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session.add(jti_a)
+
+    dev_a = OAuthDeviceCode(
+        device_code_sha256=hashlib.sha256(b"perm-delete-device").digest(),
+        user_code="BCDF-GHJK",
+        client_id=c_active_obj.id,
+        workspace_id=admin_user.workspace_id,
+        resource="http://test/mcp/agent",
+        surface="agent",
+        requested_scopes=["agent:read"],
+        expires_at=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    session.add(dev_a)
+    await session.commit()
+
+    # Now call DELETE with ?permanent=true
+    resp_del_perm = await client.delete(
+        f"/api/v1/admin/oauth-clients/{cid_active}?permanent=true",
+    )
+    assert resp_del_perm.status_code == 204
+
+    # Verify client and all dependent rows are gone
+    c_check = (
+        await session.execute(
+            select(OAuthClient).where(OAuthClient.client_id == cid_active)
+        )
+    ).scalar_one_or_none()
+    assert c_check is None
+
+    grants_check = (
+        await session.execute(
+            select(OAuthGrant).where(OAuthGrant.client_id == c_active_obj.id)
+        )
+    ).scalars().all()
+    assert len(grants_check) == 0
+
+    rts_check = (
+        await session.execute(
+            select(OAuthRefreshToken).where(OAuthRefreshToken.client_id == c_active_obj.id)
+        )
+    ).scalars().all()
+    assert len(rts_check) == 0
+
+    # 9. Test POST /api/v1/admin/oauth-clients/bulk-delete
+    # 9a. Delete explicit client_ids
+    resp_bulk_explicit = await client.post(
+        "/api/v1/admin/oauth-clients/bulk-delete",
+        json={"client_ids": [cid_zebra]},
+    )
+    assert resp_bulk_explicit.status_code == 200
+    bulk_data = resp_bulk_explicit.json()
+    assert bulk_data["deleted_count"] == 1
+    assert cid_zebra in bulk_data["deleted_client_ids"]
+
+    # 9b. Purge unused DCR and revoked clients
+    # cid_suspend is revoked, cid_dcr_stale is unused DCR -> both should be purged
+    # cid_dcr_active has an active refresh token -> MUST NOT be purged!
+    resp_purge = await client.post(
+        "/api/v1/admin/oauth-clients/bulk-delete",
+        json={"purge_unused_dcr": True, "purge_revoked": True},
+    )
+    assert resp_purge.status_code == 200
+    purge_data = resp_purge.json()
+    assert purge_data["deleted_count"] >= 2
+    assert cid_suspend in purge_data["deleted_client_ids"]
+    assert cid_dcr_stale in purge_data["deleted_client_ids"]
+    assert cid_dcr_active not in purge_data["deleted_client_ids"]
+
+    # Verify cid_dcr_active still exists in DB
+    active_dcr_check = (
+        await session.execute(
+            select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active)
+        )
+    ).scalar_one_or_none()
+    assert active_dcr_check is not None

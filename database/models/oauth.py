@@ -15,7 +15,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database.models.base import Base
 
 OAuthClientType = Literal["public", "confidential"]
-OAuthClientStatus = Literal["active", "pending_admin_approval", "disabled"]
+OAuthClientStatus = Literal[
+    "active", "pending_admin_approval", "disabled", "suspended", "revoked"
+]
 OAuthSurface = Literal["agent", "docs", "admin"]
 
 
@@ -93,7 +95,7 @@ class OAuthClient(Base):
             name="oauth_clients_type_check",
         ),
         CheckConstraint(
-            "status IN ('active', 'pending_admin_approval', 'disabled')",
+            "status IN ('active', 'pending_admin_approval', 'disabled', 'suspended', 'revoked')",
             name="oauth_clients_status_check",
         ),
     )

@@ -6,8 +6,10 @@ import {
   fetchAdminOAuthClients,
   patchAdminOAuthClient,
   deleteAdminOAuthClient,
+  bulkDeleteAdminOAuthClients,
   registerAdminOAuthClient,
   type OAuthClientItem,
+  type OAuthClientStatus,
 } from './oauthApi';
 import { copyToClipboard } from '../../utils/clipboard';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
@@ -17,15 +19,42 @@ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { Aal2StepUpCancelledError } from '../../api/client';
 import './OAuthClientGovernanceStudio.css';
+
+function isAal2StepUpCancelled(err: unknown): boolean {
+  return (
+    err instanceof Aal2StepUpCancelledError ||
+    (err instanceof Error && err.name === 'Aal2StepUpCancelledError')
+  );
+}
 
 export function OAuthClientGovernanceStudio(): JSX.Element {
   const [clients, setClients] = useState<OAuthClientItem[]>([]);
+  const [totalClients, setTotalClients] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Filters and Pagination
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended' | 'revoked'>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 50;
+
+  // Selection
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+
+  // Confirmations
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState<boolean>(false);
+  const [confirmPurge, setConfirmPurge] = useState<boolean>(false);
+
+  // Inspect Modal
   const [inspectClient, setInspectClient] = useState<OAuthClientItem | null>(null);
+
+  // Register Modal
   const [showRegisterModal, setShowRegisterModal] = useState<boolean>(false);
   const [registerName, setRegisterName] = useState<string>('');
   const [registerUris, setRegisterUris] = useState<string>('');
@@ -35,13 +64,16 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
   >('none');
   const [registerPkceEnforce, setRegisterPkceEnforce] = useState<boolean>(true);
   const [registerAccessTokenTtl, setRegisterAccessTokenTtl] = useState<number>(3600);
-  const [registerGrantTypes, setRegisterGrantTypes] = useState<string>('authorization_code,refresh_token');
+  const [registerGrantTypes, setRegisterGrantTypes] = useState<string>(
+    'authorization_code,refresh_token',
+  );
   const [registerSubmitting, setRegisterSubmitting] = useState<boolean>(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registeredClient, setRegisteredClient] = useState<OAuthClientItem | null>(null);
   const [copiedClientId, setCopiedClientId] = useState<boolean>(false);
   const [copiedClientSecret, setCopiedClientSecret] = useState<boolean>(false);
 
+  // Edit URIs Modal
   const [editClient, setEditClient] = useState<OAuthClientItem | null>(null);
   const [editUris, setEditUris] = useState<string>('');
   const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
@@ -51,15 +83,34 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAdminOAuthClients();
-      setClients(data);
+      const offset = (currentPage - 1) * pageSize;
+      const res = await fetchAdminOAuthClients({
+        q: searchQuery.trim() || undefined,
+        status: statusFilter,
+        limit: pageSize,
+        offset,
+        envelope: true,
+      });
+      if (Array.isArray(res)) {
+        setClients(res);
+        setTotalClients(res.length);
+      } else if (Array.isArray(res.items)) {
+        setClients(res.items);
+        setTotalClients(res.total);
+      } else {
+        setClients([]);
+        setTotalClients(0);
+      }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       dispatchAal2StepUpIfRequired(err);
       setError(err instanceof Error ? err.message : 'Failed to load registered OAuth clients.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, pageSize, searchQuery, statusFilter]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -77,6 +128,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       );
       setSuccessMsg(`Client ${clientId} activated successfully.`);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -95,6 +150,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       );
       setSuccessMsg(`Client ${clientId} suspended and active grants revoked.`);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -113,6 +172,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       );
       setSuccessMsg(`Client ${clientId} revoked permanently.`);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -121,6 +184,107 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
     } finally {
       setConfirmRevokeId(null);
     }
+  };
+
+  const handleConfirmDelete = async (clientId: string): Promise<void> => {
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await deleteAdminOAuthClient(clientId, { permanent: true });
+      setClients((prev) => prev.filter((c) => c.client_id !== clientId));
+      setTotalClients((prev) => Math.max(0, prev - 1));
+      setSelectedClientIds((prev) => {
+        const next = new Set(prev);
+        next.delete(clientId);
+        return next;
+      });
+      setSuccessMsg(`Client ${clientId} permanently deleted.`);
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(`Failed to delete client ${clientId}.`);
+      }
+    } finally {
+      setConfirmDeleteId(null);
+    }
+  };
+
+  const handleBulkDelete = async (): Promise<void> => {
+    if (selectedClientIds.size === 0) {
+      return;
+    }
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const ids = Array.from(selectedClientIds);
+      const res = await bulkDeleteAdminOAuthClients({ client_ids: ids });
+      setSelectedClientIds(new Set());
+      setSuccessMsg(`Permanently deleted ${String(res.deleted_count)} selected OAuth client(s).`);
+      void loadClients();
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to delete selected OAuth clients.');
+      }
+    } finally {
+      setConfirmBulkDelete(false);
+    }
+  };
+
+  const handlePurgeStale = async (): Promise<void> => {
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await bulkDeleteAdminOAuthClients({
+        purge_unused_dcr: true,
+        purge_revoked: true,
+      });
+      setSelectedClientIds(new Set());
+      setSuccessMsg(`Purged ${String(res.deleted_count)} unused DCR and revoked OAuth client(s).`);
+      void loadClients();
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to purge stale OAuth clients.');
+      }
+    } finally {
+      setConfirmPurge(false);
+    }
+  };
+
+  const handleToggleSelectAll = (): void => {
+    if (selectedClientIds.size === clients.length && clients.length > 0) {
+      setSelectedClientIds(new Set());
+    } else {
+      setSelectedClientIds(new Set(clients.map((c) => c.client_id)));
+    }
+  };
+
+  const handleToggleSelectRow = (clientId: string): void => {
+    setSelectedClientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
   };
 
   const handleOpenRegister = (): void => {
@@ -159,8 +323,13 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       });
       setRegisteredClient(created);
       setClients((prev) => [created, ...prev]);
+      setTotalClients((prev) => prev + 1);
       setSuccessMsg(`Client "${created.client_name ?? 'Client'}" registered successfully.`);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setRegisterError(err.message);
       } else {
@@ -226,6 +395,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
       setSuccessMsg(`Redirect URIs updated for client ${editClient.client_id}.`);
       setEditClient(null);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
+      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setEditError(err.message);
       } else {
@@ -236,7 +409,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
     }
   };
 
-  const getStatusBadge = (status: string): JSX.Element => {
+  const getStatusBadge = (status: OAuthClientStatus): JSX.Element => {
     switch (status) {
       case 'active':
         return (
@@ -265,6 +438,15 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
             Disabled
           </span>
         );
+      case 'pending_admin_approval':
+        return (
+          <span
+            className="kb-oauth-gov-badge kb-oauth-gov-badge-pending"
+            data-testid="status-badge-pending"
+          >
+            Pending
+          </span>
+        );
       case 'revoked':
       default:
         return (
@@ -277,6 +459,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
         );
     }
   };
+
+  const totalPages = Math.max(1, Math.ceil(totalClients / pageSize));
+  const startItem = totalClients === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalClients);
 
   return (
     <div className="kb-oauth-gov-container" data-testid="oauth-client-governance-studio">
@@ -309,7 +495,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
         </div>
       </header>
 
-      <AdminStudioSubnav activeTab="oauth" />
+      <AdminStudioSubnav activeTab="oauth" isServerAdmin={true} />
 
       {error !== null && (
         <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">
@@ -343,30 +529,185 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
           </button>
         </div>
 
+        {/* Toolbar: Search, Status Filter Pills, Bulk Delete, Purge */}
+        <div className="kb-oauth-gov-toolbar" data-testid="oauth-clients-toolbar">
+          <div className="kb-oauth-gov-toolbar-left">
+            <div className="kb-oauth-gov-search-wrap">
+              <input
+                type="text"
+                className="kb-oauth-gov-search-input"
+                data-testid="search-clients-input"
+                placeholder="Search clients, IDs, URIs..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+            <div className="kb-oauth-filter-pills" role="radiogroup" aria-label="Filter by client status">
+              <button
+                type="button"
+                className={`kb-oauth-filter-pill ${statusFilter === 'all' ? 'kb-oauth-filter-pill-active' : ''}`}
+                data-testid="filter-pill-all"
+                onClick={() => {
+                  setStatusFilter('all');
+                  setCurrentPage(1);
+                }}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={`kb-oauth-filter-pill ${statusFilter === 'active' ? 'kb-oauth-filter-pill-active' : ''}`}
+                data-testid="filter-pill-active"
+                onClick={() => {
+                  setStatusFilter('active');
+                  setCurrentPage(1);
+                }}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                className={`kb-oauth-filter-pill ${statusFilter === 'suspended' ? 'kb-oauth-filter-pill-active' : ''}`}
+                data-testid="filter-pill-suspended"
+                onClick={() => {
+                  setStatusFilter('suspended');
+                  setCurrentPage(1);
+                }}
+              >
+                Suspended
+              </button>
+              <button
+                type="button"
+                className={`kb-oauth-filter-pill ${statusFilter === 'revoked' ? 'kb-oauth-filter-pill-active' : ''}`}
+                data-testid="filter-pill-revoked"
+                onClick={() => {
+                  setStatusFilter('revoked');
+                  setCurrentPage(1);
+                }}
+              >
+                Revoked
+              </button>
+            </div>
+          </div>
+
+          <div className="kb-oauth-gov-toolbar-right">
+            {selectedClientIds.size > 0 && (
+              <>
+                {confirmBulkDelete ? (
+                  <div className="kb-oauth-gov-bulk-confirm-bar" data-testid="bulk-delete-confirm-bar">
+                    <button
+                      type="button"
+                      className="kb-oauth-gov-cancel-btn"
+                      data-testid="cancel-bulk-delete-btn"
+                      onClick={() => {
+                        setConfirmBulkDelete(false);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="kb-oauth-gov-confirm-delete-btn"
+                      data-testid="confirm-bulk-delete-btn"
+                      onClick={() => {
+                        void handleBulkDelete();
+                      }}
+                    >
+                      Confirm Delete ({selectedClientIds.size})
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="kb-oauth-gov-bulk-delete-btn"
+                    data-testid="delete-selected-btn"
+                    onClick={() => {
+                      setConfirmBulkDelete(true);
+                    }}
+                  >
+                    Delete Selected ({selectedClientIds.size})
+                  </button>
+                )}
+              </>
+            )}
+
+            {confirmPurge ? (
+              <div className="kb-oauth-gov-bulk-confirm-bar" data-testid="purge-confirm-bar">
+                <button
+                  type="button"
+                  className="kb-oauth-gov-cancel-btn"
+                  data-testid="cancel-purge-btn"
+                  onClick={() => {
+                    setConfirmPurge(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="kb-oauth-gov-confirm-delete-btn"
+                  data-testid="confirm-purge-btn"
+                  onClick={() => {
+                    void handlePurgeStale();
+                  }}
+                >
+                  Confirm Purge
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="kb-oauth-gov-purge-btn"
+                data-testid="purge-clients-btn"
+                onClick={() => {
+                  setConfirmPurge(true);
+                }}
+              >
+                Purge Unused / Revoked Clients
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="kb-oauth-gov-table-wrap">
           <table className="kb-oauth-gov-table" data-testid="clients-table">
             <thead>
               <tr>
-                <th className="kb-oauth-gov-th">Application / Client ID</th>
-                <th className="kb-oauth-gov-th">Type</th>
-                <th className="kb-oauth-gov-th">Status</th>
-                <th className="kb-oauth-gov-th">Redirect URIs</th>
-                <th className="kb-oauth-gov-th">Registered</th>
-                <th className="kb-oauth-gov-th">Actions</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-select">
+                  <input
+                    type="checkbox"
+                    className="kb-oauth-gov-checkbox"
+                    data-testid="select-all-clients-checkbox"
+                    aria-label="Select all clients"
+                    checked={clients.length > 0 && selectedClientIds.size === clients.length}
+                    onChange={handleToggleSelectAll}
+                  />
+                </th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-app">Application / Client ID</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-type">Type</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-status">Status</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-uris">Redirect URIs</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-date">Registered</th>
+                <th className="kb-oauth-gov-th kb-oauth-gov-col-actions">Actions</th>
               </tr>
             </thead>
             <tbody>
               {clients.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="kb-oauth-gov-empty-state" data-testid="empty-clients">
+                  <td colSpan={7} className="kb-oauth-gov-empty-state" data-testid="empty-clients">
                     No OAuth 2.1 clients registered. Dynamic client registration (RFC 7591)
                     is available via POST /oauth/register.
                   </td>
                 </tr>
               )}
               {clients.map((client) => {
-                const isConfirming = confirmRevokeId === client.client_id;
+                const isConfirmingRevoke = confirmRevokeId === client.client_id;
+                const isConfirmingDelete = confirmDeleteId === client.client_id;
                 const isRevoked = client.status === 'revoked';
+                const isSelected = selectedClientIds.has(client.client_id);
 
                 return (
                   <tr
@@ -374,19 +715,31 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                     className="kb-oauth-gov-tr"
                     data-testid={`client-row-${client.client_id}`}
                   >
-                    <td className="kb-oauth-gov-td">
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-select">
+                      <input
+                        type="checkbox"
+                        className="kb-oauth-gov-checkbox"
+                        data-testid={`select-client-checkbox-${client.client_id}`}
+                        aria-label={`Select ${client.client_name ?? client.client_id}`}
+                        checked={isSelected}
+                        onChange={() => {
+                          handleToggleSelectRow(client.client_id);
+                        }}
+                      />
+                    </td>
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-app">
                       <div className="kb-oauth-gov-client-name" data-testid={`client-name-${client.client_id}`}>
                         {client.client_name ?? client.client_id}
                       </div>
                       <code className="kb-oauth-gov-client-id">{client.client_id}</code>
                     </td>
-                    <td className="kb-oauth-gov-td">
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-type">
                       <span>{client.client_type}</span>
                     </td>
-                    <td className="kb-oauth-gov-td" data-testid={`client-status-${client.client_id}`}>
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-status" data-testid={`client-status-${client.client_id}`}>
                       {getStatusBadge(client.status)}
                     </td>
-                    <td className="kb-oauth-gov-td">
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-uris">
                       <div className="kb-oauth-gov-uri-list">
                         {client.redirect_uris.slice(0, 2).map((uri) => (
                           <span key={uri} className="kb-oauth-gov-uri-code" title={uri}>
@@ -400,10 +753,10 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                         )}
                       </div>
                     </td>
-                    <td className="kb-oauth-gov-td">
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-date">
                       {client.created_at ? new Date(client.created_at).toLocaleDateString() : '-'}
                     </td>
-                    <td className="kb-oauth-gov-td">
+                    <td className="kb-oauth-gov-td kb-oauth-gov-col-actions kb-oauth-gov-td-actions">
                       <div className="kb-oauth-gov-btn-group">
                         <button
                           type="button"
@@ -457,7 +810,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
 
                         {!isRevoked && (
                           <>
-                            {isConfirming ? (
+                            {isConfirmingRevoke ? (
                               <div
                                 className="kb-oauth-gov-confirm-bar"
                                 data-testid={`confirm-revoke-bar-${client.client_id}`}
@@ -498,6 +851,46 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                             )}
                           </>
                         )}
+
+                        {isConfirmingDelete ? (
+                          <div
+                            className="kb-oauth-gov-confirm-bar"
+                            data-testid={`confirm-delete-bar-${client.client_id}`}
+                          >
+                            <button
+                              type="button"
+                              className="kb-oauth-gov-cancel-btn"
+                              data-testid={`cancel-delete-${client.client_id}`}
+                              autoFocus
+                              onClick={() => {
+                                setConfirmDeleteId(null);
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="kb-oauth-gov-confirm-delete-btn"
+                              data-testid={`confirm-delete-${client.client_id}`}
+                              onClick={() => {
+                                void handleConfirmDelete(client.client_id);
+                              }}
+                            >
+                              Confirm Delete
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="kb-oauth-gov-btn kb-oauth-gov-btn-delete"
+                            data-testid={`delete-btn-${client.client_id}`}
+                            onClick={() => {
+                              setConfirmDeleteId(client.client_id);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -506,6 +899,39 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination controls */}
+        {totalClients > 0 && (
+          <div className="kb-oauth-gov-pagination" data-testid="oauth-clients-pagination">
+            <span className="kb-oauth-gov-page-info" data-testid="pagination-info">
+              Showing {startItem}-{endItem} of {totalClients}
+            </span>
+            <div className="kb-oauth-gov-page-controls">
+              <button
+                type="button"
+                className="kb-oauth-gov-page-btn"
+                data-testid="prev-page-btn"
+                disabled={currentPage <= 1}
+                onClick={() => {
+                  setCurrentPage((prev) => Math.max(1, prev - 1));
+                }}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="kb-oauth-gov-page-btn"
+                data-testid="next-page-btn"
+                disabled={currentPage >= totalPages}
+                onClick={() => {
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Inspect Client Modal */}
@@ -597,6 +1023,8 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Register OAuth Client Modal */}
       {showRegisterModal && (
         <div
           className="kb-oauth-modal-backdrop"
@@ -844,7 +1272,6 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                     summary="PKCE S256 enforcement, token lifetimes, and grant type restrictions"
                     testId="advanced-oauth-parameters"
                   >
-
                     <div className="kb-oauth-form-field">
                       <label className="kb-oauth-form-label" htmlFor="reg-pkce-toggle">
                         <input
@@ -949,7 +1376,11 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
             data-testid="edit-uris-modal"
           >
             <div className="kb-oauth-modal-header">
-              <h3 id="edit-uris-modal-title" className="kb-oauth-modal-title">
+              <h3
+                id="edit-uris-modal-title"
+                data-testid="edit-uris-modal-title"
+                className="kb-oauth-modal-title"
+              >
                 Edit Redirect URIs: {editClient.client_name ?? editClient.client_id}
               </h3>
               <button
