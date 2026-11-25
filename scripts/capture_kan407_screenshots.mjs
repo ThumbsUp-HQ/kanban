@@ -33,6 +33,7 @@ const UNCLIPPED_CSS = `
 
 async function applyUnclippedStyle(page) {
   await page.evaluate(() => {
+    document.documentElement.style.setProperty('position', 'relative', 'important');
     for (const el of document.querySelectorAll('.kb-app-shell, .kb-main-canvas')) {
       el.style.setProperty('height', 'auto', 'important');
       el.style.setProperty('max-height', 'none', 'important');
@@ -40,6 +41,12 @@ async function applyUnclippedStyle(page) {
     }
     for (const el of document.querySelectorAll('.kb-topbar, header')) {
       el.style.setProperty('position', 'static', 'important');
+    }
+    for (const el of document.querySelectorAll('[class*="backdrop"], [class*="modal-overlay"], .rbac-modal-overlay')) {
+      el.style.setProperty('position', 'absolute', 'important');
+      el.style.setProperty('inset', '0', 'important');
+      el.style.setProperty('min-height', '100%', 'important');
+      el.style.setProperty('height', '100%', 'important');
     }
   });
 }
@@ -523,16 +530,6 @@ async function main() {
 
       const quickActions = page.locator('[data-testid="rbac-quick-actions-workspace"]');
       await quickActions.waitFor({ state: 'visible', timeout: 5000 });
-
-      // Click "create new" role to showcase modal & auto-slug generation
-      const openCreateBtn = page.locator('[data-testid="rbac-open-create-role"]');
-      await openCreateBtn.waitFor({ state: 'visible', timeout: 5000 });
-      await openCreateBtn.click();
-
-      // Fill in new role name to showcase auto-slug generation
-      const newRoleNameInput = page.locator('[data-testid="rbac-new-role-name"]');
-      await newRoleNameInput.waitFor({ state: 'visible', timeout: 5000 });
-      await newRoleNameInput.fill('Security Auditor Lead');
 
       await page.waitForTimeout(400);
 

@@ -100,11 +100,11 @@ All 5 viewports were captured unclipped with Playwright, applying the mandated l
 - `02-desktop-1440x900-dark.png`:
   - Dark mode Break-Glass Anti-Lockout Warning modal (`[data-testid="break-glass-warning-dialog"]`) displaying three-layer safeguard rules before disabling sole admin card.
 - `03-desktop-1024x768.png`:
-  - Roles & Permissions tab with single RbacPolicyBuilder mounted, no duplicate panels, no `+ Add Local User` button. Shows category bulk selectors (`Select All`, `Clear All`, `Read-Only`) and Create New Role modal with auto-slug generation (`Security Auditor Lead` -> `security-auditor-lead`).
+  - Roles & Permissions tab with single RbacPolicyBuilder mounted, no duplicate panels, no `+ Add Local User` button. Shows full unobstructed category bulk selectors (`Select All`, `Clear All`, `Read-Only`) across Workspace, Issue, and Field categories with zero backdrop cutoff.
 - `04-tablet-portrait-768x1024.png`:
   - OIDC Auth Card edit drawer showing copyable callback URL and local origin warning callout (`[data-testid="oidc-localhost-warning"]`).
 - `05-mobile-portrait-390x844.png`:
-  - Responsive mobile portrait layout showing Sudo status pill, top navigation, subnav tabs, cards list with health latency badges, and clean controls. Status chip is visible and not hidden.
+  - Responsive mobile portrait layout showing Sudo status pill, top navigation, wrapped title row (`flex-wrap: wrap`) ensuring `Documentation ->` button sits cleanly within viewport bounds without edge touch or horizontal overflow, subnav tabs, cards list with health latency badges, and clean controls. Status chip is visible and not hidden.
 
 Every PNG was visually inspected directly via `read_file`.
 
@@ -117,8 +117,8 @@ All QA files are located in `docs/qa/KAN-407/`:
 - `unit-test-results.txt`
 - `build-check.txt`
 - `message-to-reality-checker.md`
-- `api-specialist-review.md` (to be written by @api-spec)
-- `ui-specialist-review.md` (to be written by @ui-spec)
+- `api-specialist-review.md` (APPROVED by @api-spec)
+- `ui-specialist-review.md` (APPROVED by @ui-spec)
 - `screenshots/01-desktop-1440x900-light.png`
 - `screenshots/02-desktop-1440x900-dark.png`
 - `screenshots/03-desktop-1024x768.png`
