@@ -4,6 +4,7 @@
 import React, { useState, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   createAiProvider,
   updateAiProvider,
@@ -949,6 +950,7 @@ export function AiProviderEditorDrawer({
   onSaved,
   providersCount,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
+  useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
 
   return (

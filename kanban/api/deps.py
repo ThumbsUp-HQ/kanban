@@ -39,6 +39,8 @@ class PrincipalContext:
     read_only: bool = False
     mfa_pending: bool = False
     aal2_verified_at: datetime | None = None
+    aal2_last_active_at: datetime | None = None
+    aal2_expires_at: datetime | None = None
     scope_tier: str | None = None
     scoped_project_id: uuid.UUID | None = None
     user_access_hash: bytes | None = None

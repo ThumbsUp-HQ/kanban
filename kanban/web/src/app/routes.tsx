@@ -1934,10 +1934,8 @@ export function AdminRouteGuard({ children }: { children?: React.ReactNode } = {
   const isServerAdmin = Boolean(user?.is_server_admin);
   const isWorkspaceAdmin =
     Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
-  const aal = user?.aal_level;
-  const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
 
-  if ((!isServerAdmin && !isWorkspaceAdmin) || !isAal2) {
+  if (!isServerAdmin && !isWorkspaceAdmin) {
     return <NotFoundView />;
   }
 

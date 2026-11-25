@@ -6,7 +6,7 @@
  */
 
 import type { paths } from './schema.gen.ts';
-import { ApiProblem } from './problem.ts';
+import { ApiProblem, isAal2StepUpCode } from './problem.ts';
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -17,6 +17,26 @@ export class ApiClientError extends Error {
     this.code = code;
     Object.setPrototypeOf(this, new.target.prototype);
   }
+}
+
+export class Aal2StepUpCancelledError extends Error {
+  constructor(message = 'AAL2 step-up challenge was cancelled') {
+    super(message);
+    this.name = 'Aal2StepUpCancelledError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export type Aal2StepUpHandler = (challenge: {
+  challengeId?: string;
+  methods?: string[];
+}) => Promise<boolean>;
+
+let activeAal2StepUpHandler: Aal2StepUpHandler | null = null;
+let pendingAal2StepUp: Promise<boolean> | null = null;
+
+export function registerAal2StepUpHandler(handler: Aal2StepUpHandler | null): void {
+  activeAal2StepUpHandler = handler;
 }
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -76,11 +96,8 @@ export function setCsrfToken(token: string | null): void {
   }
 }
 
-/** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value (or cached session token), or null when absent. */
+/** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value, or cached token fallback, or null when absent. */
 export function getCsrfToken(): string | null {
-  if (cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
-    return cachedCsrfToken;
-  }
   if (typeof document !== 'undefined') {
     const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
     if (matches.length > 0) {
@@ -96,6 +113,9 @@ export function getCsrfToken(): string | null {
         }
       }
     }
+  }
+  if (cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
+    return cachedCsrfToken;
   }
   return null;
 }
@@ -191,6 +211,7 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
   method: M,
   path: P,
   opts: ApiFetchOptions = {},
+  isReplay = false,
 ): Promise<ResponseBody<P, M>> {
   let resolved: string = path;
   assertRelative(resolved);
@@ -238,29 +259,88 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
   if (!response.ok) {
     let problemBody = await readProblemBody(response, contentType);
 
-    const isCsrfRetryable =
+    const problemCode =
+      typeof problemBody === 'object' && problemBody !== null
+        ? ((problemBody as { code?: unknown }).code ??
+           (problemBody as { error?: unknown }).error)
+        : undefined;
+
+    const isAal2StepUp =
       response.status === 403 &&
-      UNSAFE_METHODS.has(method) &&
-      (resolved.startsWith('/api/v1/auth/local/login') ||
-        resolved.startsWith('/api/v1/setup/claim'));
+      !isReplay &&
+      isAal2StepUpCode(problemCode);
 
-    if (isCsrfRetryable) {
-      const isCsrfRejected =
-        typeof problemBody === 'object' &&
-        problemBody !== null &&
-        (('code' in problemBody && (problemBody as { code?: unknown }).code === 'CSRF_REJECTED') ||
-          ('error' in problemBody && (problemBody as { error?: unknown }).error === 'CSRF_REJECTED') ||
-          ('title' in problemBody && String((problemBody as { title?: unknown }).title).includes('CSRF')));
+    if (isAal2StepUp) {
+      if (!activeAal2StepUpHandler) {
+        throw new ApiProblem(response.status, problemBody);
+      }
 
-      if (isCsrfRejected) {
-        const freshCsrf = await bootstrapCsrfToken(opts.signal, true);
-        if (freshCsrf) {
-          headers['X-CSRF-Token'] = freshCsrf;
-          init.headers = headers;
-          response = await fetch(resolved, init);
-          contentType = response.headers.get('content-type') ?? '';
-          if (!response.ok) {
-            problemBody = await readProblemBody(response, contentType);
+      if (!pendingAal2StepUp) {
+        const bodyObj = problemBody as Record<string, unknown>;
+        const challengeId =
+          typeof bodyObj.challenge_id === 'string' ? bodyObj.challenge_id : 'aal2-stepup';
+        const methods = Array.isArray(bodyObj.methods)
+          ? (bodyObj.methods as string[])
+          : ['webauthn', 'totp'];
+
+        pendingAal2StepUp = activeAal2StepUpHandler({ challengeId, methods }).finally(() => {
+          pendingAal2StepUp = null;
+        });
+      }
+
+      let elevationSuccess = false;
+      try {
+        elevationSuccess = await pendingAal2StepUp;
+      } catch {
+        elevationSuccess = false;
+      }
+
+      if (!elevationSuccess) {
+        throw new Aal2StepUpCancelledError();
+      }
+
+      // Elevation succeeded: refresh CSRF token and timeout signal, then replay fetch once (max 1 replay)
+      const freshCsrf = getCsrfToken() ?? (await bootstrapCsrfToken(opts.signal, true));
+      if (freshCsrf) {
+        headers['X-CSRF-Token'] = freshCsrf;
+      }
+      init.headers = headers;
+      init.signal = timeoutSignal(opts.signal);
+
+      response = await fetch(resolved, init);
+      contentType = response.headers.get('content-type') ?? '';
+
+      if (!response.ok) {
+        problemBody = await readProblemBody(response, contentType);
+        throw new ApiProblem(response.status, problemBody);
+      }
+    } else {
+      const isCsrfRetryable =
+        response.status === 403 &&
+        UNSAFE_METHODS.has(method) &&
+        (resolved.startsWith('/api/v1/auth/local/login') ||
+          resolved.startsWith('/api/v1/setup/claim'));
+
+      if (isCsrfRetryable) {
+        const isCsrfRejected =
+          typeof problemBody === 'object' &&
+          problemBody !== null &&
+          (('code' in problemBody && (problemBody as { code?: unknown }).code === 'CSRF_REJECTED') ||
+            ('error' in problemBody && (problemBody as { error?: unknown }).error === 'CSRF_REJECTED') ||
+            ('title' in problemBody && String((problemBody as { title?: unknown }).title).includes('CSRF')));
+
+        if (isCsrfRejected) {
+          const freshCsrf = await bootstrapCsrfToken(opts.signal, true);
+          if (freshCsrf) {
+            headers['X-CSRF-Token'] = freshCsrf;
+            init.headers = headers;
+            response = await fetch(resolved, init);
+            contentType = response.headers.get('content-type') ?? '';
+            if (!response.ok) {
+              problemBody = await readProblemBody(response, contentType);
+              throw new ApiProblem(response.status, problemBody);
+            }
+          } else {
             throw new ApiProblem(response.status, problemBody);
           }
         } else {
@@ -269,8 +349,6 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
       } else {
         throw new ApiProblem(response.status, problemBody);
       }
-    } else {
-      throw new ApiProblem(response.status, problemBody);
     }
   }
   if (response.status === 204) {

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
@@ -43,7 +44,7 @@ class SessionCookieResolver:
         self._service = session_service
         self._session_factory = session_factory
 
-    async def resolve(self, request: Request) -> PrincipalContext | None:
+    async def resolve(self, request: Request) -> PrincipalContext | None:  # noqa: C901
         """Extract and verify credentials with Bearer-first precedence."""
         auth_hdr = request.headers.get("authorization") or ""
         has_bearer_token = auth_hdr.lower().startswith("bearer ") and bool(auth_hdr[7:].strip())
@@ -84,6 +85,31 @@ class SessionCookieResolver:
         request.state.mfa_pending = user_session.mfa_pending
         request.state.user_session = user_session
 
+        aal2_last_active_at = getattr(user_session, "aal2_last_active_at", None)
+        aal2_expires_at: datetime | None = None
+        if user_session.aal_level == 2 and user_session.aal2_verified_at:  # noqa: PLR2004
+            active_at = aal2_last_active_at or user_session.aal2_verified_at
+            now = datetime.now(UTC)
+            if active_at.tzinfo is None:
+                active_at = active_at.replace(tzinfo=UTC)
+            verified_at = user_session.aal2_verified_at
+            if verified_at.tzinfo is None:
+                verified_at = verified_at.replace(tzinfo=UTC)
+            idle_exp = user_session.idle_expires_at
+            if idle_exp.tzinfo is None:
+                idle_exp = idle_exp.replace(tzinfo=UTC)
+            abs_exp = user_session.absolute_expires_at
+            if abs_exp.tzinfo is None:
+                abs_exp = abs_exp.replace(tzinfo=UTC)
+
+            idle_cap = active_at + timedelta(seconds=900)
+            abs_cap = verified_at + timedelta(seconds=14400)
+            candidate = min(idle_cap, abs_cap, idle_exp, abs_exp)
+            if now < candidate:
+                aal2_expires_at = candidate
+
+        request.state.aal2_expires_at = aal2_expires_at
+
         ctx = PrincipalContext(
             principal_id=user_session.principal_id,
             workspace_id=user_session.workspace_id,
@@ -92,6 +118,8 @@ class SessionCookieResolver:
             session_id=user_session.id,
             mfa_pending=user_session.mfa_pending,
             aal2_verified_at=user_session.aal2_verified_at,
+            aal2_last_active_at=aal2_last_active_at,
+            aal2_expires_at=aal2_expires_at,
             principal_type="USER",
             is_mcp_credential=False,
         )

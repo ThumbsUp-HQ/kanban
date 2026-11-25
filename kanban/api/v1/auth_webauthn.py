@@ -135,10 +135,16 @@ def _build_elevated_response(
             elevated.csrf_token,
             persistent=elevated.is_persistent,
         )
+        if getattr(elevated, "aal2_expires_at", None) is not None:
+            response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
     return response
 
 
-async def _assert_can_register(session: AsyncSession, principal: PrincipalContext) -> bool:
+async def _assert_can_register(  # noqa: C901
+    session: AsyncSession,
+    principal: PrincipalContext,
+    request: Request | None = None,
+) -> bool:
     """Verify principal has AAL2 or is eligible for first-factor enrollment."""
     status_res = await session.execute(
         text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
@@ -172,41 +178,70 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
             preferred_method=preferred,
         )
 
-    verified_at = principal.aal2_verified_at
-    if verified_at is None:
-        raise ProblemException(
-            code="AAL2_STALE",
-            status=403,
-            title="AAL2 Session Stale",
-            detail=(
-                "AAL2 verification timestamp is missing or stale. "
-                "Your 15-minute Admin 2FA security window "
-                "(Authenticator Assurance Level 2) requires re-verification "
-                "with your Passkey or Authenticator app (TOTP) to continue."
+    if principal.session_id is not None:
+        touch_res = await session.execute(
+            text(
+                "SELECT aal2_active, aal2_expires_at FROM kb_auth.session_touch_aal2("
+                "  :sid, :idle, 14400, FALSE"
+                ")"
             ),
-            methods=methods,
-            preferred_method=preferred,
+            {"sid": principal.session_id, "idle": AAL2_MAX_AGE_SECONDS},
         )
+        t_row = touch_res.mappings().first()
+        is_active = bool(t_row["aal2_active"]) if t_row else False
+        exp_dt = t_row["aal2_expires_at"] if t_row else None
+        if not is_active:
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail=(
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) has expired; please re-verify "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
+                ),
+                methods=methods,
+                preferred_method=preferred,
+            )
+        principal.aal2_expires_at = exp_dt
+        if request is not None:
+            request.state.aal2_expires_at = exp_dt
+    else:
+        verified_at = principal.aal2_verified_at
+        if verified_at is None:
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail=(
+                    "AAL2 verification timestamp is missing or stale. "
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) requires re-verification "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
+                ),
+                methods=methods,
+                preferred_method=preferred,
+            )
 
-    now = datetime.now(UTC)
-    if verified_at.tzinfo is None:
-        verified_at = verified_at.replace(tzinfo=UTC)
-    age = (now - verified_at).total_seconds()
-    if age > AAL2_MAX_AGE_SECONDS:
-        detail_msg = (
-            f"AAL2 verification is stale ({int(age)}s > {AAL2_MAX_AGE_SECONDS}s). "
-            "Your 15-minute Admin 2FA security window "
-            "(Authenticator Assurance Level 2) has expired; please re-verify "
-            "with your Passkey or Authenticator app (TOTP) to continue."
-        )
-        raise ProblemException(
-            code="AAL2_STALE",
-            status=403,
-            title="AAL2 Session Stale",
-            detail=detail_msg,
-            methods=methods,
-            preferred_method=preferred,
-        )
+        now = datetime.now(UTC)
+        if verified_at.tzinfo is None:
+            verified_at = verified_at.replace(tzinfo=UTC)
+        age = (now - verified_at).total_seconds()
+        if age > AAL2_MAX_AGE_SECONDS:
+            detail_msg = (
+                f"AAL2 verification is stale ({int(age)}s > {AAL2_MAX_AGE_SECONDS}s). "
+                "Your 15-minute Admin 2FA security window "
+                "(Authenticator Assurance Level 2) has expired; please re-verify "
+                "with your Passkey or Authenticator app (TOTP) to continue."
+            )
+            raise ProblemException(
+                code="AAL2_STALE",
+                status=403,
+                title="AAL2 Session Stale",
+                detail=detail_msg,
+                methods=methods,
+                preferred_method=preferred,
+            )
 
     return False
 
@@ -290,7 +325,7 @@ async def register_options(
     )
 
     async with session_factory.session(rls_ctx) as session:
-        await _assert_can_register(session, principal)
+        await _assert_can_register(session, principal, request)
 
         # Lookup username and display_name
         username: str | None = None
@@ -385,7 +420,7 @@ async def register_verify(
     )
 
     async with session_factory.session(rls_ctx) as session:
-        is_first_enrollment = await _assert_can_register(session, principal)
+        is_first_enrollment = await _assert_can_register(session, principal, request)
 
         cred_record = await service.verify_registration(
             session,
@@ -695,7 +730,10 @@ async def rename_credential(
 async def delete_credential(
     credential_id: uuid.UUID,
     request: Request,
-    principal: Annotated[PrincipalContext, Depends(require_aal2(max_age_seconds=900))],
+    principal: Annotated[
+        PrincipalContext,
+        Depends(require_aal2(max_age_seconds=900, verification_only=True)),
+    ],
 ) -> JSONResponse:
     """Delete a registered WebAuthn credential. Refuses deleting last factor of admin."""
     session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)

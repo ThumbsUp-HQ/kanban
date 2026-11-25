@@ -1177,7 +1177,7 @@ describe('IssuesWorkspaceRoute', () => {
       expect(screen.getByText('Not found or no access')).toBeDefined();
       u2();
 
-      // 3. Server admin with non-AAL2 (aal1)
+      // 3. Server admin with non-AAL2 (aal1) -> access allowed (in-place WebSudo handles step-up on API mutation)
       rbacQueryClient.setQueryData(qk.me(), { is_server_admin: true, auth_aal: 'aal1', aal_level: 1 });
       const routerAal1 = createAppRouter(['/admin/standalone']);
       const { unmount: u3 } = render(
@@ -1187,7 +1187,7 @@ describe('IssuesWorkspaceRoute', () => {
           </ThemeProvider>
         </QueryClientProvider>,
       );
-      expect(screen.getByText('Not found or no access')).toBeDefined();
+      expect(screen.getByTestId('standalone-status-route')).toBeDefined();
       u3();
 
       // 4. Server admin with AAL2 -> access allowed

@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated, Final, Literal, cast
 
@@ -61,11 +63,16 @@ async def _get_enrolled_methods(
 class _RequireAal2:
     """Callable dependency enforcing AAL2 status and maximum age freshness."""
 
-    def __init__(self, max_age_seconds: int | None = None) -> None:
+    def __init__(
+        self,
+        max_age_seconds: int | None = None,
+        verification_only: bool = False,  # noqa: FBT001, FBT002
+    ) -> None:
         """Initialize dependency with optional max age freshness in seconds."""
         self.max_age_seconds = max_age_seconds
+        self.verification_only = verification_only
 
-    async def __call__(
+    async def __call__(  # noqa: C901, PLR0912, PLR0915
         self,
         request: Request,
         principal: Annotated[PrincipalContext, Depends(get_principal)],
@@ -83,7 +90,92 @@ class _RequireAal2:
                 preferred_method=preferred,
             )
 
-        if self.max_age_seconds is not None:
+        if self.verification_only:
+            verified_at = principal.aal2_verified_at
+            if verified_at is None:
+                methods = await _get_enrolled_methods(request, principal)
+                preferred = "webauthn" if "webauthn" in methods else "totp"
+                raise ProblemException(
+                    code="AAL2_STALE",
+                    status=403,
+                    title="AAL2 Session Stale",
+                    detail=(
+                        "AAL2 verification timestamp is missing or stale. "
+                        "Your 15-minute Admin 2FA security window "
+                        "(Authenticator Assurance Level 2) requires re-verification "
+                        "with your Passkey or Authenticator app (TOTP) to continue."
+                    ),
+                    methods=methods,
+                    preferred_method=preferred,
+                )
+
+            now = datetime.now(UTC)
+            if verified_at.tzinfo is None:
+                verified_at = verified_at.replace(tzinfo=UTC)
+            age = (now - verified_at).total_seconds()
+            max_age = self.max_age_seconds or ADMIN_AAL2_MAX_AGE_SECONDS
+            if age > max_age:
+                methods = await _get_enrolled_methods(request, principal)
+                preferred = "webauthn" if "webauthn" in methods else "totp"
+                detail_msg = (
+                    f"AAL2 verification is stale ({int(age)}s > {max_age}s). "
+                    "Your 15-minute Admin 2FA security window "
+                    "(Authenticator Assurance Level 2) has expired; please re-verify "
+                    "with your Passkey or Authenticator app (TOTP) to continue."
+                )
+                raise ProblemException(
+                    code="AAL2_STALE",
+                    status=403,
+                    title="AAL2 Session Stale",
+                    detail=detail_msg,
+                    methods=methods,
+                    preferred_method=preferred,
+                )
+            return principal
+
+        # Standard sliding-window check via session_touch_aal2
+        if principal.session_id is not None:
+            session_factory = getattr(request.app.state, "session_factory", None)
+            if session_factory is not None:
+                anon_ctx = RLSContext(
+                    principal_id=uuid.UUID(int=0),
+                    workspace_id=uuid.UUID(int=0),
+                    token_scopes=("session",),
+                    aal_level=1,
+                )
+                idle_sec = self.max_age_seconds or ADMIN_AAL2_MAX_AGE_SECONDS
+                async with session_factory.session(anon_ctx) as session:
+                    res = await session.execute(
+                        text(
+                            "SELECT aal2_active, aal2_expires_at FROM kb_auth.session_touch_aal2("
+                            "  :sid, :idle, 14400, FALSE"
+                            ")"
+                        ),
+                        {"sid": principal.session_id, "idle": idle_sec},
+                    )
+                    row = res.mappings().first()
+                    is_active = bool(row["aal2_active"]) if row else False
+                    exp_dt = row["aal2_expires_at"] if row else None
+
+                if not is_active:
+                    methods = await _get_enrolled_methods(request, principal)
+                    preferred = "webauthn" if "webauthn" in methods else "totp"
+                    raise ProblemException(
+                        code="AAL2_STALE",
+                        status=403,
+                        title="AAL2 Session Stale",
+                        detail=(
+                            "Your 15-minute Admin 2FA security window "
+                            "(Authenticator Assurance Level 2) has expired; please re-verify "
+                            "with your Passkey or Authenticator app (TOTP) to continue."
+                        ),
+                        methods=methods,
+                        preferred_method=preferred,
+                    )
+                if exp_dt is not None:
+                    principal = replace(principal, aal2_expires_at=exp_dt)
+                request.state.aal2_expires_at = exp_dt
+        elif self.max_age_seconds is not None:
             verified_at = principal.aal2_verified_at
             if verified_at is None:
                 methods = await _get_enrolled_methods(request, principal)
@@ -127,9 +219,12 @@ class _RequireAal2:
         return principal
 
 
-def require_aal2(max_age_seconds: int | None = None) -> _RequireAal2:
+def require_aal2(
+    max_age_seconds: int | None = None,
+    verification_only: bool = False,  # noqa: FBT001, FBT002
+) -> _RequireAal2:
     """Return dependency requiring AAL2 elevation with optional max age freshness."""
-    return _RequireAal2(max_age_seconds=max_age_seconds)
+    return _RequireAal2(max_age_seconds=max_age_seconds, verification_only=verification_only)
 
 
 async def require_admin_aal2(  # noqa: C901, PLR0912
@@ -247,40 +342,42 @@ async def require_admin_aal2(  # noqa: C901, PLR0912
         )
 
     if principal.session_id is not None:
-        verified_at = principal.aal2_verified_at
-        if verified_at is None:
+        anon_ctx = RLSContext(
+            principal_id=uuid.UUID(int=0),
+            workspace_id=uuid.UUID(int=0),
+            token_scopes=("session",),
+            aal_level=1,
+        )
+        async with session_factory.session(anon_ctx) as session:
+            touch_res = await session.execute(
+                text(
+                    "SELECT aal2_active, aal2_expires_at FROM kb_auth.session_touch_aal2("
+                    "  :sid, :idle, 14400, FALSE"
+                    ")"
+                ),
+                {"sid": principal.session_id, "idle": ADMIN_AAL2_MAX_AGE_SECONDS},
+            )
+            row = touch_res.mappings().first()
+            is_active = bool(row["aal2_active"]) if row else False
+            exp_dt = row["aal2_expires_at"] if row else None
+
+        if not is_active:
             raise ProblemException(
                 code="AAL2_STALE",
                 status=403,
                 title="AAL2 Session Stale",
                 detail=(
-                    "AAL2 verification timestamp is missing or stale. "
                     "Your 15-minute Admin 2FA security window "
-                    "(Authenticator Assurance Level 2) requires re-verification "
+                    "(Authenticator Assurance Level 2) has expired; please re-verify "
                     "with your Passkey or Authenticator app (TOTP) to continue."
                 ),
                 methods=admin_methods,
                 preferred_method=preferred,
             )
-        now = datetime.now(UTC)
-        if verified_at.tzinfo is None:
-            verified_at = verified_at.replace(tzinfo=UTC)
-        age = (now - verified_at).total_seconds()
-        if age > ADMIN_AAL2_MAX_AGE_SECONDS:
-            detail_msg = (
-                f"AAL2 verification is stale ({int(age)}s > {ADMIN_AAL2_MAX_AGE_SECONDS}s). "
-                "Your 15-minute Admin 2FA security window "
-                "(Authenticator Assurance Level 2) has expired; please re-verify "
-                "with your Passkey or Authenticator app (TOTP) to continue."
-            )
-            raise ProblemException(
-                code="AAL2_STALE",
-                status=403,
-                title="AAL2 Session Stale",
-                detail=detail_msg,
-                methods=admin_methods,
-                preferred_method=preferred,
-            )
+
+        if exp_dt is not None:
+            principal = replace(principal, aal2_expires_at=exp_dt)
+        request.state.aal2_expires_at = exp_dt
 
     return principal
 

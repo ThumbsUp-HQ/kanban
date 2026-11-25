@@ -5,6 +5,7 @@ import React, { type JSX } from 'react';
 import { Link, useInRouterContext, useLocation } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
+import { apiFetch } from '../../api/client';
 import './AdminStudioSubnav.css';
 
 export interface AdminStudioSubnavProps {
@@ -43,6 +44,94 @@ function AdminStudioSubnavInner({
     ? queryClient.getQueryData<{ is_server_admin?: boolean }>(qk.me())
     : undefined;
   const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? true;
+
+  const [sessionData, setSessionData] = React.useState<{
+    authenticated?: boolean;
+    aal2_active?: boolean;
+    aal2_expires_at?: string | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const load = async (): Promise<void> => {
+      try {
+        const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
+          authenticated?: boolean;
+          aal2_active?: boolean;
+          aal2_expires_at?: string | null;
+        };
+        if (mounted) {
+          setSessionData(res);
+        }
+      } catch {
+        if (mounted) {
+          setSessionData(null);
+        }
+      }
+    };
+    void load();
+    const interval = setInterval(() => {
+      void load();
+    }, 10_000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const aal2Active = sessionData?.aal2_active;
+  const aal2ExpiresAt = sessionData?.aal2_expires_at;
+
+  const [now, setNow] = React.useState<number>(() => Date.now());
+
+  React.useEffect(() => {
+    if (!aal2Active || !aal2ExpiresAt) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [aal2Active, aal2ExpiresAt]);
+
+  const remainingSecs = React.useMemo<number | null>(() => {
+    if (!aal2Active || !aal2ExpiresAt) {
+      return null;
+    }
+    const exp = new Date(aal2ExpiresAt).getTime();
+    return Math.max(0, Math.floor((exp - now) / 1000));
+  }, [aal2Active, aal2ExpiresAt, now]);
+
+  const handleDrop = async (e: React.MouseEvent): Promise<void> => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await apiFetch('POST', '/api/v1/auth/aal2/drop');
+    } catch {
+      // Ignore network errors on drop
+    }
+    if (queryClient) {
+      void queryClient.invalidateQueries();
+    }
+    try {
+      const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
+        authenticated?: boolean;
+        aal2_active?: boolean;
+        aal2_expires_at?: string | null;
+      };
+      setSessionData(res);
+    } catch {
+      setSessionData(null);
+    }
+  };
+
+  const formatTime = (secs: number): string => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m)}:${s < 10 ? '0' : ''}${String(s)}`;
+  };
 
   const visibleTabs = effectiveIsServerAdmin
     ? ADMIN_TABS
@@ -88,6 +177,36 @@ function AdminStudioSubnavInner({
             </a>
           );
         })}
+      </div>
+      <div className="admin-studio-subnav__actions">
+        <div
+          className={`admin-sudo-pill ${sessionData?.aal2_active ? 'admin-sudo-pill--active' : 'admin-sudo-pill--locked'}`}
+          data-testid="admin-sudo-pill"
+        >
+          {sessionData?.aal2_active ? (
+            <>
+              <span className="admin-sudo-pill__status" title="AAL2 Admin WebSudo Active">
+                🛡️ Sudo {remainingSecs !== null ? formatTime(remainingSecs) : 'Active'}
+              </span>
+              <button
+                type="button"
+                className="admin-sudo-pill__drop-btn"
+                onClick={(e) => {
+                  void handleDrop(e);
+                }}
+                title="Lock WebSudo Session"
+                aria-label="Drop WebSudo Elevation"
+                data-testid="admin-sudo-drop-btn"
+              >
+                🔒 Lock
+              </button>
+            </>
+          ) : (
+            <span className="admin-sudo-pill__status" title="AAL2 WebSudo Locked">
+              🔒 Sudo Locked
+            </span>
+          )}
+        </div>
       </div>
     </nav>
   );

@@ -17,6 +17,7 @@ import { Topbar } from './Topbar';
 import { CommandPalette, type CachedIssue } from './CommandPalette';
 import { ShortcutsCheatSheetModal } from './ShortcutsCheatSheetModal';
 import { GlobalErrorAlertEnhancer } from '../components/help/ErrorHelpHint';
+import { WebSudoModalHost } from '../components/help/WebSudoModalHost';
 import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
@@ -433,8 +434,11 @@ export function AppShell({
           onClose={() => { setShortcutsModalOpen(false); }}
         />
 
-        {/* Global Error Alert Enhancer & AAL2 Step-Up Host (KAN-393) */}
+        {/* Global Error Alert Enhancer (KAN-393) */}
         <GlobalErrorAlertEnhancer />
+
+        {/* Global WebSudo Modal Host & Request Replay Coordinator (KAN-404) */}
+        <WebSudoModalHost />
       </div>
     </ShellPanelsProvider>
   );
