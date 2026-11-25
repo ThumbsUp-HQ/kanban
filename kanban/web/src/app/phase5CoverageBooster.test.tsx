@@ -1492,7 +1492,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
           subject_attribute: 'entryUUID',
           email_attribute: 'mail',
           display_name_attribute: 'cn',
-          ca_cert_pem: 'PEM-A',
+          ca_cert_pem: '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----',
           spki_sha256_pins: ['a'.repeat(64)],
         },
       };
@@ -1520,7 +1520,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
           service_bind_dn: 'cn=svc,dc=b',
           base_dn: 'dc=b',
           user_filter: '(sAMAccountName={username})',
-          ca_pem: 'PEM-B',
+          ca_pem: '-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----',
           spki_sha256_pin: 'b'.repeat(64),
         },
       };
