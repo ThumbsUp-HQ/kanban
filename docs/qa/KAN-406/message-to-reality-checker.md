@@ -52,4 +52,4 @@
    - Working tree has zero source-code mutations made in Phase 1.
    - `git-diff.patch` generated via `git diff e975ab96 -- docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md`.
    - Disposition counts match 1:1 across `01-audit-and-cuts.md`, `message-to-reality-checker.md`, and Rev-2 Handoff Packet: Total Settings: 90 | KEEP: 63 | SIMPLIFY: 16 | MOVE_TO_ADVANCED: 11 | MERGE: 0 | CUT: 0.
-   - Posted updated Phase 1 Handoff Packet (Rev 2) via kanban MCP `add_comment` to both `KAN-405` (comment ID `KAN-405#c-01a2114c`) and `KAN-407` (comment ID `KAN-407#c-01a2114c`).
+   - Posted updated Phase 1 Handoff Packet (Rev 2) via kanban MCP `add_comment` to both `KAN-405` (comment ID `KAN-405#c-01a2115e`) and `KAN-407` (comment ID `KAN-407#c-01a2115e`).
