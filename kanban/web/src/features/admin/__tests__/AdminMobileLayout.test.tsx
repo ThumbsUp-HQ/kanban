@@ -209,7 +209,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
   // =========================================================================
   describe('Case 1: Horizontal swipe tabs & touch scrolling navigation', () => {
     it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', () => {
-      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" />);
+      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
 
       const navElement = screen.getByRole('navigation', {
         name: /Admin MCP and Governance Navigation/i,
@@ -235,7 +235,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
       render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/admin/ai/new']}>
-            <AdminStudioSubnav />
+            <AdminStudioSubnav isServerAdmin={true} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -245,7 +245,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
     });
 
     it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', () => {
-      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" />);
+      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
       const links = c1.querySelectorAll('a.admin-studio-subnav__item');
       expect(links.length).toBeGreaterThanOrEqual(8);
 
@@ -261,21 +261,21 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
         (window as unknown as { location: unknown }).location = {
           pathname: '/admin/oauth/clients',
         };
-        const { container: c2 } = render(<AdminStudioSubnav />);
+        const { container: c2 } = render(<AdminStudioSubnav isServerAdmin={true} />);
         const oauthLink = c2.querySelector('[data-testid="tab-admin-oauth"]');
         expect(oauthLink?.getAttribute('aria-current')).toBe('page');
 
         (window as unknown as { location: unknown }).location = {
           pathname: '/admin/diagnostics',
         };
-        const { container: c3 } = render(<AdminStudioSubnav />);
+        const { container: c3 } = render(<AdminStudioSubnav isServerAdmin={true} />);
         const diagLink = c3.querySelector('[data-testid="tab-admin-diagnostics"]');
         expect(diagLink?.getAttribute('aria-current')).toBe('page');
 
         (window as unknown as { location: unknown }).location = {
           pathname: '/unknown-route',
         };
-        const { container: c4 } = render(<AdminStudioSubnav />);
+        const { container: c4 } = render(<AdminStudioSubnav isServerAdmin={true} />);
         const activeItem = c4.querySelector('.admin-studio-subnav__item--active');
         expect(activeItem).toBeNull();
       } finally {

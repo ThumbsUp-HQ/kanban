@@ -58,7 +58,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     it('renders all 8 tabs with navigation aria-label and accessible markup in router', () => {
       render(
         <MemoryRouter initialEntries={['/admin/mcp']}>
-          <AdminStudioSubnav activeTab="mcp" />
+          <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -93,7 +93,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     it.each(allTabs)('activates tab "%s" when activeTab prop is passed', (tab) => {
       render(
         <MemoryRouter initialEntries={['/admin/overview']}>
-          <AdminStudioSubnav activeTab={tab.id} />
+          <AdminStudioSubnav activeTab={tab.id} isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -115,7 +115,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     it('activates tab matching subpaths via prefix when activeTab is omitted', () => {
       render(
         <MemoryRouter initialEntries={['/admin/agent-runners/node-42']}>
-          <AdminStudioSubnav />
+          <AdminStudioSubnav isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -131,7 +131,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     it('renders no active tab when current route does not match any admin path', () => {
       render(
         <MemoryRouter initialEntries={['/settings/profile']}>
-          <AdminStudioSubnav />
+          <AdminStudioSubnav isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -144,7 +144,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
 
     it('renders accessible anchor tags outside router context (inRouter = false)', () => {
       // Rendering without MemoryRouter exercises useInRouterContext() === false branch
-      render(<AdminStudioSubnav activeTab="diagnostics" />);
+      render(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
 
       const diagEl = screen.getByTestId('tab-admin-diagnostics');
       expect(diagEl.tagName.toLowerCase()).toBe('a');
@@ -164,7 +164,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       try {
         window.history.pushState({}, '', '/admin/oauth');
 
-        render(<AdminStudioSubnav />);
+        render(<AdminStudioSubnav isServerAdmin={true} />);
 
         const oauthEl = screen.getByTestId('tab-admin-oauth');
         expect(oauthEl.tagName.toLowerCase()).toBe('a');
@@ -479,7 +479,10 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/admin/mcp']}>
-            <McpAccessStudio tier="global" />
+            <McpAccessStudio
+              tier="global"
+              user={{ is_server_admin: true, is_workspace_admin: true, is_project_admin: true }}
+            />
           </MemoryRouter>
         </QueryClientProvider>,
       );

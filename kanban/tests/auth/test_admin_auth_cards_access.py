@@ -52,8 +52,8 @@ def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
 
 async def _setup_workspace_and_multi_role_principals(
     session: AsyncSession,
-) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Provision test workspace and server_admin, workspace_admin, project_admin, and member."""
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Provision test workspace and multiple role principals for access matrix testing."""
     ws_id = uuid.uuid4()
     await session.execute(
         text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
@@ -207,8 +207,40 @@ async def _setup_workspace_and_multi_role_principals(
         {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": member_id},
     )
 
+    # 5. Viewer principal
+    viewer_id = uuid.uuid4()
+    await session.execute(
+        text(
+            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Standard Viewer', "
+            ":u_id, :u_id)"
+        ),
+        {"ws_id": ws_id, "ckey": f"usr-{viewer_id.hex}", "u_id": viewer_id},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
+            "VALUES (:id, 'USER', :ws_id, 'Standard Viewer', 'ACTIVE')"
+        ),
+        {"id": viewer_id, "ws_id": ws_id},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
+            "VALUES (:id, 'user', 'USER', :ws_id, 'viewer@example.com')"
+        ),
+        {"id": viewer_id, "ws_id": ws_id},
+    )
+    await session.execute(
+        text(
+            "INSERT INTO role_bindings "
+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
+            "VALUES (:id, :ws_id, :p_id, 'VIEWER', 'project', :proj_id)"
+        ),
+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": viewer_id, "proj_id": proj_id},
+    )
+
     # Register MFA TOTP for all test principals to satisfy require_admin_aal2
-    for p_id in (server_admin_id, ws_admin_id, project_admin_id, member_id):
+    for p_id in (server_admin_id, ws_admin_id, project_admin_id, member_id, viewer_id):
         await session.execute(
             text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'kek-v1')"),
             {
@@ -228,7 +260,7 @@ async def _setup_workspace_and_multi_role_principals(
                 {"p_fid": p_row["id"]},
             )
 
-    return ws_id, server_admin_id, ws_admin_id, project_admin_id, member_id
+    return ws_id, server_admin_id, ws_admin_id, project_admin_id, member_id, viewer_id
 
 
 def _create_test_app(
@@ -264,7 +296,8 @@ async def test_app_principal_has_role_sql_server_admin_without_workspace(
         server_admin_id,
         _ws_admin_id,
         _proj_admin_id,
-        _,
+        _member_id,
+        _viewer_id,
     ) = await _setup_workspace_and_multi_role_principals(db_session)
 
     # 1. Bind RLSContext to server_admin with workspace_id unset (app.workspace_id = NULL)
@@ -311,6 +344,7 @@ async def test_app_principal_has_role_sql_workspace_and_project_scoping(
         ws_admin_id,
         _proj_admin_id,
         member_id,
+        _viewer_id,
     ) = await _setup_workspace_and_multi_role_principals(db_session)
     other_ws_id = uuid.uuid4()
 
@@ -381,6 +415,7 @@ async def test_admin_auth_cards_endpoint_access_matrix(
         ws_admin_id,
         proj_admin_id,
         member_id,
+        viewer_id,
     ) = await _setup_workspace_and_multi_role_principals(db_session)
     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
     session_service = SessionService(key_material.session_hmac_key)
@@ -454,3 +489,162 @@ async def test_admin_auth_cards_endpoint_access_matrix(
         res_member = await client.get("/api/v1/admin/auth-cards")
         assert res_member.status_code == 403
         assert res_member.json()["code"] == "FORBIDDEN"
+
+        # 6. VIEWER with AAL2 session -> 403 FORBIDDEN
+        async with factory.session(anon_ctx) as sess:
+            sess_viewer = await session_service.create_after_login(
+                sess,
+                principal_id=viewer_id,
+                workspace_id=ws_id,
+                aal_level=2,
+                mfa_pending=False,
+            )
+        client.cookies.set(SESSION_COOKIE_NAME, sess_viewer.cookie_val)
+        res_viewer = await client.get("/api/v1/admin/auth-cards")
+        assert res_viewer.status_code == 403
+        assert res_viewer.json()["code"] == "FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_server_admin_cross_workspace_access(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+    key_material: KeyMaterial,
+) -> None:
+    """Verify SERVER_ADMIN on workspace A active on secondary workspace B has full access."""
+    (
+        _ws_a,
+        server_admin_id,
+        ws_admin_id,
+        _proj_admin_id,
+        _member_id,
+        _viewer_id,
+    ) = await _setup_workspace_and_multi_role_principals(db_session)
+
+    # Provision secondary workspace B
+    ws_b = uuid.uuid4()
+    await db_session.execute(
+        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
+        {"id": ws_b, "slug": f"ws-{ws_b.hex[:10]}", "name": "Secondary Workspace B"},
+    )
+
+    # 1. Direct SQL check with app.workspace_id = ws_b
+    await db_session.execute(
+        text(
+            "SELECT set_config('app.principal_id', :p_id, true), "
+            "set_config('app.workspace_id', :ws_id, true), "
+            "set_config('app.aal_level', '2', true)"
+        ),
+        {"p_id": str(server_admin_id), "ws_id": str(ws_b)},
+    )
+    res_sql = await db_session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+    )
+    assert res_sql.scalar_one() is True
+
+    # 2. API level tests: GET /api/v1/auth/me and GET /api/v1/admin/auth-cards
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    session_service = SessionService(key_material.session_hmac_key)
+    service = AuthCardAdminService(kek_provider=kek_provider)
+    app = _create_test_app(factory, service, key_material, session_service)
+
+    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create session on secondary workspace ws_b
+        async with factory.session(anon_ctx) as sess:
+            sess_server_admin_b = await session_service.create_after_login(
+                sess,
+                principal_id=server_admin_id,
+                workspace_id=ws_b,
+                aal_level=2,
+                mfa_pending=False,
+            )
+        client.cookies.set(SESSION_COOKIE_NAME, sess_server_admin_b.cookie_val)
+
+        # GET /api/v1/auth/me receives is_server_admin == True
+        res_me = await client.get("/api/v1/auth/me")
+        assert res_me.status_code == 200
+        me_data = res_me.json()
+        assert me_data["is_server_admin"] is True
+        assert me_data["workspace_role"] == "SERVER_ADMIN"
+
+        # GET /api/v1/admin/auth-cards receives 200 OK
+        res_cards = await client.get("/api/v1/admin/auth-cards")
+        assert res_cards.status_code == 200
+        assert "cards" in res_cards.json()
+
+        # With X-KB-Scope-Workspace header pointing to ws_b
+        res_cards_scoped = await client.get(
+            "/api/v1/admin/auth-cards",
+            headers={"X-KB-Scope-Workspace": str(ws_b)},
+        )
+        assert res_cards_scoped.status_code == 200
+
+        # WORKSPACE_ADMIN on workspace A denied on workspace B at API level
+        async with factory.session(anon_ctx) as sess:
+            sess_ws_admin_b = await session_service.create_after_login(
+                sess,
+                principal_id=ws_admin_id,
+                workspace_id=ws_b,
+                aal_level=2,
+                mfa_pending=False,
+            )
+        client.cookies.set(SESSION_COOKIE_NAME, sess_ws_admin_b.cookie_val)
+
+        res_ws_admin_me = await client.get("/api/v1/auth/me")
+        assert res_ws_admin_me.status_code == 200
+        assert res_ws_admin_me.json()["is_server_admin"] is False
+        assert res_ws_admin_me.json()["is_workspace_admin"] is False
+
+        res_ws_admin_cards = await client.get("/api/v1/admin/auth-cards")
+        assert res_ws_admin_cards.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_credential_projects_boundary_blocks_server_admin(
+    db_session: AsyncSession,
+) -> None:
+    """Verify project-scoped app.credential_projects blocks SERVER_ADMIN outside boundary."""
+    (
+        ws_id,
+        server_admin_id,
+        _ws_admin_id,
+        _proj_admin_id,
+        _member_id,
+        _viewer_id,
+    ) = await _setup_workspace_and_multi_role_principals(db_session)
+
+    proj_allowed = uuid.uuid4()
+    proj_blocked = uuid.uuid4()
+
+    await db_session.execute(
+        text(
+            "SELECT set_config('app.principal_id', :p_id, true), "
+            "set_config('app.workspace_id', :ws_id, true), "
+            "set_config('app.credential_projects', :allowed, true)"
+        ),
+        {"p_id": str(server_admin_id), "ws_id": str(ws_id), "allowed": str(proj_allowed)},
+    )
+
+    # 1. Allowed project: passes
+    res_allowed = await db_session.execute(
+        text("SELECT app_principal_has_role(:proj_id, ARRAY['SERVER_ADMIN'])"),
+        {"proj_id": proj_allowed},
+    )
+    assert res_allowed.scalar_one() is True
+
+    # 2. Blocked project: outside app.credential_projects -> returns False even for SERVER_ADMIN
+    res_blocked = await db_session.execute(
+        text("SELECT app_principal_has_role(:proj_id, ARRAY['SERVER_ADMIN'])"),
+        {"proj_id": proj_blocked},
+    )
+    assert res_blocked.scalar_one() is False
+
+    # 3. Server/Global check without project (p_project_id IS NULL): passes
+    res_null = await db_session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+    )
+    assert res_null.scalar_one() is True
+

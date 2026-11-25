@@ -796,7 +796,7 @@ export function McpAccessStudio({
 
       {/* Admin subnav for global tier */}
       {tier === 'global' && (
-        <AdminStudioSubnav activeTab="mcp" />
+        <AdminStudioSubnav activeTab="mcp" isServerAdmin={isServerAdmin} />
       )}
 
       {/* Admin View Switch (My Keys vs Governance) */}
