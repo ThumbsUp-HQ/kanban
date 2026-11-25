@@ -43,7 +43,7 @@ function AdminStudioSubnavInner({
   const cachedMe = queryClient
     ? queryClient.getQueryData<{ is_server_admin?: boolean }>(qk.me())
     : undefined;
-  const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? true;
+  const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? false;
 
   const [sessionData, setSessionData] = React.useState<{
     authenticated?: boolean;

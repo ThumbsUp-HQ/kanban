@@ -44,10 +44,10 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
   });
 
   describe('1. AdminStudioSubnav Component', () => {
-    it('renders all 8 administrative studio tabs with correct test IDs', () => {
+    it('renders all 8 administrative studio tabs with correct test IDs when isServerAdmin is true', () => {
       render(
         <MemoryRouter initialEntries={['/admin/mcp']}>
-          <AdminStudioSubnav activeTab="mcp" />
+          <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -64,7 +64,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
     it('highlights activeTab and sets aria-current=page', () => {
       render(
         <MemoryRouter initialEntries={['/admin/diagnostics']}>
-          <AdminStudioSubnav activeTab="diagnostics" />
+          <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -80,7 +80,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
     it('derives active state from pathname when activeTab prop is omitted', () => {
       render(
         <MemoryRouter initialEntries={['/admin/oauth']}>
-          <AdminStudioSubnav />
+          <AdminStudioSubnav isServerAdmin={true} />
         </MemoryRouter>,
       );
 
@@ -93,6 +93,23 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
       render(
         <MemoryRouter initialEntries={['/admin/diagnostics']}>
           <AdminStudioSubnav isServerAdmin={false} activeTab="diagnostics" />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-imports')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-standalone')).toBeNull();
+      expect(screen.getByTestId('tab-admin-diagnostics')).toBeDefined();
+    });
+
+    it('defaults to fail-closed filtering (isServerAdmin = false) when isServerAdmin prop is omitted', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/diagnostics']}>
+          <AdminStudioSubnav activeTab="diagnostics" />
         </MemoryRouter>,
       );
 

@@ -12,6 +12,7 @@
 This audit evaluates the frontend user experience and visual ergonomics for ticket KAN-398. The implementation introduces two primary user interface updates:
 1. **MFA Enrollment Required Banner**: Displays a non-destructive instructional banner with a direct navigational link to user profile settings (`/settings/profile`) when administrative endpoints return HTTP 403 `MFA_ENROLLMENT_REQUIRED`, replacing the generic access-denied error screen.
 2. **Admin Studio Subnav Role-Based Tab Filtering**: Hides the 7 Server-Admin-only tabs (`auth`, `ai`, `runners`, `mcp`, `oauth`, `imports`, `standalone`) when the authenticated user is not a Server Administrator, leaving only `diagnostics` visible to workspace administrators.
+3. **Fail-Closed Subnav Security**: Enforces fail-closed evaluation (`?? false`) so subnav tabs never default to permissive server admin visibility when session data is absent or still loading.
 
 ---
 
@@ -42,10 +43,11 @@ Visual verification was conducted via automated Playwright test suite (`kanban/w
   - `01-mfa-enrollment-banner-dark-mobile-landscape.png`
 - **Visual Inspection Findings**:
   - The banner element `[data-testid="mfa-enrollment-required-banner"]` renders with clean centered alignment within the `.auth-studio-content` container.
-  - Header text: "Two-Factor Authentication Required" renders with appropriate hierarchy and weight.
+  - Header text: "Two-Factor Authentication Required" renders as `<h2>` with appropriate typographic hierarchy.
   - Explanatory copy: "Administrative operations require MFA enrollment. Please configure a second factor in your profile settings."
   - The anchor element wraps "profile settings" pointing to `/settings/profile`, with clear underline affordance and accessible color contrast meeting WCAG AA requirements.
   - On mobile portrait (`390x844`), the banner adapts seamlessly without text truncation, horizontal overflow, or edge clipping.
+  - Header displays `admin-sudo-pill` status indicator (`Sudo Locked`) per KAN-404 integration.
 
 #### Category 2: Server Admin Studio Subnav (`02-subnav-server-admin-*`)
 - Captured files:
@@ -66,9 +68,10 @@ Visual verification was conducted via automated Playwright test suite (`kanban/w
     3. Remote Runners (`/admin/runners`)
     4. Bot API Keys (`/admin/mcp`)
     5. OAuth 2.1 Clients (`/admin/oauth`)
-    6. Plane Migration (`/admin/imports`)
+    6. Migration (`/admin/imports`) (updated tab title per KAN-397)
     7. Standalone Mode (`/admin/standalone`)
     8. Diagnostics (`/admin/diagnostics`)
+  - Status pill `admin-sudo-pill` (`Sudo Locked`) renders on right side of subnav per KAN-404.
   - Icons and labels render cleanly with breathable spacing and clear active state indicators.
 
 #### Category 3: Workspace Admin Studio Subnav (`03-subnav-workspace-admin-*`)
@@ -86,6 +89,7 @@ Visual verification was conducted via automated Playwright test suite (`kanban/w
 - **Visual Inspection Findings**:
   - For non-server administrators (`isServerAdmin = false`), all 7 server-scoped tabs are completely filtered from the DOM.
   - The Diagnostics tab remains prominently visible and functional.
+  - Status pill `admin-sudo-pill` (`Sudo Locked`) remains visible for websudo context.
   - The subnav container renders without empty gaps, layout collapse, or broken tab borders.
 
 ---
@@ -93,7 +97,7 @@ Visual verification was conducted via automated Playwright test suite (`kanban/w
 ## 3. Accessibility and Responsive Ergonomics
 
 1. **Semantic Elements and Attributes**:
-   - The MFA banner uses clean semantic markup (`<h3>`, `<p>`, `<a>`) with `role="region"` and `aria-label="Two-factor authentication required"`.
+   - The MFA banner uses clean semantic markup (`<h2>`, `<p>`, `<a>`) with `role="alert"` and `data-testid="mfa-enrollment-required-banner"`.
    - The link safely supports both HTML anchor and React Router `Link` environments.
 2. **Color Contrast**:
    - Light Mode: Text `#1e293b` on card background `#ffffff` (contrast ratio 12.6:1). Link `#2563eb` on card background (contrast ratio 4.9:1).
@@ -106,6 +110,6 @@ Visual verification was conducted via automated Playwright test suite (`kanban/w
 ---
 
 ## 4. Specialist Sign-Off
-All UI components, subnav filtering rules, and visual artifacts meet the design system standards.
+All UI components, subnav filtering rules, fail-closed ergonomics, and visual artifacts meet the design system standards.
 
 **Verdict**: APPROVED

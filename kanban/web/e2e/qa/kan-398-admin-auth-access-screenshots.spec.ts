@@ -66,8 +66,8 @@ const mockDiagnostics = {
     active_role_non_bypass: true,
     force_rls_verified: true,
     alembic_head_current: true,
-    code_heads: ['p6_17_server_admin_role_access'],
-    db_heads: ['p6_17_server_admin_role_access'],
+    code_heads: ['p6_19_server_admin_cross_workspace_role_access'],
+    db_heads: ['p6_19_server_admin_cross_workspace_role_access'],
     pool: {
       size: 10,
       checked_in: 9,

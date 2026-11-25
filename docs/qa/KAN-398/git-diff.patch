@@ -1,69 +1,13 @@
-diff --git a/database/migrations/sql/p6_17_server_admin_role_access.down.sql b/database/migrations/sql/p6_17_server_admin_role_access.down.sql
+diff --git a/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.down.sql b/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.down.sql
 new file mode 100644
-index 00000000..0194068d
+index 00000000..a7206e30
 --- /dev/null
-+++ b/database/migrations/sql/p6_17_server_admin_role_access.down.sql
-@@ -0,0 +1,50 @@
++++ b/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.down.sql
+@@ -0,0 +1,125 @@
 +-- Copyright 2026 Kanban Platform Contributors
 +-- Apache-2.0 License. See LICENSE for details.
 +
-+-- Revert app_principal_has_role to p6_04 definition
-+CREATE OR REPLACE FUNCTION app_principal_has_role(p_project_id uuid, p_roles text[])
-+RETURNS boolean
-+LANGUAGE plpgsql
-+STABLE SECURITY DEFINER
-+SET search_path = pg_catalog, public
-+AS $$
-+DECLARE
-+    v_pset uuid[];
-+    v_ws uuid;
-+    v_cred_projs_str text;
-+BEGIN
-+    v_pset := app_effective_principal_set();
-+    IF cardinality(v_pset) = 0 THEN
-+        RETURN FALSE;
-+    END IF;
-+
-+    v_ws := app_current_workspace_id();
-+    IF v_ws IS NULL THEN
-+        RETURN FALSE;
-+    END IF;
-+
-+    IF p_project_id IS NOT NULL THEN
-+        v_cred_projs_str := NULLIF(current_setting('app.credential_projects', true), '');
-+        IF v_cred_projs_str IS NOT NULL THEN
-+            IF NOT (p_project_id = ANY (string_to_array(v_cred_projs_str, ',')::uuid[])) THEN
-+                RETURN FALSE;
-+            END IF;
-+        END IF;
-+    END IF;
-+
-+    RETURN EXISTS (
-+        SELECT 1
-+        FROM role_bindings rb
-+        WHERE rb.principal_id = ANY (v_pset)
-+          AND rb.workspace_id = v_ws
-+          AND rb.role::text = ANY (p_roles)
-+          AND (
-+              rb.scope_type = 'server'
-+              OR rb.scope_type = 'workspace'
-+              OR (rb.scope_type = 'project' AND rb.project_id = p_project_id AND p_project_id IS NOT NULL)
-+          )
-+    );
-+END;
-+$$;
-+
-+GRANT EXECUTE ON FUNCTION app_principal_has_role(uuid, text[]) TO kanban_app, app_rls_reader, kanban_migrator;
-diff --git a/database/migrations/sql/p6_17_server_admin_role_access.up.sql b/database/migrations/sql/p6_17_server_admin_role_access.up.sql
-new file mode 100644
-index 00000000..66036802
---- /dev/null
-+++ b/database/migrations/sql/p6_17_server_admin_role_access.up.sql
-@@ -0,0 +1,62 @@
-+-- Copyright 2026 Kanban Platform Contributors
-+-- Apache-2.0 License. See LICENSE for details.
-+
-+-- Upgrade app_principal_has_role to match SERVER_ADMIN bindings without requiring workspace context
++-- Revert app_principal_has_role to p6_17 definition
 +CREATE OR REPLACE FUNCTION app_principal_has_role(p_project_id uuid, p_roles text[])
 +RETURNS boolean
 +LANGUAGE plpgsql
@@ -122,19 +66,227 @@ index 00000000..66036802
 +$$;
 +
 +GRANT EXECUTE ON FUNCTION app_principal_has_role(uuid, text[]) TO kanban_app, app_rls_reader, kanban_migrator;
-diff --git a/database/migrations/versions/p6_17_server_admin_role_access.py b/database/migrations/versions/p6_17_server_admin_role_access.py
++
++-- Revert kb_auth.card_admin_list and kb_auth.card_admin_get to p2_03 definitions
++CREATE OR REPLACE FUNCTION kb_auth.card_admin_list()
++RETURNS SETOF auth_provider_cards
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF NOT (
++        EXISTS (
++            SELECT 1
++            FROM role_bindings rb
++            WHERE rb.principal_id = ANY (app_effective_principal_set())
++              AND rb.role = 'SERVER_ADMIN'
++        )
++        AND current_setting('app.aal_level', true) = '2'
++    ) THEN
++        RAISE EXCEPTION 'insufficient_privilege: SERVER_ADMIN with AAL2 required'
++            USING ERRCODE = '42501';
++    END IF;
++
++    RETURN QUERY
++    SELECT *
++    FROM auth_provider_cards c
++    ORDER BY c.sort_rank COLLATE "C" ASC, c.id ASC;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.card_admin_list() OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.card_admin_list() FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.card_admin_list() TO kanban_app;
++
++CREATE OR REPLACE FUNCTION kb_auth.card_admin_get(p_id UUID)
++RETURNS SETOF auth_provider_cards
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF NOT (
++        EXISTS (
++            SELECT 1
++            FROM role_bindings rb
++            WHERE rb.principal_id = ANY (app_effective_principal_set())
++              AND rb.role = 'SERVER_ADMIN'
++        )
++        AND current_setting('app.aal_level', true) = '2'
++    ) THEN
++        RAISE EXCEPTION 'insufficient_privilege: SERVER_ADMIN with AAL2 required'
++            USING ERRCODE = '42501';
++    END IF;
++
++    RETURN QUERY
++    SELECT *
++    FROM auth_provider_cards c
++    WHERE c.id = p_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.card_admin_get(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.card_admin_get(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.card_admin_get(UUID) TO kanban_app;
+diff --git a/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.up.sql b/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.up.sql
 new file mode 100644
-index 00000000..a20c78dc
+index 00000000..c957cdba
 --- /dev/null
-+++ b/database/migrations/versions/p6_17_server_admin_role_access.py
++++ b/database/migrations/sql/p6_19_server_admin_cross_workspace_role_access.up.sql
+@@ -0,0 +1,139 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- Fix app_principal_has_role to support cross-workspace SERVER_ADMIN resolution
++-- and enforce app.credential_projects boundary checks before role checks.
++CREATE OR REPLACE FUNCTION app_principal_has_role(p_project_id uuid, p_roles text[])
++RETURNS boolean
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_principal_id uuid;
++    v_pset uuid[];
++    v_ws uuid;
++    v_cred_projs_str text;
++BEGIN
++    -- (a) Enforce app.credential_projects FIRST whenever p_project_id IS NOT NULL
++    --     and current_setting('app.credential_projects', true) is non-empty!
++    IF p_project_id IS NOT NULL THEN
++        v_cred_projs_str := NULLIF(current_setting('app.credential_projects', true), '');
++        IF v_cred_projs_str IS NOT NULL THEN
++            IF NOT (p_project_id = ANY (string_to_array(v_cred_projs_str, ',')::uuid[])) THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++    END IF;
++
++    -- (b) When 'SERVER_ADMIN' = ANY (p_roles), resolve v_principal_id directly
++    --     against principals p (p.id = v_principal_id AND p.status = 'ACTIVE')
++    --     + role_bindings rb (rb.principal_id = p.id AND rb.role::text = 'SERVER_ADMIN' AND rb.scope_type = 'server'
++    --     plus recursive group memberships if applicable) WITHOUT requiring p.workspace_id = app_current_workspace_id(),
++    --     so SERVER_ADMIN works when app.workspace_id is ''/NULL, workspace A, OR secondary workspace B!
++    IF 'SERVER_ADMIN' = ANY (p_roles) THEN
++        v_principal_id := NULLIF(current_setting('app.principal_id', true), '')::uuid;
++        IF v_principal_id IS NOT NULL THEN
++            IF EXISTS (
++                SELECT 1
++                FROM principals p
++                JOIN (
++                    SELECT v_principal_id AS pid
++                    UNION ALL
++                    SELECT pgc.ancestor_group_id AS pid
++                    FROM principal_group_closure pgc
++                    JOIN principals gp ON gp.id = pgc.ancestor_group_id AND gp.status = 'ACTIVE'
++                    WHERE pgc.member_id = v_principal_id
++                ) eff ON true
++                JOIN role_bindings rb ON rb.principal_id = eff.pid
++                WHERE p.id = v_principal_id
++                  AND p.status = 'ACTIVE'
++                  AND rb.role::text = 'SERVER_ADMIN'
++                  AND rb.scope_type = 'server'
++            ) THEN
++                RETURN TRUE;
++            END IF;
++        END IF;
++    END IF;
++
++    -- (c) For all non-SERVER_ADMIN roles (WORKSPACE_ADMIN, PROJECT_ADMIN, MEMBER, VIEWER, etc.),
++    --     keep strict v_pset := app_effective_principal_set() + rb.workspace_id = app_current_workspace_id() isolation!
++    v_pset := app_effective_principal_set();
++    IF cardinality(v_pset) = 0 THEN
++        RETURN FALSE;
++    END IF;
++
++    v_ws := app_current_workspace_id();
++    IF v_ws IS NULL THEN
++        RETURN FALSE;
++    END IF;
++
++    RETURN EXISTS (
++        SELECT 1
++        FROM role_bindings rb
++        WHERE rb.principal_id = ANY (v_pset)
++          AND rb.workspace_id = v_ws
++          AND rb.role::text = ANY (p_roles)
++          AND (
++              rb.scope_type = 'workspace'
++              OR (rb.scope_type = 'project' AND rb.project_id = p_project_id AND p_project_id IS NOT NULL)
++          )
++    );
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_principal_has_role(uuid, text[]) TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- Align kb_auth.card_admin_list and kb_auth.card_admin_get to use app_principal_has_role
++-- so SERVER_ADMIN principals active on secondary workspaces can administer auth provider cards.
++CREATE OR REPLACE FUNCTION kb_auth.card_admin_list()
++RETURNS SETOF auth_provider_cards
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF NOT (
++        app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++        AND current_setting('app.aal_level', true) = '2'
++    ) THEN
++        RAISE EXCEPTION 'insufficient_privilege: SERVER_ADMIN with AAL2 required'
++            USING ERRCODE = '42501';
++    END IF;
++
++    RETURN QUERY
++    SELECT *
++    FROM auth_provider_cards c
++    ORDER BY c.sort_rank COLLATE "C" ASC, c.id ASC;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.card_admin_list() OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.card_admin_list() FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.card_admin_list() TO kanban_app;
++
++CREATE OR REPLACE FUNCTION kb_auth.card_admin_get(p_id UUID)
++RETURNS SETOF auth_provider_cards
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++BEGIN
++    IF NOT (
++        app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])
++        AND current_setting('app.aal_level', true) = '2'
++    ) THEN
++        RAISE EXCEPTION 'insufficient_privilege: SERVER_ADMIN with AAL2 required'
++            USING ERRCODE = '42501';
++    END IF;
++
++    RETURN QUERY
++    SELECT *
++    FROM auth_provider_cards c
++    WHERE c.id = p_id;
++END;
++$$;
++
++ALTER FUNCTION kb_auth.card_admin_get(UUID) OWNER TO kb_auth_owner;
++REVOKE ALL ON FUNCTION kb_auth.card_admin_get(UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION kb_auth.card_admin_get(UUID) TO kanban_app;
+diff --git a/database/migrations/versions/p6_19_server_admin_cross_workspace_role_access.py b/database/migrations/versions/p6_19_server_admin_cross_workspace_role_access.py
+new file mode 100644
+index 00000000..b25e93e3
+--- /dev/null
++++ b/database/migrations/versions/p6_19_server_admin_cross_workspace_role_access.py
 @@ -0,0 +1,28 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
-+"""Update app_principal_has_role for server admin scope.
++"""Fix app_principal_has_role for cross-workspace server admin and credential scoping.
 +
-+Revision ID: p6_17_server_admin_role_access
-+Revises: p6_16_oauth_confidential_clients
-+Create Date: 2026-11-25 05:20:47.000000
++Revision ID: p6_19_server_admin_cross_workspace_role_access
++Revises: p6_18_websudo_sliding_aal2
++Create Date: 2026-11-25 08:08:36.000000
 +"""
 +
 +from collections.abc import Sequence
@@ -142,29 +294,29 @@ index 00000000..a20c78dc
 +from database.migrations.sqlfile import execute_sql_file
 +
 +# revision identifiers, used by Alembic.
-+revision: str = "p6_17_server_admin_role_access"
-+down_revision: str | None = "p6_16_oauth_confidential_clients"
++revision: str = "p6_19_server_admin_cross_workspace_role_access"
++down_revision: str | None = "p6_18_websudo_sliding_aal2"
 +branch_labels: str | Sequence[str] | None = None
 +depends_on: str | Sequence[str] | None = None
 +
 +
 +def upgrade() -> None:
-+    """Apply p6_17_server_admin_role_access migration."""
-+    execute_sql_file("p6_17_server_admin_role_access.up.sql")
++    """Apply p6_19_server_admin_cross_workspace_role_access migration."""
++    execute_sql_file("p6_19_server_admin_cross_workspace_role_access.up.sql")
 +
 +
 +def downgrade() -> None:
-+    """Revert p6_17_server_admin_role_access migration."""
-+    execute_sql_file("p6_17_server_admin_role_access.down.sql")
-diff --git a/database/tests/migrations/test_p6_17_server_admin_role_access_migration.py b/database/tests/migrations/test_p6_17_server_admin_role_access_migration.py
++    """Revert p6_19_server_admin_cross_workspace_role_access migration."""
++    execute_sql_file("p6_19_server_admin_cross_workspace_role_access.down.sql")
+diff --git a/database/tests/migrations/test_p6_19_server_admin_cross_workspace_role_access_migration.py b/database/tests/migrations/test_p6_19_server_admin_cross_workspace_role_access_migration.py
 new file mode 100644
-index 00000000..665031f2
+index 00000000..b212281f
 --- /dev/null
-+++ b/database/tests/migrations/test_p6_17_server_admin_role_access_migration.py
++++ b/database/tests/migrations/test_p6_19_server_admin_cross_workspace_role_access_migration.py
 @@ -0,0 +1,24 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
-+"""Migration lifecycle test for p6_17_server_admin_role_access."""
++"""Migration lifecycle test for p6_19_server_admin_cross_workspace_role_access."""
 +
 +import pytest
 +
@@ -172,865 +324,424 @@ index 00000000..665031f2
 +
 +
 +@pytest.mark.migration
-+async def test_p6_17_server_admin_role_access_migration_lifecycle() -> None:
-+    """Verify p6_17_server_admin_role_access upgrade and downgrade revert cleanly."""
++async def test_p6_19_server_admin_cross_workspace_role_access_migration_lifecycle() -> None:
++    """Verify p6_19 upgrade and downgrade lifecycle reverts cleanly."""
 +    async with MigrationHarness() as harness:
-+        prev_rev = harness.previous_of("p6_17_server_admin_role_access")
-+        assert prev_rev == "p6_16_oauth_confidential_clients"
++        prev_rev = harness.previous_of("p6_19_server_admin_cross_workspace_role_access")
++        assert prev_rev == "p6_18_websudo_sliding_aal2"
 +
-+        # 1. Upgrade to p6_17_server_admin_role_access
-+        await harness.upgrade("p6_17_server_admin_role_access")
++        # 1. Upgrade to p6_19_server_admin_cross_workspace_role_access
++        await harness.upgrade("p6_19_server_admin_cross_workspace_role_access")
 +
 +        # 2. Downgrade to previous revision
 +        await harness.downgrade(prev_rev)
 +
 +        # 3. Upgrade back to head
-+        await harness.upgrade("p6_17_server_admin_role_access")
++        await harness.upgrade("p6_19_server_admin_cross_workspace_role_access")
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-desktop.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-desktop.png
+index b2c6a8d3..15150cc9 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-desktop.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile-landscape.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile-landscape.png
+index 1c3e3c64..68e339d9 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile.png
+index 94ed534e..593cd505 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet-portrait.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet-portrait.png
+index dd3e43df..8db603f7 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet.png
+index 1a31b061..ff03be35 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-dark-tablet.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-desktop.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-desktop.png
+index 7c8355b3..7b438311 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-desktop.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile-landscape.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile-landscape.png
+index c3adae08..c0adac38 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile.png
+index fbf6131f..7fd1c2c6 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet-portrait.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet-portrait.png
+index b555cf2a..e0bcc13b 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet.png b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet.png
+index a3be50ab..7f82629b 100644
+Binary files a/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet.png and b/docs/qa/KAN-398/screenshots/01-mfa-enrollment-banner-light-tablet.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-desktop.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-desktop.png
+index e631b0a9..f51ac1d4 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-desktop.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile-landscape.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile-landscape.png
+index b989d293..09ec3e8e 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile.png
+index 40152a55..de61fece 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet-portrait.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet-portrait.png
+index 9a197560..73380758 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet.png
+index 21bbbda0..7852cd3a 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-dark-tablet.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-desktop.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-desktop.png
+index b5a10d6e..89990e71 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-desktop.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile-landscape.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile-landscape.png
+index 857f91db..a4924b2d 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile.png
+index 86ad1005..3b8efaa4 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet-portrait.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet-portrait.png
+index b2456387..38ed4f15 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet.png b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet.png
+index 1886de29..bde25b67 100644
+Binary files a/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet.png and b/docs/qa/KAN-398/screenshots/02-subnav-server-admin-light-tablet.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-desktop.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-desktop.png
+index 1b0f3f70..e0087d12 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-desktop.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile-landscape.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile-landscape.png
+index d4bd25bb..eeb88d9a 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile.png
+index 6738d729..4c4b3483 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet-portrait.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet-portrait.png
+index b51c0dca..c644da86 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet.png
+index 0e15eb63..f910feb0 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-dark-tablet.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-desktop.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-desktop.png
+index 383093a9..8a76f3dd 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-desktop.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-desktop.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile-landscape.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile-landscape.png
+index 604f5c31..cbea1952 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile-landscape.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile-landscape.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile.png
+index 8c4784ab..690e6f7e 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-mobile.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet-portrait.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet-portrait.png
+index 66c68f55..6c184f13 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet-portrait.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet-portrait.png differ
+diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png
+index be6e0e97..48b2ba05 100644
+Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png differ
 diff --git a/kanban/tests/auth/test_admin_auth_cards_access.py b/kanban/tests/auth/test_admin_auth_cards_access.py
-new file mode 100644
-index 00000000..9983172a
---- /dev/null
+index 9983172a..3051530f 100644
+--- a/kanban/tests/auth/test_admin_auth_cards_access.py
 +++ b/kanban/tests/auth/test_admin_auth_cards_access.py
-@@ -0,0 +1,456 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Tests for Admin Auth Cards access and server-admin role scoping (KAN-398)."""
-+
-+from __future__ import annotations
-+
-+import os
-+import uuid
-+from typing import TYPE_CHECKING
-+
-+import httpx
-+import pytest
-+from fastapi import FastAPI
-+from sqlalchemy import text
-+
-+if TYPE_CHECKING:
-+    from sqlalchemy.ext.asyncio import AsyncSession
-+
-+from database.session import RLSContext, RLSSessionFactory
-+from kanban.api.problems import ProblemException, problem_exception_handler
-+from kanban.api.request_id import RequestIdMiddleware
-+from kanban.api.v1 import build_v1_router
-+from kanban.auth.cards.service import AuthCardAdminService
-+from kanban.auth.mfa.policy import assert_admin_routes_protected
-+from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
-+from kanban.auth.sessions.csrf import CsrfMiddleware
-+from kanban.auth.sessions.resolver import SessionCookieResolver
-+from kanban.auth.sessions.service import SessionService
-+from kanban.security.envelope import StaticKekProvider
-+from kanban.security.keys import KeyMaterial
-+
-+
-+@pytest.fixture
-+def key_material() -> KeyMaterial:
-+    """Fixture providing testing key material."""
-+    return KeyMaterial(
-+        master_kek=b"k" * 32,
-+        master_kek_kid="kek-v1",
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+
-+
-+@pytest.fixture
-+def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
-+    """Fixture providing StaticKekProvider with test keys."""
-+    return StaticKekProvider(
-+        keys={"kek-v1": key_material.master_kek, "kek-v2": os.urandom(32)},
-+        current="kek-v1",
-+    )
-+
-+
-+async def _setup_workspace_and_multi_role_principals(
-+    session: AsyncSession,
-+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
-+    """Provision test workspace and server_admin, workspace_admin, project_admin, and member."""
-+    ws_id = uuid.uuid4()
-+    await session.execute(
-+        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
-+        {"id": ws_id, "slug": f"ws-{ws_id.hex[:10]}", "name": "Access Test WS"},
-+    )
-+
-+    # 1. Server Admin principal
-+    server_admin_id = uuid.uuid4()
+@@ -52,8 +52,8 @@ def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
+ 
+ async def _setup_workspace_and_multi_role_principals(
+     session: AsyncSession,
+-) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+-    """Provision test workspace and server_admin, workspace_admin, project_admin, and member."""
++) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
++    """Provision test workspace and multiple role principals for access matrix testing."""
+     ws_id = uuid.uuid4()
+     await session.execute(
+         text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
+@@ -207,8 +207,40 @@ async def _setup_workspace_and_multi_role_principals(
+         {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": member_id},
+     )
+ 
++    # 5. Viewer principal
++    viewer_id = uuid.uuid4()
 +    await session.execute(
 +        text(
-+            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Server Admin', "
++            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Standard Viewer', "
 +            ":u_id, :u_id)"
 +        ),
-+        {"ws_id": ws_id, "ckey": f"usr-{server_admin_id.hex}", "u_id": server_admin_id},
++        {"ws_id": ws_id, "ckey": f"usr-{viewer_id.hex}", "u_id": viewer_id},
 +    )
 +    await session.execute(
 +        text(
 +            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
-+            "VALUES (:id, 'USER', :ws_id, 'Server Admin', 'ACTIVE')"
++            "VALUES (:id, 'USER', :ws_id, 'Standard Viewer', 'ACTIVE')"
 +        ),
-+        {"id": server_admin_id, "ws_id": ws_id},
++        {"id": viewer_id, "ws_id": ws_id},
 +    )
 +    await session.execute(
 +        text(
 +            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
-+            "VALUES (:id, 'user', 'USER', :ws_id, 'server-admin@example.com')"
++            "VALUES (:id, 'user', 'USER', :ws_id, 'viewer@example.com')"
 +        ),
-+        {"id": server_admin_id, "ws_id": ws_id},
-+    )
-+    # Server-scoped role binding (scope_type='server')
-+    await session.execute(
-+        text(
-+            "INSERT INTO role_bindings "
-+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
-+            "VALUES (:id, :ws_id, :p_id, 'SERVER_ADMIN', 'server', NULL)"
-+        ),
-+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": server_admin_id},
-+    )
-+
-+    # 2. Workspace Admin principal
-+    ws_admin_id = uuid.uuid4()
-+    await session.execute(
-+        text(
-+            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Workspace Admin', "
-+            ":u_id, :u_id)"
-+        ),
-+        {"ws_id": ws_id, "ckey": f"usr-{ws_admin_id.hex}", "u_id": ws_admin_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
-+            "VALUES (:id, 'USER', :ws_id, 'Workspace Admin', 'ACTIVE')"
-+        ),
-+        {"id": ws_admin_id, "ws_id": ws_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
-+            "VALUES (:id, 'user', 'USER', :ws_id, 'ws-admin@example.com')"
-+        ),
-+        {"id": ws_admin_id, "ws_id": ws_id},
-+    )
-+    # Workspace-scoped role binding (scope_type='workspace')
-+    await session.execute(
-+        text(
-+            "INSERT INTO role_bindings "
-+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
-+            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
-+        ),
-+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": ws_admin_id},
-+    )
-+
-+    # 3. Project Admin principal
-+    proj_id = uuid.uuid4()
-+    proj_ident = f"PRJ{proj_id.hex[:4].upper()}"
-+    await session.execute(
-+        text(
-+            "SELECT register_object('project'::object_kind, :ws_id, NULL, :ckey, 'Test Project', "
-+            ":creator_id, :proj_id)"
-+        ),
-+        {"ws_id": ws_id, "ckey": proj_ident, "creator_id": server_admin_id, "proj_id": proj_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO projects (id, workspace_id, name, identifier) "
-+            "VALUES (:id, :ws_id, 'Test Project', :ident)"
-+        ),
-+        {"id": proj_id, "ws_id": ws_id, "ident": proj_ident},
-+    )
-+
-+    project_admin_id = uuid.uuid4()
-+    await session.execute(
-+        text(
-+            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Project Admin', "
-+            ":u_id, :u_id)"
-+        ),
-+        {"ws_id": ws_id, "ckey": f"usr-{project_admin_id.hex}", "u_id": project_admin_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
-+            "VALUES (:id, 'USER', :ws_id, 'Project Admin', 'ACTIVE')"
-+        ),
-+        {"id": project_admin_id, "ws_id": ws_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
-+            "VALUES (:id, 'user', 'USER', :ws_id, 'proj-admin@example.com')"
-+        ),
-+        {"id": project_admin_id, "ws_id": ws_id},
++        {"id": viewer_id, "ws_id": ws_id},
 +    )
 +    await session.execute(
 +        text(
 +            "INSERT INTO role_bindings "
 +            "(id, workspace_id, principal_id, role, scope_type, project_id) "
-+            "VALUES (:id, :ws_id, :p_id, 'PROJECT_ADMIN', 'project', :proj_id)"
++            "VALUES (:id, :ws_id, :p_id, 'VIEWER', 'project', :proj_id)"
 +        ),
-+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": project_admin_id, "proj_id": proj_id},
++        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": viewer_id, "proj_id": proj_id},
 +    )
 +
-+    # 4. Member principal
-+    member_id = uuid.uuid4()
-+    await session.execute(
-+        text(
-+            "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'Standard Member', "
-+            ":u_id, :u_id)"
-+        ),
-+        {"ws_id": ws_id, "ckey": f"usr-{member_id.hex}", "u_id": member_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) "
-+            "VALUES (:id, 'USER', :ws_id, 'Standard Member', 'ACTIVE')"
-+        ),
-+        {"id": member_id, "ws_id": ws_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
-+            "VALUES (:id, 'user', 'USER', :ws_id, 'member@example.com')"
-+        ),
-+        {"id": member_id, "ws_id": ws_id},
-+    )
-+    await session.execute(
-+        text(
-+            "INSERT INTO role_bindings "
-+            "(id, workspace_id, principal_id, role, scope_type, project_id) "
-+            "VALUES (:id, :ws_id, :p_id, 'WORKSPACE_MEMBER', 'workspace', NULL)"
-+        ),
-+        {"id": uuid.uuid4(), "ws_id": ws_id, "p_id": member_id},
-+    )
+     # Register MFA TOTP for all test principals to satisfy require_admin_aal2
+-    for p_id in (server_admin_id, ws_admin_id, project_admin_id, member_id):
++    for p_id in (server_admin_id, ws_admin_id, project_admin_id, member_id, viewer_id):
+         await session.execute(
+             text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'kek-v1')"),
+             {
+@@ -228,7 +260,7 @@ async def _setup_workspace_and_multi_role_principals(
+                 {"p_fid": p_row["id"]},
+             )
+ 
+-    return ws_id, server_admin_id, ws_admin_id, project_admin_id, member_id
++    return ws_id, server_admin_id, ws_admin_id, project_admin_id, member_id, viewer_id
+ 
+ 
+ def _create_test_app(
+@@ -264,7 +296,8 @@ async def test_app_principal_has_role_sql_server_admin_without_workspace(
+         server_admin_id,
+         _ws_admin_id,
+         _proj_admin_id,
+-        _,
++        _member_id,
++        _viewer_id,
+     ) = await _setup_workspace_and_multi_role_principals(db_session)
+ 
+     # 1. Bind RLSContext to server_admin with workspace_id unset (app.workspace_id = NULL)
+@@ -311,6 +344,7 @@ async def test_app_principal_has_role_sql_workspace_and_project_scoping(
+         ws_admin_id,
+         _proj_admin_id,
+         member_id,
++        _viewer_id,
+     ) = await _setup_workspace_and_multi_role_principals(db_session)
+     other_ws_id = uuid.uuid4()
+ 
+@@ -381,6 +415,7 @@ async def test_admin_auth_cards_endpoint_access_matrix(
+         ws_admin_id,
+         proj_admin_id,
+         member_id,
++        viewer_id,
+     ) = await _setup_workspace_and_multi_role_principals(db_session)
+     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+     session_service = SessionService(key_material.session_hmac_key)
+@@ -454,3 +489,162 @@ async def test_admin_auth_cards_endpoint_access_matrix(
+         res_member = await client.get("/api/v1/admin/auth-cards")
+         assert res_member.status_code == 403
+         assert res_member.json()["code"] == "FORBIDDEN"
 +
-+    # Register MFA TOTP for all test principals to satisfy require_admin_aal2
-+    for p_id in (server_admin_id, ws_admin_id, project_admin_id, member_id):
-+        await session.execute(
-+            text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'kek-v1')"),
-+            {
-+                "p_id": p_id,
-+                "blob": b"\x01" + b"\x00" * 28,
-+                "dek": b"\x01" + b"\x00" * 44,
-+            },
-+        )
-+        res = await session.execute(
-+            text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
-+            {"p_id": p_id},
-+        )
-+        p_row = res.mappings().first()
-+        if p_row:
-+            await session.execute(
-+                text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
-+                {"p_fid": p_row["id"]},
++        # 6. VIEWER with AAL2 session -> 403 FORBIDDEN
++        async with factory.session(anon_ctx) as sess:
++            sess_viewer = await session_service.create_after_login(
++                sess,
++                principal_id=viewer_id,
++                workspace_id=ws_id,
++                aal_level=2,
++                mfa_pending=False,
 +            )
-+
-+    return ws_id, server_admin_id, ws_admin_id, project_admin_id, member_id
-+
-+
-+def _create_test_app(
-+    factory: RLSSessionFactory,
-+    service: AuthCardAdminService,
-+    key_material: KeyMaterial,
-+    session_service: SessionService,
-+) -> FastAPI:
-+    """Create test FastAPI application configured with dependencies."""
-+    app = FastAPI()
-+    app.state.session_factory = factory
-+    app.state.session_service = session_service
-+    app.state.key_material = key_material
-+    app.state.auth_card_admin_service = service
-+    app.state.principal_resolver = SessionCookieResolver(session_service, factory)
-+
-+    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
-+    v1_router = build_v1_router()
-+    app.include_router(v1_router, prefix="/api/v1")
-+
-+    app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
-+    app.add_middleware(RequestIdMiddleware)
-+    return app
++        client.cookies.set(SESSION_COOKIE_NAME, sess_viewer.cookie_val)
++        res_viewer = await client.get("/api/v1/admin/auth-cards")
++        assert res_viewer.status_code == 403
++        assert res_viewer.json()["code"] == "FORBIDDEN"
 +
 +
 +@pytest.mark.asyncio
-+async def test_app_principal_has_role_sql_server_admin_without_workspace(
-+    db_session: AsyncSession,
-+) -> None:
-+    """Verify app_principal_has_role matches SERVER_ADMIN without requiring workspace context."""
-+    (
-+        ws_id,
-+        server_admin_id,
-+        _ws_admin_id,
-+        _proj_admin_id,
-+        _,
-+    ) = await _setup_workspace_and_multi_role_principals(db_session)
-+
-+    # 1. Bind RLSContext to server_admin with workspace_id unset (app.workspace_id = NULL)
-+    await db_session.execute(
-+        text(
-+            "SELECT set_config('app.principal_id', :p_id, true), "
-+            "set_config('app.workspace_id', '', true), "
-+            "set_config('app.aal_level', '2', true)"
-+        ),
-+        {"p_id": str(server_admin_id)},
-+    )
-+
-+    # SERVER_ADMIN role must match even when app.workspace_id is NULL
-+    res = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
-+    )
-+    assert res.scalar_one() is True
-+
-+    # But WORKSPACE_ADMIN role must return False when app.workspace_id is NULL
-+    res_ws = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN'])")
-+    )
-+    assert res_ws.scalar_one() is False
-+
-+    # 2. Bind RLSContext to server_admin with workspace_id set
-+    await db_session.execute(
-+        text("SELECT set_config('app.workspace_id', :ws_id, true)"),
-+        {"ws_id": str(ws_id)},
-+    )
-+    res_with_ws = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
-+    )
-+    assert res_with_ws.scalar_one() is True
-+
-+
-+@pytest.mark.asyncio
-+async def test_app_principal_has_role_sql_workspace_and_project_scoping(
-+    db_session: AsyncSession,
-+) -> None:
-+    """Verify WORKSPACE_ADMIN, PROJECT_ADMIN, and MEMBER bindings strictly enforce workspace_id."""
-+    (
-+        ws_id,
-+        _,
-+        ws_admin_id,
-+        _proj_admin_id,
-+        member_id,
-+    ) = await _setup_workspace_and_multi_role_principals(db_session)
-+    other_ws_id = uuid.uuid4()
-+
-+    # 1. Workspace Admin with workspace_id unset -> False
-+    await db_session.execute(
-+        text(
-+            "SELECT set_config('app.principal_id', :p_id, true), "
-+            "set_config('app.workspace_id', '', true), "
-+            "set_config('app.aal_level', '2', true)"
-+        ),
-+        {"p_id": str(ws_admin_id)},
-+    )
-+    res_no_ws = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN'])")
-+    )
-+    assert res_no_ws.scalar_one() is False
-+
-+    # Workspace Admin with other workspace -> False
-+    await db_session.execute(
-+        text("SELECT set_config('app.workspace_id', :ws_id, true)"),
-+        {"ws_id": str(other_ws_id)},
-+    )
-+    res_other_ws = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN'])")
-+    )
-+    assert res_other_ws.scalar_one() is False
-+
-+    # Workspace Admin with matching workspace -> True
-+    await db_session.execute(
-+        text("SELECT set_config('app.workspace_id', :ws_id, true)"),
-+        {"ws_id": str(ws_id)},
-+    )
-+    res_matching_ws = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN'])")
-+    )
-+    assert res_matching_ws.scalar_one() is True
-+
-+    # Workspace Admin does NOT possess SERVER_ADMIN
-+    res_not_server = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
-+    )
-+    assert res_not_server.scalar_one() is False
-+
-+    # 2. Member does NOT possess SERVER_ADMIN or WORKSPACE_ADMIN
-+    await db_session.execute(
-+        text(
-+            "SELECT set_config('app.principal_id', :p_id, true), "
-+            "set_config('app.workspace_id', :ws_id, true)"
-+        ),
-+        {"p_id": str(member_id), "ws_id": str(ws_id)},
-+    )
-+    res_member = await db_session.execute(
-+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
-+    )
-+    assert res_member.scalar_one() is False
-+
-+
-+@pytest.mark.asyncio
-+async def test_admin_auth_cards_endpoint_access_matrix(
++async def test_server_admin_cross_workspace_access(
 +    db_session: AsyncSession,
 +    kek_provider: StaticKekProvider,
 +    key_material: KeyMaterial,
 +) -> None:
-+    """Verify /api/v1/admin/auth-cards authorizes SERVER_ADMIN and rejects non-server admins."""
++    """Verify SERVER_ADMIN on workspace A active on secondary workspace B has full access."""
 +    (
-+        ws_id,
++        _ws_a,
 +        server_admin_id,
 +        ws_admin_id,
-+        proj_admin_id,
-+        member_id,
++        _proj_admin_id,
++        _member_id,
++        _viewer_id,
 +    ) = await _setup_workspace_and_multi_role_principals(db_session)
++
++    # Provision secondary workspace B
++    ws_b = uuid.uuid4()
++    await db_session.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, :name)"),
++        {"id": ws_b, "slug": f"ws-{ws_b.hex[:10]}", "name": "Secondary Workspace B"},
++    )
++
++    # 1. Direct SQL check with app.workspace_id = ws_b
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :ws_id, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"p_id": str(server_admin_id), "ws_id": str(ws_b)},
++    )
++    res_sql = await db_session.execute(
++        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++    )
++    assert res_sql.scalar_one() is True
++
++    # 2. API level tests: GET /api/v1/auth/me and GET /api/v1/admin/auth-cards
 +    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
 +    session_service = SessionService(key_material.session_hmac_key)
 +    service = AuthCardAdminService(kek_provider=kek_provider)
 +    app = _create_test_app(factory, service, key_material, session_service)
 +
-+    # Route audit
-+    assert assert_admin_routes_protected(app) == []
-+
 +    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
 +
 +    transport = httpx.ASGITransport(app=app)
 +    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-+        # 1. Unauthenticated -> 401
-+        res_anon = await client.get("/api/v1/admin/auth-cards")
-+        assert res_anon.status_code == 401
-+
-+        # 2. SERVER_ADMIN with AAL2 session -> 200 OK
++        # Create session on secondary workspace ws_b
 +        async with factory.session(anon_ctx) as sess:
-+            sess_server_admin = await session_service.create_after_login(
++            sess_server_admin_b = await session_service.create_after_login(
 +                sess,
 +                principal_id=server_admin_id,
-+                workspace_id=ws_id,
++                workspace_id=ws_b,
 +                aal_level=2,
 +                mfa_pending=False,
 +            )
-+        client.cookies.set(SESSION_COOKIE_NAME, sess_server_admin.cookie_val)
-+        res_admin = await client.get("/api/v1/admin/auth-cards")
-+        assert res_admin.status_code == 200
-+        data = res_admin.json()
-+        assert "cards" in data
++        client.cookies.set(SESSION_COOKIE_NAME, sess_server_admin_b.cookie_val)
 +
-+        # 3. WORKSPACE_ADMIN with AAL2 session -> 403 INSUFFICIENT_CAPABILITY
++        # GET /api/v1/auth/me receives is_server_admin == True
++        res_me = await client.get("/api/v1/auth/me")
++        assert res_me.status_code == 200
++        me_data = res_me.json()
++        assert me_data["is_server_admin"] is True
++        assert me_data["workspace_role"] == "SERVER_ADMIN"
++
++        # GET /api/v1/admin/auth-cards receives 200 OK
++        res_cards = await client.get("/api/v1/admin/auth-cards")
++        assert res_cards.status_code == 200
++        assert "cards" in res_cards.json()
++
++        # With X-KB-Scope-Workspace header pointing to ws_b
++        res_cards_scoped = await client.get(
++            "/api/v1/admin/auth-cards",
++            headers={"X-KB-Scope-Workspace": str(ws_b)},
++        )
++        assert res_cards_scoped.status_code == 200
++
++        # WORKSPACE_ADMIN on workspace A denied on workspace B at API level
 +        async with factory.session(anon_ctx) as sess:
-+            sess_ws_admin = await session_service.create_after_login(
++            sess_ws_admin_b = await session_service.create_after_login(
 +                sess,
 +                principal_id=ws_admin_id,
-+                workspace_id=ws_id,
++                workspace_id=ws_b,
 +                aal_level=2,
 +                mfa_pending=False,
 +            )
-+        client.cookies.set(SESSION_COOKIE_NAME, sess_ws_admin.cookie_val)
-+        res_ws_admin = await client.get("/api/v1/admin/auth-cards")
-+        assert res_ws_admin.status_code == 403
-+        assert res_ws_admin.json()["code"] == "INSUFFICIENT_CAPABILITY"
++        client.cookies.set(SESSION_COOKIE_NAME, sess_ws_admin_b.cookie_val)
 +
-+        # 4. PROJECT_ADMIN with AAL2 session -> 403 INSUFFICIENT_CAPABILITY
-+        async with factory.session(anon_ctx) as sess:
-+            sess_proj = await session_service.create_after_login(
-+                sess,
-+                principal_id=proj_admin_id,
-+                workspace_id=ws_id,
-+                aal_level=2,
-+                mfa_pending=False,
-+            )
-+        client.cookies.set(SESSION_COOKIE_NAME, sess_proj.cookie_val)
-+        res_proj = await client.get("/api/v1/admin/auth-cards")
-+        assert res_proj.status_code == 403
-+        assert res_proj.json()["code"] == "INSUFFICIENT_CAPABILITY"
++        res_ws_admin_me = await client.get("/api/v1/auth/me")
++        assert res_ws_admin_me.status_code == 200
++        assert res_ws_admin_me.json()["is_server_admin"] is False
++        assert res_ws_admin_me.json()["is_workspace_admin"] is False
 +
-+        # 5. MEMBER with AAL2 session -> 403 FORBIDDEN
-+        async with factory.session(anon_ctx) as sess:
-+            sess_member = await session_service.create_after_login(
-+                sess,
-+                principal_id=member_id,
-+                workspace_id=ws_id,
-+                aal_level=2,
-+                mfa_pending=False,
-+            )
-+        client.cookies.set(SESSION_COOKIE_NAME, sess_member.cookie_val)
-+        res_member = await client.get("/api/v1/admin/auth-cards")
-+        assert res_member.status_code == 403
-+        assert res_member.json()["code"] == "FORBIDDEN"
++        res_ws_admin_cards = await client.get("/api/v1/admin/auth-cards")
++        assert res_ws_admin_cards.status_code == 403
++
++
++@pytest.mark.asyncio
++async def test_credential_projects_boundary_blocks_server_admin(
++    db_session: AsyncSession,
++) -> None:
++    """Verify project-scoped app.credential_projects blocks SERVER_ADMIN outside boundary."""
++    (
++        ws_id,
++        server_admin_id,
++        _ws_admin_id,
++        _proj_admin_id,
++        _member_id,
++        _viewer_id,
++    ) = await _setup_workspace_and_multi_role_principals(db_session)
++
++    proj_allowed = uuid.uuid4()
++    proj_blocked = uuid.uuid4()
++
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.principal_id', :p_id, true), "
++            "set_config('app.workspace_id', :ws_id, true), "
++            "set_config('app.credential_projects', :allowed, true)"
++        ),
++        {"p_id": str(server_admin_id), "ws_id": str(ws_id), "allowed": str(proj_allowed)},
++    )
++
++    # 1. Allowed project: passes
++    res_allowed = await db_session.execute(
++        text("SELECT app_principal_has_role(:proj_id, ARRAY['SERVER_ADMIN'])"),
++        {"proj_id": proj_allowed},
++    )
++    assert res_allowed.scalar_one() is True
++
++    # 2. Blocked project: outside app.credential_projects -> returns False even for SERVER_ADMIN
++    res_blocked = await db_session.execute(
++        text("SELECT app_principal_has_role(:proj_id, ARRAY['SERVER_ADMIN'])"),
++        {"proj_id": proj_blocked},
++    )
++    assert res_blocked.scalar_one() is False
++
++    # 3. Server/Global check without project (p_project_id IS NULL): passes
++    res_null = await db_session.execute(
++        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++    )
++    assert res_null.scalar_one() is True
++
 diff --git a/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts b/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts
-new file mode 100644
-index 00000000..1ea5e099
---- /dev/null
+index 1ea5e099..d7d27d79 100644
+--- a/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts
 +++ b/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts
-@@ -0,0 +1,313 @@
-+// Copyright 2026 Kanban Platform Contributors
-+// Apache-2.0 License. See LICENSE for details.
-+
-+import { resolve } from 'node:path';
-+import { mkdirSync } from 'node:fs';
-+import type { Page } from '@playwright/test';
-+import { test, expect } from '../support/test';
-+import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
-+
-+process.env.QA_TICKET_ID = 'KAN-398';
-+const SCREENSHOT_DIR = resolve(
-+  import.meta.dirname,
-+  '../../../../docs/qa/KAN-398/screenshots',
-+);
-+mkdirSync(SCREENSHOT_DIR, { recursive: true });
-+
-+async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
-+  await page.evaluate((t: string) => {
-+    localStorage.setItem('kb:theme', t);
-+    document.documentElement.dataset.theme = t;
-+  }, theme);
-+  await page.waitForTimeout(100);
-+}
-+
-+const mockDiagnostics = {
-+  status: 'healthy',
-+  runtime_and_container: {
-+    deployment_mode: 'production_multi_container',
-+    in_container: true,
-+    container_runtime: 'docker',
-+    container_id_short: 'c116ba38',
-+    os_platform: 'Linux-6.6.137',
-+    python_version: '3.12.7',
-+    process_uid: 1000,
-+    process_gid: 1000,
-+    is_non_root: true,
-+    uptime_seconds: 3600.0,
-+    cgroup_version: 'v2',
-+    memory_limit_bytes: 4294967296,
-+    memory_current_bytes: 524288000,
-+    cpu_quota: 'max',
-+    pids_limit: 4096,
-+    pids_current: 42,
-+  },
-+  storage: {
-+    persistent_volume: true,
-+    data_mount_point: '/var/lib/kanban/data',
-+    data_mount_fstype: 'ext4',
-+    attachments_backend: 'local',
-+    sri_manifest_present: true,
-+    directories: [
-+      {
-+        name: 'attachments',
-+        path: '/var/lib/kanban/data/attachments',
-+        exists: true,
-+        writable: true,
-+        free_bytes: 107374182400,
-+        total_bytes: 536870912000,
-+      },
-+    ],
-+  },
-+  database: {
-+    connected: true,
-+    latency_ms: 1.25,
-+    server_version: 'PostgreSQL 16.2',
-+    active_role_non_bypass: true,
-+    force_rls_verified: true,
-+    alembic_head_current: true,
-+    code_heads: ['p6_17_server_admin_role_access'],
-+    db_heads: ['p6_17_server_admin_role_access'],
-+    pool: {
-+      size: 10,
-+      checked_in: 9,
-+      checked_out: 1,
-+      overflow: 0,
-+    },
-+    sanitized_dsn_target: {
-+      dialect: 'postgresql',
-+      host: '127.0.0.1',
-+      port: 5432,
-+      database: 'kanban',
-+      is_unix_socket: false,
-+    },
-+  },
-+  realtime: {
-+    ws_enabled: true,
-+    ws_paths: ['/ws', '/api/v1/ws'],
-+    sse_enabled: true,
-+    sse_path: '/sse',
-+    hub_running: true,
-+    hub_draining: false,
-+    broker_kind: 'pg_notify',
-+    broker_listener_connected: true,
-+    broker_publisher_connected: true,
-+    outbox_relay_running: true,
-+    outbox_pending_count: 0,
-+    outbox_dead_letter_count: 0,
-+    active_connections_total: 8,
-+    workspace_connections: { 'ws-01': 8 },
-+    ws_connections: 6,
-+    sse_connections: 2,
-+    heartbeat_interval_s: 25.0,
-+    session_recheck_interval_s: 60.0,
-+    replay_retention_minutes: 60,
-+    background_tasks: {
-+      listener_alive: true,
-+      ping_alive: true,
-+      session_check_alive: true,
-+    },
-+  },
-+  request_proxy_check: {
-+    detected_scheme: 'https',
-+    is_https: true,
-+    resolved_client_ip: '127.0.0.1',
-+    forwarded_proto_present: true,
-+  },
-+  config: [],
-+  subsystems: {},
-+};
-+
-+const mockServerAdmin = {
-+  id: 'usr-admin-1',
-+  handle: 'server_admin',
-+  display_name: 'Server Admin',
-+  email: 'admin@example.com',
-+  is_server_admin: true,
-+  is_workspace_admin: true,
-+  aal_level: 2,
-+  auth_aal: 'aal2',
-+};
-+
-+const mockWorkspaceAdmin = {
-+  id: 'usr-ws-admin-1',
-+  handle: 'ws_admin',
-+  display_name: 'Workspace Admin',
-+  email: 'ws-admin@example.com',
-+  workspace_role: 'WORKSPACE_ADMIN',
-+  is_server_admin: false,
-+  is_workspace_admin: true,
-+  aal_level: 2,
-+  auth_aal: 'aal2',
-+};
-+
-+function getBaseShellMocks(): MockHandlers {
-+  return {
-+    'GET /api/v1/system/status': { json: loadFixture('system-status-standalone') },
-+    'GET /api/v1/projects': { json: [loadFixture('project-kan')] },
-+    'GET /api/v1/projects/KAN': { json: loadFixture('project-kan') },
-+    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
-+    'GET /api/v1/auth/session': { json: { csrf_token: 'mock-csrf-token' } },
-+    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
-+    'GET /api/v1/notifications': { json: { items: [], total: 0, unread_count: 0 } },
-+    'GET /api/v1/workspaces/current': {
-+      json: {
-+        id: '01a1f1aa-7d7a-782f-a996-6a87f9e9e667',
-+        name: 'Platform Engineering',
-+        slug: 'platform-engineering',
-+        is_current: true,
-+      },
-+    },
-+    'GET /api/v1/workspaces': {
-+      json: [
-+        {
-+          id: '01a1f1aa-7d7a-782f-a996-6a87f9e9e667',
-+          name: 'Platform Engineering',
-+          slug: 'platform-engineering',
-+          is_current: true,
-+        },
-+      ],
-+    },
-+  };
-+}
-+
-+function getMfaRequiredMocks(): MockHandlers {
-+  return {
-+    ...getBaseShellMocks(),
-+    'GET /api/v1/auth/me': { json: mockServerAdmin },
-+    'GET /api/v1/users/me': { json: mockServerAdmin },
-+    'GET /api/v1/admin/auth-cards': {
-+      status: 403,
-+      json: {
-+        code: 'MFA_ENROLLMENT_REQUIRED',
-+        title: 'Two-Factor Authentication Required',
-+        detail: 'Administrative operations require MFA enrollment. Please configure a second factor in your profile settings.',
-+      },
-+    },
-+    'GET /api/v1/admin/principals': {
-+      status: 403,
-+      json: {
-+        code: 'MFA_ENROLLMENT_REQUIRED',
-+        title: 'Two-Factor Authentication Required',
-+        detail: 'Administrative operations require MFA enrollment. Please configure a second factor in your profile settings.',
-+      },
-+    },
-+  };
-+}
-+
-+function getServerAdminHealthyMocks(): MockHandlers {
-+  return {
-+    ...getBaseShellMocks(),
-+    'GET /api/v1/auth/me': { json: mockServerAdmin },
-+    'GET /api/v1/users/me': { json: mockServerAdmin },
-+    'GET /api/v1/admin/auth-cards': { json: loadFixture('admin-auth-cards') },
-+    'GET /api/v1/admin/principals': { json: [] },
-+  };
-+}
-+
-+function getWorkspaceAdminMocks(): MockHandlers {
-+  return {
-+    ...getBaseShellMocks(),
-+    'GET /api/v1/auth/me': { json: mockWorkspaceAdmin },
-+    'GET /api/v1/users/me': { json: mockWorkspaceAdmin },
-+    'GET /api/v1/admin/diagnostics': { json: mockDiagnostics },
-+  };
-+}
-+
-+test.describe('KAN-398 Visual Verification: Admin Auth Access and MFA Banner', () => {
-+  test.beforeEach(async ({ context, page }) => {
-+    page.on('response', (res) => {
-+      if (res.status() === 599) {
-+        console.error('599_UNMATCHED:', res.request().method(), res.url());
-+      }
-+    });
-+    await context.addCookies([
-+      {
-+        name: 'kb_csrf',
-+        value: 'test-csrf-token-398',
-+        domain: '127.0.0.1',
-+        path: '/',
-+      },
-+    ]);
-+  });
-+
-+  test('01-mfa-enrollment-banner: captures light and dark across viewports', async ({ page }, testInfo) => {
-+    const projectName = testInfo.project.name;
-+    await mockApi(page, getMfaRequiredMocks());
-+    await page.goto('/admin/auth');
-+
-+    const banner = page.getByTestId('mfa-enrollment-required-banner');
-+    await expect(banner).toBeVisible({ timeout: 10000 });
-+    await expect(banner).toContainText('Two-Factor Authentication Required');
-+    const profileLink = banner.getByRole('link', { name: /profile settings/i });
-+    await expect(profileLink).toHaveAttribute('href', '/settings/profile');
-+
-+    // Light screenshot
-+    await applyTheme(page, 'light');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `01-mfa-enrollment-banner-light-${projectName}.png`),
-+      fullPage: true,
-+    });
-+
-+    // Dark screenshot
-+    await applyTheme(page, 'dark');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `01-mfa-enrollment-banner-dark-${projectName}.png`),
-+      fullPage: true,
-+    });
-+  });
-+
-+  test('02-subnav-server-admin: captures all 8 tabs visible for server admin', async ({ page }, testInfo) => {
-+    const projectName = testInfo.project.name;
-+    await mockApi(page, getServerAdminHealthyMocks());
-+    await page.goto('/admin/auth');
-+
-+    await expect(page.getByTestId('tab-admin-auth')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-ai')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-runners')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-mcp')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-oauth')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-imports')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-standalone')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-diagnostics')).toBeVisible();
-+
-+    await applyTheme(page, 'light');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `02-subnav-server-admin-light-${projectName}.png`),
-+      fullPage: true,
-+    });
-+
-+    await applyTheme(page, 'dark');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `02-subnav-server-admin-dark-${projectName}.png`),
-+      fullPage: true,
-+    });
-+  });
-+
-+  test('03-subnav-workspace-admin: captures server tabs filtered out for non-server admin', async ({ page }, testInfo) => {
-+    const projectName = testInfo.project.name;
-+    await mockApi(page, getWorkspaceAdminMocks());
-+    await page.goto('/admin/diagnostics');
-+
-+    await expect(page.getByTestId('tab-admin-diagnostics')).toBeVisible();
-+    await expect(page.getByTestId('tab-admin-auth')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-ai')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-runners')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-mcp')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-oauth')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-imports')).toBeHidden();
-+    await expect(page.getByTestId('tab-admin-standalone')).toBeHidden();
-+
-+    await applyTheme(page, 'light');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `03-subnav-workspace-admin-light-${projectName}.png`),
-+      fullPage: true,
-+    });
-+
-+    await applyTheme(page, 'dark');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `03-subnav-workspace-admin-dark-${projectName}.png`),
-+      fullPage: true,
-+    });
-+  });
-+});
-diff --git a/kanban/web/src/api/problem.test.ts b/kanban/web/src/api/problem.test.ts
-index 8c352980..f0c5006c 100644
---- a/kanban/web/src/api/problem.test.ts
-+++ b/kanban/web/src/api/problem.test.ts
-@@ -3,6 +3,7 @@ import {
-   ApiProblem,
-   dispatchAal2StepUpIfRequired,
-   isAal2StepUpCode,
-+  isMfaEnrollmentRequiredCode,
-   isNotFound,
-   isPreconditionFailed,
- } from './problem.ts';
-@@ -45,6 +46,8 @@ describe('ApiProblem', () => {
-         { path: 'client_id', message: 'Field required' },
-         { path: ['public_config', 'issuer'], message: 'Extra fields not permitted' },
-         { path: 42, message: 99 },
-+        { path: {}, message: 'ignored object path' },
-+        { path: false, message: 'ignored boolean path' },
-         { path: ['items', 0, null, true], message: 'Invalid item' },
-         { path: '', message: 'blank path ignored' },
-         { path: 'empty_msg', message: '' },
-@@ -78,6 +81,13 @@ describe('ApiProblem', () => {
-     expect(isAal2StepUpCode('FORBIDDEN')).toBe(false);
-     expect(isAal2StepUpCode(null)).toBe(false);
- 
-+    expect(isMfaEnrollmentRequiredCode('MFA_ENROLLMENT_REQUIRED')).toBe(true);
-+    expect(isMfaEnrollmentRequiredCode('FORBIDDEN')).toBe(false);
-+    expect(isMfaEnrollmentRequiredCode(null)).toBe(false);
-+    expect(isMfaEnrollmentRequiredCode(undefined)).toBe(false);
-+    expect(isMfaEnrollmentRequiredCode(123)).toBe(false);
-+    expect(isMfaEnrollmentRequiredCode({ code: 'MFA_ENROLLMENT_REQUIRED' })).toBe(false);
-+
-     const spy = vi.fn();
-     window.addEventListener('kb:open-aal2-stepup', spy);
-     expect(dispatchAal2StepUpIfRequired(new ApiProblem(403, { code: 'AAL2_STALE' }))).toBe(true);
-diff --git a/kanban/web/src/api/problem.ts b/kanban/web/src/api/problem.ts
-index a7f6d5f6..4f6fa7f3 100644
---- a/kanban/web/src/api/problem.ts
-+++ b/kanban/web/src/api/problem.ts
-@@ -107,6 +107,11 @@ export function isAal2StepUpCode(code: unknown): boolean {
-   return typeof code === 'string' && /^AAL2_(?:REQUIRED|STALE)$/.test(code);
- }
- 
-+/** True for MFA_ENROLLMENT_REQUIRED problem code (KAN-398). */
-+export function isMfaEnrollmentRequiredCode(code: unknown): boolean {
-+  return typeof code === 'string' && code === 'MFA_ENROLLMENT_REQUIRED';
-+}
-+
- /** Dispatches global kb:open-aal2-stepup event when err is an AAL2 ApiProblem (KAN-393). */
- export function dispatchAal2StepUpIfRequired(err: unknown): boolean {
-   if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
+@@ -66,8 +66,8 @@ const mockDiagnostics = {
+     active_role_non_bypass: true,
+     force_rls_verified: true,
+     alembic_head_current: true,
+-    code_heads: ['p6_17_server_admin_role_access'],
+-    db_heads: ['p6_17_server_admin_role_access'],
++    code_heads: ['p6_19_server_admin_cross_workspace_role_access'],
++    db_heads: ['p6_19_server_admin_cross_workspace_role_access'],
+     pool: {
+       size: 10,
+       checked_in: 9,
 diff --git a/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
-index e7383bad..59cd06c7 100644
+index 59cd06c7..c3461b39 100644
 --- a/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
 +++ b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
-@@ -88,6 +88,23 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
-       expect(oauthTab.classList.contains('kb-mcp-admin-subnav-active')).toBe(true);
-       expect(oauthTab.getAttribute('aria-current')).toBe('page');
+@@ -44,10 +44,10 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+   });
+ 
+   describe('1. AdminStudioSubnav Component', () => {
+-    it('renders all 8 administrative studio tabs with correct test IDs', () => {
++    it('renders all 8 administrative studio tabs with correct test IDs when isServerAdmin is true', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/mcp']}>
+-          <AdminStudioSubnav activeTab="mcp" />
++          <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />
+         </MemoryRouter>,
+       );
+ 
+@@ -64,7 +64,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+     it('highlights activeTab and sets aria-current=page', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/diagnostics']}>
+-          <AdminStudioSubnav activeTab="diagnostics" />
++          <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />
+         </MemoryRouter>,
+       );
+ 
+@@ -80,7 +80,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+     it('derives active state from pathname when activeTab prop is omitted', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/oauth']}>
+-          <AdminStudioSubnav />
++          <AdminStudioSubnav isServerAdmin={true} />
+         </MemoryRouter>,
+       );
+ 
+@@ -105,6 +105,23 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+       expect(screen.queryByTestId('tab-admin-standalone')).toBeNull();
+       expect(screen.getByTestId('tab-admin-diagnostics')).toBeDefined();
      });
 +
-+    it('filters out server-admin-only tabs when isServerAdmin is false', () => {
++    it('defaults to fail-closed filtering (isServerAdmin = false) when isServerAdmin prop is omitted', () => {
 +      render(
 +        <MemoryRouter initialEntries={['/admin/diagnostics']}>
-+          <AdminStudioSubnav isServerAdmin={false} activeTab="diagnostics" />
++          <AdminStudioSubnav activeTab="diagnostics" />
 +        </MemoryRouter>,
 +      );
 +
@@ -1046,431 +757,155 @@ index e7383bad..59cd06c7 100644
    });
  
    describe('2. AdminMcpRedirect Route', () => {
-diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
-index d07a0b9a..70b9b1a5 100644
---- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
-+++ b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
-@@ -1,6 +1,7 @@
- import { describe, it, expect, vi, beforeEach } from 'vitest';
--import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
- import React from 'react';
-+import { MemoryRouter } from 'react-router';
- import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
- import { AuthStudioPage, formatHandle } from './AuthStudioPage';
- import * as client from '../../api/client';
-@@ -2120,4 +2121,191 @@ describe('AuthStudioPage (KB-P3-36)', () => {
-       expect(screen.getByText('Okta SSO')).toBeDefined();
-     });
-   });
-+
-+  describe('MFA Enrollment Required Banner (KAN-398)', () => {
-+    it('renders mfa-enrollment-required-banner when loadCards fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/admin/auth-cards') {
-+          throw new ApiProblem(403, {
-+            code: 'MFA_ENROLLMENT_REQUIRED',
-+            title: 'MFA Required',
-+            detail: 'Server admin requires MFA enrollment',
-+          });
-+        }
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
-+      });
-+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
-+      expect(screen.getByRole('link', { name: /profile settings/i })).toBeDefined();
-+      expect(screen.getByRole('link', { name: /profile settings/i }).getAttribute('href')).toBe('/settings/profile');
-+    });
-+
-+    it('renders mfa-enrollment-required-banner when checkAccess fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') {
-+          throw new ApiProblem(403, {
-+            code: 'MFA_ENROLLMENT_REQUIRED',
-+            title: 'MFA Required',
-+            detail: 'Server admin requires MFA enrollment',
-+          });
-+        }
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
-+      });
-+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
-+    });
-+
-+    it('renders mfa-enrollment-required-banner with react-router Link when inside a Router', async () => {
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/admin/auth-cards') {
-+          throw new ApiProblem(403, {
-+            code: 'MFA_ENROLLMENT_REQUIRED',
-+            title: 'MFA Required',
-+          });
-+        }
-+        return {};
-+      });
-+
-+      render(
-+        <MemoryRouter initialEntries={['/admin/auth']}>
-+          <AuthStudioPage />
-+        </MemoryRouter>,
-+      );
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
-+      });
-+      const link = screen.getByRole('link', { name: /profile settings/i });
-+      expect(link.getAttribute('href')).toBe('/settings/profile');
-+    });
-+
-+    it('renders mfa-enrollment-required-banner when loadUsers fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-+        if ((path as string).startsWith('/api/v1/admin/principals')) {
-+          throw new ApiProblem(403, {
-+            code: 'MFA_ENROLLMENT_REQUIRED',
-+            title: 'MFA Required',
-+          });
-+        }
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
-+      });
-+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
-+    });
-+
-+    it('switches to Roles tab when tab-roles is clicked', async () => {
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-+        if ((path as string).startsWith('/api/v1/admin/principals')) return { principals: [] };
-+        if ((path as string).startsWith('/api/v1/admin/rbac/roles')) return [];
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('tab-roles')).toBeDefined();
-+      });
-+
-+      act(() => {
-+        fireEvent.click(screen.getByTestId('tab-roles'));
-+      });
-+      expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
-+    });
-+
-+    it('handles AAL2 step up during loadCards and replays load mutation on success', async () => {
-+      let cardsCalls = 0;
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
-+        if ((path as string) === '/api/v1/admin/auth-cards') {
-+          cardsCalls++;
-+          if (cardsCalls === 1) {
-+            throw new ApiProblem(403, {
-+              code: 'AAL2_REQUIRED',
-+            });
-+          }
-+          return { cards: mockCards };
-+        }
-+        if ((path as string).startsWith('/api/v1/admin/principals')) {
-+          return { principals: [] };
-+        }
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-+      });
-+
-+      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-+      fireEvent.change(totpInput, { target: { value: '123456' } });
-+
-+      await waitFor(() => {
-+        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-+      });
-+      expect(cardsCalls).toBeGreaterThanOrEqual(2);
-+    });
-+
-+    it('handles AAL2 step up during loadUsers and replays load mutation on success', async () => {
-+      let principalCalls = 0;
-+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-+        await Promise.resolve();
-+        if ((path as string) === '/api/v1/auth/me') return adminUser;
-+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-+        if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
-+        if ((path as string).startsWith('/api/v1/admin/principals')) {
-+          principalCalls++;
-+          if (principalCalls === 1) {
-+            throw new ApiProblem(403, {
-+              code: 'AAL2_REQUIRED',
-+            });
-+          }
-+          return { principals: [] };
-+        }
-+        return {};
-+      });
-+
-+      render(<AuthStudioPage />);
-+
-+      await waitFor(() => {
-+        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-+      });
-+
-+      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-+      fireEvent.change(totpInput, { target: { value: '123456' } });
-+
-+      await waitFor(() => {
-+        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-+      });
-+      expect(principalCalls).toBeGreaterThanOrEqual(2);
-+    });
-+  });
- });
-diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-index 0796028f..19d52ac1 100644
---- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-+++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-@@ -1,7 +1,8 @@
- import React, { useState, useEffect, useCallback, type JSX } from 'react';
-+import { Link, useInRouterContext } from 'react-router';
- import { QueryClientContext } from '@tanstack/react-query';
- import { apiFetch } from '../../api/client';
--import { ApiProblem, isAal2StepUpCode } from '../../api/problem';
-+import { ApiProblem, isAal2StepUpCode, isMfaEnrollmentRequiredCode } from '../../api/problem';
- import { EmojiHint } from '../../components/emoji/EmojiHint';
- import { AuthCardRow } from './AuthCardRow';
- import { AuthCardEditorDrawer } from './AuthCardEditorDrawer';
-@@ -106,10 +107,12 @@ function getProviderBadgeClass(provider: string | undefined): string {
- }
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
+index caca4d5d..df28f3d5 100644
+--- a/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
++++ b/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
+@@ -58,7 +58,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+     it('renders all 8 tabs with navigation aria-label and accessible markup in router', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/mcp']}>
+-          <AdminStudioSubnav activeTab="mcp" />
++          <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />
+         </MemoryRouter>,
+       );
  
- export function AuthStudioPage(): JSX.Element {
-+  const inRouter = useInRouterContext();
-   const queryClient = React.useContext(QueryClientContext);
-   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
-   const [isUserLoading, setIsUserLoading] = useState(true);
-   const [accessDenied, setAccessDenied] = useState(false);
-+  const [mfaEnrollmentRequired, setMfaEnrollmentRequired] = useState(false);
+@@ -93,7 +93,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+     it.each(allTabs)('activates tab "%s" when activeTab prop is passed', (tab) => {
+       render(
+         <MemoryRouter initialEntries={['/admin/overview']}>
+-          <AdminStudioSubnav activeTab={tab.id} />
++          <AdminStudioSubnav activeTab={tab.id} isServerAdmin={true} />
+         </MemoryRouter>,
+       );
  
-   // Studio tab state
-   const [activeTab, setActiveTab] = useState<'cards' | 'users' | 'roles'>('cards');
-@@ -183,8 +186,12 @@ export function AuthStudioPage(): JSX.Element {
-         if (!me.is_server_admin) {
-           setAccessDenied(true);
-         }
--      } catch {
--        setAccessDenied(true);
-+      } catch (err: unknown) {
-+        if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
-+          setMfaEnrollmentRequired(true);
-+        } else {
-+          setAccessDenied(true);
-+        }
-       } finally {
-         setIsUserLoading(false);
-       }
-@@ -201,7 +208,9 @@ export function AuthStudioPage(): JSX.Element {
-       const res = await fetchAdminAuthCards();
-       setCards(res.cards);
-     } catch (err: unknown) {
--      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
-+      if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
-+        setMfaEnrollmentRequired(true);
-+      } else if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
-         setPendingMutation({ type: 'load' });
-         const data = err.data;
-         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-@@ -228,7 +237,9 @@ export function AuthStudioPage(): JSX.Element {
-       const principals = await fetchAdminPrincipals(activeFilter);
-       setUsers(Array.isArray(principals) ? principals : []);
-     } catch (err: unknown) {
--      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
-+      if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
-+        setMfaEnrollmentRequired(true);
-+      } else if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
-         setPendingMutation({ type: 'load' });
-         const data = err.data;
-         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-@@ -247,11 +258,11 @@ export function AuthStudioPage(): JSX.Element {
-   }, [principalKindFilter]);
+@@ -115,7 +115,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+     it('activates tab matching subpaths via prefix when activeTab is omitted', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/agent-runners/node-42']}>
+-          <AdminStudioSubnav />
++          <AdminStudioSubnav isServerAdmin={true} />
+         </MemoryRouter>,
+       );
  
-   useEffect(() => {
--    if (!accessDenied && currentUser?.is_server_admin) {
-+    if (!accessDenied && !mfaEnrollmentRequired && currentUser?.is_server_admin) {
-       void loadCards();
-       void loadUsers();
-     }
--  }, [accessDenied, currentUser, loadCards, loadUsers]);
-+  }, [accessDenied, currentUser, loadCards, loadUsers, mfaEnrollmentRequired]);
+@@ -131,7 +131,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+     it('renders no active tab when current route does not match any admin path', () => {
+       render(
+         <MemoryRouter initialEntries={['/settings/profile']}>
+-          <AdminStudioSubnav />
++          <AdminStudioSubnav isServerAdmin={true} />
+         </MemoryRouter>,
+       );
  
-   // Sort cards: non-LOCAL_ADMIN sorted by sort_rank (COLLATE "C"), LOCAL_ADMIN pinned at end
-   const externalCards = cards
-@@ -649,6 +660,31 @@ export function AuthStudioPage(): JSX.Element {
-     );
-   }
+@@ -144,7 +144,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
  
-+  // MFA Enrollment Required: inform server admin to enroll a second factor in profile settings
-+  if (mfaEnrollmentRequired) {
-+    return (
-+      <div className="auth-studio-page" data-testid="auth-studio-page">
-+        <AdminStudioSubnav activeTab="auth" isServerAdmin={currentUser?.is_server_admin} />
-+        <div
-+          className="auth-empty-state kb-mfa-enrollment-banner"
-+          role="alert"
-+          data-testid="mfa-enrollment-required-banner"
-+        >
-+          <h2>Two-Factor Authentication Required</h2>
-+          <p>
-+            Administrative operations require MFA enrollment. Please configure a second factor in your{' '}
-+            {inRouter ? (
-+              <Link to="/settings/profile">profile settings</Link>
-+            ) : (
-+              <a href="/settings/profile">profile settings</a>
-+            )}
-+            .
-+          </p>
-+        </div>
-+      </div>
-+    );
-+  }
-+
-   // Loading state
-   if (isUserLoading || isLoadingCards) {
-     return (
-@@ -660,7 +696,7 @@ export function AuthStudioPage(): JSX.Element {
+     it('renders accessible anchor tags outside router context (inRouter = false)', () => {
+       // Rendering without MemoryRouter exercises useInRouterContext() === false branch
+-      render(<AdminStudioSubnav activeTab="diagnostics" />);
++      render(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
  
-   return (
-     <div className="auth-studio-page" data-testid="auth-studio-page">
--      <AdminStudioSubnav activeTab="auth" />
-+      <AdminStudioSubnav activeTab="auth" isServerAdmin={currentUser?.is_server_admin} />
-       {/* Studio Header */}
-       <header className="auth-studio-header">
-         <div className="auth-studio-title-row">
+       const diagEl = screen.getByTestId('tab-admin-diagnostics');
+       expect(diagEl.tagName.toLowerCase()).toBe('a');
+@@ -164,7 +164,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+       try {
+         window.history.pushState({}, '', '/admin/oauth');
+ 
+-        render(<AdminStudioSubnav />);
++        render(<AdminStudioSubnav isServerAdmin={true} />);
+ 
+         const oauthEl = screen.getByTestId('tab-admin-oauth');
+         expect(oauthEl.tagName.toLowerCase()).toBe('a');
+@@ -479,7 +479,10 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+       render(
+         <QueryClientProvider client={queryClient}>
+           <MemoryRouter initialEntries={['/admin/mcp']}>
+-            <McpAccessStudio tier="global" />
++            <McpAccessStudio
++              tier="global"
++              user={{ is_server_admin: true, is_workspace_admin: true, is_project_admin: true }}
++            />
+           </MemoryRouter>
+         </QueryClientProvider>,
+       );
 diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
-index 3c017889..880f5c4b 100644
+index 67d26e53..418f081c 100644
 --- a/kanban/web/src/features/admin/AdminStudioSubnav.tsx
 +++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
-@@ -3,10 +3,13 @@
+@@ -43,7 +43,7 @@ function AdminStudioSubnavInner({
+   const cachedMe = queryClient
+     ? queryClient.getQueryData<{ is_server_admin?: boolean }>(qk.me())
+     : undefined;
+-  const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? true;
++  const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? false;
  
- import React, { type JSX } from 'react';
- import { Link, useInRouterContext, useLocation } from 'react-router';
-+import { QueryClientContext } from '@tanstack/react-query';
-+import { qk } from '../../api/queryKeys';
- import './AdminStudioSubnav.css';
+   const [sessionData, setSessionData] = React.useState<{
+     authenticated?: boolean;
+diff --git a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
+index 3b96aedc..72ee3199 100644
+--- a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
++++ b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
+@@ -209,7 +209,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+   // =========================================================================
+   describe('Case 1: Horizontal swipe tabs & touch scrolling navigation', () => {
+     it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', () => {
+-      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" />);
++      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
  
- export interface AdminStudioSubnavProps {
-   activeTab?: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
-+  isServerAdmin?: boolean | undefined;
- }
+       const navElement = screen.getByRole('navigation', {
+         name: /Admin MCP and Governance Navigation/i,
+@@ -235,7 +235,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+       render(
+         <QueryClientProvider client={queryClient}>
+           <MemoryRouter initialEntries={['/admin/ai/new']}>
+-            <AdminStudioSubnav />
++            <AdminStudioSubnav isServerAdmin={true} />
+           </MemoryRouter>
+         </QueryClientProvider>,
+       );
+@@ -245,7 +245,7 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+     });
  
- interface AdminTabDefinition {
-@@ -15,28 +18,40 @@ interface AdminTabDefinition {
-   label: string;
-   path: string;
-   icon: string;
-+  serverOnly?: boolean;
- }
+     it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', () => {
+-      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" />);
++      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
+       const links = c1.querySelectorAll('a.admin-studio-subnav__item');
+       expect(links.length).toBeGreaterThanOrEqual(8);
  
- const ADMIN_TABS: AdminTabDefinition[] = [
--  { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️' },
--  { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠' },
--  { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
--  { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
--  { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
--  { id: 'imports', testId: 'tab-admin-imports', label: 'Plane Migration', path: '/admin/imports', icon: '📥' },
--  { id: 'standalone', testId: 'tab-admin-standalone', label: 'System & Backups', path: '/admin/standalone', icon: '💾' },
--  { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
-+  { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️', serverOnly: true },
-+  { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠', serverOnly: true },
-+  { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀', serverOnly: true },
-+  { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑', serverOnly: true },
-+  { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐', serverOnly: true },
-+  { id: 'imports', testId: 'tab-admin-imports', label: 'Plane Migration', path: '/admin/imports', icon: '📥', serverOnly: true },
-+  { id: 'standalone', testId: 'tab-admin-standalone', label: 'System & Backups', path: '/admin/standalone', icon: '💾', serverOnly: true },
-+  { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺', serverOnly: false },
- ];
+@@ -261,21 +261,21 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/admin/oauth/clients',
+         };
+-        const { container: c2 } = render(<AdminStudioSubnav />);
++        const { container: c2 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+         const oauthLink = c2.querySelector('[data-testid="tab-admin-oauth"]');
+         expect(oauthLink?.getAttribute('aria-current')).toBe('page');
  
- function AdminStudioSubnavInner({
-   activeTab,
-   currentPath,
-   inRouter,
-+  isServerAdmin,
- }: AdminStudioSubnavProps & { currentPath: string; inRouter: boolean }): JSX.Element {
-+  const queryClient = React.useContext(QueryClientContext);
-+  const cachedMe = queryClient
-+    ? queryClient.getQueryData<{ is_server_admin?: boolean }>(qk.me())
-+    : undefined;
-+  const effectiveIsServerAdmin = isServerAdmin ?? cachedMe?.is_server_admin ?? true;
-+
-+  const visibleTabs = effectiveIsServerAdmin
-+    ? ADMIN_TABS
-+    : ADMIN_TABS.filter((tab) => !tab.serverOnly);
-+
-   return (
-     <nav className="kb-mcp-admin-subnav admin-studio-subnav" aria-label="Admin MCP and Governance Navigation">
-       <div className="admin-studio-subnav__scroll">
--        {ADMIN_TABS.map((tab) => {
-+        {visibleTabs.map((tab) => {
-           const isActive = activeTab
-             ? activeTab === tab.id
-             : currentPath === tab.path || currentPath.startsWith(`${tab.path}/`);
-@@ -78,16 +93,30 @@ function AdminStudioSubnavInner({
-   );
- }
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/admin/diagnostics',
+         };
+-        const { container: c3 } = render(<AdminStudioSubnav />);
++        const { container: c3 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+         const diagLink = c3.querySelector('[data-testid="tab-admin-diagnostics"]');
+         expect(diagLink?.getAttribute('aria-current')).toBe('page');
  
--function AdminStudioSubnavWithRouter({ activeTab }: AdminStudioSubnavProps): JSX.Element {
-+function AdminStudioSubnavWithRouter({ activeTab, isServerAdmin }: AdminStudioSubnavProps): JSX.Element {
-   const location = useLocation();
--  return <AdminStudioSubnavInner activeTab={activeTab} currentPath={location.pathname} inRouter={true} />;
-+  return (
-+    <AdminStudioSubnavInner
-+      activeTab={activeTab}
-+      isServerAdmin={isServerAdmin}
-+      currentPath={location.pathname}
-+      inRouter={true}
-+    />
-+  );
- }
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/unknown-route',
+         };
+-        const { container: c4 } = render(<AdminStudioSubnav />);
++        const { container: c4 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+         const activeItem = c4.querySelector('.admin-studio-subnav__item--active');
+         expect(activeItem).toBeNull();
+       } finally {
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index aa1dd6f4..b1a7e31e 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -796,7 +796,7 @@ export function McpAccessStudio({
  
--export function AdminStudioSubnav({ activeTab }: AdminStudioSubnavProps): JSX.Element {
-+export function AdminStudioSubnav({ activeTab, isServerAdmin }: AdminStudioSubnavProps): JSX.Element {
-   const inRouter = useInRouterContext();
-   if (inRouter) {
--    return <AdminStudioSubnavWithRouter activeTab={activeTab} />;
-+    return <AdminStudioSubnavWithRouter activeTab={activeTab} isServerAdmin={isServerAdmin} />;
-   }
-   const currentPath = window.location.pathname;
--  return <AdminStudioSubnavInner activeTab={activeTab} currentPath={currentPath} inRouter={false} />;
-+  return (
-+    <AdminStudioSubnavInner
-+      activeTab={activeTab}
-+      isServerAdmin={isServerAdmin}
-+      currentPath={currentPath}
-+      inRouter={false}
-+    />
-+  );
- }
+       {/* Admin subnav for global tier */}
+       {tier === 'global' && (
+-        <AdminStudioSubnav activeTab="mcp" />
++        <AdminStudioSubnav activeTab="mcp" isServerAdmin={isServerAdmin} />
+       )}
+ 
+       {/* Admin View Switch (My Keys vs Governance) */}
