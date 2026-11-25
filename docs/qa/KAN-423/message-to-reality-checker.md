@@ -14,7 +14,7 @@
 
 | # | Ticket Definition of Done Requirement | Verification Artifact / Log Evidence | Forensic Pass Verdict |
 | :-: | :--- | :--- | :--- |
-| **1** | **Standalone Live Container Verification**<br>Execute all workouts against an isolated standalone container with embedded PostgreSQL 16, FORCE ROW LEVEL SECURITY, and local admin + TOTP AAL2. Zero modifications to pre-production. | `docs/workouts/slice-4-ops-backups-imports/03-live-workout-report.md`<br>`docs/qa/KAN-423/unit-test-results.txt` (summary header)<br>No network traffic to `192.168.1.101`. | **PASS**<br>Isolated container port 18923 used exclusively. Zero pre-prod mutation. |
+| **1** | **Standalone Live Container Verification**<br>Execute all workouts against an isolated standalone container with embedded PostgreSQL 16, FORCE ROW LEVEL SECURITY, and local admin + TOTP AAL2. Zero modifications to pre-production. | `docs/workouts/slice-4-ops-backups-imports/03-live-workout-report.md`<br>No network traffic to `192.168.1.101`. | **PASS**<br>Isolated container port 18923 used exclusively. Zero pre-prod mutation. |
 | **2** | **Workout A: 4-Source Ingestion & Parity**<br>Dry-run diff preview and live transactional import across Plane (25 issues), Jira (2 issues), GitHub Issues (2 issues), and Linear (2 issues). Custom `user_map` resolution. | `03-live-workout-report.md` Section 1.1<br>Screenshots #1-#5, #21<br>`kanban/tests/importer/test_multi_source_importers.py` | **PASS**<br>All 4 sources imported. User mapping mapped correctly. |
 | **3** | **Workout A: Transaction Rollback & Legacy Keys**<br>Atomic transaction rollback on malformed input (HTTP 422, zero partial records). Legacy key alias resolution and HTTP 308 redirect (`JIRA-101` -> `KAN-1`, `GH-88` -> `KAN-3`, `ENG-42` -> `KAN-5`). | `03-live-workout-report.md` Section 1.1<br>`kanban/tests/resolve/test_legacy_key_aliases.py`<br>`kanban/tests/importer/test_cutover_verifier.py` | **PASS**<br>Atomic rollback confirmed. Alias resolution verified with 308 redirect. |
 | **4** | **Workout B: Encrypted .kbbak Backup & Verify**<br>Create encrypted `.kbbak` archive (`POST /api/v1/admin/standalone/backup` & `/backups/run-now`, `KBBAK1` AES-256-GCM). Verify valid archive (`POST .../backup/verify`). | `03-live-workout-report.md` Section 1.2<br>Screenshots #6-#10, #22<br>`kanban/tests/ops/test_backup_crypto.py`<br>`kanban/tests/api/test_system_status.py` | **PASS**<br>962 KB encrypted backup generated. Archive verification succeeded. |
@@ -29,9 +29,10 @@
 
 ## 2. Verification Proof Checklist & Concrete Artifacts
 
-1. **Scrubbed Live Execution Log Summary:**
-   - Pre-pended at the top of `docs/qa/KAN-423/unit-test-results.txt` (processed through `kanban.security.scrubber.scrub_text`).
+1. **Scrubbed Live Execution Log & Verification Proof:**
+   - Documented in full detail in `docs/workouts/slice-4-ops-backups-imports/03-live-workout-report.md` (all sensitive material processed through `kanban.security.scrubber.scrub_text`).
    - Confirms all 5 workouts passed against the live container (`http://127.0.0.1:18923`).
+   - `docs/qa/KAN-423/unit-test-results.txt` contains raw unedited test execution logs for both backend Pytest and frontend Vitest suites.
 
 2. **Automated Unit Tests & Coverage Results (`docs/qa/KAN-423/unit-test-results.txt`):**
    - **Pytest:** 224 passed in 79.24s.

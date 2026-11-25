@@ -16,9 +16,9 @@
 
 ### Security & Protocol Invariant Analysis
 
-1. **Standalone Keyring & Least-Privileged DML Grants (`deploy/standalone/entrypoint.py` & `kanban/ops/backup_service.py`):**
-   - *Problem Identified in Live Run:* Running `pg_restore` with `--no-privileges` restores schema objects with owner-only access. When the application container ran post-restore queries as `kanban_app`, it received `42501 permission denied for table issues`.
-   - *Security Evaluation:* Restoring grants via explicit `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kanban_app;` and `GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;` restores minimal necessary DML privileges to `kanban_app` while preserving `FORCE ROW LEVEL SECURITY`. At no point was superuser access granted to `kanban_app`, and `kanban_migrator` credentials remain confined to migrations and administration.
+1. **Privileged Ops Socket RPC Isolation & Least-Privilege Role Boundaries (`deploy/standalone/entrypoint.py` & `kanban/ops/backup_service.py`):**
+   - *Architecture:* In standalone embedded mode, Uvicorn runs under unprivileged UID 65532 without `BYPASSRLS` or superuser privileges (`ALTER ROLE kanban_migrator NOLOGIN` and `REVOKE CREATE ON SCHEMA public FROM PUBLIC`).
+   - *Security Evaluation:* `OpsSocketServer` listens on dedicated Unix domain socket `.kb_ops.sock` (mode `0660`, owned by `0:65532`, peer mapping `kanban_map`) to execute fixed-op RPCs (`pg_dump_raw`, `scheduled_backup`, `restore_backup`) restricted strictly to `/var/lib/kanban/` and `/tmp/`. Zero shell execution and zero arbitrary SQL. Native database ACLs are preserved in `pg_dump` and `pg_restore` without grant corruption.
 
 2. **Schema Drop Deadlock Prevention (`kanban/api/v1/system_status.py`):**
    - *Evaluation:* In `require_server_admin`, active sessions in a transaction block are now cleanly committed before entering destructive restore paths (`if session.in_transaction(): await session.commit()`). This eliminates open lock deadlocks during `DROP SCHEMA public CASCADE` without relaxing authorization checks (`SERVER_ADMIN` AAL2 role check remains strictly enforced).

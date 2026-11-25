@@ -1,14 +1,21 @@
+$ uv run kanban-ctl db check-migrations --static-only
 OK: All 82 migrations valid. Single head: p6_20_oauth_clients_status_check
+$ uv run ruff check kanban/ deploy/
 All checks passed!
+$ python3 scripts/check_no_dashes.py --all
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan423-612ca6e5/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+$ python3 scripts/check_no_dashes.py docs/workouts/slice-4-ops-backups-imports/03-live-workout-report.md
+$ pnpm --dir kanban/web typecheck
 
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan423-612ca6e5/kanban/web
 > tsc -b --noEmit
 
+$ pnpm --dir kanban/web lint
 
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan423-612ca6e5/kanban/web
 > eslint . --max-warnings 0
 
+$ pnpm --dir kanban/web build
 
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan423-612ca6e5/kanban/web
 > tsc -b && vite build
@@ -28,5 +35,5 @@ dist/assets/index-BBYUghij.js           2,884.90 kB │ gzip: 798.49 kB
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.22s
+✓ built in 1.19s
 BUILD_CHECK_STATUS_ALL_PASSED

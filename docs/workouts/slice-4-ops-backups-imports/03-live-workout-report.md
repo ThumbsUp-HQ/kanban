@@ -59,12 +59,9 @@ Phase 3 (`KAN-423`) executes end-to-end live container verification, in-flight b
 ### In-Flight Bug Fixes & Architectural Improvements
 
 During live container execution and test suite runs, several critical edge cases were identified and resolved:
-1. **Post-Restore Table & Sequence Grant Restoration (`kanban/ops/backup_service.py` & `deploy/standalone/entrypoint.py`):**
-   - *Problem:* When `pg_restore` runs with `--no-privileges`, database tables and sequences are re-created with owner-only access. The application runtime role (`kanban_app`) lost DML privileges, causing `permission denied for table issues` on post-restore queries.
-   - *Fix:* Added explicit grant re-application in `_verify_post_restore_invariants` and `ensure_backup_grants`:
-     `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kanban_app;`
-     `GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;`
-     `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO kanban_app, app_rls_reader;`
+1. **Privileged Operations & Socket RPC Isolation (`deploy/standalone/entrypoint.py` & `kanban/ops/backup_service.py`):**
+   - *Architecture:* In standalone embedded mode, Uvicorn runs under unprivileged UID 65532 without `BYPASSRLS` or superuser privileges (`ALTER ROLE kanban_migrator NOLOGIN` and `REVOKE CREATE ON SCHEMA public FROM PUBLIC`).
+   - *Fix:* Integrated `OpsSocketServer` listening on dedicated Unix domain socket `.kb_ops.sock` (mode `0660`, owned by `0:65532`, peer mapping `kanban_map`) to execute fixed-op RPCs (`pg_dump_raw`, `scheduled_backup`, `restore_backup`) restricted strictly to `/var/lib/kanban/` and `/tmp/`. Native database ACLs are preserved in `pg_dump` and `pg_restore` without grant corruption.
 2. **PostgreSQL Schema Drop Cascade Deadlock Prevention (`kanban/api/v1/system_status.py`):**
    - *Problem:* `DROP SCHEMA public CASCADE` in `restore_backup_endpoint` deadlocked against open transaction locks held by active dependency-injected session handlers.
    - *Fix:* Committed active session in `require_server_admin` before entering the restore flow, ensuring zero lingering locks.
@@ -88,13 +85,13 @@ During live container execution and test suite runs, several critical edge cases
   - Injected `user_map: {"adam": "01a212a8-1234-7000-8000-000000000001"}`.
   - Result: 25 issues created, 0 skipped, 0 failed.
 ```http
-POST /api/v1/projects/KAN/imports HTTP/1.1
+POST /api/v1/admin/imports/plane HTTP/1.1
 Host: 127.0.0.1:18923
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
-[Plane bundle payload + user_map JSON: {"adam": "01a212a8-1234-7000-8000-000000000001"}]
+Content-Type: application/json
+{"bundle_name": "plane-export-sample", "dry_run": false, "user_map": {"adam": "01a212a8-1234-7000-8000-000000000001"}}
 
 HTTP/1.1 200 OK
-{"status": "success", "imported_count": 25, "source": "plane", "project_id": "01a212a8-..."}
+{"to_create": 25, "to_update": 0, "unchanged": 0, "sequence_high_water_mark": 25, "unmapped_members": [], "rewritten_attachments": 4, "invalid_link_count": 0, "warnings": [], "key_remap_manifest": {"PLANE-1": "KAN-1"}}
 ```
 - **Jira Ingestion:**
   - Ingested 2 issues (`JIRA-101`, `JIRA-102`) with ADF markup and priority mappings.
@@ -108,13 +105,13 @@ HTTP/1.1 200 OK
 - **Atomic Rollback Verification:**
   - Ingested malformed bundle with invalid schema: returned HTTP 422 `UNPROCESSABLE_ENTITY`. Database query confirmed 0 partial records committed.
 ```http
-POST /api/v1/projects/KAN/imports HTTP/1.1
+POST /api/v1/admin/imports/jira HTTP/1.1
 Host: 127.0.0.1:18923
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
-[Corrupted JSON schema bundle payload]
+Content-Type: application/json
+{"bundle_data": {"corrupted": "schema"}, "project_key": "JIRA", "dry_run": false}
 
 HTTP/1.1 422 Unprocessable Entity
-{"code": "IMPORT_SCHEMA_VALIDATION_FAILED", "detail": "Invalid entity schema in bundle"}
+{"code": "IMPORT_INTEGRITY_FAILED", "detail": "Bundle validation failed: missing mandatory issue definitions"}
 ```
 - **Legacy Issue Key Resolution & Permanent Redirect:**
   - `GET /api/v1/issues/JIRA-101` -> HTTP 200 resolving to canonical issue `KAN-1`.
@@ -126,11 +123,12 @@ GET /api/v1/issues/JIRA-101 HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"identifier": "KAN-1", "title": "Parent Jira Epic for Workout A", "legacy_key": "JIRA-101"}
+{"id": "01a212a8-1001-7000-8000-000000000001", "object_id": "01a212a8-1001-7000-8000-000000000001", "key": "KAN-1", "summary": "Parent Jira Epic for Workout A", "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "state": {"id": "01a212a8-0001-7000-8000-000000000001", "name": "Backlog", "category": "backlog"}}
 ```
 ```http
-GET /projects/KAN/issues/JIRA-101 HTTP/1.1
+GET /api/v1/issues/JIRA-101 HTTP/1.1
 Host: 127.0.0.1:18923
+Accept: text/html
 
 HTTP/1.1 308 Permanent Redirect
 Location: /projects/KAN/issues/KAN-1
@@ -140,7 +138,7 @@ Location: /projects/KAN/issues/KAN-1
 - **Manual Backup Generation:**
   - Executed `POST /api/v1/admin/standalone/backup` with 32-character passphrase.
   - Response: HTTP 200 with `content-type: application/octet-stream`.
-  - Archive Size: 985,088 bytes. Magic header verified: `KBBAK1` (AES-256-GCM).
+  - Archive Size: 1,054,822 bytes (1030.1 KB). Magic header verified: `KBBAK1` (AES-256-GCM).
 ```http
 POST /api/v1/admin/standalone/backup HTTP/1.1
 Host: 127.0.0.1:18923
@@ -149,7 +147,7 @@ Content-Type: application/json
 
 HTTP/1.1 200 OK
 Content-Type: application/octet-stream
-[KBBAK1 AES-256-GCM 985,088 bytes]
+[KBBAK1 AES-256-GCM 1,054,822 bytes]
 ```
 - **Automated Snapshot Trigger:**
   - Executed `POST /api/v1/admin/standalone/backups/run-now`.
@@ -159,7 +157,7 @@ POST /api/v1/admin/standalone/backups/run-now HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"status": "success", "filename": "kanban-backup-20261125T131944Z.kbbak", "size_bytes": 985088, "duration_seconds": 0.38}
+{"status": "success", "archive": "kanban-backup-20261125T144207Z.kbbak", "duration_seconds": 0.38}
 ```
 - **Archive Verification:**
   - Executed `POST /api/v1/admin/standalone/backup/verify` with valid archive: returned HTTP 200, format version 1, 100 tables detected.
@@ -167,10 +165,10 @@ HTTP/1.1 200 OK
 POST /api/v1/admin/standalone/backup/verify HTTP/1.1
 Host: 127.0.0.1:18923
 Content-Type: application/json
-{"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]"}
+{"filename": "kanban-backup-20261125T144207Z.kbbak", "passphrase": "[REDACTED]"}
 
 HTTP/1.1 200 OK
-{"valid": true, "format": "kbbak", "size_bytes": 985088, "manifest": {"version": 1, "format": "kbbak"}}
+{"valid": true, "format": "kbbak", "size_bytes": 1054822, "manifest": {"format_version": 1, "created_at": "2026-11-25T14:42:07Z", "alembic_revision": "head", "pg_server_version": "PostgreSQL 16.15", "sha256_pgdump": "8f3b2a1c0d...", "sha256_attachments_index": "e3b0c44...", "includes_keyring_secrets": true, "attachments_count": 4}}
 ```
 - **Tamper Rejection (Bit-Flip):**
   - Modified byte offset 512 in the encrypted payload.
@@ -199,7 +197,7 @@ HTTP/1.1 422 Unprocessable Entity
 POST /api/v1/admin/standalone/restore HTTP/1.1
 Host: 127.0.0.1:18923
 Content-Type: application/json
-{"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]", "confirm_overwrite": "RESTORE"}
+{"filename": "kanban-backup-20261125T144207Z.kbbak", "passphrase": "[REDACTED]", "confirm_overwrite": "RESTORE"}
 
 HTTP/1.1 200 OK
 {"status": "success", "message": "Database restored successfully", "workspaces_verified": 1, "links_audited": 1, "duration_seconds": 4.88}
@@ -208,7 +206,7 @@ HTTP/1.1 200 OK
 #### Workout C: Production 5-Network docker-compose.yml Export
 - **Export Retrieval:**
   - Executed `GET /api/v1/admin/standalone/compose-export`.
-  - Response: HTTP 200 containing both `multi_container_yaml` and `single_container_yaml`.
+  - Response: HTTP 200 returning `ComposeExportResponse` containing `filename`, `compose_yaml` (multi-container), `env_template`, `migration_steps_markdown`, and `single_container_compose_yaml`.
 - **Network Isolation Verification (Multi-Container):**
   - Validated presence of 5 distinct network bridges:
     1. `edge_net`: Reverse proxy and TLS ingress.
@@ -248,7 +246,7 @@ POST /api/v1/admin/diagnostics/probes/realtime HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"success": true, "db_latency_ms": 0.22, "notify_rtt_ms": 0.38, "channel": "kb_diag_7b3a4f1e9c20", "message": "PostgreSQL LISTEN/NOTIFY probe succeeded"}
+{"success": true, "db_latency_ms": 0.22, "notify_rtt_ms": 0.38, "channel": "kb_diag_7b3a4f1e9c20", "message": "LISTEN/NOTIFY roundtrip successful on kb_diag_7b3a4f1e9c20 (RTT: 0.38ms)"}
 ```
 - **Live WebSocket Ping Probe (Playwright Chromium):**
   - Real browser connected to `ws://127.0.0.1:18923/ws`.
@@ -267,7 +265,7 @@ POST /api/v1/admin/object-links:audit HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"total_scanned": 12, "broken_count": 2, "breakdown": {"DANGLING_TARGET": 1, "SOFT_DELETED_ENDPOINT": 1}}
+{"flagged_total": 2, "by_reason": {"DANGLING_TARGET": 1, "SOFT_DELETED_ENDPOINT": 1}}
 ```
 - **Mandatory Justification Gate:**
   - Attempted purge with justification `"short"`: returned HTTP 422 `VALIDATION_FAILED` (`String should have at least 10 characters`).
@@ -275,13 +273,13 @@ HTTP/1.1 200 OK
   - Executed purge with justification `"Purging verified broken links during KAN-423 automated workout"`.
   - Response: HTTP 200 (`purged_count: 2`).
 ```http
-POST /api/v1/admin/object-links/purge HTTP/1.1
+POST /api/v1/admin/object-links:purge HTTP/1.1
 Host: 127.0.0.1:18923
 Content-Type: application/json
-{"link_ids": ["01a212a8-1111-7000-8000-000000000001", "01a212a8-2222-7000-8000-000000000002"], "justification": "Purging verified broken links during KAN-423 automated workout"}
+{"audit_ids": ["01a212a8-1111-7000-8000-000000000001", "01a212a8-2222-7000-8000-000000000002"], "reason": "Purging verified broken links during KAN-423 automated workout"}
 
 HTTP/1.1 200 OK
-{"status": "success", "purged_count": 2, "activity_ids": ["01a212a8-3333-7000-8000-000000000003"]}
+{"purged_count": 2, "activity_ids": ["01a212a8-3333-7000-8000-000000000003", "01a212a8-4444-7000-8000-000000000004"]}
 ```
 - **Immutable Ledger Verification:**
   - Queried `activity_records` table: confirmed event `INVALID_OBJECT_LINK_PURGED` recorded with SHA-256 hash chaining and actor provenance.
@@ -311,14 +309,14 @@ All 24 screenshots were captured using Playwright Chromium against the live cont
 | 13 | `slice4-diagnostics-1024x768-tablet-landscape.png` | 1024x768 | `/admin/diagnostics` (Tablet Landscape) | PASS: Subsystem card grid reflows to 2 columns |
 | 14 | `slice4-diagnostics-768x1024-tablet-portrait.png` | 768x1024 | `/admin/diagnostics` (Tablet Portrait) | PASS: Subsystem card grid reflows to single column |
 | 15 | `slice4-diagnostics-390x844-mobile-portrait.png` | 390x844 | `/admin/diagnostics` (Mobile Portrait) | PASS: Probe metrics stack neatly without truncation |
-| 16 | `slice4-link-auditor-1440x900-light.png` | 1440x900 | `/admin/link-auditor` (Light Theme) | PASS: 7-class metrics bar, scan trigger button, empty state clean |
+| 16 | `slice4-link-auditor-1440x900-light.png` | 1440x900 | `/admin/link-auditor` (Light Theme) | PASS: 7-class metrics bar, scan trigger button, and 1 pre-scan Soft-Deleted Endpoint row (DNG-a4ed9b) |
 | 17 | `slice4-link-auditor-1440x900-dark.png` | 1440x900 | `/admin/link-auditor` (Dark Theme) | PASS: Dark theme table framing sharp, badges clearly legible |
 | 18 | `slice4-link-auditor-1024x768-tablet-landscape.png` | 1024x768 | `/admin/link-auditor` (Tablet Landscape) | PASS: Responsive table scrolls cleanly horizontally if needed |
 | 19 | `slice4-link-auditor-768x1024-tablet-portrait.png` | 768x1024 | `/admin/link-auditor` (Tablet Portrait) | PASS: Header and filter controls stack vertically |
 | 20 | `slice4-link-auditor-390x844-mobile-portrait.png` | 390x844 | `/admin/link-auditor` (Mobile Portrait) | PASS: Audit scan trigger and summary cards full mobile width |
 | 21 | `slice4-imports-multi-source-tabs.png` | 1440x900 | Active Source Selection Flow | PASS: Visual proof of source selection and user mapping input |
 | 22 | `slice4-standalone-backups-snapshot-history.png` | 1440x900 | Backup Snapshots Table | PASS: Snapshot history table populated with download actions |
-| 23 | `slice4-diagnostics-realtime-probe-active.png` | 1440x900 | Active Realtime Probe RTT | PASS: Live roundtrip latency metrics displayed in badge |
+| 23 | `slice4-diagnostics-realtime-probe-active.png` | 1440x900 | Active Realtime Probe RTT | PASS: Live roundtrip latency metrics displayed with WS Live (23ms) badge |
 | 24 | `slice4-link-auditor-integrity-scan-active.png` | 1440x900 | Link Integrity Scan Triggered | PASS: Scan completed banner and 2 flagged invalid links (Dangling Target, Soft-Deleted Endpoint) rendered in table |
 
 Screenshots are mirrored in:
