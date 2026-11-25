@@ -14,7 +14,7 @@
 
 This UI Specialist Review re-audits the visual ergonomics, unclipped modal geometry, responsive design, component interaction flows, accessibility, and security controls delivered in **KAN-412: Simplify AI Providers, Budgets, Autonomous Agents & Remote Runners UI**.
 
-In this Round-2 verification:
+In this Round-3 verification:
 1. **Unclipped Modal Layout & Full Action Footers**:
    - `01-ai-provider-editor-1440x900-light.png`: The `Register AI Provider` modal now renders completely unclipped from top to bottom. The collapsible `Advanced Settings` accordion is rendered cleanly collapsed (`>` chevron with visible summary text, unclipped above footer actions), and the modal footer buttons (`Cancel`, `Test Connection`, `Register Provider`) are 100% visible and accessible.
    - `02-ai-budget-freeze-1440x900-light.png` & `05-ai-budget-unlimited-768x1024.png`: The `Token Budget & Usage Ledger` modal renders cleanly with continuous backdrop coverage across the entire scrollable height. In `05`, the summary header displays `Unlimited (No Cap)` and `Unlimited (10B ceiling)` with crisp alignment. Both `Close` and `Save Token Cap` footer actions are crisp and unobstructed.
@@ -64,7 +64,7 @@ In this Round-2 verification:
 
 - Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across documentation and code.
 - Visual inspection completed directly via `read_file` on all re-captured PNG artifacts in `docs/qa/KAN-412/screenshots/`.
-- Frontend Vitest test suites (175 tests across touched AI surfaces) verified passing with **96.16%** branch coverage and zero `act(...)` warnings.
-- Build checks (`tsc`, `eslint`, `vite build` in 1.24s, `ruff`, `mypy`) verified clean.
+- Frontend Vitest test suites (217 tests across 8 test suites) verified passing with **96.28%** branch coverage and zero `act(...)` warnings.
+- Build checks (`tsc`, `eslint`, `vite build` in 1.31s, `ruff`, `mypy`) verified clean.
 
 The UI/UX implementation of KAN-412 is thoroughly engineered, verified, and approved for promotion.

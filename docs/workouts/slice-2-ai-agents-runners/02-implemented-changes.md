@@ -31,7 +31,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 2. **AI Budget Modal Hard Freeze & UX Clarity Fix (`AiBudgetModal.tsx`)**:
    - Resolved the display bug where `capNum === 0` rendered misleading `'Unlimited'` / `'No cap enforced'`: now explicitly renders `'Zero-Allowance Freeze (0 tokens)'`.
    - Added explicit mode toggle pills: **`Enforce Token Cap`** (`cap-mode-enforce-btn`) vs **`Unlimited Quota (No Cap)`** (`cap-mode-unlimited-btn`), making quota policy unambiguous.
-   - Added 1-click monthly token budget quick-pick presets: **`1M`**, **`5M`**, **`25M`**, **`100M`**, and **`0 Freeze`** (`preset-budget-0-freeze-btn`).
+   - Added 1-click monthly token budget quick-pick presets: **`1M`**, **`5M`**, **`25M`**, **`100M`**, and **`0 (Freeze)`** (`preset-budget-0-freeze-btn`).
    - Added an explicit warning banner when `token_cap === 0`: **`0 tokens set: Completions through this provider are completely frozen.`** (`zero-cap-freeze-warning`).
    - Round-trip persistence: when `token_cap >= 10_000_000_000` on load, initializes in unlimited mode, displaying `'Unlimited (No Cap)'` and `'Unlimited (10B ceiling)'`.
 
@@ -62,7 +62,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 | **4. Zero Password Inputs (KAN-400)** | `AiProviderEditorDrawer.tsx` | `KEEP` | Retained masked text input with `.kb-masked-api-key`, multi-manager suppression attributes, zero `type="password"`. | Verified Complete |
 | **5. Fix Token Cap 0 Display Bug** | `AiBudgetModal.tsx` | `SIMPLIFY` | Reconciled line 140/167 bug; renders `'Zero-Allowance Freeze (0 tokens)'` when `capNum === 0` instead of `'Unlimited'`. | Verified Complete |
 | **6. Enforce Cap vs Unlimited Mode Pills** | `AiBudgetModal.tsx`, `aiStudio.css` | `SIMPLIFY` | Added explicit mode toggle pills (`Enforce Token Cap` vs `Unlimited Quota (No Cap)`). | Verified Complete |
-| **7. Token Budget Quick-Pick Presets** | `AiBudgetModal.tsx`, `aiStudio.css` | `SIMPLIFY` | Added quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 Freeze`. | Verified Complete |
+| **7. Token Budget Quick-Pick Presets** | `AiBudgetModal.tsx`, `aiStudio.css` | `SIMPLIFY` | Added quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 (Freeze)`. | Verified Complete |
 | **8. Hard Freeze Warning Banner** | `AiBudgetModal.tsx`, `aiStudio.css` | `SIMPLIFY` | Added prominent warning alert when token cap is set to 0. | Verified Complete |
 | **9. Add Agents Tab to Studio Subnav** | `AdminStudioSubnav.tsx` | `SIMPLIFY` | Added `{ id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' }` to `ADMIN_TABS`. | Verified Complete |
 | **10. Mount Studio Subnav on AgentStudioPage** | `AgentStudioPage.tsx` | `SIMPLIFY` | Mounted `<AdminStudioSubnav activeTab="agents" />` conditionally when `(showSubnav ?? !projectId)`. | Verified Complete |
@@ -80,7 +80,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 - **1-Click Preset Buttons (`data-testid="preset-ollama-btn"`, `preset-openai-btn`, `preset-gemini-btn`)**:
   - `Ollama`: Sets `provider_kind="ollama"`, `display_name="Local Ollama Runtime"`, `base_url="http://127.0.0.1:11434"`, `residency_tier="local_only"`, suggested models `llama3.2, qwen2.5-coder`.
   - `OpenAI`: Sets `provider_kind="openai"`, `display_name="OpenAI / OpenAI-Compatible"`, `base_url="https://api.openai.com/v1"`, `residency_tier="cloud_standard"`, suggested models `gpt-4o, gpt-4o-mini`.
-  - `Google Gemini`: Sets `provider_kind="gemini"`, `display_name="Google Gemini Workspace"`, `base_url="https://generativelanguage.googleapis.com"`, `residency_tier="cloud_standard"`, suggested models `gemini-2.5-flash, gemini-2.5-pro`.
+  - `Google Gemini`: Sets `provider_kind="gemini"`, `display_name="Google Gemini Workspace"`, `base_url="https://generativelanguage.googleapis.com"`, `residency_tier="cloud_standard"`, suggested models `gemini-2.5-pro, gemini-2.5-flash`.
 - **Promoted HTTP Base URL**:
   - Moved out of `<AdvancedSection>` directly into the primary connection settings group immediately following API Key and Clear Key checkbox.
   - Retained optional placeholder guidance tailored per provider kind.
@@ -102,7 +102,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
   - `data-testid="cap-mode-enforce-btn"`: Sets `capMode = 'enforce'` and defaults cap to `1,000,000` tokens if switching from unlimited or empty.
   - `data-testid="cap-mode-unlimited-btn"`: Sets `capMode = 'unlimited'`, persisting `token_cap: 10000000000` (10B ceiling per `BudgetSetRequest` schema).
 - **Token Quick-Pick Presets**:
-  - Quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 Freeze` (`preset-budget-0-freeze-btn`) immediately populate the token cap input.
+  - Quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 (Freeze)` (`preset-budget-0-freeze-btn`) immediately populate the token cap input.
 - **Hard Freeze Alert Banner**:
   - When `tokenCap === '0'`, mounts `.kb-zero-cap-warning` (`data-testid="zero-cap-freeze-warning"`):
     `"Hard AI Freeze: 0 tokens set: Completions through this provider are completely frozen."`
@@ -127,9 +127,9 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 
 #### 5. Agent Definition Editor Drawer (`AgentDefinitionEditorDrawer.tsx`)
 - Added inline harness hint box (`data-testid="agent-harness-hint"`):
-  - `in_app_sdk`: `"Direct API integration using configured AI providers (Gemini, OpenAI, Ollama). Fast, zero-daemon execution."`
+  - `in_app_sdk`: `'Executes in-process against configured AI providers (OpenAI, Gemini, Ollama) via native SDK.'`
   - `cli_pipe`: `'Executes through a sandboxed CLI pipe binary (agy or codex) using standard I/O streaming.'`
-  - `remote_runner`: `"Dispatches workloads to remote worker daemons connected over outbound mTLS WebSocket connections."`
+  - `remote_runner`: `'Dispatches agent execution jobs to an isolated remote worker via secure mTLS WebSocket.'`
 - Wired `useAal2DirtyKeepalive(isDirty)` on form dirtiness.
 - Added structured error response handling for `AIR_GAP_EGRESS_DENIED`.
 
@@ -228,7 +228,7 @@ docker run -d \
 ##### Step 4: Validate Token Budget Hard Freeze & Unlimited Modes
 1. On the configured provider card, click "Token Budget" (`manage-budget-btn`).
 2. Verify that clicking "Enforce Token Cap" enables the cap input and quick-pick presets.
-3. Click preset "0 Freeze" (`preset-budget-0-freeze-btn`).
+3. Click preset "0 (Freeze)" (`preset-budget-0-freeze-btn`).
 4. Verify:
    - Warning banner appears: `"Hard AI Freeze: 0 tokens set: Completions through this provider are completely frozen."`
    - Line displays `'Zero-Allowance Freeze (0 tokens)'` (verifying fix for previous `'Unlimited'` bug).
