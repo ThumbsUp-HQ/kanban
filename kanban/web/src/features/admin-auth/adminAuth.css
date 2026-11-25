@@ -1176,3 +1176,36 @@
     min-height: 44px;
   }
 }
+
+/* KB-AUTH-SIMPLIFY masked secret, localhost warning, & break-glass modal */
+.kb-masked-api-key {
+  -webkit-text-security: disc;
+}
+
+.auth-localhost-warning {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  background-color: var(--bg-surface-raised, #fffbeb);
+  color: var(--text-warning, #b45309);
+  border: 1px solid var(--border-warning, #fde68a);
+}
+
+.auth-btn-danger {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--text-danger, #ef4444);
+  color: #ffffff;
+  border: 1px solid var(--text-danger, #dc2626);
+  transition: all 0.15s ease-in-out;
+}
+
+.auth-btn-danger:hover {
+  background: #dc2626;
+}
+

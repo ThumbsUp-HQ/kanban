@@ -31,6 +31,14 @@ const MOCK_ROLES: RbacRole[] = [
     is_system: true,
     permissions: ['issue:view', 'issue:comment', 'field:modify_summary'],
   },
+  {
+    id: 'role-4',
+    slug: 'custom-no-color',
+    name: 'No Color Role',
+    color_hex: null as unknown as string,
+    is_system: false,
+    permissions: [],
+  },
 ];
 
 describe('RbacPolicyBuilder Component (KAN-83)', () => {
@@ -227,5 +235,195 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('rbac-error-banner').textContent).toContain('Network offline');
     });
+  });
+
+  it('supports category bulk permission quick-selectors (Select All, Clear All, Read-Only preset)', async () => {
+    const batchCalls: { permission_key: string; granted: boolean }[] = [];
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path, opts) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
+        return Promise.resolve(MOCK_ROLES as never);
+      }
+      if (path.includes('/api/v1/admin/rbac/roles/permissions:batch')) {
+        const body = (opts as { body: { permission_key: string; granted: boolean } }).body;
+        batchCalls.push(body);
+        return Promise.resolve({ status: 'ok' } as never);
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+
+    render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-select-all-issue')).toBeDefined();
+    });
+
+    // 1. Select All on Issue permissions
+    fireEvent.click(screen.getByTestId('bulk-select-all-issue'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(10);
+      expect(batchCalls.every((c) => c.granted)).toBe(true);
+    });
+
+    // 2. Clear All on Issue permissions
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-clear-all-issue'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(10);
+      expect(batchCalls.every((c) => !c.granted)).toBe(true);
+    });
+
+    // 3. Read-Only on Issue permissions (issue:view true, others false)
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-readonly-issue'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(10);
+      const viewCall = batchCalls.find((c) => c.permission_key === 'issue:view');
+      const otherCalls = batchCalls.filter((c) => c.permission_key !== 'issue:view');
+      expect(viewCall?.granted).toBe(true);
+      expect(otherCalls.every((c) => !c.granted)).toBe(true);
+    });
+
+    // 4. Workspace & Field bulk selectors
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-select-all-workspace'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(8);
+      expect(batchCalls.every((c) => c.granted)).toBe(true);
+    });
+
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-clear-all-workspace'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(8);
+      expect(batchCalls.every((c) => !c.granted)).toBe(true);
+    });
+
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-readonly-workspace'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(8);
+      const auditCall = batchCalls.find((c) => c.permission_key === 'workspace:audit_logs');
+      const exportCall = batchCalls.find((c) => c.permission_key === 'workspace:export_data');
+      expect(auditCall?.granted).toBe(true);
+      expect(exportCall?.granted).toBe(true);
+    });
+
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-select-all-field'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(12);
+      expect(batchCalls.every((c) => c.granted)).toBe(true);
+    });
+
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-clear-all-field'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(12);
+      expect(batchCalls.every((c) => !c.granted)).toBe(true);
+    });
+
+    batchCalls.length = 0;
+    fireEvent.click(screen.getByTestId('bulk-readonly-field'));
+    await waitFor(() => {
+      expect(batchCalls.length).toBe(12);
+      expect(batchCalls.every((c) => !c.granted)).toBe(true);
+    });
+
+    // 5. Error handling in bulk category permissions
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.includes('/api/v1/admin/rbac/roles/permissions:batch')) {
+        return Promise.reject(new Error('Batch update failed'));
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+    fireEvent.click(screen.getByTestId('bulk-select-all-field'));
+    await waitFor(() => {
+      expect(screen.getByTestId('rbac-error-banner').textContent).toContain('Batch update failed');
+    });
+
+    // 6. Aal2StepUpCancelledError in bulk category permissions (silently ignored)
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.includes('/api/v1/admin/rbac/roles/permissions:batch')) {
+        return Promise.reject(new clientModule.Aal2StepUpCancelledError());
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+    fireEvent.click(screen.getByTestId('bulk-clear-all-field'));
+
+    // 7. Aal2StepUpCancelledError in handleTogglePermission (silently ignored)
+    const toggleSpy = vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.includes('/api/v1/admin/rbac/roles/permissions')) {
+        return Promise.reject(new clientModule.Aal2StepUpCancelledError());
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+    const permCheckbox = screen.getAllByRole('checkbox')[0];
+    if (permCheckbox) fireEvent.click(permCheckbox);
+    await waitFor(() => {
+      expect(toggleSpy).toHaveBeenCalled();
+    });
+
+    // 8. Select role-4 with null color_hex to cover color fallback
+    fireEvent.change(screen.getByTestId('rbac-select-role-dropdown'), {
+      target: { value: 'role-4' },
+    });
+    expect(screen.getByTestId('rbac-selected-role-custom-no-color')).toBeDefined();
+
+    // 9. Dropdown change with empty string or already selected role
+    fireEvent.change(screen.getByTestId('rbac-select-role-dropdown'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByTestId('rbac-select-role-dropdown'), {
+      target: { value: 'role-4' },
+    });
+
+    // 10. Bulk category update with fallback error message
+    class EmptyError extends Error {
+      override message = undefined as unknown as string;
+    }
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.includes('/api/v1/admin/rbac/roles/permissions:batch')) {
+        return Promise.reject(new EmptyError());
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+    fireEvent.click(screen.getByTestId('bulk-select-all-field'));
+    await waitFor(() => {
+      expect(screen.getByTestId('rbac-error-banner').textContent).toContain('Failed to update category permissions.');
+    });
+  });
+
+  it('silently ignores Aal2StepUpCancelledError on loadRoles', () => {
+    vi.spyOn(clientModule, 'apiFetch').mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError());
+    render(<RbacPolicyBuilder isServerAdmin={true} />);
+    expect(screen.queryByTestId('rbac-error-banner')).toBeNull();
+  });
+
+  it('handles auto-slug generation and manual customization in Create Role popover', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path.endsWith('/api/v1/admin/rbac/roles')) {
+        return Promise.resolve(MOCK_ROLES as never);
+      }
+      return Promise.resolve({ permissions: [] } as never);
+    });
+
+    render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rbac-open-create-role')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('rbac-open-create-role'));
+    const nameInput = screen.getByTestId<HTMLInputElement>('rbac-new-role-name');
+    const slugInput = screen.getByTestId<HTMLInputElement>('rbac-new-role-slug');
+
+    // Auto-slug generated from name
+    fireEvent.change(nameInput, { target: { value: 'QA Lead Engineer' } });
+    expect(slugInput.value).toBe('qa-lead-engineer');
+
+    // Manual edit prevents overwrite
+    fireEvent.change(slugInput, { target: { value: 'qa-specialist' } });
+    fireEvent.change(nameInput, { target: { value: 'QA Lead Architect' } });
+    expect(slugInput.value).toBe('qa-specialist');
   });
 });

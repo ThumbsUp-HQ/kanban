@@ -369,3 +369,25 @@ export async function parseGoogleOAuthJson(
   )) as GoogleOAuthJsonPreviewResponse;
   return result;
 }
+
+/**
+ * Determines whether a given authentication card is the sole active card capable of authenticating a Server Administrator.
+ */
+export function isSoleActiveAdminCard(
+  card: { id: string; is_enabled: boolean; provider_kind: ProviderKind; public_config?: Record<string, unknown> },
+  allCards: { id: string; is_enabled: boolean; provider_kind: ProviderKind; public_config?: Record<string, unknown> }[],
+): boolean {
+  if (!card.is_enabled) return false;
+  const activeCards = allCards.filter((c) => c.is_enabled);
+  if (activeCards.length <= 1) return true;
+  const otherActiveCards = allCards.filter((c) => c.is_enabled && c.id !== card.id);
+  if (otherActiveCards.length === 0) return true;
+  if (card.provider_kind === 'LOCAL_ADMIN') {
+    const hasActiveExternal = otherActiveCards.some(
+      (c) => c.provider_kind === 'OIDC' || c.provider_kind === 'OAUTH2' || c.provider_kind === 'LDAP',
+    );
+    if (!hasActiveExternal) return true;
+  }
+  return false;
+}
+

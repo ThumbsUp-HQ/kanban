@@ -1,0 +1,148 @@
+=== Backend Pytest Results with Coverage ===
+Uninstalled 4 packages in 0.69ms
+Installed 4 packages in 1ms
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan407-1e894da6
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 69 items
+
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_2_security_zero_secret_leakage PASSED [  1%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_3_fractional_rank_collate_c PASSED [  2%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_4_handshake_probe_diagnostics PASSED [  4%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_5_lockout_enforcement_over_http PASSED [  5%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_6_delete_confirmation PASSED [  7%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_7_authz_and_aal2_wall PASSED [  8%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_8_validation_boundaries PASSED [ 10%]
+kanban/tests/auth/test_auth_cards_admin_api.py::test_case_9_google_oauth_json_preview_and_card_creation PASSED [ 11%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_01_positive_ldaps_flow PASSED [ 13%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_02_positive_starttls_flow PASSED [ 14%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_03_tls_hard_downgrade_rejected PASSED [ 15%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_04_tls_version_and_cert_verification PASSED [ 17%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_05_spki_pin_mismatch_rejected PASSED [ 18%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_06_anonymous_bind_bypass_blocked PASSED [ 20%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_08_ambiguous_search_and_alias_deref PASSED [ 21%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_10_rate_limit_and_enumeration PASSED [ 23%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_11_boundary_and_ssrf PASSED [ 24%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_12_secret_hygiene_logging_and_zeroization PASSED [ 26%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_admin_ldap_test_connection_endpoint PASSED [ 27%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_ldap_alias_endpoint PASSED [ 28%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_ldap_reexports PASSED  [ 30%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_config_validation_branches PASSED [ 31%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_asn1_ber_coverage PASSED [ 33%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_client_coverage_branches PASSED [ 34%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_service_coverage_branches PASSED [ 36%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_router_coverage_branches PASSED [ 37%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_extra_coverage_for_client_router_ber PASSED [ 39%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_b1_starttls_buffer_injection_and_msg_id PASSED [ 40%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_b2_hostile_wire_timeouts_and_size_limit PASSED [ 42%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_b3_uniform_failure_and_malformed_bind_response PASSED [ 43%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_b4_machine_readable_429 PASSED [ 44%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_b5_session_issuance_and_csrf_cookie PASSED [ 46%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_ui_b3_csrf_protection_with_csrf_middleware PASSED [ 47%]
+kanban/tests/auth/test_ldap_tls_and_bind.py::test_ui_b2_byte_identical_401_responses PASSED [ 49%]
+kanban/tests/auth/test_ldap_group_sync.py::test_09_group_dn_sync_lifecycle_and_closure PASSED [ 50%]
+kanban/tests/auth/test_ldap_group_sync.py::test_group_sync_empty_inputs PASSED [ 52%]
+kanban/tests/auth/test_ldap_group_sync.py::test_group_sync_reconciliation_idempotency PASSED [ 53%]
+kanban/tests/auth/test_ldap_group_sync.py::test_ldap_group_mapping_table_model PASSED [ 55%]
+kanban/tests/auth/test_oidc_flow.py::test_01_positive_oidc_flow PASSED   [ 56%]
+kanban/tests/auth/test_oidc_flow.py::test_02_positive_oauth2_flow PASSED [ 57%]
+kanban/tests/auth/test_oidc_flow.py::test_03_positive_private_key_jwt_flow PASSED [ 59%]
+kanban/tests/auth/test_oidc_flow.py::test_04_state_replay_and_expiry PASSED [ 60%]
+kanban/tests/auth/test_oidc_flow.py::test_05_browser_binding_csrf PASSED [ 62%]
+kanban/tests/auth/test_oidc_flow.py::test_11_open_redirect_defense PASSED [ 63%]
+kanban/tests/auth/test_oidc_flow.py::test_12_ssrf_config_validation PASSED [ 65%]
+kanban/tests/auth/test_oidc_flow.py::test_13_boundary_response_size_and_subject_length PASSED [ 66%]
+kanban/tests/auth/test_oidc_flow.py::test_14_secret_hygiene_logging PASSED [ 68%]
+kanban/tests/auth/test_oidc_flow.py::test_provider_error_query_param PASSED [ 69%]
+kanban/tests/auth/test_oidc_flow.py::test_reject_all_identity_resolver PASSED [ 71%]
+kanban/tests/auth/test_oidc_flow.py::test_config_validation_edge_cases PASSED [ 72%]
+kanban/tests/auth/test_oidc_flow.py::test_identity_assertion_and_resolver PASSED [ 73%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_properties_and_helpers PASSED [ 75%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_card_not_found PASSED     [ 76%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_malformed_inputs PASSED   [ 78%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_oauth2_error_responses PASSED [ 79%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_session_service_cookies PASSED [ 81%]
+kanban/tests/auth/test_oidc_flow.py::test_config_direct_helpers PASSED   [ 82%]
+kanban/tests/auth/test_oidc_flow.py::test_flow_oidc_token_exchange_failures PASSED [ 84%]
+kanban/tests/auth/test_oidc_flow.py::test_fastapi_oidc_routes PASSED     [ 85%]
+kanban/tests/auth/test_oidc_flow.py::test_oidc_callback_link_flow_preserves_session_and_redirects PASSED [ 86%]
+kanban/tests/auth/test_oidc_flow.py::test_oidc_callback_link_flow_conflict_redirects_error PASSED [ 88%]
+kanban/tests/auth/test_identity_linking_real_pg_e2e.py::test_oidc_identity_linking_real_pg_lifecycle PASSED [ 89%]
+kanban/tests/api/test_granular_rbac_api.py::test_workspace_creation_granular_permission PASSED [ 91%]
+kanban/tests/api/test_granular_rbac_api.py::test_workspace_settings_and_members_aal2_and_granular_permissions PASSED [ 92%]
+kanban/tests/api/test_granular_rbac_api.py::test_viewer_attachment_upload_bug_closed PASSED [ 94%]
+kanban/tests/api/test_granular_rbac_api.py::test_issue_field_level_permissions_and_response_fields PASSED [ 95%]
+kanban/tests/api/test_granular_rbac_api.py::test_admin_rbac_roles_crud_and_tier_governance PASSED [ 97%]
+kanban/tests/api/test_granular_rbac_api.py::test_admin_principals_role_labels_and_escalation PASSED [ 98%]
+kanban/tests/api/test_granular_rbac_api.py::test_multi_role_label_additive_union_in_api PASSED [100%]/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.auth_cards was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.rbac was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.admin.principals was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/control.py:967: CoverageWarning: No data was collected. (no-data-collected); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-no-data-collected
+  self._warn("No data was collected.", slug="no-data-collected")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/pytest_cov/plugin.py:366: CovReportWarning: Failed to generate report: No data to report.
+
+  warnings.warn(CovReportWarning(message), stacklevel=1)
+
+WARNING: Failed to generate report: No data to report.
+
+
+
+============================= 69 passed in 31.65s ==============================
+
+=== Frontend Vitest & Coverage Results ===
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan407-1e894da6/kanban/web
+> vitest run AuthStudioPage.test.tsx AuthCardEditorDrawer.test.tsx RbacPolicyBuilder.test.tsx --coverage --run
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan407-1e894da6/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx (8 tests) 1266ms
+   ✓ RbacPolicyBuilder Component (KAN-83) (8)
+     ✓ supports category bulk permission quick-selectors (Select All, Clear All, Read-Only preset) 457ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (59 tests) 7429ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (59)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 406ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 336ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 320ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 336ms
+     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 421ms
+     ✓ Progressive Disclosure & AdvancedSection (KAN-319) (17)
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 409ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (55 tests) 7717ms
+   ✓ AuthStudioPage (KB-P3-36) (55)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 372ms
+     ✓ opens drawer to add a new auth card and appends created card 720ms
+     ✓ opens drawer to edit an existing card and updates it 321ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 400ms
+     ✓ handles Aal2StepUpCancelledError during user create or role change 345ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 545ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ opens Reset Password modal and resets user password 413ms
+       ✓ covers role change in add user modal and cancelling reset password modal 372ms
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 823ms
+
+ Test Files  3 passed (3)
+      Tests  122 passed (122)
+   Start at  15:06:09
+   Duration  9.22s (tests 85%, environment 11%, import 3%, worker 1%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.02 |    95.76 |     100 |    99.8 |                   
+ admin-auth        |   98.83 |    95.61 |     100 |   99.76 |                   
+  ...torDrawer.tsx |   99.41 |    95.57 |     100 |   99.56 | 648,712           
+  ...tudioPage.tsx |   98.14 |    95.68 |     100 |     100 | ...22,613,619,644 
+ rbac              |     100 |    97.59 |     100 |     100 |                   
+  ...cyBuilder.tsx |     100 |    97.59 |     100 |     100 | 117,287           
+-------------------|---------|----------|---------|---------|-------------------

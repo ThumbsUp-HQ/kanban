@@ -2491,5 +2491,163 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(screen.getByText(/Failed to parse JSON: Non-error string payload/i)).toBeDefined();
       parseSpy.mockRestore();
     });
+
+    it('mounts ZERO input[type="password"] elements and applies .kb-masked-api-key + suppression attributes (KAN-407)', () => {
+      const { container } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // 1. Verify ZERO password inputs exist in OIDC mode
+      expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0);
+
+      const oidcSecret = container.querySelector<HTMLInputElement>('#card-secret');
+      expect(oidcSecret).not.toBeNull();
+      expect(oidcSecret?.getAttribute('type')).toBe('text');
+      expect(oidcSecret?.className).toContain('kb-masked-api-key');
+      expect(oidcSecret?.getAttribute('autoComplete')).toBe('off');
+      expect(oidcSecret?.getAttribute('data-1p-ignore')).toBe('true');
+      expect(oidcSecret?.getAttribute('data-lpignore')).toBe('true');
+      expect(oidcSecret?.getAttribute('data-bwignore')).toBe('true');
+      expect(oidcSecret?.getAttribute('data-form-type')).toBe('other');
+
+      // 2. Switch to LDAP and verify ZERO password inputs
+      fireEvent.click(screen.getByTestId('preset-openldap'));
+      expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0);
+
+      const ldapSecret = container.querySelector<HTMLInputElement>('#card-secret');
+      expect(ldapSecret).not.toBeNull();
+      expect(ldapSecret?.getAttribute('type')).toBe('text');
+      expect(ldapSecret?.className).toContain('kb-masked-api-key');
+      expect(ldapSecret?.getAttribute('autoComplete')).toBe('off');
+      expect(ldapSecret?.getAttribute('data-1p-ignore')).toBe('true');
+      expect(ldapSecret?.getAttribute('data-lpignore')).toBe('true');
+      expect(ldapSecret?.getAttribute('data-bwignore')).toBe('true');
+      expect(ldapSecret?.getAttribute('data-form-type')).toBe('other');
+    });
+
+    it('wires is_enabled cleanly on submit in both create and edit modes (KAN-407)', async () => {
+      const saveSpy = vi.fn().mockResolvedValue(undefined);
+      const { rerender } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={saveSpy}
+        />,
+      );
+
+      // Create mode: uncheck Enable Card
+      fireEvent.change(screen.getByLabelText('Display Name'), { target: { value: 'Disabled Provider' } });
+      fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-123' } });
+      const enableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card');
+      expect(enableCheck.checked).toBe(true);
+      fireEvent.click(enableCheck);
+      expect(enableCheck.checked).toBe(false);
+
+      fireEvent.click(screen.getByTestId('drawer-save-btn'));
+      await waitFor(() => {
+        expect(saveSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            is_enabled: false,
+            display_name: 'Disabled Provider',
+          }),
+          false,
+        );
+      });
+
+      // Edit mode: toggle is_enabled
+      saveSpy.mockClear();
+      rerender(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={{
+            ...existingOidcCard,
+            is_enabled: true,
+          }}
+          onClose={vi.fn()}
+          onSave={saveSpy}
+        />,
+      );
+
+      const editEnableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card');
+      expect(editEnableCheck.checked).toBe(true);
+      fireEvent.click(editEnableCheck);
+      expect(editEnableCheck.checked).toBe(false);
+
+      fireEvent.click(screen.getByTestId('drawer-save-btn'));
+      await waitFor(() => {
+        expect(saveSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            is_enabled: false,
+          }),
+          true,
+        );
+      });
+    });
+
+    it('renders localhost origin warning on OIDC callback URI when origin is localhost (KAN-407)', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const warning = screen.getByTestId('oidc-localhost-warning');
+      expect(warning).toBeDefined();
+      expect(warning.textContent).toContain('You are running on a local origin');
+      expect(warning.textContent).toContain('require HTTPS or exact port registration');
+    });
+
+    it('validates CA PEM header requires -----BEGIN CERTIFICATE----- (KAN-407)', async () => {
+      const saveSpy = vi.fn().mockResolvedValue(undefined);
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={saveSpy}
+        />,
+      );
+
+      // Apply OpenLDAP preset to populate required LDAP fields
+      fireEvent.click(screen.getByTestId('preset-openldap'));
+
+      // Populate required bind_dn and base_dn
+      fireEvent.change(screen.getByLabelText(/^Bind DN$/i), { target: { value: 'cn=admin,dc=corp,dc=local' } });
+      fireEvent.change(screen.getByLabelText(/^Base DN$/i), { target: { value: 'dc=corp,dc=local' } });
+
+      // Open Advanced Section
+      fireEvent.click(screen.getByTestId('auth-advanced-section-toggle'));
+
+      const pemTextarea = screen.getByLabelText(/CA Certificate PEM/i);
+      fireEvent.change(pemTextarea, { target: { value: 'NOT_A_VALID_PEM_HEADER' } });
+
+      fireEvent.click(screen.getByTestId('drawer-save-btn'));
+      await waitFor(() => {
+        expect(screen.getByText('CA certificate must begin with -----BEGIN CERTIFICATE-----')).toBeDefined();
+      });
+      expect(saveSpy).not.toHaveBeenCalled();
+
+      // Fix PEM header
+      fireEvent.change(pemTextarea, {
+        target: { value: '-----BEGIN CERTIFICATE-----\nMIIBojCCAUqgAwIBAg...\n-----END CERTIFICATE-----' },
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-save-btn'));
+      await waitFor(() => {
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+      });
+      const lastPayload = saveSpy.mock.calls[0]?.[0] as CreateAuthCardPayload;
+      expect(String(lastPayload.public_config.ca_cert_pem)).toContain('-----BEGIN CERTIFICATE-----');
+      expect(saveSpy.mock.calls[0]?.[1]).toBe(false);
+    });
   });
 });

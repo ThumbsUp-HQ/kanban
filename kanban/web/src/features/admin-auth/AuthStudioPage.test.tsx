@@ -804,12 +804,29 @@ describe('AuthStudioPage (KB-P3-36)', () => {
   });
 
   it('handles Aal2StepUpCancelledError during user create or role change', async () => {
+    const mockUsers = [
+      {
+        id: 'p-1',
+        type: 'USER',
+        handle: 'alice',
+        display_name: 'Alice',
+        role: 'WORKSPACE_MEMBER',
+        is_active: true,
+      },
+    ];
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/auth/me') return adminUser;
       if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+      if ((path as string).startsWith('/api/v1/admin/principals')) {
+        return mockUsers;
+      }
       return {};
     });
+
+    const updateRoleSpy = vi.spyOn(adminAuthApi, 'updateUserRole').mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    const createPrincipalSpy = vi.spyOn(adminAuthApi, 'createLocalUser').mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    const resetPasswordSpy = vi.spyOn(adminAuthApi, 'resetUserPassword').mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     render(<AuthStudioPage />);
 
@@ -820,7 +837,46 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     const usersTab = screen.getByRole('tab', { name: /Users/i });
     fireEvent.click(usersTab);
 
-    expect(screen.queryByText('Session expired. Please sign in again.')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeDefined();
+    });
+
+    // 1. Role change throwing Aal2StepUpCancelledError
+    const roleSelect = screen.getByLabelText(/Role for @?alice/i);
+    fireEvent.change(roleSelect, { target: { value: 'PROJECT_ADMIN' } });
+    await waitFor(() => {
+      expect(updateRoleSpy).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // 2. Create user throwing Aal2StepUpCancelledError
+    const addBtn = screen.getByRole('button', { name: /\+ Add Local User/i });
+    fireEvent.click(addBtn);
+    fireEvent.change(screen.getByLabelText(/Username \/ Handle/i), { target: { value: 'bob' } });
+    fireEvent.change(screen.getByLabelText(/Email Address/i), { target: { value: 'bob@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^Password/i), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Create User$/i }));
+    await waitFor(() => {
+      expect(createPrincipalSpy).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // Close add user modal
+    const closeBtns = screen.getAllByRole('button', { name: 'Close' });
+    const lastClose = closeBtns[closeBtns.length - 1];
+    if (lastClose) fireEvent.click(lastClose);
+
+    // 3. Reset password throwing Aal2StepUpCancelledError
+    const resetBtns = screen.getAllByRole('button', { name: /^Reset Password$/i });
+    const firstReset = resetBtns[0];
+    if (firstReset) fireEvent.click(firstReset);
+    fireEvent.change(screen.getByLabelText(/^New Password/i), { target: { value: 'newpassword123' } });
+    fireEvent.change(screen.getByLabelText(/Confirm New Password/i), { target: { value: 'newpassword123' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Update Password$/i }));
+    await waitFor(() => {
+      expect(resetPasswordSpy).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('handles moving cards to top and bottom boundaries', async () => {
@@ -2248,6 +2304,151 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(screen.queryByText('Failed to reorder card.')).toBeNull();
       });
       expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('fixes duplicate panel-roles mount, hides panel-users and hides + Add Local User on roles tab (KAN-407)', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return { principals: [] };
+        if ((path as string).startsWith('/api/v1/admin/rbac/roles')) return [];
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-roles')).toBeDefined();
+      });
+
+      // Click Roles tab
+      fireEvent.click(screen.getByTestId('tab-roles'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-roles-section')).toBeDefined();
+      });
+
+      // 1. Only one panel-roles / auth-roles-section is mounted (no duplicate)
+      expect(screen.getAllByTestId('auth-roles-section')).toHaveLength(1);
+
+      // 2. panel-users / users table is NOT mounted on roles tab
+      expect(screen.queryByTestId('auth-users-table')).toBeNull();
+
+      // 3. + Add Local User is hidden on roles tab
+      expect(screen.queryByText('+ Add Local User')).toBeNull();
+      expect(screen.queryByText('+ Add auth card')).toBeNull();
+    });
+
+    it('triggers client-side break-glass warning when disabling sole active card and cancels or confirms (KAN-407)', async () => {
+      const baseCard = mockCards[3];
+      const soleAdminCard = { ...baseCard, id: 'c-local-only', is_enabled: true };
+      const soleCard = [soleAdminCard];
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: soleCard };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return { principals: [] };
+        return {};
+      });
+
+      const toggleSpy = vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockResolvedValue({
+        ...soleAdminCard,
+        is_enabled: false,
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Local Administrator')).toBeDefined();
+      });
+
+      const localSwitch = screen.getByRole('switch', { name: /Enable Local Administrator/i });
+
+      // Click switch -> triggers client-side break-glass warning modal
+      fireEvent.click(localSwitch);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('break-glass-warning-dialog')).toBeDefined();
+        expect(screen.getByText(/Break-Glass Anti-Lockout Warning/i)).toBeDefined();
+        expect(screen.getByText(/Three-Layer Anti-Lockout Safeguards/i)).toBeDefined();
+      });
+
+      // Cancel action
+      fireEvent.click(screen.getByTestId('cancel-break-glass-action'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('break-glass-warning-dialog')).toBeNull();
+      });
+      expect(toggleSpy).not.toHaveBeenCalled();
+
+      // Re-trigger and click Close (X) button
+      fireEvent.click(localSwitch);
+      await waitFor(() => {
+        expect(screen.getByTestId('break-glass-warning-dialog')).toBeDefined();
+      });
+      const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+      const lastCloseBtn = closeButtons[closeButtons.length - 1];
+      if (lastCloseBtn) fireEvent.click(lastCloseBtn);
+      await waitFor(() => {
+        expect(screen.queryByTestId('break-glass-warning-dialog')).toBeNull();
+      });
+      expect(toggleSpy).not.toHaveBeenCalled();
+
+      // Re-trigger and confirm
+      fireEvent.click(localSwitch);
+      await waitFor(() => {
+        expect(screen.getByTestId('break-glass-warning-dialog')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('confirm-break-glass-action'));
+      await waitFor(() => {
+        expect(toggleSpy).toHaveBeenCalledWith('c-local-only', false);
+      });
+    });
+
+    it('triggers client-side break-glass warning when deleting sole active external card and cancels or confirms (KAN-407)', async () => {
+      const baseExtCard = mockCards[0];
+      const soleExternal = [{ ...baseExtCard, id: 'c-ext-only', is_enabled: true }];
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: soleExternal };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return { principals: [] };
+        return {};
+      });
+
+      const deleteSpy = vi.spyOn(adminAuthApi, 'deleteAdminAuthCard').mockResolvedValue(undefined);
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Delete Okta SSO')).toBeDefined();
+      });
+
+      // Click delete -> triggers break-glass warning modal
+      fireEvent.click(screen.getByLabelText('Delete Okta SSO'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('break-glass-warning-dialog')).toBeDefined();
+      });
+
+      // Cancel
+      fireEvent.click(screen.getByTestId('cancel-break-glass-action'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('break-glass-warning-dialog')).toBeNull();
+      });
+      expect(deleteSpy).not.toHaveBeenCalled();
+
+      // Re-trigger and confirm
+      fireEvent.click(screen.getByLabelText('Delete Okta SSO'));
+      await waitFor(() => {
+        expect(screen.getByTestId('break-glass-warning-dialog')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('confirm-break-glass-action'));
+      await waitFor(() => {
+        expect(deleteSpy).toHaveBeenCalledWith('c-ext-only');
+      });
     });
   });
 });

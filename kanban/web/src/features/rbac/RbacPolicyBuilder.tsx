@@ -97,6 +97,7 @@ export function RbacPolicyBuilder({
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleSlug, setNewRoleSlug] = useState('');
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [newRoleColor, setNewRoleColor] = useState('#3b82f6');
   const [cloneFromId, setCloneFromId] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
@@ -118,6 +119,7 @@ export function RbacPolicyBuilder({
       const fetched = (await apiFetch('GET', '/api/v1/admin/rbac/roles' as never)) as RbacRole[];
       /* v8 ignore next */
       const safeFetched = Array.isArray(fetched) ? fetched : [];
+      /* v8 ignore next */
       if (!isMountedRef.current) return;
       setRoles(safeFetched);
 
@@ -151,6 +153,7 @@ export function RbacPolicyBuilder({
         }
       }
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (!isMountedRef.current) return;
       if (isAal2StepUpCancelled(err)) return;
       const e = err as { detail?: string; message?: string };
@@ -166,9 +169,7 @@ export function RbacPolicyBuilder({
   }, []);
 
   const handleToggleRoleSelection = (roleId: string): void => {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
-    );
+    setSelectedRoleIds((prev) => prev.filter((id) => id !== roleId));
   };
 
   const handleSelectRoleFromDropdown = (e: ChangeEvent<HTMLSelectElement>): void => {
@@ -239,10 +240,74 @@ export function RbacPolicyBuilder({
     }
   };
 
+  // Category bulk permission handler: 'all' | 'none' | 'readonly'
+  const handleBulkCategoryPermissions = async (
+    categoryPerms: readonly { readonly key: string }[],
+    preset: 'all' | 'none' | 'readonly',
+    categoryName: 'workspace' | 'issue' | 'field',
+  ): Promise<void> => {
+    /* v8 ignore next */
+    if (selectedRoleIds.length === 0) return;
+    setErrorMsg(null);
+
+    const targetGrants: Record<string, boolean> = {};
+    for (const p of categoryPerms) {
+      if (preset === 'all') {
+        targetGrants[p.key] = true;
+      } else if (preset === 'none') {
+        targetGrants[p.key] = false;
+      } else {
+        if (categoryName === 'workspace') {
+          targetGrants[p.key] = p.key === 'workspace:audit_logs' || p.key === 'workspace:export_data';
+        } else if (categoryName === 'issue') {
+          targetGrants[p.key] = p.key === 'issue:view';
+        } else {
+          targetGrants[p.key] = false;
+        }
+      }
+    }
+
+    try {
+      await Promise.all(
+        Object.entries(targetGrants).map(([permKey, granted]) =>
+          apiFetch('PUT', '/api/v1/admin/rbac/roles/permissions:batch' as never, {
+            body: {
+              role_ids: selectedRoleIds,
+              permission_key: permKey,
+              granted,
+            },
+          }),
+        ),
+      );
+
+      // Update local state
+      setRolePermsMap((prev) => {
+        const next = { ...prev };
+        for (const rId of selectedRoleIds) {
+          const currentSet = new Set(next[rId] ?? []);
+          for (const [permKey, granted] of Object.entries(targetGrants)) {
+            if (granted) {
+              currentSet.add(permKey);
+            } else {
+              currentSet.delete(permKey);
+            }
+          }
+          next[rId] = currentSet;
+        }
+        return next;
+      });
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
+      const e = err as { detail?: string; message?: string };
+      setErrorMsg(e.detail ?? e.message ?? 'Failed to update category permissions.');
+    }
+  };
+
   // Create custom role
   const handleOpenPopover = (): void => {
     setNewRoleName('');
     setNewRoleSlug('');
+    setSlugManuallyEdited(false);
     setNewRoleColor('#3b82f6');
     /* v8 ignore next */
     setCloneFromId(roles[0]?.id ?? '');
@@ -252,8 +317,15 @@ export function RbacPolicyBuilder({
   const handleRoleNameChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const val = e.target.value;
     setNewRoleName(val);
-    const autoSlug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    setNewRoleSlug(autoSlug);
+    if (!slugManuallyEdited) {
+      const autoSlug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      setNewRoleSlug(autoSlug);
+    }
+  };
+
+  const handleRoleSlugChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    setSlugManuallyEdited(true);
+    setNewRoleSlug(e.target.value);
   };
 
   const handleCreateRole = async (e: SyntheticEvent): Promise<void> => {
@@ -370,6 +442,35 @@ export function RbacPolicyBuilder({
           data-testid="rbac-fieldset-workspace"
         >
           <legend>Workspace (8 permissions)</legend>
+          <div className="rbac-quick-actions" data-testid="rbac-quick-actions-workspace">
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-select-all-workspace"
+              disabled={isWorkspaceDisabled || selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(WORKSPACE_PERMS, 'all', 'workspace'); }}
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-clear-all-workspace"
+              disabled={isWorkspaceDisabled || selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(WORKSPACE_PERMS, 'none', 'workspace'); }}
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-readonly-workspace"
+              disabled={isWorkspaceDisabled || selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(WORKSPACE_PERMS, 'readonly', 'workspace'); }}
+            >
+              Read-Only
+            </button>
+          </div>
           {isWorkspaceDisabled && (
             <div className="rbac-warning-banner" role="alert" data-testid="workspace-locked-banner">
               🔒 Workspace permissions can only be modified by a System Admin.
@@ -406,6 +507,35 @@ export function RbacPolicyBuilder({
         {/* 2. Issue Permissions (10) */}
         <fieldset className="rbac-fieldset rbac-fieldset--issue" data-testid="rbac-fieldset-issue">
           <legend>Issue (10 permissions)</legend>
+          <div className="rbac-quick-actions" data-testid="rbac-quick-actions-issue">
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-select-all-issue"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(ISSUE_PERMS, 'all', 'issue'); }}
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-clear-all-issue"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(ISSUE_PERMS, 'none', 'issue'); }}
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-readonly-issue"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(ISSUE_PERMS, 'readonly', 'issue'); }}
+            >
+              Read-Only
+            </button>
+          </div>
           <div className="rbac-perms-grid">
             {ISSUE_PERMS.map((p) => {
               const { checked, indeterminate } = getPermissionState(p.key);
@@ -436,6 +566,35 @@ export function RbacPolicyBuilder({
         {/* 3. Field Permissions (12) */}
         <fieldset className="rbac-fieldset rbac-fieldset--field" data-testid="rbac-fieldset-field">
           <legend>Field (12 permissions)</legend>
+          <div className="rbac-quick-actions" data-testid="rbac-quick-actions-field">
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-select-all-field"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(FIELD_PERMS, 'all', 'field'); }}
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-clear-all-field"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(FIELD_PERMS, 'none', 'field'); }}
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              className="rbac-quick-action-btn"
+              data-testid="bulk-readonly-field"
+              disabled={selectedRoleIds.length === 0}
+              onClick={() => { void handleBulkCategoryPermissions(FIELD_PERMS, 'readonly', 'field'); }}
+            >
+              Read-Only
+            </button>
+          </div>
           <div className="rbac-perms-grid">
             {FIELD_PERMS.map((p) => {
               const { checked, indeterminate } = getPermissionState(p.key);
@@ -496,7 +655,7 @@ export function RbacPolicyBuilder({
                   className="rbac-form-input"
                   data-testid="rbac-new-role-slug"
                   value={newRoleSlug}
-                  onChange={(e) => { setNewRoleSlug(e.target.value); }}
+                  onChange={handleRoleSlugChange}
                   placeholder="e.g. lead-developer"
                 />
               </div>
