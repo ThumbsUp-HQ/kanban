@@ -15,7 +15,7 @@ PG_HBA_CONTENT = """\
 # PostgreSQL Client Authentication Configuration File
 # Standalone mode: Unix-socket only, zero TCP host listeners permitted
 local  all     postgres                         peer
-local  kanban  kanban_migrator                  scram-sha-256
+local  kanban  kanban_migrator                  peer map=kanban_map
 local  kanban  kanban_app                       scram-sha-256
 """
 

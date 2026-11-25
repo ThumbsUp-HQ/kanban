@@ -727,9 +727,9 @@ def test_backup_service_additional_coverage_branches(tmp_path: Path) -> None:
     assert _restore_secrets(extract_dir, tmp_path / "target_keyring.json") is False
 
     # 3. _execute_pg_restore returncode not in (0, 1)
-    mock_proc = SimpleNamespace(returncode=2, stderr=b"pg_restore fatal error")
+    mock_err = subprocess.CalledProcessError(2, ["pg_restore"], stderr=b"pg_restore fatal error")
     with (
-        patch("subprocess.run", return_value=mock_proc),
+        patch("subprocess.run", side_effect=mock_err),
         pytest.raises(RestoreError, match=r"pg_restore execution failed \(exit code 2\)"),
     ):
         _execute_pg_restore("pg_restore", "postgresql://localhost/db", tmp_path / "dump.pgdump")

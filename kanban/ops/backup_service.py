@@ -312,7 +312,6 @@ def _execute_pg_dump(pg_dump_bin: str, db_url: str, pgdump_file: Path) -> str:
         pg_dump_bin,
         "--format=custom",
         "--no-owner",
-        "--no-privileges",
         "--enable-row-security",
         "-f",
         str(pgdump_file),
@@ -520,8 +519,9 @@ async def _assert_target_db_empty_or_confirmed(
                     await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
                     await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
                     await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
+                    await conn.execute(text("REVOKE CREATE ON SCHEMA public FROM PUBLIC;"))
                     await conn.execute(
-                        text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+                        text("GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;")
                     )
                 except Exception as drop_err:  # noqa: BLE001
                     logger.warning(
@@ -530,17 +530,17 @@ async def _assert_target_db_empty_or_confirmed(
                     )
                 with contextlib.suppress(Exception):
                     await conn.execute(
-                        text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+                        text("GRANT USAGE ON SCHEMA kb_auth TO kanban_app, app_rls_reader;")
                     )
                 with contextlib.suppress(Exception):
                     await conn.execute(
-                        text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                        text("GRANT USAGE ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
                     )
     finally:
         await engine.dispose()
 
 
-async def _verify_post_restore_invariants(  # noqa: PLR0915
+async def _verify_post_restore_invariants(
     db_url: str,
     manifest: BackupManifest,
 ) -> tuple[int, int]:
@@ -549,77 +549,29 @@ async def _verify_post_restore_invariants(  # noqa: PLR0915
     engine = create_async_engine(async_dsn, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as conn:
-            # 1. Re-apply extensions and role grants
+            # 1. Re-apply extensions and schema privileges
             for ext in ("pgcrypto", "ltree", "pg_trgm", "btree_gist", "vector"):
                 with contextlib.suppress(Exception):
                     await conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext};"))
 
+            await conn.execute(text("REVOKE CREATE ON SCHEMA public FROM PUBLIC;"))
+            await conn.execute(text("GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;"))
             with contextlib.suppress(Exception):
                 await conn.execute(
-                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+                    text("GRANT USAGE ON SCHEMA kb_auth TO kanban_app, app_rls_reader;")
                 )
             with contextlib.suppress(Exception):
                 await conn.execute(
-                    text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
-                )
-
-            # Re-apply table, sequence, and function grants for least-privileged roles
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text(
-                        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
-                        "TO kanban_app;"
-                    )
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text("GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;")
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text(
-                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public "
-                        "TO kanban_app, app_rls_reader;"
-                    )
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text("GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_rls_reader;")
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text(
-                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kb_auth "
-                        "TO kanban_app, app_rls_reader;"
-                    )
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text(
-                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kb_infra "
-                        "TO kanban_app, app_rls_reader;"
-                    )
-                )
-            with contextlib.suppress(Exception):
-                await conn.execute(
-                    text(
-                        "GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials "
-                        "TO kanban_app;"
-                    )
+                    text("GRANT USAGE ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
                 )
             with contextlib.suppress(Exception):
                 await conn.execute(
                     text("GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;")
                 )
 
-            with contextlib.suppress(Exception):
-                await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
-            with contextlib.suppress(Exception):
-                await conn.execute(text("ALTER ROLE app_rls_reader NOBYPASSRLS;"))
+            # Enforce NOBYPASSRLS fail-closed
+            await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
+            await conn.execute(text("ALTER ROLE app_rls_reader NOBYPASSRLS;"))
 
             # 2. Verify Alembic current revision matches manifest
             if manifest.alembic_revision and manifest.alembic_revision not in ("none", "head"):
@@ -768,29 +720,25 @@ def _execute_pg_restore(pg_restore_bin: str, target_db_url: str, pgdump_file: Pa
         "--clean",
         "--if-exists",
         "--no-owner",
-        "--no-privileges",
+        "--exit-on-error",
         *conn_args,
         str(pgdump_file),
     ]
 
     try:
-        proc = subprocess.run(  # noqa: S603 - zero-shell subprocess invocation with validated arguments
+        subprocess.run(  # noqa: S603 - zero-shell subprocess invocation with validated arguments
             restore_cmd,
             env=env,
-            check=False,
+            check=True,
             capture_output=True,
         )
     except FileNotFoundError as err:
         msg = f"pg_restore executable not found at {pg_restore_bin}"
         raise RestoreError(msg) from err
     except subprocess.CalledProcessError as err:
-        msg = f"pg_restore execution failed: {err}"
+        stderr_msg = err.stderr.decode("utf-8", errors="replace")
+        msg = f"pg_restore execution failed (exit code {err.returncode}): {stderr_msg}"
         raise RestoreError(msg) from err
-
-    if proc.returncode not in (0, 1):
-        stderr_msg = proc.stderr.decode("utf-8", errors="replace")
-        msg = f"pg_restore execution failed (exit code {proc.returncode}): {stderr_msg}"
-        raise RestoreError(msg)
 
 
 def _unpack_archive_for_restore(

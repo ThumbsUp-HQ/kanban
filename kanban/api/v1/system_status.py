@@ -8,9 +8,11 @@ import asyncio
 import base64
 import binascii
 import contextlib
+import json
 import logging
 import os
 import re
+import socket
 import tempfile
 import uuid
 from datetime import UTC, datetime
@@ -34,11 +36,21 @@ from kanban.jobs.scheduled_backup import (
     run_scheduled_backup_pass,
     update_backup_schedule,
 )
-from kanban.ops.backup_crypto import KeySource, PassphraseKeySource, RawKeySource
-from kanban.ops.backup_service import restore_backup, verify_backup
+from kanban.ops.backup_crypto import (
+    BackupIntegrityError,
+    KeySource,
+    PassphraseKeySource,
+    RawKeySource,
+)
+from kanban.ops.backup_service import (
+    TargetDatabaseNotEmptyError,
+    restore_backup,
+    verify_backup,
+)
 from kanban.ops.build_info import get_build_info
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.standalone.export_service import (
+    RestoreError,
     decrypt_backup,
     encrypt_backup,
     generate_compose_export,
@@ -439,6 +451,41 @@ async def run_backup_now_endpoint(
     request: Request,
 ) -> dict[str, Any]:
     """Execute an automated backup pass immediately on demand."""
+    ops_sock = Path(os.environ.get("KB_OPS_SOCK") or "/run/postgresql/.kb_ops.sock")
+    is_socket = await asyncio.to_thread(ops_sock.is_socket)
+    if is_socket:
+        problem_to_raise: ProblemException | None = None
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(120.0)
+                client.connect(str(ops_sock))
+                client.sendall(json.dumps({"op": "scheduled_backup"}).encode("utf-8") + b"\n")
+                raw = b""
+                while not raw.endswith(b"\n"):
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    raw += chunk
+                resp = json.loads(raw.decode("utf-8"))
+                if resp.get("status") == "ok":
+                    return {
+                        "status": "success",
+                        "archive": resp["filename"],
+                        "size_bytes": resp["size_bytes"],
+                        "duration_seconds": resp["duration_seconds"],
+                    }
+                msg = resp.get("message", "Scheduled backup failed")
+                problem_to_raise = ProblemException(
+                    code="BACKUP_RUN_FAILED",
+                    status=500,
+                    title="Backup Run Failed",
+                    detail=f"Failed to execute immediate backup snapshot: {msg}",
+                )
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            logger.warning("Ops socket backup failed: %s; falling back to direct pass", exc)
+        if problem_to_raise is not None:
+            raise problem_to_raise
+
     settings = getattr(request.app.state, "settings", None)
     migrator_url = os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
     db_url = (
@@ -741,6 +788,80 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
     with tempfile.NamedTemporaryFile(prefix="kb_restore_target_", delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = Path(tmp.name)
+    with contextlib.suppress(OSError):
+        await asyncio.to_thread(tmp_path.chmod, 0o644)
+
+    ops_sock = Path(os.environ.get("KB_OPS_SOCK") or "/run/postgresql/.kb_ops.sock")
+    is_socket = await asyncio.to_thread(ops_sock.is_socket)
+    if is_socket:
+        raw_key_b64 = (
+            base64.b64encode(master_kek).decode("ascii") if not passphrase and master_kek else None
+        )
+        payload = {
+            "op": "restore_backup",
+            "archive_path": str(tmp_path),
+            "passphrase": passphrase,
+            "raw_key_b64": raw_key_b64,
+            "confirm_overwrite": True,
+        }
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(300.0)
+                client.connect(str(ops_sock))
+                client.sendall(json.dumps(payload).encode("utf-8") + b"\n")
+                raw = b""
+                while not raw.endswith(b"\n"):
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    raw += chunk
+                resp = json.loads(raw.decode("utf-8"))
+                if resp.get("status") == "ok":
+                    report_data = resp.get("report", {})
+                    if (
+                        hasattr(request.app.state, "engine")
+                        and request.app.state.engine is not None
+                    ):
+                        with contextlib.suppress(Exception):
+                            await request.app.state.engine.dispose()
+                    return {
+                        "status": "success",
+                        "message": "Database restored successfully",
+                        "workspaces_verified": report_data.get("workspaces_verified", 1),
+                        "links_audited": report_data.get("links_audited", 0),
+                        "duration_seconds": report_data.get("duration_seconds", 0.1),
+                    }
+                err_type = resp.get("error_type", "")
+                err_msg = resp.get("message", "Restore failed")
+                is_validation = err_type in (
+                    "BackupIntegrityError",
+                    "RestoreError",
+                    "TargetDatabaseNotEmptyError",
+                    "ValueError",
+                )
+                if is_validation:
+                    err_code = (
+                        "BACKUP_VERIFICATION_FAILED"
+                        if err_type in ("BackupIntegrityError", "RestoreError")
+                        else "RESTORE_VALIDATION_FAILED"
+                    )
+                    restore_problem = ProblemException(
+                        code=err_code,
+                        status=422,
+                        title="Restore Verification Failed",
+                        detail=err_msg,
+                    )
+                else:
+                    restore_problem = ProblemException(
+                        code="RESTORE_EXECUTION_FAILED",
+                        status=500,
+                        title="Restore Failed",
+                        detail=err_msg,
+                    )
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            logger.warning("Ops socket restore failed: %s; falling back to direct restore", exc)
+        if restore_problem is not None:
+            raise restore_problem
 
     try:
         report = restore_backup(
@@ -752,6 +873,24 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
         if hasattr(request.app.state, "engine") and request.app.state.engine is not None:
             with contextlib.suppress(Exception):
                 await request.app.state.engine.dispose()
+    except (
+        BackupIntegrityError,
+        RestoreError,
+        TargetDatabaseNotEmptyError,
+        ValueError,
+    ) as exc:
+        logger.warning("Database restore validation failed: %s", exc)
+        exc_code = (
+            "BACKUP_VERIFICATION_FAILED"
+            if isinstance(exc, (BackupIntegrityError, RestoreError))
+            else "RESTORE_VALIDATION_FAILED"
+        )
+        raise ProblemException(
+            code=exc_code,
+            status=422,
+            title="Restore Verification Failed",
+            detail=f"Database restore verification failed: {exc}",
+        ) from exc
     except Exception as exc:
         logger.exception("Database restore execution failed")
         raise ProblemException(
