@@ -91,44 +91,45 @@ All 5 Slice-4 UI components contain verified documentation links that resolve ag
 
 The following configuration parameters and backend contracts are documented with complete technical precision:
 
-#### 1. Standalone & Promotion Studio (10 Settings)
-- **`deployment_mode`:** Detects `STANDALONE_CONTAINER` (single container with embedded PostgreSQL 16) vs `MULTI_CONTAINER_COMPOSE` (external database, Redis, and compartmentalized services).
-- **`passphrase`:** Client-supplied encryption secret (minimum 16 characters). Derived into AES-256-GCM symmetric key via PBKDF2-HMAC-SHA256 across 600,000 iterations.
-- **`auto_backup_enabled`:** Toggles recurring automated background snapshot execution by the `.kb_ops.sock` daemon.
-- **`backup_interval_hours`:** Automated snapshot frequency options: `6`, `12`, `24`, or `48` hours.
-- **`snapshot_retention_count`:** Maximum historical snapshots retained on server disk (`3` to `30`, default `7`). Older archives are automatically unlinked.
-- **`confirm_overwrite`:** Mandatory safety gate string required for destructive database restoration (`POST /api/v1/admin/standalone/restore`). Must match exact string `"RESTORE"`.
+#### 1. Standalone & Promotion Studio (8 Settings + Backend Contracts)
+- **`deployment_mode`:** Detects `standalone_embedded_pg` (single container with embedded PostgreSQL 16) vs `production_multi_container` (external database, Redis, and compartmentalized services).
+- **`passphrase`:** Client-supplied encryption secret (minimum 16 characters). Derived into AES-256-GCM symmetric key via PBKDF2-HMAC-SHA256 (600,000 iterations) for KBKP streaming, or Argon2id for KBBAK1 archives.
+- **`auto_backup_enabled`:** Toggles recurring automated background snapshot execution by the root-privileged `/run/postgresql/.kb_ops.sock` daemon.
+- **`backup_interval_hours`:** Automated snapshot frequency configurable between `1` and `168` hours (default `24`).
+- **`snapshot_retention_count`:** Maximum historical snapshots retained on server disk (`1` to `90`, default `7`). Older archives are automatically unlinked.
+- **`confirm_overwrite`:** Mandatory safety gate string required for destructive database restoration (`POST /api/v1/admin/standalone/backups/restore`). Must match exact string `"RESTORE"`.
+- **`backup_storage_path`:** Server-side directory where backups reside (`/var/lib/kanban/data/backups`).
 - **`compose_networks`:** 5 isolated production Docker networks (`edge_net`, `app_net`, `data_net`, `sandbox_net`, `egress_llm_net`).
-- **`privilege_separation`:** Background maintenance commands execute through root-privileged UNIX domain socket `/var/lib/kanban/.kb_ops.sock`. Web process `kanban_app` lacks direct shell access.
-- **`backup_format_streaming` (`KBKP`):** Direct download endpoint `POST /api/v1/admin/standalone/backup` streams AES-256-GCM encrypted payload without server disk buffering.
-- **`backup_format_snapshot` (`KBBAK1`):** Server snapshot engine `POST /api/v1/admin/standalone/backups/run-now` generates timestamped `.kbbak` archive bundling `manifest.json`, `database.sql.gz`, `object_graph.jsonl`, and `media/`.
+- **`privilege_separation`:** Background maintenance commands execute through root-privileged UNIX domain socket `/run/postgresql/.kb_ops.sock` (JSON-line commands `"pg_dump_raw"`, `"restore_backup"`, `"scheduled_backup"`). Web process `kanban_app` lacks direct shell access.
+- **`backup_format_streaming` (`KBKP`):** Direct download endpoint `POST /api/v1/admin/standalone/backups/download` streams AES-256-GCM encrypted payload with a 34-byte binary header (`KBKP` + version 1 + kdf_mode + 16B salt + 12B nonce) without server disk buffering.
+- **`backup_format_snapshot` (`KBBAK1`):** Server snapshot engine `POST /api/v1/admin/standalone/backups/run-now` generates timestamped `.kbbak` archive with 37-byte header (`KBBAK1\x00\x01`) bundling `manifest.json`, `database.pgdump`, `attachments/`, and optional `secrets_carryover.json`.
 
-#### 2. Migration Import Studio (7 Settings)
-- **`source`:** Source parser and schema selector: `plane`, `jira`, `github`, `linear`, or `portable`.
+#### 2. Migration Import Studio (6 Settings + Backend Contracts)
+- **`per_source_endpoints`:** Ingestion is executed via 4 distinct endpoints: `POST /api/v1/admin/imports/plane`, `POST /api/v1/admin/imports/jira`, `POST /api/v1/admin/imports/github`, and `POST /api/v1/admin/imports/linear`.
 - **`workspace_slug`:** Destination workspace tenant.
-- **`project_key`:** Destination project prefix key for sequential issue allocation (e.g. `KAN`).
+- **`project_key`:** Destination project prefix key for sequential issue allocation (e.g. `KAN`, `JIRA`, `GH`, `LIN`).
 - **`dry_run`:** Boolean toggle (`true` executes simulation in `SAVEPOINT`; `false` executes atomic commit).
 - **`user_map`:** JSON dictionary mapping source accounts or emails to canonical 👍kanban users.
-- **`preserve_states`:** Boolean flag controlling whether source states are recreated verbatim or mapped to standard Kanban categories.
-- **`legacy_key_aliases`:** Historical keys (`JIRA-101`, `GH-88`, `ENG-42`) stored in `issue_key_aliases`, serving `HTTP 308 Permanent Redirect` on subsequent queries.
+- **`export_workspace_slug` & `export_scrub`:** Used by `POST /api/v1/admin/exports/portable` to export canonical `.tar.gz` bundles with optional secret scrubbing (`scrub: true`).
+- **`legacy_key_aliases`:** Historical keys (`JIRA-101`, `GH-88`, `ENG-42`) stored in `issue_key_aliases`. `GET /api/v1/issues/{issue_key}` returns `200 OK` JSON with `X-Kanban-Canonical-Key` for API clients, and returns `HTTP 308 Permanent Redirect` with `Location: /projects/{project_key}/issues/{canonical_key}` when `Accept: text/html`.
 
 #### 3. Admin Diagnostics & Realtime Probes Studio (9 Subsystems / Probes)
 - **`postgresql_rls`:** Connectivity, pool saturation, 82 single-head migrations, `FORCE RLS` on 100 tables.
 - **`realtime_hub_outbox`:** Transactional outbox relay lag (< 5s), dispatch loop, `LISTEN/NOTIFY` channels.
 - **`job_worker_pool`:** Background task executor, active tasks, dead-letter queue depth (must equal 0).
-- **`wasm_script_sandbox`:** Wasmtime AST compiler state, 64MB memory cap, fuel execution budget.
+- **`wasm_script_sandbox`:** Wasmtime AST compiler state, 32 MiB memory cap (33,554,432 bytes), fuel execution budget.
 - **`agent_runtime_providers`:** Health and latency of active AI model providers (`gemini`, `openai`, `ollama`), monthly token cap.
 - **`remote_runner_fleet`:** mTLS build nodes connected over port 8444, heartbeat timestamps (< 30s).
 - **`rate_limiter`:** In-memory token bucket capacity and IP throttle health.
 - **`realtime_pubsub_probe`:** On-demand PostgreSQL `LISTEN/NOTIFY` latency measurement (target < 1.0ms).
 - **`websocket_ws_probe`:** Real WebSocket binary ping frame latency measurement (target < 50ms).
 
-#### 4. Universal Object Graph Link Auditor Studio (5 Settings / Controls)
-- **`audit_scan_mode`:** Graph traversal mode (`full` or `incremental`) across `object_links` without table locks.
-- **`defect_class_filter`:** Filters anomalies across all 7 invalidity classes (`DANGLING_TARGET`, `DANGLING_SOURCE`, `EXPIRED_ENDPOINT`, `TENANT_MISMATCH`, `TYPE_UNREGISTERED`, `CARDINALITY_VIOLATION`, `SELF_REFERENTIAL_CYCLE`).
-- **`justification`:** Mandatory rationale string (minimum 10 characters) required for purging links (`POST /api/v1/admin/object-links:purge`).
-- **`dry_run`:** Two-stage blast-radius simulation toggle before destructive deletion.
-- **`immutable_audit_ledger`:** Purge writes `INVALID_OBJECT_LINK_PURGED` event to `activity_records` capturing purged link IDs, defect classes, operator, and rationale.
+#### 4. Universal Object Graph Link Auditor Studio (4 Controls + Backend Contracts)
+- **`audit_scan`:** Graph traversal via `POST /api/v1/admin/object-links:audit` (or UI **Run Integrity Scan**) across `object_links` without table locks.
+- **`reason_filter`:** Filters anomalies across all 7 formal `InvalidLinkReason` classes (`DANGLING_SOURCE`, `DANGLING_TARGET`, `SOFT_DELETED_ENDPOINT`, `ARCHIVED_POLICY_VIOLATION`, `TYPE_MATRIX_VIOLATION`, `CROSS_WORKSPACE_LEAK`, `PERMISSION_SEVERED`).
+- **`audit_ids`:** List of 1 to 200 flagged audit record UUIDs to purge via `POST /api/v1/admin/object-links:purge`.
+- **`reason`:** Mandatory administrative justification string (10 to 500 characters) required for purging links.
+- **`immutable_audit_ledger`:** Purge writes `INVALID_OBJECT_LINK_PURGED` event to `activity_records` capturing purged link IDs, defect classes, operator, and rationale, returning `purged_count` and `activity_ids`.
 
 ---
 

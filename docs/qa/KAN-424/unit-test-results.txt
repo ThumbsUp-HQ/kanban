@@ -1,5 +1,5 @@
 === UNIT TEST RESULTS REPORT: KAN-424 ===
-Timestamp: 2026-11-25T20:13:58Z
+Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 --- PYTEST SUITE (Offline Wiki Bundle Sync & Image Parity) ---
 Command: uv run python -m pytest kanban/tests/test_wiki_bundle_sync.py
@@ -21,19 +21,19 @@ Command: pnpm --dir kanban/web exec vitest run src/features/docs-center/__tests_
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 175ms
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 178ms
 Not implemented: navigation to another Document
- ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 5291ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 5216ms
    ✓ DocsCenter & Help System (KAN-16) (49)
      ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
-       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1670ms
-       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 473ms
-       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 397ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1662ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 476ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 414ms
 
  Test Files  2 passed (2)
       Tests  70 passed (70)
-   Start at  15:09:15
-   Duration  6.60s (tests 75%, environment 18%, import 5%, transform 1%, worker 1%)
+   Start at  15:28:08
+   Duration  6.61s (tests 73%, environment 17%, import 5%, transform 5%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -50,4 +50,4 @@ All files          |    99.6 |    96.44 |     100 |     100 |
 
 --- PLAYWRIGHT SUITE (Multi-Viewport Layout & Embedded Workout Visual Proof) ---
 Command: pnpm --dir kanban/web exec playwright test e2e/qa/kan-424-slice4-docs-screenshots.spec.ts --project=desktop
-Result: 1 passed (46.4s) - Verified 0 horizontal overflow at 390px, 768px, 1024px, 1440px, non-zero naturalWidth image load, and unclipped configuration tables.
+Result: 1 passed (48.0s) - Verified 0 horizontal overflow at 390px, 768px, 1024px, 1440px, non-zero naturalWidth image load, and unclipped configuration tables.

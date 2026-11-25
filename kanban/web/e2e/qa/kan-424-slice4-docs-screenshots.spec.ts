@@ -248,7 +248,7 @@ test.describe('KAN-424: Slice-4 Published Docs Visual Verification', () => {
     });
 
     // Dedicated Scrolled-in-View Verification 07: Slice-4 Studio Configuration Reference Tables
-    await page.goto('/docs/studio-configuration-reference#6-migration-import-studio');
+    await page.goto('/docs/studio-configuration-reference#migration-import-studio');
     await applyTheme(page, 'light');
     const slice4Heading = page.locator('h2', { hasText: 'Migration Import Studio' }).first();
     await expect(slice4Heading).toBeVisible();
