@@ -147,7 +147,7 @@ class RequestIdMiddleware:
         """Initialize with inner ASGI application."""
         self.app = app
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:  # noqa: C901
         """Intercept HTTP scopes to establish and echo request-id and reset user context."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -179,7 +179,17 @@ class RequestIdMiddleware:
                 # Add X-Request-ID header to response if not already present
                 if not any(name.lower() == b"x-request-id" for name, _ in raw_headers):
                     raw_headers.append((b"x-request-id", assigned_id.encode("ascii")))
-                    message["headers"] = raw_headers
+                # Add X-KB-AAL2-Expires-At header if present in scope state
+                aal2_exp = scope.get("state", {}).get("aal2_expires_at")
+                hdr_match = any(name.lower() == b"x-kb-aal2-expires-at" for name, _ in raw_headers)
+                if aal2_exp and not hdr_match:
+                    exp_val = (
+                        aal2_exp.isoformat()
+                        if hasattr(aal2_exp, "isoformat")
+                        else str(aal2_exp)
+                    )
+                    raw_headers.append((b"x-kb-aal2-expires-at", exp_val.encode("ascii")))
+                message["headers"] = raw_headers
             await send(message)
 
         try:

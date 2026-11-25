@@ -173,8 +173,6 @@ export function LinkAuditorStudio(): JSX.Element {
 
   const isServerAdmin = Boolean(user?.is_server_admin);
   const isWorkspaceAdmin = Boolean(user?.is_workspace_admin) || user?.workspace_role === 'WORKSPACE_ADMIN';
-  const aal = user?.aal_level;
-  const isAal2 = aal === 2 || aal === '2' || aal === 'aal2' || user?.auth_aal === 'aal2';
 
   // Audit list query
   const auditListQueryKey = [
@@ -202,7 +200,7 @@ export function LinkAuditorStudio(): JSX.Element {
         },
       );
     },
-    enabled: (isServerAdmin || isWorkspaceAdmin) && isAal2,
+    enabled: isServerAdmin || isWorkspaceAdmin,
     staleTime: 10_000,
   });
 
@@ -277,8 +275,8 @@ export function LinkAuditorStudio(): JSX.Element {
     );
   }
 
-  // Non-admins or non-AAL2 receive uniform 404 view preventing enumeration
-  if ((!isServerAdmin && !isWorkspaceAdmin) || !isAal2) {
+  // Non-admins receive uniform 404 view preventing enumeration
+  if (!isServerAdmin && !isWorkspaceAdmin) {
     return <NotFoundView />;
   }
 

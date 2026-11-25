@@ -257,7 +257,10 @@ async def test_case_9_aal2_policy_enforcement(  # noqa: PLR0915
         stale_time = datetime.now(UTC) - timedelta(seconds=905)
         async with factory.session(anon_ctx) as session:
             await session.execute(
-                text("UPDATE sessions SET aal2_verified_at = :stale WHERE id = :id"),
+                text(
+                    "UPDATE sessions SET aal2_verified_at = :stale, "
+                    "aal2_last_active_at = :stale WHERE id = :id"
+                ),
                 {"stale": stale_time, "id": sess_aal2.session_id},
             )
 

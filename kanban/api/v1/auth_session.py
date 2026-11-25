@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends
@@ -41,8 +42,6 @@ from kanban.auth.sessions.csrf import (
 )
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from kanban.auth.sessions.service import SessionService
     from kanban.security.keys import KeyMaterial
 
@@ -123,7 +122,7 @@ def _append_session_and_csrf_cookies(
 
 
 @router.get("/session")
-async def get_session_info(request: Request) -> JSONResponse:
+async def get_session_info(request: Request) -> JSONResponse:  # noqa: C901, PLR0912
     """Return active session status and CSRF token, issuing pre-session CSRF if unauthenticated."""
     key_material: KeyMaterial | None = getattr(request.app.state, "key_material", None)
     session_hmac_key = b"\x00" * 32 if key_material is None else key_material.session_hmac_key
@@ -157,6 +156,35 @@ async def get_session_info(request: Request) -> JSONResponse:
         idle_expires_at, absolute_expires_at, remember_me = await _fetch_session_expiry(
             request, principal_ctx
         )
+        aal2_active = False
+        aal2_expires_at_iso: str | None = None
+        if principal_ctx.aal_level == 2:  # noqa: PLR2004
+            exp = principal_ctx.aal2_expires_at
+            if exp is not None:
+                now = datetime.now(UTC)
+                exp_tz = exp if exp.tzinfo else exp.replace(tzinfo=UTC)
+                if now < exp_tz:
+                    aal2_active = True
+                    aal2_expires_at_iso = exp_tz.isoformat()
+            elif principal_ctx.aal2_verified_at is not None:
+                now = datetime.now(UTC)
+                v_at = (
+                    principal_ctx.aal2_verified_at
+                    if principal_ctx.aal2_verified_at.tzinfo
+                    else principal_ctx.aal2_verified_at.replace(tzinfo=UTC)
+                )
+                act_at = principal_ctx.aal2_last_active_at
+                if act_at and act_at.tzinfo:
+                    l_at = act_at
+                elif act_at:
+                    l_at = act_at.replace(tzinfo=UTC)
+                else:
+                    l_at = v_at
+                cand = min(l_at + timedelta(seconds=900), v_at + timedelta(seconds=14400))
+                if now < cand:
+                    aal2_active = True
+                    aal2_expires_at_iso = cand.isoformat()
+
         data: dict[str, Any] = {
             "authenticated": True,
             "principal_id": str(principal_ctx.principal_id),
@@ -170,6 +198,8 @@ async def get_session_info(request: Request) -> JSONResponse:
                 absolute_expires_at.isoformat() if absolute_expires_at else None
             ),
             "remember_me": remember_me,
+            "aal2_active": aal2_active,
+            "aal2_expires_at": aal2_expires_at_iso,
         }
     else:
         data = {
@@ -183,6 +213,8 @@ async def get_session_info(request: Request) -> JSONResponse:
             "idle_expires_at": None,
             "absolute_expires_at": None,
             "remember_me": False,
+            "aal2_active": False,
+            "aal2_expires_at": None,
         }
 
     response = JSONResponse(content=data)
@@ -209,6 +241,80 @@ async def get_current_principal(
 
 
 get_current_principal.allow_mfa_pending = True  # type: ignore[attr-defined]
+
+
+class Aal2TouchResponse(BaseModel):
+    """Response payload for AAL2 WebSudo sliding window touch."""
+
+    aal2_active: bool
+    aal2_expires_at: str | None = None
+
+
+@router.post("/aal2/touch", response_model=Aal2TouchResponse)
+async def touch_aal2_session(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Touch and slide the AAL2 WebSudo sliding window.
+
+    Returns 200 with { aal2_active: bool, aal2_expires_at: str | None } without
+    throwing 403 when expired.
+    """
+    if principal.session_id is None or principal.aal_level < 2:  # noqa: PLR2004
+        return JSONResponse(content={"aal2_active": False, "aal2_expires_at": None})
+
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        return JSONResponse(content={"aal2_active": False, "aal2_expires_at": None})
+
+    anon_ctx = RLSContext(
+        principal_id=uuid.UUID(int=0),
+        workspace_id=uuid.UUID(int=0),
+        token_scopes=("session",),
+        aal_level=1,
+    )
+    async with session_factory.session(anon_ctx) as session:
+        res = await session.execute(
+            text(
+                "SELECT aal2_active, aal2_expires_at FROM kb_auth.session_touch_aal2("
+                "  :sid, 900, 14400, FALSE"
+                ")"
+            ),
+            {"sid": principal.session_id},
+        )
+        row = res.mappings().first()
+        if not row or not row["aal2_active"]:
+            return JSONResponse(content={"aal2_active": False, "aal2_expires_at": None})
+
+        exp_dt: datetime | None = row["aal2_expires_at"]
+        exp_str = exp_dt.isoformat() if exp_dt else None
+        resp = JSONResponse(content={"aal2_active": True, "aal2_expires_at": exp_str})
+        if exp_str:
+            resp.headers["X-KB-AAL2-Expires-At"] = exp_str
+        return resp
+
+
+@router.post("/aal2/drop")
+async def drop_aal2_session(
+    request: Request,
+    principal: Annotated[PrincipalContext, Depends(get_principal)],
+) -> JSONResponse:
+    """Explicitly drop active AAL2 WebSudo elevation."""
+    if principal.session_id is not None:
+        session_factory = getattr(request.app.state, "session_factory", None)
+        if session_factory is not None:
+            anon_ctx = RLSContext(
+                principal_id=uuid.UUID(int=0),
+                workspace_id=uuid.UUID(int=0),
+                token_scopes=("session",),
+                aal_level=1,
+            )
+            async with session_factory.session(anon_ctx) as session:
+                await session.execute(
+                    text("SELECT kb_auth.session_drop_aal2(:sid)"),
+                    {"sid": principal.session_id},
+                )
+    return JSONResponse(content={"ok": True, "aal2_active": False})
 
 
 @router.post("/totp/enroll", include_in_schema=False)

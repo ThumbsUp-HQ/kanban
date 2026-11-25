@@ -54,6 +54,8 @@ class SessionPolicy:
     idle_seconds: int = DEFAULT_IDLE_SECONDS
     absolute_seconds: int = DEFAULT_ABSOLUTE_SECONDS
     aal2_fresh_seconds: int = DEFAULT_AAL2_FRESH_SECONDS
+    aal2_idle_seconds: int = 900
+    aal2_absolute_seconds: int = 14400
     remember_idle_seconds: int = DEFAULT_REMEMBER_IDLE_SECONDS
     remember_absolute_seconds: int = DEFAULT_REMEMBER_ABSOLUTE_SECONDS
 
@@ -63,6 +65,8 @@ class SessionPolicy:
             ("idle_seconds", self.idle_seconds),
             ("absolute_seconds", self.absolute_seconds),
             ("aal2_fresh_seconds", self.aal2_fresh_seconds),
+            ("aal2_idle_seconds", self.aal2_idle_seconds),
+            ("aal2_absolute_seconds", self.aal2_absolute_seconds),
             ("remember_idle_seconds", self.remember_idle_seconds),
             ("remember_absolute_seconds", self.remember_absolute_seconds),
         ):
@@ -117,6 +121,9 @@ class IssuedSession:
     absolute_expires_at: datetime
     is_persistent: bool = True
     principal_id: uuid.UUID | None = None
+    aal2_verified_at: datetime | None = None
+    aal2_last_active_at: datetime | None = None
+    aal2_expires_at: datetime | None = None
 
 
 class SessionService:
@@ -178,13 +185,23 @@ class SessionService:
             absolute_expires_at = now + timedelta(seconds=self._policy.absolute_seconds)
 
         aal2_verified_at = now if aal_level == 2 else None  # noqa: PLR2004
+        aal2_last_active_at = now if aal_level == 2 else None  # noqa: PLR2004
+        aal2_expires_at = (
+            min(
+                now + timedelta(seconds=self._policy.aal2_idle_seconds),
+                idle_expires_at,
+                absolute_expires_at,
+            )
+            if aal_level == 2  # noqa: PLR2004
+            else None
+        )
 
         stmt = text(
             "SELECT kb_auth.session_create("
             "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
             "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
             "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
-            "  :p_is_persistent"
+            "  :p_is_persistent, :p_aal2_last_active_at"
             ")"
         )
         await session.execute(
@@ -202,6 +219,7 @@ class SessionService:
                 "p_absolute_expires_at": absolute_expires_at,
                 "p_rotated_from_id": None,
                 "p_is_persistent": remember_me,
+                "p_aal2_last_active_at": aal2_last_active_at,
             },
         )
 
@@ -219,6 +237,9 @@ class SessionService:
             absolute_expires_at=absolute_expires_at,
             is_persistent=remember_me,
             principal_id=principal_id,
+            aal2_verified_at=aal2_verified_at,
+            aal2_last_active_at=aal2_last_active_at,
+            aal2_expires_at=aal2_expires_at,
         )
 
     async def elevate_aal(
@@ -252,6 +273,16 @@ class SessionService:
         cookie_val = encode_session_cookie(token, self._session_hmac_key)
         csrf_token = generate_csrf_token(new_id, self._session_hmac_key)
 
+        aal2_exp = (
+            min(
+                resolved.last_seen_at + timedelta(seconds=self._policy.aal2_idle_seconds),
+                resolved.idle_expires_at,
+                resolved.absolute_expires_at,
+            )
+            if new_aal == 2  # noqa: PLR2004
+            else None
+        )
+
         return IssuedSession(
             session_id=new_id,
             token=token,
@@ -263,6 +294,9 @@ class SessionService:
             absolute_expires_at=resolved.absolute_expires_at,
             is_persistent=resolved.is_persistent,
             principal_id=resolved.principal_id,
+            aal2_verified_at=resolved.aal2_verified_at,
+            aal2_last_active_at=resolved.aal2_last_active_at,
+            aal2_expires_at=aal2_exp,
         )
 
     async def logout(self, session: AsyncSession, session_id: uuid.UUID) -> bool:
@@ -339,12 +373,13 @@ class SessionService:
         token = generate_session_token()
         token_sha256 = hash_session_token(token)
 
+        aal2_last_active = getattr(orig, "aal2_last_active_at", None) or orig.aal2_verified_at
         stmt = text(
             "SELECT kb_auth.session_create("
             "  :p_id, :p_token_sha256, :p_principal_id, :p_workspace_id, "
             "  :p_auth_card_id, :p_aal_level, :p_aal2_verified_at, :p_mfa_pending, "
             "  :p_idle_expires_at, :p_absolute_expires_at, :p_rotated_from_id, "
-            "  :p_is_persistent"
+            "  :p_is_persistent, :p_aal2_last_active_at"
             ")"
         )
         await session.execute(
@@ -362,11 +397,22 @@ class SessionService:
                 "p_absolute_expires_at": absolute_expires_at,
                 "p_rotated_from_id": orig.id,
                 "p_is_persistent": is_persistent,
+                "p_aal2_last_active_at": aal2_last_active,
             },
         )
 
         cookie_val = encode_session_cookie(token, self._session_hmac_key)
         csrf_token = generate_csrf_token(new_session_id, self._session_hmac_key)
+
+        aal2_exp = (
+            min(
+                now + timedelta(seconds=self._policy.aal2_idle_seconds),
+                idle_expires_at,
+                absolute_expires_at,
+            )
+            if orig.aal_level == 2  # noqa: PLR2004
+            else None
+        )
 
         return IssuedSession(
             session_id=new_session_id,
@@ -379,7 +425,49 @@ class SessionService:
             absolute_expires_at=absolute_expires_at,
             is_persistent=is_persistent,
             principal_id=target_principal_id,
+            aal2_verified_at=orig.aal2_verified_at,
+            aal2_last_active_at=aal2_last_active,
+            aal2_expires_at=aal2_exp,
         )
+
+    async def touch_aal2(
+        self,
+        session: AsyncSession,
+        session_id: uuid.UUID,
+        *,
+        idle_seconds: int | None = None,
+        abs_seconds: int | None = None,
+        force: bool = False,
+    ) -> tuple[bool, datetime | None]:
+        """Touch and slide AAL2 WebSudo sliding window. Returns (aal2_active, aal2_expires_at)."""
+        stmt = text(
+            "SELECT aal2_active, aal2_expires_at FROM kb_auth.session_touch_aal2("
+            "  :p_session_id, :p_idle, :p_abs, :p_force"
+            ")"
+        )
+        res = await session.execute(
+            stmt,
+            {
+                "p_session_id": session_id,
+                "p_idle": idle_seconds or self._policy.aal2_idle_seconds,
+                "p_abs": abs_seconds or self._policy.aal2_absolute_seconds,
+                "p_force": force,
+            },
+        )
+        row = res.mappings().first()
+        if not row:
+            return False, None
+        return bool(row["aal2_active"]), row["aal2_expires_at"]
+
+    async def drop_aal2(
+        self,
+        session: AsyncSession,
+        session_id: uuid.UUID,
+    ) -> bool:
+        """Drop active AAL2 WebSudo elevation for session."""
+        stmt = text("SELECT kb_auth.session_drop_aal2(:p_session_id)")
+        res = await session.execute(stmt, {"p_session_id": session_id})
+        return bool(res.scalar_one())
 
     async def resolve_session(
         self, session: AsyncSession, token_sha256: bytes

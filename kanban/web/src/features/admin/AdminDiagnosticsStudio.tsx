@@ -340,9 +340,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
   }
 
   const isAuthorized = Boolean(
-    user &&
-      (user.is_server_admin === true || user.is_workspace_admin === true) &&
-      (user.aal_level === 2 || user.auth_aal === 'aal2'),
+    user && (user.is_server_admin === true || user.is_workspace_admin === true),
   );
 
   if (!isAuthorized) {

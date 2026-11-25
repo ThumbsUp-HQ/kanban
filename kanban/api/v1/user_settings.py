@@ -12,6 +12,7 @@ import os
 import re
 import uuid
 import zoneinfo
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
 
 from fastapi import APIRouter, Depends, Response
@@ -281,6 +282,37 @@ async def build_me_response(  # noqa: C901, PLR0912, PLR0915
             )
 
     handle = username or display_name or str(principal.principal_id)
+    aal2_active = False
+    aal2_expires_at_iso: str | None = None
+    if principal.aal_level == 2:  # noqa: PLR2004
+        exp = principal.aal2_expires_at
+        if exp is not None:
+            now = datetime.now(UTC)
+            exp_tz = exp if exp.tzinfo else exp.replace(tzinfo=UTC)
+            if now < exp_tz:
+                aal2_active = True
+                aal2_expires_at_iso = exp_tz.isoformat()
+        elif principal.aal2_verified_at is not None:
+            now = datetime.now(UTC)
+            v_at = (
+                principal.aal2_verified_at
+                if principal.aal2_verified_at.tzinfo
+                else principal.aal2_verified_at.replace(tzinfo=UTC)
+            )
+            l_at = (
+                principal.aal2_last_active_at
+                if (principal.aal2_last_active_at and principal.aal2_last_active_at.tzinfo)
+                else (
+                    principal.aal2_last_active_at.replace(tzinfo=UTC)
+                    if principal.aal2_last_active_at
+                    else v_at
+                )
+            )
+            cand = min(l_at + timedelta(seconds=900), v_at + timedelta(seconds=14400))
+            if now < cand:
+                aal2_active = True
+                aal2_expires_at_iso = cand.isoformat()
+
     return JSONResponse(
         content={
             "id": str(principal.principal_id),
@@ -300,6 +332,8 @@ async def build_me_response(  # noqa: C901, PLR0912, PLR0915
             "has_local_password": has_local_password,
             "aal_level": principal.aal_level,
             "mfa_pending": getattr(principal, "mfa_pending", False),
+            "aal2_active": aal2_active,
+            "aal2_expires_at": aal2_expires_at_iso,
         }
     )
 

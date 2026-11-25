@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   Google,
   GitHub,
@@ -51,6 +52,7 @@ export function AuthCardEditorDrawer({
   onSave,
   onTestHandshake,
 }: AuthCardEditorDrawerProps): JSX.Element | null {
+  useAal2DirtyKeepalive(isOpen);
   const isEdit = Boolean(card);
   const drawerRef = useRef<HTMLDivElement | null>(null);
 

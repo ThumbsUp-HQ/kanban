@@ -4,6 +4,7 @@
 import React, { useState, useEffect, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   createAgentDefinition,
   updateAgentDefinition,
@@ -523,6 +524,7 @@ export function AgentDefinitionEditorDrawer({
   onSaved,
   aiProviders,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
+  useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
 
   return (

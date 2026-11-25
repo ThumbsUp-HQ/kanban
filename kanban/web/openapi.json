@@ -1,6 +1,31 @@
 {
   "components": {
     "schemas": {
+      "Aal2TouchResponse": {
+        "description": "Response payload for AAL2 WebSudo sliding window touch.",
+        "properties": {
+          "aal2_active": {
+            "title": "Aal2 Active",
+            "type": "boolean"
+          },
+          "aal2_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aal2 Expires At"
+          }
+        },
+        "required": [
+          "aal2_active"
+        ],
+        "title": "Aal2TouchResponse",
+        "type": "object"
+      },
       "AccessManifest": {
         "description": "Complete S3.4 access manifest powering the \ud83d\udee1\ufe0f access pill and inspector.",
         "properties": {
@@ -595,7 +620,7 @@
           },
           "client_type": {
             "default": "public",
-            "description": "OAuth 2.1 client type (public)",
+            "description": "OAuth 2.1 client type (public or confidential)",
             "title": "Client Type",
             "type": "string"
           },
@@ -619,7 +644,6 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 5,
             "minItems": 1,
             "title": "Redirect Uris",
             "type": "array"
@@ -641,7 +665,7 @@
           },
           "token_endpoint_auth_method": {
             "default": "none",
-            "description": "Authentication method: 'none' or 'private_key_jwt'",
+            "description": "Authentication method: 'none', 'private_key_jwt', 'client_secret_basic', or 'client_secret_post'",
             "title": "Token Endpoint Auth Method",
             "type": "string"
           }
@@ -11666,8 +11690,11 @@
             "title": "Client Name"
           },
           "client_type": {
-            "const": "public",
             "default": "public",
+            "enum": [
+              "public",
+              "confidential"
+            ],
             "title": "Client Type",
             "type": "string"
           },
@@ -13570,6 +13597,19 @@
             "description": "Human-readable explanation specific to this occurrence",
             "title": "Detail"
           },
+          "doc_href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Documentation URI for troubleshooting this problem",
+            "title": "Doc Href"
+          },
           "errors": {
             "anyOf": [
               {
@@ -13598,6 +13638,19 @@
             "default": null,
             "description": "Target field associated with reference or validation failure",
             "title": "Field"
+          },
+          "help_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Human-readable remediation guidance and context",
+            "title": "Help Summary"
           },
           "hidden_open_count": {
             "anyOf": [
@@ -22329,9 +22382,9 @@
   },
   "info": {
     "title": "\ud83d\udc4dkanban API",
-    "version": "0.2.1395",
-    "x-build-commit": "72e49fe57958",
-    "x-openapi-bundle-hash": "1fd26b1bdd8c25f6b20ed4c319af206043f8700fe482cd9043699fa09f5b1d19"
+    "version": "0.2.1524",
+    "x-build-commit": "71b847bab941",
+    "x-openapi-bundle-hash": "6f583f629ae2cedb9f94867196b5bfe9586be9752b3b43ff9e2a4c56d1454295"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -30100,6 +30153,86 @@
         ]
       }
     },
+    "/api/v1/auth/aal2/drop": {
+      "post": {
+        "description": "Explicitly drop active AAL2 WebSudo elevation.",
+        "operationId": "drop_aal2_session_api_v1_auth_aal2_drop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Drop Aal2 Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/aal2/touch": {
+      "post": {
+        "description": "Touch and slide the AAL2 WebSudo sliding window.\n\nReturns 200 with { aal2_active: bool, aal2_expires_at: str | None } without throwing 403 when expired.",
+        "operationId": "touch_aal2_session_api_v1_auth_aal2_touch_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Aal2TouchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Touch Aal2 Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/cards": {
       "get": {
         "description": "Retrieve enabled authentication cards for display on the public sign-in view.\n\nReturns only non-sensitive login button metadata in sort_rank order.\nExcludes private configs, secrets, email domains, and disabled cards.",
@@ -30196,7 +30329,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 2048,
+                  "maxLength": 8192,
                   "type": "string"
                 },
                 {
@@ -30213,7 +30346,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 2048,
+                  "maxLength": 8192,
                   "type": "string"
                 },
                 {
@@ -31575,7 +31708,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 2048,
+                  "maxLength": 8192,
                   "type": "string"
                 },
                 {
@@ -46804,7 +46937,7 @@
     },
     "/oauth/register": {
       "post": {
-        "description": "Register public OAuth 2.1 client with strict URI and rate limit validation.",
+        "description": "Register public or confidential OAuth 2.1 client with strict validation.",
         "operationId": "oauth_register_client_oauth_register_post",
         "requestBody": {
           "content": {

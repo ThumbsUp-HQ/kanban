@@ -1155,6 +1155,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/principals/{principal_id}/role-labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List assigned role labels for principal
+         * @description List all custom and built-in role labels attached to a user, group, or agent.
+         */
+        get: operations["list_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_get"];
+        /**
+         * Batch set role labels for principal
+         * @description Batch replace all role labels on a principal (multi-role chip picker support).
+         */
+        put: operations["batch_set_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_put"];
+        /**
+         * Assign role label to principal
+         * @description Attach a role label to a principal (Rule 1).
+         */
+        post: operations["assign_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/principals/{principal_id}/role-labels/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a role label from principal
+         * @description Detach a role label from a principal (Rule 1).
+         */
+        delete: operations["remove_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels__role_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/projects/blueprint:apply": {
         parameters: {
             query?: never;
@@ -1208,6 +1256,102 @@ export interface paths {
          */
         get: operations["get_project_blueprint_api_v1_admin_projects__project_ref__blueprint_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rbac/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List RBAC roles for workspace
+         * @description List all system and custom RBAC roles in workspace with their assigned permissions.
+         */
+        get: operations["list_roles_endpoint_api_v1_admin_rbac_roles_get"];
+        put?: never;
+        /**
+         * Create a custom RBAC role
+         * @description Create a new custom RBAC role (Rule 3).
+         *
+         *     WORKSPACE_ADMIN and SERVER_ADMIN can create roles.
+         *     If cloned by WORKSPACE_ADMIN from a role with workspace:* permissions,
+         *     workspace:* grants are automatically stripped so escalation is prevented.
+         */
+        post: operations["create_role_endpoint_api_v1_admin_rbac_roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rbac/roles/permissions:batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Batch update a permission across multiple roles
+         * @description Toggle a permission key across multiple roles simultaneously (tri-state checkbox support).
+         */
+        put: operations["batch_update_role_permissions_endpoint_api_v1_admin_rbac_roles_permissions_batch_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rbac/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete custom RBAC role
+         * @description Delete a custom RBAC role (Rule 1). Built-in roles cannot be deleted.
+         */
+        delete: operations["delete_role_endpoint_api_v1_admin_rbac_roles__role_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update RBAC role attributes
+         * @description Update role display name, color_hex, or description (Rule 1).
+         */
+        patch: operations["update_role_endpoint_api_v1_admin_rbac_roles__role_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/rbac/roles/{role_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get permissions for a role
+         * @description Get active permissions assigned to an RBAC role.
+         */
+        get: operations["get_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_get"];
+        /**
+         * Replace permissions for a role
+         * @description Replace all permissions on a role (Rule 1 & Rule 2).
+         */
+        put: operations["set_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1421,6 +1565,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get system settings (Server Admin + AAL2)
+         * @description Retrieve system-level governance and feature flags.
+         */
+        get: operations["get_system_settings_api_v1_admin_system_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update system settings (Server Admin + AAL2)
+         * @description Update system-level governance flags.
+         */
+        patch: operations["update_system_settings_api_v1_admin_system_settings_patch"];
         trace?: never;
     };
     "/api/v1/admin/trash": {
@@ -1738,6 +1906,48 @@ export interface paths {
          * @description Verify Capability.VIEW on owning resource and mint 300s signed URL.
          */
         post: operations["create_signed_url_api_v1_attachments__attachment_id__signed_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/aal2/drop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop Aal2 Session
+         * @description Explicitly drop active AAL2 WebSudo elevation.
+         */
+        post: operations["drop_aal2_session_api_v1_auth_aal2_drop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/aal2/touch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Touch Aal2 Session
+         * @description Touch and slide the AAL2 WebSudo sliding window.
+         *
+         *     Returns 200 with { aal2_active: bool, aal2_expires_at: str | None } without throwing 403 when expired.
+         */
+        post: operations["touch_aal2_session_api_v1_auth_aal2_touch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3405,7 +3615,7 @@ export interface paths {
          * @description Retrieve external Markdown image over DNS-pinned cookieless socket.
          *
          *     Requires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.
-         *     Validates HMAC signature before URL parsing or DNS lookup.
+         *     Validates HMAC signature and expiration before URL parsing or DNS lookup.
          */
         get: operations["get_media_proxy_api_v1_media_proxy_get"];
         put?: never;
@@ -4056,6 +4266,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/issues/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export issues in project to CSV or Password-protected ZIP (AES-256)
+         * @description Export project issues matching filters to CSV or Password-protected ZIP (AES-256).
+         */
+        post: operations["export_project_issues_api_v1_projects__project_ref__issues_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/issues/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import issues from CSV or Password-protected ZIP (AES-256) into project
+         * @description Import issues from CSV or Password-protected ZIP (AES-256) archive into project.
+         */
+        post: operations["import_project_issues_api_v1_projects__project_ref__issues_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/issues/import-template.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download project-specific CSV import template
+         * @description Return pre-populated RFC 4180 CSV template for importing issues into project.
+         */
+        get: operations["download_project_import_template_api_v1_projects__project_ref__issues_import_template_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/issues:query": {
         parameters: {
             query?: never;
@@ -4292,6 +4562,26 @@ export interface paths {
          *     Requires project ADMIN capability.
          */
         patch: operations["patch_priority_api_v1_projects__project_ref__priorities__priority_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/reports/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate full report export for project
+         * @description Generate multi-format document report export for project issues.
+         */
+        post: operations["generate_project_report_api_v1_projects__project_ref__reports_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{project_ref}/states": {
@@ -5384,6 +5674,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_ref}/issues/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export issues in workspace to CSV or Password-protected ZIP (AES-256)
+         * @description Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256).
+         */
+        post: operations["export_workspace_issues_api_v1_workspaces__workspace_ref__issues_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/issues/import-template.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download workspace-generic CSV import template
+         * @description Return generic RFC 4180 CSV template for importing issues into workspace.
+         */
+        get: operations["download_workspace_import_template_api_v1_workspaces__workspace_ref__issues_import_template_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/report-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List report templates in workspace
+         * @description List built-in and workspace custom report templates visible to caller.
+         */
+        get: operations["list_report_templates_api_v1_workspaces__workspace_ref__report_templates_get"];
+        put?: never;
+        /**
+         * Create custom report template
+         * @description Create a new custom report template under workspace.
+         */
+        post: operations["create_report_template_api_v1_workspaces__workspace_ref__report_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/report-templates/{template_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get single report template
+         * @description Retrieve full descriptor and markdown of a report template.
+         */
+        get: operations["get_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete custom report template
+         * @description Delete a custom report template (built-in templates cannot be deleted).
+         */
+        delete: operations["delete_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update custom report template
+         * @description Update a custom report template (built-in templates are immutable).
+         */
+        patch: operations["update_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/reports/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate full report export for workspace
+         * @description Generate multi-format document report export for workspace issues.
+         */
+        post: operations["generate_workspace_report_api_v1_workspaces__workspace_ref__reports_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/reports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render fast live preview of report template
+         * @description Render a live preview of a report against up to 5 matching issues.
+         */
+        post: operations["preview_report_api_v1_workspaces__workspace_ref__reports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_ref}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get workspace settings by workspace slug or ID
+         * @description Retrieve workspace settings by slug or UUID.
+         */
+        get: operations["get_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update workspace settings by workspace slug or ID
+         * @description Update workspace settings by slug or UUID. Requires WORKSPACE_ADMIN or SERVER_ADMIN.
+         */
+        patch: operations["update_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_patch"];
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace}/agent-definitions": {
         parameters: {
             query?: never;
@@ -5499,7 +5945,7 @@ export interface paths {
         put?: never;
         /**
          * Dynamic Client Registration (RFC 7591)
-         * @description Register public OAuth 2.1 client with strict URI and rate limit validation.
+         * @description Register public or confidential OAuth 2.1 client with strict validation.
          */
         post: operations["oauth_register_client_oauth_register_post"];
         delete?: never;
@@ -5552,6 +5998,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Aal2TouchResponse
+         * @description Response payload for AAL2 WebSudo sliding window touch.
+         */
+        Aal2TouchResponse: {
+            /** Aal2 Active */
+            aal2_active: boolean;
+            /** Aal2 Expires At */
+            aal2_expires_at?: string | null;
+        };
         /**
          * AccessManifest
          * @description Complete S3.4 access manifest powering the 🛡️ access pill and inspector.
@@ -5894,7 +6350,7 @@ export interface components {
             client_name: string;
             /**
              * Client Type
-             * @description OAuth 2.1 client type (public)
+             * @description OAuth 2.1 client type (public or confidential)
              * @default public
              */
             client_type: string;
@@ -5915,7 +6371,7 @@ export interface components {
             response_types?: string[] | null;
             /**
              * Token Endpoint Auth Method
-             * @description Authentication method: 'none' or 'private_key_jwt'
+             * @description Authentication method: 'none', 'private_key_jwt', 'client_secret_basic', or 'client_secret_post'
              * @default none
              */
             token_endpoint_auth_method: string;
@@ -6227,6 +6683,19 @@ export interface components {
              * @description Explanatory reason if archiving is prohibited
              */
             reason?: string | null;
+        };
+        /**
+         * AssignRoleLabelRequest
+         * @description Payload to assign a single role label to a principal.
+         */
+        AssignRoleLabelRequest: {
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
         };
         /**
          * AssigneeCreate
@@ -6724,6 +7193,37 @@ export interface components {
              * @default 7
              */
             retention_count: number;
+        };
+        /**
+         * BatchSetRoleLabelsRequest
+         * @description Payload to replace all role labels on a principal.
+         */
+        BatchSetRoleLabelsRequest: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Role Ids */
+            role_ids: string[];
+        };
+        /**
+         * BatchUpdatePermissionsRequest
+         * @description Request payload for toggling a single permission across multiple roles.
+         */
+        BatchUpdatePermissionsRequest: {
+            /**
+             * Granted
+             * @description Whether permission should be enabled or disabled
+             */
+            granted: boolean;
+            /**
+             * Permission Key
+             * @description Granular permission key
+             */
+            permission_key: string;
+            /**
+             * Role Ids
+             * @description Roles to update
+             */
+            role_ids: string[];
         };
         /**
          * BeginWorkRequest
@@ -7388,6 +7888,50 @@ export interface components {
             source_key: string;
         };
         /**
+         * CreateRbacRoleRequest
+         * @description Request payload for creating a custom RBAC role.
+         */
+        CreateRbacRoleRequest: {
+            /**
+             * Clone From Role Id
+             * @description Optional role ID to copy permissions from
+             */
+            clone_from_role_id?: string | null;
+            /**
+             * Color Hex
+             * @description Hex color code for role pill badge
+             * @default #3b82f6
+             */
+            color_hex: string;
+            /**
+             * Description
+             * @description Role purpose
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description Display name for the role
+             */
+            name: string;
+            /**
+             * Project Id
+             * @description Optional project binding
+             */
+            project_id?: string | null;
+            /**
+             * Scope Tier
+             * @description Tier scope of the role
+             * @default workspace
+             * @enum {string}
+             */
+            scope_tier: "workspace" | "project";
+            /**
+             * Slug
+             * @description URL-safe slug
+             */
+            slug?: string | null;
+        };
+        /**
          * CreateWorkspaceRequest
          * @description Payload for creating a new tenant workspace.
          */
@@ -7421,6 +7965,64 @@ export interface components {
         };
         /** @description Creator principal summary or masked external collaborator placeholder */
         CreatorSummary: components["schemas"]["CreatorPrincipalSummary"] | components["schemas"]["RedactedCreatorSummary"];
+        /**
+         * CsvImportDiffReport
+         * @description Forensic diff and validation report for issue CSV import preview or execution.
+         */
+        CsvImportDiffReport: {
+            /** Created Keys */
+            created_keys?: string[];
+            /**
+             * Creates Count
+             * @default 0
+             */
+            creates_count: number;
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /**
+             * Error Count
+             * @default 0
+             */
+            error_count: number;
+            /** Errors */
+            errors?: components["schemas"]["ImportRowError"][];
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * To Create
+             * @default 0
+             */
+            to_create: number;
+            /**
+             * To Update
+             * @default 0
+             */
+            to_update: number;
+            /**
+             * Total Rows
+             * @default 0
+             */
+            total_rows: number;
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+            /** Updated Keys */
+            updated_keys?: string[];
+            /**
+             * Updates Count
+             * @default 0
+             */
+            updates_count: number;
+            /** Warnings */
+            warnings?: string[];
+        };
         /**
          * CustomFieldApprovalApproveRequest
          * @description Payload to approve a pending custom field escalation.
@@ -8762,6 +9364,29 @@ export interface components {
             warnings?: string[];
         };
         /**
+         * ImportRowError
+         * @description Validation or integrity error encountered during CSV issue import.
+         */
+        ImportRowError: {
+            /** Column */
+            column?: string | null;
+            /**
+             * Message
+             * @default
+             */
+            message: string;
+            /**
+             * Row
+             * @default 0
+             */
+            row: number;
+            /**
+             * Row Number
+             * @default 0
+             */
+            row_number: number;
+        };
+        /**
          * InboundLinkOut
          * @description Inbound link representation directed from source to queried object.
          */
@@ -8956,6 +9581,86 @@ export interface components {
              * Format: date-time
              */
             purge_after: string;
+        };
+        /**
+         * IssueExportRequest
+         * @description Filters and format configuration for issue export.
+         */
+        IssueExportRequest: {
+            /**
+             * Assignee Ids
+             * @description Filter by assignee IDs or handles
+             */
+            assignee_ids?: string[] | null;
+            /**
+             * Cycle Id
+             * @description Filter by cycle ID
+             */
+            cycle_id?: string | null;
+            /**
+             * Format
+             * @description Output format: csv or Password-protected ZIP (AES-256) zip_csv
+             * @default csv
+             * @enum {string}
+             */
+            format: "csv" | "zip_csv";
+            /**
+             * Issue Ids
+             * @description Specific issue IDs or keys to export
+             */
+            issue_ids?: string[] | null;
+            /**
+             * Label Ids
+             * @description Filter by label IDs
+             */
+            label_ids?: string[] | null;
+            /**
+             * Module Id
+             * @description Filter by module ID
+             */
+            module_id?: string | null;
+            /**
+             * Priorities
+             * @description Filter by priority slugs or IDs
+             */
+            priorities?: string[] | null;
+            /**
+             * Project Id
+             * @description Project ID or identifier scope
+             */
+            project_id?: string | null;
+            /**
+             * Q
+             * @description Search query string
+             */
+            q?: string | null;
+            /**
+             * Sort By
+             * @description Field to sort by (created_at, board_rank, sequence_id)
+             * @default created_at
+             */
+            sort_by: string | null;
+            /**
+             * Sort Dir
+             * @description Sort direction
+             * @default asc
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * State Categories
+             * @description Filter by state categories / groups
+             */
+            state_categories?: string[] | null;
+            /**
+             * State Ids
+             * @description Filter by state IDs
+             */
+            state_ids?: string[] | null;
+            /**
+             * Zip Password
+             * @description Mandatory password when format is zip_csv (>= 12 characters)
+             */
+            zip_password?: string | null;
         };
         /**
          * IssueList
@@ -9220,6 +9925,11 @@ export interface components {
              */
             due_date?: string | null;
             /**
+             * Editable Fields
+             * @description List of issue field names caller has granular permission to modify
+             */
+            editable_fields?: string[];
+            /**
              * Etag
              * @description Quoted strong ETag digest covering description and serialized attributes (KANBA-212)
              */
@@ -9230,6 +9940,11 @@ export interface components {
              * @description Unique issue UUID identifier
              */
             id: string;
+            /**
+             * Issue Permissions
+             * @description List of granular issue permissions caller holds on this issue
+             */
+            issue_permissions?: string[];
             /**
              * Key
              * @description Canonical issue key (e.g. KAN-101)
@@ -10740,9 +11455,9 @@ export interface components {
             /**
              * Client Type
              * @default public
-             * @constant
+             * @enum {string}
              */
-            client_type: "public";
+            client_type: "public" | "confidential";
             /** Client Uri */
             client_uri?: string | null;
             /** Contacts */
@@ -11352,6 +12067,47 @@ export interface components {
             principal: components["schemas"]["PrincipalSummary"];
         };
         /**
+         * PrincipalRoleLabelItem
+         * @description Assigned role label for a principal.
+         */
+        PrincipalRoleLabelItem: {
+            /** Color Hex */
+            color_hex: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /** Role Name */
+            role_name: string;
+            /** Role Slug */
+            role_slug: string;
+            /** Scope Tier */
+            scope_tier: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * PrincipalSummary
          * @description Minimal non-leaking principal metadata for assignee responses.
          */
@@ -11498,6 +12254,12 @@ export interface components {
              */
             detail: string | null;
             /**
+             * Doc Href
+             * @description Documentation URI for troubleshooting this problem
+             * @default null
+             */
+            doc_href: string | null;
+            /**
              * Errors
              * @description Field-level validation errors
              * @default null
@@ -11509,6 +12271,12 @@ export interface components {
              * @default null
              */
             field: string | null;
+            /**
+             * Help Summary
+             * @description Human-readable remediation guidance and context
+             * @default null
+             */
+            help_summary: string | null;
             /**
              * Hidden Open Count
              * @description Count of open sub-issues hidden by RLS
@@ -12194,6 +12962,55 @@ export interface components {
             revision?: number | null;
         };
         /**
+         * RbacRoleResponse
+         * @description Response model for an RBAC role.
+         */
+        RbacRoleResponse: {
+            /** Base Capability Mask */
+            base_capability_mask: number;
+            /** Color Hex */
+            color_hex: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is System */
+            is_system: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Permissions
+             * @default []
+             */
+            permissions: string[];
+            /** Project Id */
+            project_id: string | null;
+            /** Scope Tier */
+            scope_tier: string;
+            /** Slug */
+            slug: string;
+            /** System Role */
+            system_role: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * ReactionSummary
          * @description Aggregated reaction count and caller participation.
          */
@@ -12449,6 +13266,183 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * ReportGenerateRequest
+         * @description Schema for generating a full multi-format report export.
+         */
+        ReportGenerateRequest: {
+            /** Filter Query */
+            filter_query?: string | null;
+            /**
+             * Format
+             * @default PDF
+             * @enum {string}
+             */
+            format: "PDF" | "XLSX" | "CSV" | "DOCX" | "ODT" | "HTML" | "MD";
+            /** Issue Ids */
+            issue_ids?: string[] | null;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Template Ref
+             * @description Slug or UUID of template
+             */
+            template_ref: string;
+            /** Zip Password */
+            zip_password?: string | null;
+        };
+        /**
+         * ReportPreviewRequest
+         * @description Schema for rendering a fast live preview of a report template.
+         */
+        ReportPreviewRequest: {
+            /**
+             * Format
+             * @default HTML
+             * @enum {string}
+             */
+            format: "HTML" | "MD";
+            /** Issue Ids */
+            issue_ids?: string[] | null;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /** Project Ref */
+            project_ref?: string | null;
+            /** Template Markdown */
+            template_markdown?: string | null;
+            /** Template Ref */
+            template_ref?: string | null;
+        };
+        /**
+         * ReportPreviewResponse
+         * @description Schema for report preview output.
+         */
+        ReportPreviewResponse: {
+            /** Format */
+            format: string;
+            /** Issue Count */
+            issue_count: number;
+            /** Rendered Content */
+            rendered_content: string;
+        };
+        /**
+         * ReportTemplateCreateRequest
+         * @description Schema for creating a custom report template.
+         */
+        ReportTemplateCreateRequest: {
+            /** Allowed Formats */
+            allowed_formats?: string[] | null;
+            /** Csv Columns Json */
+            csv_columns_json?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /** Parameters Schema Json */
+            parameters_schema_json?: {
+                [key: string]: unknown;
+            }[] | {
+                [key: string]: unknown;
+            } | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Slug */
+            slug: string;
+            /** Template Markdown */
+            template_markdown: string;
+        };
+        /**
+         * ReportTemplateListResponse
+         * @description Schema representing a list of report templates.
+         */
+        ReportTemplateListResponse: {
+            /** Items */
+            items: components["schemas"]["ReportTemplateResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * ReportTemplateResponse
+         * @description Schema representing a stored or built-in report template.
+         */
+        ReportTemplateResponse: {
+            /** Allowed Formats */
+            allowed_formats?: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By User Id */
+            created_by_user_id?: string | null;
+            /** Csv Columns Json */
+            csv_columns_json?: {
+                [key: string]: unknown;
+            }[];
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Builtin */
+            is_builtin: boolean;
+            /** Name */
+            name: string;
+            /** Parameters Schema Json */
+            parameters_schema_json?: {
+                [key: string]: unknown;
+            }[] | {
+                [key: string]: unknown;
+            };
+            /** Project Id */
+            project_id?: string | null;
+            /** Slug */
+            slug: string;
+            /** Template Markdown */
+            template_markdown: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * ReportTemplateUpdateRequest
+         * @description Schema for updating a custom report template.
+         */
+        ReportTemplateUpdateRequest: {
+            /** Allowed Formats */
+            allowed_formats?: string[] | null;
+            /** Csv Columns Json */
+            csv_columns_json?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Parameters Schema Json */
+            parameters_schema_json?: {
+                [key: string]: unknown;
+            }[] | {
+                [key: string]: unknown;
+            } | null;
+            /** Template Markdown */
+            template_markdown?: string | null;
         };
         /**
          * RequestProxyCheckInfo
@@ -12920,6 +13914,17 @@ export interface components {
             remote_runners: components["schemas"]["RemoteRunnersSummary"];
             /** Valkey Configured */
             valkey_configured: boolean;
+        };
+        /**
+         * SetRolePermissionsRequest
+         * @description Request payload for setting role permissions.
+         */
+        SetRolePermissionsRequest: {
+            /**
+             * Permissions
+             * @description Complete set of permissions to assign
+             */
+            permissions: string[];
         };
         /**
          * SetupClaimRequest
@@ -13648,6 +14653,42 @@ export interface components {
             version?: string;
         };
         /**
+         * SystemSettingsResponse
+         * @description System-level operational and governance settings.
+         */
+        SystemSettingsResponse: {
+            /**
+             * Air Gap Mode
+             * @default false
+             */
+            air_gap_mode: boolean;
+            /**
+             * Deployment Mode
+             * @default production
+             */
+            deployment_mode: string;
+            /**
+             * Enable Issue Export
+             * @default true
+             */
+            enable_issue_export: boolean;
+            /**
+             * Enable Issue Import
+             * @default true
+             */
+            enable_issue_import: boolean;
+        };
+        /**
+         * SystemSettingsUpdate
+         * @description Payload for updating system-level governance settings.
+         */
+        SystemSettingsUpdate: {
+            /** Enable Issue Export */
+            enable_issue_export?: boolean | null;
+            /** Enable Issue Import */
+            enable_issue_import?: boolean | null;
+        };
+        /**
          * SystemStatusResponse
          * @description Runtime deployment mode, persistence indicator, and infrastructure topology.
          */
@@ -13773,6 +14814,10 @@ export interface components {
              * @description Target workflow state name or UUID
              */
             to_state: string;
+            /** Verification Proof */
+            verification_proof?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * TransitionResponse
@@ -14185,6 +15230,18 @@ export interface components {
              * @default UTC
              */
             timezone: string;
+        };
+        /**
+         * UpdateRbacRoleRequest
+         * @description Request payload for updating an existing RBAC role.
+         */
+        UpdateRbacRoleRequest: {
+            /** Color Hex */
+            color_hex?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
         };
         /**
          * UpdateWorkspaceRequest
@@ -15033,6 +16090,18 @@ export interface components {
             default_skip_loaded_sequence_numbers: boolean;
             /** Display Name */
             display_name: string;
+            /** Issue Export Allowed Roles */
+            issue_export_allowed_roles?: string[];
+            /**
+             * Issue Export Enabled
+             * @default true
+             */
+            issue_export_enabled: boolean;
+            /**
+             * Issue Import Enabled
+             * @default true
+             */
+            issue_import_enabled: boolean;
             /** Mcp Key Max Ttl Days */
             mcp_key_max_ttl_days: number;
             /**
@@ -15040,6 +16109,13 @@ export interface components {
              * @default Workspace
              */
             name: string;
+            /** Report Export Allowed Roles */
+            report_export_allowed_roles?: string[];
+            /**
+             * Report Export Enabled
+             * @default true
+             */
+            report_export_enabled: boolean;
             /** Session Absolute Timeout Min */
             session_absolute_timeout_min: number;
             /** Session Idle Timeout Min */
@@ -15075,10 +16151,20 @@ export interface components {
             default_skip_loaded_sequence_numbers?: boolean | null;
             /** Display Name */
             display_name?: string | null;
+            /** Issue Export Allowed Roles */
+            issue_export_allowed_roles?: string[] | null;
+            /** Issue Export Enabled */
+            issue_export_enabled?: boolean | null;
+            /** Issue Import Enabled */
+            issue_import_enabled?: boolean | null;
             /** Mcp Key Max Ttl Days */
             mcp_key_max_ttl_days?: number | null;
             /** Name */
             name?: string | null;
+            /** Report Export Allowed Roles */
+            report_export_allowed_roles?: string[] | null;
+            /** Report Export Enabled */
+            report_export_enabled?: boolean | null;
             /** Session Absolute Timeout Min */
             session_absolute_timeout_min?: number | null;
             /** Session Idle Timeout Min */
@@ -17997,6 +19083,181 @@ export interface operations {
             };
         };
     };
+    list_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path: {
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalRoleLabelItem"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_set_principal_role_labels_endpoint_api_v1_admin_principals__principal_id__role_labels_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchSetRoleLabelsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalRoleLabelItem"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignRoleLabelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalRoleLabelItem"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_principal_role_label_endpoint_api_v1_admin_principals__principal_id__role_labels__role_id__delete: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path: {
+                principal_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     apply_project_blueprint_api_v1_admin_projects_blueprint_apply_post: {
         parameters: {
             query?: never;
@@ -18099,6 +19360,306 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectBlueprint"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_roles_endpoint_api_v1_admin_rbac_roles_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RbacRoleResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_role_endpoint_api_v1_admin_rbac_roles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRbacRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RbacRoleResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_update_role_permissions_endpoint_api_v1_admin_rbac_roles_permissions_batch_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchUpdatePermissionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_role_endpoint_api_v1_admin_rbac_roles__role_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_role_endpoint_api_v1_admin_rbac_roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRbacRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RbacRoleResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_role_permissions_endpoint_api_v1_admin_rbac_roles__role_id__permissions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRolePermissionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -18551,6 +20112,77 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_system_settings_api_v1_admin_system_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_system_settings_api_v1_admin_system_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -19543,6 +21175,64 @@ export interface operations {
             };
             /** @description Too Many Requests - rate limit exceeded */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    drop_aal2_session_api_v1_auth_aal2_drop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    touch_aal2_session_api_v1_auth_aal2_touch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Aal2TouchResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23564,6 +25254,8 @@ export interface operations {
                 u: string;
                 /** @description HMAC-SHA256 signature for media URL */
                 sig: string;
+                /** @description Expiration timestamp (UNIX epoch seconds) */
+                exp?: number | null;
             };
             header?: never;
             path?: never;
@@ -24898,6 +26590,8 @@ export interface operations {
                 horizon_days?: number;
                 /** @description Remaining items count for 'When?' Monte Carlo simulation (1 to 10000) */
                 target_items?: number;
+                /** @description Monte Carlo simulation trials (10 to 50000) */
+                trials?: number;
                 /** @description Optional random seed for deterministic simulation and reproducibility */
                 seed?: number | null;
             };
@@ -25318,6 +27012,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_project_issues_api_v1_projects__project_ref__issues_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_project_issues_api_v1_projects__project_ref__issues_import_post: {
+        parameters: {
+            query?: {
+                /** @description Simulate import and return diff without committing */
+                dry_run?: boolean;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CsvImportDiffReport"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_project_import_template_api_v1_projects__project_ref__issues_import_template_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pre-populated CSV template with project states and priorities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -25994,6 +27813,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PriorityResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_project_report_api_v1_projects__project_ref__reports_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -28766,6 +30629,472 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SwitchWorkspaceResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_workspace_issues_api_v1_workspaces__workspace_ref__issues_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_workspace_import_template_api_v1_workspaces__workspace_ref__issues_import_template_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Generic workspace issue import template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_report_templates_api_v1_workspaces__workspace_ref__report_templates_get: {
+        parameters: {
+            query?: {
+                /** @description Optional project scope filter */
+                project_ref?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportTemplateListResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_template_api_v1_workspaces__workspace_ref__report_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportTemplateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportTemplateResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+                template_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportTemplateResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+                template_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_report_template_api_v1_workspaces__workspace_ref__report_templates__template_ref__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+                template_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportTemplateUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportTemplateResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_workspace_report_api_v1_workspaces__workspace_ref__reports_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_report_api_v1_workspaces__workspace_ref__reports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPreviewResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workspace_settings_by_ref_api_v1_workspaces__workspace_ref__settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSettingsResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */

@@ -273,6 +273,8 @@ async def confirm_totp(
                 elevated.csrf_token,
                 persistent=elevated.is_persistent,
             )
+            if getattr(elevated, "aal2_expires_at", None) is not None:
+                response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
         return response
 
     return JSONResponse(content={"confirmed": True, "ok": True})
@@ -333,7 +335,10 @@ async def get_mfa_status(
 @router.delete("/totp")
 async def delete_totp(
     request: Request,
-    principal: Annotated[PrincipalContext, Depends(require_aal2())],
+    principal: Annotated[
+        PrincipalContext,
+        Depends(require_aal2(max_age_seconds=900, verification_only=True)),
+    ],
 ) -> JSONResponse:
     """Revoke active TOTP factor for authenticated principal (requires AAL2)."""
     session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
@@ -464,6 +469,8 @@ def _build_elevated_response(
             elevated.csrf_token,
             persistent=elevated.is_persistent,
         )
+        if getattr(elevated, "aal2_expires_at", None) is not None:
+            response.headers["X-KB-AAL2-Expires-At"] = elevated.aal2_expires_at.isoformat()
     return response
 
 
@@ -556,7 +563,10 @@ verify_mfa.allow_mfa_pending = True  # type: ignore[attr-defined]
 @router.post("/recovery-codes/generate", include_in_schema=False)
 async def regenerate_recovery_codes(
     request: Request,
-    principal: Annotated[PrincipalContext, Depends(require_aal2())],
+    principal: Annotated[
+        PrincipalContext,
+        Depends(require_aal2(max_age_seconds=900, verification_only=True)),
+    ],
 ) -> JSONResponse:
     """Regenerate 10 one-time recovery codes (requires active AAL2 session)."""
     session_factory: RLSSessionFactory | None = getattr(request.app.state, "session_factory", None)
