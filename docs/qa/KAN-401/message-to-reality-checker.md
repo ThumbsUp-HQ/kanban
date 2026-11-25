@@ -84,15 +84,15 @@ Recorded in `docs/qa/KAN-401/unit-test-results.txt`:
 - **Static Database Migration Lifecycle Check**:
   - `uv run kanban-ctl db check-migrations --static-only`: Passed. All 83 migrations valid, single linear head `p6_21_agent_onboarding_preferences`.
 - **Backend Pytest Suite**:
-  - **96 passed in 63.87s, 0 warnings**.
-  - Total backend coverage across all modified modules: **96%** (exceeding the >= 95% project threshold).
+  - **101 passed in 64.98s, 0 warnings**.
+  - Total backend coverage across all modified modules: **96%** (>= 95% across 100% of rows).
     - `database/models/principals.py`: **100%**
     - `kanban/ops/llms_txt.py`: **100%**
     - `kanban/api/v1/agent_definitions.py`: **100%**
     - `kanban/agents/service.py`: **97%**
     - `kanban/ai_config/service.py`: **95%**
     - `kanban/api/v1/admin/ai_providers.py`: **95%**
-    - `kanban/api/v1/user_settings.py`: **94%** (100% on new preferences endpoints)
+    - `kanban/api/v1/user_settings.py`: **95%** (100% on new preferences endpoints)
 - **Frontend Vitest Suite**:
   - **300 passed across 12 test files in 7.37s, 0 warnings**.
   - Enforced `--coverage.thresholds.branches=95`.

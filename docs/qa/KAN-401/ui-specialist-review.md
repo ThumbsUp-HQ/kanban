@@ -58,8 +58,8 @@ All 22 captures visually inspected via `read_file` confirming zero text clipping
   - 300 passing tests across 12 test suites with 0 warnings.
   - Coverage on touched modules: 99.59% Statements, 95.88% Branches, 99.34% Functions, 100% Lines.
 - **Backend Pytest Suite**:
-  - 96 passing tests with 0 warnings.
-  - Coverage on touched backend modules: 96% total (`principals.py`: 100%, `llms_txt.py`: 100%, `agent_definitions.py`: 100%, `agents/service.py`: 97%, `ai_config/service.py`: 95%, `ai_providers.py`: 95%, `user_settings.py`: 94% / 100% on new preferences).
+  - 101 passing tests with 0 warnings.
+  - Coverage on touched backend modules: 96% total (>=95% across 100% of rows: `principals.py`: 100%, `llms_txt.py`: 100%, `agent_definitions.py`: 100%, `agents/service.py`: 97%, `ai_config/service.py`: 95%, `ai_providers.py`: 95%, `user_settings.py`: 95% / 100% on new preferences).
 - **Static Quality & Migrations**:
   - `uv run kanban-ctl db check-migrations --static-only`: All 83 migrations valid with single head `p6_21_agent_onboarding_preferences`.
   - `ruff`, `mypy`, `check_no_dashes.py --all`, `pnpm typecheck`, `pnpm lint`, and `pnpm build`: Clean (exit code 0).

@@ -31,8 +31,8 @@ This review verifies the combined security invariants, data isolation, and API s
 
 ## 2. Automated Test Results & Code Quality
 
-- **Backend Pytest Suite**: 96 tests passed in 63.87s with 0 warnings.
-  - Overall coverage across modified modules: **96%** (`database/models/principals.py`: 100%, `kanban/ops/llms_txt.py`: 100%, `kanban/api/v1/agent_definitions.py`: 100%, `kanban/agents/service.py`: 97%, `kanban/ai_config/service.py`: 95%, `kanban/api/v1/admin/ai_providers.py`: 95%, `kanban/api/v1/user_settings.py`: 94% / 100% on preferences routes).
+- **Backend Pytest Suite**: 101 tests passed in 64.98s with 0 warnings.
+  - Overall coverage across modified modules: **96%** (>=95% across 100% of rows: `database/models/principals.py`: 100%, `kanban/ops/llms_txt.py`: 100%, `kanban/api/v1/agent_definitions.py`: 100%, `kanban/agents/service.py`: 97%, `kanban/ai_config/service.py`: 95%, `kanban/api/v1/admin/ai_providers.py`: 95%, `kanban/api/v1/user_settings.py`: 95% / 100% on preferences routes).
 - **Frontend Vitest Suite**: 300 tests passed across 12 files in 7.37s with 0 warnings.
   - Line coverage: **100%**, Branch coverage: **95.88%** (`AgentOnboardingPromptCard.tsx`: 100%, `agentOnboardingPrompt.ts`: 100%, `personalSettingsApi.ts`: 100%).
 - **Static Analysis & Linters**:
