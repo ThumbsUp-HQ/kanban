@@ -27,6 +27,7 @@ function MintEnrollmentTokenContent({
   const [error, setError] = useState<string | null>(null);
   const [mintedToken, setMintedToken] = useState<EnrollmentTokenResponse | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedCli, setCopiedCli] = useState<boolean>(false);
 
   const handleMint = async (e: React.SyntheticEvent): Promise<void> => {
     e.preventDefault();
@@ -68,7 +69,26 @@ function MintEnrollmentTokenContent({
   const handleClose = (): void => {
     // Purge token plaintext from state
     setMintedToken(null);
+    setCopied(false);
+    setCopiedCli(false);
     onClose();
+  };
+
+  const getCliCommand = (token: string, pool: string): string => {
+    return `echo "${token}" | uv run kanban-agent-runner enroll --server-url ${window.location.origin} --token-stdin --pool ${pool}`;
+  };
+
+  const handleCopyCli = async (command: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch {
+      // Fallback
+    } finally {
+      setCopiedCli(true);
+      setTimeout(() => {
+        setCopiedCli(false);
+      }, 2000);
+    }
   };
 
   return (
@@ -191,9 +211,33 @@ function MintEnrollmentTokenContent({
           </div>
 
           <div className="kb-form-group">
-            <label className="kb-form-label">Example Runner CLI Ingestion:</label>
+            <div
+              className="kb-token-label-row"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '8px',
+              }}
+            >
+              <label className="kb-form-label" style={{ marginBottom: 0 }}>
+                Example Runner CLI Ingestion:
+              </label>
+              <button
+                type="button"
+                className="kb-btn kb-btn-secondary"
+                onClick={() => {
+                  void handleCopyCli(
+                    getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug),
+                  );
+                }}
+                data-testid="copy-runner-cli-btn"
+              >
+                {copiedCli ? '✓ Copied!' : 'Copy CLI Command'}
+              </button>
+            </div>
             <pre className="kb-runner-cli-pre" data-testid="runner-cli-command">
-              {`echo "${mintedToken.enrollment_token}" | uv run kanban-agent-runner enroll --url ${window.location.origin} --token-stdin --pool ${mintedToken.pool_slug}`}
+              {getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug)}
             </pre>
             <div className="kb-form-hint kb-runner-mtls-notice" data-testid="runner-mtls-notice">
               <strong>Dedicated mTLS Endpoint Notice:</strong> Autonomous runners communicate over a dedicated mutual TLS port (default :8444) for Proof-of-Possession handshakes and real-time WebSocket job coordination.
@@ -207,7 +251,7 @@ function MintEnrollmentTokenContent({
               onClick={handleClose}
               data-testid="dismiss-mint-modal-btn"
             >
-              I have safely stored the token
+              Done
             </button>
           </div>
         </div>

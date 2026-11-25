@@ -461,8 +461,20 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
         expect(screen.getByTestId('copy-token-btn').textContent).toContain('Copied');
       });
 
-      // Dismiss modal
-      fireEvent.click(screen.getByTestId('dismiss-mint-modal-btn'));
+      // Click copy CLI command button
+      fireEvent.click(screen.getByTestId('copy-runner-cli-btn'));
+      expect(writeTextMock).toHaveBeenCalledWith(
+        'echo "kb_enroll_secret_token_1234567890" | uv run kanban-agent-runner enroll --server-url http://localhost:3000 --token-stdin --pool ci-cluster',
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('✓ Copied!');
+      });
+
+      // Dismiss modal has label "Done"
+      const dismissBtn = screen.getByTestId('dismiss-mint-modal-btn');
+      expect(dismissBtn.textContent).toBe('Done');
+      fireEvent.click(dismissBtn);
       expect(onClose).toHaveBeenCalled();
       expect(onTokenMinted).toHaveBeenCalled();
     });
@@ -486,6 +498,11 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       fireEvent.click(screen.getByTestId('copy-token-btn'));
       await waitFor(() => {
         expect(screen.getByTestId('copy-token-btn').textContent).toContain('Copied');
+      });
+
+      fireEvent.click(screen.getByTestId('copy-runner-cli-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('✓ Copied!');
       });
 
       // Dismiss without onTokenMinted callback provided
@@ -583,7 +600,7 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       expect(onClose).toHaveBeenCalled();
     });
 
-    it('renders exact kanban-agent-runner enroll CLI snippet with --url and dedicated :8444 notice (KAN-68 Positive)', async () => {
+    it('renders exact kanban-agent-runner enroll CLI snippet with --server-url and dedicated :8444 notice (KAN-68 / KAN-399 Positive)', async () => {
       vi.spyOn(runnersApi, 'mintEnrollmentToken').mockResolvedValue(mockTokenResponse);
 
       render(
@@ -605,13 +622,27 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
 
       const cliText = screen.getByTestId('runner-cli-command').textContent;
       expect(cliText).toContain('uv run kanban-agent-runner enroll');
-      expect(cliText).toContain('--url http://localhost:3000');
+      expect(cliText).toContain('--server-url http://localhost:3000');
       expect(cliText).toContain('--token-stdin');
       expect(cliText).toContain('--pool ci-cluster');
+
+      expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('Copy CLI Command');
+      expect(screen.getByTestId('dismiss-mint-modal-btn').textContent).toBe('Done');
 
       expect(screen.getByTestId('runner-mtls-notice').textContent).toContain(
         'dedicated mutual TLS port (default :8444)',
       );
+    });
+
+    it('renders certificate rotation guidance with canonical --server-url in RunnerStudioPage', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([]);
+      render(<RunnerStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Certificate Rotation & Runner Lifecycle Guidance/)).toBeDefined();
+      });
+
+      expect(screen.getByText(/kanban-agent-runner enroll --server-url/)).toBeDefined();
     });
   });
 });
