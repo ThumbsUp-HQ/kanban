@@ -12,6 +12,7 @@ import {
 import * as aiApi from '../aiAdminApi';
 import type { ProviderConfigPublic } from '../aiAdminApi';
 import { Aal2StepUpCancelledError } from '../../../api/client';
+import * as webSudoModule from '../../../components/help/WebSudoModalHost';
 
 describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
   const mockExistingProvider: ProviderConfigPublic = {
@@ -1879,46 +1880,54 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
     });
 
     it('sets isDirty in edit mode when modifying modelAllowlist, timeoutMs, sampling parameters, or mtlsCertPem', () => {
-      render(
-        <AiProviderEditorDrawer
-          isOpen={true}
-          onClose={vi.fn()}
-          provider={mockProviderWithFullSettings}
-          airGapMode={false}
-          onSaved={vi.fn()}
-        />,
-      );
+      const keepaliveSpy = vi.spyOn(webSudoModule, 'useAal2DirtyKeepalive');
+      try {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={mockProviderWithFullSettings}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+        expect(keepaliveSpy).toHaveBeenCalledWith(false);
 
-      // Expand advanced settings accordion
-      fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+        // Expand advanced settings accordion
+        fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
 
-      // Modify model allowlist
-      const modelsInput = screen.getByTestId('provider-models-input');
-      fireEvent.change(modelsInput, { target: { value: 'gpt-4o, gpt-4o-mini' } });
+        // Modify model allowlist
+        const modelsInput = screen.getByTestId('provider-models-input');
+        fireEvent.change(modelsInput, { target: { value: 'gpt-4o, gpt-4o-mini' } });
+        expect(keepaliveSpy).toHaveBeenCalledWith(true);
 
-      // Modify timeout
-      const timeoutInput = screen.getByTestId('provider-timeout-ms-input');
-      fireEvent.change(timeoutInput, { target: { value: '35000' } });
+        // Modify timeout
+        const timeoutInput = screen.getByTestId('provider-timeout-ms-input');
+        fireEvent.change(timeoutInput, { target: { value: '35000' } });
 
-      // Modify temperature
-      const tempInput = screen.getByTestId('provider-temperature-input');
-      fireEvent.change(tempInput, { target: { value: '0.9' } });
+        // Modify temperature
+        const tempInput = screen.getByTestId('provider-temperature-input');
+        fireEvent.change(tempInput, { target: { value: '0.9' } });
 
-      // Modify top_p
-      const topPInput = screen.getByTestId('provider-top-p-input');
-      fireEvent.change(topPInput, { target: { value: '0.95' } });
+        // Modify top_p
+        const topPInput = screen.getByTestId('provider-top-p-input');
+        fireEvent.change(topPInput, { target: { value: '0.95' } });
 
-      // Modify max_tokens
-      const maxTokensInput = screen.getByTestId('provider-max-tokens-input');
-      fireEvent.change(maxTokensInput, { target: { value: '8192' } });
+        // Modify max_tokens
+        const maxTokensInput = screen.getByTestId('provider-max-tokens-input');
+        fireEvent.change(maxTokensInput, { target: { value: '8192' } });
 
-      // Modify mtlsCertPem
-      const mtlsInput = screen.getByTestId('provider-mtls-cert-input');
-      fireEvent.change(mtlsInput, { target: { value: '-----BEGIN CERTIFICATE-----\nNEW\n-----END CERTIFICATE-----' } });
+        // Modify mtlsCertPem
+        const mtlsInput = screen.getByTestId('provider-mtls-cert-input');
+        fireEvent.change(mtlsInput, { target: { value: '-----BEGIN CERTIFICATE-----\nNEW\n-----END CERTIFICATE-----' } });
 
-      // Save button is present and ready
-      const saveBtn = screen.getByTestId('save-provider-btn');
-      expect(saveBtn).toBeDefined();
+        // Save button is present and ready
+        const saveBtn = screen.getByTestId('save-provider-btn');
+        expect(saveBtn).toBeDefined();
+        expect(keepaliveSpy).toHaveBeenCalledWith(true);
+      } finally {
+        keepaliveSpy.mockRestore();
+      }
     });
   });
 });

@@ -69,7 +69,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 | **11. Inline Agent Harness Hints** | `AgentDefinitionEditorDrawer.tsx` | `SIMPLIFY` | Added contextual descriptions explaining `in_app_sdk`, `cli_pipe`, and `remote_runner`. | Verified Complete |
 | **12. WebSudo AAL2 Keepalive in Drawers** | `AiProviderEditorDrawer.tsx`, `AgentDefinitionEditorDrawer.tsx` | `KEEP` | Integrated `useAal2DirtyKeepalive(isDirty)` in both drawers to refresh session during edits. | Verified Complete |
 | **13. Runner Enroll CLI & UX Parity (KAN-399)** | `RunnerStudioPage.tsx`, `MintEnrollmentTokenModal.tsx`, `cli.py` | `KEEP` | Verified canonical `--server-url`, `copy-runner-cli-btn`, `"Done"` button, and `0o700` state dir. | Verified Complete |
-| **14. Air-Gap Backend Enforcement & Egress Denial** | `kanban/api/v1/admin/ai_providers.py`, `kanban/net/guard.py` | `KEEP` | Confirmed 409 `AIR_GAP_EGRESS_DENIED` on mutation and 200 `ProviderProbeResult(ok=False)` on probe. | Verified Complete |
+| **14. Air-Gap Backend Enforcement & Egress Denial** | `kanban/api/v1/admin/ai_providers.py`, `kanban/ai_config/net_guard.py` | `KEEP` | Confirmed 409 `AIR_GAP_EGRESS_DENIED` on mutation and 200 `ProviderProbeResult(ok=False)` on probe. | Verified Complete |
 | **15. Local Project Folder Onboarding (KAN-403)** | `kanban/ops/llms_txt.py` | `KEEP` | Verified `ONBOARDING_PROMPT_TEMPLATE` mandates local project folder persistence. | Verified Complete |
 
 ---
@@ -79,7 +79,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 #### 1. AI Provider Editor Drawer (`AiProviderEditorDrawer.tsx` & `aiStudio.css`)
 - **1-Click Preset Buttons (`data-testid="preset-ollama-btn"`, `preset-openai-btn`, `preset-gemini-btn`)**:
   - `Ollama`: Sets `provider_kind="ollama"`, `display_name="Local Ollama Runtime"`, `base_url="http://127.0.0.1:11434"`, `residency_tier="local_only"`, suggested models `llama3.2, qwen2.5-coder`.
-  - `OpenAI`: Sets `provider_kind="openai"`, `display_name="OpenAI GPT-4o"`, `base_url="https://api.openai.com/v1"`, `residency_tier="cloud_standard"`, suggested models `gpt-4o, gpt-4o-mini`.
+  - `OpenAI`: Sets `provider_kind="openai"`, `display_name="OpenAI / OpenAI-Compatible"`, `base_url="https://api.openai.com/v1"`, `residency_tier="cloud_standard"`, suggested models `gpt-4o, gpt-4o-mini`.
   - `Google Gemini`: Sets `provider_kind="gemini"`, `display_name="Google Gemini Workspace"`, `base_url="https://generativelanguage.googleapis.com"`, `residency_tier="cloud_standard"`, suggested models `gemini-2.5-flash, gemini-2.5-pro`.
 - **Promoted HTTP Base URL**:
   - Moved out of `<AdvancedSection>` directly into the primary connection settings group immediately following API Key and Clear Key checkbox.
@@ -105,7 +105,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
   - Quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 Freeze` (`preset-budget-0-freeze-btn`) immediately populate the token cap input.
 - **Hard Freeze Alert Banner**:
   - When `tokenCap === '0'`, mounts `.kb-zero-cap-warning` (`data-testid="zero-cap-freeze-warning"`):
-    `"Warning: 0 tokens set. Completions through this provider are completely frozen."`
+    `"Hard AI Freeze: 0 tokens set: Completions through this provider are completely frozen."`
 
 #### 3. Administrative Studio Subnav (`AdminStudioSubnav.tsx`)
 - Extended `AdminTabId` union to include `'agents'`.
@@ -128,7 +128,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 #### 5. Agent Definition Editor Drawer (`AgentDefinitionEditorDrawer.tsx`)
 - Added inline harness hint box (`data-testid="agent-harness-hint"`):
   - `in_app_sdk`: `"Direct API integration using configured AI providers (Gemini, OpenAI, Ollama). Fast, zero-daemon execution."`
-  - `cli_pipe`: `"Executes local allowlisted CLI binaries (agy, codex, gemini-cli) via standard input/output pipes with read-only sandbox options."`
+  - `cli_pipe`: `'Executes through a sandboxed CLI pipe binary (agy or codex) using standard I/O streaming.'`
   - `remote_runner`: `"Dispatches workloads to remote worker daemons connected over outbound mTLS WebSocket connections."`
 - Wired `useAal2DirtyKeepalive(isDirty)` on form dirtiness.
 - Added structured error response handling for `AIR_GAP_EGRESS_DENIED`.
@@ -144,19 +144,20 @@ Executed against isolated dedicated test container (`kan412-pg-test-1`, socket `
 - `test_agent_definitions_api.py`: 24 passed
 - `test_llms_txt.py`: 7 passed
 - `test_remote_runner.py`: 11 passed
-- **Total Backend Pytest**: 63 passed in 16.83s, 0 failed, 0 warnings.
+- **Total Backend Pytest**: 63 passed in 17.29s, 0 failed, 0 warnings.
 
-#### 2. Frontend Vitest Suites (`kanban/web/src/features/`)
+#### 2. Frontend Vitest Suites (`kanban/web/src/features/` & `kanban/web/src/app/`)
 Executed with `--coverage.thresholds.branches=95`:
 - `aiAdminApi.test.ts`: 7 passed
 - `AgentDefinitionEditorDrawer.test.tsx`: 7 passed (Branch coverage: 95.48%, Lines: 99.05%)
 - `AgentStudioPage.test.tsx`: 30 passed (Branch coverage: 97.50%, Lines: 100%)
 - `MenuConsolidation.test.tsx`: 10 passed
-- `AiProviderEditorDrawer.test.tsx`: 51 passed (Branch coverage: 95.83%, Lines: 100%)
+- `MenuConsolidation_KAN362.test.tsx`: 42 passed
+- `AiProviderEditorDrawer.test.tsx`: 51 passed (Branch coverage: 96.08%, Lines: 100%)
 - `AiStudioPage.test.tsx`: 48 passed (Branch coverage: 95.90%, Lines: 99.28%)
 - `RunnerStudioPage.test.tsx`: 22 passed (Branch coverage: 97.61%, Lines: 100%)
-- **Total Frontend Vitest**: 175 passed across 7 test suites, 0 failed, 0 `act(...)` warnings.
-- **Combined Branch Coverage across Touched Modules**: **96.16%** (satisfies mandatory `>=95%` standard with 100% of files >=95%).
+- **Total Frontend Vitest**: 217 passed across 8 test suites, 0 failed, 0 `act(...)` warnings in 4.56s.
+- **Combined Branch Coverage across Touched Modules**: **96.28%** (satisfies mandatory `>=95%` standard with 100% of files >=95%).
 
 #### 3. Static Analysis & Build Quality
 - `uv run ruff check kanban/ agent/`: Passed (0 errors, 0 warnings).
@@ -164,7 +165,7 @@ Executed with `--coverage.thresholds.branches=95`:
 - `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode dashes found).
 - `pnpm --dir kanban/web typecheck`: Passed (`tsc -b --noEmit` clean, 0 errors).
 - `pnpm --dir kanban/web lint`: Passed (`eslint . --max-warnings 0` clean, 0 warnings).
-- `pnpm --dir kanban/web build`: Passed (Clean production Vite build in 1.24s).
+- `pnpm --dir kanban/web build`: Passed (Clean production Vite build in 1.31s).
 
 #### 4. Visual Verification (Playwright Multi-Viewport Screenshots)
 Executed via `e2e/qa/kan-412-slice2-ai-screenshots.spec.ts` capturing 5 viewports without clipping:
@@ -173,7 +174,7 @@ Executed via `e2e/qa/kan-412-slice2-ai-screenshots.spec.ts` capturing 5 viewport
 - `03-agent-studio-subnav-1440x900-dark.png`: Shows dark theme, `AdminStudioSubnav` active `Agents` tab, and `AgentDefinitionEditorDrawer` with inline harness hint.
 - `04-ai-airgap-disabled-1024x768.png`: Tablet landscape showing air-gap notice, disabled cloud presets, and disabled options in dropdown.
 - `05-ai-budget-unlimited-768x1024.png`: Tablet portrait showing unlimited quota mode selected with informative note.
-- `06-ai-mobile-responsive-390x844.png`: Mobile portrait showing clean single-column stacking of preset buttons, Base URL input, and drawer controls.
+- `06-ai-mobile-responsive-390x844.png`: Mobile portrait showing the unobstructed `AiStudioPage` stacked provider cards without an open drawer.
 All PNGs stored in `docs/qa/KAN-412/screenshots/` and visually verified.
 
 ---
@@ -205,13 +206,13 @@ docker run -d \
 1. Log in as `workout-admin@example.com` at `http://localhost:18080`.
 2. Navigate to `http://localhost:18080/admin/ai`.
 3. Click "Register Provider" (`register-provider-btn`).
-4. Click the "Ollama (Zero-Egress)" preset button (`preset-ollama`).
+4. Click the "Ollama (Zero-Egress)" preset button (`preset-ollama-btn`).
 5. Verify that:
    - Display name is populated with `"Local Ollama Runtime"`.
    - Provider Kind is set to `ollama`.
    - HTTP Base URL is populated with `"http://127.0.0.1:11434"` immediately visible in the primary connection settings (without opening Advanced Settings).
    - Residency Tier is set to `local_only`.
-6. Click "Google Gemini" preset (`preset-gemini`) and "OpenAI" preset (`preset-openai`), verifying appropriate default URLs and model lists.
+6. Click "Google Gemini" preset (`preset-gemini-btn`) and "OpenAI" preset (`preset-openai-btn`), verifying appropriate default URLs and model lists.
 7. Save the Ollama provider and verify it appears in the active provider priority list.
 
 ##### Step 3: Validate Enterprise Air-Gap Policy Provider Blocking
@@ -227,12 +228,12 @@ docker run -d \
 ##### Step 4: Validate Token Budget Hard Freeze & Unlimited Modes
 1. On the configured provider card, click "Token Budget" (`manage-budget-btn`).
 2. Verify that clicking "Enforce Token Cap" enables the cap input and quick-pick presets.
-3. Click preset "0 Freeze" (`preset-0`).
+3. Click preset "0 Freeze" (`preset-budget-0-freeze-btn`).
 4. Verify:
-   - Warning banner appears: `"Warning: 0 tokens set. Completions through this provider are completely frozen."`
+   - Warning banner appears: `"Hard AI Freeze: 0 tokens set: Completions through this provider are completely frozen."`
    - Line displays `'Zero-Allowance Freeze (0 tokens)'` (verifying fix for previous `'Unlimited'` bug).
 5. Click preset "5M". Verify cap updates to `5,000,000`.
-6. Click "Unlimited Quota" mode pill. Verify cap input is cleared and informational note is shown.
+6. Click "Unlimited Quota" mode pill. Verify clicking `"Unlimited Quota (No Cap)"` unmounts `budget-token-cap-input` and displays `budget-unlimited-note`.
 7. Click Save Budget and verify budget persists.
 
 ##### Step 5: Validate Agent Studio Subnav & Inline Harness Hints (`/admin/agents`)
@@ -241,7 +242,7 @@ docker run -d \
 3. Click "Register Agent" (`register-agent-btn`).
 4. In the drawer, toggle through execution harnesses:
    - Select `in_app_sdk`: verify inline harness hint explains in-process API execution.
-   - Select `cli_pipe`: verify inline hint explains allowlisted CLI pipes (`agy`, `codex`, `gemini-cli`).
+   - Select `cli_pipe`: verify inline hint displays `'Executes through a sandboxed CLI pipe binary (agy or codex) using standard I/O streaming.'`.
    - Select `remote_runner`: verify inline hint explains remote outbound mTLS runner daemons.
 5. Create a test agent definition using `in_app_sdk` with the configured Ollama provider.
 6. Click "Validate Echo" (`validate-agent-btn`) and verify the 4-section validation report displays valid schema and tool checks.
@@ -295,10 +296,10 @@ docker volume rm kanban_s2_workout_data
   9. Wired `useAal2DirtyKeepalive` in both `AiProviderEditorDrawer.tsx` and `AgentDefinitionEditorDrawer.tsx`.
   10. Preserved 100% of landed KAN-399 (`--server-url`, `copy-runner-cli-btn`, `"Done"` button, `0o700` runner state dir), KAN-402, and KAN-403 work. Zero database migrations introduced.
 - **Verification Proof**:
-  - Backend Pytest: 63 passed in 37.67s across 5 test suites, 0 failures, 0 warnings.
-  - Frontend Vitest: 173 passed across 7 test suites, 0 failures, 0 `act(...)` warnings. Branch coverage: 96.21% (>=95% standard satisfied with 100% of files >=95%).
-  - Static Gates: `ruff` (0 errors), `mypy` (815 files clean), `check_no_dashes.py --all` (0 violations), `pnpm typecheck` (clean), `pnpm lint` (0 warnings), `pnpm build` (clean in 1.25s).
-  - Screenshots: 5 unclipped viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) captured and visually inspected in `docs/qa/KAN-412/screenshots/`.
+  - Backend Pytest: 63 passed in 17.29s across 5 test suites, 0 failures, 0 warnings.
+  - Frontend Vitest: 217 passed across 8 test suites, 0 failures, 0 `act(...)` warnings. Branch coverage: 96.28% (>=95% standard satisfied with 100% of files >=95%).
+  - Static Gates: `ruff` (0 errors), `mypy` (815 files clean), `check_no_dashes.py --all` (0 violations), `pnpm typecheck` (clean), `pnpm lint` (0 warnings), `pnpm build` (clean in 1.31s).
+  - Screenshots: 5 unclipped viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) with 6 PNGs captured and visually inspected in `docs/qa/KAN-412/screenshots/` (where `06-ai-mobile-responsive-390x844.png` displays the unobstructed `AiStudioPage` stacked provider cards without an open drawer).
 
 ---
 

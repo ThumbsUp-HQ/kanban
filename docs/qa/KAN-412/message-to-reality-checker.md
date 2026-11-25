@@ -74,19 +74,20 @@ Executed against hermetic dedicated testdb (`/tmp/kb-pgsock-kan412`):
 - `test_agent_definitions_api.py`: 24 passed
 - `test_llms_txt.py`: 7 passed
 - `test_remote_runner.py`: 11 passed
-- **Total Backend**: 63 passed in 16.83s, 0 failures, 0 warnings.
+- **Total Backend**: 63 passed in 17.29s, 0 failures, 0 warnings.
 
-### 2. Frontend Vitest Suites (175 Passed, >=95% Branch Coverage)
+### 2. Frontend Vitest Suites (217 Passed, >=95% Branch Coverage)
 Executed with `--coverage.thresholds.branches=95`:
 - `aiAdminApi.test.ts`: 7 passed
 - `AgentDefinitionEditorDrawer.test.tsx`: 7 passed (Branch coverage: 95.48%, Lines: 99.05%)
 - `AgentStudioPage.test.tsx`: 30 passed (Branch coverage: 97.50%, Lines: 100%)
 - `MenuConsolidation.test.tsx`: 10 passed
-- `AiProviderEditorDrawer.test.tsx`: 51 passed (Branch coverage: 95.83%, Lines: 100%)
+- `MenuConsolidation_KAN362.test.tsx`: 42 passed
+- `AiProviderEditorDrawer.test.tsx`: 51 passed (Branch coverage: 96.08%, Lines: 100%)
 - `AiStudioPage.test.tsx`: 48 passed (Branch coverage: 95.90%, Lines: 99.28%)
 - `RunnerStudioPage.test.tsx`: 22 passed (Branch coverage: 97.61%, Lines: 100%)
-- **Total Frontend**: 175 passed across 7 test suites, 0 failures, 0 `act(...)` warnings in 4.31s.
-- **Combined Branch Coverage on Touched Modules**: **96.16%** (exceeds >=95% mandate, 100% of touched files >=95%).
+- **Total Frontend**: 217 passed across 8 test suites, 0 failures, 0 `act(...)` warnings in 4.56s.
+- **Combined Branch Coverage on Touched Modules**: **96.28%** (exceeds >=95% mandate, 100% of touched files >=95%).
 
 ### 3. Static Analysis & Linters (All Clean)
 - `uv run ruff check kanban/ agent/`: Clean (0 errors, 0 warnings).
@@ -94,11 +95,11 @@ Executed with `--coverage.thresholds.branches=95`:
 - `python3 scripts/check_no_dashes.py --all`: Clean (0 Unicode dashes across all files).
 - `pnpm --dir kanban/web typecheck`: Clean (`tsc -b --noEmit` exit 0).
 - `pnpm --dir kanban/web lint`: Clean (`eslint . --max-warnings 0` exit 0).
-- `pnpm --dir kanban/web build`: Clean (Clean production build in 1.24s).
+- `pnpm --dir kanban/web build`: Clean (Clean production build in 1.31s).
 
 ### 4. Visual Verification (Playwright Multi-Viewport Screenshots)
 Executed via `e2e/qa/kan-412-slice2-ai-screenshots.spec.ts` capturing 5 viewports without clipping:
-- `01-ai-provider-editor-1440x900-light.png`: Shows 1-click presets (Ollama, OpenAI, Gemini), promoted Base URL, masked secret key, zero password inputs, full Advanced Settings accordion, and unclipped Cancel/Save footer.
+- `01-ai-provider-editor-1440x900-light.png`: Shows 1-click presets (Ollama, OpenAI, Gemini), promoted Base URL, masked secret key, zero password inputs, collapsed Advanced Settings accordion with `>` chevron and summary text, and unclipped Cancel/Save footer.
 - `02-ai-budget-freeze-1440x900-light.png`: Shows mode toggle pills, quick-pick presets, 0-token freeze progress bar, full-page dark backdrop, and hard freeze alert banner.
 - `03-agent-studio-subnav-1440x900-dark.png`: Shows dark theme, `AdminStudioSubnav` active `Agents` tab, and `AgentDefinitionEditorDrawer` with inline harness hint.
 - `04-ai-airgap-disabled-1024x768.png`: Tablet landscape showing air-gap notice, disabled cloud presets, and disabled options in dropdown.
@@ -112,7 +113,7 @@ All PNGs stored in `docs/qa/KAN-412/screenshots/` and visually verified via `rea
 
 The following proof artifacts are available in `docs/qa/KAN-412/`:
 1. `git-diff.patch`: Unified diff from base commit `8c6a77e2`.
-2. `unit-test-results.txt`: Raw test execution log showing 63 backend pytest and 175 frontend vitest tests passing with 96.16% branch coverage.
+2. `unit-test-results.txt`: Raw test execution log showing 63 backend pytest and 217 frontend vitest tests passing with 96.28% branch coverage.
 3. `build-check.txt`: Raw output of ruff, mypy, typography check, pnpm typecheck, pnpm lint, and pnpm build.
 4. `screenshots/`: 5 unclipped multi-viewport Playwright PNG screenshots (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`).
 5. `api-specialist-review.md`: Dedicated API Specialist Review and sign-off.

@@ -16,7 +16,7 @@ This API Specialist Review evaluates the API integrations, request schema adhere
 
 The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and reinforces zero-trust security invariants:
 1. **Air-Gap Policy Egress Protection**:
-   - Preserves backend network guard validation in `kanban/ai_config/net_guard.py` and maps HTTP 403 `AIR_GAP_EGRESS_DENIED` cleanly to actionable user-facing guidance. In creation mode, cloud provider 1-click presets (OpenAI, Gemini) are automatically disabled when `airGapMode` is active.
+   - Preserves backend network guard validation in `kanban/ai_config/net_guard.py` and maps HTTP 409 `AIR_GAP_EGRESS_DENIED` cleanly to actionable user-facing guidance. In creation mode, cloud provider 1-click presets (OpenAI, Gemini) are automatically disabled when `airGapMode` is active.
 2. **AI Provider Base URL SSRF & Credential Guard**:
    - HTTP Base URL promoted into primary connection settings with strict password manager suppression attributes (`autoComplete="off"`, `data-1p-ignore="true"`, `data-lpignore="true"`, `data-bwignore="true"`, `data-form-type="other"`).
    - Validates against SSRF via existing backend `validate_base_url_safety` rejecting RFC 1918 / CGNAT / AWS metadata endpoints when cloud providers are configured.
@@ -34,23 +34,31 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
 
 ### 2.1 AI Provider Management (`kanban/api/v1/admin/ai_providers.py`)
 - **Routes:**
-  - `GET /api/v1/admin/ai-providers`
-  - `POST /api/v1/admin/ai-providers`
-  - `PUT /api/v1/admin/ai-providers/{provider_id}`
-  - `DELETE /api/v1/admin/ai-providers/{provider_id}`
-  - `POST /api/v1/admin/ai-providers/reorder`
-  - `POST /api/v1/admin/ai-providers/{provider_id}/probe`
+  - `GET /api/v1/admin/ai/providers`
+  - `POST /api/v1/admin/ai/providers`
+  - `PUT /api/v1/admin/ai/providers/order`
+  - `GET /api/v1/admin/ai/providers/{provider_id}`
+  - `PATCH /api/v1/admin/ai/providers/{provider_id}`
+  - `DELETE /api/v1/admin/ai/providers/{provider_id}`
+  - `POST /api/v1/admin/ai/providers/probe-models`
+  - `POST /api/v1/admin/ai/providers/test-connection`
+  - `POST /api/v1/admin/ai/providers/{provider_id}/probe-models`
+  - `POST /api/v1/admin/ai/providers/{provider_id}/test-connection`
+  - `GET /api/v1/admin/ai/budgets`
+  - `PUT /api/v1/admin/ai/budgets`
 - **Security Invariants:**
   - All routes protected by `Depends(require_admin_aal2)`.
   - Secret keys zeroized from response payloads; write-only updates supported via replacement toggles.
   - Failover reordering validated through atomic rank updates.
 
-### 2.2 Agent Definitions Management (`kanban/api/v1/admin/agent_definitions.py`)
+### 2.2 Agent Definitions Management (`kanban/api/v1/agent_definitions.py`)
 - **Routes:**
-  - `GET /api/v1/admin/agent-definitions`
-  - `POST /api/v1/admin/agent-definitions`
-  - `PATCH /api/v1/admin/agent-definitions/{agent_id}`
-  - `DELETE /api/v1/admin/agent-definitions/{agent_id}`
+  - `POST /api/v1/workspaces/{workspace}/agent-definitions`
+  - `GET /api/v1/workspaces/{workspace}/agent-definitions`
+  - `GET /api/v1/agent-definitions/{agent}`
+  - `PATCH /api/v1/agent-definitions/{agent}`
+  - `DELETE /api/v1/agent-definitions/{agent}`
+  - `POST /api/v1/agent-definitions/{agent}:validate` (or `/validate`)
 - **Security Invariants:**
   - Strict harness typing (`in_app_sdk`, `cli_pipe`, `remote_runner`).
   - Table-driven banned flag enforcement (`--yolo`, `--dangerously-skip-permissions`, `--full-auto`, `--allow-all-tools`) for `cli_pipe`.
@@ -61,20 +69,20 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 63 passed in 16.83s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, and `test_remote_runner.py`.
+   - 63 passed in 17.29s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, and `test_remote_runner.py`.
    - 0 failures, 0 errors, 0 warnings.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 175 passed across 7 test suites (`aiAdminApi`, `AgentDefinitionEditorDrawer`, `AgentStudioPage`, `MenuConsolidation`, `AiProviderEditorDrawer`, `AiStudioPage`, `RunnerStudioPage`).
-   - Branch coverage: **96.16%** across touched files (`AgentDefinitionEditorDrawer.tsx` 95.48%, `AgentStudioPage.tsx` 97.5%, `AiBudgetModal.tsx` 97.77%, `AiProviderEditorDrawer.tsx` 95.83%, `AiStudioPage.tsx` 95.90%, `RunnerStudioPage.tsx` 97.61%).
-   - 0 `act(...)` stderr warnings.
+   - 217 passed across 8 test suites (`aiAdminApi`, `AgentDefinitionEditorDrawer`, `AgentStudioPage`, `MenuConsolidation`, `MenuConsolidation_KAN362`, `AiProviderEditorDrawer`, `AiStudioPage`, `RunnerStudioPage`).
+   - Branch coverage: **96.28%** across touched files (`AgentDefinitionEditorDrawer.tsx` 95.48%, `AgentStudioPage.tsx` 97.5%, `AiBudgetModal.tsx` 97.77%, `AiProviderEditorDrawer.tsx` 96.08%, `AiStudioPage.tsx` 95.90%, `RunnerStudioPage.tsx` 97.61%).
+   - 0 `act(...)` stderr warnings in 4.56s.
 
 3. **Build & Static Analysis Pipeline**:
    - `ruff check`: All checks passed.
    - `mypy`: 0 issues found in 815 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.24s.
+   - `vite build`: Succeeded in 1.31s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -87,9 +95,9 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 63 backend and 175 frontend passing tests.
+  - `unit-test-results.txt`: Documents 63 backend and 217 frontend passing tests with 96.28% branch coverage.
   - `git-diff.patch`: Clean diff with 0 untracked files.
-  - `screenshots/`: 5 multi-viewport unclipped PNG captures.
+  - `screenshots/`: 5 multi-viewport unclipped PNG captures (6 numbered images `01` through `06`).
   - `changed-files-manifest.txt` and `SHA256SUMS.txt`: Verified with `sha256sum -c`.
 
 The API architecture, schema compliance, and security safeguards for KAN-412 are complete, robust, and approved for integration.
