@@ -647,4 +647,3 @@ async def test_credential_projects_boundary_blocks_server_admin(
         text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
     )
     assert res_null.scalar_one() is True
-

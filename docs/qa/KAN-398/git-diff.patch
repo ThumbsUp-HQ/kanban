@@ -429,7 +429,7 @@ diff --git a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.
 index be6e0e97..48b2ba05 100644
 Binary files a/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png and b/docs/qa/KAN-398/screenshots/03-subnav-workspace-admin-light-tablet.png differ
 diff --git a/kanban/tests/auth/test_admin_auth_cards_access.py b/kanban/tests/auth/test_admin_auth_cards_access.py
-index 9983172a..3051530f 100644
+index 9983172a..0b06b14f 100644
 --- a/kanban/tests/auth/test_admin_auth_cards_access.py
 +++ b/kanban/tests/auth/test_admin_auth_cards_access.py
 @@ -52,8 +52,8 @@ def kek_provider(key_material: KeyMaterial) -> StaticKekProvider:
@@ -520,7 +520,7 @@ index 9983172a..3051530f 100644
      ) = await _setup_workspace_and_multi_role_principals(db_session)
      factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
      session_service = SessionService(key_material.session_hmac_key)
-@@ -454,3 +489,162 @@ async def test_admin_auth_cards_endpoint_access_matrix(
+@@ -454,3 +489,161 @@ async def test_admin_auth_cards_endpoint_access_matrix(
          res_member = await client.get("/api/v1/admin/auth-cards")
          assert res_member.status_code == 403
          assert res_member.json()["code"] == "FORBIDDEN"
@@ -682,7 +682,6 @@ index 9983172a..3051530f 100644
 +        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
 +    )
 +    assert res_null.scalar_one() is True
-+
 diff --git a/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts b/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts
 index 1ea5e099..d7d27d79 100644
 --- a/kanban/web/e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts
