@@ -1669,7 +1669,7 @@ export function McpAccessStudio({
                     !newKeyLabel.trim() ||
                     (isUnlimited && !confirmUnlimited) ||
                     Boolean(cidrError) ||
-                    capabilityMask <= 0
+                    capabilityMask < 0
                   }
                 >
                   {minting ? 'Minting...' : 'Mint Key'}

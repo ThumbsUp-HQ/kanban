@@ -2534,5 +2534,39 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       // Verify unlimited option is not present due to TTL policy
       expect(screen.queryByTestId('option-unlimited')).toBeNull();
     });
+
+    it('permits minting a key with capability_mask 0 without disabling submit button (KAN-417)', () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} allowUnlimitedKeys={true} />
+        </MemoryRouter>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('mint-key-button'));
+      });
+
+      act(() => {
+        fireEvent.change(screen.getByTestId('mint-label-input'), {
+          target: { value: 'Zero Mask Key' },
+        });
+        // Expand advanced section
+        fireEvent.click(screen.getByTestId('advanced-capability-restrictions-toggle'));
+      });
+
+      // Uncheck default capability bits (1, 2, 4, 8, 16) so mask becomes 0
+      act(() => {
+        for (const bit of [1, 2, 4, 8, 16]) {
+          const cb = screen.getByTestId<HTMLInputElement>(`cap-bit-${String(bit)}`);
+          if (cb.checked) {
+            fireEvent.click(cb);
+          }
+        }
+      });
+
+      // Submit button should NOT be disabled for mask 0
+      const submitBtn = screen.getByTestId<HTMLButtonElement>('mint-submit-btn');
+      expect(submitBtn.disabled).toBe(false);
+    });
   });
 });

@@ -63,7 +63,7 @@ Execute the following commands from the workspace root to reproduce all verifica
 # 1. Run backend unit test suites (118 tests: 53 core slice + 58 oauth flow + 7 parity; 95% on admin/mcp_keys.py, 98% on workload_identities.py, 97% on mcp_keys.py, 95% on oauth.py, 95% on mcp/app.py)
 uv run python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/oauth/test_device_flow.py', 'kanban/tests/oauth/test_oauth_coverage.py', 'kanban/tests/oauth/test_oauth_flow.py', 'kanban/tests/oauth/test_oauth_unit.py', 'kanban/tests/api/test_unified_mcp_keys_api.py', 'kanban/tests/api/test_admin_mcp_keys_api.py', 'kanban/tests/auth/test_workload_oidc_exchange.py', 'mcp/tests/test_workload_jwt_auth.py', 'mcp/tests/test_mcp_capability_mask_and_cidr.py', 'kanban/tests/test_feature_comparison_parity.py']))"
 
-# 2. Run frontend Vitest test suites (133 tests with 95.96% branch coverage and 0 act(...) warnings)
+# 2. Run frontend Vitest test suites (134 tests with 95.98% branch coverage and 0 act(...) warnings)
 COVERAGE_INCLUDE="src/features/settings/McpAccessStudio.tsx,src/features/settings/ConnectOAuthAppModal.tsx,src/features/settings/McpUnifiedStudio.tsx,src/features/oauth/OAuthClientGovernanceStudio.tsx,src/features/oauth/DeviceActivatePage.tsx" \
 pnpm --dir kanban/web exec vitest run --coverage \
   src/features/settings/__tests__/McpAccessStudio.test.tsx \
@@ -88,12 +88,12 @@ cd docs/qa/KAN-417 && sha256sum -c changed-files-manifest.txt
 
 ## 4. Visual Evidence & Screenshots
 
-All 5 viewports were captured and verified via Playwright in `docs/qa/KAN-417/screenshots/`:
-- `01-desktop-1440x900-light-mcp-mint-modal-segmented-selectors.png`
-- `02-desktop-1440x900-dark-connect-oauth-modal.png`
-- `03-desktop-1024x768-workload-oidc-presets.png`
-- `04-tablet-portrait-768x1024-oauth-governance-advanced.png`
-- `05-mobile-portrait-390x844-device-activate.png`
+All 5 viewports were captured and verified via Playwright in `docs/qa/KAN-417/screenshots/` (with fully unclipped modal cards and zero sticky footer overlap):
+- `01-desktop-1440x900-light-mcp-mint-modal-segmented-selectors.png` (1440x1450)
+- `02-desktop-1440x900-dark-connect-oauth-modal.png` (1440x900)
+- `03-desktop-1024x768-workload-oidc-presets.png` (1024x1250)
+- `04-tablet-portrait-768x1024-oauth-governance-advanced.png` (768x1024)
+- `05-mobile-portrait-390x844-device-activate.png` (390x844)
 
 ---
 

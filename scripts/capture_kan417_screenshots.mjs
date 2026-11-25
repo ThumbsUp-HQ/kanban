@@ -394,13 +394,38 @@ async function main() {
       await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card { height: auto !important; max-height: none !important; overflow: visible !important; }
+          html, body, #root, .kb-app-shell, .kb-main-canvas {
+            height: auto !important;
+            min-height: 100% !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .kb-snippet-modal-backdrop {
+            position: relative !important;
+            inset: auto !important;
+            min-height: 100vh !important;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex !important;
+            justify-content: center !important;
+            padding-top: 40px !important;
+            padding-bottom: 40px !important;
+          }
+          .kb-snippet-modal-card, .kb-mcp-mint-form {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
           .kb-topbar, header { position: static !important; }
+          .kb-mcp-form-actions { position: static !important; margin-top: 24px !important; }
         `;
         document.head.appendChild(style);
       });
 
-      await page.waitForTimeout(300);
+      // Expand viewport height so the entire modal card is captured cleanly without clipping
+      await page.setViewportSize({ width: 1440, height: 1450 });
+
+      await page.waitForTimeout(400);
       await page.screenshot({
         path: path.join(OUT_DIR, `${vp.name}.png`),
         fullPage: true,
@@ -440,8 +465,22 @@ async function main() {
       await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card { height: auto !important; max-height: none !important; overflow: visible !important; }
+          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card, .kb-mcp-mint-form {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .kb-snippet-modal-backdrop {
+            position: absolute !important;
+            min-height: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            align-items: flex-start !important;
+            padding-top: 40px !important;
+            padding-bottom: 40px !important;
+          }
           .kb-topbar, header { position: static !important; }
+          .kb-mcp-form-actions { position: static !important; margin-top: 20px !important; }
         `;
         document.head.appendChild(style);
       });
@@ -483,16 +522,44 @@ async function main() {
       // Click GitHub Actions preset
       await page.locator('[data-testid="preset-github-actions"]').click();
 
+      // Open Advanced restrictions
+      await page.locator('[data-testid="workload-advanced-section-toggle"]').click();
+
       await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card { height: auto !important; max-height: none !important; overflow: visible !important; }
+          html, body, #root, .kb-app-shell, .kb-main-canvas {
+            height: auto !important;
+            min-height: 100% !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .kb-snippet-modal-backdrop {
+            position: relative !important;
+            inset: auto !important;
+            min-height: 100vh !important;
+            height: auto !important;
+            overflow: visible !important;
+            display: flex !important;
+            justify-content: center !important;
+            padding-top: 40px !important;
+            padding-bottom: 40px !important;
+          }
+          .kb-snippet-modal-card, .kb-mcp-mint-form {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
           .kb-topbar, header { position: static !important; }
+          .kb-mcp-form-actions { position: static !important; margin-top: 20px !important; }
         `;
         document.head.appendChild(style);
       });
 
-      await page.waitForTimeout(300);
+      // Expand viewport height so the workload OIDC policy modal card is captured cleanly without clipping
+      await page.setViewportSize({ width: 1024, height: 1250 });
+
+      await page.waitForTimeout(400);
       await page.screenshot({
         path: path.join(OUT_DIR, `${vp.name}.png`),
         fullPage: true,
@@ -537,8 +604,22 @@ async function main() {
       await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card { height: auto !important; max-height: none !important; overflow: visible !important; }
+          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card, .kb-mcp-mint-form {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .kb-snippet-modal-backdrop {
+            position: absolute !important;
+            min-height: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            align-items: flex-start !important;
+            padding-top: 40px !important;
+            padding-bottom: 40px !important;
+          }
           .kb-topbar, header { position: static !important; }
+          .kb-mcp-form-actions { position: static !important; margin-top: 20px !important; }
         `;
         document.head.appendChild(style);
       });
@@ -569,16 +650,32 @@ async function main() {
         localStorage.setItem('theme', 'light');
       });
 
-      // Enter valid code
+      // Type code with an invalid character 'A' to trigger real-time warning banner
       const input = page.locator('[data-testid="user-code-input"]');
       await input.waitFor({ state: 'visible', timeout: 5000 });
-      await input.fill('BCDF-GHJK');
+      await input.click();
+      await input.pressSequentially('BCDA', { delay: 50 });
+      await page.locator('[data-testid="user-code-input-notice"]').waitFor({ state: 'visible', timeout: 5000 });
 
       await page.evaluate(() => {
         const style = document.createElement('style');
         style.textContent = `
-          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card { height: auto !important; max-height: none !important; overflow: visible !important; }
+          .kb-app-shell, .kb-main-canvas, .kb-snippet-modal-card, .kb-mcp-mint-form {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .kb-snippet-modal-backdrop {
+            position: absolute !important;
+            min-height: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            align-items: flex-start !important;
+            padding-top: 40px !important;
+            padding-bottom: 40px !important;
+          }
           .kb-topbar, header { position: static !important; }
+          .kb-mcp-form-actions { position: static !important; margin-top: 20px !important; }
         `;
         document.head.appendChild(style);
       });

@@ -1143,6 +1143,15 @@ describe('WorkloadFederationSection (KAN-74)', () => {
       expect(sentBody?.max_ttl_seconds).toBe(3600);
       expect(sentBody?.description).toBeUndefined();
     });
+
+    // 3. Submit with explicit capability_mask = 0 (prevents escalation to 255)
+    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-custom-1'));
+    fireEvent.change(screen.getByTestId('policy-cap-mask-input'), { target: { value: '0' } });
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+
+    await waitFor(() => {
+      expect(sentBody?.capability_mask).toBe(0);
+    });
     unmount();
   });
 });
