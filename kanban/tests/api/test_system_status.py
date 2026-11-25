@@ -444,7 +444,7 @@ async def test_case_2_standalone_encrypted_backup_and_zero_shell(
             assert resp.status_code == 200
             assert resp.headers["content-type"] == "application/octet-stream"
             assert "kanban-backup-" in resp.headers["content-disposition"]
-            assert resp.headers["content-disposition"].endswith('.kbkp"')
+            assert resp.headers["content-disposition"].endswith('.kbbak"')
 
             encrypted_bytes = resp.content
             assert encrypted_bytes.startswith(b"KBKP")

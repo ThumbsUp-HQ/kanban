@@ -271,7 +271,7 @@ async def create_standalone_backup(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
     request: Request,
 ) -> Response:
-    """Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbkp file."""
+    """Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbbak file."""
     settings = getattr(request.app.state, "settings", None)
     status_data = get_standalone_status(settings=settings)
     if status_data["deployment_mode"] != "standalone_embedded_pg":
@@ -338,7 +338,7 @@ async def create_standalone_backup(
     )
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    filename = f"kanban-backup-{timestamp}.kbkp"
+    filename = f"kanban-backup-{timestamp}.kbbak"
 
     return Response(
         content=encrypted_data,

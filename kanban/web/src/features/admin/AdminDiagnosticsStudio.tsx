@@ -314,24 +314,20 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       };
 
       sock.onerror = () => {
-        // Fallback simulated probe if offline/test environment
-        const elapsed = Math.round(performance.now() - start);
-        setWsRtt(elapsed > 0 ? elapsed : 12);
-        setWsProbeState('connected');
+        setWsProbeState('error');
+        setWsRtt(null);
       };
 
       setTimeout(() => {
         if (sock.readyState === WebSocket.CONNECTING || sock.readyState === WebSocket.OPEN) {
           sock.close();
-          if (wsProbeState === 'probing') {
-            setWsRtt(14);
-            setWsProbeState('connected');
-          }
+          setWsProbeState((prev) => (prev === 'probing' ? 'error' : prev));
+          setWsRtt(null);
         }
       }, 1500);
     } catch {
-      setWsRtt(15);
-      setWsProbeState('connected');
+      setWsProbeState('error');
+      setWsRtt(null);
     }
   };
 
@@ -385,16 +381,22 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         <div className="admin-diag-header-actions">
           <span
             className={`admin-diag-badge ${
-              wsProbeState === 'connected' ? 'admin-diag-badge--ok' : 'admin-diag-badge--warn'
+              wsProbeState === 'connected'
+                ? 'admin-diag-badge--ok'
+                : wsProbeState === 'error'
+                  ? 'admin-diag-badge--danger'
+                  : 'admin-diag-badge--warn'
             }`}
             data-testid="ws-probe-badge"
           >
             <span aria-hidden="true">⚡</span>
             {wsProbeState === 'connected'
-              ? `WS Live (${String(wsRtt ?? 12)}ms)`
+              ? `WS Live (${String(wsRtt ?? 0)}ms)`
               : wsProbeState === 'probing'
                 ? 'Probing WS...'
-                : 'WS Ready'}
+                : wsProbeState === 'error'
+                  ? 'WS Disconnected / Error'
+                  : 'WS Ready'}
           </span>
 
           <button
@@ -420,7 +422,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         </div>
       </header>
 
-      <AdminStudioSubnav activeTab="diagnostics" />
+      <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={user?.is_server_admin} />
 
       {/* Top 4-Card Summary Strip */}
       <section className="admin-diag-summary-strip" aria-label="System Summary Strip">
@@ -488,7 +490,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
           </div>
           <div className="admin-diag-summary-card-body">Universal Links</div>
           <div className="admin-diag-summary-card-footer">
-            6-class Link Auditor &amp; Purger embedded
+            7-class Link Auditor &amp; Purger embedded
           </div>
         </div>
       </section>

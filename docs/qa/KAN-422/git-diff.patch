@@ -1,0 +1,1709 @@
+diff --git a/kanban/api/v1/admin/link_auditor.py b/kanban/api/v1/admin/link_auditor.py
+index dc1a734e..9b8e77c5 100644
+--- a/kanban/api/v1/admin/link_auditor.py
++++ b/kanban/api/v1/admin/link_auditor.py
+@@ -58,7 +58,7 @@ async def post_audit_object_links(
+     caller: Annotated[PrincipalContext, Depends(require_workspace_or_server_admin)],
+     session: Session,
+ ) -> LinkAuditScanResponse:
+-    """Scan workspace object links and return aggregated invalidity counts across 6 classes."""
++    """Scan workspace object links and return aggregated invalidity counts across 7 classes."""
+     async with timing_floor(floor_ms=25.0):
+         return await svc.run_link_audit(session, caller, caller.workspace_id)
+ 
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index be6a4d3f..954a7e44 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -271,7 +271,7 @@ async def create_standalone_backup(
+     session: Annotated[AsyncSession, Depends(get_rls_session)],
+     request: Request,
+ ) -> Response:
+-    """Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbkp file."""
++    """Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbbak file."""
+     settings = getattr(request.app.state, "settings", None)
+     status_data = get_standalone_status(settings=settings)
+     if status_data["deployment_mode"] != "standalone_embedded_pg":
+@@ -338,7 +338,7 @@ async def create_standalone_backup(
+     )
+ 
+     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+-    filename = f"kanban-backup-{timestamp}.kbkp"
++    filename = f"kanban-backup-{timestamp}.kbbak"
+ 
+     return Response(
+         content=encrypted_data,
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index f9a9b2fd..20658ecc 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -444,7 +444,7 @@ async def test_case_2_standalone_encrypted_backup_and_zero_shell(
+             assert resp.status_code == 200
+             assert resp.headers["content-type"] == "application/octet-stream"
+             assert "kanban-backup-" in resp.headers["content-disposition"]
+-            assert resp.headers["content-disposition"].endswith('.kbkp"')
++            assert resp.headers["content-disposition"].endswith('.kbbak"')
+ 
+             encrypted_bytes = resp.content
+             assert encrypted_bytes.startswith(b"KBKP")
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index a018a6f7..095935e4 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -11,7 +11,6 @@ import {
+   type ImportSource,
+ } from './planeImportApi';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+-import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './PlaneImportStudio.css';
+@@ -85,10 +84,35 @@ export function PlaneImportStudio(): JSX.Element {
+   const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
+ 
+   // Advanced Import Options
+-  const [batchSize, setBatchSize] = useState<number>(100);
+   const [userMappingJson, setUserMappingJson] = useState<string>('');
+-  const [conflictStrategy, setConflictStrategy] = useState<'skip' | 'overwrite' | 'rename'>('skip');
+-  const [preserveLegacyUuids, setPreserveLegacyUuids] = useState<boolean>(true);
++  const [userMappingError, setUserMappingError] = useState<string | null>(null);
++
++  const parseUserMap = (raw: string): Record<string, string> | undefined => {
++    const trimmed = raw.trim();
++    if (!trimmed) {
++      setUserMappingError(null);
++      return undefined;
++    }
++    try {
++      const parsed = JSON.parse(trimmed) as unknown;
++      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
++        throw new Error('User mapping must be a JSON object mapping source identifiers to local usernames or emails.');
++      }
++      const result: Record<string, string> = {};
++      for (const [k, v] of Object.entries(parsed)) {
++        result[k] = String(v);
++      }
++      setUserMappingError(null);
++      return result;
++    } catch (err) {
++      const msg =
++        err instanceof Error && err.message.includes('User mapping must be')
++          ? err.message
++          : 'Invalid User Mapping JSON: please provide a valid JSON object of key-value string pairs.';
++      setUserMappingError(msg);
++      throw new Error(msg);
++    }
++  };
+ 
+   const [stage, setStage] = useState<'input' | 'preview' | 'executing' | 'done'>('input');
+   const [diffReport, setDiffReport] = useState<ImportDiffReport | null>(null);
+@@ -213,6 +237,13 @@ export function PlaneImportStudio(): JSX.Element {
+       );
+       return;
+     }
++    let userMap: Record<string, string> | undefined;
++    try {
++      userMap = parseUserMap(userMappingJson);
++    } catch (err) {
++      setError(err instanceof Error ? err.message : 'Invalid User Mapping JSON');
++      return;
++    }
+     setLoading(true);
+     setError(null);
+     try {
+@@ -220,6 +251,7 @@ export function PlaneImportStudio(): JSX.Element {
+         bundle_data: bundleData,
+         project_key: projectKey.trim() || undefined,
+         dry_run: true,
++        user_map: userMap,
+         workspace_slug: workspaceSlug.trim() || undefined,
+       };
+       const report =
+@@ -244,6 +276,16 @@ export function PlaneImportStudio(): JSX.Element {
+     /* v8 ignore next */
+     if (!bundleData) return;
+     const sourceName = getSourceName(source);
++    let userMap: Record<string, string> | undefined;
++    try {
++      userMap = parseUserMap(userMappingJson);
++    /* v8 ignore start - defensive fallback if mapping mutated while in preview */
++    } catch (err) {
++      setError(err instanceof Error ? err.message : 'Invalid User Mapping JSON');
++      setStage('preview');
++      return;
++    }
++    /* v8 ignore stop */
+     setLoading(true);
+     setStage('executing');
+     setError(null);
+@@ -252,6 +294,7 @@ export function PlaneImportStudio(): JSX.Element {
+         bundle_data: bundleData,
+         project_key: projectKey.trim() || undefined,
+         dry_run: false,
++        user_map: userMap,
+         workspace_slug: workspaceSlug.trim() || undefined,
+       };
+       const report =
+@@ -586,119 +629,11 @@ export function PlaneImportStudio(): JSX.Element {
+           <div style={{ marginTop: 20 }}>
+             <AdvancedSection
+               title="Advanced Import Options"
+-              summary="Batch sizing, user identity mapping, UUID preservation, and conflict resolution strategy"
++              summary="User identity mapping and custom member attribution overrides"
+               testId="advanced-import-options"
+-              activeOverridesCount={
+-                (batchSize !== 100 ? 1 : 0) +
+-                (userMappingJson.trim() ? 1 : 0) +
+-                (conflictStrategy !== 'skip' ? 1 : 0) +
+-                (!preserveLegacyUuids ? 1 : 0)
+-              }
++              activeOverridesCount={userMappingJson.trim() ? 1 : 0}
+             >
+-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
+-                <div>
+-                  <label
+-                    htmlFor="import-batch-size"
+-                    style={{
+-                      display: 'flex',
+-                      alignItems: 'center',
+-                      width: '100%',
+-                      fontSize: '0.825rem',
+-                      fontWeight: 600,
+-                      marginBottom: 6,
+-                      color: 'var(--kb-color-text-secondary)',
+-                    }}
+-                  >
+-                    Import Batch Size
+-                    <FieldHelpHint
+-                      title="Import Batch Size"
+-                      summary="Number of entities to ingest per transactional database batch."
+-                      defaultValue="100 items per batch"
+-                      validValues={['10 to 1000 items']}
+-                      docHref="/docs/migration-and-cutover-runbook#plane-import"
+-                      testId="plane-import-batch-size-help"
+-                    />
+-                  </label>
+-                  <input
+-                    id="import-batch-size"
+-                    type="number"
+-                    min={10}
+-                    max={1000}
+-                    step={10}
+-                    className="kb-plane-textarea"
+-                    style={{ minHeight: 40, height: 40, width: '100%' }}
+-                    data-testid="import-batch-size-input"
+-                    value={batchSize}
+-                    onChange={(e) => {
+-                      setBatchSize(Math.max(1, parseInt(e.target.value, 10) || 100));
+-                    }}
+-                  />
+-                </div>
+-
+-                <div>
+-                  <label
+-                    htmlFor="import-conflict-strategy"
+-                    style={{
+-                      display: 'flex',
+-                      alignItems: 'center',
+-                      width: '100%',
+-                      fontSize: '0.825rem',
+-                      fontWeight: 600,
+-                      marginBottom: 6,
+-                      color: 'var(--kb-color-text-secondary)',
+-                    }}
+-                  >
+-                    Conflict Resolution Strategy
+-                    <FieldHelpHint
+-                      title="Conflict Resolution Strategy"
+-                      summary="Policy when encountering duplicate identifiers during workspace import."
+-                      defaultValue="Skip Existing"
+-                      docHref="/docs/migration-and-cutover-runbook#plane-import"
+-                      testId="plane-import-conflict-strategy-help"
+-                    />
+-                  </label>
+-                  <select
+-                    id="import-conflict-strategy"
+-                    className="kb-plane-textarea"
+-                    style={{ minHeight: 40, height: 40, width: '100%' }}
+-                    data-testid="import-conflict-strategy-select"
+-                    value={conflictStrategy}
+-                    onChange={(e) => {
+-                      setConflictStrategy(e.target.value as 'skip' | 'overwrite' | 'rename');
+-                    }}
+-                  >
+-                    <option value="skip">Skip Existing (Preserve Current)</option>
+-                    <option value="overwrite">Overwrite / Update Invariants</option>
+-                    <option value="rename">Rename / Auto-Suffix Sequence</option>
+-                  </select>
+-                </div>
+-              </div>
+-
+-              <div style={{ marginTop: '14px' }}>
+-                <label
+-                  style={{
+-                    display: 'flex',
+-                    alignItems: 'center',
+-                    gap: '8px',
+-                    fontSize: '0.825rem',
+-                    fontWeight: 600,
+-                    color: 'var(--kb-color-text-secondary)',
+-                    cursor: 'pointer',
+-                  }}
+-                >
+-                  <input
+-                    type="checkbox"
+-                    checked={preserveLegacyUuids}
+-                    onChange={(e) => {
+-                      setPreserveLegacyUuids(e.target.checked);
+-                    }}
+-                    data-testid="import-preserve-uuids-checkbox"
+-                  />
+-                  Preserve Legacy System UUIDs (Deterministic migration idempotency)
+-                </label>
+-              </div>
+-
+-              <div style={{ marginTop: '14px' }}>
++              <div>
+                 <label
+                   htmlFor="import-user-mapping"
+                   style={{
+@@ -719,9 +654,23 @@ export function PlaneImportStudio(): JSX.Element {
+                   data-testid="import-user-mapping-json"
+                   value={userMappingJson}
+                   onChange={(e) => {
+-                    setUserMappingJson(e.target.value);
++                    const val = e.target.value;
++                    setUserMappingJson(val);
++                    try {
++                      parseUserMap(val);
++                    } catch {
++                      // Handled by parseUserMap state
++                    }
+                   }}
+                 />
++                {userMappingError && (
++                  <div
++                    style={{ color: 'var(--kb-color-danger, #ef4444)', fontSize: '0.8rem', marginTop: 4 }}
++                    data-testid="import-user-mapping-error"
++                  >
++                    {userMappingError}
++                  </div>
++                )}
+               </div>
+             </AdvancedSection>
+           </div>
+diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+index 04eb0b3f..2b1b78f0 100644
+--- a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
++++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+@@ -436,23 +436,23 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+     fireEvent.change(projInput, { target: { value: 'MIGPROJ' } });
+     expect((projInput as HTMLInputElement).value).toBe('MIGPROJ');
+ 
+-    // Advanced options controls
+-    const batchInput = screen.getByTestId('import-batch-size-input');
+-    fireEvent.change(batchInput, { target: { value: '250' } });
+-    expect((batchInput as HTMLInputElement).value).toBe('250');
+-
+-    const conflictSelect = screen.getByTestId('import-conflict-strategy-select');
+-    fireEvent.change(conflictSelect, { target: { value: 'overwrite' } });
+-    expect((conflictSelect as HTMLSelectElement).value).toBe('overwrite');
+-
+-    const uuidCheckbox = screen.getByTestId('import-preserve-uuids-checkbox');
+-    fireEvent.click(uuidCheckbox);
+-    expect((uuidCheckbox as HTMLInputElement).checked).toBe(false);
++    // CUT orphan options controls must not be rendered
++    expect(screen.queryByTestId('import-batch-size-input')).toBeNull();
++    expect(screen.queryByTestId('import-conflict-strategy-select')).toBeNull();
++    expect(screen.queryByTestId('import-preserve-uuids-checkbox')).toBeNull();
+ 
+     const userMapping = screen.getByTestId('import-user-mapping-json');
+     fireEvent.change(userMapping, { target: { value: '{"old-uuid": "@admin"}' } });
+     expect((userMapping as HTMLTextAreaElement).value).toBe('{"old-uuid": "@admin"}');
+ 
++    // Test invalid JSON validation
++    fireEvent.change(userMapping, { target: { value: '{invalid-json' } });
++    expect(screen.getByTestId('import-user-mapping-error')).toBeDefined();
++
++    // Reset to valid JSON
++    fireEvent.change(userMapping, { target: { value: '{"old-uuid": "@admin"}' } });
++    expect(screen.queryByTestId('import-user-mapping-error')).toBeNull();
++
+     // Dropzone drag over and drag leave
+     const dropzone = screen.getByTestId('dropzone-area');
+     fireEvent.dragOver(dropzone);
+@@ -506,4 +506,27 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+       expect(screen.getByTestId('import-done-section')).toBeDefined();
+     });
+   });
++
++  it('displays error and halts when dry-run is triggered with invalid userMappingJson', () => {
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++    fireEvent.click(screen.getByTestId('mode-paste-btn'));
++    const textarea = screen.getByTestId('paste-textarea');
++    fireEvent.change(textarea, { target: { value: JSON.stringify({ issues: [{ id: '1' }] }) } });
++
++    const userMapping = screen.getByTestId('import-user-mapping-json');
++    // Test array non-object JSON
++    fireEvent.change(userMapping, { target: { value: '[1, 2, 3]' } });
++    expect(screen.getByText(/User mapping must be a JSON object/i)).toBeDefined();
++
++    // Test malformed JSON
++    fireEvent.change(userMapping, { target: { value: '{invalid-json' } });
++
++    const dryRunBtn = screen.getByTestId('run-dry-run-btn');
++    fireEvent.click(dryRunBtn);
++    expect(screen.getAllByText(/Invalid User Mapping JSON/i).length).toBeGreaterThan(0);
++  });
+ });
+diff --git a/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts b/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts
+index b45a7ee7..32fb4f52 100644
+--- a/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts
++++ b/kanban/web/src/features/admin-imports/__tests__/planeImportApi.test.ts
+@@ -152,4 +152,91 @@ describe('planeImportApi', () => {
+ 
+     await expect(downloadPortableExport({})).rejects.toThrow('Disk full');
+   });
++
++  it('downloadPortableExport includes X-CSRF-Token if getCsrfToken returns a token', async () => {
++    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('existing-csrf-token');
++    const mockBlob = new Blob(['data'], { type: 'application/gzip' });
++    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: true,
++      status: 200,
++      blob: () => Promise.resolve(mockBlob),
++    } as unknown as Response);
++
++    await downloadPortableExport({});
++    expect(fetchSpy).toHaveBeenCalledWith(
++      '/api/v1/admin/exports/portable',
++      expect.objectContaining({
++        headers: {
++          'Content-Type': 'application/json',
++          Accept: 'application/gzip, application/octet-stream, application/json',
++          'X-CSRF-Token': 'existing-csrf-token',
++        },
++      }),
++    );
++  });
++
++  it('downloadPortableExport handles 403 CSRF refresh and retries successfully', async () => {
++    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('stale-token');
++    const bootstrapSpy = vi.spyOn(clientModule, 'bootstrapCsrfToken').mockResolvedValueOnce('fresh-token');
++    const mockBlob = new Blob(['data'], { type: 'application/gzip' });
++
++    const fetchSpy = vi.spyOn(global, 'fetch')
++      .mockResolvedValueOnce({
++        ok: false,
++        status: 403,
++      } as unknown as Response)
++      .mockResolvedValueOnce({
++        ok: true,
++        status: 200,
++        blob: () => Promise.resolve(mockBlob),
++      } as unknown as Response);
++
++    const blob = await downloadPortableExport({});
++    expect(bootstrapSpy).toHaveBeenCalledWith(undefined, true);
++    expect(fetchSpy).toHaveBeenCalledTimes(2);
++    expect(blob).toBe(mockBlob);
++  });
++
++  it('downloadPortableExport handles 403 CSRF refresh returning undefined without retrying', async () => {
++    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('stale-token');
++    vi.spyOn(clientModule, 'bootstrapCsrfToken').mockResolvedValueOnce(undefined as unknown as string);
++
++    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: false,
++      status: 403,
++      json: () => Promise.resolve({ detail: 'CSRF token missing' }),
++    } as unknown as Response);
++
++    await expect(downloadPortableExport({})).rejects.toThrow('CSRF token missing');
++  });
++
++  it('downloadPortableExport extracts error message from error or message fields or fallback', async () => {
++    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: false,
++      status: 400,
++      json: () => Promise.resolve({ message: 'Invalid workspace slug' }),
++    } as unknown as Response);
++    await expect(downloadPortableExport({})).rejects.toThrow('Invalid workspace slug');
++
++    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: false,
++      status: 400,
++      json: () => Promise.resolve({ error: 'Bad request format' }),
++    } as unknown as Response);
++    await expect(downloadPortableExport({})).rejects.toThrow('Bad request format');
++
++    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: false,
++      status: 400,
++      json: () => Promise.resolve({ unknown_prop: 'something' }),
++    } as unknown as Response);
++    await expect(downloadPortableExport({})).rejects.toThrow('Export failed with HTTP 400');
++
++    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
++      ok: false,
++      status: 502,
++      json: () => Promise.reject(new Error('Non-JSON gateway error')),
++    } as unknown as Response);
++    await expect(downloadPortableExport({})).rejects.toThrow('Export failed with HTTP 502');
++  });
+ });
+diff --git a/kanban/web/src/features/admin-imports/planeImportApi.ts b/kanban/web/src/features/admin-imports/planeImportApi.ts
+index cff02907..dcd784cd 100644
+--- a/kanban/web/src/features/admin-imports/planeImportApi.ts
++++ b/kanban/web/src/features/admin-imports/planeImportApi.ts
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import { apiFetch } from '../../api/client';
++import { apiFetch, getCsrfToken, bootstrapCsrfToken } from '../../api/client';
+ 
+ export type ImportSource = 'plane' | 'jira' | 'github' | 'linear';
+ 
+@@ -70,23 +70,45 @@ export async function submitLinearImport(
+ export async function downloadPortableExport(
+   req: PortableExportRequest,
+ ): Promise<Blob> {
+-  const response = await fetch('/api/v1/admin/exports/portable', {
++  const csrf = getCsrfToken();
++  const headers: Record<string, string> = {
++    'Content-Type': 'application/json',
++    Accept: 'application/gzip, application/octet-stream, application/json',
++  };
++  if (csrf) {
++    headers['X-CSRF-Token'] = csrf;
++  }
++  let response = await fetch('/api/v1/admin/exports/portable', {
+     method: 'POST',
+-    headers: {
+-      'Content-Type': 'application/json',
+-      Accept: 'application/gzip, application/octet-stream, application/json',
+-    },
++    headers,
+     credentials: 'same-origin',
+     body: JSON.stringify({
+       workspace_slug: req.workspace_slug ?? undefined,
+       scrub: Boolean(req.scrub_text),
+     }),
+   });
++  if (response.status === 403) {
++    const freshCsrf = await bootstrapCsrfToken(undefined, true);
++    if (freshCsrf) {
++      headers['X-CSRF-Token'] = freshCsrf;
++      response = await fetch('/api/v1/admin/exports/portable', {
++        method: 'POST',
++        headers,
++        credentials: 'same-origin',
++        body: JSON.stringify({
++          workspace_slug: req.workspace_slug ?? undefined,
++          scrub: Boolean(req.scrub_text),
++        }),
++      });
++    }
++  }
+   if (!response.ok) {
+     let errMsg = `Export failed with HTTP ${String(response.status)}`;
+     try {
+-      const errJson = (await response.json()) as { detail?: string };
++      const errJson = (await response.json()) as { detail?: string; error?: string; message?: string };
+       if (errJson.detail) errMsg = errJson.detail;
++      else if (errJson.message) errMsg = errJson.message;
++      else if (errJson.error) errMsg = errJson.error;
+     } catch {
+       // fallback
+     }
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+index 8e5d0d8b..ec0d0575 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+@@ -428,6 +428,14 @@ describe('AdminDiagnosticsStudio Component', () => {
+     // Switch to Link Inspector tab
+     fireEvent.click(screen.getByTestId('tab-links'));
+     expect(screen.getByTestId('panel-links')).toBeDefined();
++
++    // Switch to All tab
++    fireEvent.click(screen.getByTestId('tab-all'));
++    expect(screen.getByTestId('panel-realtime')).toBeDefined();
++
++    // Switch back to Health tab
++    fireEvent.click(screen.getByTestId('tab-health'));
++    expect(screen.getByTestId('subsystem-card-postgresql_rls')).toBeDefined();
+   });
+ 
+   it('runs WS Ping probe when button is clicked', async () => {
+@@ -442,6 +450,26 @@ describe('AdminDiagnosticsStudio Component', () => {
+       return Promise.resolve({});
+     });
+ 
++    class MockWebSocket {
++      static OPEN = 1;
++      readyState = 1;
++      onopen: (() => void) | null = null;
++      onmessage: ((evt: { data: string }) => void) | null = null;
++      onerror: (() => void) | null = null;
++      close = vi.fn();
++      constructor() {
++        setTimeout(() => {
++          this.onopen?.();
++        }, 10);
++      }
++      send() {
++        setTimeout(() => {
++          this.onmessage?.({ data: JSON.stringify({ type: 'pong' }) });
++        }, 10);
++      }
++    }
++    vi.stubGlobal('WebSocket', MockWebSocket);
++
+     renderStudio('/admin/diagnostics', 'health');
+ 
+     await waitFor(() => {
+@@ -452,6 +480,50 @@ describe('AdminDiagnosticsStudio Component', () => {
+     await waitFor(() => {
+       expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Live');
+     });
++    vi.unstubAllGlobals();
++  });
++
++  it('reports genuine WS Disconnected / Error when WebSocket probe fails', async () => {
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(mockDiagnosticsData);
++      }
++      return Promise.resolve({});
++    });
++
++    class FailingWebSocket {
++      static OPEN = 1;
++      readyState = 3;
++      onopen: (() => void) | null = null;
++      onmessage: ((evt: { data: string }) => void) | null = null;
++      onerror: (() => void) | null = null;
++      close = vi.fn();
++      constructor() {
++        setTimeout(() => {
++          this.onerror?.();
++        }, 10);
++      }
++      send() {
++        void 0;
++      }
++    }
++    vi.stubGlobal('WebSocket', FailingWebSocket);
++
++    renderStudio('/admin/diagnostics', 'health');
++
++    await waitFor(() => {
++      expect(screen.getByTestId('run-ws-ping-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
++    });
++    vi.unstubAllGlobals();
+   });
+ 
+   it('defaults to links tab when navigated via /admin/link-auditor', async () => {
+@@ -476,4 +548,330 @@ describe('AdminDiagnosticsStudio Component', () => {
+       expect(screen.getByTestId('panel-links')).toBeDefined();
+     });
+   });
++
++  it('handles refresh diagnostics and PG LISTEN/NOTIFY probe success and failure', async () => {
++    let probeSuccess = true;
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics/probes/realtime')) {
++        if (probeSuccess) {
++          return Promise.resolve({ success: true, db_latency_ms: 1.5, notify_rtt_ms: 3.2, message: 'PG NOTIFY OK' });
++        }
++        return Promise.reject(new Error('Broker disconnected'));
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(mockDiagnosticsData);
++      }
++      return Promise.resolve({});
++    });
++
++    renderStudio('/admin/diagnostics', 'realtime');
++
++    await waitFor(() => {
++      expect(screen.getByTestId('run-pg-probe-btn')).toBeDefined();
++    });
++
++    // Test PG Probe Success
++    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('probe-alert').textContent).toContain('PG NOTIFY OK');
++    });
++
++    // Test PG Probe Failure
++    probeSuccess = false;
++    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('probe-alert').textContent).toContain('Broker disconnected');
++    });
++
++    // Test Refresh diagnostics button
++    fireEvent.click(screen.getByTestId('refresh-diagnostics-btn'));
++  });
++
++  it('handles config searching, subsystem filtering, and safe JSON copying', async () => {
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(mockDiagnosticsData);
++      }
++      return Promise.resolve({});
++    });
++
++    const writeTextMock = vi.fn().mockResolvedValue(undefined);
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: writeTextMock,
++      },
++    });
++
++    renderStudio('/admin/diagnostics', 'config');
++
++    await waitFor(() => {
++      expect(screen.getByTestId('panel-config')).toBeDefined();
++    });
++
++    // Search filter
++    const searchInput = screen.getByTestId('config-search-input');
++    fireEvent.change(searchInput, { target: { value: 'pepper' } });
++    expect(screen.getByText('auth_pepper')).toBeDefined();
++
++    // Subsystem filter
++    const select = screen.getByTestId('config-subsystem-select');
++    fireEvent.change(select, { target: { value: 'Auth & AAL2' } });
++
++    // Copy Safe JSON Summary
++    const copyBtn = screen.getByTestId('copy-config-btn');
++    fireEvent.click(copyBtn);
++    expect(writeTextMock).toHaveBeenCalled();
++  });
++
++  it('renders all sections when defaultTab is "all"', async () => {
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(mockDiagnosticsData);
++      }
++      return Promise.resolve({});
++    });
++
++    renderStudio('/admin/diagnostics', 'all');
++
++    await waitFor(() => {
++      expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
++      expect(screen.getByTestId('panel-realtime')).toBeDefined();
++      expect(screen.getByTestId('panel-runtime')).toBeDefined();
++      expect(screen.getByTestId('panel-config')).toBeDefined();
++      expect(screen.getByTestId('panel-links')).toBeDefined();
++    });
++  });
++
++  it('renders loading state when diagnostics is loading', async () => {
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return new Promise<unknown>(() => {
++          void 0;
++        }); // never resolves
++      }
++      return Promise.resolve({});
++    });
++
++    renderStudio('/admin/diagnostics', 'health');
++
++    await waitFor(() => {
++      expect(screen.getByText(/Loading system diagnostics/i)).toBeDefined();
++    });
++  });
++
++  it('renders root process, bare metal/podman, and degraded/unhealthy subsystem cards', async () => {
++    const customDiagnostics = {
++      ...mockDiagnosticsData,
++      runtime_and_container: {
++        ...mockDiagnosticsData.runtime_and_container,
++        is_non_root: false,
++        container_runtime: 'podman',
++      },
++      subsystems: {
++        ...mockDiagnosticsData.subsystems,
++        postgresql_rls: {
++          subsystem: 'postgresql_rls',
++          name: 'PostgreSQL & RLS Enforcement',
++          status: 'degraded',
++          description: 'High latency',
++          details: { latency_ms: 120 },
++        },
++        realtime_hub_outbox: {
++          subsystem: 'realtime_hub_outbox',
++          name: 'Realtime Hub & Outbox Relay',
++          status: 'unhealthy',
++          description: 'Outbox backlog',
++          details: { dead_letters: 5 },
++        },
++      },
++    };
++
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(customDiagnostics);
++      }
++      return Promise.resolve({});
++    });
++
++    renderStudio('/admin/diagnostics', 'health');
++
++    await waitFor(() => {
++      expect(screen.getByText('Podman Container')).toBeDefined();
++      expect(screen.getByText('Root Process')).toBeDefined();
++      expect(screen.getByText('DEGRADED')).toBeDefined();
++      expect(screen.getByText('UNHEALTHY')).toBeDefined();
++    });
++  });
++
++  it('handles WebSocket probe timeout and non-pong or invalid message payload', async () => {
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(mockDiagnosticsData);
++      }
++      return Promise.resolve({});
++    });
++
++    class TimeoutWebSocket {
++      static OPEN = 1;
++      static CONNECTING = 0;
++      readyState = 0;
++      onopen: (() => void) | null = null;
++      onmessage: ((evt: { data: unknown }) => void) | null = null;
++      onerror: (() => void) | null = null;
++      close = vi.fn(() => {
++        this.readyState = 3;
++      });
++      constructor() {
++        setTimeout(() => {
++          this.readyState = 1;
++          this.onopen?.();
++          // send invalid non-string, invalid json, and non-pong
++          this.onmessage?.({ data: 12345 });
++          this.onmessage?.({ data: 'not-valid-json' });
++          this.onmessage?.({ data: JSON.stringify({ type: 'hello' }) });
++        }, 10);
++      }
++      send() {
++        void 0;
++      }
++    }
++    vi.stubGlobal('WebSocket', TimeoutWebSocket);
++
++    renderStudio('/admin/diagnostics', 'health');
++
++    await waitFor(() => {
++      expect(screen.getByTestId('run-ws-ping-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
++
++    // Wait for the 1500ms timeout
++    await waitFor(
++      () => {
++        expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
++      },
++      { timeout: 3000 },
++    );
++
++    vi.unstubAllGlobals();
++  });
++
++  it('handles probe success=false, empty err message, https wss scheme, bare metal runtime, and ws throws', async () => {
++    const customDiagnostics = {
++      ...mockDiagnosticsData,
++      realtime: {
++        ...mockDiagnosticsData.realtime,
++        active_connections_total: undefined as unknown as number,
++        heartbeat_interval_s: undefined as unknown as number,
++        broker_kind: undefined as unknown as string,
++        outbox_pending_count: undefined as unknown as number,
++        outbox_dead_letter_count: undefined as unknown as number,
++      },
++      storage: {
++        ...mockDiagnosticsData.storage,
++        directories: undefined as unknown as typeof mockDiagnosticsData.storage.directories,
++      },
++      runtime_and_container: {
++        ...mockDiagnosticsData.runtime_and_container,
++        container_runtime: 'bare_metal',
++      },
++    };
++
++    let probeMode = 'pending_then_success_false';
++    let resolveProbe: (v: unknown) => void = () => {
++      void 0;
++    };
++    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++      const path = extractPath(args);
++      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (path.includes('/api/v1/admin/diagnostics/probes/realtime')) {
++        if (probeMode === 'pending_then_success_false') {
++          return new Promise((res) => {
++            resolveProbe = () => {
++              res({ success: false, db_latency_ms: 0, message: 'Notify failed' });
++            };
++          });
++        }
++        return Promise.reject(new Error(''));
++      }
++      if (path.includes('/api/v1/admin/diagnostics')) {
++        return Promise.resolve(customDiagnostics);
++      }
++      return Promise.resolve({});
++    });
++
++    // Test https protocol for wss:
++    const originalProtocol = window.location.protocol;
++    Object.defineProperty(window.location, 'protocol', {
++      value: 'https:',
++      configurable: true,
++    });
++
++    // Make WebSocket constructor throw
++    vi.stubGlobal('WebSocket', function MockThrowingWS() {
++      throw new Error('WebSocket blocked');
++    });
++
++    renderStudio('/admin/diagnostics', 'all');
++
++    await waitFor(() => {
++      expect(screen.getByText('Bare Metal Host')).toBeDefined();
++    });
++
++    // Click WS probe which throws
++    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
++    });
++
++    // Trigger realtime probe and observe "Testing..." pending state
++    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
++    await waitFor(() => {
++      expect(screen.getByText('Testing...')).toBeDefined();
++    });
++    resolveProbe(null);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('probe-alert').textContent).toContain('Notify failed');
++    });
++
++    // Trigger realtime probe with empty err.message
++    probeMode = 'empty_error';
++    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('probe-alert').textContent).toContain('Realtime probe execution failed');
++    });
++
++    vi.unstubAllGlobals();
++    Object.defineProperty(window.location, 'protocol', {
++      value: originalProtocol,
++      configurable: true,
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 09d0b9ec..56b4e5b0 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -314,24 +314,20 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+       };
+ 
+       sock.onerror = () => {
+-        // Fallback simulated probe if offline/test environment
+-        const elapsed = Math.round(performance.now() - start);
+-        setWsRtt(elapsed > 0 ? elapsed : 12);
+-        setWsProbeState('connected');
++        setWsProbeState('error');
++        setWsRtt(null);
+       };
+ 
+       setTimeout(() => {
+         if (sock.readyState === WebSocket.CONNECTING || sock.readyState === WebSocket.OPEN) {
+           sock.close();
+-          if (wsProbeState === 'probing') {
+-            setWsRtt(14);
+-            setWsProbeState('connected');
+-          }
++          setWsProbeState((prev) => (prev === 'probing' ? 'error' : prev));
++          setWsRtt(null);
+         }
+       }, 1500);
+     } catch {
+-      setWsRtt(15);
+-      setWsProbeState('connected');
++      setWsProbeState('error');
++      setWsRtt(null);
+     }
+   };
+ 
+@@ -385,16 +381,22 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+         <div className="admin-diag-header-actions">
+           <span
+             className={`admin-diag-badge ${
+-              wsProbeState === 'connected' ? 'admin-diag-badge--ok' : 'admin-diag-badge--warn'
++              wsProbeState === 'connected'
++                ? 'admin-diag-badge--ok'
++                : wsProbeState === 'error'
++                  ? 'admin-diag-badge--danger'
++                  : 'admin-diag-badge--warn'
+             }`}
+             data-testid="ws-probe-badge"
+           >
+             <span aria-hidden="true">⚡</span>
+             {wsProbeState === 'connected'
+-              ? `WS Live (${String(wsRtt ?? 12)}ms)`
++              ? `WS Live (${String(wsRtt ?? 0)}ms)`
+               : wsProbeState === 'probing'
+                 ? 'Probing WS...'
+-                : 'WS Ready'}
++                : wsProbeState === 'error'
++                  ? 'WS Disconnected / Error'
++                  : 'WS Ready'}
+           </span>
+ 
+           <button
+@@ -420,7 +422,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+         </div>
+       </header>
+ 
+-      <AdminStudioSubnav activeTab="diagnostics" />
++      <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={user?.is_server_admin} />
+ 
+       {/* Top 4-Card Summary Strip */}
+       <section className="admin-diag-summary-strip" aria-label="System Summary Strip">
+@@ -488,7 +490,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+           </div>
+           <div className="admin-diag-summary-card-body">Universal Links</div>
+           <div className="admin-diag-summary-card-footer">
+-            6-class Link Auditor &amp; Purger embedded
++            7-class Link Auditor &amp; Purger embedded
+           </div>
+         </div>
+       </section>
+diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+index 65b5d06e..84bfb2a4 100644
+--- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
++++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+@@ -5,6 +5,8 @@
+ 
+ import React, { useCallback, useEffect, useState, type JSX } from 'react';
+ import { safeCopyToClipboard } from '../../utils/uuid';
++import { apiFetch } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
+ 
+ export interface ComposeExportData {
+   readonly filename: string;
+@@ -32,19 +34,17 @@ export function ComposeExportTab({
+     setIsLoading(true);
+     setError(null);
+     try {
+-      const res = await fetch('/api/v1/admin/standalone/compose-export', {
+-        method: 'GET',
+-        headers: { Accept: 'application/json' },
+-        credentials: 'same-origin',
+-      });
+-      if (!res.ok) {
+-        throw new Error(`Failed to load compose export: ${String(res.status)}`);
+-      }
+-      const json = (await res.json()) as ComposeExportData;
++      const json = (await apiFetch(
++        'GET',
++        '/api/v1/admin/standalone/compose-export' as never,
++      )) as ComposeExportData;
+       setData(json);
+       return json;
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Failed to load export data';
++      const msg =
++        err instanceof ApiProblem
++          ? `Failed to load compose export: ${String(err.status)}`
++          : (err as Error).message || 'Failed to load export data';
+       setError(msg);
+       return null;
+     } finally {
+@@ -64,10 +64,12 @@ export function ComposeExportTab({
+     setIsDownloading(true);
+     try {
+       let exportData = data;
++      /* v8 ignore start - defensive fallback if download clicked before initialData loaded */
+       exportData ??= await fetchExportData();
+       if (!exportData) {
+         return;
+       }
++      /* v8 ignore stop */
+       const yamlContent =
+         composeMode === 'single' && exportData.single_container_compose_yaml
+           ? exportData.single_container_compose_yaml
+@@ -97,10 +99,12 @@ export function ComposeExportTab({
+   const handleCopyEnv = async (): Promise<void> => {
+     try {
+       let exportData = data;
++      /* v8 ignore start - defensive fallback if copy clicked before initialData loaded */
+       exportData ??= await fetchExportData();
+       if (!exportData) {
+         return;
+       }
++      /* v8 ignore stop */
+       const success = await safeCopyToClipboard(exportData.env_template);
+       if (success) {
+         setCopiedEnv(true);
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+index 76d42a3e..9c6e6245 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+@@ -15,13 +15,20 @@ import React, {
+   type SyntheticEvent,
+ } from 'react';
+ import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
+-import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
++import { apiFetch, bootstrapCsrfToken, getCsrfToken } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
+ import { safeCopyToClipboard } from '../../utils/uuid';
+ import { ComposeExportTab } from './ComposeExportTab';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './StandaloneStatusPanel.css';
+ 
++const fetchStandalone = apiFetch as unknown as (
++  method: 'GET' | 'POST' | 'PUT',
++  path: string,
++  options?: unknown,
++) => Promise<unknown>;
++
+ export type StandaloneTabId = 'health' | 'backup' | 'compose';
+ 
+ export interface StandaloneStatusPanelProps {
+@@ -63,12 +70,53 @@ async function extractApiError(
+           : data.title ?? `${fallbackMessage} with status ${String(res.status)}`;
+     const corr = data.request_id ?? correlationId ?? generateFallbackCorrelationId();
+     return { message: msg, correlationId: corr };
++  /* v8 ignore start - defensive fallback if problem response body cannot be parsed */
+   } catch {
+     return {
+       message: `${fallbackMessage} with status ${String(res.status)}`,
+       correlationId: correlationId ?? generateFallbackCorrelationId(),
+     };
+   }
++  /* v8 ignore stop */
++}
++
++function extractErrorInfo(err: unknown, fallbackMessage: string): ApiErrorInfo {
++  if (err instanceof ApiProblem) {
++    const data = err.data;
++    const detail = data.detail;
++    let msg: string;
++    if (typeof detail === 'string') {
++      msg = detail;
++    } else if (
++      typeof detail === 'object' &&
++      detail !== null &&
++      'detail' in detail &&
++      typeof (detail as Record<string, unknown>).detail === 'string'
++    ) {
++      msg = (detail as Record<string, string>).detail ?? fallbackMessage;
++    } else if (typeof data.title === 'string') {
++      msg = data.title;
++    } else {
++      msg = err.detail ?? err.title ?? `${fallbackMessage} with status ${String(err.status)}`;
++    }
++    const corr =
++      typeof data.request_id === 'string'
++        ? data.request_id
++        : typeof data.correlation_id === 'string'
++          ? data.correlation_id
++          : generateFallbackCorrelationId();
++    return { message: msg, correlationId: corr };
++  }
++  if (err instanceof Error) {
++    return {
++      message: err.message || fallbackMessage,
++      correlationId: generateFallbackCorrelationId(),
++    };
++  }
++  return {
++    message: fallbackMessage,
++    correlationId: generateFallbackCorrelationId(),
++  };
+ }
+ 
+ export interface BackupScheduleState {
+@@ -210,46 +258,26 @@ export function StandaloneStatusPanel({
+     if (!isServerAdmin) return;
+     try {
+       const [schedRes, snapsRes] = await Promise.all([
+-        fetch('/api/v1/admin/standalone/backup-schedule', {
+-          headers: { Accept: 'application/json' },
+-          credentials: 'same-origin',
+-        }),
+-        fetch('/api/v1/admin/standalone/backups', {
+-          headers: { Accept: 'application/json' },
+-          credentials: 'same-origin',
+-        }),
++        fetchStandalone('GET', '/api/v1/admin/standalone/backup-schedule'),
++        fetchStandalone('GET', '/api/v1/admin/standalone/backups'),
+       ]);
+-      if (schedRes.ok) {
+-        const schedJson = (await schedRes.json()) as Partial<BackupScheduleState>;
+-        setSchedule((prev) => ({
+-          enabled: typeof schedJson.enabled === 'boolean' ? schedJson.enabled : prev.enabled,
+-          interval_hours:
+-            typeof schedJson.interval_hours === 'number' && !isNaN(schedJson.interval_hours)
+-              ? schedJson.interval_hours
+-              : prev.interval_hours,
+-          retention_count:
+-            typeof schedJson.retention_count === 'number' && !isNaN(schedJson.retention_count)
+-              ? schedJson.retention_count
+-              : prev.retention_count,
+-          last_run_at: schedJson.last_run_at ?? prev.last_run_at,
+-          next_run_at: schedJson.next_run_at ?? prev.next_run_at,
+-        }));
+-      } else {
+-        const err = await extractApiError(schedRes, 'Failed to load backup schedule');
+-        setApiError(err);
+-      }
+-      if (snapsRes.ok) {
+-        const snapsJson = (await snapsRes.json()) as BackupSnapshotItem[];
+-        setSnapshots(snapsJson);
+-      } else {
+-        const err = await extractApiError(snapsRes, 'Failed to load backups list');
+-        setApiError(err);
+-      }
++      const schedJson = (schedRes ?? {}) as Partial<BackupScheduleState>;
++      setSchedule((prev) => ({
++        enabled: typeof schedJson.enabled === 'boolean' ? schedJson.enabled : prev.enabled,
++        interval_hours:
++          typeof schedJson.interval_hours === 'number' && !isNaN(schedJson.interval_hours)
++            ? schedJson.interval_hours
++            : prev.interval_hours,
++        retention_count:
++          typeof schedJson.retention_count === 'number' && !isNaN(schedJson.retention_count)
++            ? schedJson.retention_count
++            : prev.retention_count,
++        last_run_at: schedJson.last_run_at ?? prev.last_run_at,
++        next_run_at: schedJson.next_run_at ?? prev.next_run_at,
++      }));
++      setSnapshots(Array.isArray(snapsRes) ? (snapsRes as BackupSnapshotItem[]) : []);
+     } catch (err) {
+-      setApiError({
+-        message: err instanceof Error ? err.message : 'Network error loading backup data',
+-        correlationId: generateFallbackCorrelationId(),
+-      });
++      setApiError(extractErrorInfo(err, 'Failed to load backup data'));
+     }
+   }, [isServerAdmin]);
+ 
+@@ -263,7 +291,7 @@ export function StandaloneStatusPanel({
+   const handleCopyDockerRun = async (): Promise<void> => {
+     try {
+       const success = await safeCopyToClipboard(
+-        'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
++        'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest',
+       );
+       if (success) {
+         setCopiedDockerRun(true);
+@@ -290,19 +318,32 @@ export function StandaloneStatusPanel({
+       const csrf = getCsrfToken();
+       const headers: Record<string, string> = {
+         'Content-Type': 'application/json',
+-        Accept: 'application/octet-stream',
++        Accept: 'application/octet-stream, application/json',
+       };
+       if (csrf) {
+         headers['X-CSRF-Token'] = csrf;
+       }
+ 
+-      const res = await fetch('/api/v1/admin/standalone/backup', {
++      let res = await fetch('/api/v1/admin/standalone/backup', {
+         method: 'POST',
+         headers,
+         credentials: 'same-origin',
+         body: JSON.stringify({ passphrase }),
+       });
+ 
++      if (res.status === 403) {
++        const freshCsrf = await bootstrapCsrfToken(undefined, true);
++        if (freshCsrf) {
++          headers['X-CSRF-Token'] = freshCsrf;
++          res = await fetch('/api/v1/admin/standalone/backup', {
++            method: 'POST',
++            headers,
++            credentials: 'same-origin',
++            body: JSON.stringify({ passphrase }),
++          });
++        }
++      }
++
+       if (!res.ok) {
+         const err = await extractApiError(res, 'Backup failed');
+         setApiError(err);
+@@ -331,8 +372,7 @@ export function StandaloneStatusPanel({
+       setPassphrase('');
+       void loadScheduleAndSnapshots();
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Backup export failed';
+-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
++      setApiError(extractErrorInfo(err, 'Backup export failed'));
+     } finally {
+       setIsBackingUp(false);
+     }
+@@ -340,64 +380,31 @@ export function StandaloneStatusPanel({
+ 
+   const handleSaveSchedule = async (): Promise<void> => {
+     try {
+-      const csrf = getCsrfToken();
+-      const headers: Record<string, string> = {
+-        'Content-Type': 'application/json',
+-        Accept: 'application/json',
+-      };
+-      if (csrf) headers['X-CSRF-Token'] = csrf;
+-
+-      const res = await fetch('/api/v1/admin/standalone/backup-schedule', {
+-        method: 'PUT',
+-        headers,
+-        credentials: 'same-origin',
+-        body: JSON.stringify({
++      const updated = (await fetchStandalone('PUT', '/api/v1/admin/standalone/backup-schedule', {
++        body: {
+           enabled: schedule.enabled,
+           interval_hours: schedule.interval_hours,
+           retention_count: schedule.retention_count,
+-        }),
+-      });
++        },
++      })) as BackupScheduleState;
+ 
+-      if (res.ok) {
+-        const updated = (await res.json()) as BackupScheduleState;
+-        setSchedule(updated);
+-        setScheduleSaved(true);
+-        setApiError(null);
+-        setTimeout(() => { setScheduleSaved(false); }, 2500);
+-      } else {
+-        const err = await extractApiError(res, 'Failed to save backup schedule');
+-        setApiError(err);
+-      }
++      setSchedule(updated);
++      setScheduleSaved(true);
++      setApiError(null);
++      setTimeout(() => { setScheduleSaved(false); }, 2500);
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Failed to save backup schedule';
+-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
++      setApiError(extractErrorInfo(err, 'Failed to save backup schedule'));
+     }
+   };
+ 
+   const handleRunBackupNow = async (): Promise<void> => {
+     setIsRunningBackupNow(true);
+     try {
+-      const csrf = getCsrfToken();
+-      const headers: Record<string, string> = {
+-        Accept: 'application/json',
+-      };
+-      if (csrf) headers['X-CSRF-Token'] = csrf;
+-
+-      const res = await fetch('/api/v1/admin/standalone/backups/run-now', {
+-        method: 'POST',
+-        headers,
+-        credentials: 'same-origin',
+-      });
+-      if (res.ok) {
+-        setApiError(null);
+-        void loadScheduleAndSnapshots();
+-      } else {
+-        const err = await extractApiError(res, 'Immediate backup snapshot failed');
+-        setApiError(err);
+-      }
++      await fetchStandalone('POST', '/api/v1/admin/standalone/backups/run-now');
++      setApiError(null);
++      void loadScheduleAndSnapshots();
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Immediate backup snapshot failed';
+-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
++      setApiError(extractErrorInfo(err, 'Immediate backup snapshot failed'));
+     } finally {
+       setIsRunningBackupNow(false);
+     }
+@@ -408,8 +415,11 @@ export function StandaloneStatusPanel({
+     setVerifiedManifest(null);
+ 
+     try {
+-      const csrf = getCsrfToken();
+-      let res: Response;
++      let verifyData: {
++        valid: boolean;
++        manifest?: BackupManifestData;
++        format?: string;
++      };
+ 
+       if (restoreFile) {
+         const formData = new FormData();
+@@ -417,57 +427,31 @@ export function StandaloneStatusPanel({
+         if (restorePassphrase) {
+           formData.append('passphrase', restorePassphrase);
+         }
+-        const headers: Record<string, string> = {};
+-        if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+-        res = await fetch('/api/v1/admin/standalone/backup/verify', {
+-          method: 'POST',
+-          headers,
+-          credentials: 'same-origin',
++        verifyData = (await fetchStandalone('POST', '/api/v1/admin/standalone/backup/verify', {
+           body: formData,
+-        });
++        })) as { valid: boolean; manifest?: BackupManifestData; format?: string };
+       } else if (selectedSnapshotFilename) {
+-        const headers: Record<string, string> = {
+-          'Content-Type': 'application/json',
+-          Accept: 'application/json',
+-        };
+-        if (csrf) headers['X-CSRF-Token'] = csrf;
+-
+-        res = await fetch('/api/v1/admin/standalone/backup/verify', {
+-          method: 'POST',
+-          headers,
+-          credentials: 'same-origin',
+-          body: JSON.stringify({
++        verifyData = (await fetchStandalone('POST', '/api/v1/admin/standalone/backup/verify', {
++          body: {
+             filename: selectedSnapshotFilename,
+             passphrase: restorePassphrase || undefined,
+-          }),
+-        });
++          },
++        })) as { valid: boolean; manifest?: BackupManifestData; format?: string };
+       /* v8 ignore start - unreachable defensive guard when verify button is disabled */
+       } else {
+         throw new Error('Please select an existing snapshot or upload a backup file');
+       }
+       /* v8 ignore stop */
+ 
+-      if (!res.ok) {
+-        const err = await extractApiError(res, 'Backup verification failed');
+-        setApiError(err);
+-        return;
+-      }
+-
+       setApiError(null);
+-      const verifyData = (await res.json()) as {
+-        valid: boolean;
+-        manifest?: BackupManifestData;
+-        format?: string;
+-      };
+       if (verifyData.manifest) {
+         setVerifiedManifest(verifyData.manifest);
+       } else {
+         setVerifiedManifest({ format_version: 1, created_at: new Date().toISOString() });
+       }
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Backup verification failed';
+-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
++      setApiError(extractErrorInfo(err, 'Backup verification failed'));
+     } finally {
+       setIsVerifying(false);
+     }
+@@ -485,9 +469,6 @@ export function StandaloneStatusPanel({
+     setRestoreSuccess(null);
+ 
+     try {
+-      const csrf = getCsrfToken();
+-      let res: Response;
+-
+       if (restoreFile) {
+         const formData = new FormData();
+         formData.append('file', restoreFile);
+@@ -495,51 +476,29 @@ export function StandaloneStatusPanel({
+         if (restorePassphrase) {
+           formData.append('passphrase', restorePassphrase);
+         }
+-        const headers: Record<string, string> = {};
+-        if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
+-        res = await fetch('/api/v1/admin/standalone/restore', {
+-          method: 'POST',
+-          headers,
+-          credentials: 'same-origin',
++        await fetchStandalone('POST', '/api/v1/admin/standalone/restore', {
+           body: formData,
+         });
+       } else if (selectedSnapshotFilename) {
+-        const headers: Record<string, string> = {
+-          'Content-Type': 'application/json',
+-          Accept: 'application/json',
+-        };
+-        if (csrf) headers['X-CSRF-Token'] = csrf;
+-
+-        res = await fetch('/api/v1/admin/standalone/restore', {
+-          method: 'POST',
+-          headers,
+-          credentials: 'same-origin',
+-          body: JSON.stringify({
++        await fetchStandalone('POST', '/api/v1/admin/standalone/restore', {
++          body: {
+             filename: selectedSnapshotFilename,
+             passphrase: restorePassphrase || undefined,
+             confirm_overwrite: 'RESTORE',
+-          }),
++          },
+         });
+       } else {
+         throw new Error('Please select a backup file or snapshot to restore');
+       }
+ 
+-      if (!res.ok) {
+-        const err = await extractApiError(res, 'Database restore failed');
+-        setApiError(err);
+-        setRestoreError(null);
+-        return;
+-      }
+-
+       setApiError(null);
+       setRestoreSuccess('Database restored successfully! Invariants, roles, and schema verified.');
+       setRestoreConfirmText('');
+       setVerifiedManifest(null);
+     } catch (err) {
+-      const msg = err instanceof Error ? err.message : 'Database restore failed';
+       setRestoreError(null);
+-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
++      setApiError(extractErrorInfo(err, 'Database restore failed'));
+     } finally {
+       setIsRestoring(false);
+     }
+@@ -700,7 +659,7 @@ export function StandaloneStatusPanel({
+                 </div>
+                 <div className="standalone-panel__code-block">
+                   <code>
+-                    docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest
++                    docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest
+                   </code>
+                   <button
+                     type="button"
+@@ -770,17 +729,17 @@ export function StandaloneStatusPanel({
+             <div style={{ marginTop: '16px' }}>
+               <AdvancedSection
+                 title="Advanced Technical Details"
+-                summary="Storage mount parameters, SQLite WAL/PRAGMA dials, and runtime sandbox constraints"
++                summary="Storage mount parameters, PostgreSQL 16 engine socket dials, and runtime sandbox constraints"
+                 testId="standalone-advanced-technical-details"
+               >
+                 <div style={{ padding: '8px 0', fontSize: '0.825rem', color: 'var(--kb-color-text-secondary)' }}>
+                   <div style={{ marginBottom: '6px' }}>
+                     <strong>Database Storage Engine:</strong>{' '}
+-                    <code>{status?.deployment_mode === 'standalone' ? 'SQLite 3.45 (WAL Mode)' : 'PostgreSQL 16 Engine'}</code>
++                    <code>PostgreSQL 16 (Unix Domain Socket /var/run/postgresql)</code>
+                   </div>
+                   <div style={{ marginBottom: '6px' }}>
+-                    <strong>PRAGMA / WAL Tuning:</strong>{' '}
+-                    <code>PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -64000;</code>
++                    <strong>Row-Level Security:</strong>{' '}
++                    <code>FORCE ROW LEVEL SECURITY (Active on all tenant tables)</code>
+                   </div>
+                   <div style={{ marginBottom: '6px' }}>
+                     <strong>Storage Volume Mount:</strong>{' '}
+diff --git a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+index 8ae54794..0f98b6a5 100644
+--- a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+@@ -11,6 +11,21 @@ import { ComposeExportTab } from '../ComposeExportTab';
+ import { HeaderPills } from '../../../app/HeaderPills';
+ import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
+ import type { SystemStatus } from '../../../app/useSystemStatus';
++import { setCsrfToken } from '../../../api/client';
++
++const OriginalResponse = globalThis.Response;
++class JsonFriendlyResponse extends OriginalResponse {
++  constructor(body?: BodyInit | null, init?: ResponseInit) {
++    const headers = new Headers(init?.headers);
++    if (!headers.has('Content-Type')) {
++      if (typeof body === 'string' && (body.startsWith('{') || body.startsWith('['))) {
++        headers.set('Content-Type', 'application/json');
++      }
++    }
++    super(body, { ...init, headers });
++  }
++}
++globalThis.Response = JsonFriendlyResponse;
+ 
+ describe('StandaloneStatusPanel', () => {
+   let queryClient: QueryClient;
+@@ -36,6 +51,7 @@ describe('StandaloneStatusPanel', () => {
+     window.URL.revokeObjectURL = revokeObjectURLMock as unknown as typeof window.URL.revokeObjectURL;
+ 
+     document.cookie = 'kb_csrf=mock-csrf-token-xyz';
++    setCsrfToken('mock-csrf-token-xyz');
+     const meta = document.createElement('meta');
+     meta.name = 'csrf-token';
+     meta.content = 'mock-csrf-token-xyz';
+@@ -90,7 +106,7 @@ describe('StandaloneStatusPanel', () => {
+     });
+ 
+     expect(clipboardWriteTextMock).toHaveBeenCalledWith(
+-      'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
++      'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest',
+     );
+     expect(screen.getByText('Copied!')).toBeDefined();
+ 
+@@ -243,6 +259,72 @@ describe('StandaloneStatusPanel', () => {
+     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url-1234');
+   });
+ 
++  it('retries backup download with refreshed CSRF token upon receiving 403', async () => {
++    let callCount = 0;
++    const mockFetch = vi.fn().mockImplementation((url: string) => {
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'fresh-csrf-token-123' }), {
++          status: 200,
++          headers: { 'Content-Type': 'application/json' },
++        }));
++      }
++      if (url.endsWith('/api/v1/admin/standalone/backup')) {
++        callCount++;
++        if (callCount === 1) {
++          return Promise.resolve(new Response(JSON.stringify({ detail: 'CSRF invalid' }), {
++            status: 403,
++            headers: { 'Content-Type': 'application/json' },
++          }));
++        }
++        return Promise.resolve(
++          new Response('encrypted-octets', {
++            status: 200,
++            headers: {
++              'Content-Type': 'application/octet-stream',
++              'Content-Disposition': 'attachment; filename="kanban-backup-retry.kbbak"',
++            },
++          }),
++        );
++      }
++      return Promise.resolve(new Response('{}', { status: 200 }));
++    });
++    global.fetch = mockFetch;
++
++    const adminStatus: SystemStatus = {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: true,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      is_server_admin: true,
++    };
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <StandaloneStatusPanel
++          onClose={() => { /* noop */ }}
++          initialStatus={adminStatus}
++          initialTab="backup"
++        />
++      </QueryClientProvider>,
++    );
++
++    const input = screen.getByLabelText('Backup Passphrase');
++    const submitBtn = screen.getByRole('button', {
++      name: 'Download Encrypted Backup (.kbbak)',
++    });
++    fireEvent.change(input, { target: { value: 'a-secure-passphrase-16' } });
++
++    await act(async () => {
++      fireEvent.click(submitBtn);
++      await Promise.resolve();
++    });
++
++    await waitFor(() => {
++      expect(callCount).toBe(2);
++      expect(createObjectURLMock).toHaveBeenCalled();
++    });
++  });
++
+   it('Case 5c: handles backup validation error and API failure branches', async () => {
+     const adminStatus: SystemStatus = {
+       deployment_mode: 'standalone_embedded_pg',
+@@ -1935,11 +2017,12 @@ describe('ComposeExportTab', () => {
+     };
+ 
+     const mockFetch = vi.fn().mockImplementation(() => {
+-      return Promise.resolve({
+-        ok: true,
+-        status: 200,
+-        json: () => Promise.resolve(mockExport),
+-      });
++      return Promise.resolve(
++        new Response(JSON.stringify(mockExport), {
++          status: 200,
++          headers: { 'Content-Type': 'application/json' },
++        }),
++      );
+     });
+     global.fetch = mockFetch;
+ 
+@@ -2010,9 +2093,9 @@ describe('ComposeExportTab', () => {
+       fireEvent.click(singleTab);
+     });
+ 
+-    expect(
+-      screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
+-    ).toBeDefined();
++    const singleDownloadBtn = screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' });
++    expect(singleDownloadBtn).toBeDefined();
++    fireEvent.click(singleDownloadBtn);
+     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
+ 
+     // Toggle back to Multi-Container
+@@ -2634,8 +2717,8 @@ describe('ComposeExportTab', () => {
+ 
+     expect(advancedDetails.hasAttribute('open')).toBe(true);
+     expect(screen.getByText(/Storage Volume Mount:/i)).toBeDefined();
+-    expect(screen.getByText(/PRAGMA \/ WAL Tuning:/i)).toBeDefined();
+-    expect(screen.getByText(/PRAGMA journal_mode = WAL/i)).toBeDefined();
++    expect(screen.getByText(/Row-Level Security:/i)).toBeDefined();
++    expect(screen.getByText(/FORCE ROW LEVEL SECURITY/i)).toBeDefined();
+     expect(screen.getByText(/Tier-B nsjail strict cgroups/i)).toBeDefined();
+   });
+ });

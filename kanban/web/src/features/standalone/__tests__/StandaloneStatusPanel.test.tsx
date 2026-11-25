@@ -11,6 +11,21 @@ import { ComposeExportTab } from '../ComposeExportTab';
 import { HeaderPills } from '../../../app/HeaderPills';
 import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
 import type { SystemStatus } from '../../../app/useSystemStatus';
+import { setCsrfToken } from '../../../api/client';
+
+const OriginalResponse = globalThis.Response;
+class JsonFriendlyResponse extends OriginalResponse {
+  constructor(body?: BodyInit | null, init?: ResponseInit) {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Content-Type')) {
+      if (typeof body === 'string' && (body.startsWith('{') || body.startsWith('['))) {
+        headers.set('Content-Type', 'application/json');
+      }
+    }
+    super(body, { ...init, headers });
+  }
+}
+globalThis.Response = JsonFriendlyResponse;
 
 describe('StandaloneStatusPanel', () => {
   let queryClient: QueryClient;
@@ -36,6 +51,7 @@ describe('StandaloneStatusPanel', () => {
     window.URL.revokeObjectURL = revokeObjectURLMock as unknown as typeof window.URL.revokeObjectURL;
 
     document.cookie = 'kb_csrf=mock-csrf-token-xyz';
+    setCsrfToken('mock-csrf-token-xyz');
     const meta = document.createElement('meta');
     meta.name = 'csrf-token';
     meta.content = 'mock-csrf-token-xyz';
@@ -90,7 +106,7 @@ describe('StandaloneStatusPanel', () => {
     });
 
     expect(clipboardWriteTextMock).toHaveBeenCalledWith(
-      'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
+      'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest',
     );
     expect(screen.getByText('Copied!')).toBeDefined();
 
@@ -241,6 +257,72 @@ describe('StandaloneStatusPanel', () => {
       expect(createObjectURLMock).toHaveBeenCalled();
     });
     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url-1234');
+  });
+
+  it('retries backup download with refreshed CSRF token upon receiving 403', async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'fresh-csrf-token-123' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      if (url.endsWith('/api/v1/admin/standalone/backup')) {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(new Response(JSON.stringify({ detail: 'CSRF invalid' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          }));
+        }
+        return Promise.resolve(
+          new Response('encrypted-octets', {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'Content-Disposition': 'attachment; filename="kanban-backup-retry.kbbak"',
+            },
+          }),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone_embedded_pg',
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+      is_server_admin: true,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StandaloneStatusPanel
+          onClose={() => { /* noop */ }}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    const input = screen.getByLabelText('Backup Passphrase');
+    const submitBtn = screen.getByRole('button', {
+      name: 'Download Encrypted Backup (.kbbak)',
+    });
+    fireEvent.change(input, { target: { value: 'a-secure-passphrase-16' } });
+
+    await act(async () => {
+      fireEvent.click(submitBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(callCount).toBe(2);
+      expect(createObjectURLMock).toHaveBeenCalled();
+    });
   });
 
   it('Case 5c: handles backup validation error and API failure branches', async () => {
@@ -1935,11 +2017,12 @@ describe('ComposeExportTab', () => {
     };
 
     const mockFetch = vi.fn().mockImplementation(() => {
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(mockExport),
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify(mockExport), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
     });
     global.fetch = mockFetch;
 
@@ -2010,9 +2093,9 @@ describe('ComposeExportTab', () => {
       fireEvent.click(singleTab);
     });
 
-    expect(
-      screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' }),
-    ).toBeDefined();
+    const singleDownloadBtn = screen.getByRole('button', { name: 'Download docker-compose.standalone.yml' });
+    expect(singleDownloadBtn).toBeDefined();
+    fireEvent.click(singleDownloadBtn);
     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL in a single container/)).toBeDefined();
 
     // Toggle back to Multi-Container
@@ -2634,8 +2717,8 @@ describe('ComposeExportTab', () => {
 
     expect(advancedDetails.hasAttribute('open')).toBe(true);
     expect(screen.getByText(/Storage Volume Mount:/i)).toBeDefined();
-    expect(screen.getByText(/PRAGMA \/ WAL Tuning:/i)).toBeDefined();
-    expect(screen.getByText(/PRAGMA journal_mode = WAL/i)).toBeDefined();
+    expect(screen.getByText(/Row-Level Security:/i)).toBeDefined();
+    expect(screen.getByText(/FORCE ROW LEVEL SECURITY/i)).toBeDefined();
     expect(screen.getByText(/Tier-B nsjail strict cgroups/i)).toBeDefined();
   });
 });

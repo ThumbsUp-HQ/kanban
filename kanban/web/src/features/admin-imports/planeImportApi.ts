@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import { apiFetch } from '../../api/client';
+import { apiFetch, getCsrfToken, bootstrapCsrfToken } from '../../api/client';
 
 export type ImportSource = 'plane' | 'jira' | 'github' | 'linear';
 
@@ -70,23 +70,45 @@ export async function submitLinearImport(
 export async function downloadPortableExport(
   req: PortableExportRequest,
 ): Promise<Blob> {
-  const response = await fetch('/api/v1/admin/exports/portable', {
+  const csrf = getCsrfToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/gzip, application/octet-stream, application/json',
+  };
+  if (csrf) {
+    headers['X-CSRF-Token'] = csrf;
+  }
+  let response = await fetch('/api/v1/admin/exports/portable', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/gzip, application/octet-stream, application/json',
-    },
+    headers,
     credentials: 'same-origin',
     body: JSON.stringify({
       workspace_slug: req.workspace_slug ?? undefined,
       scrub: Boolean(req.scrub_text),
     }),
   });
+  if (response.status === 403) {
+    const freshCsrf = await bootstrapCsrfToken(undefined, true);
+    if (freshCsrf) {
+      headers['X-CSRF-Token'] = freshCsrf;
+      response = await fetch('/api/v1/admin/exports/portable', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          workspace_slug: req.workspace_slug ?? undefined,
+          scrub: Boolean(req.scrub_text),
+        }),
+      });
+    }
+  }
   if (!response.ok) {
     let errMsg = `Export failed with HTTP ${String(response.status)}`;
     try {
-      const errJson = (await response.json()) as { detail?: string };
+      const errJson = (await response.json()) as { detail?: string; error?: string; message?: string };
       if (errJson.detail) errMsg = errJson.detail;
+      else if (errJson.message) errMsg = errJson.message;
+      else if (errJson.error) errMsg = errJson.error;
     } catch {
       // fallback
     }

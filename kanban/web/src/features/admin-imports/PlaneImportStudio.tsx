@@ -11,7 +11,6 @@ import {
   type ImportSource,
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
-import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './PlaneImportStudio.css';
@@ -85,10 +84,35 @@ export function PlaneImportStudio(): JSX.Element {
   const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
 
   // Advanced Import Options
-  const [batchSize, setBatchSize] = useState<number>(100);
   const [userMappingJson, setUserMappingJson] = useState<string>('');
-  const [conflictStrategy, setConflictStrategy] = useState<'skip' | 'overwrite' | 'rename'>('skip');
-  const [preserveLegacyUuids, setPreserveLegacyUuids] = useState<boolean>(true);
+  const [userMappingError, setUserMappingError] = useState<string | null>(null);
+
+  const parseUserMap = (raw: string): Record<string, string> | undefined => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      setUserMappingError(null);
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('User mapping must be a JSON object mapping source identifiers to local usernames or emails.');
+      }
+      const result: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        result[k] = String(v);
+      }
+      setUserMappingError(null);
+      return result;
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message.includes('User mapping must be')
+          ? err.message
+          : 'Invalid User Mapping JSON: please provide a valid JSON object of key-value string pairs.';
+      setUserMappingError(msg);
+      throw new Error(msg);
+    }
+  };
 
   const [stage, setStage] = useState<'input' | 'preview' | 'executing' | 'done'>('input');
   const [diffReport, setDiffReport] = useState<ImportDiffReport | null>(null);
@@ -213,6 +237,13 @@ export function PlaneImportStudio(): JSX.Element {
       );
       return;
     }
+    let userMap: Record<string, string> | undefined;
+    try {
+      userMap = parseUserMap(userMappingJson);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid User Mapping JSON');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -220,6 +251,7 @@ export function PlaneImportStudio(): JSX.Element {
         bundle_data: bundleData,
         project_key: projectKey.trim() || undefined,
         dry_run: true,
+        user_map: userMap,
         workspace_slug: workspaceSlug.trim() || undefined,
       };
       const report =
@@ -244,6 +276,16 @@ export function PlaneImportStudio(): JSX.Element {
     /* v8 ignore next */
     if (!bundleData) return;
     const sourceName = getSourceName(source);
+    let userMap: Record<string, string> | undefined;
+    try {
+      userMap = parseUserMap(userMappingJson);
+    /* v8 ignore start - defensive fallback if mapping mutated while in preview */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid User Mapping JSON');
+      setStage('preview');
+      return;
+    }
+    /* v8 ignore stop */
     setLoading(true);
     setStage('executing');
     setError(null);
@@ -252,6 +294,7 @@ export function PlaneImportStudio(): JSX.Element {
         bundle_data: bundleData,
         project_key: projectKey.trim() || undefined,
         dry_run: false,
+        user_map: userMap,
         workspace_slug: workspaceSlug.trim() || undefined,
       };
       const report =
@@ -586,119 +629,11 @@ export function PlaneImportStudio(): JSX.Element {
           <div style={{ marginTop: 20 }}>
             <AdvancedSection
               title="Advanced Import Options"
-              summary="Batch sizing, user identity mapping, UUID preservation, and conflict resolution strategy"
+              summary="User identity mapping and custom member attribution overrides"
               testId="advanced-import-options"
-              activeOverridesCount={
-                (batchSize !== 100 ? 1 : 0) +
-                (userMappingJson.trim() ? 1 : 0) +
-                (conflictStrategy !== 'skip' ? 1 : 0) +
-                (!preserveLegacyUuids ? 1 : 0)
-              }
+              activeOverridesCount={userMappingJson.trim() ? 1 : 0}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '12px' }}>
-                <div>
-                  <label
-                    htmlFor="import-batch-size"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      width: '100%',
-                      fontSize: '0.825rem',
-                      fontWeight: 600,
-                      marginBottom: 6,
-                      color: 'var(--kb-color-text-secondary)',
-                    }}
-                  >
-                    Import Batch Size
-                    <FieldHelpHint
-                      title="Import Batch Size"
-                      summary="Number of entities to ingest per transactional database batch."
-                      defaultValue="100 items per batch"
-                      validValues={['10 to 1000 items']}
-                      docHref="/docs/migration-and-cutover-runbook#plane-import"
-                      testId="plane-import-batch-size-help"
-                    />
-                  </label>
-                  <input
-                    id="import-batch-size"
-                    type="number"
-                    min={10}
-                    max={1000}
-                    step={10}
-                    className="kb-plane-textarea"
-                    style={{ minHeight: 40, height: 40, width: '100%' }}
-                    data-testid="import-batch-size-input"
-                    value={batchSize}
-                    onChange={(e) => {
-                      setBatchSize(Math.max(1, parseInt(e.target.value, 10) || 100));
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="import-conflict-strategy"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      width: '100%',
-                      fontSize: '0.825rem',
-                      fontWeight: 600,
-                      marginBottom: 6,
-                      color: 'var(--kb-color-text-secondary)',
-                    }}
-                  >
-                    Conflict Resolution Strategy
-                    <FieldHelpHint
-                      title="Conflict Resolution Strategy"
-                      summary="Policy when encountering duplicate identifiers during workspace import."
-                      defaultValue="Skip Existing"
-                      docHref="/docs/migration-and-cutover-runbook#plane-import"
-                      testId="plane-import-conflict-strategy-help"
-                    />
-                  </label>
-                  <select
-                    id="import-conflict-strategy"
-                    className="kb-plane-textarea"
-                    style={{ minHeight: 40, height: 40, width: '100%' }}
-                    data-testid="import-conflict-strategy-select"
-                    value={conflictStrategy}
-                    onChange={(e) => {
-                      setConflictStrategy(e.target.value as 'skip' | 'overwrite' | 'rename');
-                    }}
-                  >
-                    <option value="skip">Skip Existing (Preserve Current)</option>
-                    <option value="overwrite">Overwrite / Update Invariants</option>
-                    <option value="rename">Rename / Auto-Suffix Sequence</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginTop: '14px' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    color: 'var(--kb-color-text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={preserveLegacyUuids}
-                    onChange={(e) => {
-                      setPreserveLegacyUuids(e.target.checked);
-                    }}
-                    data-testid="import-preserve-uuids-checkbox"
-                  />
-                  Preserve Legacy System UUIDs (Deterministic migration idempotency)
-                </label>
-              </div>
-
-              <div style={{ marginTop: '14px' }}>
+              <div>
                 <label
                   htmlFor="import-user-mapping"
                   style={{
@@ -719,9 +654,23 @@ export function PlaneImportStudio(): JSX.Element {
                   data-testid="import-user-mapping-json"
                   value={userMappingJson}
                   onChange={(e) => {
-                    setUserMappingJson(e.target.value);
+                    const val = e.target.value;
+                    setUserMappingJson(val);
+                    try {
+                      parseUserMap(val);
+                    } catch {
+                      // Handled by parseUserMap state
+                    }
                   }}
                 />
+                {userMappingError && (
+                  <div
+                    style={{ color: 'var(--kb-color-danger, #ef4444)', fontSize: '0.8rem', marginTop: 4 }}
+                    data-testid="import-user-mapping-error"
+                  >
+                    {userMappingError}
+                  </div>
+                )}
               </div>
             </AdvancedSection>
           </div>

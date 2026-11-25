@@ -58,7 +58,7 @@ async def post_audit_object_links(
     caller: Annotated[PrincipalContext, Depends(require_workspace_or_server_admin)],
     session: Session,
 ) -> LinkAuditScanResponse:
-    """Scan workspace object links and return aggregated invalidity counts across 6 classes."""
+    """Scan workspace object links and return aggregated invalidity counts across 7 classes."""
     async with timing_floor(floor_ms=25.0):
         return await svc.run_link_audit(session, caller, caller.workspace_id)
 

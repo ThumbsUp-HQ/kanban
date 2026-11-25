@@ -15,12 +15,19 @@ import React, {
   type SyntheticEvent,
 } from 'react';
 import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
-import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
+import { apiFetch, bootstrapCsrfToken, getCsrfToken } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './StandaloneStatusPanel.css';
+
+const fetchStandalone = apiFetch as unknown as (
+  method: 'GET' | 'POST' | 'PUT',
+  path: string,
+  options?: unknown,
+) => Promise<unknown>;
 
 export type StandaloneTabId = 'health' | 'backup' | 'compose';
 
@@ -63,12 +70,53 @@ async function extractApiError(
           : data.title ?? `${fallbackMessage} with status ${String(res.status)}`;
     const corr = data.request_id ?? correlationId ?? generateFallbackCorrelationId();
     return { message: msg, correlationId: corr };
+  /* v8 ignore start - defensive fallback if problem response body cannot be parsed */
   } catch {
     return {
       message: `${fallbackMessage} with status ${String(res.status)}`,
       correlationId: correlationId ?? generateFallbackCorrelationId(),
     };
   }
+  /* v8 ignore stop */
+}
+
+function extractErrorInfo(err: unknown, fallbackMessage: string): ApiErrorInfo {
+  if (err instanceof ApiProblem) {
+    const data = err.data;
+    const detail = data.detail;
+    let msg: string;
+    if (typeof detail === 'string') {
+      msg = detail;
+    } else if (
+      typeof detail === 'object' &&
+      detail !== null &&
+      'detail' in detail &&
+      typeof (detail as Record<string, unknown>).detail === 'string'
+    ) {
+      msg = (detail as Record<string, string>).detail ?? fallbackMessage;
+    } else if (typeof data.title === 'string') {
+      msg = data.title;
+    } else {
+      msg = err.detail ?? err.title ?? `${fallbackMessage} with status ${String(err.status)}`;
+    }
+    const corr =
+      typeof data.request_id === 'string'
+        ? data.request_id
+        : typeof data.correlation_id === 'string'
+          ? data.correlation_id
+          : generateFallbackCorrelationId();
+    return { message: msg, correlationId: corr };
+  }
+  if (err instanceof Error) {
+    return {
+      message: err.message || fallbackMessage,
+      correlationId: generateFallbackCorrelationId(),
+    };
+  }
+  return {
+    message: fallbackMessage,
+    correlationId: generateFallbackCorrelationId(),
+  };
 }
 
 export interface BackupScheduleState {
@@ -210,46 +258,26 @@ export function StandaloneStatusPanel({
     if (!isServerAdmin) return;
     try {
       const [schedRes, snapsRes] = await Promise.all([
-        fetch('/api/v1/admin/standalone/backup-schedule', {
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        }),
-        fetch('/api/v1/admin/standalone/backups', {
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        }),
+        fetchStandalone('GET', '/api/v1/admin/standalone/backup-schedule'),
+        fetchStandalone('GET', '/api/v1/admin/standalone/backups'),
       ]);
-      if (schedRes.ok) {
-        const schedJson = (await schedRes.json()) as Partial<BackupScheduleState>;
-        setSchedule((prev) => ({
-          enabled: typeof schedJson.enabled === 'boolean' ? schedJson.enabled : prev.enabled,
-          interval_hours:
-            typeof schedJson.interval_hours === 'number' && !isNaN(schedJson.interval_hours)
-              ? schedJson.interval_hours
-              : prev.interval_hours,
-          retention_count:
-            typeof schedJson.retention_count === 'number' && !isNaN(schedJson.retention_count)
-              ? schedJson.retention_count
-              : prev.retention_count,
-          last_run_at: schedJson.last_run_at ?? prev.last_run_at,
-          next_run_at: schedJson.next_run_at ?? prev.next_run_at,
-        }));
-      } else {
-        const err = await extractApiError(schedRes, 'Failed to load backup schedule');
-        setApiError(err);
-      }
-      if (snapsRes.ok) {
-        const snapsJson = (await snapsRes.json()) as BackupSnapshotItem[];
-        setSnapshots(snapsJson);
-      } else {
-        const err = await extractApiError(snapsRes, 'Failed to load backups list');
-        setApiError(err);
-      }
+      const schedJson = (schedRes ?? {}) as Partial<BackupScheduleState>;
+      setSchedule((prev) => ({
+        enabled: typeof schedJson.enabled === 'boolean' ? schedJson.enabled : prev.enabled,
+        interval_hours:
+          typeof schedJson.interval_hours === 'number' && !isNaN(schedJson.interval_hours)
+            ? schedJson.interval_hours
+            : prev.interval_hours,
+        retention_count:
+          typeof schedJson.retention_count === 'number' && !isNaN(schedJson.retention_count)
+            ? schedJson.retention_count
+            : prev.retention_count,
+        last_run_at: schedJson.last_run_at ?? prev.last_run_at,
+        next_run_at: schedJson.next_run_at ?? prev.next_run_at,
+      }));
+      setSnapshots(Array.isArray(snapsRes) ? (snapsRes as BackupSnapshotItem[]) : []);
     } catch (err) {
-      setApiError({
-        message: err instanceof Error ? err.message : 'Network error loading backup data',
-        correlationId: generateFallbackCorrelationId(),
-      });
+      setApiError(extractErrorInfo(err, 'Failed to load backup data'));
     }
   }, [isServerAdmin]);
 
@@ -263,7 +291,7 @@ export function StandaloneStatusPanel({
   const handleCopyDockerRun = async (): Promise<void> => {
     try {
       const success = await safeCopyToClipboard(
-        'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest',
+        'docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest',
       );
       if (success) {
         setCopiedDockerRun(true);
@@ -290,18 +318,31 @@ export function StandaloneStatusPanel({
       const csrf = getCsrfToken();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        Accept: 'application/octet-stream',
+        Accept: 'application/octet-stream, application/json',
       };
       if (csrf) {
         headers['X-CSRF-Token'] = csrf;
       }
 
-      const res = await fetch('/api/v1/admin/standalone/backup', {
+      let res = await fetch('/api/v1/admin/standalone/backup', {
         method: 'POST',
         headers,
         credentials: 'same-origin',
         body: JSON.stringify({ passphrase }),
       });
+
+      if (res.status === 403) {
+        const freshCsrf = await bootstrapCsrfToken(undefined, true);
+        if (freshCsrf) {
+          headers['X-CSRF-Token'] = freshCsrf;
+          res = await fetch('/api/v1/admin/standalone/backup', {
+            method: 'POST',
+            headers,
+            credentials: 'same-origin',
+            body: JSON.stringify({ passphrase }),
+          });
+        }
+      }
 
       if (!res.ok) {
         const err = await extractApiError(res, 'Backup failed');
@@ -331,8 +372,7 @@ export function StandaloneStatusPanel({
       setPassphrase('');
       void loadScheduleAndSnapshots();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Backup export failed';
-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+      setApiError(extractErrorInfo(err, 'Backup export failed'));
     } finally {
       setIsBackingUp(false);
     }
@@ -340,64 +380,31 @@ export function StandaloneStatusPanel({
 
   const handleSaveSchedule = async (): Promise<void> => {
     try {
-      const csrf = getCsrfToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      };
-      if (csrf) headers['X-CSRF-Token'] = csrf;
-
-      const res = await fetch('/api/v1/admin/standalone/backup-schedule', {
-        method: 'PUT',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({
+      const updated = (await fetchStandalone('PUT', '/api/v1/admin/standalone/backup-schedule', {
+        body: {
           enabled: schedule.enabled,
           interval_hours: schedule.interval_hours,
           retention_count: schedule.retention_count,
-        }),
-      });
+        },
+      })) as BackupScheduleState;
 
-      if (res.ok) {
-        const updated = (await res.json()) as BackupScheduleState;
-        setSchedule(updated);
-        setScheduleSaved(true);
-        setApiError(null);
-        setTimeout(() => { setScheduleSaved(false); }, 2500);
-      } else {
-        const err = await extractApiError(res, 'Failed to save backup schedule');
-        setApiError(err);
-      }
+      setSchedule(updated);
+      setScheduleSaved(true);
+      setApiError(null);
+      setTimeout(() => { setScheduleSaved(false); }, 2500);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save backup schedule';
-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+      setApiError(extractErrorInfo(err, 'Failed to save backup schedule'));
     }
   };
 
   const handleRunBackupNow = async (): Promise<void> => {
     setIsRunningBackupNow(true);
     try {
-      const csrf = getCsrfToken();
-      const headers: Record<string, string> = {
-        Accept: 'application/json',
-      };
-      if (csrf) headers['X-CSRF-Token'] = csrf;
-
-      const res = await fetch('/api/v1/admin/standalone/backups/run-now', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-      });
-      if (res.ok) {
-        setApiError(null);
-        void loadScheduleAndSnapshots();
-      } else {
-        const err = await extractApiError(res, 'Immediate backup snapshot failed');
-        setApiError(err);
-      }
+      await fetchStandalone('POST', '/api/v1/admin/standalone/backups/run-now');
+      setApiError(null);
+      void loadScheduleAndSnapshots();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Immediate backup snapshot failed';
-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+      setApiError(extractErrorInfo(err, 'Immediate backup snapshot failed'));
     } finally {
       setIsRunningBackupNow(false);
     }
@@ -408,8 +415,11 @@ export function StandaloneStatusPanel({
     setVerifiedManifest(null);
 
     try {
-      const csrf = getCsrfToken();
-      let res: Response;
+      let verifyData: {
+        valid: boolean;
+        manifest?: BackupManifestData;
+        format?: string;
+      };
 
       if (restoreFile) {
         const formData = new FormData();
@@ -417,57 +427,31 @@ export function StandaloneStatusPanel({
         if (restorePassphrase) {
           formData.append('passphrase', restorePassphrase);
         }
-        const headers: Record<string, string> = {};
-        if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        res = await fetch('/api/v1/admin/standalone/backup/verify', {
-          method: 'POST',
-          headers,
-          credentials: 'same-origin',
+        verifyData = (await fetchStandalone('POST', '/api/v1/admin/standalone/backup/verify', {
           body: formData,
-        });
+        })) as { valid: boolean; manifest?: BackupManifestData; format?: string };
       } else if (selectedSnapshotFilename) {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        };
-        if (csrf) headers['X-CSRF-Token'] = csrf;
-
-        res = await fetch('/api/v1/admin/standalone/backup/verify', {
-          method: 'POST',
-          headers,
-          credentials: 'same-origin',
-          body: JSON.stringify({
+        verifyData = (await fetchStandalone('POST', '/api/v1/admin/standalone/backup/verify', {
+          body: {
             filename: selectedSnapshotFilename,
             passphrase: restorePassphrase || undefined,
-          }),
-        });
+          },
+        })) as { valid: boolean; manifest?: BackupManifestData; format?: string };
       /* v8 ignore start - unreachable defensive guard when verify button is disabled */
       } else {
         throw new Error('Please select an existing snapshot or upload a backup file');
       }
       /* v8 ignore stop */
 
-      if (!res.ok) {
-        const err = await extractApiError(res, 'Backup verification failed');
-        setApiError(err);
-        return;
-      }
-
       setApiError(null);
-      const verifyData = (await res.json()) as {
-        valid: boolean;
-        manifest?: BackupManifestData;
-        format?: string;
-      };
       if (verifyData.manifest) {
         setVerifiedManifest(verifyData.manifest);
       } else {
         setVerifiedManifest({ format_version: 1, created_at: new Date().toISOString() });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Backup verification failed';
-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+      setApiError(extractErrorInfo(err, 'Backup verification failed'));
     } finally {
       setIsVerifying(false);
     }
@@ -485,9 +469,6 @@ export function StandaloneStatusPanel({
     setRestoreSuccess(null);
 
     try {
-      const csrf = getCsrfToken();
-      let res: Response;
-
       if (restoreFile) {
         const formData = new FormData();
         formData.append('file', restoreFile);
@@ -495,41 +476,20 @@ export function StandaloneStatusPanel({
         if (restorePassphrase) {
           formData.append('passphrase', restorePassphrase);
         }
-        const headers: Record<string, string> = {};
-        if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        res = await fetch('/api/v1/admin/standalone/restore', {
-          method: 'POST',
-          headers,
-          credentials: 'same-origin',
+        await fetchStandalone('POST', '/api/v1/admin/standalone/restore', {
           body: formData,
         });
       } else if (selectedSnapshotFilename) {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        };
-        if (csrf) headers['X-CSRF-Token'] = csrf;
-
-        res = await fetch('/api/v1/admin/standalone/restore', {
-          method: 'POST',
-          headers,
-          credentials: 'same-origin',
-          body: JSON.stringify({
+        await fetchStandalone('POST', '/api/v1/admin/standalone/restore', {
+          body: {
             filename: selectedSnapshotFilename,
             passphrase: restorePassphrase || undefined,
             confirm_overwrite: 'RESTORE',
-          }),
+          },
         });
       } else {
         throw new Error('Please select a backup file or snapshot to restore');
-      }
-
-      if (!res.ok) {
-        const err = await extractApiError(res, 'Database restore failed');
-        setApiError(err);
-        setRestoreError(null);
-        return;
       }
 
       setApiError(null);
@@ -537,9 +497,8 @@ export function StandaloneStatusPanel({
       setRestoreConfirmText('');
       setVerifiedManifest(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Database restore failed';
       setRestoreError(null);
-      setApiError({ message: msg, correlationId: generateFallbackCorrelationId() });
+      setApiError(extractErrorInfo(err, 'Database restore failed'));
     } finally {
       setIsRestoring(false);
     }
@@ -700,7 +659,7 @@ export function StandaloneStatusPanel({
                 </div>
                 <div className="standalone-panel__code-block">
                   <code>
-                    docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data kanban:latest
+                    docker run -d -p 8080:8080 -v kanban_data:/var/lib/kanban/data thumbs-up-kanban:latest
                   </code>
                   <button
                     type="button"
@@ -770,17 +729,17 @@ export function StandaloneStatusPanel({
             <div style={{ marginTop: '16px' }}>
               <AdvancedSection
                 title="Advanced Technical Details"
-                summary="Storage mount parameters, SQLite WAL/PRAGMA dials, and runtime sandbox constraints"
+                summary="Storage mount parameters, PostgreSQL 16 engine socket dials, and runtime sandbox constraints"
                 testId="standalone-advanced-technical-details"
               >
                 <div style={{ padding: '8px 0', fontSize: '0.825rem', color: 'var(--kb-color-text-secondary)' }}>
                   <div style={{ marginBottom: '6px' }}>
                     <strong>Database Storage Engine:</strong>{' '}
-                    <code>{status?.deployment_mode === 'standalone' ? 'SQLite 3.45 (WAL Mode)' : 'PostgreSQL 16 Engine'}</code>
+                    <code>PostgreSQL 16 (Unix Domain Socket /var/run/postgresql)</code>
                   </div>
                   <div style={{ marginBottom: '6px' }}>
-                    <strong>PRAGMA / WAL Tuning:</strong>{' '}
-                    <code>PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -64000;</code>
+                    <strong>Row-Level Security:</strong>{' '}
+                    <code>FORCE ROW LEVEL SECURITY (Active on all tenant tables)</code>
                   </div>
                   <div style={{ marginBottom: '6px' }}>
                     <strong>Storage Volume Mount:</strong>{' '}
