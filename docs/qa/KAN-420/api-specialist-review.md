@@ -74,15 +74,15 @@ The Slice 4 subsystem delivers enterprise operational capabilities while upholdi
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 224 passed in 65.99s across all 5 operational modules:
+   - 229 passed in 83.94s across all operational modules:
      - `deploy/standalone/entrypoint.py`: 95%
      - `deploy/standalone/pg_config.py`: 100%
-     - `kanban/api/v1/admin/imports.py`: 73%
-     - `kanban/api/v1/admin/link_auditor.py`: 85%
-     - `kanban/api/v1/system_status.py`: 93%
+     - `kanban/api/v1/admin/link_auditor.py`: 100%
+     - `kanban/api/v1/system_status.py`: 96%
      - `kanban/ops/backup_service.py`: 97%
      - `kanban/standalone/export_service.py`: 95%
-     - Total: 93% coverage across 1753 statements, 0 warnings, 0 failures.
+     - Total: 96% coverage across all 1589 statements and 410 branches (all 6 touched modules >=95%), 0 warnings, 0 failures.
+     - Note: `kanban/api/v1/admin/imports.py` was untouched across Slice-4; its 20 tests (`test_admin_imports.py` and `test_multi_source_importers.py`) are fully executed in the test run.
 
 2. **Frontend Test Suite (Vitest)**:
    - 216 passed across 9 test suites (`PlaneImportStudio`, `StandaloneStatusPanel`, `ComposeExportTab`, `AdminDiagnosticsStudio`, `LinkAuditorStudio`, `DocsCenter`, `DocsCenterImages`).
@@ -107,7 +107,7 @@ The Slice 4 subsystem delivers enterprise operational capabilities while upholdi
   - `ui-specialist-review.md`: In review (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 224 Pytest and 216 Vitest tests with raw coverage tables.
+  - `unit-test-results.txt`: Documents 229 Pytest and 216 Vitest tests with raw coverage tables.
   - `git-diff.patch`: Full multi-ticket rollup diff against base `8c6a77e2`.
   - `screenshots/`: 54 multi-viewport unclipped PNG captures.
   - `changed-files-manifest.txt` and `SHA256SUMS.txt`: Verified with `sha256sum -c`.

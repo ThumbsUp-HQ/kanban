@@ -3,7 +3,7 @@
 # ==============================================================================
 # Base Commit: 8c6a77e29e8fe036ebbc14400d15053e4d1bb335
 # Target Branch: docs/KAN-424-slice4-ops-docs
-# HEAD Commit: 9a75f2155b84d6b886f9990a492ca495744ad788
+# HEAD Commit: 3a16a978f3ae8da5fd0985f150405f6308c496d1
 #
 # Rollup Phase Traceability:
 # - Phase 1 (Audit & Cuts Blueprint): KAN-421 (Commit 0cc95c32)
@@ -171,23 +171,23 @@ index 00000000..07b11619
 +| **Web ESLint** | `pnpm --dir kanban/web lint` | Exit code 0, 0 warnings | **PASSED (0 warnings)** |
 +| **Web Production Build** | `pnpm --dir kanban/web build` | Exit code 0, production bundle compiled | **PASSED (100% clean)** |
 diff --git a/kanban/tests/test_wiki_bundle_sync.py b/kanban/tests/test_wiki_bundle_sync.py
-index 385f49af..7031a1bf 100644
+index 385f49af..ef4c31ae 100644
 --- a/kanban/tests/test_wiki_bundle_sync.py
 +++ b/kanban/tests/test_wiki_bundle_sync.py
-@@ -17,8 +17,12 @@ from scripts import sync_wiki_bundle
+@@ -17,9 +17,10 @@ from scripts import sync_wiki_bundle
  def get_wiki_and_public_paths() -> tuple[Path, Path, Path]:
      """Resolve wiki dir, web public images dir, and README path."""
      repo_root = Path(__file__).resolve().parent.parent.parent
-+    local_wiki = repo_root / "thumbs-up-kanban.wiki"
-     wiki_dir = Path(
+-    wiki_dir = Path(
 -        os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki")
-+        os.environ.get(
-+            "KANBAN_WIKI_PATH",
-+            str(local_wiki) if local_wiki.is_dir() else "/home/adamoutler/kanban/thumbs-up-kanban.wiki",
-+        )
-     )
+-    )
++    local_wiki = repo_root / "thumbs-up-kanban.wiki"
++    fallback_wiki = "/home/adamoutler/kanban/thumbs-up-kanban.wiki"
++    default_wiki = str(local_wiki) if local_wiki.is_dir() else fallback_wiki
++    wiki_dir = Path(os.environ.get("KANBAN_WIKI_PATH", default_wiki))
      public_images_dir = repo_root / "kanban" / "web" / "public" / "docs-images"
      readme_path = repo_root / "README.md"
+     return wiki_dir, public_images_dir, readme_path
 diff --git a/kanban/web/e2e/qa/kan-424-slice4-docs-screenshots.spec.ts b/kanban/web/e2e/qa/kan-424-slice4-docs-screenshots.spec.ts
 new file mode 100644
 index 00000000..99f6144b
@@ -1486,6 +1486,24 @@ index 84bfb2a4..831c9415 100644
        </div>
  
        {composeMode === 'multi' ? (
+diff --git a/scripts/coverage_slice4.ini b/scripts/coverage_slice4.ini
+new file mode 100644
+index 00000000..6f1c77de
+--- /dev/null
++++ b/scripts/coverage_slice4.ini
+@@ -0,0 +1,12 @@
++[run]
++branch = true
++
++[report]
++include =
++    deploy/standalone/entrypoint.py
++    deploy/standalone/pg_config.py
++    kanban/api/v1/system_status.py
++    kanban/ops/backup_service.py
++    kanban/standalone/export_service.py
++    kanban/api/v1/admin/link_auditor.py
++    kanban/api/v1/admin/imports.py
 diff --git a/scripts/sync_wiki_bundle.py b/scripts/sync_wiki_bundle.py
 index c7a1fd0f..9cb09ff1 100644
 --- a/scripts/sync_wiki_bundle.py
@@ -1503,3 +1521,71 @@ index c7a1fd0f..9cb09ff1 100644
  DEFAULT_OUT_FILE = "kanban/web/src/features/docs-center/wikiManifest.ts"
  DEFAULT_PUBLIC_DIR = "kanban/web/public"
  
+diff --git a/kanban/tests/api/test_admin_link_auditor.py b/kanban/tests/api/test_admin_link_auditor.py
+index 6b1c2941..cd47b714 100644
+--- a/kanban/tests/api/test_admin_link_auditor.py
++++ b/kanban/tests/api/test_admin_link_auditor.py
+@@ -582,3 +582,23 @@ async def test_admin_link_auditor_service_direct_edge_cases(
+     with pytest.raises(ProblemException) as exc4:
+         _decode_cursor("not_valid_base64_!!!")
+     assert exc4.value.status == 422
++
++
++@pytest.mark.asyncio
++async def test_require_workspace_or_server_admin_forbidden(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test require_workspace_or_server_admin raises 403 INSUFFICIENT_CAPABILITY."""
++    from kanban.api.v1.admin.link_auditor import require_workspace_or_server_admin
++
++    member_user = await make_user("link_member_unauth", workspace_role="WORKSPACE_MEMBER")
++    caller = PrincipalContext(
++        principal_id=member_user.id,
++        workspace_id=member_user.workspace_id,
++        aal_level=2,
++    )
++    with pytest.raises(ProblemException) as exc:
++        await require_workspace_or_server_admin(caller, api_env.seed)
++    assert exc.value.status == 403
++    assert exc.value.code == "INSUFFICIENT_CAPABILITY"
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index 0cd07206..1aa0e46d 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -1306,3 +1306,20 @@ async def test_restore_backup_ops_socket_engine_dispose(tmp_path: Path) -> None:
+         res = await restore_backup_endpoint(request=mock_req)
+         assert res["status"] == "success"
+         mock_engine.dispose.assert_awaited_once()
++
++
++@pytest.mark.asyncio
++async def test_require_server_admin_forbidden(db_session: AsyncSession) -> None:
++    """Test require_server_admin raises 403 INSUFFICIENT_CAPABILITY for non-server-admin."""
++    from kanban.api.deps import PrincipalContext
++    from kanban.api.v1.system_status import require_server_admin
++
++    caller = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        aal_level=2,
++    )
++    with pytest.raises(ProblemException) as exc:
++        await require_server_admin(caller, db_session)
++    assert exc.value.status == 403
++    assert exc.value.code == "INSUFFICIENT_CAPABILITY"
+diff --git a/scripts/coverage_slice4.ini b/scripts/coverage_slice4.ini
+index 6f1c77de..136caa02 100644
+--- a/scripts/coverage_slice4.ini
++++ b/scripts/coverage_slice4.ini
+@@ -1,4 +1,5 @@
+ [run]
++concurrency = greenlet, thread
+ branch = true
+ 
+ [report]
+@@ -9,4 +10,3 @@ include =
+     kanban/ops/backup_service.py
+     kanban/standalone/export_service.py
+     kanban/api/v1/admin/link_auditor.py
+-    kanban/api/v1/admin/imports.py
