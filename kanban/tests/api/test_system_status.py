@@ -925,6 +925,29 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
         assert resp_r_fail.status_code == 422
         assert "INVALID_CONFIRM_OVERWRITE" in resp_r_fail.text
 
+        # Test invalid base64 and invalid filename handling on verify
+        resp_v_bad_b64 = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"file_base64": "a"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_bad_b64.status_code == 422
+
+        resp_v_bad_fn = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "../evil_path.kbbak"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_bad_fn.status_code == 400
+
+        # Test invalid base64 on restore
+        resp_r_bad_b64 = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"file_base64": "a", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_bad_b64.status_code == 422
+
         # 3. Verify multipart form upload and use_master_kek
         with patch.object(
             Request,
@@ -1064,6 +1087,8 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
                 links_audited=0,
                 duration_seconds=0.42,
             )
+            app.state.engine = AsyncMock()
+            app.state.engine.dispose = AsyncMock()
             resp_r_upload = await client.post(
                 "/api/v1/admin/standalone/restore",
                 headers={

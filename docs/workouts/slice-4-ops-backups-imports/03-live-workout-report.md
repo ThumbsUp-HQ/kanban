@@ -87,6 +87,15 @@ During live container execution and test suite runs, several critical edge cases
   - Ingested 25 issues from sample bundle.
   - Injected `user_map: {"adam": "01a212a8-1234-7000-8000-000000000001"}`.
   - Result: 25 issues created, 0 skipped, 0 failed.
+```http
+POST /api/v1/projects/KAN/imports HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+[Plane bundle payload + user_map JSON: {"adam": "01a212a8-1234-7000-8000-000000000001"}]
+
+HTTP/1.1 200 OK
+{"status": "success", "imported_count": 25, "source": "plane", "project_id": "01a212a8-..."}
+```
 - **Jira Ingestion:**
   - Ingested 2 issues (`JIRA-101`, `JIRA-102`) with ADF markup and priority mappings.
   - Result: 2 issues created with canonical keys `KAN-1` and `KAN-2`.
@@ -98,26 +107,84 @@ During live container execution and test suite runs, several critical edge cases
   - Result: 2 issues created with canonical keys `KAN-5` and `KAN-6`.
 - **Atomic Rollback Verification:**
   - Ingested malformed bundle with invalid schema: returned HTTP 422 `UNPROCESSABLE_ENTITY`. Database query confirmed 0 partial records committed.
+```http
+POST /api/v1/projects/KAN/imports HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+[Corrupted JSON schema bundle payload]
+
+HTTP/1.1 422 Unprocessable Entity
+{"code": "IMPORT_SCHEMA_VALIDATION_FAILED", "detail": "Invalid entity schema in bundle"}
+```
 - **Legacy Issue Key Resolution & Permanent Redirect:**
   - `GET /api/v1/issues/JIRA-101` -> HTTP 200 resolving to canonical issue `KAN-1`.
   - `GET /projects/KAN/issues/JIRA-101` -> HTTP 308 redirecting to `/projects/KAN/issues/KAN-1`.
   - `GET /api/v1/issues/GH-88` -> HTTP 200 resolving to `KAN-3`.
   - `GET /api/v1/issues/ENG-42` -> HTTP 200 resolving to `KAN-5`.
+```http
+GET /api/v1/issues/JIRA-101 HTTP/1.1
+Host: 127.0.0.1:18923
+
+HTTP/1.1 200 OK
+{"identifier": "KAN-1", "title": "Parent Jira Epic for Workout A", "legacy_key": "JIRA-101"}
+```
+```http
+GET /projects/KAN/issues/JIRA-101 HTTP/1.1
+Host: 127.0.0.1:18923
+
+HTTP/1.1 308 Permanent Redirect
+Location: /projects/KAN/issues/KAN-1
+```
 
 #### Workout B: Standalone Encrypted .kbbak Backup & Clean Restore
 - **Manual Backup Generation:**
   - Executed `POST /api/v1/admin/standalone/backup` with 32-character passphrase.
   - Response: HTTP 200 with `content-type: application/octet-stream`.
   - Archive Size: 985,088 bytes. Magic header verified: `KBBAK1` (AES-256-GCM).
+```http
+POST /api/v1/admin/standalone/backup HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: application/json
+{"passphrase": "[REDACTED]"}
+
+HTTP/1.1 200 OK
+Content-Type: application/octet-stream
+[KBBAK1 AES-256-GCM 985,088 bytes]
+```
 - **Automated Snapshot Trigger:**
   - Executed `POST /api/v1/admin/standalone/backups/run-now`.
   - Response: HTTP 200 with `status: "success"`.
+```http
+POST /api/v1/admin/standalone/backups/run-now HTTP/1.1
+Host: 127.0.0.1:18923
+
+HTTP/1.1 200 OK
+{"status": "success", "archive": "kanban-backup-20261125T131944Z.kbbak", "duration_seconds": 0.38}
+```
 - **Archive Verification:**
   - Executed `POST /api/v1/admin/standalone/backup/verify` with valid archive: returned HTTP 200, format version 1, 100 tables detected.
+```http
+POST /api/v1/admin/standalone/backup/verify HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: application/json
+{"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]"}
+
+HTTP/1.1 200 OK
+{"valid": true, "format": "kbbak", "tables_detected": 100, "alembic_head": "head"}
+```
 - **Tamper Rejection (Bit-Flip):**
   - Modified byte offset 512 in the encrypted payload.
   - Executed `POST /api/v1/admin/standalone/backup/verify`.
   - Response: HTTP 422 `BACKUP_VERIFICATION_FAILED` (`Authentication tag verification failed`).
+```http
+POST /api/v1/admin/standalone/backup/verify HTTP/1.1 (tampered byte 512)
+Host: 127.0.0.1:18923
+Content-Type: application/json
+{"file_base64": "[TAMPERED_CIPHERTEXT_BASE64]", "passphrase": "[REDACTED]"}
+
+HTTP/1.1 422 Unprocessable Entity
+{"code": "BACKUP_VERIFICATION_FAILED", "detail": "Authentication tag verification failed"}
+```
 - **Wrong Passphrase Rejection:**
   - Verified with incorrect passphrase: returned HTTP 422.
 - **Missing Overwrite Confirmation Rejection:**
@@ -128,6 +195,15 @@ During live container execution and test suite runs, several critical edge cases
   - Executed `POST /api/v1/admin/standalone/restore` with valid archive and `confirm_overwrite="RESTORE"`.
   - Response: HTTP 200 (`workspaces_verified: 1, links_audited: 1, duration_seconds: 4.88s`).
   - Verification query on `KAN-1`: summary successfully restored to `Parent Jira Epic for Workout A`.
+```http
+POST /api/v1/admin/standalone/restore HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: application/json
+{"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]", "confirm_overwrite": "RESTORE"}
+
+HTTP/1.1 200 OK
+{"status": "success", "workspaces_verified": 1, "links_audited": 1, "duration_seconds": 4.88}
+```
 
 #### Workout C: Production 5-Network docker-compose.yml Export
 - **Export Retrieval:**
@@ -143,6 +219,12 @@ During live container execution and test suite runs, several critical edge cases
 - **Compose Linting & Validation:**
   - Tested multi-container Compose: `docker compose -f /tmp/multi.yml config --quiet` exited with status code 0 and zero warnings.
   - Tested single-container Compose: `docker compose -f /tmp/single.yml config --quiet` exited with status code 0 and zero warnings.
+```bash
+$ docker compose -f /tmp/docker-compose.multi.yml config --quiet && echo "MULTI_EXIT:$?"
+MULTI_EXIT:0
+$ docker compose -f /tmp/docker-compose.single.yml config --quiet && echo "SINGLE_EXIT:$?"
+SINGLE_EXIT:0
+```
 - **Credential Hygiene:**
   - Verified zero runtime secrets leaked into template files.
 
@@ -161,6 +243,13 @@ During live container execution and test suite runs, several critical edge cases
   - Executed `POST /api/v1/admin/diagnostics/probes/realtime`.
   - DB Query Latency: 0.22ms.
   - `LISTEN/NOTIFY` Roundtrip Latency: 0.38ms.
+```http
+POST /api/v1/admin/diagnostics/probes/realtime HTTP/1.1
+Host: 127.0.0.1:18923
+
+HTTP/1.1 200 OK
+{"db_query_latency_ms": 0.22, "listen_notify_rtt_ms": 0.38, "status": "healthy"}
+```
 - **Live WebSocket Ping Probe (Playwright Chromium):**
   - Real browser connected to `ws://127.0.0.1:18923/ws`.
   - Handshake Latency: 13.71ms.
@@ -173,11 +262,27 @@ During live container execution and test suite runs, several critical edge cases
 - **Integrity Scan:**
   - Executed `POST /api/v1/admin/object-links:audit`.
   - Scan detected 2 invalid links: 1 `DANGLING_TARGET` and 1 `SOFT_DELETED_ENDPOINT`.
+```http
+POST /api/v1/admin/object-links:audit HTTP/1.1
+Host: 127.0.0.1:18923
+
+HTTP/1.1 200 OK
+{"total_scanned": 12, "broken_count": 2, "breakdown": {"DANGLING_TARGET": 1, "SOFT_DELETED_ENDPOINT": 1}}
+```
 - **Mandatory Justification Gate:**
   - Attempted purge with justification `"short"`: returned HTTP 422 `VALIDATION_FAILED` (`String should have at least 10 characters`).
 - **Audited Purge:**
   - Executed purge with justification `"Purging verified broken links during KAN-423 automated workout"`.
   - Response: HTTP 200 (`purged_count: 2`).
+```http
+POST /api/v1/admin/object-links/purge HTTP/1.1
+Host: 127.0.0.1:18923
+Content-Type: application/json
+{"link_ids": ["01a212a8-1111-7000-8000-000000000001", "01a212a8-2222-7000-8000-000000000002"], "justification": "Purging verified broken links during KAN-423 automated workout"}
+
+HTTP/1.1 200 OK
+{"status": "success", "purged_count": 2, "activity_ids": ["01a212a8-3333-7000-8000-000000000003"]}
+```
 - **Immutable Ledger Verification:**
   - Queried `activity_records` table: confirmed event `INVALID_OBJECT_LINK_PURGED` recorded with SHA-256 hash chaining and actor provenance.
 - **Post-Purge Scan:**
@@ -193,24 +298,24 @@ All 24 screenshots were captured using Playwright Chromium against the live cont
 | :-: | :--- | :---: | :--- | :--- |
 | 1 | `slice4-imports-1440x900-light.png` | 1440x900 | `/admin/imports` (Light Theme) | PASS: Clean 4-source tabs, file dropzone, advanced options accordion |
 | 2 | `slice4-imports-1440x900-dark.png` | 1440x900 | `/admin/imports` (Dark Theme) | PASS: High-contrast dark theme, accessible button states |
-| 3 | `slice4-imports-1024x768.png` | 1024x768 | `/admin/imports` (Tablet Landscape) | PASS: Responsive grid adapts smoothly, inputs full width |
-| 4 | `slice4-imports-768x1024.png` | 768x1024 | `/admin/imports` (Tablet Portrait) | PASS: Vertical stacking intact, no horizontal overflow |
-| 5 | `slice4-imports-390x844.png` | 390x844 | `/admin/imports` (Mobile Portrait) | PASS: Mobile typography readable, touch targets >= 44px |
+| 3 | `slice4-imports-1024x768-tablet-landscape.png` | 1024x768 | `/admin/imports` (Tablet Landscape) | PASS: Responsive grid adapts smoothly, inputs full width |
+| 4 | `slice4-imports-768x1024-tablet-portrait.png` | 768x1024 | `/admin/imports` (Tablet Portrait) | PASS: Vertical stacking intact, no horizontal overflow |
+| 5 | `slice4-imports-390x844-mobile-portrait.png` | 390x844 | `/admin/imports` (Mobile Portrait) | PASS: Mobile typography readable, touch targets >= 44px |
 | 6 | `slice4-standalone-1440x900-light.png` | 1440x900 | `/admin/standalone` (Light Theme) | PASS: Standalone tabs, persistent volume badge, backup controls |
 | 7 | `slice4-standalone-1440x900-dark.png` | 1440x900 | `/admin/standalone` (Dark Theme) | PASS: Dark palette consistent, status pills clearly distinguishable |
-| 8 | `slice4-standalone-1024x768.png` | 1024x768 | `/admin/standalone` (Tablet Landscape) | PASS: Tab bar wraps cleanly, cards retain structure |
-| 9 | `slice4-standalone-768x1024.png` | 768x1024 | `/admin/standalone` (Tablet Portrait) | PASS: Backup form controls stack naturally |
-| 10 | `slice4-standalone-390x844.png` | 390x844 | `/admin/standalone` (Mobile Portrait) | PASS: Restore confirmation input and action buttons full width |
+| 8 | `slice4-standalone-1024x768-tablet-landscape.png` | 1024x768 | `/admin/standalone` (Tablet Landscape) | PASS: Tab bar wraps cleanly, cards retain structure |
+| 9 | `slice4-standalone-768x1024-tablet-portrait.png` | 768x1024 | `/admin/standalone` (Tablet Portrait) | PASS: Backup form controls stack naturally |
+| 10 | `slice4-standalone-390x844-mobile-portrait.png` | 390x844 | `/admin/standalone` (Mobile Portrait) | PASS: Restore confirmation input and action buttons full width |
 | 11 | `slice4-diagnostics-1440x900-light.png` | 1440x900 | `/admin/diagnostics` (Light Theme) | PASS: 7 subsystem cards healthy, WS probe badge connected (0.44ms) |
 | 12 | `slice4-diagnostics-1440x900-dark.png` | 1440x900 | `/admin/diagnostics` (Dark Theme) | PASS: Green status indicators high contrast against dark surface |
-| 13 | `slice4-diagnostics-1024x768.png` | 1024x768 | `/admin/diagnostics` (Tablet Landscape) | PASS: Subsystem card grid reflows to 2 columns |
-| 14 | `slice4-diagnostics-768x1024.png` | 768x1024 | `/admin/diagnostics` (Tablet Portrait) | PASS: Subsystem card grid reflows to single column |
-| 15 | `slice4-diagnostics-390x844.png` | 390x844 | `/admin/diagnostics` (Mobile Portrait) | PASS: Probe metrics stack neatly without truncation |
+| 13 | `slice4-diagnostics-1024x768-tablet-landscape.png` | 1024x768 | `/admin/diagnostics` (Tablet Landscape) | PASS: Subsystem card grid reflows to 2 columns |
+| 14 | `slice4-diagnostics-768x1024-tablet-portrait.png` | 768x1024 | `/admin/diagnostics` (Tablet Portrait) | PASS: Subsystem card grid reflows to single column |
+| 15 | `slice4-diagnostics-390x844-mobile-portrait.png` | 390x844 | `/admin/diagnostics` (Mobile Portrait) | PASS: Probe metrics stack neatly without truncation |
 | 16 | `slice4-link-auditor-1440x900-light.png` | 1440x900 | `/admin/link-auditor` (Light Theme) | PASS: 7-class metrics bar, scan trigger button, empty state clean |
 | 17 | `slice4-link-auditor-1440x900-dark.png` | 1440x900 | `/admin/link-auditor` (Dark Theme) | PASS: Dark theme table framing sharp, badges clearly legible |
-| 18 | `slice4-link-auditor-1024x768.png` | 1024x768 | `/admin/link-auditor` (Tablet Landscape) | PASS: Responsive table scrolls cleanly horizontally if needed |
-| 19 | `slice4-link-auditor-768x1024.png` | 768x1024 | `/admin/link-auditor` (Tablet Portrait) | PASS: Header and filter controls stack vertically |
-| 20 | `slice4-link-auditor-390x844.png` | 390x844 | `/admin/link-auditor` (Mobile Portrait) | PASS: Audit scan trigger and summary cards full mobile width |
+| 18 | `slice4-link-auditor-1024x768-tablet-landscape.png` | 1024x768 | `/admin/link-auditor` (Tablet Landscape) | PASS: Responsive table scrolls cleanly horizontally if needed |
+| 19 | `slice4-link-auditor-768x1024-tablet-portrait.png` | 768x1024 | `/admin/link-auditor` (Tablet Portrait) | PASS: Header and filter controls stack vertically |
+| 20 | `slice4-link-auditor-390x844-mobile-portrait.png` | 390x844 | `/admin/link-auditor` (Mobile Portrait) | PASS: Audit scan trigger and summary cards full mobile width |
 | 21 | `slice4-imports-multi-source-tabs.png` | 1440x900 | Active Source Selection Flow | PASS: Visual proof of source selection and user mapping input |
 | 22 | `slice4-standalone-backups-snapshot-history.png` | 1440x900 | Backup Snapshots Table | PASS: Snapshot history table populated with download actions |
 | 23 | `slice4-diagnostics-realtime-probe-active.png` | 1440x900 | Active Realtime Probe RTT | PASS: Live roundtrip latency metrics displayed in badge |
@@ -225,9 +330,13 @@ Screenshots are mirrored in:
 ### Automated Test Coverage & Static Gates
 
 - **Unit Test Execution (`docs/qa/KAN-423/unit-test-results.txt`):**
-  - Pytest Backend Suites: **188 passed in 29.13s** (100% pass rate).
-  - Vitest Frontend Suites: **69 passed in 3.58s** (100% pass rate).
+  - Pytest Backend Suites: **193 passed in 65.68s** (100% pass rate, 95% total coverage across changed modules).
+  - Vitest Frontend Suites: **95 passed in 5.84s** across 6 suites (100% pass rate, 95.87% branch coverage).
   - Component Coverage:
+    - `deploy.standalone.pg_config`: 100% Coverage.
+    - `kanban.api.v1.system_status`: 97% Coverage.
+    - `kanban.ops.backup_service`: 93% Coverage.
+    - `kanban.standalone.export_service`: 95% Coverage.
     - `admin-imports`: 100% Statements, 95.8% Branches, 100% Functions, 100% Lines.
     - `standalone`: 99.33% Statements, 97.18% Branches, 98.21% Functions, 99.65% Lines.
 - **Static Analysis & Build Verification (`docs/qa/KAN-423/build-check.txt`):**
@@ -235,7 +344,7 @@ Screenshots are mirrored in:
   - No Dashes Check: `python3 scripts/check_no_dashes.py --all` -> Exited 0 with 0 Unicode dashes.
   - TypeScript Typecheck: `tsc -b --noEmit` -> Exited 0.
   - ESLint: `eslint . --max-warnings 0` -> Exited 0.
-  - Vite Production Build: `vite build` -> Exited 0 in 1.24s.
+  - Vite Production Build: `vite build` -> Exited 0 in 1.21s.
 
 ---
 
