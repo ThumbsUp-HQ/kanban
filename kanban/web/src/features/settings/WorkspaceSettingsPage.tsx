@@ -1771,7 +1771,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                       >
                                         {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
                                       </span>
-                                      {groupActionError && m.id === selectedAddMemberId && (
+                                      {groupActionError && /cycle/i.test(groupActionError) && m.id === selectedAddMemberId && (
                                         <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '6px' }}>
                                           Cycle Detected
                                         </span>

@@ -7,12 +7,13 @@ import { spawn } from 'node:child_process';
 
 let chromium;
 try {
-  ({ chromium } = await import('/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs'));
+  ({ chromium } = await import('@playwright/test'));
 } catch {
   try {
-    ({ chromium } = await import('@playwright/test'));
-  } catch {
     ({ chromium } = await import('playwright'));
+  } catch {
+    const localPlaywright = path.resolve(import.meta.dirname, '../kanban/web/node_modules/@playwright/test/index.mjs');
+    ({ chromium } = await import(localPlaywright));
   }
 }
 

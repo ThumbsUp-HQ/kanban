@@ -165,5 +165,5 @@ This step-by-step test plan provides exact operations to validate the simplified
 | **Frontend TypeScript** | `pnpm --dir kanban/web typecheck` | Pass (0 errors) |
 | **Frontend ESLint** | `pnpm --dir kanban/web lint` | Pass (0 warnings) |
 | **Frontend Build** | `pnpm --dir kanban/web build` | Pass (Clean production build) |
-| **Backend Feature Tests** | `pytest tests/unit/api/...` | Pass (93/93 tests passing) |
+| **Backend Feature Tests** | `pytest tests/unit/api/...` | Pass (93/93 tests passing in 85.09s, 85% coverage on slice modules, 100% on custom fields & hooks) |
 | **Frontend Feature Tests** | `vitest run src/features/...` | Pass (280/280 tests passing, >=95% branch coverage on all touched components) |
