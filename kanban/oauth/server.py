@@ -92,6 +92,8 @@ body {
   padding: 0.25rem 0.625rem;
   border-radius: 6px;
   border: 1px solid var(--border);
+  word-break: break-all;
+  max-width: 100%;
 }
 .user-badge {
   text-align: center;
@@ -361,6 +363,10 @@ def resolve_public_base_url(request: Request | None = None) -> str:
     if request is not None:
         proto = request.headers.get("x-forwarded-proto")
         host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if proto:
+            proto = proto.split(",")[0].strip()
+        if host:
+            host = host.split(",")[0].strip()
         if proto and host:
             return f"{proto}://{host}".rstrip("/")
         if host:

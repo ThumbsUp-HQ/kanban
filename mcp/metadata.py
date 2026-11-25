@@ -35,6 +35,10 @@ def resolve_public_base_url(request: Request | None = None) -> str:
     if request is not None:
         proto = request.headers.get("x-forwarded-proto")
         host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if proto:
+            proto = proto.split(",")[0].strip()
+        if host:
+            host = host.split(",")[0].strip()
         if proto and host:
             return f"{proto}://{host}".rstrip("/")
         if host:
@@ -97,9 +101,11 @@ async def protected_resource_metadata_endpoint(request: Request) -> Response:
         if parts:
             if parts[0] == "mcp":
                 parts = parts[1:]
-            if parts and (parts[0] in ("agent", "docs", "admin") or not surface):
+            if parts and parts[0] in ("agent", "docs", "admin"):
                 surface = parts[0]
                 parts = parts[1:]
+            else:
+                surface = surface or "agent"
             if parts and parts[0] == "w" and len(parts) >= 2:  # noqa: PLR2004
                 workspace_slug = parts[1]
                 if len(parts) >= 4 and parts[2] == "p":  # noqa: PLR2004

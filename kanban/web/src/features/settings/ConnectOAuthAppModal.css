@@ -157,6 +157,7 @@
   color: #58a6ff;
   overflow-x: auto;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .kb-connect-oauth-copy-btn {
@@ -168,6 +169,7 @@
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .kb-connect-oauth-copy-btn:hover {
@@ -244,6 +246,34 @@
 
 .kb-connect-oauth-snippet-copy:hover {
   background-color: #2ea043;
+}
+
+.kb-connect-oauth-scope-hint {
+  font-size: 0.75rem;
+  color: var(--kb-color-text-secondary, #8b949e);
+  margin-top: 2px;
+}
+
+.kb-connect-oauth-gemini-hint {
+  background-color: var(--bg-surface-raised, #161b22);
+  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.8125rem;
+  color: var(--kb-color-text-secondary, #8b949e);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-connect-oauth-gemini-hint strong {
+  color: var(--kb-color-text-primary, #f0f6fc);
+}
+
+.kb-connect-oauth-gemini-hint code {
+  color: #58a6ff;
+  font-family: monospace;
 }
 
 .kb-connect-oauth-headless-note {

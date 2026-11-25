@@ -429,4 +429,119 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
 
     vi.unstubAllGlobals();
   });
+
+  it('switches to Gemini App tab, displaying instructions and OAuth 2.1 details (KAN-395)', () => {
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          user={{ is_workspace_admin: false }}
+          workspaceSlug="gemini-ws"
+          projectKey="GEM"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to Gemini App tab
+    fireEvent.click(screen.getByTestId('tab-gemini-app'));
+    expect(screen.getByTestId('gemini-app-instructions')).toBeDefined();
+    expect(screen.getByTestId('gemini-app-instructions').textContent).toContain('Google Gemini Connected Apps');
+
+    const snippet = screen.getByTestId('command-snippet').textContent;
+    expect(snippet).toContain('Google Gemini Connected Apps (OAuth 2.1 PKCE)');
+    expect(snippet).toContain('http://localhost:3000/mcp/agent/w/gemini-ws/p/GEM');
+    expect(snippet).toContain('agent:read, agent:write');
+  });
+
+  it('allows dynamically changing Target Scope between Workspace, Single Project, and Server (KAN-395)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { key: 'PROJ-ALPHA', name: 'Alpha Project' },
+            { key: 'PROJ-BETA', name: 'Beta Project' },
+          ]),
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="dynamic-ws"
+          scopeTier="workspace"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
+    expect(scopeSelect.value).toBe('workspace');
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/dynamic-ws',
+    );
+
+    // Switch to Server scope
+    act(() => {
+      fireEvent.change(scopeSelect, { target: { value: 'server' } });
+    });
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent',
+    );
+    expect(screen.queryByTestId('project-select')).toBeNull();
+
+    // Switch to Single Project scope
+    act(() => {
+      fireEvent.change(scopeSelect, { target: { value: 'project' } });
+    });
+    const projSelect = screen.getByTestId<HTMLSelectElement>('project-select');
+    expect(projSelect).toBeDefined();
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/dynamic-ws/p/PROJ-ALPHA',
+    );
+
+    // Switch selected project to PROJ-BETA
+    act(() => {
+      fireEvent.change(projSelect, { target: { value: 'PROJ-BETA' } });
+    });
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe(
+      'http://localhost:3000/mcp/agent/w/dynamic-ws/p/PROJ-BETA',
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('wires selectedScopes into snippets and updates scope hint (KAN-395)', () => {
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="scopes-ws"
+          projectKey="SCP"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('scope-hint').textContent).toContain('Selected scopes: agent:read, agent:write');
+
+    // Uncheck agent:write
+    const writeCheck = screen.getByTestId<HTMLInputElement>('scope-check-agent:write');
+    fireEvent.click(writeCheck);
+
+    expect(screen.getByTestId('scope-hint').textContent).toBe('Selected scopes: agent:read');
+
+    // Check snippet reflects single scope
+    fireEvent.click(screen.getByTestId('tab-cursor'));
+    expect(screen.getByTestId('command-snippet').textContent).toContain('"agent:read"');
+    expect(screen.getByTestId('command-snippet').textContent).not.toContain('"agent:write"');
+
+    // Check Gemini snippet reflects single scope
+    fireEvent.click(screen.getByTestId('tab-gemini-app'));
+    expect(screen.getByTestId('command-snippet').textContent).toContain('Requested Scopes: agent:read');
+  });
 });

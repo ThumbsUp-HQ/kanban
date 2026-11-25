@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import time
 import uuid
 from unittest.mock import AsyncMock, MagicMock
@@ -16,7 +17,7 @@ from starlette.requests import Request
 from database.models.oauth import OAuthClient
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import format_validation_error
-from kanban.api.v1.oauth import oauth_authorize
+from kanban.api.v1.oauth import MAX_STATE_LEN, _redirect_with_params, oauth_authorize
 from kanban.auth.ldap.config import LdapCardConfig
 from kanban.auth.oidc.config import OidcCardConfig
 from kanban.auth.sessions.csrf import verify_same_origin_request
@@ -49,6 +50,7 @@ from kanban.oauth.server import (
     verify_consent_csrf_token,
     verify_pkce_s256,
 )
+from mcp.metadata import protected_resource_metadata_endpoint
 
 
 def _b64(b: bytes) -> str:
@@ -941,3 +943,192 @@ async def test_oauth_authorize_rejects_inactive_client_statuses() -> None:
         )
         assert resp.status_code == 302
         assert f"error_description=client_{inactive_status}" in resp.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_oauth_authorize_state_length_boundaries_4096_accepted_4097_rejected() -> None:
+    """Test state length boundary: 4096 accepted, 4097 rejected (KAN-395)."""
+    assert MAX_STATE_LEN == 4096
+    mock_session = AsyncMock()
+    req = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/oauth/authorize",
+            "query_string": b"",
+            "headers": [(b"host", b"localhost:8000")],
+        }
+    )
+
+    # 1. 4097 chars -> rejected
+    state_4097 = "s" * 4097
+    with pytest.raises(OAuth2Error) as exc_info_over:
+        await oauth_authorize(
+            request=req,
+            session=mock_session,
+            response_type="code",
+            client_id="cid_1",
+            redirect_uri="http://127.0.0.1:8080/cb",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge_method="S256",
+            state=state_4097,
+        )
+    assert exc_info_over.value.error == "invalid_request"
+    assert exc_info_over.value.description == "state parameter required and must be <= 4096 chars"
+    assert exc_info_over.value.status_code == 400
+
+    # 2. Empty state -> rejected
+    with pytest.raises(OAuth2Error) as exc_info_empty:
+        await oauth_authorize(
+            request=req,
+            session=mock_session,
+            response_type="code",
+            client_id="cid_1",
+            redirect_uri="http://127.0.0.1:8080/cb",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge_method="S256",
+            state="",
+        )
+    assert exc_info_empty.value.error == "invalid_request"
+    assert exc_info_empty.value.description == "state parameter required and must be <= 4096 chars"
+
+    # 3. 4096 chars -> state validation passes, progresses to client lookup
+    state_4096 = "s" * 4096
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = result
+
+    with pytest.raises(OAuth2Error) as exc_info_4096:
+        await oauth_authorize(
+            request=req,
+            session=mock_session,
+            response_type="code",
+            client_id="unknown_client",
+            redirect_uri="http://127.0.0.1:8080/cb",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge_method="S256",
+            state=state_4096,
+        )
+    assert exc_info_4096.value.error == "invalid_client"
+
+
+def test_redirect_with_params_handles_existing_query_params() -> None:
+    """Test _redirect_with_params appends with & when ? exists, avoiding ?a=1?code= (KAN-395)."""
+    # 1. URI with existing query parameters
+    resp_with_query = _redirect_with_params(
+        "https://oauth.google.com/callback?authuser=0&prompt=consent",
+        {"code": "auth_code_123", "state": "state_xyz"},
+    )
+    assert resp_with_query.status_code == 302
+    loc = resp_with_query.headers["location"]
+    assert loc.startswith("https://oauth.google.com/callback?authuser=0&prompt=consent&")
+    assert "?code=" not in loc
+    assert "&code=auth_code_123" in loc
+    assert "&state=state_xyz" in loc
+
+    # 2. URI without query parameters
+    resp_no_query = _redirect_with_params(
+        "https://oauth.google.com/callback",
+        {"code": "auth_code_123", "state": "state_xyz"},
+    )
+    assert resp_no_query.status_code == 302
+    assert resp_no_query.headers["location"].startswith("https://oauth.google.com/callback?")
+    assert "?code=auth_code_123" in resp_no_query.headers["location"]
+
+
+def test_gemini_long_state_csrf_hmac_and_tamper_detection() -> None:
+    """Test HMAC CSRF token supports 1200-4096 char states and rejects tampering (KAN-395)."""
+    hmac_key = b"test-hmac-key-for-oauth-csrfs-32b!"
+    sess_id = uuid.uuid4()
+    long_state = "gemini_state_" + ("a" * 1200)
+
+    # 1. Generate and verify valid token with 1200+ char state
+    token = generate_consent_csrf_token(
+        session_hmac_key=hmac_key,
+        session_id=sess_id,
+        client_id="gemini_mcp_client",
+        redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
+        code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        state=long_state,
+        surface="agent",
+    )
+    assert (
+        verify_consent_csrf_token(
+            token=token,
+            session_hmac_key=hmac_key,
+            session_id=sess_id,
+            client_id="gemini_mcp_client",
+            redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            state=long_state,
+            surface="agent",
+        )
+        is True
+    )
+
+    # 2. Tampered state rejected
+    tampered_state = long_state[:-1] + "b"
+    assert (
+        verify_consent_csrf_token(
+            token=token,
+            session_hmac_key=hmac_key,
+            session_id=sess_id,
+            client_id="gemini_mcp_client",
+            redirect_uri="https://gemini.google.com/oauth/callback?foo=bar",
+            code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            state=tampered_state,
+            surface="agent",
+        )
+        is False
+    )
+
+
+def test_resolve_public_base_url_reverse_proxy_comma_separated() -> None:
+    """Test resolve_public_base_url parses comma-separated proxy headers cleanly (KAN-395)."""
+    req_chained = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8080),
+            "path": "/",
+            "headers": [
+                (b"x-forwarded-proto", b"https, http"),
+                (b"x-forwarded-host", b"k.hackedyour.info, 192.168.1.101"),
+            ],
+        }
+    )
+    assert resolve_public_base_url(req_chained) == "https://k.hackedyour.info"
+
+
+@pytest.mark.asyncio
+async def test_protected_resource_metadata_scoped_path_discovery() -> None:
+    """Test RFC 9728 discovery on /mcp/w/{ws} and /mcp/w/{ws}/p/{proj} (KAN-395)."""
+    # 1. /mcp/w/kanban
+    req_ws = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp/w/kanban",
+            "headers": [(b"host", b"kanban.local")],
+        }
+    )
+    resp_ws = await protected_resource_metadata_endpoint(req_ws)
+    assert resp_ws.status_code == 200
+    data_ws = json.loads(resp_ws.body.decode("utf-8"))
+    assert data_ws["resource"] == "http://kanban.local/mcp/agent/w/kanban"
+    assert "agent:read" in data_ws["scopes_supported"]
+
+    # 2. /mcp/w/kanban/p/KANBA
+    req_proj = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp/w/kanban/p/KANBA",
+            "headers": [(b"host", b"kanban.local")],
+        }
+    )
+    resp_proj = await protected_resource_metadata_endpoint(req_proj)
+    assert resp_proj.status_code == 200
+    data_proj = json.loads(resp_proj.body.decode("utf-8"))
+    assert data_proj["resource"] == "http://kanban.local/mcp/agent/w/kanban/p/KANBA"

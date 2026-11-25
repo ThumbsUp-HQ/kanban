@@ -1694,6 +1694,7 @@ export function McpAccessStudio({
           user={propUser ?? fetchedUser}
           workspaceSlug={currentWorkspaceSlug}
           projectKey={effectiveProjectKey}
+          scopeTier={activeScope === 'all' ? 'workspace' : activeScope}
           onClose={() => {
             setShowConnectOAuthModal(false);
           }}

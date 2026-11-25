@@ -2323,3 +2323,169 @@ async def test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr(  # 
         json={"redirect_uris": [f"https://too-many.example.com/{i}" for i in range(17)]},
     )
     assert resp_patch_too_many.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Full Gemini MCP OAuth 2.1 handshake with 1200-char state & proxy (KAN-395)."""
+    client = api_env.client
+
+    redirect_uri = "https://gemini.google.com/oauth/callback?app=connected&env=prod"
+    resource = "https://k.hackedyour.info/mcp/agent/w/gemini-ws"
+
+    # 1. Reverse-proxy HTTPS discovery check
+    resp_as = await client.get(
+        "/.well-known/oauth-authorization-server",
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "k.hackedyour.info",
+        },
+    )
+    assert resp_as.status_code == 200
+    as_meta = resp_as.json()
+    assert as_meta["issuer"] == "https://k.hackedyour.info"
+    assert as_meta["authorization_endpoint"] == "https://k.hackedyour.info/oauth/authorize"
+    assert as_meta["token_endpoint"] == "https://k.hackedyour.info/oauth/token"
+
+    resp_res = await client.get(
+        "/.well-known/oauth-protected-resource/mcp/w/gemini-ws",
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "k.hackedyour.info",
+        },
+    )
+    assert resp_res.status_code == 200
+    res_meta = resp_res.json()
+    assert res_meta["resource"] == "https://k.hackedyour.info/mcp/agent/w/gemini-ws"
+    assert "agent:read" in res_meta["scopes_supported"]
+
+    # 2. Dynamic Client Registration (RFC 7591)
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={
+            "client_name": "Google Gemini Connected App",
+            "redirect_uris": [redirect_uri],
+        },
+    )
+    assert resp_reg.status_code == 201
+    client_id = resp_reg.json()["client_id"]
+
+    # 3. 1,200-char Gemini state parameter
+    gemini_state = "gemini_state_token_" + ("x" * 1181)
+    assert len(gemini_state) == 1200
+    verifier, challenge = _generate_pkce()
+
+    # 4. Unauthenticated user redirected to /login?next=... preserving long state
+    api_env.resolver.principal = None
+    resp_unauth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": gemini_state,
+            "resource": resource,
+            "scope": "agent:read agent:write",
+        },
+        follow_redirects=False,
+    )
+    assert resp_unauth.status_code == 302
+    login_next_loc = resp_unauth.headers["location"]
+    assert login_next_loc.startswith("/login?next=")
+    # Unquoted login next must contain the full 1200-char state
+    unquoted_login_url = urllib.parse.unquote(login_next_loc)
+    assert gemini_state in unquoted_login_url
+
+    # 5. Authenticate user & render consent screen
+    user = await make_user("gemini_tester", workspace_role="WORKSPACE_MEMBER")
+    as_principal(user)
+
+    resp_auth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": gemini_state,
+            "resource": resource,
+            "scope": "agent:read agent:write",
+        },
+    )
+    assert resp_auth.status_code == 200
+    assert "Authorize Google Gemini Connected App" in resp_auth.text
+    assert gemini_state in resp_auth.text
+    csrf_token = _extract_csrf(resp_auth.text)
+
+    # 6. POST /oauth/authorize/decision -> Approve
+    resp_decision = await client.post(
+        "/oauth/authorize/decision",
+        data={
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": gemini_state,
+            "action": "approve",
+            "csrf_token": csrf_token,
+            "scopes": ["agent:read", "agent:write"],
+            "allowed_project_id": "__ALL__",
+        },
+        follow_redirects=False,
+    )
+    assert resp_decision.status_code == 302
+    decision_loc = resp_decision.headers["location"]
+    # Check that separator is & and never ?a=1?code=
+    assert decision_loc.startswith(f"{redirect_uri}&")
+    assert "?code=" not in decision_loc
+
+    parsed_loc = urllib.parse.urlparse(decision_loc)
+    qs = urllib.parse.parse_qs(parsed_loc.query)
+    code = qs["code"][0]
+    assert qs["state"][0] == gemini_state
+    assert qs["app"][0] == "connected"
+    assert qs["env"][0] == "prod"
+
+    # 7. POST /oauth/token -> Exchange code for token
+    api_env.resolver.principal = None
+    resp_token = await client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "code_verifier": verifier,
+            "redirect_uri": redirect_uri,
+            "resource": resource,
+        },
+    )
+    assert resp_token.status_code == 200
+    token_json = resp_token.json()
+    assert token_json["token_type"] == "Bearer"
+    assert token_json["expires_in"] == 900
+    assert "access_token" in token_json
+
+    # 8. Unauthenticated 401 on /mcp/agent/w/{ws} returns RFC 9728 WWW-Authenticate
+    resp_mcp_unauth = await client.post(
+        "/mcp/agent/w/gemini-ws",
+        headers={
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "k.hackedyour.info",
+        },
+    )
+    assert resp_mcp_unauth.status_code == 401
+    www_auth = resp_mcp_unauth.headers.get("www-authenticate", "")
+    assert 'realm="kanban-mcp"' in www_auth
+    expected_meta = (
+        'resource_metadata="https://k.hackedyour.info/.well-known/'
+        'oauth-protected-resource/mcp/agent/w/gemini-ws"'
+    )
+    assert expected_meta in www_auth

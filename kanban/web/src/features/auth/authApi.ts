@@ -55,7 +55,7 @@ export function resolveSafeNext(next: string | null | undefined): string {
   if (!next || typeof next !== 'string') {
     return '/';
   }
-  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%:+~]*$/;
+  const SAFE_NEXT_REGEX = /^\/(?!\/)[A-Za-z0-9/_\-?=&.%:+~@,;!$'()*]*$/;
   const [pathPart = ''] = next.split('?');
   if (!SAFE_NEXT_REGEX.test(next) || next.includes('\\') || pathPart.includes(':')) {
     return '/';

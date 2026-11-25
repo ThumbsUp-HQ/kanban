@@ -283,6 +283,10 @@ class McpAuthMiddleware:
             proto = headers.get("x-forwarded-proto") or (
                 str(scope.get("scheme", "https")) if scope else "https"
             )
+            if proto:
+                proto = proto.split(",")[0].strip()
+            if host:
+                host = host.split(",")[0].strip()
             local_hosts = (
                 "localhost",
                 "127.0.0.1",

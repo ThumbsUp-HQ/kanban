@@ -1084,6 +1084,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('connect-oauth-app-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
+      expect(screen.getByTestId('scope-tier-select')).toBeDefined();
     });
 
     // Close modal via close button

@@ -106,7 +106,7 @@ __all__ = [
 _REQUIRED_AAL_LEVEL: Final[int] = 2
 MIN_CODE_CHALLENGE_LEN: Final[int] = 43
 MAX_CODE_CHALLENGE_LEN: Final[int] = 128
-MAX_STATE_LEN: Final[int] = 512
+MAX_STATE_LEN: Final[int] = 4096
 _logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 Caller = Annotated[PrincipalContext, Depends(get_principal)]
@@ -556,6 +556,12 @@ async def oauth_device_authorize(
     )
 
 
+def _redirect_with_params(redirect_uri: str, params: dict[str, Any]) -> RedirectResponse:
+    """Build RFC 6749 compliant 302 redirect preserving any existing query parameters."""
+    sep = "&" if "?" in redirect_uri else "?"
+    return RedirectResponse(f"{redirect_uri}{sep}{urlencode(params)}", status_code=302)
+
+
 # =========================================================================
 # Interactive Authorization & Consent Flow
 # =========================================================================
@@ -599,7 +605,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     # 3. Validate state parameter
     if not state or len(state) > MAX_STATE_LEN:
         err = "invalid_request"
-        desc = "state parameter required and must be <= 512 chars"
+        desc = f"state parameter required and must be <= {MAX_STATE_LEN} chars"
         raise OAuth2Error(err, desc, 400)
 
     # 4. Lookup client
@@ -623,7 +629,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             "error_description": f"client_{client_record.status}",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 7. Validate resource & surface
     base_url = resolve_public_base_url(request)
@@ -640,7 +646,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
                 "error_description": f"Scope {sc} invalid for {surface}",
                 "state": state,
             }
-            return RedirectResponse(f"{redirect_uri}?{urlencode(params)}")
+            return _redirect_with_params(redirect_uri, params)
 
     # 9. Principal resolution
     resolver = getattr(request.app.state, "principal_resolver", DenyAllResolver())
@@ -669,7 +675,7 @@ async def oauth_authorize(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             "error_description": "aal2_required",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 11. Bind caller RLS context on session and load available projects + principal display name
     await session.execute(
@@ -838,7 +844,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
             "error_description": f"client_{client_record.status}",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 6. Admin surface requires AAL2
     if surface == "admin" and caller.aal_level < _REQUIRED_AAL_LEVEL:
@@ -847,7 +853,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
             "error_description": "aal2_required",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 7. Handle User Deny
     if action.lower() != "approve":
@@ -856,7 +862,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
             "error_description": "User denied consent",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 8. Scope validation and rejection of empty approved scopes
     allowed_surface_scopes = SURFACE_SCOPES[surface]
@@ -867,7 +873,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
             "error_description": "At least one valid scope must be approved",
             "state": state,
         }
-        return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+        return _redirect_with_params(redirect_uri, params)
 
     # 4. Project narrowing
     allowed_projects: list[uuid.UUID] | None = None
@@ -913,7 +919,7 @@ async def oauth_authorize_decision(  # noqa: C901, PLR0912, PLR0915
     await session.commit()
 
     params = {"code": code, "state": state}
-    return RedirectResponse(f"{redirect_uri}?{urlencode(params)}", status_code=302)
+    return _redirect_with_params(redirect_uri, params)
 
 
 @oauth_root_router.post(
@@ -1051,7 +1057,7 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
             raise OAuth2Error(err, desc, 400)
 
         # Validate resource match if provided
-        if eff_resource and code_record.resource != eff_resource:
+        if eff_resource and (code_record.resource or "").rstrip("/") != eff_resource.rstrip("/"):
             err = "invalid_grant"
             desc = "resource mismatch"
             raise OAuth2Error(err, desc, 400)

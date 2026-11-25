@@ -54,7 +54,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~]{0,2048}$")
+RETURN_TO_REGEX: Final[re.Pattern[str]] = re.compile(
+    r"^/(?![/\\])[A-Za-z0-9/_.\-?=&%:+~@,;!$'()*]{0,8192}$"
+)
 
 BROWSER_BINDING_COOKIE_NAME: Final[str] = "__Host-kb_oidc"
 FALLBACK_BROWSER_BINDING_COOKIE_NAME: Final[str] = "kb_oidc"

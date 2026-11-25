@@ -15,12 +15,12 @@ export interface ConnectOAuthAppModalProps {
   } | null | undefined;
   workspaceSlug?: string | undefined;
   projectKey?: string | undefined;
-  scopeTier?: 'server' | 'workspace' | 'project' | undefined;
+  scopeTier?: 'server' | 'workspace' | 'project' | 'all' | undefined;
   onClose: () => void;
 }
 
 type SurfaceType = 'agent' | 'docs' | 'admin';
-type ToolTab = 'claude' | 'cursor' | 'antigravity' | 'codex';
+type ToolTab = 'claude' | 'cursor' | 'antigravity' | 'codex' | 'gemini';
 
 const SCOPES_BY_SURFACE: Record<SurfaceType, readonly string[]> = {
   agent: ['agent:read', 'agent:write'],
@@ -40,40 +40,69 @@ export function ConnectOAuthAppModal({
     user?.is_workspace_admin === true ||
     user?.workspace_role === 'WORKSPACE_ADMIN' ||
     user?.workspace_role === 'SERVER_ADMIN';
+
+  const [targetScope, setTargetScope] = useState<'workspace' | 'project' | 'server'>(() => {
+    if (scopeTier === 'server') return 'server';
+    if (scopeTier === 'project') return 'project';
+    if (scopeTier === 'workspace') return 'workspace';
+    if (!scopeTier && projectKey) return 'project';
+    return 'workspace';
+  });
+
+  const [projects, setProjects] = useState<{ key: string; name?: string }[]>([]);
+  const [selectedProjectKey, setSelectedProjectKey] = useState<string>(projectKey ?? '');
+  const [fetchedProjectKey, setFetchedProjectKey] = useState<string | null>(null);
+
   const [surface, setSurface] = useState<SurfaceType>('agent');
   const [selectedScopes, setSelectedScopes] = useState<string[]>([...SCOPES_BY_SURFACE.agent]);
   const [activeTab, setActiveTab] = useState<ToolTab>('claude');
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [fetchedProjectKey, setFetchedProjectKey] = useState<string | null>(null);
 
   useEffect(() => {
     const isMounted = { current: true };
-    if (scopeTier === 'project' && !projectKey) {
-      void (async () => {
-        try {
-          const res = await fetch('/api/v1/projects', {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            credentials: 'same-origin',
-          });
-          if (!res.ok || !isMounted.current) {
-            return;
+    void (async () => {
+      try {
+        const res = await fetch('/api/v1/projects', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        if (!res.ok || !isMounted.current) {
+          if (!projectKey && !fetchedProjectKey) {
+            setFetchedProjectKey('<PROJECT_KEY>');
           }
-          const data = (await res.json()) as
-            | { items?: { key?: string; identifier?: string }[] }
-            | { key?: string; identifier?: string }[];
-          const items = Array.isArray(data) ? data : (data.items ?? []);
-          const firstKey = items[0]?.key ?? items[0]?.identifier;
-          setFetchedProjectKey(firstKey ?? '<PROJECT_KEY>');
-        } catch {
+          return;
+        }
+        const data = (await res.json()) as
+          | { items?: { key?: string; identifier?: string; name?: string }[] }
+          | { key?: string; identifier?: string; name?: string }[];
+        const items = Array.isArray(data) ? data : (data.items ?? []);
+        const mapped = items
+          .map((p) => {
+            const k = p.key ?? p.identifier ?? '';
+            return { key: k, name: p.name ?? k };
+          })
+          .filter((p) => Boolean(p.key));
+        setProjects(mapped);
+        const firstKey = mapped[0]?.key;
+        if (firstKey) {
+          setFetchedProjectKey(firstKey);
+          if (!selectedProjectKey) {
+            setSelectedProjectKey(firstKey);
+          }
+        } else {
           setFetchedProjectKey('<PROJECT_KEY>');
         }
-      })();
-    }
+      } catch {
+        if (isMounted.current && !projectKey && !fetchedProjectKey) {
+          setFetchedProjectKey('<PROJECT_KEY>');
+        }
+      }
+    })();
     return () => {
       isMounted.current = false;
     };
-  }, [scopeTier, projectKey]);
+  }, [projectKey, fetchedProjectKey, selectedProjectKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -108,17 +137,18 @@ export function ConnectOAuthAppModal({
     }
   };
 
-  let resolvedProjectKey: string | null = null;
-  if (scopeTier === 'project') {
-    resolvedProjectKey = projectKey ?? fetchedProjectKey ?? '<PROJECT_KEY>';
-  } else if (!scopeTier && projectKey) {
-    resolvedProjectKey = projectKey;
-  }
-
   const origin = window.location.origin;
-  const resourceUrl = resolvedProjectKey
-    ? `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${resolvedProjectKey}`
-    : `${origin}/mcp/${surface}/w/${workspaceSlug}`;
+  const effectiveProject =
+    (selectedProjectKey ? selectedProjectKey : undefined) ??
+    projectKey ??
+    fetchedProjectKey ??
+    '<PROJECT_KEY>';
+  let resourceUrl = `${origin}/mcp/${surface}/w/${workspaceSlug}`;
+  if (targetScope === 'server') {
+    resourceUrl = `${origin}/mcp/${surface}`;
+  } else if (targetScope === 'project') {
+    resourceUrl = `${origin}/mcp/${surface}/w/${workspaceSlug}/p/${effectiveProject}`;
+  }
   const rfc8414Url = `${origin}/.well-known/oauth-authorization-server`;
 
   let snippet = '';
@@ -131,6 +161,7 @@ export function ConnectOAuthAppModal({
           kanban: {
             url: resourceUrl,
             auth: 'oauth',
+            scopes: selectedScopes,
           },
         },
       },
@@ -144,6 +175,7 @@ export function ConnectOAuthAppModal({
           kanban: {
             serverUrl: resourceUrl,
             auth: 'oauth',
+            scopes: selectedScopes,
           },
         },
       },
@@ -151,13 +183,14 @@ export function ConnectOAuthAppModal({
       2,
     );
     snippet = `${agyJson}\n\n# Or register via agy CLI:\nagy mcp add kanban ${resourceUrl} --auth oauth`;
-  } else {
+  } else if (activeTab === 'codex') {
     const codexJson = JSON.stringify(
       {
         mcpServers: {
           kanban: {
             url: resourceUrl,
             auth: 'oauth',
+            scopes: selectedScopes,
           },
         },
       },
@@ -165,6 +198,18 @@ export function ConnectOAuthAppModal({
       2,
     );
     snippet = `${codexJson}\n\n# Or register via Codex CLI:\ncodex mcp add kanban ${resourceUrl} --auth oauth`;
+  } else {
+    const scopesList = selectedScopes.length > 0 ? selectedScopes.join(', ') : 'agent:read, agent:write';
+    snippet = `# Google Gemini Connected Apps (OAuth 2.1 PKCE)
+# 1. In Gemini (gemini.google.com), open Settings > Connected Apps > Add Custom MCP Server
+# 2. Set MCP Server URL to:
+${resourceUrl}
+
+# 3. Protocol: Streamable HTTP (SSE)
+# 4. Authentication: OAuth 2.1 Authorization Code with PKCE S256
+# 5. Requested Scopes: ${scopesList}
+#
+# Click 'Connect'. When prompted, sign into 👍kanban and click 'Approve' on the consent screen.`;
   }
 
   return (
@@ -201,9 +246,55 @@ export function ConnectOAuthAppModal({
 
         <div className="kb-connect-oauth-body">
           <p className="kb-connect-oauth-desc">
-            Connect external MCP clients (Claude Code, VS Code, Cursor, Codex, Antigravity) using
+            Connect external MCP clients (Google Gemini, Claude Code, VS Code, Cursor, Codex, Antigravity) using
             OAuth 2.1 with PKCE S256 authorization code or headless RFC 8628 device flow.
           </p>
+
+          <div className="kb-connect-oauth-field">
+            <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
+              Target Scope
+            </label>
+            <select
+              id="scope-tier-select"
+              className="kb-connect-oauth-select"
+              data-testid="scope-tier-select"
+              value={targetScope}
+              onChange={(e) => {
+                setTargetScope(e.target.value as 'workspace' | 'project' | 'server');
+              }}
+            >
+              <option value="workspace">Workspace ({workspaceSlug})</option>
+              <option value="project">Single Project</option>
+              <option value="server">Server (Global)</option>
+            </select>
+          </div>
+
+          {targetScope === 'project' && (
+            <div className="kb-connect-oauth-field">
+              <label htmlFor="project-select" className="kb-connect-oauth-label">
+                Target Project
+              </label>
+              <select
+                id="project-select"
+                className="kb-connect-oauth-select"
+                data-testid="project-select"
+                value={effectiveProject}
+                onChange={(e) => {
+                  setSelectedProjectKey(e.target.value);
+                }}
+              >
+                {projects.length > 0 ? (
+                  projects.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name && p.name !== p.key ? `${p.name} (${p.key})` : p.key}
+                    </option>
+                  ))
+                ) : (
+                  <option value={effectiveProject}>{effectiveProject}</option>
+                )}
+              </select>
+            </div>
+          )}
 
           <div className="kb-connect-oauth-field">
             <label htmlFor="surface-select" className="kb-connect-oauth-label">
@@ -241,6 +332,9 @@ export function ConnectOAuthAppModal({
                 </label>
               ))}
             </div>
+            <span className="kb-connect-oauth-scope-hint" data-testid="scope-hint">
+              Selected scopes: {selectedScopes.join(', ') || 'None'}
+            </span>
           </div>
 
           <div className="kb-connect-oauth-endpoints">
@@ -284,6 +378,18 @@ export function ConnectOAuthAppModal({
           </div>
 
           <div className="kb-connect-oauth-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'gemini'}
+              className={`kb-connect-oauth-tab ${activeTab === 'gemini' ? 'kb-connect-oauth-tab-active' : ''}`}
+              data-testid="tab-gemini-app"
+              onClick={() => {
+                setActiveTab('gemini');
+              }}
+            >
+              Gemini App
+            </button>
             <button
               type="button"
               role="tab"
@@ -333,6 +439,17 @@ export function ConnectOAuthAppModal({
               Codex
             </button>
           </div>
+
+          {activeTab === 'gemini' && (
+            <div className="kb-connect-oauth-gemini-hint" data-testid="gemini-app-instructions">
+              <p>
+                <strong>Google Gemini Connected Apps:</strong> Connect 👍kanban directly to Google Gemini via OAuth 2.1 PKCE. In Gemini, go to <em>Settings &gt; Connected Apps &gt; Add MCP Server</em> and enter the MCP OAuth Resource URL.
+              </p>
+              <p>
+                Authorization code flow will launch automatically with requested scopes: <code>{selectedScopes.join(', ') || 'agent:read, agent:write'}</code>.
+              </p>
+            </div>
+          )}
 
           <div className="kb-connect-oauth-snippet-wrap">
             <pre className="kb-connect-oauth-snippet" data-testid="command-snippet">

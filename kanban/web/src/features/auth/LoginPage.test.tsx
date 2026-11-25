@@ -89,6 +89,14 @@ describe('LoginPage (KB-P3-35)', () => {
     const oauthAuthorizeNext =
       '/oauth/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2F127.0.0.1%3A54321%2Fcallback&scope=agent:read+agent:write';
     expect(resolveSafeNext(oauthAuthorizeNext)).toBe(oauthAuthorizeNext);
+
+    const longGeminiState = 'x'.repeat(1200);
+    const geminiOauthNext = `/oauth/authorize?response_type=code&client_id=gemini_client&redirect_uri=https%3A%2F%2Fgemini.google.com%2Fcallback%3Ffoo%3Dbar&state=${longGeminiState}&scope=agent:read+agent:write`;
+    expect(resolveSafeNext(geminiOauthNext)).toBe(geminiOauthNext);
+
+    const subDelimsNext = '/oauth/authorize?state=abc@123;param=1!$()*';
+    expect(resolveSafeNext(subDelimsNext)).toBe(subDelimsNext);
+
     expect(resolveSafeNext('/https://evil.example')).toBe('/');
   });
 
