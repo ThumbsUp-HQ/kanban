@@ -267,23 +267,24 @@ def test_ops_socket_server_lifecycle_and_rpc(tmp_path: Path) -> None:
     assert server.sock_path.exists()
 
     try:
-        # 1. Connect and close immediately without data
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client0:
-            client0.connect(str(server.sock_path))
+        # 1. Connect and close immediately without data (tested as non-root)
+        with patch("os.geteuid", return_value=1000):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client0:
+                client0.connect(str(server.sock_path))
 
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(5.0)
-            client.connect(str(server.sock_path))
-            client.sendall(json.dumps({"op": "ping_test_op"}).encode("utf-8") + b"\n")
-            raw = b""
-            while not raw.endswith(b"\n"):
-                chunk = client.recv(4096)
-                if not chunk:
-                    break
-                raw += chunk
-        resp = json.loads(raw.decode("utf-8"))
-        assert resp["status"] == "error"
-        assert "Unknown operation: ping_test_op" in resp["message"]
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(5.0)
+                client.connect(str(server.sock_path))
+                client.sendall(json.dumps({"op": "ping_test_op"}).encode("utf-8") + b"\n")
+                raw = b""
+                while not raw.endswith(b"\n"):
+                    chunk = client.recv(4096)
+                    if not chunk:
+                        break
+                    raw += chunk
+            resp = json.loads(raw.decode("utf-8"))
+            assert resp["status"] == "error"
+            assert "Unknown operation: ping_test_op" in resp["message"]
 
         # 2. Test os.geteuid() == 0 branch with mock run_as_postgres
         mock_proc_ok = SimpleNamespace(
