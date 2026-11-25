@@ -165,6 +165,9 @@ class ProviderReorderRequest(BaseModel):
     ordered_ids: list[uuid.UUID] = Field(
         min_length=1, description="List of provider UUIDs in ascending priority order"
     )
+    project_id: uuid.UUID | None = Field(
+        default=None, description="Optional project UUID if reordering within a project scope"
+    )
 
 
 class ProviderProbeRequest(BaseModel):
@@ -176,6 +179,9 @@ class ProviderProbeRequest(BaseModel):
     base_url: str | None = Field(default=None, description="Optional custom HTTP base URL")
     api_key: SecretStr | None = Field(default=None, description="Optional secret API key")
     settings_json: dict[str, Any] | None = Field(default=None, description="Optional settings")
+    project_id: uuid.UUID | None = Field(
+        default=None, description="Optional project UUID if probing within project scope"
+    )
 
     @field_validator("api_key")
     @classmethod
@@ -221,3 +227,12 @@ class ProviderProbeResult(BaseModel):
     model_count: int = Field(ge=0, description="Count of discovered models")
     error_code: str | None = Field(default=None, description="Diagnostic error code if failed")
     message: str | None = Field(default=None, description="Human-readable status or error message")
+
+
+class AISettingsPublic(BaseModel):
+    """Workspace AI runtime settings including air gap policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    air_gap_mode: bool = Field(description="Whether air-gap zero-egress mode is enforced")
+

@@ -181,4 +181,58 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it('saves agent with workspaceSlug routing successfully', async () => {
+    const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
+      id: 'agent-created-2',
+      workspace_id: 'ws-1',
+      principal_id: 'prin-1',
+      slug: 'workspace-qa-agent',
+      display_name: 'Workspace QA Agent',
+      harness_kind: 'in_app_sdk',
+      provider_kind: 'gemini',
+      model_id: 'gemini-2.5-flash-lite',
+      cli_binary_allowlist_id: null,
+      cli_args: [],
+      remote_runner_pool_slug: null,
+      repo_access_mode: 'none',
+      mcp_allowed_tools: [],
+      system_instructions_md: 'Workspace prompt instructions.',
+      timeout_ms: 60000,
+    });
+    const onSaved = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <AgentDefinitionEditorDrawer
+        isOpen={true}
+        onClose={onClose}
+        agent={null}
+        onSaved={onSaved}
+        aiProviders={mockAiProviders}
+        workspaceSlug="qa-team"
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('agent-slug-input'), {
+      target: { value: 'workspace-qa-agent' },
+    });
+    fireEvent.change(screen.getByTestId('agent-name-input'), {
+      target: { value: 'Workspace QA Agent' },
+    });
+    fireEvent.click(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite'));
+    fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'workspace-qa-agent',
+          display_name: 'Workspace QA Agent',
+        }),
+        'qa-team',
+      );
+      expect(onSaved).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
 });

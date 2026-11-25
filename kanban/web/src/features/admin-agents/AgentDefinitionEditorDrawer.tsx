@@ -28,6 +28,8 @@ interface AgentDefinitionEditorDrawerProps {
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
@@ -37,11 +39,15 @@ function AgentDefinitionEditorContent({
   agent,
   onSaved,
   aiProviders,
+  projectId,
+  workspaceSlug,
 }: {
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }): JSX.Element {
   const isEditing = agent !== null;
 
@@ -57,7 +63,10 @@ function AgentDefinitionEditorContent({
       return;
     }
     let isMounted = true;
-    fetchAiProviders()
+    const fetchCall = workspaceSlug
+      ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
+      : fetchAiProviders(projectId ?? undefined);
+    fetchCall
       .then((data) => {
         if (isMounted) {
           setFetchedProviders(data);
@@ -69,7 +78,7 @@ function AgentDefinitionEditorContent({
     return () => {
       isMounted = false;
     };
-  }, [aiProviders]);
+  }, [aiProviders, projectId, workspaceSlug]);
 
   const providers = aiProviders ?? fetchedProviders;
   const matchingProviders = providers.filter(
@@ -158,6 +167,7 @@ function AgentDefinitionEditorContent({
         const payload: AgentDefinitionCreate = {
           slug: slug.trim(),
           display_name: displayName.trim(),
+          project_id: projectId ?? null,
           harness_kind: harnessKind,
           provider_kind: harnessKind === 'in_app_sdk' ? providerKind : null,
           model_id: harnessKind === 'in_app_sdk' ? modelId.trim() : null,
@@ -170,7 +180,11 @@ function AgentDefinitionEditorContent({
           timeout_ms: timeoutMs,
         };
 
-        await createAgentDefinition(payload);
+        if (workspaceSlug) {
+          await createAgentDefinition(payload, workspaceSlug);
+        } else {
+          await createAgentDefinition(payload);
+        }
       }
 
       setIsSaving(false);
@@ -523,6 +537,8 @@ export function AgentDefinitionEditorDrawer({
   agent,
   onSaved,
   aiProviders,
+  projectId,
+  workspaceSlug,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -541,6 +557,8 @@ export function AgentDefinitionEditorDrawer({
         agent={agent}
         onSaved={onSaved}
         aiProviders={aiProviders}
+        projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
     </div>
   );

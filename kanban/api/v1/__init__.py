@@ -6,7 +6,12 @@ from fastapi import APIRouter
 
 from kanban.api.v1.activity import router as activity_router
 from kanban.api.v1.admin.acl import router as admin_acl_router
-from kanban.api.v1.admin.ai_providers import router as admin_ai_router
+from kanban.api.v1.admin.ai_providers import (
+    router as admin_ai_router,
+)
+from kanban.api.v1.admin.ai_providers import (
+    workspace_router as workspace_ai_router,
+)
 from kanban.api.v1.admin.audit_shred import router as admin_audit_shred_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
 from kanban.api.v1.admin.destructive import router as admin_destructive_router
@@ -146,6 +151,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_auth_cards_router)
     v1.include_router(admin_audit_shred_router)
     v1.include_router(admin_ai_router)
+    v1.include_router(workspace_ai_router)
     v1.include_router(admin_destructive_router)
     v1.include_router(admin_exports_router)
     v1.include_router(admin_imports_router)

@@ -15,16 +15,19 @@ interface AiBudgetModalProps {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   onBudgetUpdated?: (() => void) | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 function AiBudgetModalContent({
   onClose,
   provider,
   onBudgetUpdated,
+  workspaceSlug,
 }: {
   onClose: () => void;
   provider: ProviderConfigPublic;
   onBudgetUpdated?: (() => void) | undefined;
+  workspaceSlug?: string | undefined;
 }): JSX.Element {
   const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -38,7 +41,9 @@ function AiBudgetModalContent({
 
     async function load() {
       try {
-        const records = await fetchBudgets(provider.id);
+        const records = workspaceSlug
+          ? await fetchBudgets(provider.id, workspaceSlug)
+          : await fetchBudgets(provider.id);
         if (!active) return;
         setBudgets(records);
         const monthly = records.find((b) => b.period_kind === 'monthly');
@@ -64,7 +69,7 @@ function AiBudgetModalContent({
     return () => {
       active = false;
     };
-  }, [provider.id]);
+  }, [provider.id, workspaceSlug]);
 
   const currentBudget = budgets.find((b) => b.period_kind === periodKind) ?? budgets[0];
   const capNum = currentBudget?.token_cap ?? 0;
@@ -83,13 +88,27 @@ function AiBudgetModalContent({
     try {
       setIsSaving(true);
       setError(null);
-      await setBudget({
-        provider_config_id: provider.id,
-        project_id: provider.project_id ?? undefined,
-        period_kind: periodKind,
-        token_cap: cap,
-      });
-      const updated = await fetchBudgets(provider.id);
+      if (workspaceSlug) {
+        await setBudget(
+          {
+            provider_config_id: provider.id,
+            project_id: provider.project_id ?? undefined,
+            period_kind: periodKind,
+            token_cap: cap,
+          },
+          workspaceSlug,
+        );
+      } else {
+        await setBudget({
+          provider_config_id: provider.id,
+          project_id: provider.project_id ?? undefined,
+          period_kind: periodKind,
+          token_cap: cap,
+        });
+      }
+      const updated = workspaceSlug
+        ? await fetchBudgets(provider.id, workspaceSlug)
+        : await fetchBudgets(provider.id);
       setBudgets(updated);
       setIsSaving(false);
       onBudgetUpdated?.();
@@ -244,6 +263,7 @@ export function AiBudgetModal({
   onClose,
   provider,
   onBudgetUpdated,
+  workspaceSlug,
 }: AiBudgetModalProps): JSX.Element | null {
   if (!isOpen || !provider) return null;
 
@@ -260,6 +280,7 @@ export function AiBudgetModal({
         onClose={onClose}
         provider={provider}
         onBudgetUpdated={onBudgetUpdated}
+        workspaceSlug={workspaceSlug}
       />
     </div>
   );

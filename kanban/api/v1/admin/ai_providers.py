@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid  # noqa: TC003
+import uuid
 from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -20,10 +20,11 @@ from kanban.ai_config.service import (
     AIProviderConfigService,
     AirGapViolation,
 )
-from kanban.api.deps import PrincipalContext, get_rls_session
+from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
 from kanban.api.v1.admin.ai_schemas import (
+    AISettingsPublic,
     BudgetRecord,
     BudgetSetRequest,
     ProviderConfigCreate,
@@ -184,6 +185,8 @@ async def list_providers(
     session: Session,
     request: Request,
     project_id: Annotated[uuid.UUID | None, Query()] = None,
+    *,
+    include_projects: Annotated[bool, Query()] = True,
 ) -> list[ProviderConfigPublic]:
     """List AI provider configurations for workspace or project with API keys omitted."""
     async with timing_floor(floor_ms=25.0):
@@ -192,6 +195,7 @@ async def list_providers(
         configs = await service.list_configs(
             workspace_id=caller.workspace_id,
             project_id=project_id,
+            include_projects=include_projects if project_id is None else True,
         )
         return [_to_public_config(c) for c in configs]
 
@@ -208,7 +212,7 @@ async def reorder_providers(
 ) -> list[ProviderConfigPublic]:
     """Atomically reorder all AI provider configurations in workspace."""
     async with timing_floor(floor_ms=25.0):
-        await _assert_admin_for_scope(session, caller, None)
+        await _assert_admin_for_scope(session, caller, body.project_id)
 
         if len(body.ordered_ids) != len(set(body.ordered_ids)):
             raise ProblemException(
@@ -218,11 +222,12 @@ async def reorder_providers(
                 detail="ordered_ids list contains duplicate IDs",
             )
 
-        stmt = (
-            select(AIProviderConfig)
-            .where(AIProviderConfig.workspace_id == caller.workspace_id)
-            .with_for_update()
-        )
+        stmt = select(AIProviderConfig).where(AIProviderConfig.workspace_id == caller.workspace_id)
+        if body.project_id is None:
+            stmt = stmt.where(AIProviderConfig.project_id.is_(None))
+        else:
+            stmt = stmt.where(AIProviderConfig.project_id == body.project_id)
+        stmt = stmt.with_for_update()
         res = await session.execute(stmt)
         configs = list(res.scalars().all())
         config_map = {c.id: c for c in configs}
@@ -279,7 +284,7 @@ async def probe_provider_models(
 ) -> ProviderProbeResult:
     """Probe models for an unsaved AI provider draft configuration."""
     async with timing_floor(floor_ms=25.0):
-        await _assert_admin_for_scope(session, caller, None)
+        await _assert_admin_for_scope(session, caller, body.project_id)
         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
@@ -305,7 +310,7 @@ async def check_provider_connection(
 ) -> ProviderProbeResult:
     """Test connectivity, auth, and model listing for an unsaved AI provider configuration."""
     async with timing_floor(floor_ms=25.0):
-        await _assert_admin_for_scope(session, caller, None)
+        await _assert_admin_for_scope(session, caller, body.project_id)
         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
         api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
@@ -698,8 +703,18 @@ async def set_budget(
         if config is None:
             not_found()
 
-        target_project_id = body.project_id or config.project_id
-        await _assert_admin_for_scope(session, caller, target_project_id)
+        if (
+            config.project_id is not None
+            and body.project_id is not None
+            and body.project_id != config.project_id
+        ):
+            raise ProblemException(
+                code="SCOPE_MISMATCH",
+                status=422,
+                title="Validation Error",
+                detail="Request project_id does not match provider project scope.",
+            )
+        await _assert_admin_for_scope(session, caller, config.project_id)
 
         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         try:
@@ -708,7 +723,7 @@ async def set_budget(
                 provider_config_id=body.provider_config_id,
                 period_kind=body.period_kind,
                 token_cap=body.token_cap,
-                project_id=body.project_id,
+                project_id=body.project_id if config.project_id is None else config.project_id,
             )
         except AIConfigValidationError as exc:
             raise ProblemException(
@@ -737,3 +752,657 @@ async def set_budget(
             tokens_used=ledger.tokens_used,
             tokens_reserved=ledger.tokens_reserved,
         )
+
+
+# =============================================================================
+# Workspace & Project-Scoped AI Provider Router (KB-WORKSPACE-PROJECT-AI-AGENTS, KAN-402)
+# =============================================================================
+
+workspace_router = APIRouter(
+    prefix="/workspaces/{workspace}/ai-providers",
+    tags=["workspace-ai-providers"],
+)
+
+WorkspaceCaller = Annotated[PrincipalContext, Depends(get_principal)]
+
+
+async def _verify_workspace(
+    session: AsyncSession, caller: PrincipalContext, workspace_ref: str
+) -> None:
+    """Verify workspace exists and caller is authorized in this workspace."""
+    if workspace_ref == "current":
+        return
+    try:
+        ws_id = uuid.UUID(workspace_ref)
+        if ws_id != caller.workspace_id:
+            not_found()
+    except ValueError:
+        stmt = text("SELECT id FROM workspaces WHERE id = :wid AND slug = :slug")
+        found = (
+            await session.execute(stmt, {"wid": caller.workspace_id, "slug": workspace_ref})
+        ).scalar_one_or_none()
+        if found is None:
+            not_found()
+
+
+@workspace_router.get(
+    "",
+    response_model=list[ProviderConfigPublic],
+    summary="List workspace or project AI provider configurations",
+)
+async def workspace_list_providers(
+    workspace: str,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+    project_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> list[ProviderConfigPublic]:
+    """List AI provider configurations for workspace or project visible to caller."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        await _assert_admin_for_scope(session, caller, project_id)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        configs = await service.list_configs(
+            workspace_id=caller.workspace_id,
+            project_id=project_id,
+            include_projects=project_id is not None,
+        )
+        return [_to_public_config(c) for c in configs]
+
+
+@workspace_router.post(
+    "",
+    response_model=ProviderConfigPublic,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create workspace or project AI provider configuration",
+)
+async def workspace_create_provider(  # noqa: PLR0913, PLR0917
+    workspace: str,
+    body: ProviderConfigCreate,
+    caller: WorkspaceCaller,
+    session: Session,
+    response: Response,
+    request: Request,
+) -> ProviderConfigPublic:
+    """Create an AI provider configuration enforcing residency tier, air gap, and custody."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        await _assert_admin_for_scope(session, caller, body.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
+
+        try:
+            config = await service.create_config(
+                workspace_id=caller.workspace_id,
+                provider_kind=body.provider_kind,
+                display_name=body.display_name,
+                model_allowlist=body.model_allowlist,
+                residency_tier=body.residency_tier,
+                base_url=body.base_url,
+                priority=body.priority,
+                settings_json=body.settings,
+                project_id=body.project_id,
+                api_key=api_key_str,
+                is_enabled=body.is_enabled,
+                air_gap_mode=is_air_gap,
+            )
+        except AirGapViolation as exc:
+            raise ProblemException(
+                code="AIR_GAP_EGRESS_DENIED",
+                status=409,
+                title="Air Gap Egress Denied",
+                detail=str(exc),
+            ) from exc
+        except AIConfigValidationError as exc:
+            code = "INVALID_BASE_URL" if "base_url" in str(exc) else "INVALID_REQUEST"
+            raise ProblemException(
+                code=code,
+                status=422,
+                title="Validation Error",
+                detail=str(exc),
+            ) from exc
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_CONFIG_CREATED,
+            payload={
+                "config_id": str(config.id),
+                "provider_kind": config.provider_kind,
+                "display_name": config.display_name,
+                "is_enabled": config.is_enabled,
+                "project_id": str(config.project_id) if config.project_id else None,
+            },
+        )
+
+        response.headers["Location"] = f"/api/v1/workspaces/{workspace}/ai-providers/{config.id}"
+        return _to_public_config(config)
+
+
+@workspace_router.put(
+    "/order",
+    response_model=list[ProviderConfigPublic],
+    summary="Atomically reorder workspace or project AI providers",
+)
+async def workspace_reorder_providers(
+    workspace: str,
+    body: ProviderReorderRequest,
+    caller: WorkspaceCaller,
+    session: Session,
+) -> list[ProviderConfigPublic]:
+    """Atomically reorder AI provider configurations in workspace or project scope."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        await _assert_admin_for_scope(session, caller, body.project_id)
+
+        if len(body.ordered_ids) != len(set(body.ordered_ids)):
+            raise ProblemException(
+                code="INVALID_REORDER_REQUEST",
+                status=422,
+                title="Validation Error",
+                detail="ordered_ids list contains duplicate IDs",
+            )
+
+        stmt = select(AIProviderConfig).where(AIProviderConfig.workspace_id == caller.workspace_id)
+        if body.project_id is None:
+            stmt = stmt.where(AIProviderConfig.project_id.is_(None))
+        else:
+            stmt = stmt.where(AIProviderConfig.project_id == body.project_id)
+        stmt = stmt.with_for_update()
+
+        res = await session.execute(stmt)
+        configs = list(res.scalars().all())
+        config_map = {c.id: c for c in configs}
+
+        existing_ids = set(config_map.keys())
+        req_ids = set(body.ordered_ids)
+        if existing_ids != req_ids:
+            missing = existing_ids - req_ids
+            extra = req_ids - existing_ids
+            detail_parts: list[str] = []
+            if missing:
+                detail_parts.append(f"missing provider IDs: {[str(m) for m in missing]}")
+            if extra:
+                detail_parts.append(f"unrecognized provider IDs: {[str(e) for e in extra]}")
+            raise ProblemException(
+                code="INVALID_REORDER_MEMBERSHIP",
+                status=422,
+                title="Validation Error",
+                detail=f"Full membership validation failed: {'; '.join(detail_parts)}",
+            )
+
+        assigned: dict[str, int] = {}
+        for idx, provider_id in enumerate(body.ordered_ids):
+            new_priority = (idx + 1) * 10
+            config_map[provider_id].priority = new_priority
+            assigned[str(provider_id)] = new_priority
+
+        await session.flush()
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_REORDERED,
+            payload={
+                "ordered_ids": [str(uid) for uid in body.ordered_ids],
+                "assigned_priorities": assigned,
+            },
+        )
+
+        return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
+
+
+@workspace_router.post(
+    "/probe-models",
+    response_model=ProviderProbeResult,
+    summary="Probe upstream models for unsaved AI provider draft configuration",
+)
+async def workspace_probe_provider_models(
+    workspace: str,
+    body: ProviderProbeRequest,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> ProviderProbeResult:
+    """Probe models for an unsaved AI provider draft configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        await _assert_admin_for_scope(session, caller, body.project_id)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
+        res = await service.probe_provider(
+            provider_kind=body.provider_kind,
+            base_url=body.base_url,
+            api_key=api_key_str,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(res)
+
+
+@workspace_router.post(
+    "/test-connection",
+    response_model=ProviderProbeResult,
+    summary="Test connection to unsaved AI provider configuration",
+)
+async def workspace_check_provider_connection(
+    workspace: str,
+    body: ProviderProbeRequest,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> ProviderProbeResult:
+    """Test connectivity, auth, and model listing for an unsaved AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        await _assert_admin_for_scope(session, caller, body.project_id)
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
+        res = await service.probe_provider(
+            provider_kind=body.provider_kind,
+            base_url=body.base_url,
+            api_key=api_key_str,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(res)
+
+
+@workspace_router.get(
+    "/budgets",
+    response_model=list[BudgetRecord],
+    summary="Get budget records for provider configuration",
+)
+async def workspace_get_budgets(
+    workspace: str,
+    provider_config_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> list[BudgetRecord]:
+    """List token consumption ledger records and caps for a provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_config_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        ledgers = await service.get_budgets(
+            provider_config_id=provider_config_id,
+            project_id=config.project_id,
+        )
+        return [
+            BudgetRecord(
+                period_kind=cast("Literal['daily', 'monthly']", row.period_kind),
+                period_start=row.period_start,
+                token_cap=row.token_cap,
+                tokens_used=row.tokens_used,
+                tokens_reserved=row.tokens_reserved,
+            )
+            for row in ledgers
+        ]
+
+
+@workspace_router.put(
+    "/budgets",
+    response_model=BudgetRecord,
+    summary="Set or update budget cap for provider configuration",
+)
+async def workspace_set_budget(
+    workspace: str,
+    body: BudgetSetRequest,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> BudgetRecord:
+    """Set or update token consumption limit cap for a period tier."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == body.provider_config_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        if body.project_id is not None and body.project_id != config.project_id:
+            raise ProblemException(
+                code="SCOPE_MISMATCH",
+                status=422,
+                title="Validation Error",
+                detail="Request project_id does not match provider project scope.",
+            )
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        try:
+            ledger = await service.set_budget(
+                workspace_id=caller.workspace_id,
+                provider_config_id=body.provider_config_id,
+                period_kind=body.period_kind,
+                token_cap=body.token_cap,
+                project_id=body.project_id if config.project_id is None else config.project_id,
+            )
+        except AIConfigValidationError as exc:
+            raise ProblemException(
+                code="INVALID_BUDGET_CAP",
+                status=422,
+                title="Validation Error",
+                detail=str(exc),
+            ) from exc
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_BUDGET_SET,
+            payload={
+                "provider_config_id": str(body.provider_config_id),
+                "period_kind": body.period_kind,
+                "token_cap": body.token_cap,
+                "project_id": str(body.project_id) if body.project_id else None,
+            },
+        )
+        return BudgetRecord(
+            period_kind=cast("Literal['daily', 'monthly']", ledger.period_kind),
+            period_start=ledger.period_start,
+            token_cap=ledger.token_cap,
+            tokens_used=ledger.tokens_used,
+            tokens_reserved=ledger.tokens_reserved,
+        )
+
+
+@workspace_router.get(
+    "/settings",
+    response_model=AISettingsPublic,
+    summary="Get AI workspace runtime settings",
+)
+async def workspace_get_ai_settings(
+    workspace: str,
+    caller: WorkspaceCaller,
+    session: Session,
+) -> AISettingsPublic:
+    """Retrieve workspace AI runtime settings such as air-gap status."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        return AISettingsPublic(air_gap_mode=is_air_gap)
+
+
+@workspace_router.get(
+    "/{provider_id}",
+    response_model=ProviderConfigPublic,
+    summary="Get AI provider configuration by ID",
+)
+async def workspace_get_provider(
+    workspace: str,
+    provider_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+) -> ProviderConfigPublic:
+    """Retrieve public metadata for a specific AI provider configuration by UUID."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+        await _assert_admin_for_scope(session, caller, config.project_id)
+        return _to_public_config(config)
+
+
+@workspace_router.patch(
+    "/{provider_id}",
+    response_model=ProviderConfigPublic,
+    summary="Update AI provider configuration",
+)
+async def workspace_update_provider(  # noqa: PLR0913, PLR0917
+    workspace: str,
+    provider_id: uuid.UUID,
+    body: ProviderConfigUpdate,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> ProviderConfigPublic:
+    """Update settings, model allowlist, URL, priority, or credentials on an AI provider."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        clear_key = False
+        new_key: str | None = None
+        if "api_key" in body.model_fields_set:
+            if body.api_key is None:
+                clear_key = True
+            else:
+                new_key = body.api_key.get_secret_value()
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+
+        try:
+            updated = await service.update_config(
+                config_id=provider_id,
+                display_name=body.display_name,
+                model_allowlist=body.model_allowlist,
+                residency_tier=body.residency_tier,
+                base_url=body.base_url,
+                priority=body.priority,
+                settings_json=body.settings,
+                is_enabled=body.is_enabled,
+                api_key=new_key,
+                clear_api_key=clear_key,
+                air_gap_mode=is_air_gap,
+            )
+        except AirGapViolation as exc:
+            raise ProblemException(
+                code="AIR_GAP_EGRESS_DENIED",
+                status=409,
+                title="Air Gap Egress Denied",
+                detail=str(exc),
+            ) from exc
+        except AIConfigValidationError as exc:
+            code = "INVALID_BASE_URL" if "base_url" in str(exc) else "INVALID_REQUEST"
+            raise ProblemException(
+                code=code,
+                status=422,
+                title="Validation Error",
+                detail=str(exc),
+            ) from exc
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_CONFIG_UPDATED,
+            payload={
+                "config_id": str(updated.id),
+                "display_name": updated.display_name,
+                "is_enabled": updated.is_enabled,
+                "api_key_cleared": clear_key,
+                "api_key_updated": bool(new_key is not None),
+            },
+        )
+        return _to_public_config(updated)
+
+
+@workspace_router.delete(
+    "/{provider_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete AI provider configuration",
+)
+async def workspace_delete_provider(
+    workspace: str,
+    provider_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> Response:
+    """Delete an AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        await service.delete_config(provider_id)
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_CONFIG_DISABLED,
+            payload={
+                "config_id": str(provider_id),
+                "provider_kind": config.provider_kind,
+                "display_name": config.display_name,
+                "action": "deleted",
+            },
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@workspace_router.post(
+    "/{provider_id}:disable",
+    response_model=ProviderConfigPublic,
+    summary="Disable AI provider configuration",
+)
+@workspace_router.post(
+    "/{provider_id}/disable",
+    response_model=ProviderConfigPublic,
+    summary="Disable AI provider configuration",
+)
+async def workspace_disable_provider(
+    workspace: str,
+    provider_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+) -> ProviderConfigPublic:
+    """Disable an active AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        disabled = await service.disable_config(provider_id)
+
+        await record_activity(
+            session=session,
+            workspace_id=caller.workspace_id,
+            actor_principal_id=caller.principal_id,
+            event_type=ActivityEventType.AI_PROVIDER_CONFIG_DISABLED,
+            payload={
+                "config_id": str(disabled.id),
+                "provider_kind": disabled.provider_kind,
+                "display_name": disabled.display_name,
+            },
+        )
+        return _to_public_config(disabled)
+
+
+@workspace_router.post(
+    "/{provider_id}/probe-models",
+    response_model=ProviderProbeResult,
+    summary="Probe upstream models for saved AI provider configuration",
+)
+async def workspace_probe_saved_provider_models(  # noqa: PLR0913, PLR0917
+    workspace: str,
+    provider_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+    body: SavedProviderProbeRequest | None = None,
+) -> ProviderProbeResult:
+    """Probe models for a saved AI provider configuration using stored envelope key."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = (
+            body.api_key.get_secret_value()
+            if body is not None and body.api_key is not None
+            else None
+        )
+        probe_res = await service.probe_provider(
+            provider_kind=config.provider_kind,
+            base_url=config.base_url,
+            api_key=api_key_str,
+            config_id=config.id,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(probe_res)
+
+
+@workspace_router.post(
+    "/{provider_id}/test-connection",
+    response_model=ProviderProbeResult,
+    summary="Test connection to saved AI provider configuration",
+)
+async def workspace_check_saved_provider_connection(  # noqa: PLR0913, PLR0917
+    workspace: str,
+    provider_id: uuid.UUID,
+    caller: WorkspaceCaller,
+    session: Session,
+    request: Request,
+    body: SavedProviderProbeRequest | None = None,
+) -> ProviderProbeResult:
+    """Test connectivity, auth, and model listing for a saved AI provider configuration."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        stmt = select(AIProviderConfig).where(AIProviderConfig.id == provider_id)
+        res = await session.execute(stmt)
+        config = res.scalar_one_or_none()
+        if config is None:
+            not_found()
+        await _assert_admin_for_scope(session, caller, config.project_id)
+
+        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        api_key_str = (
+            body.api_key.get_secret_value()
+            if body is not None and body.api_key is not None
+            else None
+        )
+        probe_res = await service.probe_provider(
+            provider_kind=config.provider_kind,
+            base_url=config.base_url,
+            api_key=api_key_str,
+            config_id=config.id,
+            air_gap_mode=is_air_gap,
+        )
+        return ProviderProbeResult.model_validate(probe_res)
+

@@ -68,21 +68,35 @@ export interface AgentValidationResponse {
   report_text: string;
 }
 
-export async function fetchAgentDefinitions(): Promise<AgentDefinitionResponse[]> {
-  return (await apiFetch('GET', '/api/v1/admin/agent-definitions' as never)) as AgentDefinitionResponse[];
+export async function fetchAgentDefinitions(
+  workspace = 'current',
+  projectId?: string,
+): Promise<AgentDefinitionResponse[]> {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+  return (await apiFetch(
+    'GET',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/agent-definitions${query}` as never,
+  )) as AgentDefinitionResponse[];
 }
 
 export async function fetchAgentDefinition(agent: string): Promise<AgentDefinitionResponse> {
   return (await apiFetch(
     'GET',
-    `/api/v1/admin/agent-definitions/${encodeURIComponent(agent)}` as never,
+    `/api/v1/agent-definitions/${encodeURIComponent(agent)}` as never,
   )) as AgentDefinitionResponse;
 }
 
-export async function createAgentDefinition(payload: AgentDefinitionCreate): Promise<AgentDefinitionResponse> {
-  return (await apiFetch('POST', '/api/v1/admin/agent-definitions' as never, {
-    body: payload,
-  })) as AgentDefinitionResponse;
+export async function createAgentDefinition(
+  payload: AgentDefinitionCreate,
+  workspace = 'current',
+): Promise<AgentDefinitionResponse> {
+  return (await apiFetch(
+    'POST',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/agent-definitions` as never,
+    {
+      body: payload,
+    },
+  )) as AgentDefinitionResponse;
 }
 
 export async function updateAgentDefinition(
@@ -91,7 +105,7 @@ export async function updateAgentDefinition(
 ): Promise<AgentDefinitionResponse> {
   return (await apiFetch(
     'PATCH',
-    `/api/v1/admin/agent-definitions/${encodeURIComponent(agent)}` as never,
+    `/api/v1/agent-definitions/${encodeURIComponent(agent)}` as never,
     {
       body: payload,
     },
@@ -99,12 +113,12 @@ export async function updateAgentDefinition(
 }
 
 export async function deleteAgentDefinition(agent: string): Promise<void> {
-  await apiFetch('DELETE', `/api/v1/admin/agent-definitions/${encodeURIComponent(agent)}` as never);
+  await apiFetch('DELETE', `/api/v1/agent-definitions/${encodeURIComponent(agent)}` as never);
 }
 
 export async function validateAgentDefinition(agent: string): Promise<AgentValidationResponse> {
   return (await apiFetch(
     'POST',
-    `/api/v1/admin/agent-definitions/${encodeURIComponent(agent)}:validate` as never,
+    `/api/v1/agent-definitions/${encodeURIComponent(agent)}:validate` as never,
   )) as AgentValidationResponse;
 }

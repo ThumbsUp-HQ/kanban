@@ -46,6 +46,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
           workspace_role: 'SERVER_ADMIN',
         };
       }
+      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
+        return [];
+      }
       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
         return {
           id: 'ws-1',
@@ -128,6 +131,20 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.click(generalTab);
     expect(screen.getByTestId('workspace-general-form')).toBeDefined();
     expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
+
+    // Switch to AI Providers tab
+    const aiTab = screen.getByTestId('tab-ai');
+    expect(aiTab).toBeDefined();
+    fireEvent.click(aiTab);
+    expect(await screen.findByTestId('workspace-ai-section')).toBeDefined();
+    expect(screen.getByTestId('ai-studio-page')).toBeDefined();
+
+    // Switch to Autonomous Agents tab
+    const agentsTab = screen.getByTestId('tab-agents');
+    expect(agentsTab).toBeDefined();
+    fireEvent.click(agentsTab);
+    expect(await screen.findByTestId('workspace-agents-section')).toBeDefined();
+    expect(screen.getByTestId('agent-studio-page')).toBeDefined();
   });
 
   it('renders 403 access denied when standard member visits workspace settings', async () => {
@@ -1055,6 +1072,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       if (url.includes('/api/v1/auth/me')) {
         return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' };
       }
+      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
+        return [];
+      }
       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
         return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
       }
@@ -1292,6 +1312,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
 
       if (url.includes('/api/v1/auth/me')) {
         return Promise.resolve({ id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' });
+      }
+      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
+        return Promise.resolve([]);
       }
       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
         return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
@@ -2640,6 +2663,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
           is_workspace_admin: true,
           workspace_role: 'SERVER_ADMIN',
         };
+      }
+      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
+        return [];
       }
       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
         return {

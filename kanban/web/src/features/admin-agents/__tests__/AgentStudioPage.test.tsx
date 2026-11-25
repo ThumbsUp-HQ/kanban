@@ -157,6 +157,14 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
       const list = await agentApi.fetchAgentDefinitions();
       expect(list).toEqual([mockAgentSdk]);
 
+      fetchSpy.mockResolvedValueOnce([mockAgentSdk]);
+      const listWithProject = await agentApi.fetchAgentDefinitions('my-ws', 'proj-123');
+      expect(listWithProject).toEqual([mockAgentSdk]);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'GET',
+        '/api/v1/workspaces/my-ws/agent-definitions?project_id=proj-123',
+      );
+
       fetchSpy.mockResolvedValueOnce(mockAgentSdk);
       const single = await agentApi.fetchAgentDefinition('reality-checker');
       expect(single).toEqual(mockAgentSdk);
@@ -710,6 +718,15 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
         );
         expect(onSaved).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
+      });
+    });
+    it('handles non-array response from fetchAgentDefinitions gracefully', async () => {
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue(
+        {} as unknown as agentApi.AgentDefinitionResponse[],
+      );
+      render(<AgentStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('empty-agents-placeholder')).toBeDefined();
       });
     });
   });

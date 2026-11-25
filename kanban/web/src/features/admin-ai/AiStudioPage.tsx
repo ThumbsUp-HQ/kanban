@@ -26,7 +26,17 @@ interface CardTestStatus {
   message: string;
 }
 
-export function AiStudioPage(): JSX.Element {
+export interface AiStudioPageProps {
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
+  showSubnav?: boolean | undefined;
+}
+
+export function AiStudioPage({
+  projectId,
+  workspaceSlug,
+  showSubnav,
+}: AiStudioPageProps = {}): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
   const [airGapMode, setAirGapMode] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -53,11 +63,18 @@ export function AiStudioPage(): JSX.Element {
     async function load() {
       try {
         const [provList, isAirGap] = await Promise.all([
-          fetchAiProviders(),
-          fetchAirGapMode(),
+          workspaceSlug
+            ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
+            : projectId
+              ? fetchAiProviders(projectId)
+              : fetchAiProviders(),
+          workspaceSlug
+            ? fetchAirGapMode(workspaceSlug)
+            : fetchAirGapMode(),
         ]);
         if (!active) return;
-        const sorted = [...provList].sort((a, b) => a.priority - b.priority);
+        const rawList = Array.isArray(provList) ? provList : [];
+        const sorted = [...rawList].sort((a, b) => a.priority - b.priority);
         setProviders(sorted);
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
@@ -76,7 +93,7 @@ export function AiStudioPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [reloadCounter]);
+  }, [reloadCounter, projectId, workspaceSlug]);
 
   const refreshData = useCallback((): void => {
     setReloadCounter((c) => c + 1);
@@ -85,9 +102,17 @@ export function AiStudioPage(): JSX.Element {
   const handleToggleEnable = async (provider: ProviderConfigPublic): Promise<void> => {
     try {
       if (provider.is_enabled) {
-        await disableAiProvider(provider.id);
+        if (workspaceSlug) {
+          await disableAiProvider(provider.id, workspaceSlug);
+        } else {
+          await disableAiProvider(provider.id);
+        }
       } else {
-        await updateAiProvider(provider.id, { is_enabled: true });
+        if (workspaceSlug) {
+          await updateAiProvider(provider.id, { is_enabled: true }, workspaceSlug);
+        } else {
+          await updateAiProvider(provider.id, { is_enabled: true });
+        }
       }
       refreshData();
     } catch (err: unknown) {
@@ -98,7 +123,11 @@ export function AiStudioPage(): JSX.Element {
   const handleConfirmDelete = async (): Promise<void> => {
     if (!providerToDelete) return;
     try {
-      await deleteAiProvider(providerToDelete.id);
+      if (workspaceSlug) {
+        await deleteAiProvider(providerToDelete.id, workspaceSlug);
+      } else {
+        await deleteAiProvider(providerToDelete.id);
+      }
       setProviderToDelete(null);
       refreshData();
     } catch (err: unknown) {
@@ -111,7 +140,11 @@ export function AiStudioPage(): JSX.Element {
     setProviders(newOrder);
     try {
       const orderedIds = newOrder.map((p) => p.id);
-      const updated = await reorderAiProviders(orderedIds);
+      const updated = workspaceSlug
+        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug)
+        : projectId
+          ? await reorderAiProviders(orderedIds, projectId)
+          : await reorderAiProviders(orderedIds);
       const sorted = [...updated].sort((a, b) => a.priority - b.priority);
       setProviders(sorted);
     } catch (err: unknown) {
@@ -177,7 +210,9 @@ export function AiStudioPage(): JSX.Element {
     }));
 
     try {
-      const res = await testAiConnection({}, provider.id);
+      const res = workspaceSlug
+        ? await testAiConnection({}, provider.id, workspaceSlug)
+        : await testAiConnection({}, provider.id);
       if (res.ok) {
         setCardTestStatuses((prev) => ({
           ...prev,
@@ -208,14 +243,16 @@ export function AiStudioPage(): JSX.Element {
 
   return (
     <section className="kb-ai-studio" data-testid="ai-studio-page">
-      <AdminStudioSubnav activeTab="ai" />
+      {(showSubnav ?? !projectId) && <AdminStudioSubnav activeTab="ai" />}
       <div className="kb-ai-studio-header">
         <div className="kb-ai-studio-title-group">
           <h1>
             <span aria-hidden="true">🧠</span> AI Providers & Token Caps Studio
           </h1>
           <p className="kb-ai-studio-subtitle">
-            Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.
+            {projectId
+              ? 'Configure project LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'
+              : 'Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'}
           </p>
         </div>
 
@@ -467,6 +504,7 @@ export function AiStudioPage(): JSX.Element {
         onClose={() => { setSelectedBudgetProvider(null); }}
         provider={selectedBudgetProvider}
         onBudgetUpdated={refreshData}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Editor Drawer */}
@@ -480,6 +518,8 @@ export function AiStudioPage(): JSX.Element {
         airGapMode={airGapMode}
         onSaved={refreshData}
         providersCount={providers.length}
+        projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Delete Confirmation Modal */}

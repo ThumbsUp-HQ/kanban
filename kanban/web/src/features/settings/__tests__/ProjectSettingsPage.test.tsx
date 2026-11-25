@@ -44,6 +44,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       const url: string = path;
+      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
+        return [];
+      }
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [
           {
@@ -105,6 +108,14 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(dangerTab);
     expect(screen.getByText('Move Project to Trash')).toBeDefined();
     expect(screen.getByTestId('request-delete-btn')).toBeDefined();
+
+    // Switch to AI & Agents Tab
+    const aiAgentsTab = screen.getByTestId('tab-ai-agents');
+    expect(aiAgentsTab).toBeDefined();
+    fireEvent.click(aiAgentsTab);
+    expect(await screen.findByTestId('project-ai-agents-section')).toBeDefined();
+    expect(screen.getByTestId('ai-studio-page')).toBeDefined();
+    expect(screen.getByTestId('agent-studio-page')).toBeDefined();
   });
 
   it('allows adding and removing project members with role selection', async () => {
@@ -392,6 +403,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       await Promise.resolve();
       const url: string = path;
       const m = method.toUpperCase();
+      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
+        return [];
+      }
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [];
       }
@@ -2038,6 +2052,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
           ],
         };
       }
+      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
+        return [];
+      }
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [];
       }
@@ -2083,6 +2100,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
             handle: 'nullname',
           },
         ];
+      }
+      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
+        return [];
       }
       if (url.includes('/api/v1/projects/KAN/members')) {
         return [

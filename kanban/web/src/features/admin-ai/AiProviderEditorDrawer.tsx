@@ -25,6 +25,8 @@ interface AiProviderEditorDrawerProps {
   airGapMode: boolean;
   onSaved: () => void;
   providersCount?: number | undefined;
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 interface TestStatusState {
@@ -91,12 +93,16 @@ function AiProviderEditorContent({
   airGapMode,
   onSaved,
   providersCount,
+  projectId,
+  workspaceSlug,
 }: {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
   onSaved: () => void;
   providersCount?: number | undefined;
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }): JSX.Element {
   const isEditing = provider !== null;
 
@@ -264,13 +270,17 @@ function AiProviderEditorContent({
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           }
         : {
             ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-      const res = await probeAiModels(payload, targetProviderId);
+      const res = workspaceSlug
+        ? await probeAiModels(payload, targetProviderId, workspaceSlug)
+        : await probeAiModels(payload, targetProviderId);
       if (res.ok) {
         setProbedModels(res.models);
         if (res.models.length === 0) {
@@ -304,13 +314,17 @@ function AiProviderEditorContent({
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           }
         : {
             ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-      const res = await testAiConnection(payload, targetProviderId);
+      const res = workspaceSlug
+        ? await testAiConnection(payload, targetProviderId, workspaceSlug)
+        : await testAiConnection(payload, targetProviderId);
       if (res.ok) {
         setTestStatus({
           kind: 'success',
@@ -386,7 +400,11 @@ function AiProviderEditorContent({
           payload.api_key = apiKey.trim();
         }
 
-        await updateAiProvider(provider.id, payload);
+        if (workspaceSlug) {
+          await updateAiProvider(provider.id, payload, workspaceSlug);
+        } else {
+          await updateAiProvider(provider.id, payload);
+        }
       } else {
         const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
         const payload: ProviderConfigCreate = {
@@ -399,9 +417,14 @@ function AiProviderEditorContent({
           api_key: apiKey.trim() ? apiKey.trim() : null,
           is_enabled: true,
           settings: computeSettings(),
+          ...(projectId ? { project_id: projectId } : {}),
         };
 
-        await createAiProvider(payload);
+        if (workspaceSlug) {
+          await createAiProvider(payload, workspaceSlug);
+        } else {
+          await createAiProvider(payload);
+        }
       }
 
       setIsSaving(false);
@@ -949,6 +972,8 @@ export function AiProviderEditorDrawer({
   airGapMode,
   onSaved,
   providersCount,
+  projectId,
+  workspaceSlug,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -968,6 +993,8 @@ export function AiProviderEditorDrawer({
         airGapMode={airGapMode}
         onSaved={onSaved}
         providersCount={providersCount}
+        projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
     </div>
   );
