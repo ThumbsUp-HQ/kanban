@@ -186,61 +186,55 @@ function MintEnrollmentTokenContent({
           </div>
         </form>
       ) : (
-        <div data-testid="single-reveal-token-view">
-          <div className="kb-single-reveal-alert" data-testid="single-reveal-warning">
-            <strong>Single-Reveal Notice:</strong> This single-use enrollment token is valid for 15 minutes. It is generated once and will never be retrievable again after closing this window. Copy it now and paste it into your runner daemon configuration.
-          </div>
-
-          <div className="kb-form-group">
-            <label className="kb-form-label">Single-Use Enrollment Token</label>
-            <div className="kb-token-display-box">
-              <span data-testid="token-plaintext">{mintedToken.enrollment_token}</span>
-              <button
-                type="button"
-                className="kb-btn kb-btn-primary kb-copy-token-btn"
-                onClick={() => { void handleCopy(mintedToken.enrollment_token); }}
-                data-testid="copy-token-btn"
-              >
-                {copied ? '✓ Copied' : 'Copy'}
-              </button>
+        <div data-testid="single-reveal-token-view" className="kb-modal-body-container">
+          <div className="kb-modal-body">
+            <div className="kb-single-reveal-alert" data-testid="single-reveal-warning">
+              <strong>Single-Reveal Notice:</strong> This single-use enrollment token is valid for 15 minutes. It is generated once and will never be retrievable again after closing this window. Copy it now and paste it into your runner daemon configuration.
             </div>
-          </div>
 
-          <div className="kb-form-hint kb-mint-expires-hint">
-            Expires at: {new Date(mintedToken.expires_at).toLocaleString()} | Pool: <code>{mintedToken.pool_slug}</code>
-          </div>
-
-          <div className="kb-form-group">
-            <div
-              className="kb-token-label-row"
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '8px',
-              }}
-            >
-              <label className="kb-form-label" style={{ marginBottom: 0 }}>
-                Example Runner CLI Ingestion:
-              </label>
-              <button
-                type="button"
-                className="kb-btn kb-btn-secondary"
-                onClick={() => {
-                  void handleCopyCli(
-                    getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug),
-                  );
-                }}
-                data-testid="copy-runner-cli-btn"
-              >
-                {copiedCli ? '✓ Copied!' : 'Copy CLI Command'}
-              </button>
+            <div className="kb-form-group">
+              <label className="kb-form-label">Single-Use Enrollment Token</label>
+              <div className="kb-token-display-box">
+                <span data-testid="token-plaintext">{mintedToken.enrollment_token}</span>
+                <button
+                  type="button"
+                  className="kb-btn kb-btn-primary kb-copy-token-btn"
+                  onClick={() => { void handleCopy(mintedToken.enrollment_token); }}
+                  data-testid="copy-token-btn"
+                >
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
             </div>
-            <pre className="kb-runner-cli-pre" data-testid="runner-cli-command">
-              {getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug)}
-            </pre>
-            <div className="kb-form-hint kb-runner-mtls-notice" data-testid="runner-mtls-notice">
-              <strong>Dedicated mTLS Endpoint Notice:</strong> Autonomous runners communicate over a dedicated mutual TLS port (default :8444) for Proof-of-Possession handshakes and real-time WebSocket job coordination.
+
+            <div className="kb-form-hint kb-mint-expires-hint">
+              Expires at: {new Date(mintedToken.expires_at).toLocaleString()} | Pool: <code>{mintedToken.pool_slug}</code>
+            </div>
+
+            <div className="kb-form-group">
+              <div className="kb-token-label-row">
+                <label className="kb-form-label" style={{ marginBottom: 0 }}>
+                  Example Runner CLI Ingestion:
+                </label>
+                <button
+                  type="button"
+                  className="kb-btn kb-btn-secondary kb-copy-cli-btn"
+                  onClick={() => {
+                    void handleCopyCli(
+                      getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug),
+                    );
+                  }}
+                  data-testid="copy-runner-cli-btn"
+                >
+                  {copiedCli ? '✓ Copied!' : 'Copy CLI Command'}
+                </button>
+              </div>
+              <pre className="kb-runner-cli-pre" data-testid="runner-cli-command">
+                {getCliCommand(mintedToken.enrollment_token, mintedToken.pool_slug)}
+              </pre>
+              <div className="kb-form-hint kb-runner-mtls-notice" data-testid="runner-mtls-notice">
+                <strong>Dedicated mTLS Endpoint Notice:</strong> Autonomous runners communicate over a dedicated mutual TLS port (default :8444) for Proof-of-Possession handshakes and real-time WebSocket job coordination.
+              </div>
             </div>
           </div>
 

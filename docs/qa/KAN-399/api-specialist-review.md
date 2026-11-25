@@ -3,7 +3,7 @@
 ## Ticket Reference
 - **Ticket ID**: `KAN-399` (`[KB-RUNNER-ENROLL-UX-AND-CLI] Runner Enrollment UX and CLI Hardening`)
 - **Reviewer Persona**: Backend Architect & API Security Specialist (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
-- **Branch**: `feat/KAN-399-runner-enroll-cli`
+- **Branch**: `fix/KAN-399-rc1` (Round-1 Remediation)
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -17,13 +17,14 @@
   - Retains `--url` as a transparent backward-compatible alias, ensuring existing CI scripts, automated deployment plays, and user configurations continue functioning without breaking changes.
   - Verified in unit tests `test_cli_enroll_server_url_and_url_alias` that both `--server-url` and `--url` correctly populate `args.server_url` and successfully execute enrollment.
 
-### B. Secure State Directory Resolution (`default_runner_state_dir`)
+### B. Secure State Directory Resolution & Permission Invariant (0o700)
 - **POSIX Privilege & XDG Data Specification**:
   - Checks `KB_RUNNER_STATE_DIR` environment override first.
   - When running as root (`os.geteuid() == 0`), resolves to standard system daemon path `/var/lib/kanban-runner`.
   - When running as non-root (`os.geteuid() != 0`), resolves to `Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "kanban-runner"`.
-- **POSIX Permission Invariant (0o700)**:
-  - Both directory creation (`mkdir(parents=True, exist_ok=True, mode=0o700)`) and explicit chmod (`os.chmod(state_dir, 0o700)`) guarantee directory isolation against unauthorized local users on multi-tenant hosts.
+- **Strict POSIX 0o700 Permission Invariant**:
+  - In `enroll_runner()`, explicit `--state-dir` overrides now strictly enforce `0o700` (`rwx------`) via `state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)` and `os.chmod(state_dir, 0o700)` regardless of umask.
+  - Verified in unit tests `test_enroll_runner_persists_ca_pem_0600_and_runner_toml` (`(state_dir.stat().st_mode & 0o777) == 0o700`) and `test_default_runner_state_dir_root` (`(mock_target.stat().st_mode & 0o777) == 0o700`).
   - Private key files (`client.key`) and certificates (`client.crt`, `ca.pem`) written inside this directory remain fully shielded from non-privileged local process inspection.
 
 ### C. Default Runner Configuration Path Auto-Detection (`default_runner_config_path`)

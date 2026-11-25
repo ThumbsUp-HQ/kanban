@@ -110,16 +110,167 @@
 }
 
 .kb-mint-expires-hint {
-  margin-bottom: var(--space-4);
+  margin-bottom: 8px;
+  font-size: 11.5px;
 }
 
+/* Modal Card & Body layout (KAN-399) */
+.kb-modal-card {
+  background-color: var(--kb-color-bg-surface, #ffffff);
+  border-radius: var(--radius-lg, 12px);
+  padding: 16px 24px;
+  max-width: 620px;
+  width: 100%;
+  box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.1));
+  box-sizing: border-box;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kb-modal-card .kb-form-group {
+  margin-bottom: 8px;
+}
+
+[data-theme='dark'] .kb-modal-card {
+  background-color: #1f2937;
+  color: #f9fafb;
+  border: 1px solid #374151;
+}
+
+.kb-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.kb-modal-header h2 {
+  font-size: var(--text-xl, 18px);
+  font-weight: 700;
+  margin: 0;
+}
+
+.kb-modal-body-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.kb-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 20px;
+  padding-right: 4px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kb-modal-card .kb-modal-footer {
+  position: static !important;
+  flex-shrink: 0;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kb-color-border-subtle, #e5e7eb);
+  background: transparent !important;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+[data-theme='dark'] .kb-modal-card .kb-modal-footer {
+  border-top-color: #374151;
+  background: transparent !important;
+}
+
+/* Token label row & CLI command button ergonomics (KAN-399) */
+.kb-token-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+[data-testid="copy-runner-cli-btn"],
+.kb-copy-cli-btn {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  padding: 5px 12px;
+  line-height: 1.4;
+  font-size: var(--text-xs, 12px);
+  font-weight: 500;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* CLI command snippet wrapping across all viewports (KAN-399) */
 .kb-runner-cli-pre {
   background-color: #1f2937;
   color: #e5e7eb;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  overflow-x: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--text-xs, 12px);
+  line-height: 1.45;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-all !important;
+  margin: 6px 0;
+  box-sizing: border-box;
+}
+
+.kb-runner-mtls-notice {
+  margin-top: 8px;
+  padding-bottom: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--kb-color-text-secondary, #6b7280);
+}
+
+[data-theme='dark'] .kb-runner-mtls-notice {
+  color: #9ca3af;
+}
+
+.kb-single-reveal-alert {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+[data-theme='dark'] .kb-single-reveal-alert {
+  background-color: #1e3a8a;
+  border-color: #1d4ed8;
+  color: #dbeafe;
+}
+
+.kb-token-display-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #111827;
+  color: #34d399;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 12.5px;
+  word-break: break-all;
+  margin: 6px 0;
+  border: 1px solid #374151;
 }
 
 /* Runner Filter Pills */
@@ -342,5 +493,27 @@
   .kb-runner-studio-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .kb-modal-card {
+    padding: 14px 16px;
+    max-height: 94vh;
+  }
+
+  .kb-modal-body {
+    padding-bottom: 24px;
+  }
+
+  .kb-modal-card .kb-modal-footer {
+    position: static !important;
+    flex-direction: row;
+    justify-content: stretch;
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .kb-modal-card .kb-modal-footer button {
+    width: 100%;
+    min-height: 40px;
   }
 }
