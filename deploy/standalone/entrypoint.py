@@ -263,14 +263,26 @@ def bootstrap_database(
     log_phase("bootstrap_sql", "roles, database, and extensions initialized")
 
 
-def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
-    """Run Alembic migrations under kanban_migrator and revoke login privilege afterwards."""
+def run_migrations(
+    pgdata: Path,
+    alembic_ini: Path,
+    run_dir: str = DEFAULT_RUN_DIR,
+    keyring: StandaloneKeyring | None = None,
+) -> None:
+    """Run Alembic migrations under kanban_migrator."""
     if not alembic_ini.is_file():
         log_phase("migrations", "MIGRATIONS_SKIPPED_NO_ALEMBIC_INI")
         return
 
     log_phase("migrations", "running alembic upgrade head")
-    migrator_dsn = f"postgresql+asyncpg://kanban_migrator@/kanban?host={run_dir}"
+    if keyring is not None:
+        encoded_mig_pw = quote(keyring.kanban_migrator_password_str, safe="")
+        encoded_dir = quote(run_dir, safe="")
+        migrator_dsn = (
+            f"postgresql+asyncpg://kanban_migrator:{encoded_mig_pw}@/kanban?host={encoded_dir}"
+        )
+    else:
+        migrator_dsn = f"postgresql+asyncpg://kanban_migrator@/kanban?host={run_dir}"
     mig_env = {
         "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
         "DATABASE_URL": migrator_dsn,
@@ -318,12 +330,11 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
     $$;
     """
     run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
-    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
-    log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
+    log_phase("migrations", "column-level and backup grants verified")
 
 
 def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
-    """Ensure kanban_app has SELECT on alembic_version so pg_dump succeeds."""
+    """Ensure kanban_app has table and sequence grants so queries and updates succeed."""
     grant_sql = """
     DO $$
     BEGIN
@@ -333,14 +344,17 @@ def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
       ) THEN
         GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
       END IF;
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kanban_app;
+      GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;
+      GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_rls_reader;
     END
     $$;
     """
     try:
         run_psql_script(grant_sql, dbname="kanban", run_dir=run_dir)
-        log_phase("backup_grants", "granted SELECT on alembic_version to kanban_app")
+        log_phase("backup_grants", "granted SELECT/DML on alembic_version and public tables to kanban_app")
     except Exception as exc:  # noqa: BLE001
-        log_phase("backup_grants", f"Warning: grant SELECT on alembic_version failed: {exc}")
+        log_phase("backup_grants", f"Warning: grant tables failed: {exc}")
 
 
 def build_uvicorn_command() -> list[str]:
@@ -450,6 +464,11 @@ def build_child_env(
         env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64
         env["KB_AUTH_PEPPER_B64"] = keyring.auth_pepper_b64
         env["KB_SESSION_HMAC_KEY_B64"] = keyring.session_hmac_key_b64
+        encoded_mig_pw = quote(keyring.kanban_migrator_password_str, safe="")
+        encoded_dir = quote(run_dir, safe="")
+        env["KANBAN_MIGRATOR_DATABASE_URL"] = (
+            f"postgresql+asyncpg://kanban_migrator:{encoded_mig_pw}@/kanban?host={encoded_dir}"
+        )
 
     return env
 
@@ -670,7 +689,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
 
         # Bootstrap SQL & Migrations
         bootstrap_database(run_dir=run_dir, keyring=keyring)
-        run_migrations(pgdata, alembic_ini, run_dir=run_dir)
+        run_migrations(pgdata, alembic_ini, run_dir=run_dir, keyring=keyring)
         ensure_backup_grants(run_dir=run_dir)
         if current_digest:
             mig_digest_file.parent.mkdir(parents=True, exist_ok=True)

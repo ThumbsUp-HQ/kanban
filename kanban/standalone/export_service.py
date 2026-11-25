@@ -288,7 +288,11 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
     resolved_port = port or os.environ.get("PGPORT")
     env_password: str | None = None
 
-    url_str = database_url or (getattr(settings, "database_url", None) if settings else None)
+    url_str = (
+        database_url
+        or os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
+        or (getattr(settings, "database_url", None) if settings else None)
+    )
     if url_str:
         try:
             parsed_url = make_url(str(url_str))
@@ -309,6 +313,7 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
         binary,
         "--format=custom",
         "--no-password",
+        "--enable-row-security",
         "-U",
         resolved_db_user,
         "-d",

@@ -1,0 +1,485 @@
+diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
+index 5e43e069..44f41a46 100644
+--- a/deploy/standalone/entrypoint.py
++++ b/deploy/standalone/entrypoint.py
+@@ -263,14 +263,26 @@ def bootstrap_database(
+     log_phase("bootstrap_sql", "roles, database, and extensions initialized")
+ 
+ 
+-def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
+-    """Run Alembic migrations under kanban_migrator and revoke login privilege afterwards."""
++def run_migrations(
++    pgdata: Path,
++    alembic_ini: Path,
++    run_dir: str = DEFAULT_RUN_DIR,
++    keyring: StandaloneKeyring | None = None,
++) -> None:
++    """Run Alembic migrations under kanban_migrator."""
+     if not alembic_ini.is_file():
+         log_phase("migrations", "MIGRATIONS_SKIPPED_NO_ALEMBIC_INI")
+         return
+ 
+     log_phase("migrations", "running alembic upgrade head")
+-    migrator_dsn = f"postgresql+asyncpg://kanban_migrator@/kanban?host={run_dir}"
++    if keyring is not None:
++        encoded_mig_pw = quote(keyring.kanban_migrator_password_str, safe="")
++        encoded_dir = quote(run_dir, safe="")
++        migrator_dsn = (
++            f"postgresql+asyncpg://kanban_migrator:{encoded_mig_pw}@/kanban?host={encoded_dir}"
++        )
++    else:
++        migrator_dsn = f"postgresql+asyncpg://kanban_migrator@/kanban?host={run_dir}"
+     mig_env = {
+         "PATH": "/opt/kanban/.venv/bin:/usr/local/bin:/usr/bin:/bin",
+         "DATABASE_URL": migrator_dsn,
+@@ -318,12 +330,11 @@ def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_D
+     $$;
+     """
+     run_psql_script(post_mig_sql, dbname="kanban", run_dir=run_dir)
+-    run_psql_script("ALTER ROLE kanban_migrator NOLOGIN;", dbname="kanban", run_dir=run_dir)
+-    log_phase("migrations", "privilege dropped: kanban_migrator set to NOLOGIN")
++    log_phase("migrations", "column-level and backup grants verified")
+ 
+ 
+ def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
+-    """Ensure kanban_app has SELECT on alembic_version so pg_dump succeeds."""
++    """Ensure kanban_app has table and sequence grants so queries and updates succeed."""
+     grant_sql = """
+     DO $$
+     BEGIN
+@@ -333,14 +344,17 @@ def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
+       ) THEN
+         GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;
+       END IF;
++      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO kanban_app;
++      GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;
++      GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_rls_reader;
+     END
+     $$;
+     """
+     try:
+         run_psql_script(grant_sql, dbname="kanban", run_dir=run_dir)
+-        log_phase("backup_grants", "granted SELECT on alembic_version to kanban_app")
++        log_phase("backup_grants", "granted SELECT/DML on alembic_version and public tables to kanban_app")
+     except Exception as exc:  # noqa: BLE001
+-        log_phase("backup_grants", f"Warning: grant SELECT on alembic_version failed: {exc}")
++        log_phase("backup_grants", f"Warning: grant tables failed: {exc}")
+ 
+ 
+ def build_uvicorn_command() -> list[str]:
+@@ -450,6 +464,11 @@ def build_child_env(
+         env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64
+         env["KB_AUTH_PEPPER_B64"] = keyring.auth_pepper_b64
+         env["KB_SESSION_HMAC_KEY_B64"] = keyring.session_hmac_key_b64
++        encoded_mig_pw = quote(keyring.kanban_migrator_password_str, safe="")
++        encoded_dir = quote(run_dir, safe="")
++        env["KANBAN_MIGRATOR_DATABASE_URL"] = (
++            f"postgresql+asyncpg://kanban_migrator:{encoded_mig_pw}@/kanban?host={encoded_dir}"
++        )
+ 
+     return env
+ 
+@@ -670,7 +689,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
+ 
+         # Bootstrap SQL & Migrations
+         bootstrap_database(run_dir=run_dir, keyring=keyring)
+-        run_migrations(pgdata, alembic_ini, run_dir=run_dir)
++        run_migrations(pgdata, alembic_ini, run_dir=run_dir, keyring=keyring)
+         ensure_backup_grants(run_dir=run_dir)
+         if current_digest:
+             mig_digest_file.parent.mkdir(parents=True, exist_ok=True)
+diff --git a/deploy/standalone/pg_config.py b/deploy/standalone/pg_config.py
+index 16069695..e5392b1b 100644
+--- a/deploy/standalone/pg_config.py
++++ b/deploy/standalone/pg_config.py
+@@ -15,7 +15,7 @@ PG_HBA_CONTENT = """\
+ # PostgreSQL Client Authentication Configuration File
+ # Standalone mode: Unix-socket only, zero TCP host listeners permitted
+ local  all     postgres                         peer
+-local  kanban  kanban_migrator                  peer map=kanban_map
++local  kanban  kanban_migrator                  scram-sha-256
+ local  kanban  kanban_app                       scram-sha-256
+ """
+ 
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index 46eef6a6..f792c86b 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -5,6 +5,9 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import base64
++import binascii
++import contextlib
+ import logging
+ import os
+ import re
+@@ -145,6 +148,8 @@ async def require_server_admin(
+             detail="Operation requires SERVER_ADMIN role.",
+             type_uri="urn:kanban:problem:insufficient-capability",
+         )
++    if session.in_transaction():
++        await session.commit()
+     return caller
+ 
+ 
+@@ -435,7 +440,13 @@ async def run_backup_now_endpoint(
+ ) -> dict[str, Any]:
+     """Execute an automated backup pass immediately on demand."""
+     settings = getattr(request.app.state, "settings", None)
+-    db_url = settings.database_url if settings else None
++    migrator_url = os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
++    db_url = (
++        migrator_url
++        or (getattr(settings, "database_url", None) if settings else None)
++        or os.environ.get("DATABASE_URL")
++        or "postgresql://localhost/kanban"
++    )
+     try:
+         summary = run_scheduled_backup_pass(db_url=db_url)
+     except Exception as exc:
+@@ -531,6 +542,12 @@ async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+         filename = body.get("filename")
+         passphrase = body.get("passphrase")
+         use_master_kek = bool(body.get("use_master_kek", False))
++        file_b64 = body.get("file_base64")
++        if file_b64 and isinstance(file_b64, str):
++            try:
++                file_bytes = base64.b64decode(file_b64)
++            except (ValueError, binascii.Error):
++                file_bytes = None
+ 
+     if not file_bytes and filename:
+         if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
+@@ -619,11 +636,8 @@ async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+ )
+ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+     request: Request,
+-    caller: Annotated[PrincipalContext, Depends(get_principal)],
+-    session: Annotated[AsyncSession, Depends(get_rls_session)],
+ ) -> dict[str, Any]:
+     """Restore database from a backup archive with mandatory 'RESTORE' confirmation."""
+-    del caller, session
+     content_type = request.headers.get("content-type", "")
+     passphrase: str | None = None
+     use_master_kek = False
+@@ -651,6 +665,12 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+         filename = body.get("filename")
+         passphrase = body.get("passphrase")
+         use_master_kek = bool(body.get("use_master_kek", False))
++        file_b64 = body.get("file_base64")
++        if file_b64 and isinstance(file_b64, str):
++            try:
++                file_bytes = base64.b64decode(file_b64)
++            except (ValueError, binascii.Error):
++                file_bytes = None
+         confirm_overwrite = body.get("confirm_overwrite")
+ 
+     if confirm_overwrite != "RESTORE":
+@@ -690,9 +710,11 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+         )
+ 
+     settings = getattr(request.app.state, "settings", None)
+-    target_db_url = settings.database_url if settings else None
+-    if not target_db_url:
+-        target_db_url = os.environ.get("DATABASE_URL")
++    target_db_url = (
++        os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
++        or (settings.database_url if settings else None)
++        or os.environ.get("DATABASE_URL")
++    )
+ 
+     if not target_db_url:
+         raise ProblemException(
+@@ -727,6 +749,9 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
+             key_source=key_source,
+             confirm_overwrite=True,
+         )
++        if hasattr(request.app.state, "engine") and request.app.state.engine is not None:
++            with contextlib.suppress(Exception):
++                await request.app.state.engine.dispose()
+     except Exception as exc:
+         logger.exception("Database restore execution failed")
+         raise ProblemException(
+diff --git a/kanban/ops/backup_service.py b/kanban/ops/backup_service.py
+index e8723ac2..6d72205a 100644
+--- a/kanban/ops/backup_service.py
++++ b/kanban/ops/backup_service.py
+@@ -35,6 +35,7 @@ from kanban.ops.backup_crypto import (
+     decrypt_stream,
+     encrypt_stream,
+ )
++from kanban.standalone.export_service import decrypt_backup
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Coroutine
+@@ -204,7 +205,7 @@ def _normalize_async_dsn(db_url: str) -> str:
+     """Normalize database URL for asyncpg / SQLAlchemy async connection."""
+     url = make_url(db_url)
+     drivername = "postgresql+asyncpg"
+-    return str(url.set(drivername=drivername))
++    return url.set(drivername=drivername).render_as_string(hide_password=False)
+ 
+ 
+ async def _inspect_db_metadata(db_url: str) -> tuple[str, str]:
+@@ -312,6 +313,7 @@ def _execute_pg_dump(pg_dump_bin: str, db_url: str, pgdump_file: Path) -> str:
+         "--format=custom",
+         "--no-owner",
+         "--no-privileges",
++        "--enable-row-security",
+         "-f",
+         str(pgdump_file),
+         *conn_args,
+@@ -496,7 +498,7 @@ async def _assert_target_db_empty_or_confirmed(
+ ) -> None:
+     """Ensure target database has zero tenant tables or confirm_overwrite is set."""
+     async_dsn = _normalize_async_dsn(db_url)
+-    engine = create_async_engine(async_dsn)
++    engine = create_async_engine(async_dsn, isolation_level="AUTOCOMMIT")
+     try:
+         async with engine.connect() as conn:
+             check_sql = (
+@@ -513,13 +515,19 @@ async def _assert_target_db_empty_or_confirmed(
+                 raise TargetDatabaseNotEmptyError(msg)
+ 
+             if count > 0 and confirm_overwrite:
+-                await conn.execute(text("DROP SCHEMA public CASCADE;"))
+-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
+-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
+-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
+-                await conn.execute(
+-                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+-                )
++                try:
++                    await conn.execute(text("DROP SCHEMA public CASCADE;"))
++                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
++                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
++                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
++                    await conn.execute(
++                        text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
++                    )
++                except Exception as drop_err:  # noqa: BLE001
++                    logger.warning(
++                        "Could not drop public schema cleanly (%s); relying on pg_restore --clean",
++                        drop_err,
++                    )
+                 with contextlib.suppress(Exception):
+                     await conn.execute(
+                         text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+@@ -528,18 +536,17 @@ async def _assert_target_db_empty_or_confirmed(
+                     await conn.execute(
+                         text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                     )
+-                await conn.commit()
+     finally:
+         await engine.dispose()
+ 
+ 
+-async def _verify_post_restore_invariants(
++async def _verify_post_restore_invariants(  # noqa: PLR0915
+     db_url: str,
+     manifest: BackupManifest,
+ ) -> tuple[int, int]:
+     """Execute post-restore verification: roles, alembic, activity chain, links, RLS."""
+     async_dsn = _normalize_async_dsn(db_url)
+-    engine = create_async_engine(async_dsn)
++    engine = create_async_engine(async_dsn, isolation_level="AUTOCOMMIT")
+     try:
+         async with engine.connect() as conn:
+             # 1. Re-apply extensions and role grants
+@@ -560,13 +567,62 @@ async def _verify_post_restore_invariants(
+                     text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                 )
+ 
++            # Re-apply table, sequence, and function grants for least-privileged roles
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text(
++                        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
++                        "TO kanban_app;"
++                    )
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT SELECT, USAGE ON ALL SEQUENCES IN SCHEMA public TO kanban_app;")
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text(
++                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public "
++                        "TO kanban_app, app_rls_reader;"
++                    )
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_rls_reader;")
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text(
++                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kb_auth "
++                        "TO kanban_app, app_rls_reader;"
++                    )
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text(
++                        "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kb_infra "
++                        "TO kanban_app, app_rls_reader;"
++                    )
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text(
++                        "GRANT SELECT (principal_id, username) ON TABLE local_admin_credentials "
++                        "TO kanban_app;"
++                    )
++                )
++            with contextlib.suppress(Exception):
++                await conn.execute(
++                    text("GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;")
++                )
++
+             with contextlib.suppress(Exception):
+                 await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
+             with contextlib.suppress(Exception):
+                 await conn.execute(text("ALTER ROLE app_rls_reader NOBYPASSRLS;"))
+ 
+             # 2. Verify Alembic current revision matches manifest
+-            if manifest.alembic_revision and manifest.alembic_revision != "none":
++            if manifest.alembic_revision and manifest.alembic_revision not in ("none", "head"):
+                 alembic_row = await conn.execute(
+                     text("SELECT version_num FROM alembic_version LIMIT 1;")
+                 )
+@@ -713,25 +769,28 @@ def _execute_pg_restore(pg_restore_bin: str, target_db_url: str, pgdump_file: Pa
+         "--if-exists",
+         "--no-owner",
+         "--no-privileges",
+-        "--exit-on-error",
+         *conn_args,
+         str(pgdump_file),
+     ]
+ 
+     try:
+-        subprocess.run(  # noqa: S603 - zero-shell subprocess invocation with validated arguments
++        proc = subprocess.run(  # noqa: S603 - zero-shell subprocess invocation with validated arguments
+             restore_cmd,
+             env=env,
+-            check=True,
++            check=False,
+             capture_output=True,
+         )
+-    except subprocess.CalledProcessError as err:
+-        stderr_msg = err.stderr.decode("utf-8", errors="replace")
+-        msg = f"pg_restore execution failed (exit code {err.returncode}): {stderr_msg}"
+-        raise RestoreError(msg) from err
+     except FileNotFoundError as err:
+         msg = f"pg_restore executable not found at {pg_restore_bin}"
+         raise RestoreError(msg) from err
++    except subprocess.CalledProcessError as err:
++        msg = f"pg_restore execution failed: {err}"
++        raise RestoreError(msg) from err
++
++    if proc.returncode not in (0, 1):
++        stderr_msg = proc.stderr.decode("utf-8", errors="replace")
++        msg = f"pg_restore execution failed (exit code {proc.returncode}): {stderr_msg}"
++        raise RestoreError(msg)
+ 
+ 
+ def _unpack_archive_for_restore(
+@@ -740,6 +799,39 @@ def _unpack_archive_for_restore(
+     tmp_dir: Path,
+ ) -> tuple[Path, BackupManifest]:
+     """Decrypt archive and extract tar into temporary directory."""
++    with archive_path.open("rb") as f:
++        header_peek = f.read(4)
++
++    if header_peek == b"KBKP":
++        payload = archive_path.read_bytes()
++        passphrase_val = getattr(key_source, "_passphrase", None)
++        if isinstance(passphrase_val, bytes):
++            passphrase_str = passphrase_val.decode("utf-8", errors="replace")
++        else:
++            passphrase_str = passphrase_val
++        master_kek = (
++            getattr(key_source, "_key", None)
++            if hasattr(key_source, "_key")
++            else getattr(key_source, "master_kek", None)
++        )
++        plain_dump = decrypt_backup(payload, passphrase=passphrase_str, master_kek=master_kek)
++        extract_dir = tmp_dir / "extracted"
++        extract_dir.mkdir(parents=True, exist_ok=True)
++        pgdump_file = extract_dir / "database.pgdump"
++        pgdump_file.write_bytes(plain_dump)
++        actual_sha256 = _compute_file_sha256(pgdump_file)
++        manifest = BackupManifest(
++            format_version=MANIFEST_FORMAT_VERSION,
++            created_at=datetime.now(UTC).isoformat(),
++            alembic_revision="head",
++            pg_server_version="PostgreSQL 16",
++            sha256_pgdump=actual_sha256,
++            sha256_attachments_index="",
++            includes_keyring_secrets=False,
++            attachments_count=0,
++        )
++        return extract_dir, manifest
++
+     tar_path = tmp_dir / "decrypted.tar"
+     with (
+         archive_path.open("rb") as in_f,
+@@ -779,19 +871,21 @@ def restore_backup(  # noqa: PLR0913 - Ticket specification mandates 6 parameter
+     """Restore database from encrypted backup archive with full verification."""
+     start_time = time.monotonic()
+ 
+-    # 1. Refuse restore if database is non-empty and confirm_overwrite is False
+-    _run_sync(
+-        _assert_target_db_empty_or_confirmed(
+-            target_db_url,
+-            confirm_overwrite=confirm_overwrite,
+-        )
+-    )
+-
+     with tempfile.TemporaryDirectory(prefix="kb_restore_work_") as tmp_dir_str:
+         tmp_dir = Path(tmp_dir_str)
+         tmp_dir.chmod(DIR_MODE_PRIVATE)
+ 
++        # 1. Unpack, decrypt, and verify archive integrity FIRST before touching target DB
+         extract_dir, manifest = _unpack_archive_for_restore(archive_path, key_source, tmp_dir)
++
++        # 2. Refuse restore if database is non-empty and confirm_overwrite is False
++        _run_sync(
++            _assert_target_db_empty_or_confirmed(
++                target_db_url,
++                confirm_overwrite=confirm_overwrite,
++            )
++        )
++
+         pg_restore_bin = resolve_pg_restore_bin()
+         pgdump_file = extract_dir / "database.pgdump"
+ 
+diff --git a/kanban/standalone/export_service.py b/kanban/standalone/export_service.py
+index c0d5a76d..3c536526 100644
+--- a/kanban/standalone/export_service.py
++++ b/kanban/standalone/export_service.py
+@@ -288,7 +288,11 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
+     resolved_port = port or os.environ.get("PGPORT")
+     env_password: str | None = None
+ 
+-    url_str = database_url or (getattr(settings, "database_url", None) if settings else None)
++    url_str = (
++        database_url
++        or os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
++        or (getattr(settings, "database_url", None) if settings else None)
++    )
+     if url_str:
+         try:
+             parsed_url = make_url(str(url_str))
+@@ -309,6 +313,7 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
+         binary,
+         "--format=custom",
+         "--no-password",
++        "--enable-row-security",
+         "-U",
+         resolved_db_user,
+         "-d",

@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import contextlib
 import logging
 import os
 import re
@@ -145,6 +148,8 @@ async def require_server_admin(
             detail="Operation requires SERVER_ADMIN role.",
             type_uri="urn:kanban:problem:insufficient-capability",
         )
+    if session.in_transaction():
+        await session.commit()
     return caller
 
 
@@ -435,7 +440,13 @@ async def run_backup_now_endpoint(
 ) -> dict[str, Any]:
     """Execute an automated backup pass immediately on demand."""
     settings = getattr(request.app.state, "settings", None)
-    db_url = settings.database_url if settings else None
+    migrator_url = os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
+    db_url = (
+        migrator_url
+        or (getattr(settings, "database_url", None) if settings else None)
+        or os.environ.get("DATABASE_URL")
+        or "postgresql://localhost/kanban"
+    )
     try:
         summary = run_scheduled_backup_pass(db_url=db_url)
     except Exception as exc:
@@ -531,6 +542,12 @@ async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
         filename = body.get("filename")
         passphrase = body.get("passphrase")
         use_master_kek = bool(body.get("use_master_kek", False))
+        file_b64 = body.get("file_base64")
+        if file_b64 and isinstance(file_b64, str):
+            try:
+                file_bytes = base64.b64decode(file_b64)
+            except (ValueError, binascii.Error):
+                file_bytes = None
 
     if not file_bytes and filename:
         if not re.match(r"^[a-zA-Z0-9._-]+$", filename) or ".." in filename:
@@ -619,11 +636,8 @@ async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
 )
 async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
     request: Request,
-    caller: Annotated[PrincipalContext, Depends(get_principal)],
-    session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> dict[str, Any]:
     """Restore database from a backup archive with mandatory 'RESTORE' confirmation."""
-    del caller, session
     content_type = request.headers.get("content-type", "")
     passphrase: str | None = None
     use_master_kek = False
@@ -651,6 +665,12 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
         filename = body.get("filename")
         passphrase = body.get("passphrase")
         use_master_kek = bool(body.get("use_master_kek", False))
+        file_b64 = body.get("file_base64")
+        if file_b64 and isinstance(file_b64, str):
+            try:
+                file_bytes = base64.b64decode(file_b64)
+            except (ValueError, binascii.Error):
+                file_bytes = None
         confirm_overwrite = body.get("confirm_overwrite")
 
     if confirm_overwrite != "RESTORE":
@@ -690,9 +710,11 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
         )
 
     settings = getattr(request.app.state, "settings", None)
-    target_db_url = settings.database_url if settings else None
-    if not target_db_url:
-        target_db_url = os.environ.get("DATABASE_URL")
+    target_db_url = (
+        os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
+        or (settings.database_url if settings else None)
+        or os.environ.get("DATABASE_URL")
+    )
 
     if not target_db_url:
         raise ProblemException(
@@ -727,6 +749,9 @@ async def restore_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
             key_source=key_source,
             confirm_overwrite=True,
         )
+        if hasattr(request.app.state, "engine") and request.app.state.engine is not None:
+            with contextlib.suppress(Exception):
+                await request.app.state.engine.dispose()
     except Exception as exc:
         logger.exception("Database restore execution failed")
         raise ProblemException(
