@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -215,12 +216,15 @@ def as_principal(api_env: ApiEnv) -> Callable[..., httpx.AsyncClient]:
         aal_level: int = 1,
         agent_principal_id: uuid.UUID | None = None,
     ) -> httpx.AsyncClient:
+        now = datetime.now(UTC) if aal_level == 2 else None
         api_env.resolver.principal = PrincipalContext(
             principal_id=user.id,
             workspace_id=user.workspace_id,
             token_scopes=scopes,
             aal_level=aal_level,
             agent_principal_id=agent_principal_id,
+            aal2_verified_at=now,
+            aal2_last_active_at=now,
         )
         return api_env.client
 

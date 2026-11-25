@@ -199,9 +199,9 @@ async def _setup_workspace_and_principals(
     # Default session RLS context to server admin AAL2
     await session.execute(
         text(
-            "SELECT set_config('app.principal_id', :p_id, true), "
-            "set_config('app.workspace_id', :w_id, true), "
-            "set_config('app.aal_level', '2', true)"
+            "SELECT set_config('app.principal_id', :p_id, false), "
+            "set_config('app.workspace_id', :w_id, false), "
+            "set_config('app.aal_level', '2', false)"
         ),
         {"p_id": str(server_admin_id), "w_id": str(ws_id)},
     )
@@ -621,6 +621,14 @@ async def test_case_5_lockout_enforcement_over_http(
         assert sole_prob["layer"] in ("db_trigger", "handshake_probe_15m")
 
         # 2. Add an enabled external card (OIDC) with NO recent login handshake
+        await db_session.execute(
+            text(
+                "SELECT set_config('app.principal_id', :p_id, false), "
+                "set_config('app.workspace_id', :w_id, false), "
+                "set_config('app.aal_level', '2', false)"
+            ),
+            {"p_id": str(server_admin_id), "w_id": str(ws_id)},
+        )
         c_oidc_id = uuid.uuid4()
         await admin_upsert(
             db_session,

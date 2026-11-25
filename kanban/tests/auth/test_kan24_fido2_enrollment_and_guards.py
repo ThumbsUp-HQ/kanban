@@ -759,7 +759,10 @@ async def test_kan24_step_up_methods_discovery(
             )
             stale_time = datetime.now(UTC) - timedelta(seconds=950)
             await s.execute(
-                text("UPDATE sessions SET aal2_verified_at = :stale WHERE id = :id"),
+                text(
+                    "UPDATE sessions SET aal2_verified_at = :stale, "
+                    "aal2_last_active_at = :stale WHERE id = :id"
+                ),
                 {"stale": stale_time, "id": sess_stale.session_id},
             )
 

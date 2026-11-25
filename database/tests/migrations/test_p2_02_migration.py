@@ -11,7 +11,7 @@ from database.tests.migration_harness import MigrationHarness
 async def test_21_sessions_migration_lifecycle() -> None:
     """Verify upgrade to p2_02_sessions, downgrade -1, and re-upgrade."""
     async with MigrationHarness() as harness:
-        # 1. Upgrade to head (p2_02_sessions)
+        # 1. Upgrade to head
         await harness.upgrade("head")
 
         # Verify table exists and owned by kb_auth_owner
@@ -37,6 +37,8 @@ async def test_21_sessions_migration_lifecycle() -> None:
             "session_revoke_all_for_principal",
             "session_revoke_all_except",
             "session_get_metadata",
+            "session_touch_aal2",
+            "session_drop_aal2",
         }
         for f in funcs:
             assert f["prosecdef"] is True

@@ -178,16 +178,16 @@ def test_codebase_metrics_parity() -> None:
     )
     schemas_count = len(openapi.get("components", {}).get("schemas", {}))
 
-    assert paths_count == 275
-    assert ops_count == 366
-    assert schemas_count == 384
+    assert paths_count == 277
+    assert ops_count == 368
+    assert schemas_count == 385
 
     readme_text = README_PATH.read_text(encoding="utf-8")
     assert "92 SQLAlchemy 2.0 models" in readme_text
     assert "76 Alembic single-head migrations" in readme_text
-    assert "275" in readme_text
-    assert "366" in readme_text
-    assert "384" in readme_text
+    assert "277" in readme_text
+    assert "368" in readme_text
+    assert "385" in readme_text
 
 
 def test_wiki_manifest_synchronization() -> None:
