@@ -69,15 +69,20 @@ This review specifically audits:
 ### A. Python Backend Test Suite
 Executed backend tests:
 ```bash
-pytest kanban/tests/api/test_user_personal_settings.py \
+uv run kanban-ctl db check-migrations --static-only
+KB_TEST_DB_PREFIX=kanban_test_bkan403 uv run coverage run -m pytest \
+  kanban/tests/api/test_agent_onboarding_preferences.py \
+  kanban/tests/api/test_user_personal_settings.py \
+  kanban/tests/auth/test_websudo_sliding_aal2.py \
+  kanban/tests/auth/test_standard_user_rbac_matrix.py \
+  kanban/tests/api/test_llms_txt.py \
   database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py \
   database/tests/test_p1_17_models.py \
-  kanban/tests/api/test_llms_txt.py \
-  kanban/tests/security/test_admin_routes_protected.py -v \
-  --cov=database/models/principals --cov=kanban/ops/llms_txt --cov=kanban/api/v1/user_settings --cov-report=term-missing
+  kanban/tests/test_feature_comparison_parity.py -v
+uv run coverage report -m --include="kanban/ops/llms_txt.py,kanban/api/v1/user_settings.py,database/models/principals.py"
 ```
 **Results**:
-- 43/43 passed in 31.45s with **0 warnings**.
+- 50/50 passed in 37.36s with **0 warnings**.
 - Coverage:
   - `database/models/principals.py`: **100%**
   - `kanban/ops/llms_txt.py`: **100%**
@@ -87,23 +92,25 @@ pytest kanban/tests/api/test_user_personal_settings.py \
 ### B. Frontend Vitest Suite
 Executed web test suite:
 ```bash
-pnpm vitest run src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx \
+COVERAGE_INCLUDE="src/features/settings/AgentOnboardingPromptCard.tsx,src/features/settings/agentOnboardingPrompt.ts,src/features/settings/personalSettingsApi.ts" \
+  pnpm vitest run \
+  src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx \
   src/features/settings/__tests__/agentOnboardingPrompt.test.ts \
+  src/features/settings/personalSettingsApi.test.ts \
   src/features/docs-center/__tests__/DocsCenter.test.tsx --coverage
 ```
 **Results**:
-- 65/65 passed across all targeted test suites.
+- 88/88 passed across all targeted test suites.
 - Coverage on `agentOnboardingPrompt.ts`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.
-- Coverage on `AgentOnboardingPromptCard.tsx`: **100% Statements, 97.05% Branches, 100% Functions, 100% Lines**.
+- Coverage on `AgentOnboardingPromptCard.tsx`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.
+- Coverage on `personalSettingsApi.ts`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**.
+- Zero React Query warnings, zero stderr warnings.
 
 ### C. Build & Hygiene
+- Literal verification command: `uv run ruff check kanban/ database/ && python3 scripts/check_no_dashes.py --all && pnpm --dir kanban/web typecheck && pnpm --dir kanban/web lint && pnpm --dir kanban/web build`
+- All checks passed, exit code 0.
 - Migration audit: Clean exit code 0, 83 migrations, single head `p6_21_agent_onboarding_preferences`.
-- `ruff check .`: All checks passed.
-- `mypy`: 0 errors.
 - `scripts/check_no_dashes.py --all`: 0 violations across all files.
-- `pnpm typecheck`: Clean compilation.
-- `pnpm lint`: 0 warnings.
-- `pnpm build`: Clean production bundle (1.21s).
 
 ---
 

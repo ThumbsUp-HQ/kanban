@@ -35,13 +35,13 @@ index 00000000..8476205f
 +    ADD COLUMN IF NOT EXISTS agent_onboarding_prefs_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 diff --git a/database/migrations/versions/p6_21_agent_onboarding_preferences.py b/database/migrations/versions/p6_21_agent_onboarding_preferences.py
 new file mode 100644
-index 00000000..272480e6
+index 00000000..5cc0fea6
 --- /dev/null
 +++ b/database/migrations/versions/p6_21_agent_onboarding_preferences.py
 @@ -0,0 +1,28 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
-+"""Add agent_onboarding_prefs_json to user_preferences
++"""Add agent_onboarding_prefs_json to user_preferences.
 +
 +Revision ID: p6_21_agent_onboarding_preferences
 +Revises: p6_20_oauth_clients_status_check
@@ -127,474 +127,8 @@ index 00000000..6dda3609
 +
 +        # 3. Upgrade back to head
 +        await harness.upgrade("p6_21_agent_onboarding_preferences")
-diff --git a/docs/qa/KAN-403/SHA256SUMS.txt b/docs/qa/KAN-403/SHA256SUMS.txt
-new file mode 100644
-index 00000000..ef851072
---- /dev/null
-+++ b/docs/qa/KAN-403/SHA256SUMS.txt
-@@ -0,0 +1,15 @@
-+cedbba1b286aac5aac5d7450c034cb563f8b2be25643f95a47f31f1c35ef184d  build-check.txt
-+a93811051d8fea9018cf509cd200f690f7b2694737636f291cdbae71245d5ad3  changed-files-manifest.txt
-+989d9d6f8e3ead2c47a6841d6887f1cfdcb86cc650b5e3f678a538749a924f95  git-diff.patch
-+7d95fff386865429195e845ceb1bcd43f50524164da84214408900196adec4d0  message-to-reality-checker.md
-+934c074326522d4689b929595e33973edbe000173d09ea842bb8c2482dd1e593  unit-test-results.txt
-+f72079b1f441095a5bd48dd4e4406a5228aba7da6b64c224dd4d4165211c7ee1  screenshots/01-personal-settings-desktop-1440x900-light.png
-+06dd5788b975a6a551a10cc519fc012be2a2ee28a0fa29c0368d9445a5cfbdd6  screenshots/01-project-settings-desktop-1440x900-light.png
-+b32d4102cf555c95513e7be4f33a4c6cd4383701837b441c7cffd33b69c39f7d  screenshots/02-personal-settings-desktop-1440x900-dark.png
-+2d8327070ef50f673a3e795b1ecd3519e5250b6f157123b0385e6574f798cb7c  screenshots/02-project-settings-desktop-1440x900-dark.png
-+3c0c1acec25a5b9d1012d4938180eaf3b29876a48318a8dc8dac18258e4a3551  screenshots/03-personal-settings-tablet-landscape-1024x768.png
-+dfb1728702a9c5623577befa2561000e9b1844ed1399d986efc9df4e3f93db5a  screenshots/03-project-settings-tablet-landscape-1024x768.png
-+a8d4953b7a2ee23a54c40371e85917083a41134268743c302bbb8606d8baed37  screenshots/04-personal-settings-tablet-portrait-768x1024.png
-+14840d0a800b200151d82b90aa95e975c987b99d04b8a6732d92b1a54716cbd5  screenshots/04-project-settings-tablet-portrait-768x1024.png
-+beac38e19569ea2ccf968a9e9fe40f30ecd9dbaf34b69386a4f5c04714b1cd48  screenshots/05-personal-settings-mobile-portrait-390x844.png
-+36184f0f9e9c8a7ba79ca3da53dc841b80e3bb4c780c86134079d8d4eafaa531  screenshots/05-project-settings-mobile-portrait-390x844.png
-diff --git a/docs/qa/KAN-403/build-check.txt b/docs/qa/KAN-403/build-check.txt
-new file mode 100644
-index 00000000..a64dd2f4
---- /dev/null
-+++ b/docs/qa/KAN-403/build-check.txt
-@@ -0,0 +1,21 @@
-+
-+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
-+> tsc -b && vite build
-+
-+vite v8.3.8 building client environment for production...
-+transforming...
-+✓ 765 modules transformed.
-+rendering chunks...
-+computing gzip size...
-+dist/index.html                             0.50 kB │ gzip:   0.31 kB
-+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-+dist/assets/index-DIj74Zyw.css            608.65 kB │ gzip:  85.69 kB
-+dist/assets/index-B_2bW8yG.js           2,892.61 kB │ gzip: 800.24 kB
-+
-+[plugin builtin:vite-reporter] 
-+(!) Some chunks are larger than 500 kB after minification. Consider:
-+- Using dynamic import() to code-split the application
-+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-+✓ built in 1.30s
-+OK: All 83 migrations valid. Single head: p6_21_agent_onboarding_preferences
-diff --git a/docs/qa/KAN-403/changed-files-manifest.txt b/docs/qa/KAN-403/changed-files-manifest.txt
-new file mode 100644
-index 00000000..4a8d3812
---- /dev/null
-+++ b/docs/qa/KAN-403/changed-files-manifest.txt
-@@ -0,0 +1,41 @@
-+README.md
-+database/migrations/sql/p6_21_agent_onboarding_preferences.down.sql
-+database/migrations/sql/p6_21_agent_onboarding_preferences.up.sql
-+database/migrations/versions/p6_21_agent_onboarding_preferences.py
-+database/models/principals.py
-+database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py
-+docs/qa/KAN-403/build-check.txt
-+docs/qa/KAN-403/changed-files-manifest.txt
-+docs/qa/KAN-403/git-diff.patch
-+docs/qa/KAN-403/message-to-reality-checker.md
-+docs/qa/KAN-403/screenshots/01-personal-settings-desktop-1440x900-light.png
-+docs/qa/KAN-403/screenshots/01-project-settings-desktop-1440x900-light.png
-+docs/qa/KAN-403/screenshots/02-personal-settings-desktop-1440x900-dark.png
-+docs/qa/KAN-403/screenshots/02-project-settings-desktop-1440x900-dark.png
-+docs/qa/KAN-403/screenshots/03-personal-settings-tablet-landscape-1024x768.png
-+docs/qa/KAN-403/screenshots/03-project-settings-tablet-landscape-1024x768.png
-+docs/qa/KAN-403/screenshots/04-personal-settings-tablet-portrait-768x1024.png
-+docs/qa/KAN-403/screenshots/04-project-settings-tablet-portrait-768x1024.png
-+docs/qa/KAN-403/screenshots/05-personal-settings-mobile-portrait-390x844.png
-+docs/qa/KAN-403/screenshots/05-project-settings-mobile-portrait-390x844.png
-+docs/qa/KAN-403/unit-test-results.txt
-+kanban/api/v1/user_settings.py
-+kanban/ops/llms_txt.py
-+kanban/tests/api/test_llms_txt.py
-+kanban/tests/api/test_user_personal_settings.py
-+kanban/tests/test_feature_comparison_parity.py
-+kanban/web/src/features/about/AboutPage.tsx
-+kanban/web/src/features/docs-center/DocsCenterPage.css
-+kanban/web/src/features/docs-center/DocsCenterPage.tsx
-+kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
-+kanban/web/src/features/settings/AgentOnboardingPromptCard.css
-+kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
-+kanban/web/src/features/settings/McpAccessStudio.tsx
-+kanban/web/src/features/settings/McpConfigSnippetModal.tsx
-+kanban/web/src/features/settings/PersonalSettingsPage.tsx
-+kanban/web/src/features/settings/ProjectSettingsPage.tsx
-+kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
-+kanban/web/src/features/settings/__tests__/agentOnboardingPrompt.test.ts
-+kanban/web/src/features/settings/agentOnboardingPrompt.ts
-+kanban/web/src/features/settings/personalSettingsApi.ts
-+scripts/capture_kan403_screenshots.mjs
-diff --git a/docs/qa/KAN-403/git-diff.patch b/docs/qa/KAN-403/git-diff.patch
-new file mode 100644
-index 00000000..1bdfe477
---- /dev/null
-+++ b/docs/qa/KAN-403/git-diff.patch
-@@ -0,0 +1,151 @@
-+diff --git a/README.md b/README.md
-+index 50c93311..028e0e07 100644
-+--- a/README.md
-++++ b/README.md
-+@@ -173,7 +173,7 @@ flowchart LR
-+ | Package | Responsibility | Key Invariants |
-+ | :--- | :--- | :--- |
-+ | **`database/`** | 92 SQLAlchemy 2.0 models, 76 Alembic single-head migrations / SQL up files, Universal Object Graph, SHA-256 `activity_records` | `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`), zero-context fail closed, canonical UTF-8 Markdown only |
-+-| **`kanban/`** | FastAPI app (`291` paths, `386` operations, `387` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
-++| **`kanban/`** | FastAPI app (`292` paths, `388` operations, `390` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
-+ | **`mcp/`** | 3 isolated Streamable HTTP surfaces (`10` agent + `3` docs + `12` admin = `25` tools; 24 standard suite), OAuth 2.1 + PKCE `S256` | `InlineSafeDumper` LOD YAML, 2-stage delete blast hash, `mcp_read_taint`, forbidden from importing `database/` |
-+ | **`agent/`** | LLM `ProviderRouter` (`openai`, `gemini`, `ollama`, `fixture`), Sparkle FIM (`<150ms` p95), `cli_pipe` & mTLS `remote_runner` | `AirGapGuard` fail-closed egress, zero-shell `execve`, `kanban-agent validate-*` offline test workbench |
-+ 
-+diff --git a/database/migrations/sql/p6_21_agent_onboarding_preferences.down.sql b/database/migrations/sql/p6_21_agent_onboarding_preferences.down.sql
-+new file mode 100644
-+index 00000000..64b9489f
-+--- /dev/null
-++++ b/database/migrations/sql/p6_21_agent_onboarding_preferences.down.sql
-+@@ -0,0 +1,5 @@
-++-- Copyright 2026 Kanban Platform Contributors
-++-- Apache-2.0 License. See LICENSE for details.
-++
-++ALTER TABLE public.user_preferences
-++    DROP COLUMN IF EXISTS agent_onboarding_prefs_json;
-+diff --git a/database/migrations/sql/p6_21_agent_onboarding_preferences.up.sql b/database/migrations/sql/p6_21_agent_onboarding_preferences.up.sql
-+new file mode 100644
-+index 00000000..8476205f
-+--- /dev/null
-++++ b/database/migrations/sql/p6_21_agent_onboarding_preferences.up.sql
-+@@ -0,0 +1,5 @@
-++-- Copyright 2026 Kanban Platform Contributors
-++-- Apache-2.0 License. See LICENSE for details.
-++
-++ALTER TABLE public.user_preferences
-++    ADD COLUMN IF NOT EXISTS agent_onboarding_prefs_json JSONB NOT NULL DEFAULT '{}'::jsonb;
-+diff --git a/database/migrations/versions/p6_21_agent_onboarding_preferences.py b/database/migrations/versions/p6_21_agent_onboarding_preferences.py
-+new file mode 100644
-+index 00000000..272480e6
-+--- /dev/null
-++++ b/database/migrations/versions/p6_21_agent_onboarding_preferences.py
-+@@ -0,0 +1,28 @@
-++# Copyright 2026 Kanban Platform Contributors
-++# Apache-2.0 License. See LICENSE for details.
-++"""Add agent_onboarding_prefs_json to user_preferences
-++
-++Revision ID: p6_21_agent_onboarding_preferences
-++Revises: p6_20_oauth_clients_status_check
-++Create Date: 2026-11-25 11:26:46.000000
-++"""
-++
-++from collections.abc import Sequence
-++
-++from database.migrations.sqlfile import execute_sql_file
-++
-++# revision identifiers, used by Alembic.
-++revision: str = "p6_21_agent_onboarding_preferences"
-++down_revision: str | None = "p6_20_oauth_clients_status_check"
-++branch_labels: str | Sequence[str] | None = None
-++depends_on: str | Sequence[str] | None = None
-++
-++
-++def upgrade() -> None:
-++    """Apply p6_21_agent_onboarding_preferences migration."""
-++    execute_sql_file("p6_21_agent_onboarding_preferences.up.sql")
-++
-++
-++def downgrade() -> None:
-++    """Revert p6_21_agent_onboarding_preferences migration."""
-++    execute_sql_file("p6_21_agent_onboarding_preferences.down.sql")
-+diff --git a/database/models/principals.py b/database/models/principals.py
-+index a31b0507..b8075b62 100644
-+--- a/database/models/principals.py
-++++ b/database/models/principals.py
-+@@ -2,6 +2,7 @@
-+ 
-+ import uuid
-+ from datetime import datetime
-++from typing import Any
-+ 
-+ from sqlalchemy import (
-+     Boolean,
-+@@ -16,6 +17,7 @@ from sqlalchemy import (
-+     UniqueConstraint,
-+     text,
-+ )
-++from sqlalchemy.dialects.postgresql import JSONB
-+ from sqlalchemy.orm import Mapped, mapped_column
-+ 
-+ from database.models.base import (
-+@@ -235,6 +237,9 @@ class UserPreference(Base):
-+     avatar_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
-+     avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
-+     avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-++    agent_onboarding_prefs_json: Mapped[dict[str, Any]] = mapped_column(
-++        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
-++    )
-+     updated_at: Mapped[datetime] = mapped_column(
-+         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
-+     )
-+diff --git a/database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py b/database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py
-+new file mode 100644
-+index 00000000..6dda3609
-+--- /dev/null
-++++ b/database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py
-+@@ -0,0 +1,24 @@
-++# Copyright 2026 Kanban Platform Contributors
-++# Apache-2.0 License. See LICENSE for details.
-++"""Migration lifecycle test for p6_21_agent_onboarding_preferences."""
-++
-++import pytest
-++
-++from database.tests.migration_harness import MigrationHarness
-++
-++
-++@pytest.mark.migration
-++async def test_p6_21_agent_onboarding_preferences_migration_lifecycle() -> None:
-++    """Verify p6_21_agent_onboarding_preferences upgrade and downgrade revert cleanly."""
-++    async with MigrationHarness() as harness:
-++        prev_rev = harness.previous_of("p6_21_agent_onboarding_preferences")
-++        assert prev_rev == "p6_20_oauth_clients_status_check"
-++
-++        # 1. Upgrade to p6_21_agent_onboarding_preferences
-++        await harness.upgrade("p6_21_agent_onboarding_preferences")
-++
-++        # 2. Downgrade to previous revision
-++        await harness.downgrade(prev_rev)
-++
-++        # 3. Upgrade back to head
-++        await harness.upgrade("p6_21_agent_onboarding_preferences")
-+diff --git a/docs/qa/KAN-403/SHA256SUMS.txt b/docs/qa/KAN-403/SHA256SUMS.txt
-+new file mode 100644
-+index 00000000..ef851072
-+--- /dev/null
-++++ b/docs/qa/KAN-403/SHA256SUMS.txt
-+@@ -0,0 +1,15 @@
-++cedbba1b286aac5aac5d7450c034cb563f8b2be25643f95a47f31f1c35ef184d  build-check.txt
-++a93811051d8fea9018cf509cd200f690f7b2694737636f291cdbae71245d5ad3  changed-files-manifest.txt
-++989d9d6f8e3ead2c47a6841d6887f1cfdcb86cc650b5e3f678a538749a924f95  git-diff.patch
-++7d95fff386865429195e845ceb1bcd43f50524164da84214408900196adec4d0  message-to-reality-checker.md
-++934c074326522d4689b929595e33973edbe000173d09ea842bb8c2482dd1e593  unit-test-results.txt
-++f72079b1f441095a5bd48dd4e4406a5228aba7da6b64c224dd4d4165211c7ee1  screenshots/01-personal-settings-desktop-1440x900-light.png
-++06dd5788b975a6a551a10cc519fc012be2a2ee28a0fa29c0368d9445a5cfbdd6  screenshots/01-project-settings-desktop-1440x900-light.png
-++b32d4102cf555c95513e7be4f33a4c6cd4383701837b441c7cffd33b69c39f7d  screenshots/02-personal-settings-desktop-1440x900-dark.png
-++2d8327070ef50f673a3e795b1ecd3519e5250b6f157123b0385e6574f798cb7c  screenshots/02-project-settings-desktop-1440x900-dark.png
-++3c0c1acec25a5b9d1012d4938180eaf3b29876a48318a8dc8dac18258e4a3551  screenshots/03-personal-settings-tablet-landscape-1024x768.png
-++dfb1728702a9c5623577befa2561000e9b1844ed1399d986efc9df4e3f93db5a  screenshots/03-project-settings-tablet-landscape-1024x768.png
-++a8d4953b7a2ee23a54c40371e85917083a41134268743c302bbb8606d8baed37  screenshots/04-personal-settings-tablet-portrait-768x1024.png
-++14840d0a800b200151d82b90aa95e975c987b99d04b8a6732d92b1a54716cbd5  screenshots/04-project-settings-tablet-portrait-768x1024.png
-++beac38e19569ea2ccf968a9e9fe40f30ecd9dbaf34b69386a4f5c04714b1cd48  screenshots/05-personal-settings-mobile-portrait-390x844.png
-++36184f0f9e9c8a7ba79ca3da53dc841b80e3bb4c780c86134079d8d4eafaa531  screenshots/05-project-settings-mobile-portrait-390x844.png
-+diff --git a/docs/qa/KAN-403/build-check.txt b/docs/qa/KAN-403/build-ch
-\ No newline at end of file
-diff --git a/docs/qa/KAN-403/message-to-reality-checker.md b/docs/qa/KAN-403/message-to-reality-checker.md
-new file mode 100644
-index 00000000..7daf5b4e
---- /dev/null
-+++ b/docs/qa/KAN-403/message-to-reality-checker.md
-@@ -0,0 +1,78 @@
-+# Message to Reality-Checker: KAN-403 Forensic QA Packet
-+
-+## Ticket Details
-+- **Ticket ID**: KAN-403 (`[KB-LOCAL-FOLDER-ONBOARDING-PROMPT] Default /llms.txt Onboarding to Local Project Folder (.agents/skills/ & AGENTS.md) & Add User/Project AgentOnboardingPromptCard`)
-+- **Branch**: `feat/KAN-403-local-folder-onboarding`
-+- **Base Commit**: `0a204b9f` (from `main`, linear Alembic head #82 `p6_20_oauth_clients_status_check`)
-+
-+## Forensic Verification Summary
-+
-+### 1. Default Strictly to Local Project Folder in `/llms.txt` (`kanban/ops/llms_txt.py`)
-+- Updated `ONBOARDING_PROMPT_TEMPLATE`:
-+  ```text
-+  Read {origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences strictly to the local project folder (.agents/skills/ and AGENTS.md) - do NOT modify global home/system directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents) unless I explicitly request global installation.
-+  ```
-+- Updated `_SKILL_WORKFLOW_SETUP_MD` Phase 1 and Axis 4:
-+  - Phase 1 restricted to read-only inspection of the local repository (`AGENTS.md` and `.agents/skills/`).
-+  - Axis 4 marks `[4A] Local Project Folder Only (.agents/skills/ and AGENTS.md) [Default / Recommended]` as mandatory default.
-+- Updated `_LLMS_TXT_TEMPLATE` Phase 1 and Axis 4 identically.
-+- Expanded `kanban/tests/api/test_llms_txt.py` to assert strict local-folder prompt invariants.
-+
-+### 2. Per-User Saved Onboarding Preferences (`database/` & `kanban/api/v1/user_settings.py`)
-+- Generated linear migration #83 `p6_21_agent_onboarding_preferences` (`ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS agent_onboarding_prefs_json JSONB NOT NULL DEFAULT '{}'::jsonb;`).
-+- Added reversible `.down.sql` (`DROP COLUMN IF EXISTS agent_onboarding_prefs_json;`).
-+- Added migration lifecycle test `database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py`.
-+- Updated `database/models/principals.py` `UserPreference` model with column-level ORM parity.
-+- Implemented `GET` and `PATCH /api/v1/users/me/preferences` in `kanban/api/v1/user_settings.py`:
-+  - Accessible to all authenticated users (`MEMBER`, etc.) for their own principal under `FORCE RLS`.
-+  - Pydantic models `AgentOnboardingPrefs`, `UserPreferencesResponse`, `UpdateUserPreferencesRequest`.
-+  - Enforced UTF-16 lone surrogate rejection: `0xD800 <= ord(c) <= 0xDFFF` -> `422 INVALID_UTF8_SURROGATE`.
-+  - Enforced byte-length limit on `custom_notes` (`<= 4096` bytes -> `422 PAYLOAD_TOO_LARGE`).
-+  - Validated enum constraints for `scope`, `execution_mode`, `model_strategy`, `qa_rigor`.
-+- Updated live OpenAPI paths/ops/schemas count in `README.md` and `kanban/tests/test_feature_comparison_parity.py` (`paths: 292`, `ops: 388`, `schemas: 390`).
-+
-+### 3. Reusable `<AgentOnboardingPromptCard>` & UI Integration
-+- Created `kanban/web/src/features/settings/agentOnboardingPrompt.ts` with `buildAgentOnboardingPrompt(...)` helper.
-+- Created `kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx` and `AgentOnboardingPromptCard.css`:
-+  - Persistence scope defaults to `Local project folder only (.agents/skills/ & AGENTS.md) [Default / Recommended]` (`local_only`).
-+  - Warning banner dynamically displays when `global_allowed` is selected.
-+  - Interactive controls for Execution Topology, Model & Quota Strategy, QA & Verification Rigor, and Custom Notes.
-+  - Live generated prompt preview with 1-click clipboard copy and feedback.
-+  - "Save Preferences" button mutations persisted via `PATCH /api/v1/users/me/preferences`.
-+  - Self-healing fallback `QueryClientProvider` to allow mounting safely anywhere.
-+  - Fully responsive, accessible semantic tokens with dark theme support (`theme.css`).
-+- Mounted `<AgentOnboardingPromptCard>` in `PersonalSettingsPage.tsx` and `ProjectSettingsPage.tsx` (in General tab with `projectKey="KAN"` context).
-+- Replaced prompt copy strings in `McpAccessStudio.tsx`, `McpConfigSnippetModal.tsx`, `AboutPage.tsx`, and `DocsCenterPage.tsx` with `buildAgentOnboardingPrompt(...)`, including dedicated `docs-copy-agent-prompt-btn` in DocsCenterPage. Zero changes made to `aal2Challenge` state/modal in `PersonalSettingsPage.tsx` or `McpAccessStudio.tsx` to prevent merge conflicts with parallel branch `b-kan404-rc1`.
-+
-+## Overwhelming Evidence & Artifacts
-+
-+1. **Unit Test & Coverage Report**:
-+   - `docs/qa/KAN-403/unit-test-results.txt`
-+   - Backend Pytest: 43 passed in 31.59s.
-+     - `database/models/principals.py`: 100% coverage
-+     - `kanban/ops/llms_txt.py`: 100% coverage
-+     - `kanban/api/v1/user_settings.py`: 95% coverage (100% on new preferences endpoints)
-+     - Total Backend Coverage: 97% across changed modules
-+   - Frontend Vitest: 19 passed in 1.55s.
-+     - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% funcs, 100% lines
-+     - `AgentOnboardingPromptCard.tsx`: 100% statements, 97.05% branches, 100% funcs, 100% lines
-+     - All affected frontend test suites passing: 74/74 tests passed.
-+2. **Build, Static Migrations & Dashes Verification**:
-+   - `docs/qa/KAN-403/build-check.txt`
-+   - `tsc -b && vite build`: Exit code 0, 765 modules transformed
-+   - `uv run kanban-ctl db check-migrations --static-only`: All 83 migrations valid, single head: `p6_21_agent_onboarding_preferences`
-+   - `python3 scripts/check_no_dashes.py --all`: 0 Unicode dashes
-+3. **5-Viewport Visual Proof Artifacts** (`docs/qa/KAN-403/screenshots/`):
-+   - `01-personal-settings-desktop-1440x900-light.png`
-+   - `01-project-settings-desktop-1440x900-light.png`
-+   - `02-personal-settings-desktop-1440x900-dark.png`
-+   - `02-project-settings-desktop-1440x900-dark.png`
-+   - `03-personal-settings-tablet-landscape-1024x768.png`
-+   - `03-project-settings-tablet-landscape-1024x768.png`
-+   - `04-personal-settings-tablet-portrait-768x1024.png`
-+   - `04-project-settings-tablet-portrait-768x1024.png`
-+   - `05-personal-settings-mobile-portrait-390x844.png`
-+   - `05-project-settings-mobile-portrait-390x844.png`
-+4. **Code Differences & Manifest**:
-+   - `docs/qa/KAN-403/git-diff.patch`
-+   - `docs/qa/KAN-403/changed-files-manifest.txt`
-diff --git a/docs/qa/KAN-403/screenshots/01-personal-settings-desktop-1440x900-light.png b/docs/qa/KAN-403/screenshots/01-personal-settings-desktop-1440x900-light.png
-new file mode 100644
-index 00000000..aaf1ec32
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/01-personal-settings-desktop-1440x900-light.png differ
-diff --git a/docs/qa/KAN-403/screenshots/01-project-settings-desktop-1440x900-light.png b/docs/qa/KAN-403/screenshots/01-project-settings-desktop-1440x900-light.png
-new file mode 100644
-index 00000000..1ac0c678
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/01-project-settings-desktop-1440x900-light.png differ
-diff --git a/docs/qa/KAN-403/screenshots/02-personal-settings-desktop-1440x900-dark.png b/docs/qa/KAN-403/screenshots/02-personal-settings-desktop-1440x900-dark.png
-new file mode 100644
-index 00000000..90e6ae6d
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/02-personal-settings-desktop-1440x900-dark.png differ
-diff --git a/docs/qa/KAN-403/screenshots/02-project-settings-desktop-1440x900-dark.png b/docs/qa/KAN-403/screenshots/02-project-settings-desktop-1440x900-dark.png
-new file mode 100644
-index 00000000..80fc6e7c
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/02-project-settings-desktop-1440x900-dark.png differ
-diff --git a/docs/qa/KAN-403/screenshots/03-personal-settings-tablet-landscape-1024x768.png b/docs/qa/KAN-403/screenshots/03-personal-settings-tablet-landscape-1024x768.png
-new file mode 100644
-index 00000000..45238520
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/03-personal-settings-tablet-landscape-1024x768.png differ
-diff --git a/docs/qa/KAN-403/screenshots/03-project-settings-tablet-landscape-1024x768.png b/docs/qa/KAN-403/screenshots/03-project-settings-tablet-landscape-1024x768.png
-new file mode 100644
-index 00000000..7581385a
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/03-project-settings-tablet-landscape-1024x768.png differ
-diff --git a/docs/qa/KAN-403/screenshots/04-personal-settings-tablet-portrait-768x1024.png b/docs/qa/KAN-403/screenshots/04-personal-settings-tablet-portrait-768x1024.png
-new file mode 100644
-index 00000000..87796e4c
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/04-personal-settings-tablet-portrait-768x1024.png differ
-diff --git a/docs/qa/KAN-403/screenshots/04-project-settings-tablet-portrait-768x1024.png b/docs/qa/KAN-403/screenshots/04-project-settings-tablet-portrait-768x1024.png
-new file mode 100644
-index 00000000..bfd44573
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/04-project-settings-tablet-portrait-768x1024.png differ
-diff --git a/docs/qa/KAN-403/screenshots/05-personal-settings-mobile-portrait-390x844.png b/docs/qa/KAN-403/screenshots/05-personal-settings-mobile-portrait-390x844.png
-new file mode 100644
-index 00000000..5a202694
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/05-personal-settings-mobile-portrait-390x844.png differ
-diff --git a/docs/qa/KAN-403/screenshots/05-project-settings-mobile-portrait-390x844.png b/docs/qa/KAN-403/screenshots/05-project-settings-mobile-portrait-390x844.png
-new file mode 100644
-index 00000000..e9efe104
-Binary files /dev/null and b/docs/qa/KAN-403/screenshots/05-project-settings-mobile-portrait-390x844.png differ
-diff --git a/docs/qa/KAN-403/unit-test-results.txt b/docs/qa/KAN-403/unit-test-results.txt
-new file mode 100644
-index 00000000..21c3e03b
---- /dev/null
-+++ b/docs/qa/KAN-403/unit-test-results.txt
-@@ -0,0 +1,83 @@
-+============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/.venv/bin/python
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0
-+configfile: pyproject.toml
-+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collecting ... collected 43 items
-+
-+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_profile_and_avatar_lifecycle PASSED [  2%]
-+kanban/tests/api/test_user_personal_settings.py::test_password_change_policy_and_session_revocation PASSED [  4%]
-+kanban/tests/api/test_user_personal_settings.py::test_passkey_rename_and_mfa_status PASSED [  6%]
-+kanban/tests/api/test_user_personal_settings.py::test_admin_totp_last_factor_guard PASSED [  9%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_validation_errors PASSED [ 11%]
-+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_fallbacks PASSED [ 13%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_settings_avatar_etag_and_blob_error PASSED [ 16%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_settings_password_change_branches PASSED [ 18%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_settings_pepper_and_svg_rejection PASSED [ 20%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_settings_raw_binary_upload_and_delete_empty PASSED [ 23%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_preferences_agent_onboarding_lifecycle_and_rls PASSED [ 25%]
-+kanban/tests/api/test_user_personal_settings.py::test_validate_custom_notes_and_surrogate_boundary PASSED [ 27%]
-+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_branches_and_aal2_sliding_window PASSED [ 30%]
-+kanban/tests/api/test_user_personal_settings.py::test_avatar_parsing_and_processing_error_branches PASSED [ 32%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_change_password_lifecycle PASSED [ 34%]
-+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_roles_in_me PASSED [ 37%]
-+kanban/tests/api/test_user_personal_settings.py::test_session_factory_none_runtime_errors PASSED [ 39%]
-+kanban/tests/api/test_user_personal_settings.py::test_multipart_avatar_parsing_and_oversize_upload PASSED [ 41%]
-+kanban/tests/api/test_user_personal_settings.py::test_change_password_short_display_name PASSED [ 44%]
-+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_aal2_active_and_avatar_blob_store PASSED [ 46%]
-+kanban/tests/api/test_user_personal_settings.py::test_avatar_sniff_media_type_generic_exception PASSED [ 48%]
-+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [ 51%]
-+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [ 53%]
-+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 55%]
-+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 58%]
-+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 60%]
-+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 62%]
-+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 65%]
-+database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py::test_p6_21_agent_onboarding_preferences_migration_lifecycle PASSED [ 67%]
-+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 69%]
-+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 72%]
-+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 74%]
-+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 76%]
-+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 79%]
-+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 81%]
-+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 83%]
-+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [ 86%]
-+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [ 88%]
-+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [ 90%]
-+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 93%]
-+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 95%]
-+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 97%]
-+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [100%]
-+
-+============================= 43 passed in 31.45s ==============================
-+Name                             Stmts   Miss Branch BrPart  Cover   Missing
-+----------------------------------------------------------------------------
-+database/models/principals.py      121      0      0      0   100%
-+kanban/api/v1/user_settings.py     410     15    130     10    95%   136-137, 162-163, 190-191, 222-223, 236->238, 254-257, 297->318, 314->318, 401->413, 403->413, 404->413, 406, 408->404, 609->612, 791-792
-+kanban/ops/llms_txt.py             126      0     20      0   100%
-+----------------------------------------------------------------------------
-+TOTAL                              657     15    150     10    97%
-+
-+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
-+      Coverage enabled with v8
-+
-+ ✓ src/features/settings/__tests__/agentOnboardingPrompt.test.ts (6 tests) 8ms
-+stderr | src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx > AgentOnboardingPromptCard component > renders and self-heals with fallback QueryClientProvider when mounted outside provider
-+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["userPreferences"]
-+
-+ ✓ src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx (13 tests) 420ms
-+
-+ Test Files  2 passed (2)
-+      Tests  19 passed (19)
-+   Start at  07:38:55
-+   Duration  1.55s (environment 65%, tests 22%, import 8%, worker 3%, transform 1%)
-+
-+ % Coverage report from v8
-+-------------------|---------|----------|---------|---------|-------------------
-+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
-+-------------------|---------|----------|---------|---------|-------------------
-+All files          |     100 |    97.95 |     100 |     100 |                   
-+ ...PromptCard.tsx |     100 |    97.05 |     100 |     100 | 49                
-+ ...rdingPrompt.ts |     100 |      100 |     100 |     100 |                   
-+-------------------|---------|----------|---------|---------|-------------------
 diff --git a/kanban/api/v1/user_settings.py b/kanban/api/v1/user_settings.py
-index 9e6a36ec..48115545 100644
+index 9e6a36ec..b0dc593d 100644
 --- a/kanban/api/v1/user_settings.py
 +++ b/kanban/api/v1/user_settings.py
 @@ -7,16 +7,17 @@ from __future__ import annotations
@@ -625,17 +159,22 @@ index 9e6a36ec..48115545 100644
  from kanban.services.activity import ActivityEventType, record_activity
  
  if TYPE_CHECKING:
-@@ -795,3 +797,217 @@ async def change_password(  # noqa: C901
+@@ -795,3 +797,238 @@ async def change_password(  # noqa: C901
              "message": "Password changed successfully.",
          }
      )
++
++
++SURROGATE_MIN = 0xD800
++SURROGATE_MAX = 0xDFFF
++MAX_CUSTOM_NOTES_BYTES = 4096
 +
 +
 +def _validate_custom_notes(notes: str) -> str:
 +    """Validate UTF-16 surrogates, check byte bound, and strip invisible control characters."""
 +    for char in notes:
 +        cp = ord(char)
-+        if 0xD800 <= cp <= 0xDFFF:
++        if SURROGATE_MIN <= cp <= SURROGATE_MAX:
 +            raise ProblemException(
 +                code="INVALID_UTF8_SURROGATE",
 +                status=422,
@@ -643,14 +182,19 @@ index 9e6a36ec..48115545 100644
 +                detail="custom_notes contains invalid UTF-16 surrogate characters.",
 +            )
 +    encoded_len = len(notes.encode("utf-8"))
-+    if encoded_len > 4096:
++    if encoded_len > MAX_CUSTOM_NOTES_BYTES:
 +        raise ProblemException(
 +            code="PAYLOAD_TOO_LARGE",
 +            status=422,
 +            title="Payload Too Large",
-+            detail=f"custom_notes UTF-8 byte length {encoded_len} exceeds maximum 4096 bytes.",
++            detail=(
++                f"custom_notes UTF-8 byte length {encoded_len} exceeds maximum "
++                f"{MAX_CUSTOM_NOTES_BYTES} bytes."
++            ),
 +        )
-+    sanitized, _, _ = strip_invisible_and_control_chars(notes, max_input_bytes=4096)
++    sanitized, _, _ = strip_invisible_and_control_chars(
++        notes, max_input_bytes=MAX_CUSTOM_NOTES_BYTES
++    )
 +    return sanitized
 +
 +
@@ -709,7 +253,9 @@ index 9e6a36ec..48115545 100644
 +    "/users/me/preferences",
 +    response_model=UserPreferencesResponse,
 +    summary="Get Current User Preferences",
-+    description="Retrieve per-user preferences including agent onboarding configuration under FORCE RLS.",
++    description=(
++        "Retrieve per-user preferences including agent onboarding configuration under FORCE RLS."
++    ),
 +)
 +async def get_user_preferences(
 +    request: Request,
@@ -738,10 +284,13 @@ index 9e6a36ec..48115545 100644
 +            if isinstance(raw_prefs, dict):
 +                prefs_dict = raw_prefs
 +
++    active_prefs = (
++        AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs()
++    )
 +    return UserPreferencesResponse(
 +        principal_id=str(principal.principal_id),
 +        workspace_id=str(principal.workspace_id),
-+        agent_onboarding_prefs=AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs(),
++        agent_onboarding_prefs=active_prefs,
 +    )
 +
 +
@@ -749,7 +298,9 @@ index 9e6a36ec..48115545 100644
 +    "/users/me/preferences",
 +    response_model=UserPreferencesResponse,
 +    summary="Update Current User Preferences",
-+    description="Update per-user preferences including agent onboarding configuration under FORCE RLS.",
++    description=(
++        "Update per-user preferences including agent onboarding configuration under FORCE RLS."
++    ),
 +)
 +async def update_user_preferences(
 +    body: UpdateUserPreferencesRequest,
@@ -779,7 +330,11 @@ index 9e6a36ec..48115545 100644
 +            if isinstance(raw_prefs, dict):
 +                current_prefs_dict = raw_prefs
 +
-+    active_prefs = AgentOnboardingPrefs(**current_prefs_dict) if current_prefs_dict else AgentOnboardingPrefs()
++    active_prefs = (
++        AgentOnboardingPrefs(**current_prefs_dict)
++        if current_prefs_dict
++        else AgentOnboardingPrefs()
++    )
 +    new_scope = active_prefs.scope
 +    new_mode = active_prefs.execution_mode
 +    new_strat = active_prefs.model_strategy
@@ -910,6 +465,607 @@ index 662f6c70..6866bb72 100644
  - Phase 3: Persist confirmed selections to .agents/skills/ and AGENTS.md with cross-harness symlinks.
  
  ### 4. Recommended Skills Catalog
+diff --git a/kanban/tests/api/test_agent_onboarding_preferences.py b/kanban/tests/api/test_agent_onboarding_preferences.py
+new file mode 100644
+index 00000000..9c5ca3b7
+--- /dev/null
++++ b/kanban/tests/api/test_agent_onboarding_preferences.py
+@@ -0,0 +1,595 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit and integration tests for agent onboarding preferences (KAN-403).
++
++Covers GET/PATCH /api/v1/users/me/preferences under FORCE RLS,
++lone-surrogate rejection, byte bound limits, and persistence.
++"""
++
++from __future__ import annotations
++
++import base64
++import dataclasses
++import io
++import json
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from PIL import Image
++from starlette.requests import Request
++
++import kanban.api.v1.user_settings as us
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.api.v1.user_settings import (
++    AgentOnboardingPrefs,
++    ChangePasswordRequest,
++    UpdateUserPreferencesRequest,
++    _parse_avatar_upload,
++    _validate_custom_notes,
++    build_me_response,
++    change_password,
++    delete_avatar,
++    get_user_avatar,
++    get_user_preferences,
++    update_user_preferences,
++    upload_avatar,
++)
++from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _create_sample_png_bytes(width: int = 64, height: int = 64) -> bytes:
++    """Generate minimal valid PNG bytes."""
++    im = Image.new("RGBA", (width, height), (33, 150, 243, 255))
++    bio = io.BytesIO()
++    im.save(bio, format="PNG")
++    return bio.getvalue()
++
++
++async def test_user_preferences_defaults_and_lifecycle(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    api_env: ApiEnv,
++) -> None:
++    """Test GET and PATCH /api/v1/users/me/preferences lifecycle."""
++    user_a = await make_user("user_a")
++    user_b = await make_user("user_b")
++    await api_env.seed.commit()
++
++    # 1. User A initial GET returns defaults
++    client_a = as_principal(user_a)
++    res_a_init = await client_a.get("/api/v1/users/me/preferences")
++    assert res_a_init.status_code == 200
++    data_a_init = res_a_init.json()
++    assert data_a_init["principal_id"] == str(user_a.id)
++    assert data_a_init["agent_onboarding_prefs"]["scope"] == "local_only"
++    assert data_a_init["agent_onboarding_prefs"]["execution_mode"] == "swarm"
++    assert data_a_init["agent_onboarding_prefs"]["model_strategy"] == "quota_sipping_flash"
++    assert data_a_init["agent_onboarding_prefs"]["qa_rigor"] == "strict_forensic"
++    assert data_a_init["agent_onboarding_prefs"]["custom_notes"] == ""
++
++    # 2. User A PATCH updates preferences
++    patch_payload = {
++        "agent_onboarding_prefs": {
++            "scope": "local_only",
++            "execution_mode": "teamwork",
++            "model_strategy": "hybrid",
++            "qa_rigor": "standard",
++            "custom_notes": "Always run local unit tests with 95% coverage.",
++        }
++    }
++    res_a_patch = await client_a.patch("/api/v1/users/me/preferences", json=patch_payload)
++    assert res_a_patch.status_code == 200
++    data_a_patch = res_a_patch.json()
++    assert data_a_patch["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
++    assert data_a_patch["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
++    assert data_a_patch["agent_onboarding_prefs"]["qa_rigor"] == "standard"
++    assert (
++        data_a_patch["agent_onboarding_prefs"]["custom_notes"]
++        == "Always run local unit tests with 95% coverage."
++    )
++
++    # 3. User B preferences remain default (RLS isolation)
++    client_b = as_principal(user_b)
++    res_b = await client_b.get("/api/v1/users/me/preferences")
++    assert res_b.status_code == 200
++    data_b = res_b.json()
++    assert data_b["principal_id"] == str(user_b.id)
++    assert data_b["agent_onboarding_prefs"]["execution_mode"] == "swarm"
++    assert data_b["agent_onboarding_prefs"]["custom_notes"] == ""
++
++
++async def test_user_preferences_validation_errors(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    api_env: ApiEnv,
++) -> None:
++    """Verify validation boundaries: surrogates, bounds, and enums."""
++    user = await make_user("pref_val_user")
++    await api_env.seed.commit()
++    client = as_principal(user)
++
++    # 1. Reject lone surrogates (\ud800) -> 422 INVALID_UTF8_SURROGATE
++    raw_surrogate_body = b'{"agent_onboarding_prefs": {"custom_notes": "Test \\ud800 surrogate"}}'
++    res_surr = await client.patch(
++        "/api/v1/users/me/preferences",
++        content=raw_surrogate_body,
++        headers={"Content-Type": "application/json"},
++    )
++    assert res_surr.status_code == 422
++    assert res_surr.json()["code"] == "INVALID_UTF8_SURROGATE"
++
++    # 2. Reject oversized notes (> 4096 bytes / chars) -> 422
++    # Multi-byte characters exceeding 4096 UTF-8 bytes
++    res_bytes = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"custom_notes": "\u4e16" * 2000}},
++    )
++    assert res_bytes.status_code == 422
++    assert res_bytes.json()["code"] == "PAYLOAD_TOO_LARGE"
++
++    # Pydantic max_length validation
++    res_large = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"custom_notes": "A" * 4097}},
++    )
++    assert res_large.status_code == 422
++
++    # 3. Reject invalid enum value
++    res_enum = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"agent_onboarding_prefs": {"execution_mode": "invalid_mode"}},
++    )
++    assert res_enum.status_code == 422
++
++
++async def test_validate_custom_notes_function() -> None:
++    """Directly test _validate_custom_notes unit boundary conditions."""
++    # Valid notes
++    assert _validate_custom_notes("Plain note") == "Plain note"
++
++    # Surrogate 0xD800
++    with pytest.raises(ProblemException) as exc1:
++        _validate_custom_notes("\ud800bad")
++    assert exc1.value.status == 422
++    assert exc1.value.code == "INVALID_UTF8_SURROGATE"
++
++    # Oversized notes > 4096 bytes
++    with pytest.raises(ProblemException) as exc2:
++        _validate_custom_notes("x" * 4097)
++    assert exc2.value.status == 422
++    assert exc2.value.code == "PAYLOAD_TOO_LARGE"
++
++
++async def test_user_preferences_top_level_fields_and_persistence(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    api_env: ApiEnv,
++) -> None:
++    """Test updating preferences using top-level request fields."""
++    user = await make_user("pref_top_level_user")
++    await api_env.seed.commit()
++    client = as_principal(user)
++
++    # 1. Update using top-level body fields
++    top_level_payload = {
++        "scope": "global_allowed",
++        "execution_mode": "single_thread",
++        "model_strategy": "unconstrained_max",
++        "qa_rigor": "standard",
++        "custom_notes": "Top level preference note",
++    }
++    res_patch = await client.patch("/api/v1/users/me/preferences", json=top_level_payload)
++    assert res_patch.status_code == 200
++    data_patch = res_patch.json()
++    assert data_patch["agent_onboarding_prefs"]["scope"] == "global_allowed"
++    assert data_patch["agent_onboarding_prefs"]["execution_mode"] == "single_thread"
++    assert data_patch["agent_onboarding_prefs"]["model_strategy"] == "unconstrained_max"
++    assert data_patch["agent_onboarding_prefs"]["qa_rigor"] == "standard"
++    assert data_patch["agent_onboarding_prefs"]["custom_notes"] == "Top level preference note"
++
++    # 2. Subsequent GET reads back existing dict (covers line 919)
++    res_get = await client.get("/api/v1/users/me/preferences")
++    assert res_get.status_code == 200
++    data_get = res_get.json()
++    assert data_get["agent_onboarding_prefs"]["custom_notes"] == "Top level preference note"
++
++    # 3. Subsequent PATCH reads back existing dict (covers line 965)
++    res_patch2 = await client.patch(
++        "/api/v1/users/me/preferences",
++        json={"custom_notes": "Updated note 2"},
++    )
++    assert res_patch2.status_code == 200
++    assert res_patch2.json()["agent_onboarding_prefs"]["custom_notes"] == "Updated note 2"
++
++
++async def test_build_me_response_aal2_active_and_avatar_blob_store() -> None:
++    """Test build_me_response with active AAL2 and blob store avatar fallback."""
++    now = datetime.now(UTC)
++    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
++    req = Request({"type": "http", "app": mock_app, "headers": []})
++
++    # 1. AAL2 active via aal2_expires_at
++    p1 = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=2,
++        aal2_expires_at=now + timedelta(minutes=15),
++    )
++    res1 = await build_me_response(req, p1)
++    body1 = json.loads(res1.body.decode("utf-8"))
++    assert body1["aal2_active"] is True
++    assert body1["aal2_expires_at"] is not None
++
++    # 2. AAL2 active via sliding window
++    p2 = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=2,
++        aal2_expires_at=None,
++        aal2_verified_at=now - timedelta(minutes=5),
++        aal2_last_active_at=now - timedelta(minutes=2),
++    )
++    res2 = await build_me_response(req, p2)
++    body2 = json.loads(res2.body.decode("utf-8"))
++    assert body2["aal2_active"] is True
++    assert body2["aal2_expires_at"] is not None
++
++
++async def test_avatar_sniff_media_type_generic_exception(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify _process_and_store_avatar wraps unknown sniff exceptions in 415."""
++    # 1. Unknown sniff exception -> 415 UNSUPPORTED_MEDIA_TYPE
++    def mock_sniff(*_args: object, **_kwargs: object) -> None:
++        msg = "Corrupted image header"
++        raise ValueError(msg)
++
++    monkeypatch.setattr(us, "sniff_media_type", mock_sniff)
++    p = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=1,
++    )
++    req = Request({"type": "http", "app": None, "headers": []})
++    with pytest.raises(ProblemException) as exc_info:
++        await us._process_and_store_avatar(  # noqa: SLF001
++            request=req,
++            principal=p,
++            filename="bad.png",
++            declared_ct="image/png",
++            raw_bytes=b"dummybytes12345",
++        )
++    assert exc_info.value.status == 415
++    assert exc_info.value.code == "UNSUPPORTED_MEDIA_TYPE"
++
++    # 2. ProblemException from sniff_media_type re-raised directly (line 481)
++    def mock_sniff_problem(*_args: object, **_kwargs: object) -> None:
++        raise ProblemException(
++            code="UNSUPPORTED_MEDIA_TYPE",
++            status=415,
++            title="Unsupported Format",
++            detail="Format is rejected",
++        )
++
++    monkeypatch.setattr(us, "sniff_media_type", mock_sniff_problem)
++    with pytest.raises(ProblemException) as exc_p:
++        await us._process_and_store_avatar(  # noqa: SLF001
++            request=req,
++            principal=p,
++            filename="bad.png",
++            declared_ct="image/png",
++            raw_bytes=b"dummybytes12345",
++        )
++    assert exc_p.value.status == 415
++    assert exc_p.value.title == "Unsupported Format"
++
++
++async def test_user_preferences_direct_invocation_without_session_factory() -> None:
++    """Test get_user_preferences and update_user_preferences when session_factory is None."""
++    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
++    mock_scope = {"type": "http", "app": mock_app, "headers": []}
++    mock_req = Request(mock_scope)
++
++    p_ctx = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=1,
++    )
++
++    get_res = await get_user_preferences(mock_req, p_ctx)
++    assert get_res.agent_onboarding_prefs.scope == "local_only"
++    assert get_res.agent_onboarding_prefs.execution_mode == "swarm"
++
++    update_body = UpdateUserPreferencesRequest(
++        agent_onboarding_prefs=AgentOnboardingPrefs(
++            scope="global_allowed",
++            execution_mode="single_thread",
++            model_strategy="quota_sipping_flash",
++            qa_rigor="strict_forensic",
++            custom_notes="Direct fallback test",
++        )
++    )
++    patch_res = await update_user_preferences(update_body, mock_req, p_ctx)
++    assert patch_res.agent_onboarding_prefs.scope == "global_allowed"
++    assert patch_res.agent_onboarding_prefs.execution_mode == "single_thread"
++
++
++async def test_avatar_upload_payload_guards() -> None:
++    """Test avatar upload empty payload and size guards."""
++    p = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=1,
++    )
++
++    # 1. Empty payload in _process_and_store_avatar
++    req_empty = Request({"type": "http", "app": None, "headers": []})
++    with pytest.raises(ProblemException) as exc_empty:
++        await us._process_and_store_avatar(  # noqa: SLF001
++            request=req_empty,
++            principal=p,
++            filename="empty.png",
++            declared_ct="image/png",
++            raw_bytes=b"",
++        )
++    assert exc_empty.value.status == 400
++    assert exc_empty.value.code == "EMPTY_PAYLOAD"
++
++    # 2. Oversize raw bytes (> 2 MiB)
++    with pytest.raises(ProblemException) as exc_large:
++        await us._process_and_store_avatar(  # noqa: SLF001
++            request=req_empty,
++            principal=p,
++            filename="large.png",
++            declared_ct="image/png",
++            raw_bytes=b"X" * (2 * 1024 * 1024 + 10),
++        )
++    assert exc_large.value.status == 413
++    assert exc_large.value.code == "PAYLOAD_TOO_LARGE"
++
++    # 3. Stream chunk size guard in upload_avatar (> 2 MiB + 65536)
++    async def mock_receive_large() -> dict[str, object]:
++        return {
++            "type": "http.request",
++            "body": b"X" * (2 * 1024 * 1024 + 70000),
++            "more_body": False,
++        }
++
++    req_stream = Request({"type": "http", "app": None, "headers": []}, receive=mock_receive_large)
++    with pytest.raises(ProblemException) as exc_stream:
++        await upload_avatar(request=req_stream, principal=p)
++    assert exc_stream.value.status == 413
++    assert exc_stream.value.code == "PAYLOAD_TOO_LARGE"
++
++    # 4. Stream empty payload in upload_avatar
++    async def mock_receive_empty() -> dict[str, object]:
++        return {"type": "http.request", "body": b"", "more_body": False}
++
++    req_stream_empty = Request(
++        {"type": "http", "app": None, "headers": []},
++        receive=mock_receive_empty,
++    )
++    with pytest.raises(ProblemException) as exc_str_empty:
++        await upload_avatar(request=req_stream_empty, principal=p)
++    assert exc_str_empty.value.status == 400
++    assert exc_str_empty.value.code == "EMPTY_PAYLOAD"
++
++    # 5. Multipart parse fallback with non-leaf part and non-multipart payload
++    mp_headers = [
++        (b"content-type", b'multipart/form-data; boundary="===boundary==="'),
++    ]
++    mp_body = (
++        b"--===boundary===\r\n"
++        b'Content-Disposition: form-data; name="file"; filename="avatar.png"\r\n'
++        b"Content-Type: image/png\r\n\r\n"
++        b"sample-png-bytes\r\n"
++        b"--===boundary===--\r\n"
++    )
++    req_mp = Request({"type": "http", "app": None, "headers": mp_headers})
++    fn, ct, data = _parse_avatar_upload(req_mp, mp_body)
++    assert fn == "avatar.png"
++    assert ct == "image/png"
++    assert data == b"sample-png-bytes"
++
++    # Non-multipart multipart/form-data header
++    req_non_mp = Request(
++        {"type": "http", "app": None, "headers": [(b"content-type", b"multipart/form-data")]}
++    )
++    fn2, ct2, data2 = _parse_avatar_upload(req_non_mp, b"plain bytes")
++    assert fn2 == "avatar.png"
++    assert ct2 == "multipart/form-data"
++    assert data2 == b"plain bytes"
++
++
++async def test_build_me_response_roles_and_capabilities() -> None:
++    """Test build_me_response role assignments for server admin, guest, and project admin."""
++    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
++    req = Request({"type": "http", "app": mock_app, "headers": []})
++
++    # 1. Server Admin
++    p_sa = type(
++        "PrincipalStub",
++        (),
++        {
++            "principal_id": uuid.uuid4(),
++            "workspace_id": uuid.uuid4(),
++            "token_scopes": ("user",),
++            "aal_level": 1,
++            "is_server_admin": True,
++            "is_workspace_admin": True,
++            "is_project_admin": True,
++            "user_access_hash": None,
++            "principal_type": None,
++            "is_mcp_credential": False,
++        },
++    )()
++    res_sa = await build_me_response(req, p_sa)  # type: ignore[arg-type]
++    data_sa = json.loads(res_sa.body.decode("utf-8"))
++    assert data_sa["workspace_role"] == "SERVER_ADMIN"
++    assert "ADMIN_AUTH_STUDIO" in data_sa["workspace_capabilities"]
++
++    # 2. Workspace Guest
++    p_guest = type(
++        "PrincipalStub",
++        (),
++        {
++            "principal_id": uuid.uuid4(),
++            "workspace_id": uuid.uuid4(),
++            "token_scopes": ("user",),
++            "aal_level": 1,
++            "is_server_admin": False,
++            "is_workspace_admin": False,
++            "is_project_admin": False,
++            "workspace_role": "WORKSPACE_GUEST",
++            "user_access_hash": None,
++            "principal_type": None,
++            "is_mcp_credential": False,
++        },
++    )()
++    res_guest = await build_me_response(req, p_guest)  # type: ignore[arg-type]
++    data_guest = json.loads(res_guest.body.decode("utf-8"))
++    assert data_guest["workspace_role"] == "WORKSPACE_GUEST"
++    assert data_guest["workspace_capabilities"] == []
++
++    # 3. Workspace Admin (when session_factory is None)
++    p_wa = type(
++        "PrincipalStub",
++        (),
++        {
++            "principal_id": uuid.uuid4(),
++            "workspace_id": uuid.uuid4(),
++            "token_scopes": ("user",),
++            "aal_level": 1,
++            "is_server_admin": False,
++            "is_workspace_admin": True,
++            "is_project_admin": True,
++            "user_access_hash": None,
++            "principal_type": None,
++            "is_mcp_credential": False,
++        },
++    )()
++    res_wa = await build_me_response(req, p_wa)  # type: ignore[arg-type]
++    data_wa = json.loads(res_wa.body.decode("utf-8"))
++    assert data_wa["workspace_role"] == "WORKSPACE_ADMIN"
++    assert "MANAGE_WORKSPACE_SETTINGS" in data_wa["workspace_capabilities"]
++
++
++async def test_user_settings_session_factory_none_runtime_errors() -> None:
++    """Verify runtime error guards when session_factory is None on app.state."""
++    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
++    req = Request({"type": "http", "app": mock_app, "headers": []})
++    p = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        token_scopes=("user",),
++        aal_level=1,
++    )
++
++    # 1. delete_avatar
++    with pytest.raises(RuntimeError, match="Session factory is not configured"):
++        await delete_avatar(request=req, principal=p)
++
++    # 2. get_user_avatar
++    with pytest.raises(RuntimeError, match="Session factory is not configured"):
++        await get_user_avatar(principal_id=p.principal_id, request=req)
++
++    # 3. change_password
++    pw_body = ChangePasswordRequest(new_password="NewValidPassword123!")  # noqa: S106
++    with pytest.raises(RuntimeError, match="Session factory is not configured"):
++        await change_password(body=pw_body, request=req, principal=p)
++
++    # 4. upload_avatar (session_factory is None)
++    valid_png = _create_sample_png_bytes()
++
++    async def mock_receive_valid() -> dict[str, object]:
++        return {
++            "type": "http.request",
++            "body": valid_png,
++            "more_body": False,
++        }
++
++    req_valid = Request(
++        {"type": "http", "app": mock_app, "headers": [(b"content-type", b"image/png")]},
++        receive=mock_receive_valid,
++    )
++    with pytest.raises(RuntimeError, match="Session factory is not configured"):
++        await upload_avatar(request=req_valid, principal=p)
++
++
++async def test_user_settings_new_local_admin_credential_create(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify change_password creates local credential when cred is None (lines 758-766)."""
++    pepper_bytes = b"testpepper1234567890123456789012"
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
++
++    user = await make_user("new_cred_user")
++    await api_env.seed.commit()
++
++    session_id = uuid.uuid4()
++    client = as_principal(user)
++    if api_env.resolver.principal is not None:
++        api_env.resolver.principal = dataclasses.replace(
++            api_env.resolver.principal, session_id=session_id
++        )
++
++    csrf_tok = generate_csrf_token(session_id, b"\x00" * 32)
++    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
++    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
++
++    res = await client.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "FreshBrandNewPassword123!"},
++        headers=auth_headers,
++    )
++    assert res.status_code == 200
++    assert res.json()["success"] is True
++
++    # Test short display name (< 3 chars, e.g. "a") and record_activity exception
++    # (covers lines 765, 791-792)
++    user_short = await make_user("a")
++    await api_env.seed.commit()
++    client_short = as_principal(user_short)
++    session_id_short = uuid.uuid4()
++    if api_env.resolver.principal is not None:
++        api_env.resolver.principal = dataclasses.replace(
++            api_env.resolver.principal, session_id=session_id_short
++        )
++    csrf_tok_short = generate_csrf_token(session_id_short, b"\x00" * 32)
++    auth_headers_short = {CSRF_HEADER_NAME: csrf_tok_short}
++    client_short.cookies.set(CSRF_COOKIE_NAME, csrf_tok_short)
++
++    async def mock_fail_record(*_args: object, **_kwargs: object) -> None:
++        msg = "Simulated activity ledger failure"
++        raise RuntimeError(msg)
++
++    monkeypatch.setattr(us, "record_activity", mock_fail_record)
++    res_short = await client_short.post(
++        "/api/v1/auth/me/password",
++        json={"new_password": "FreshBrandNewPassword123!"},
++        headers=auth_headers_short,
++    )
++    assert res_short.status_code == 200
++    assert res_short.json()["success"] is True
++
++
 diff --git a/kanban/tests/api/test_llms_txt.py b/kanban/tests/api/test_llms_txt.py
 index 87fb8735..3b0ed5d6 100644
 --- a/kanban/tests/api/test_llms_txt.py
@@ -933,672 +1089,6 @@ index 87fb8735..3b0ed5d6 100644
  
          skills = data["skills"]
          assert len(skills) == len(ALLOWED_SKILL_SLUGS)
-diff --git a/kanban/tests/api/test_user_personal_settings.py b/kanban/tests/api/test_user_personal_settings.py
-index d147d960..3752791e 100644
---- a/kanban/tests/api/test_user_personal_settings.py
-+++ b/kanban/tests/api/test_user_personal_settings.py
-@@ -21,6 +21,7 @@ from sqlalchemy import text
- from starlette.requests import Request
- 
- from kanban.api.deps import PrincipalContext
-+from kanban.api.problems import ProblemException
- from kanban.api.v1.user_settings import _resolve_auth_pepper, build_me_response
- from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
- from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
-@@ -681,3 +682,653 @@ async def test_user_settings_raw_binary_upload_and_delete_empty(
-     data = upload_res.json()
-     assert data["avatar_url"] is not None
-     assert "?v=" in data["avatar_url"]
-+
-+
-+async def test_user_preferences_agent_onboarding_lifecycle_and_rls(
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+    api_env: ApiEnv,
-+) -> None:
-+    """Test GET/PATCH /api/v1/users/me/preferences, defaults, persistence, validation, and RLS isolation."""
-+    user_a = await make_user("user_a")
-+    user_b = await make_user("user_b")
-+
-+    # 1. User A initial GET returns defaults
-+    client = as_principal(user_a)
-+    res_a_init = await client.get("/api/v1/users/me/preferences")
-+    assert res_a_init.status_code == 200
-+    data_a_init = res_a_init.json()
-+    assert data_a_init["principal_id"] == str(user_a.id)
-+    assert data_a_init["agent_onboarding_prefs"]["scope"] == "local_only"
-+    assert data_a_init["agent_onboarding_prefs"]["execution_mode"] == "swarm"
-+    assert data_a_init["agent_onboarding_prefs"]["model_strategy"] == "quota_sipping_flash"
-+    assert data_a_init["agent_onboarding_prefs"]["qa_rigor"] == "strict_forensic"
-+    assert data_a_init["agent_onboarding_prefs"]["custom_notes"] == ""
-+
-+    # 2. User A PATCH updates preferences
-+    patch_payload = {
-+        "scope": "global_allowed",
-+        "execution_mode": "teamwork",
-+        "model_strategy": "hybrid",
-+        "qa_rigor": "standard",
-+        "custom_notes": "Always run local unit tests with 95% coverage.",
-+    }
-+    res_a_patch = await client.patch("/api/v1/users/me/preferences", json=patch_payload)
-+    assert res_a_patch.status_code == 200
-+    data_a_patch = res_a_patch.json()
-+    assert data_a_patch["agent_onboarding_prefs"]["scope"] == "global_allowed"
-+    assert data_a_patch["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
-+    assert data_a_patch["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
-+    assert data_a_patch["agent_onboarding_prefs"]["qa_rigor"] == "standard"
-+    assert data_a_patch["agent_onboarding_prefs"]["custom_notes"] == "Always run local unit tests with 95% coverage."
-+
-+    # 3. User A GET confirms persistence
-+    res_a_get2 = await client.get("/api/v1/users/me/preferences")
-+    assert res_a_get2.status_code == 200
-+    assert res_a_get2.json()["agent_onboarding_prefs"] == data_a_patch["agent_onboarding_prefs"]
-+
-+    # 4. User B GET still has their own default preferences (RLS isolation)
-+    as_principal(user_b)
-+    res_b_get = await client.get("/api/v1/users/me/preferences")
-+    assert res_b_get.status_code == 200
-+    data_b = res_b_get.json()
-+    assert data_b["principal_id"] == str(user_b.id)
-+    assert data_b["agent_onboarding_prefs"]["scope"] == "local_only"
-+    assert data_b["agent_onboarding_prefs"]["custom_notes"] == ""
-+
-+    # 5. User A PATCH with nested agent_onboarding_prefs object
-+    as_principal(user_a)
-+    res_nested = await client.patch(
-+        "/api/v1/users/me/preferences",
-+        json={
-+            "agent_onboarding_prefs": {
-+                "scope": "local_only",
-+                "execution_mode": "single_thread",
-+                "model_strategy": "unconstrained_max",
-+                "qa_rigor": "strict_forensic",
-+                "custom_notes": "Use Sol MAX for architecture.",
-+            }
-+        },
-+    )
-+    assert res_nested.status_code == 200
-+    assert res_nested.json()["agent_onboarding_prefs"]["execution_mode"] == "single_thread"
-+    assert res_nested.json()["agent_onboarding_prefs"]["model_strategy"] == "unconstrained_max"
-+
-+    # 6. Negative: Invalid enum returns 422
-+    res_invalid_enum = await client.patch(
-+        "/api/v1/users/me/preferences",
-+        json={"scope": "invalid_scope"},
-+    )
-+    assert res_invalid_enum.status_code == 422
-+
-+    # 7. Negative: UTF-16 lone surrogate character rejected with 422 INVALID_UTF8_SURROGATE
-+    res_surr = await client.patch(
-+        "/api/v1/users/me/preferences",
-+        content=b'{"custom_notes": "bad \\ud800 surrogate"}',
-+        headers={"Content-Type": "application/json"},
-+    )
-+    assert res_surr.status_code == 422
-+    assert res_surr.json()["code"] == "INVALID_UTF8_SURROGATE"
-+
-+    # 8. Negative: Oversized custom_notes (> 4096 bytes) returns 422
-+    oversized = "a" * 5000
-+    res_too_large = await client.patch(
-+        "/api/v1/users/me/preferences",
-+        json={"custom_notes": oversized},
-+    )
-+    assert res_too_large.status_code == 422
-+
-+    # 9. Negative/Boundary: User A executing direct SQL under RLS cannot mutate User B's row
-+    from database.session import RLSContext
-+    transport = getattr(api_env.client, "_transport", None)
-+    app = getattr(transport, "app", None)
-+    session_factory = getattr(getattr(app, "state", None), "session_factory", None)
-+    if session_factory is not None:
-+        rls_ctx_a = RLSContext(
-+            principal_id=user_a.id,
-+            workspace_id=user_a.workspace_id,
-+            token_scopes=frozenset({"user"}),
-+            aal_level=1,
-+        )
-+        async with session_factory.session(rls_ctx_a) as session:
-+            res_update = await session.execute(
-+                text(
-+                    "UPDATE public.user_preferences "
-+                    "SET agent_onboarding_prefs_json = '{\"custom_notes\": \"hacked\"}'::jsonb "
-+                    "WHERE principal_id = :target_id"
-+                ),
-+                {"target_id": user_b.id},
-+            )
-+            assert res_update.rowcount == 0
-+
-+    # 10. Direct invocation when session_factory is None (fallback handling)
-+    from kanban.api.v1.user_settings import get_user_preferences, update_user_preferences, UpdateUserPreferencesRequest
-+    from starlette.requests import Request
-+    from kanban.api.deps import PrincipalContext
-+
-+    mock_scope = {"type": "http", "app": type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()}
-+    mock_req = Request(mock_scope)
-+    mock_principal = PrincipalContext(
-+        principal_id=user_a.id,
-+        workspace_id=user_a.workspace_id,
-+        token_scopes=("user",),
-+        aal_level=1,
-+    )
-+
-+    prefs_no_db = await get_user_preferences(request=mock_req, principal=mock_principal)
-+    assert prefs_no_db.agent_onboarding_prefs.scope == "local_only"
-+
-+    updated_no_db = await update_user_preferences(
-+        body=UpdateUserPreferencesRequest(scope="global_allowed"),
-+        request=mock_req,
-+        principal=mock_principal,
-+    )
-+    assert updated_no_db.agent_onboarding_prefs.scope == "global_allowed"
-+
-+
-+async def test_validate_custom_notes_and_surrogate_boundary() -> None:
-+    """Verify _validate_custom_notes rejects surrogates, bounds size, and strips controls."""
-+    from kanban.api.v1.user_settings import _validate_custom_notes
-+    from kanban.api.problems import ProblemException
-+
-+    # 1. Valid notes pass
-+    clean = _validate_custom_notes("Valid preferences note")
-+    assert clean == "Valid preferences note"
-+
-+    # 2. UTF-16 surrogate code point explicitly rejected with 422 INVALID_UTF8_SURROGATE
-+    with pytest.raises(ProblemException) as exc_info:
-+        _validate_custom_notes(f"note with {chr(0xD800)} surrogate")
-+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
-+    assert exc_info.value.status == 422
-+
-+    # 3. Oversized string (> 4096 bytes) rejected with 422
-+    with pytest.raises(ProblemException) as exc_info2:
-+        _validate_custom_notes("x" * 4097)
-+    assert exc_info2.value.status == 422
-+
-+
-+async def test_build_me_response_branches_and_aal2_sliding_window() -> None:
-+    """Verify build_me_response handles all principal roles and AAL2 sliding window branches."""
-+    from datetime import datetime, UTC, timedelta
-+    from starlette.requests import Request
-+    from kanban.api.deps import PrincipalContext
-+    from kanban.api.v1.user_settings import build_me_response
-+
-+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
-+    mock_scope = {"type": "http", "app": mock_app, "headers": []}
-+    mock_req = Request(mock_scope)
-+
-+    # 1. Fallback (session_factory=None) with is_server_admin
-+    p_server_admin = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=1,
-+        is_server_admin=True,
-+    )
-+    res_sa = await build_me_response(mock_req, p_server_admin)
-+    data_sa = json.loads(res_sa.body.decode("utf-8"))
-+    assert data_sa["workspace_role"] == "SERVER_ADMIN"
-+    assert "ADMIN_AUTH_STUDIO" in data_sa["workspace_capabilities"]
-+
-+    # 2. Fallback with is_workspace_admin duck typing
-+    p_ws_admin = type(
-+        "MockWsAdminPrincipal",
-+        (),
-+        {
-+            "principal_id": uuid.uuid4(),
-+            "workspace_id": uuid.uuid4(),
-+            "token_scopes": ("user",),
-+            "aal_level": 1,
-+            "is_server_admin": False,
-+            "is_workspace_admin": True,
-+            "workspace_role": "WORKSPACE_ADMIN",
-+            "session_id": None,
-+            "agent_principal_id": None,
-+            "ephemeral_project_id": None,
-+            "read_only": False,
-+            "mfa_pending": False,
-+            "aal2_verified_at": None,
-+            "aal2_last_active_at": None,
-+            "aal2_expires_at": None,
-+            "scope_tier": None,
-+            "scoped_project_id": None,
-+            "user_access_hash": None,
-+            "principal_type": None,
-+            "is_mcp_credential": False,
-+        },
-+    )()
-+    res_wa = await build_me_response(mock_req, p_ws_admin)
-+    data_wa = json.loads(res_wa.body.decode("utf-8"))
-+    assert data_wa["workspace_role"] == "WORKSPACE_ADMIN"
-+
-+    # 3. Fallback with guest role duck typing
-+    p_guest = type(
-+        "MockGuestPrincipal",
-+        (),
-+        {
-+            "principal_id": uuid.uuid4(),
-+            "workspace_id": uuid.uuid4(),
-+            "token_scopes": ("user",),
-+            "aal_level": 1,
-+            "is_server_admin": False,
-+            "is_workspace_admin": False,
-+            "workspace_role": "WORKSPACE_GUEST",
-+            "session_id": None,
-+            "agent_principal_id": None,
-+            "ephemeral_project_id": None,
-+            "read_only": False,
-+            "mfa_pending": False,
-+            "aal2_verified_at": None,
-+            "aal2_last_active_at": None,
-+            "aal2_expires_at": None,
-+            "scope_tier": None,
-+            "scoped_project_id": None,
-+            "user_access_hash": None,
-+            "principal_type": None,
-+            "is_mcp_credential": False,
-+        },
-+    )()
-+    res_guest = await build_me_response(mock_req, p_guest)
-+    data_guest = json.loads(res_guest.body.decode("utf-8"))
-+    assert data_guest["workspace_role"] == "WORKSPACE_GUEST"
-+    assert data_guest["workspace_capabilities"] == []
-+
-+    # 4. AAL2 with verified_at / last_active_at sliding window
-+    now = datetime.now(UTC)
-+    p_aal2_sliding = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=2,
-+        aal2_verified_at=now,
-+        aal2_last_active_at=now,
-+    )
-+    res_sliding = await build_me_response(mock_req, p_aal2_sliding)
-+    data_sliding = json.loads(res_sliding.body.decode("utf-8"))
-+    assert data_sliding["aal2_active"] is True
-+    assert data_sliding["aal2_expires_at"] is not None
-+
-+    # 5. AAL2 with expired aal2_expires_at
-+    past = now - timedelta(hours=1)
-+    p_aal2_expired = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=2,
-+        aal2_expires_at=past,
-+    )
-+    res_exp = await build_me_response(mock_req, p_aal2_expired)
-+    data_exp = json.loads(res_exp.body.decode("utf-8"))
-+    assert data_exp["aal2_active"] is False
-+
-+
-+async def test_avatar_parsing_and_processing_error_branches() -> None:
-+    """Verify avatar parser and processor handle multipart bodies, oversize, and errors."""
-+    import email.message
-+    from starlette.requests import Request
-+    from kanban.api.deps import PrincipalContext
-+    from kanban.api.v1.user_settings import (
-+        _parse_avatar_upload,
-+        _process_and_store_avatar,
-+        MAX_AVATAR_BYTES,
-+    )
-+    from kanban.api.problems import ProblemException
-+
-+    # 1. Parse multipart email payload
-+    msg = email.message.EmailMessage()
-+    msg["Content-Type"] = "multipart/form-data; boundary=boundary123"
-+    part = email.message.EmailMessage()
-+    part.set_content(b"fake image bytes", maintype="image", subtype="png")
-+    part.add_header("Content-Disposition", "form-data", name="avatar", filename="custom.png")
-+    msg.attach(part)
-+    msg_bytes = msg.as_bytes()
-+
-+    scope = {
-+        "type": "http",
-+        "app": None,
-+        "headers": [(b"content-type", b"multipart/form-data; boundary=boundary123")],
-+    }
-+    req = Request(scope)
-+    fn, ct, payload = _parse_avatar_upload(req, msg_bytes)
-+    assert fn == "custom.png"
-+    assert payload == b"fake image bytes"
-+
-+    # 2. _process_and_store_avatar: oversized payload
-+    p = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=1,
-+    )
-+    with pytest.raises(ProblemException) as exc_large:
-+        await _process_and_store_avatar(
-+            request=req,
-+            principal=p,
-+            filename="large.png",
-+            declared_ct="image/png",
-+            raw_bytes=b"x" * (MAX_AVATAR_BYTES + 1),
-+        )
-+    assert exc_large.value.code == "PAYLOAD_TOO_LARGE"
-+
-+    # 3. _process_and_store_avatar: empty payload
-+    with pytest.raises(ProblemException) as exc_empty:
-+        await _process_and_store_avatar(
-+            request=req,
-+            principal=p,
-+            filename="empty.png",
-+            declared_ct="image/png",
-+            raw_bytes=b"",
-+        )
-+    assert exc_empty.value.code == "EMPTY_PAYLOAD"
-+
-+
-+async def test_user_personal_settings_change_password_lifecycle(
-+    api_env: ApiEnv,
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """Test POST /api/v1/auth/me/password endpoint end-to-end for user without prior credentials."""
-+    pepper_bytes = b"p" * 32
-+    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
-+    user = await make_user("pw_change_user_403")
-+    await api_env.seed.commit()
-+    current_session_id = uuid.uuid4()
-+    client = as_principal(user)
-+    assert api_env.resolver.principal is not None
-+    api_env.resolver.principal = dataclasses.replace(
-+        api_env.resolver.principal, session_id=current_session_id
-+    )
-+
-+    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
-+    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
-+    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
-+
-+    # 1. Password too short (< 10 chars) returns 422
-+    res_short = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={"new_password": "short"},
-+        headers=auth_headers,
-+    )
-+    assert res_short.status_code == 422
-+    assert res_short.json()["code"] == "PASSWORD_TOO_SHORT"
-+
-+    # 2. User initially has no local credentials: create local password successfully
-+    res_create = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={"new_password": "MyNewSecurePassword123!"},
-+        headers=auth_headers,
-+    )
-+    assert res_create.status_code == 200
-+    assert res_create.json()["success"] is True
-+
-+    # 3. Identical password returns 422 PASSWORD_UNCHANGED
-+    res_same = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={
-+            "current_password": "MyNewSecurePassword123!",
-+            "new_password": "MyNewSecurePassword123!",
-+        },
-+        headers=auth_headers,
-+    )
-+    assert res_same.status_code == 422
-+    assert res_same.json()["code"] == "PASSWORD_UNCHANGED"
-+
-+    # 4. Missing current_password when local password exists returns 422 CURRENT_PASSWORD_REQUIRED
-+    res_missing_curr = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={"new_password": "BrandNewPassword456!"},
-+        headers=auth_headers,
-+    )
-+    assert res_missing_curr.status_code == 422
-+    assert res_missing_curr.json()["code"] == "CURRENT_PASSWORD_REQUIRED"
-+
-+    # 5. Invalid current_password returns 401 INVALID_CREDENTIALS
-+    res_wrong_curr = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={
-+            "current_password": "WrongPassword999!",
-+            "new_password": "BrandNewPassword456!",
-+        },
-+        headers=auth_headers,
-+    )
-+    assert res_wrong_curr.status_code == 401
-+    assert res_wrong_curr.json()["code"] == "INVALID_CREDENTIALS"
-+
-+    # 6. Valid change with correct current_password succeeds
-+    res_ok = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={
-+            "current_password": "MyNewSecurePassword123!",
-+            "new_password": "BrandNewPassword456!",
-+        },
-+        headers=auth_headers,
-+    )
-+    assert res_ok.status_code == 200
-+    assert res_ok.json()["success"] is True
-+
-+
-+async def test_user_personal_settings_roles_in_me(
-+    api_env: ApiEnv,
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+) -> None:
-+    """Test GET /api/v1/auth/me for WORKSPACE_ADMIN and WORKSPACE_GUEST."""
-+    u_admin = await make_user("ws_admin_user", workspace_role="WORKSPACE_ADMIN")
-+    await api_env.seed.commit()
-+    c_admin = as_principal(u_admin)
-+    res_admin = await c_admin.get("/api/v1/auth/me")
-+    assert res_admin.status_code == 200
-+    assert res_admin.json()["workspace_role"] == "WORKSPACE_ADMIN"
-+
-+    u_guest = await make_user("ws_guest_user", workspace_role="WORKSPACE_GUEST")
-+    await api_env.seed.commit()
-+    c_guest = as_principal(u_guest)
-+    res_guest = await c_guest.get("/api/v1/auth/me")
-+    assert res_guest.status_code == 200
-+    assert res_guest.json()["workspace_role"] == "WORKSPACE_GUEST"
-+
-+
-+async def test_session_factory_none_runtime_errors() -> None:
-+    """Verify endpoints raise RuntimeError when session_factory is missing."""
-+    from starlette.requests import Request
-+    from kanban.api.deps import PrincipalContext
-+    from kanban.api.v1.user_settings import (
-+        delete_avatar,
-+        get_user_avatar,
-+        change_password,
-+        ChangePasswordRequest,
-+    )
-+
-+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
-+    mock_scope = {"type": "http", "app": mock_app, "headers": []}
-+    mock_req = Request(mock_scope)
-+    mock_principal = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=1,
-+    )
-+
-+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
-+        await delete_avatar(request=mock_req, principal=mock_principal)
-+
-+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
-+        await get_user_avatar(principal_id=uuid.uuid4(), request=mock_req)
-+
-+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
-+        await change_password(
-+            body=ChangePasswordRequest(new_password="ValidNewPassword123!"),
-+            request=mock_req,
-+            principal=mock_principal,
-+        )
-+
-+    from kanban.api.v1.user_settings import update_profile, UpdateProfileRequest, _process_and_store_avatar
-+
-+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
-+        await update_profile(
-+            body=UpdateProfileRequest(display_name="Test"),
-+            request=mock_req,
-+            principal=mock_principal,
-+        )
-+
-+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
-+        await _process_and_store_avatar(
-+            request=mock_req,
-+            principal=mock_principal,
-+            filename="test.png",
-+            declared_ct="image/png",
-+            raw_bytes=_create_sample_png_bytes(16, 16),
-+        )
-+
-+    with pytest.raises(ProblemException) as exc_unsupported:
-+        await _process_and_store_avatar(
-+            request=mock_req,
-+            principal=mock_principal,
-+            filename="unknown.xyz",
-+            declared_ct="application/octet-stream",
-+            raw_bytes=b"not an image at all",
-+        )
-+    assert exc_unsupported.value.code == "MIME_MISMATCH_OR_UNSUPPORTED"
-+
-+
-+async def test_multipart_avatar_parsing_and_oversize_upload() -> None:
-+    """Verify multipart email parsing and stream overflow check in upload_avatar."""
-+    from starlette.requests import Request
-+    from kanban.api.deps import PrincipalContext
-+    from kanban.api.v1.user_settings import _parse_avatar_upload, upload_avatar
-+    from kanban.api.problems import ProblemException
-+
-+    # 1. Real multipart body with boundary
-+    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-+    raw_multipart = (
-+        f"--{boundary}\r\n"
-+        f'Content-Disposition: form-data; name="avatar"; filename="test_pic.png"\r\n'
-+        f"Content-Type: image/png\r\n\r\n"
-+        f"test-image-content\r\n"
-+        f"--{boundary}--\r\n"
-+    ).encode("utf-8")
-+
-+    scope = {
-+        "type": "http",
-+        "app": None,
-+        "headers": [(b"content-type", f"multipart/form-data; boundary={boundary}".encode("latin-1"))],
-+    }
-+    req = Request(scope)
-+    fn, ct, payload = _parse_avatar_upload(req, raw_multipart)
-+    assert fn == "test_pic.png"
-+    assert ct == "image/png"
-+    assert payload == b"test-image-content"
-+
-+    # 2. upload_avatar stream chunk size check (> MAX_AVATAR_BYTES + 65536)
-+    p = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=1,
-+    )
-+    async def mock_receive():
-+        return {"type": "http.request", "body": b"X" * (2 * 1024 * 1024 + 70000), "more_body": False}
-+
-+    oversize_req = Request({"type": "http", "app": None, "headers": []}, receive=mock_receive)
-+    with pytest.raises(ProblemException) as exc_large:
-+        await upload_avatar(request=oversize_req, principal=p)
-+    assert exc_large.value.code == "PAYLOAD_TOO_LARGE"
-+
-+
-+async def test_change_password_short_display_name(
-+    api_env: ApiEnv,
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """Verify change_password falls back to user-<hex> when clean display_name is < 3 chars."""
-+    pepper_bytes = b"p" * 32
-+    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
-+    user = await make_user("x")
-+    await api_env.seed.commit()
-+    current_session_id = uuid.uuid4()
-+    client = as_principal(user)
-+    assert api_env.resolver.principal is not None
-+    api_env.resolver.principal = dataclasses.replace(
-+        api_env.resolver.principal, session_id=current_session_id
-+    )
-+
-+    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
-+    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
-+    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
-+
-+    res = await client.post(
-+        "/api/v1/auth/me/password",
-+        json={"new_password": "ShortNameUserPass123!"},
-+        headers=auth_headers,
-+    )
-+    assert res.status_code == 200
-+
-+
-+async def test_build_me_response_aal2_active_and_avatar_blob_store() -> None:
-+    """Test build_me_response with active AAL2 and blob store avatar fallback."""
-+    from datetime import datetime, timedelta, UTC
-+    now = datetime.now(UTC)
-+
-+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
-+    req1 = Request({"type": "http", "app": mock_app, "headers": []})
-+
-+    # 1. AAL2 active via aal2_expires_at
-+    p1 = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=2,
-+        aal2_expires_at=now + timedelta(minutes=15),
-+    )
-+    res1 = await build_me_response(req1, p1)
-+    body1 = json.loads(res1.body.decode("utf-8"))
-+    assert body1["aal2_active"] is True
-+    assert body1["aal2_expires_at"] is not None
-+
-+    # 2. AAL2 active via sliding window (aal2_expires_at is None)
-+    p2 = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=2,
-+        aal2_expires_at=None,
-+        aal2_verified_at=now - timedelta(minutes=5),
-+        aal2_last_active_at=now - timedelta(minutes=2),
-+    )
-+    res2 = await build_me_response(req1, p2)
-+    body2 = json.loads(res2.body.decode("utf-8"))
-+    assert body2["aal2_active"] is True
-+    assert body2["aal2_expires_at"] is not None
-+
-+
-+async def test_avatar_sniff_media_type_generic_exception(
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """Verify _process_and_store_avatar wraps unknown sniff exceptions in 415."""
-+    import kanban.api.v1.user_settings as us
-+
-+    def mock_sniff(*args, **kwargs):
-+        raise ValueError("Corrupted image header")
-+
-+    monkeypatch.setattr(us, "sniff_media_type", mock_sniff)
-+    p = PrincipalContext(
-+        principal_id=uuid.uuid4(),
-+        workspace_id=uuid.uuid4(),
-+        token_scopes=("user",),
-+        aal_level=1,
-+    )
-+    req = Request({"type": "http", "app": None, "headers": []})
-+    with pytest.raises(ProblemException) as exc_info:
-+        await us._process_and_store_avatar(
-+            request=req,
-+            principal=p,
-+            filename="bad.png",
-+            declared_ct="image/png",
-+            raw_bytes=b"dummybytes12345",
-+        )
-+    assert exc_info.value.status == 415
-+    assert exc_info.value.code == "UNSUPPORTED_MEDIA_TYPE"
-+
 diff --git a/kanban/tests/test_feature_comparison_parity.py b/kanban/tests/test_feature_comparison_parity.py
 index 2dc3feeb..0245b5cc 100644
 --- a/kanban/tests/test_feature_comparison_parity.py
@@ -1739,7 +1229,7 @@ index 58e9975e..2a43237d 100644
  
            <button
 diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
-index e4f0f42a..1d6b42ed 100644
+index e4f0f42a..bbf7512e 100644
 --- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
 +++ b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
 @@ -15,8 +15,13 @@ vi.mock('../../../editor/mermaid/MermaidBlockView', () => ({
@@ -1756,7 +1246,7 @@ index e4f0f42a..1d6b42ed 100644
  import {
    searchDocs,
    slugifyAnchor,
-@@ -521,6 +526,29 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
+@@ -521,6 +526,31 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
        expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
      });
  
@@ -1779,7 +1269,9 @@ index e4f0f42a..1d6b42ed 100644
 +        expect(copyBtn.textContent).toContain('Copied!');
 +      });
 +      expect(copyToClipboard).toHaveBeenCalled();
-+      const calledPrompt = vi.mocked(copyToClipboard).mock.calls[0]?.[0] as string;
++      const calls = vi.mocked(copyToClipboard).mock.calls;
++      const firstCall = calls[0];
++      const calledPrompt = firstCall ? firstCall[0] : '';
 +      expect(calledPrompt).toContain('strictly to the local project folder');
 +    });
 +
@@ -1788,10 +1280,10 @@ index e4f0f42a..1d6b42ed 100644
          <MemoryRouter initialEntries={['/docs/home']}>
 diff --git a/kanban/web/src/features/settings/AgentOnboardingPromptCard.css b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
 new file mode 100644
-index 00000000..2c552834
+index 00000000..d98645d1
 --- /dev/null
 +++ b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,207 @@
 +/* Copyright 2026 Kanban Platform Contributors */
 +/* Apache-2.0 License. See LICENSE for details. */
 +
@@ -1972,16 +1464,43 @@ index 00000000..2c552834
 +  border: 1px solid var(--border-danger, #ef4444);
 +  color: var(--danger-fg, #991b1b);
 +}
++
++/* Clean-room screenshot capture unconstrained mode */
++body.kb-screenshot-unconstrained,
++body.kb-screenshot-unconstrained #root,
++body.kb-screenshot-unconstrained .kb-app-shell,
++body.kb-screenshot-unconstrained .kb-main-canvas,
++body.kb-screenshot-unconstrained .kb-canvas,
++body.kb-screenshot-unconstrained .kb-page,
++body.kb-screenshot-unconstrained main,
++body.kb-screenshot-unconstrained .settings-page,
++body.kb-screenshot-unconstrained .personal-settings-page,
++body.kb-screenshot-unconstrained .project-settings-page {
++  height: auto !important;
++  min-height: auto !important;
++  max-height: none !important;
++  overflow: visible !important;
++}
++
++body.kb-screenshot-unconstrained .realtime-status-chip,
++body.kb-screenshot-unconstrained .realtime-live-region,
++body.kb-screenshot-unconstrained .kb-toast,
++body.kb-screenshot-unconstrained [role="alert"],
++body.kb-screenshot-unconstrained [class*="toast"] {
++  display: none !important;
++  visibility: hidden !important;
++  opacity: 0 !important;
++}
 diff --git a/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx b/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
 new file mode 100644
-index 00000000..83b5c2e2
+index 00000000..4a79e458
 --- /dev/null
 +++ b/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,320 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
-+import React, { useState, useEffect, useContext, useMemo, type JSX } from 'react';
++import React, { useState, useContext, useMemo, type JSX } from 'react';
 +import {
 +  useQuery,
 +  useMutation,
@@ -2011,28 +1530,29 @@ index 00000000..83b5c2e2
 +    queryFn: fetchUserPreferences,
 +  });
 +
-+  const [scope, setScope] = useState<'local_only' | 'global_allowed'>('local_only');
-+  const [executionMode, setExecutionMode] = useState<'single_thread' | 'teamwork' | 'swarm'>('swarm');
-+  const [modelStrategy, setModelStrategy] = useState<
-+    'quota_sipping_flash' | 'hybrid' | 'unconstrained_max'
-+  >('quota_sipping_flash');
-+  const [qaRigor, setQaRigor] = useState<'standard' | 'strict_forensic'>('strict_forensic');
-+  const [customNotes, setCustomNotes] = useState<string>('');
++  const [scopeInput, setScopeInput] = useState<'local_only' | 'global_allowed' | null>(null);
++  const [executionModeInput, setExecutionModeInput] = useState<
++    'single_thread' | 'teamwork' | 'swarm' | null
++  >(null);
++  const [modelStrategyInput, setModelStrategyInput] = useState<
++    'quota_sipping_flash' | 'hybrid' | 'unconstrained_max' | null
++  >(null);
++  const [qaRigorInput, setQaRigorInput] = useState<'standard' | 'strict_forensic' | null>(null);
++  const [customNotesInput, setCustomNotesInput] = useState<string | null>(null);
++
++  const scope = scopeInput ?? prefData?.agent_onboarding_prefs.scope ?? 'local_only';
++  const executionMode =
++    executionModeInput ?? prefData?.agent_onboarding_prefs.execution_mode ?? 'swarm';
++  const modelStrategy =
++    modelStrategyInput ??
++    prefData?.agent_onboarding_prefs.model_strategy ??
++    'quota_sipping_flash';
++  const qaRigor = qaRigorInput ?? prefData?.agent_onboarding_prefs.qa_rigor ?? 'strict_forensic';
++  const customNotes = customNotesInput ?? prefData?.agent_onboarding_prefs.custom_notes ?? '';
 +
 +  const [isCopied, setIsCopied] = useState<boolean>(false);
 +  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 +  const [saveError, setSaveError] = useState<string | null>(null);
-+
-+  useEffect(() => {
-+    if (prefData?.agent_onboarding_prefs) {
-+      const p = prefData.agent_onboarding_prefs;
-+      if (p.scope) setScope(p.scope);
-+      if (p.execution_mode) setExecutionMode(p.execution_mode);
-+      if (p.model_strategy) setModelStrategy(p.model_strategy);
-+      if (p.qa_rigor) setQaRigor(p.qa_rigor);
-+      if (p.custom_notes !== undefined) setCustomNotes(p.custom_notes);
-+    }
-+  }, [prefData]);
 +
 +  const updateMutation = useMutation({
 +    mutationFn: (updated: AgentOnboardingPrefs) =>
@@ -2041,6 +1561,11 @@ index 00000000..83b5c2e2
 +      }),
 +    onSuccess: (data) => {
 +      queryClient.setQueryData(['userPreferences'], data);
++      setScopeInput(null);
++      setExecutionModeInput(null);
++      setModelStrategyInput(null);
++      setQaRigorInput(null);
++      setCustomNotesInput(null);
 +      setSaveSuccess('Preferences saved successfully.');
 +      setSaveError(null);
 +      setTimeout(() => {
@@ -2106,7 +1631,7 @@ index 00000000..83b5c2e2
 +            className="kb-agent-onboarding-select"
 +            value={scope}
 +            onChange={(e) => {
-+              setScope(e.target.value as 'local_only' | 'global_allowed');
++              setScopeInput(e.target.value as 'local_only' | 'global_allowed');
 +            }}
 +          >
 +            <option value="local_only">
@@ -2128,7 +1653,7 @@ index 00000000..83b5c2e2
 +            className="kb-agent-onboarding-select"
 +            value={executionMode}
 +            onChange={(e) => {
-+              setExecutionMode(e.target.value as 'single_thread' | 'teamwork' | 'swarm');
++              setExecutionModeInput(e.target.value as 'single_thread' | 'teamwork' | 'swarm');
 +            }}
 +          >
 +            <option value="swarm">Multi-Agent Swarm (Parallel Worktree Builders) [Recommended]</option>
@@ -2147,7 +1672,7 @@ index 00000000..83b5c2e2
 +            className="kb-agent-onboarding-select"
 +            value={modelStrategy}
 +            onChange={(e) => {
-+              setModelStrategy(
++              setModelStrategyInput(
 +                e.target.value as 'quota_sipping_flash' | 'hybrid' | 'unconstrained_max',
 +              );
 +            }}
@@ -2172,7 +1697,7 @@ index 00000000..83b5c2e2
 +            className="kb-agent-onboarding-select"
 +            value={qaRigor}
 +            onChange={(e) => {
-+              setQaRigor(e.target.value as 'standard' | 'strict_forensic');
++              setQaRigorInput(e.target.value as 'standard' | 'strict_forensic');
 +            }}
 +          >
 +            <option value="strict_forensic">
@@ -2206,7 +1731,7 @@ index 00000000..83b5c2e2
 +            placeholder="e.g. Always generate Playwright screenshots for UI changes, never modify production credentials..."
 +            value={customNotes}
 +            onChange={(e) => {
-+              setCustomNotes(e.target.value);
++              setCustomNotesInput(e.target.value);
 +            }}
 +          />
 +        </div>
@@ -2394,10 +1919,10 @@ index c7d5b9ee..b81df0ad 100644
          {activeTab === 'states' && (
 diff --git a/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
 new file mode 100644
-index 00000000..69897467
+index 00000000..488fe31e
 --- /dev/null
 +++ b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
-@@ -0,0 +1,490 @@
+@@ -0,0 +1,488 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2431,7 +1956,19 @@ index 00000000..69897467
 +        queries: { retry: false },
 +      },
 +    });
-+    vi.clearAllMocks();
++    vi.resetAllMocks();
++    vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValue(true);
++    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValue({
++      principal_id: '01a2-test',
++      workspace_id: '01a2-ws',
++      agent_onboarding_prefs: {
++        scope: 'local_only',
++        execution_mode: 'swarm',
++        model_strategy: 'quota_sipping_flash',
++        qa_rigor: 'strict_forensic',
++        custom_notes: '',
++      },
++    });
 +  });
 +
 +  afterEach(() => {
@@ -2446,7 +1983,7 @@ index 00000000..69897467
 +    );
 +  };
 +
-+  it('renders card with default values and local folder persistence', async () => {
++  it('renders card with default values and local folder persistence', () => {
 +    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
 +      principal_id: '01a2-test',
 +      workspace_id: '01a2-ws',
@@ -2464,7 +2001,7 @@ index 00000000..69897467
 +    expect(screen.getByTestId('agent-onboarding-prompt-card')).toBeDefined();
 +    expect(screen.getByRole('heading', { name: /Agent Onboarding Prompt/ })).toBeDefined();
 +
-+    const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
++    const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
 +    expect(scopeSelect.value).toBe('local_only');
 +
 +    const preview = screen.getByTestId('agent-onboarding-prompt-preview');
@@ -2475,7 +2012,7 @@ index 00000000..69897467
 +    expect(screen.queryByTestId('onboarding-scope-warning')).toBeNull();
 +  });
 +
-+  it('renders warning banner and updates prompt when switching to global_allowed', async () => {
++  it('renders warning banner and updates prompt when switching to global_allowed', () => {
 +    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
 +      principal_id: '01a2-test',
 +      workspace_id: '01a2-ws',
@@ -2490,7 +2027,7 @@ index 00000000..69897467
 +
 +    renderCard();
 +
-+    const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
++    const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
 +    fireEvent.change(scopeSelect, { target: { value: 'global_allowed' } });
 +
 +    expect(scopeSelect.value).toBe('global_allowed');
@@ -2500,7 +2037,7 @@ index 00000000..69897467
 +    expect(preview.textContent).toContain('global workstation directories');
 +  });
 +
-+  it('updates form controls and prompt preview when changing options', async () => {
++  it('updates form controls and prompt preview when changing options', () => {
 +    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
 +      principal_id: '01a2-test',
 +      workspace_id: '01a2-ws',
@@ -2520,22 +2057,22 @@ index 00000000..69897467
 +    expect(preview.textContent).toContain('for project KAN-403');
 +
 +    // Change Execution Mode
-+    const execSelect = screen.getByTestId('pref-exec-mode-select') as HTMLSelectElement;
++    const execSelect = screen.getByTestId<HTMLSelectElement>('pref-exec-mode-select');
 +    fireEvent.change(execSelect, { target: { value: 'teamwork' } });
 +    expect(execSelect.value).toBe('teamwork');
 +
 +    // Change Model Strategy
-+    const modelSelect = screen.getByTestId('pref-model-strat-select') as HTMLSelectElement;
++    const modelSelect = screen.getByTestId<HTMLSelectElement>('pref-model-strat-select');
 +    fireEvent.change(modelSelect, { target: { value: 'hybrid' } });
 +    expect(modelSelect.value).toBe('hybrid');
 +
 +    // Change QA Rigor
-+    const qaSelect = screen.getByTestId('pref-qa-rigor-select') as HTMLSelectElement;
++    const qaSelect = screen.getByTestId<HTMLSelectElement>('pref-qa-rigor-select');
 +    fireEvent.change(qaSelect, { target: { value: 'standard' } });
 +    expect(qaSelect.value).toBe('standard');
 +
 +    // Change Custom Notes
-+    const notesInput = screen.getByTestId('pref-custom-notes-input') as HTMLTextAreaElement;
++    const notesInput = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');
 +    fireEvent.change(notesInput, { target: { value: 'Special note for agent.' } });
 +    expect(notesInput.value).toBe('Special note for agent.');
 +    expect(preview.textContent).toContain('Notes: Special note for agent.');
@@ -2595,7 +2132,7 @@ index 00000000..69897467
 +
 +    renderCard();
 +
-+    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
++    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
 +    await waitFor(() => {
 +      expect(saveBtn.disabled).toBe(false);
 +    });
@@ -2639,7 +2176,7 @@ index 00000000..69897467
 +
 +    renderCard();
 +
-+    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
++    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
 +    await waitFor(() => {
 +      expect(saveBtn.disabled).toBe(false);
 +    });
@@ -2669,7 +2206,7 @@ index 00000000..69897467
 +
 +    renderCard();
 +
-+    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
++    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
 +    await waitFor(() => {
 +      expect(saveBtn.disabled).toBe(false);
 +    });
@@ -2683,141 +2220,125 @@ index 00000000..69897467
 +  });
 +
 +  it('clears save success message after timeout', async () => {
-+    let timerCallback: (() => void) | null = null;
-+    const originalSetTimeout = globalThis.setTimeout;
-+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: any, ms?: number, ...args: any[]) => {
-+      if (ms === 3000) {
-+        timerCallback = fn;
-+        return 999 as any;
-+      }
-+      return originalSetTimeout(fn, ms, ...args);
++    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
++      principal_id: '01a2-test',
++      workspace_id: '01a2-ws',
++      agent_onboarding_prefs: {
++        scope: 'local_only',
++        execution_mode: 'swarm',
++        model_strategy: 'quota_sipping_flash',
++        qa_rigor: 'strict_forensic',
++        custom_notes: '',
++      },
 +    });
 +
++    vi.mocked(personalSettingsApi.updateUserPreferences).mockResolvedValueOnce({
++      principal_id: '01a2-test',
++      workspace_id: '01a2-ws',
++      agent_onboarding_prefs: {
++        scope: 'local_only',
++        execution_mode: 'swarm',
++        model_strategy: 'quota_sipping_flash',
++        qa_rigor: 'strict_forensic',
++        custom_notes: '',
++      },
++    });
++
++    renderCard();
++
++    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
++    await waitFor(() => {
++      expect(saveBtn.disabled).toBe(false);
++    });
++
++    vi.useFakeTimers();
 +    try {
-+      vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
-+        principal_id: '01a2-test',
-+        workspace_id: '01a2-ws',
-+        agent_onboarding_prefs: {
-+          scope: 'local_only',
-+          execution_mode: 'swarm',
-+          model_strategy: 'quota_sipping_flash',
-+          qa_rigor: 'strict_forensic',
-+          custom_notes: '',
-+        },
-+      });
-+
-+      vi.mocked(personalSettingsApi.updateUserPreferences).mockResolvedValueOnce({
-+        principal_id: '01a2-test',
-+        workspace_id: '01a2-ws',
-+        agent_onboarding_prefs: {
-+          scope: 'local_only',
-+          execution_mode: 'swarm',
-+          model_strategy: 'quota_sipping_flash',
-+          qa_rigor: 'strict_forensic',
-+          custom_notes: '',
-+        },
-+      });
-+
-+      renderCard();
-+
-+      const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn');
-+      await waitFor(() => {
-+        expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
-+      });
-+
-+      fireEvent.click(saveBtn);
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
-+      });
-+
-+      expect(timerCallback).not.toBeNull();
 +      act(() => {
-+        timerCallback!();
++        fireEvent.click(saveBtn);
++      });
++
++      expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
++
++      act(() => {
++        vi.advanceTimersByTime(3000);
 +      });
 +
 +      expect(screen.queryByTestId('onboarding-save-success')).toBeNull();
 +    } finally {
-+      timeoutSpy.mockRestore();
++      vi.useRealTimers();
 +    }
 +  });
 +
-+  it('resets copied state after timeout and handles copy failure', async () => {
-+    let copyTimerCallback: (() => void) | null = null;
-+    const originalSetTimeout = globalThis.setTimeout;
-+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: any, ms?: number, ...args: any[]) => {
-+      if (ms === 2000) {
-+        copyTimerCallback = fn;
-+        return 888 as any;
-+      }
-+      return originalSetTimeout(fn, ms, ...args);
++  it('resets copied state after timeout and handles copy failure', () => {
++    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
++      principal_id: '01a2-test',
++      workspace_id: '01a2-ws',
++      agent_onboarding_prefs: {
++        scope: 'local_only',
++        execution_mode: 'swarm',
++        model_strategy: 'quota_sipping_flash',
++        qa_rigor: 'strict_forensic',
++        custom_notes: '',
++      },
 +    });
 +
++    renderCard();
++
++    const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
++    expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
++
++    vi.useFakeTimers();
 +    try {
-+      vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
-+        principal_id: '01a2-test',
-+        workspace_id: '01a2-ws',
-+        agent_onboarding_prefs: {
-+          scope: 'local_only',
-+          execution_mode: 'swarm',
-+          model_strategy: 'quota_sipping_flash',
-+          qa_rigor: 'strict_forensic',
-+          custom_notes: '',
-+        },
-+      });
-+
-+      renderCard();
-+
-+      const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
-+
-+      // Test successful copy with reset timeout
-+      fireEvent.click(copyBtn);
-+      await waitFor(() => {
-+        expect(copyBtn.textContent).toContain('Copied Prompt!');
-+      });
-+
-+      expect(copyTimerCallback).not.toBeNull();
 +      act(() => {
-+        copyTimerCallback!();
++        fireEvent.click(copyBtn);
++      });
++
++      expect(copyBtn.textContent).toContain('Copied Prompt!');
++
++      act(() => {
++        vi.advanceTimersByTime(2000);
 +      });
 +
 +      expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
 +
-+      // Test failed copy (when copyToClipboard returns false)
++      // Test copy failure (returns false)
 +      vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValueOnce(false);
-+      fireEvent.click(copyBtn);
-+
-+      await waitFor(() => {
-+        expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
++      act(() => {
++        fireEvent.click(copyBtn);
 +      });
++
++      expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
 +    } finally {
-+      timeoutSpy.mockRestore();
++      vi.useRealTimers();
 +    }
 +  });
 +
-+  it('handles partial prefData gracefully', async () => {
++  it('handles custom notes gracefully when empty', async () => {
 +    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
 +      principal_id: '01a2-test',
 +      workspace_id: '01a2-ws',
 +      agent_onboarding_prefs: {
 +        scope: 'global_allowed',
-+        // custom_notes, execution_mode, etc. undefined
-+      } as any,
++        execution_mode: 'swarm',
++        model_strategy: 'quota_sipping_flash',
++        qa_rigor: 'strict_forensic',
++        custom_notes: '',
++      },
 +    });
 +
 +    renderCard();
 +
 +    await waitFor(() => {
-+      const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
 +      expect(scopeSelect.value).toBe('global_allowed');
-+      const notes = screen.getByTestId('pref-custom-notes-input') as HTMLTextAreaElement;
++      const notes = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');
 +      expect(notes.value).toBe('');
 +    });
 +  });
 +
 +  it('shows saving indicator while mutation is pending', async () => {
-+    let resolveMutation: ((val: any) => void) | null = null;
-+    const mutationPromise = new Promise((resolve) => {
++    let resolveMutation: ((val: personalSettingsApi.UserPreferencesResponse) => void) | null = null;
++    const mutationPromise = new Promise<personalSettingsApi.UserPreferencesResponse>((resolve) => {
 +      resolveMutation = resolve;
 +    });
 +
@@ -2834,12 +2355,12 @@ index 00000000..69897467
 +    });
 +
 +    vi.mocked(personalSettingsApi.updateUserPreferences).mockImplementationOnce(
-+      () => mutationPromise as any,
++      () => mutationPromise,
 +    );
 +
 +    renderCard();
 +
-+    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
++    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
 +    await waitFor(() => {
 +      expect(saveBtn.disabled).toBe(false);
 +    });
@@ -2872,18 +2393,20 @@ index 00000000..69897467
 +    });
 +  });
 +
-+  it('handles empty prefData response gracefully', async () => {
-+    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce(null as any);
++  it('handles error in fetchUserPreferences gracefully', async () => {
++    vi.mocked(personalSettingsApi.fetchUserPreferences).mockRejectedValueOnce(
++      new Error('Failed to load preferences'),
++    );
 +
 +    renderCard();
 +
 +    await waitFor(() => {
-+      const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
 +      expect(scopeSelect.value).toBe('local_only');
 +    });
 +  });
 +
-+  it('renders and self-heals with fallback QueryClientProvider when mounted outside provider', async () => {
++  it('renders and self-heals with fallback QueryClientProvider when mounted outside provider', () => {
 +    render(<AgentOnboardingPromptCard />);
 +    expect(screen.getByTestId('agent-onboarding-prompt-card')).toBeDefined();
 +  });
@@ -3004,11 +2527,82 @@ index 00000000..8e9dabe3
 +
 +  return prompt;
 +}
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.test.ts b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+index f764c268..03b2d5e6 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.test.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+@@ -25,6 +25,8 @@ import {
+   startLinkIdentity,
+   linkLdapIdentity,
+   unlinkIdentity,
++  fetchUserPreferences,
++  updateUserPreferences,
+ } from './personalSettingsApi';
+ 
+ describe('personalSettingsApi', () => {
+@@ -343,4 +345,57 @@ describe('personalSettingsApi', () => {
+       params: { identity_id: 'ident-99' },
+     });
+   });
++
++  it('fetchUserPreferences invokes GET /api/v1/users/me/preferences and falls back cleanly', async () => {
++    const mockPrefs = {
++      principal_id: 'p-1',
++      workspace_id: 'ws-1',
++      agent_onboarding_prefs: {
++        scope: 'local_only' as const,
++        execution_mode: 'swarm' as const,
++        model_strategy: 'quota_sipping_flash' as const,
++        qa_rigor: 'strict_forensic' as const,
++        custom_notes: 'Local preference note',
++      },
++    };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockPrefs);
++
++    const res = await fetchUserPreferences();
++    expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/users/me/preferences');
++    expect(res).toEqual(mockPrefs);
++
++    // Fallback when server returns null/undefined
++    apiFetchSpy.mockResolvedValue(null);
++    const fallbackRes = await fetchUserPreferences();
++    expect(fallbackRes.agent_onboarding_prefs.scope).toBe('local_only');
++    expect(fallbackRes.agent_onboarding_prefs.execution_mode).toBe('swarm');
++  });
++
++  it('updateUserPreferences invokes PATCH /api/v1/users/me/preferences with json body', async () => {
++    const mockUpdated = {
++      principal_id: 'p-1',
++      workspace_id: 'ws-1',
++      agent_onboarding_prefs: {
++        scope: 'local_only' as const,
++        execution_mode: 'single_thread' as const,
++        model_strategy: 'quota_sipping_flash' as const,
++        qa_rigor: 'strict_forensic' as const,
++        custom_notes: 'Updated note',
++      },
++    };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockUpdated);
++
++    const payload = {
++      agent_onboarding_prefs: {
++        scope: 'local_only' as const,
++        execution_mode: 'single_thread' as const,
++      },
++    };
++    const res = await updateUserPreferences(payload);
++    expect(apiFetchSpy).toHaveBeenCalledWith('PATCH', '/api/v1/users/me/preferences', {
++      body: JSON.stringify(payload),
++      headers: { 'Content-Type': 'application/json' },
++    });
++    expect(res).toEqual(mockUpdated);
++  });
+ });
 diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
-index 33079ff5..2148a6b3 100644
+index 33079ff5..5764ad0d 100644
 --- a/kanban/web/src/features/settings/personalSettingsApi.ts
 +++ b/kanban/web/src/features/settings/personalSettingsApi.ts
-@@ -259,3 +259,52 @@ export async function unlinkIdentity(identityId: string): Promise<void> {
+@@ -259,3 +259,55 @@ export async function unlinkIdentity(identityId: string): Promise<void> {
      params: { identity_id: identityId },
    });
  }
@@ -3037,7 +2631,10 @@ index 33079ff5..2148a6b3 100644
 +}
 +
 +export async function fetchUserPreferences(): Promise<UserPreferencesResponse> {
-+  const result = (await apiFetch('GET', '/api/v1/users/me/preferences' as never)) as UserPreferencesResponse;
++  const result = (await apiFetch('GET', '/api/v1/users/me/preferences' as never)) as
++    | UserPreferencesResponse
++    | null
++    | undefined;
 +  return (
 +    result ?? {
 +      principal_id: '',
@@ -3063,10 +2660,10 @@ index 33079ff5..2148a6b3 100644
 +}
 diff --git a/scripts/capture_kan403_screenshots.mjs b/scripts/capture_kan403_screenshots.mjs
 new file mode 100644
-index 00000000..5bf4b19b
+index 00000000..88f31aac
 --- /dev/null
 +++ b/scripts/capture_kan403_screenshots.mjs
-@@ -0,0 +1,358 @@
+@@ -0,0 +1,375 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -3323,9 +2920,26 @@ index 00000000..5bf4b19b
 +        localStorage.setItem('theme', theme);
 +      }, colorScheme);
 +      await page.waitForSelector(selector, { timeout: 15000 });
-+      const el = page.locator(selector);
-+      await el.scrollIntoViewIfNeeded();
++      await page.waitForSelector('[data-testid="copy-agent-onboarding-prompt-btn"]', { timeout: 10000 });
++      await page.waitForSelector('[data-testid="save-agent-onboarding-prefs-btn"]', { timeout: 10000 });
++
++      // Clean viewport assertions, dismiss transient fallback toast and realtime chips, and unconstrain 100vh containers for fullPage screenshot via CSP-safe class
++      await page.evaluate(() => {
++        document.body.classList.add('kb-screenshot-unconstrained');
++
++        // Check horizontal bounding box
++        const card = document.querySelector('[data-testid="agent-onboarding-prompt-card"]');
++        if (card && card.scrollWidth > card.clientWidth + 5) {
++          console.warn(`Card horizontal overflow detected: scrollWidth=${card.scrollWidth}, clientWidth=${card.clientWidth}`);
++        }
++      });
++
++      const copyBtn = page.locator('[data-testid="copy-agent-onboarding-prompt-btn"]');
++      const saveBtn = page.locator('[data-testid="save-agent-onboarding-prefs-btn"]');
++      await copyBtn.scrollIntoViewIfNeeded();
++      await saveBtn.scrollIntoViewIfNeeded();
 +      await page.waitForTimeout(500);
++
 +      await page.screenshot({
 +        path: path.join(OUT_DIR, filename),
 +        fullPage: true,

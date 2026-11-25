@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useContext, useMemo, type JSX } from 'react';
+import React, { useState, useContext, useMemo, type JSX } from 'react';
 import {
   useQuery,
   useMutation,
@@ -31,28 +31,29 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
     queryFn: fetchUserPreferences,
   });
 
-  const [scope, setScope] = useState<'local_only' | 'global_allowed'>('local_only');
-  const [executionMode, setExecutionMode] = useState<'single_thread' | 'teamwork' | 'swarm'>('swarm');
-  const [modelStrategy, setModelStrategy] = useState<
-    'quota_sipping_flash' | 'hybrid' | 'unconstrained_max'
-  >('quota_sipping_flash');
-  const [qaRigor, setQaRigor] = useState<'standard' | 'strict_forensic'>('strict_forensic');
-  const [customNotes, setCustomNotes] = useState<string>('');
+  const [scopeInput, setScopeInput] = useState<'local_only' | 'global_allowed' | null>(null);
+  const [executionModeInput, setExecutionModeInput] = useState<
+    'single_thread' | 'teamwork' | 'swarm' | null
+  >(null);
+  const [modelStrategyInput, setModelStrategyInput] = useState<
+    'quota_sipping_flash' | 'hybrid' | 'unconstrained_max' | null
+  >(null);
+  const [qaRigorInput, setQaRigorInput] = useState<'standard' | 'strict_forensic' | null>(null);
+  const [customNotesInput, setCustomNotesInput] = useState<string | null>(null);
+
+  const scope = scopeInput ?? prefData?.agent_onboarding_prefs.scope ?? 'local_only';
+  const executionMode =
+    executionModeInput ?? prefData?.agent_onboarding_prefs.execution_mode ?? 'swarm';
+  const modelStrategy =
+    modelStrategyInput ??
+    prefData?.agent_onboarding_prefs.model_strategy ??
+    'quota_sipping_flash';
+  const qaRigor = qaRigorInput ?? prefData?.agent_onboarding_prefs.qa_rigor ?? 'strict_forensic';
+  const customNotes = customNotesInput ?? prefData?.agent_onboarding_prefs.custom_notes ?? '';
 
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (prefData?.agent_onboarding_prefs) {
-      const p = prefData.agent_onboarding_prefs;
-      if (p.scope) setScope(p.scope);
-      if (p.execution_mode) setExecutionMode(p.execution_mode);
-      if (p.model_strategy) setModelStrategy(p.model_strategy);
-      if (p.qa_rigor) setQaRigor(p.qa_rigor);
-      if (p.custom_notes !== undefined) setCustomNotes(p.custom_notes);
-    }
-  }, [prefData]);
 
   const updateMutation = useMutation({
     mutationFn: (updated: AgentOnboardingPrefs) =>
@@ -61,6 +62,11 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['userPreferences'], data);
+      setScopeInput(null);
+      setExecutionModeInput(null);
+      setModelStrategyInput(null);
+      setQaRigorInput(null);
+      setCustomNotesInput(null);
       setSaveSuccess('Preferences saved successfully.');
       setSaveError(null);
       setTimeout(() => {
@@ -126,7 +132,7 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
             className="kb-agent-onboarding-select"
             value={scope}
             onChange={(e) => {
-              setScope(e.target.value as 'local_only' | 'global_allowed');
+              setScopeInput(e.target.value as 'local_only' | 'global_allowed');
             }}
           >
             <option value="local_only">
@@ -148,7 +154,7 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
             className="kb-agent-onboarding-select"
             value={executionMode}
             onChange={(e) => {
-              setExecutionMode(e.target.value as 'single_thread' | 'teamwork' | 'swarm');
+              setExecutionModeInput(e.target.value as 'single_thread' | 'teamwork' | 'swarm');
             }}
           >
             <option value="swarm">Multi-Agent Swarm (Parallel Worktree Builders) [Recommended]</option>
@@ -167,7 +173,7 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
             className="kb-agent-onboarding-select"
             value={modelStrategy}
             onChange={(e) => {
-              setModelStrategy(
+              setModelStrategyInput(
                 e.target.value as 'quota_sipping_flash' | 'hybrid' | 'unconstrained_max',
               );
             }}
@@ -192,7 +198,7 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
             className="kb-agent-onboarding-select"
             value={qaRigor}
             onChange={(e) => {
-              setQaRigor(e.target.value as 'standard' | 'strict_forensic');
+              setQaRigorInput(e.target.value as 'standard' | 'strict_forensic');
             }}
           >
             <option value="strict_forensic">
@@ -226,7 +232,7 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
             placeholder="e.g. Always generate Playwright screenshots for UI changes, never modify production credentials..."
             value={customNotes}
             onChange={(e) => {
-              setCustomNotes(e.target.value);
+              setCustomNotesInput(e.target.value);
             }}
           />
         </div>

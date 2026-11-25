@@ -48,21 +48,25 @@
 
 1. **Unit Test & Coverage Report**:
    - `docs/qa/KAN-403/unit-test-results.txt`
-   - Backend Pytest: 43 passed in 31.59s.
+   - Static Migration Check: `uv run kanban-ctl db check-migrations --static-only` (All 83 migrations valid, single head: `p6_21_agent_onboarding_preferences`).
+   - Backend Pytest: 50 passed tests in 37.36s.
      - `database/models/principals.py`: 100% coverage
      - `kanban/ops/llms_txt.py`: 100% coverage
      - `kanban/api/v1/user_settings.py`: 95% coverage (100% on new preferences endpoints)
      - Total Backend Coverage: 97% across changed modules
-   - Frontend Vitest: 19 passed in 1.55s.
+   - Frontend Vitest: 88 passed tests in 6.21s.
      - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% funcs, 100% lines
-     - `AgentOnboardingPromptCard.tsx`: 100% statements, 97.05% branches, 100% funcs, 100% lines
-     - All affected frontend test suites passing: 74/74 tests passed.
+     - `AgentOnboardingPromptCard.tsx`: 100% statements, 100% branches, 100% funcs, 100% lines
+     - `personalSettingsApi.ts`: 100% statements, 100% branches, 100% funcs, 100% lines
+     - `DocsCenter.test.tsx`: 46 passed tests
+     - 0 stderr warnings, 0 React Query warnings
 2. **Build, Static Migrations & Dashes Verification**:
    - `docs/qa/KAN-403/build-check.txt`
-   - `tsc -b && vite build`: Exit code 0, 765 modules transformed
-   - `uv run kanban-ctl db check-migrations --static-only`: All 83 migrations valid, single head: `p6_21_agent_onboarding_preferences`
+   - Literal verification command: `uv run ruff check kanban/ database/ && python3 scripts/check_no_dashes.py --all && pnpm --dir kanban/web typecheck && pnpm --dir kanban/web lint && pnpm --dir kanban/web build`
+   - Exit code: 0, 765 modules transformed
    - `python3 scripts/check_no_dashes.py --all`: 0 Unicode dashes
 3. **5-Viewport Visual Proof Artifacts** (`docs/qa/KAN-403/screenshots/`):
+   - All 10 screenshots captured with unconstrained height (`kb-screenshot-unconstrained`) and transient toast suppression, confirming both `Copy Agent Onboarding Prompt` and `Save Preferences` buttons are completely visible without truncation across all viewports:
    - `01-personal-settings-desktop-1440x900-light.png`
    - `01-project-settings-desktop-1440x900-light.png`
    - `02-personal-settings-desktop-1440x900-dark.png`

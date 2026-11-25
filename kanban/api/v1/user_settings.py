@@ -799,11 +799,16 @@ async def change_password(  # noqa: C901
     )
 
 
+SURROGATE_MIN = 0xD800
+SURROGATE_MAX = 0xDFFF
+MAX_CUSTOM_NOTES_BYTES = 4096
+
+
 def _validate_custom_notes(notes: str) -> str:
     """Validate UTF-16 surrogates, check byte bound, and strip invisible control characters."""
     for char in notes:
         cp = ord(char)
-        if 0xD800 <= cp <= 0xDFFF:
+        if SURROGATE_MIN <= cp <= SURROGATE_MAX:
             raise ProblemException(
                 code="INVALID_UTF8_SURROGATE",
                 status=422,
@@ -811,14 +816,19 @@ def _validate_custom_notes(notes: str) -> str:
                 detail="custom_notes contains invalid UTF-16 surrogate characters.",
             )
     encoded_len = len(notes.encode("utf-8"))
-    if encoded_len > 4096:
+    if encoded_len > MAX_CUSTOM_NOTES_BYTES:
         raise ProblemException(
             code="PAYLOAD_TOO_LARGE",
             status=422,
             title="Payload Too Large",
-            detail=f"custom_notes UTF-8 byte length {encoded_len} exceeds maximum 4096 bytes.",
+            detail=(
+                f"custom_notes UTF-8 byte length {encoded_len} exceeds maximum "
+                f"{MAX_CUSTOM_NOTES_BYTES} bytes."
+            ),
         )
-    sanitized, _, _ = strip_invisible_and_control_chars(notes, max_input_bytes=4096)
+    sanitized, _, _ = strip_invisible_and_control_chars(
+        notes, max_input_bytes=MAX_CUSTOM_NOTES_BYTES
+    )
     return sanitized
 
 
@@ -877,7 +887,9 @@ class UpdateUserPreferencesRequest(BaseModel):
     "/users/me/preferences",
     response_model=UserPreferencesResponse,
     summary="Get Current User Preferences",
-    description="Retrieve per-user preferences including agent onboarding configuration under FORCE RLS.",
+    description=(
+        "Retrieve per-user preferences including agent onboarding configuration under FORCE RLS."
+    ),
 )
 async def get_user_preferences(
     request: Request,
@@ -906,10 +918,13 @@ async def get_user_preferences(
             if isinstance(raw_prefs, dict):
                 prefs_dict = raw_prefs
 
+    active_prefs = (
+        AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs()
+    )
     return UserPreferencesResponse(
         principal_id=str(principal.principal_id),
         workspace_id=str(principal.workspace_id),
-        agent_onboarding_prefs=AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs(),
+        agent_onboarding_prefs=active_prefs,
     )
 
 
@@ -917,7 +932,9 @@ async def get_user_preferences(
     "/users/me/preferences",
     response_model=UserPreferencesResponse,
     summary="Update Current User Preferences",
-    description="Update per-user preferences including agent onboarding configuration under FORCE RLS.",
+    description=(
+        "Update per-user preferences including agent onboarding configuration under FORCE RLS."
+    ),
 )
 async def update_user_preferences(
     body: UpdateUserPreferencesRequest,
@@ -947,7 +964,11 @@ async def update_user_preferences(
             if isinstance(raw_prefs, dict):
                 current_prefs_dict = raw_prefs
 
-    active_prefs = AgentOnboardingPrefs(**current_prefs_dict) if current_prefs_dict else AgentOnboardingPrefs()
+    active_prefs = (
+        AgentOnboardingPrefs(**current_prefs_dict)
+        if current_prefs_dict
+        else AgentOnboardingPrefs()
+    )
     new_scope = active_prefs.scope
     new_mode = active_prefs.execution_mode
     new_strat = active_prefs.model_strategy

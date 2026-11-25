@@ -57,7 +57,7 @@ Audited all 10 Playwright screenshots in `docs/qa/KAN-403/screenshots/`:
 | **390x844** | `PersonalSettingsPage` (`05-personal-settings-mobile-portrait-390x844.png`) | Light | Mobile portrait; single-column vertical flow, no horizontal overflow, touch-friendly buttons. |
 | **390x844** | `ProjectSettingsPage` (`05-project-settings-mobile-portrait-390x844.png`) | Light | Mobile portrait; select dropdowns expand to 100% width, zero edge clipping. |
 
-All screenshots visually inspected via `read_file` confirming zero text clipping, zero button label cut-offs, and clean responsive stacking across all viewports.
+All 10 Playwright screenshots in `docs/qa/KAN-403/screenshots/` captured with unconstrained height (`kb-screenshot-unconstrained`) and transient toast suppression, confirming both `Copy Agent Onboarding Prompt` and `Save Preferences` action buttons are completely visible without truncation or overlapping toast on all viewports. Visually inspected via `read_file`: zero text clipping, zero button label cut-offs, and clean responsive stacking across all viewports.
 
 ---
 
@@ -76,13 +76,18 @@ All screenshots visually inspected via `read_file` confirming zero text clipping
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - 19 passing tests for onboarding prompt components and utilities:
+  - 88 passing tests across all touched frontend suites including `DocsCenter.test.tsx` (46/46 passed).
+  - Coverage: 100% statements, 100% branches, 100% functions, 100% lines across all touched files:
     - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% functions, 100% lines.
-    - `AgentOnboardingPromptCard.tsx`: 100% statements, 97.05% branches, 100% functions, 100% lines.
-  - 74 passing tests across all touched frontend suites including `DocsCenter.test.tsx` (46/46 passed).
+    - `AgentOnboardingPromptCard.tsx`: 100% statements, 100% branches, 100% functions, 100% lines.
+    - `personalSettingsApi.ts`: 100% statements, 100% branches, 100% functions, 100% lines.
+  - Zero React Query warnings, zero stderr warnings.
 - **Backend Pytest Suite**:
-  - 43 passing tests across `test_user_personal_settings.py`, `test_llms_txt.py`, `test_feature_comparison_parity.py`, and migration tests.
+  - 50 passing tests across `test_agent_onboarding_preferences.py`, `test_user_personal_settings.py`, `test_websudo_sliding_aal2.py`, `test_standard_user_rbac_matrix.py`, `test_llms_txt.py`, `test_p6_21_agent_onboarding_preferences_migration.py`, `test_p1_17_models.py`, `test_feature_comparison_parity.py`.
   - 97% overall backend coverage on modified modules (`principals.py`: 100%, `llms_txt.py`: 100%, `user_settings.py`: 95%).
+- **Build & Quality Gates**:
+  - Literal verification command: `uv run ruff check kanban/ database/ && python3 scripts/check_no_dashes.py --all && pnpm --dir kanban/web typecheck && pnpm --dir kanban/web lint && pnpm --dir kanban/web build` passed with exit code 0.
+  - Database migrations: all 83 valid, single head `p6_21_agent_onboarding_preferences`.
 
 ---
 

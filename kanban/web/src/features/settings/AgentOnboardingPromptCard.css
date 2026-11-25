@@ -178,3 +178,30 @@
   border: 1px solid var(--border-danger, #ef4444);
   color: var(--danger-fg, #991b1b);
 }
+
+/* Clean-room screenshot capture unconstrained mode */
+body.kb-screenshot-unconstrained,
+body.kb-screenshot-unconstrained #root,
+body.kb-screenshot-unconstrained .kb-app-shell,
+body.kb-screenshot-unconstrained .kb-main-canvas,
+body.kb-screenshot-unconstrained .kb-canvas,
+body.kb-screenshot-unconstrained .kb-page,
+body.kb-screenshot-unconstrained main,
+body.kb-screenshot-unconstrained .settings-page,
+body.kb-screenshot-unconstrained .personal-settings-page,
+body.kb-screenshot-unconstrained .project-settings-page {
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+body.kb-screenshot-unconstrained .realtime-status-chip,
+body.kb-screenshot-unconstrained .realtime-live-region,
+body.kb-screenshot-unconstrained .kb-toast,
+body.kb-screenshot-unconstrained [role="alert"],
+body.kb-screenshot-unconstrained [class*="toast"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}

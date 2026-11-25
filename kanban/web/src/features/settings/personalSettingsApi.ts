@@ -284,7 +284,10 @@ export interface UpdateUserPreferencesRequest {
 }
 
 export async function fetchUserPreferences(): Promise<UserPreferencesResponse> {
-  const result = (await apiFetch('GET', '/api/v1/users/me/preferences' as never)) as UserPreferencesResponse;
+  const result = (await apiFetch('GET', '/api/v1/users/me/preferences' as never)) as
+    | UserPreferencesResponse
+    | null
+    | undefined;
   return (
     result ?? {
       principal_id: '',

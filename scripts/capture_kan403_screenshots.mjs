@@ -254,9 +254,26 @@ async function main() {
         localStorage.setItem('theme', theme);
       }, colorScheme);
       await page.waitForSelector(selector, { timeout: 15000 });
-      const el = page.locator(selector);
-      await el.scrollIntoViewIfNeeded();
+      await page.waitForSelector('[data-testid="copy-agent-onboarding-prompt-btn"]', { timeout: 10000 });
+      await page.waitForSelector('[data-testid="save-agent-onboarding-prefs-btn"]', { timeout: 10000 });
+
+      // Clean viewport assertions, dismiss transient fallback toast and realtime chips, and unconstrain 100vh containers for fullPage screenshot via CSP-safe class
+      await page.evaluate(() => {
+        document.body.classList.add('kb-screenshot-unconstrained');
+
+        // Check horizontal bounding box
+        const card = document.querySelector('[data-testid="agent-onboarding-prompt-card"]');
+        if (card && card.scrollWidth > card.clientWidth + 5) {
+          console.warn(`Card horizontal overflow detected: scrollWidth=${card.scrollWidth}, clientWidth=${card.clientWidth}`);
+        }
+      });
+
+      const copyBtn = page.locator('[data-testid="copy-agent-onboarding-prompt-btn"]');
+      const saveBtn = page.locator('[data-testid="save-agent-onboarding-prefs-btn"]');
+      await copyBtn.scrollIntoViewIfNeeded();
+      await saveBtn.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
+
       await page.screenshot({
         path: path.join(OUT_DIR, filename),
         fullPage: true,

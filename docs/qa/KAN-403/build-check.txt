@@ -1,3 +1,13 @@
+All checks passed!
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
+> tsc -b --noEmit
+
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
+> eslint . --max-warnings 0
+
 
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/kanban/web
 > tsc -b && vite build
@@ -9,13 +19,12 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-DIj74Zyw.css            608.65 kB │ gzip:  85.69 kB
-dist/assets/index-B_2bW8yG.js           2,892.61 kB │ gzip: 800.24 kB
+dist/assets/index-RXPAV-xf.css            609.52 kB │ gzip:  85.91 kB
+dist/assets/index-B_xfTz9C.js           2,892.63 kB │ gzip: 800.22 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.30s
-OK: All 83 migrations valid. Single head: p6_21_agent_onboarding_preferences
+✓ built in 1.56s

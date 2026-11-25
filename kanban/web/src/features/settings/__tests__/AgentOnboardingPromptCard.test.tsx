@@ -31,7 +31,19 @@ describe('AgentOnboardingPromptCard component', () => {
         queries: { retry: false },
       },
     });
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValue(true);
+    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValue({
+      principal_id: '01a2-test',
+      workspace_id: '01a2-ws',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
+    });
   });
 
   afterEach(() => {
@@ -46,7 +58,7 @@ describe('AgentOnboardingPromptCard component', () => {
     );
   };
 
-  it('renders card with default values and local folder persistence', async () => {
+  it('renders card with default values and local folder persistence', () => {
     vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
       principal_id: '01a2-test',
       workspace_id: '01a2-ws',
@@ -64,7 +76,7 @@ describe('AgentOnboardingPromptCard component', () => {
     expect(screen.getByTestId('agent-onboarding-prompt-card')).toBeDefined();
     expect(screen.getByRole('heading', { name: /Agent Onboarding Prompt/ })).toBeDefined();
 
-    const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
+    const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
     expect(scopeSelect.value).toBe('local_only');
 
     const preview = screen.getByTestId('agent-onboarding-prompt-preview');
@@ -75,7 +87,7 @@ describe('AgentOnboardingPromptCard component', () => {
     expect(screen.queryByTestId('onboarding-scope-warning')).toBeNull();
   });
 
-  it('renders warning banner and updates prompt when switching to global_allowed', async () => {
+  it('renders warning banner and updates prompt when switching to global_allowed', () => {
     vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
       principal_id: '01a2-test',
       workspace_id: '01a2-ws',
@@ -90,7 +102,7 @@ describe('AgentOnboardingPromptCard component', () => {
 
     renderCard();
 
-    const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
+    const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
     fireEvent.change(scopeSelect, { target: { value: 'global_allowed' } });
 
     expect(scopeSelect.value).toBe('global_allowed');
@@ -100,7 +112,7 @@ describe('AgentOnboardingPromptCard component', () => {
     expect(preview.textContent).toContain('global workstation directories');
   });
 
-  it('updates form controls and prompt preview when changing options', async () => {
+  it('updates form controls and prompt preview when changing options', () => {
     vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
       principal_id: '01a2-test',
       workspace_id: '01a2-ws',
@@ -120,22 +132,22 @@ describe('AgentOnboardingPromptCard component', () => {
     expect(preview.textContent).toContain('for project KAN-403');
 
     // Change Execution Mode
-    const execSelect = screen.getByTestId('pref-exec-mode-select') as HTMLSelectElement;
+    const execSelect = screen.getByTestId<HTMLSelectElement>('pref-exec-mode-select');
     fireEvent.change(execSelect, { target: { value: 'teamwork' } });
     expect(execSelect.value).toBe('teamwork');
 
     // Change Model Strategy
-    const modelSelect = screen.getByTestId('pref-model-strat-select') as HTMLSelectElement;
+    const modelSelect = screen.getByTestId<HTMLSelectElement>('pref-model-strat-select');
     fireEvent.change(modelSelect, { target: { value: 'hybrid' } });
     expect(modelSelect.value).toBe('hybrid');
 
     // Change QA Rigor
-    const qaSelect = screen.getByTestId('pref-qa-rigor-select') as HTMLSelectElement;
+    const qaSelect = screen.getByTestId<HTMLSelectElement>('pref-qa-rigor-select');
     fireEvent.change(qaSelect, { target: { value: 'standard' } });
     expect(qaSelect.value).toBe('standard');
 
     // Change Custom Notes
-    const notesInput = screen.getByTestId('pref-custom-notes-input') as HTMLTextAreaElement;
+    const notesInput = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');
     fireEvent.change(notesInput, { target: { value: 'Special note for agent.' } });
     expect(notesInput.value).toBe('Special note for agent.');
     expect(preview.textContent).toContain('Notes: Special note for agent.');
@@ -195,7 +207,7 @@ describe('AgentOnboardingPromptCard component', () => {
 
     renderCard();
 
-    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
+    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
     await waitFor(() => {
       expect(saveBtn.disabled).toBe(false);
     });
@@ -239,7 +251,7 @@ describe('AgentOnboardingPromptCard component', () => {
 
     renderCard();
 
-    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
+    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
     await waitFor(() => {
       expect(saveBtn.disabled).toBe(false);
     });
@@ -269,7 +281,7 @@ describe('AgentOnboardingPromptCard component', () => {
 
     renderCard();
 
-    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
+    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
     await waitFor(() => {
       expect(saveBtn.disabled).toBe(false);
     });
@@ -283,141 +295,125 @@ describe('AgentOnboardingPromptCard component', () => {
   });
 
   it('clears save success message after timeout', async () => {
-    let timerCallback: (() => void) | null = null;
-    const originalSetTimeout = globalThis.setTimeout;
-    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: any, ms?: number, ...args: any[]) => {
-      if (ms === 3000) {
-        timerCallback = fn;
-        return 999 as any;
-      }
-      return originalSetTimeout(fn, ms, ...args);
+    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
+      principal_id: '01a2-test',
+      workspace_id: '01a2-ws',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
     });
 
+    vi.mocked(personalSettingsApi.updateUserPreferences).mockResolvedValueOnce({
+      principal_id: '01a2-test',
+      workspace_id: '01a2-ws',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
+    });
+
+    renderCard();
+
+    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
+    await waitFor(() => {
+      expect(saveBtn.disabled).toBe(false);
+    });
+
+    vi.useFakeTimers();
     try {
-      vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
-        principal_id: '01a2-test',
-        workspace_id: '01a2-ws',
-        agent_onboarding_prefs: {
-          scope: 'local_only',
-          execution_mode: 'swarm',
-          model_strategy: 'quota_sipping_flash',
-          qa_rigor: 'strict_forensic',
-          custom_notes: '',
-        },
-      });
-
-      vi.mocked(personalSettingsApi.updateUserPreferences).mockResolvedValueOnce({
-        principal_id: '01a2-test',
-        workspace_id: '01a2-ws',
-        agent_onboarding_prefs: {
-          scope: 'local_only',
-          execution_mode: 'swarm',
-          model_strategy: 'quota_sipping_flash',
-          qa_rigor: 'strict_forensic',
-          custom_notes: '',
-        },
-      });
-
-      renderCard();
-
-      const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn');
-      await waitFor(() => {
-        expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
-      });
-
-      fireEvent.click(saveBtn);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
-      });
-
-      expect(timerCallback).not.toBeNull();
       act(() => {
-        timerCallback!();
+        fireEvent.click(saveBtn);
+      });
+
+      expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
       });
 
       expect(screen.queryByTestId('onboarding-save-success')).toBeNull();
     } finally {
-      timeoutSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 
-  it('resets copied state after timeout and handles copy failure', async () => {
-    let copyTimerCallback: (() => void) | null = null;
-    const originalSetTimeout = globalThis.setTimeout;
-    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: any, ms?: number, ...args: any[]) => {
-      if (ms === 2000) {
-        copyTimerCallback = fn;
-        return 888 as any;
-      }
-      return originalSetTimeout(fn, ms, ...args);
+  it('resets copied state after timeout and handles copy failure', () => {
+    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
+      principal_id: '01a2-test',
+      workspace_id: '01a2-ws',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
     });
 
+    renderCard();
+
+    const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
+    expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
+
+    vi.useFakeTimers();
     try {
-      vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
-        principal_id: '01a2-test',
-        workspace_id: '01a2-ws',
-        agent_onboarding_prefs: {
-          scope: 'local_only',
-          execution_mode: 'swarm',
-          model_strategy: 'quota_sipping_flash',
-          qa_rigor: 'strict_forensic',
-          custom_notes: '',
-        },
-      });
-
-      renderCard();
-
-      const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
-
-      // Test successful copy with reset timeout
-      fireEvent.click(copyBtn);
-      await waitFor(() => {
-        expect(copyBtn.textContent).toContain('Copied Prompt!');
-      });
-
-      expect(copyTimerCallback).not.toBeNull();
       act(() => {
-        copyTimerCallback!();
+        fireEvent.click(copyBtn);
+      });
+
+      expect(copyBtn.textContent).toContain('Copied Prompt!');
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
       });
 
       expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
 
-      // Test failed copy (when copyToClipboard returns false)
+      // Test copy failure (returns false)
       vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValueOnce(false);
-      fireEvent.click(copyBtn);
-
-      await waitFor(() => {
-        expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
+      act(() => {
+        fireEvent.click(copyBtn);
       });
+
+      expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
     } finally {
-      timeoutSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 
-  it('handles partial prefData gracefully', async () => {
+  it('handles custom notes gracefully when empty', async () => {
     vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
       principal_id: '01a2-test',
       workspace_id: '01a2-ws',
       agent_onboarding_prefs: {
         scope: 'global_allowed',
-        // custom_notes, execution_mode, etc. undefined
-      } as any,
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
     });
 
     renderCard();
 
     await waitFor(() => {
-      const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
       expect(scopeSelect.value).toBe('global_allowed');
-      const notes = screen.getByTestId('pref-custom-notes-input') as HTMLTextAreaElement;
+      const notes = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');
       expect(notes.value).toBe('');
     });
   });
 
   it('shows saving indicator while mutation is pending', async () => {
-    let resolveMutation: ((val: any) => void) | null = null;
-    const mutationPromise = new Promise((resolve) => {
+    let resolveMutation: ((val: personalSettingsApi.UserPreferencesResponse) => void) | null = null;
+    const mutationPromise = new Promise<personalSettingsApi.UserPreferencesResponse>((resolve) => {
       resolveMutation = resolve;
     });
 
@@ -434,12 +430,12 @@ describe('AgentOnboardingPromptCard component', () => {
     });
 
     vi.mocked(personalSettingsApi.updateUserPreferences).mockImplementationOnce(
-      () => mutationPromise as any,
+      () => mutationPromise,
     );
 
     renderCard();
 
-    const saveBtn = screen.getByTestId('save-agent-onboarding-prefs-btn') as HTMLButtonElement;
+    const saveBtn = screen.getByTestId<HTMLButtonElement>('save-agent-onboarding-prefs-btn');
     await waitFor(() => {
       expect(saveBtn.disabled).toBe(false);
     });
@@ -472,18 +468,20 @@ describe('AgentOnboardingPromptCard component', () => {
     });
   });
 
-  it('handles empty prefData response gracefully', async () => {
-    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce(null as any);
+  it('handles error in fetchUserPreferences gracefully', async () => {
+    vi.mocked(personalSettingsApi.fetchUserPreferences).mockRejectedValueOnce(
+      new Error('Failed to load preferences'),
+    );
 
     renderCard();
 
     await waitFor(() => {
-      const scopeSelect = screen.getByTestId('pref-scope-select') as HTMLSelectElement;
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('pref-scope-select');
       expect(scopeSelect.value).toBe('local_only');
     });
   });
 
-  it('renders and self-heals with fallback QueryClientProvider when mounted outside provider', async () => {
+  it('renders and self-heals with fallback QueryClientProvider when mounted outside provider', () => {
     render(<AgentOnboardingPromptCard />);
     expect(screen.getByTestId('agent-onboarding-prompt-card')).toBeDefined();
   });

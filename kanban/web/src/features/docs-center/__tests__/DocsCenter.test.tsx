@@ -545,7 +545,9 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
         expect(copyBtn.textContent).toContain('Copied!');
       });
       expect(copyToClipboard).toHaveBeenCalled();
-      const calledPrompt = vi.mocked(copyToClipboard).mock.calls[0]?.[0] as string;
+      const calls = vi.mocked(copyToClipboard).mock.calls;
+      const firstCall = calls[0];
+      const calledPrompt = firstCall ? firstCall[0] : '';
       expect(calledPrompt).toContain('strictly to the local project folder');
     });
 

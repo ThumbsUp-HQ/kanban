@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Add agent_onboarding_prefs_json to user_preferences
+"""Add agent_onboarding_prefs_json to user_preferences.
 
 Revision ID: p6_21_agent_onboarding_preferences
 Revises: p6_20_oauth_clients_status_check
