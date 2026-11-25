@@ -1,24 +1,31 @@
-=== KAN-421 Unit Test / Verification Results ===
+=== KAN-421 Unit Test & Path Verification Results ===
 
-1. Unicode Em/En-Dash Verification (check_no_dashes.py):
-Return Code: 0
-Stdout: 
-Stderr: 
+1. Unicode Em/En-Dash Verification:
+Command: python3 scripts/check_no_dashes.py docs/workouts/slice-4-ops-backups-imports/01-audit-and-cuts.md
+Exit Code: 0
 Result: PASS (0 forbidden dashes found)
 
 2. Cited Repository File Paths Existence Verification:
-Return Code: 0
-Verified 10 cited file paths:
+Exit Code: 0
+Verified 18 cited file paths across specification, frontend, backend, schemas, and verification tooling:
+  [EXISTS] docs/workouts/slice-4-ops-backups-imports/01-audit-and-cuts.md
   [EXISTS] docs/ARCHITECTURE_AND_PRODUCT_SPEC.md
   [EXISTS] docs/PROMOTION_AND_BACKUP.md
-  [EXISTS] kanban/api/v1/system_status.py
+  [EXISTS] scripts/check_no_dashes.py
   [EXISTS] kanban/web/src/api/client.ts
   [EXISTS] kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+  [EXISTS] kanban/web/src/features/admin-imports/planeImportApi.ts
+  [EXISTS] kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
+  [EXISTS] kanban/web/src/features/standalone/ComposeExportTab.tsx
   [EXISTS] kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
   [EXISTS] kanban/web/src/features/admin/LinkAuditorStudio.tsx
-  [EXISTS] kanban/web/src/features/standalone/ComposeExportTab.tsx
-  [EXISTS] kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
-  [EXISTS] scripts/check_no_dashes.py
-100% of cited repository file paths exist on disk!
+  [EXISTS] kanban/api/v1/admin/imports.py
+  [EXISTS] kanban/api/v1/admin/exports.py
+  [EXISTS] kanban/api/v1/admin/diagnostics.py
+  [EXISTS] kanban/api/v1/admin/link_auditor.py
+  [EXISTS] kanban/api/v1/system_status.py
+  [EXISTS] kanban/api/v1/system.py
+  [EXISTS] kanban/api/v1/schemas/link_auditor.py
 
-Result: PASS (100% of cited file paths exist)
+Total paths verified: 18 / 18 (100% of cited repository file paths exist on disk)
+Result: PASS

@@ -1,15 +1,23 @@
 === KAN-421 Build & Static Validation Check ===
 
-1. Global check_no_dashes.py --all Verification:
-Return Code: 0
+1. Positional check_no_dashes.py Verification:
+Command: python3 scripts/check_no_dashes.py docs/workouts/slice-4-ops-backups-imports/01-audit-and-cuts.md
+Exit Code: 0
 Stdout: 
-Stderr: Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-s4-p1-1387c7b2/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Stderr: 
+Result: PASS (0 forbidden dashes found in docs/workouts/slice-4-ops-backups-imports/01-audit-and-cuts.md)
 
+2. Global check_no_dashes.py --all Verification:
+Command: python3 scripts/check_no_dashes.py --all
+Exit Code: 0
+Stdout: 
+Stderr: Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-s4-p1-rc1-e9a4ec89/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 Result: PASS (0 violations across entire workspace)
 
-2. Source-Code Mutation Boundary Verification:
+3. Source-Code Mutation Boundary Verification:
+Command: git status --porcelain
+Exit Code: 0
 Changed files according to git status:
+ M docs/workouts/slice-4-ops-backups-imports/01-audit-and-cuts.md
 ?? docs/qa/KAN-421/
-?? docs/workouts/
-
 Result: PASS (Zero source code modifications; strictly documentation and QA artifacts)
