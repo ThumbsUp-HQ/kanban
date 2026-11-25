@@ -983,3 +983,90 @@
   }
 }
 
+/* Provider Presets Toolbar */
+.kb-provider-presets-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2, 8px);
+}
+
+.kb-provider-presets-label {
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  color: var(--kb-color-text-secondary, #6b7280);
+}
+
+.kb-preset-btn {
+  padding: 4px 10px;
+  font-size: var(--text-xs, 12px);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+/* Budget Mode Toggle & Presets */
+.kb-budget-mode-toggle {
+  display: flex;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-4, 16px);
+}
+
+.kb-budget-presets-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-3, 12px);
+}
+
+.kb-budget-presets-label {
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  color: var(--kb-color-text-secondary, #6b7280);
+}
+
+.kb-budget-preset-btn {
+  padding: 4px 8px;
+  font-size: var(--text-xs, 12px);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.kb-budget-preset-btn--freeze {
+  color: var(--danger-fg, #ef4444);
+}
+
+.kb-zero-cap-warning {
+  padding: var(--space-3, 12px);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--bg-danger-subtle, #fef2f2);
+  border: 1px solid var(--border-danger, #f87171);
+  color: var(--danger-fg, #b91c1c);
+  font-size: var(--text-xs, 12px);
+  margin-top: var(--space-2, 8px);
+  line-height: 1.4;
+}
+
+[data-theme='dark'] .kb-zero-cap-warning {
+  background-color: #451a1a;
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.kb-budget-unlimited-note {
+  padding: var(--space-3, 12px);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--kb-color-bg-surface-secondary, #f9fafb);
+  border: 1px solid var(--kb-color-border-subtle, #e5e7eb);
+  font-size: var(--text-sm, 14px);
+  color: var(--kb-color-text-secondary, #4b5563);
+  margin-bottom: var(--space-4, 16px);
+}
+
+[data-theme='dark'] .kb-budget-unlimited-note {
+  background-color: #111827;
+  border-color: #374151;
+  color: #9ca3af;
+}
+

@@ -9,12 +9,12 @@ import { apiFetch } from '../../api/client';
 import './AdminStudioSubnav.css';
 
 export interface AdminStudioSubnavProps {
-  activeTab?: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
+  activeTab?: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
   isServerAdmin?: boolean | undefined;
 }
 
 interface AdminTabDefinition {
-  id: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
+  id: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
   testId: string;
   label: string;
   path: string;
@@ -25,6 +25,7 @@ interface AdminTabDefinition {
 const ADMIN_TABS: AdminTabDefinition[] = [
   { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️', serverOnly: true },
   { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠', serverOnly: true },
+  { id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖', serverOnly: true },
   { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀', serverOnly: true },
   { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑', serverOnly: true },
   { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐', serverOnly: true },

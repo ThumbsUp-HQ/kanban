@@ -209,13 +209,20 @@ function AiProviderEditorContent({
         maxTokensModified
       );
     }
+    const initialModelAllowlist = provider.model_allowlist.join(', ');
     return (
       displayName !== provider.display_name ||
       apiKey.trim() !== '' ||
       baseUrl !== (provider.base_url ?? '') ||
       clearExistingKey ||
       residencyTier !== initialResidency ||
-      providerKind !== provider.provider_kind
+      providerKind !== provider.provider_kind ||
+      modelAllowlist !== initialModelAllowlist ||
+      timeoutMs !== initialTimeoutMs ||
+      temperatureModified ||
+      topPModified ||
+      maxTokensModified ||
+      mtlsCertPem !== initialMtlsCert
     );
   }, [
     provider,
@@ -228,7 +235,9 @@ function AiProviderEditorContent({
     defaultBaseUrl,
     modelAllowlist,
     mtlsCertPem,
+    initialMtlsCert,
     timeoutMs,
+    initialTimeoutMs,
     temperatureModified,
     topPModified,
     maxTokensModified,
@@ -268,6 +277,35 @@ function AiProviderEditorContent({
         if (!residencyTierManual) {
           setResidencyTier('local_only');
         }
+      }
+    }
+  };
+
+  const applyPreset = (kind: 'ollama' | 'openai' | 'gemini'): void => {
+    if (isEditing) return;
+    setError(null);
+    setProviderKind(kind);
+    setProbedModels(null);
+    if (kind === 'ollama') {
+      setDisplayName('Local Ollama Runtime');
+      setBaseUrl('http://127.0.0.1:11434');
+      setModelAllowlist('llama3.2, qwen2.5-coder');
+      if (!residencyTierManual) {
+        setResidencyTier('local_only');
+      }
+    } else if (kind === 'openai') {
+      setDisplayName('OpenAI / OpenAI-Compatible');
+      setBaseUrl('https://api.openai.com/v1');
+      setModelAllowlist('gpt-4o, gpt-4o-mini');
+      if (!residencyTierManual) {
+        setResidencyTier('cloud_standard');
+      }
+    } else {
+      setDisplayName('Google Gemini Workspace');
+      setBaseUrl('https://generativelanguage.googleapis.com');
+      setModelAllowlist('gemini-2.5-pro, gemini-2.5-flash');
+      if (!residencyTierManual) {
+        setResidencyTier('cloud_standard');
       }
     }
   };
@@ -335,7 +373,10 @@ function AiProviderEditorContent({
           setModelAllowlist(res.models.join(', '));
         }
       } else {
-        setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
+        const msg = res.error_code === 'AIR_GAP_EGRESS_DENIED'
+          ? (res.message ?? 'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.')
+          : (res.message ?? res.error_code ?? 'Model probing failed');
+        setProbeError(msg);
       }
     } catch (err: unknown) {
       if (isAal2StepUpCancelled(err)) {
@@ -380,9 +421,12 @@ function AiProviderEditorContent({
           message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
         });
       } else {
+        const msg = res.error_code === 'AIR_GAP_EGRESS_DENIED'
+          ? (res.message ?? 'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.')
+          : `${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`;
         setTestStatus({
           kind: 'error',
-          message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
+          message: `Connection failed: ${msg}`,
         });
       }
     } catch (err: unknown) {
@@ -562,8 +606,12 @@ function AiProviderEditorContent({
             data-testid="provider-kind-select"
           >
             <option value="ollama">Ollama (Local / Zero Egress)</option>
-            <option value="openai">OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM)</option>
-            <option value="gemini">Google Gemini (Cloud)</option>
+            <option value="openai" disabled={airGapMode}>
+              OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM){airGapMode ? ' (Blocked by Air-Gap Policy)' : ''}
+            </option>
+            <option value="gemini" disabled={airGapMode}>
+              Google Gemini (Cloud){airGapMode ? ' (Blocked by Air-Gap Policy)' : ''}
+            </option>
           </select>
           <span className="kb-form-hint">
             {providerKind === 'ollama' &&
@@ -573,6 +621,39 @@ function AiProviderEditorContent({
             {providerKind === 'gemini' &&
               'Google Gemini generative language API.'}
           </span>
+          {!isEditing && (
+            <div className="kb-provider-presets-row" data-testid="provider-presets-row">
+              <span className="kb-provider-presets-label">Quick Presets:</span>
+              <button
+                type="button"
+                className="kb-btn kb-btn-secondary kb-preset-btn"
+                onClick={() => { applyPreset('ollama'); }}
+                data-testid="preset-ollama-btn"
+              >
+                🦙 Ollama Local
+              </button>
+              <button
+                type="button"
+                className="kb-btn kb-btn-secondary kb-preset-btn"
+                disabled={airGapMode}
+                title={airGapMode ? 'Cloud provider egress is blocked by Air-Gap Policy' : undefined}
+                onClick={() => { applyPreset('openai'); }}
+                data-testid="preset-openai-btn"
+              >
+                🤖 OpenAI
+              </button>
+              <button
+                type="button"
+                className="kb-btn kb-btn-secondary kb-preset-btn"
+                disabled={airGapMode}
+                title={airGapMode ? 'Cloud provider egress is blocked by Air-Gap Policy' : undefined}
+                onClick={() => { applyPreset('gemini'); }}
+                data-testid="preset-gemini-btn"
+              >
+                ✨ Google Gemini
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 2. Display Name */}
@@ -663,6 +744,40 @@ function AiProviderEditorContent({
               </label>
             </div>
           )}
+        </div>
+
+        {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
+        <div className="kb-form-group">
+          <label htmlFor="provider-base-url-input" className="kb-form-label">
+            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+          </label>
+          <input
+            id="provider-base-url-input"
+            type="url"
+            className="kb-form-input"
+            value={baseUrl}
+            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
+            placeholder={
+              providerKind === 'ollama'
+                ? 'http://127.0.0.1:11434'
+                : providerKind === 'gemini'
+                  ? 'https://generativelanguage.googleapis.com'
+                  : 'https://api.openai.com/v1'
+            }
+            autoComplete="off"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            data-testid="provider-base-url-input"
+          />
+          <span className="kb-form-hint">
+            {providerKind === 'ollama'
+              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+              : providerKind === 'gemini'
+                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
+                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
+          </span>
         </div>
 
         {/* 4. Configurable Cutoff Timeout (ms) */}
@@ -808,39 +923,11 @@ function AiProviderEditorContent({
         {/* 6. Advanced Model & Harness Configuration */}
         <AdvancedSection
           title="Advanced Settings"
-          summary="Base URL, temperature, max tokens, mTLS client certificates, and data residency overrides"
+          summary="Temperature, max tokens, mTLS client certificates, and data residency overrides"
           testId="advanced-settings-details"
           className="kb-advanced-model-harness-section"
         >
           <div data-testid="advanced-model-harness-config">
-            <div className="kb-form-group">
-              <label htmlFor="provider-base-url-input" className="kb-form-label">
-                HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
-              </label>
-              <input
-                id="provider-base-url-input"
-                type="url"
-                className="kb-form-input"
-                value={baseUrl}
-                onChange={(e) => { handleBaseUrlChange(e.target.value); }}
-                placeholder={
-                  providerKind === 'ollama'
-                    ? 'http://127.0.0.1:11434'
-                    : providerKind === 'gemini'
-                      ? 'https://generativelanguage.googleapis.com'
-                      : 'https://api.openai.com/v1'
-                }
-                data-testid="provider-base-url-input"
-              />
-              <span className="kb-form-hint">
-                {providerKind === 'ollama'
-                  ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
-                  : providerKind === 'gemini'
-                    ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
-                    : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
-              </span>
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
               <div className="kb-form-group">
                 <label htmlFor="provider-temperature-input" className="kb-form-label">

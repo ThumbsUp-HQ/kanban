@@ -30,7 +30,7 @@ vi.mock('../../api/client', () => ({
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
   },
-  apiFetch: vi.fn().mockResolvedValue({}),
+  apiFetch: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
 }));
 
 describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
@@ -53,6 +53,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
 
       expect(screen.getByTestId('tab-admin-auth')).toBeDefined();
       expect(screen.getByTestId('tab-admin-ai')).toBeDefined();
+      expect(screen.getByTestId('tab-admin-agents')).toBeDefined();
       expect(screen.getByTestId('tab-admin-runners')).toBeDefined();
       expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
       expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
@@ -98,6 +99,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
 
       expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
       expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
       expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
       expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
       expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();
@@ -115,6 +117,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
 
       expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
       expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
       expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
       expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
       expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();

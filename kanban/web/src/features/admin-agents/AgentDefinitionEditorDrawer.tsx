@@ -235,7 +235,11 @@ function AgentDefinitionEditorContent({
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      setError(err instanceof Error ? err.message : 'Failed to save agent definition');
+      const rawMsg = err instanceof Error ? err.message : 'Failed to save agent definition';
+      const msg = rawMsg.includes('AIR_GAP_EGRESS_DENIED')
+        ? 'Air-Gap Egress Denied: Autonomous agents cannot use cloud providers under active air-gap policy.'
+        : rawMsg;
+      setError(msg);
     }
   };
 
@@ -321,6 +325,14 @@ function AgentDefinitionEditorContent({
             <option value="cli_pipe">CLI Pipe (Sandboxed Zero-Shell Binary)</option>
             <option value="remote_runner">Remote Runner (mTLS Isolated Worker)</option>
           </select>
+          <span className="kb-form-hint" data-testid="agent-harness-hint">
+            {harnessKind === 'in_app_sdk' &&
+              'Executes in-process against configured AI providers (OpenAI, Gemini, Ollama) via native SDK.'}
+            {harnessKind === 'cli_pipe' &&
+              'Executes through a sandboxed CLI pipe binary (agy or codex) using standard I/O streaming.'}
+            {harnessKind === 'remote_runner' &&
+              'Dispatches agent execution jobs to an isolated remote worker via secure mTLS WebSocket.'}
+          </span>
         </div>
 
         {harnessKind === 'in_app_sdk' && (

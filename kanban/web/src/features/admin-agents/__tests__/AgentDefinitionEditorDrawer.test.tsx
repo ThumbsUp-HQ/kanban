@@ -235,4 +235,60 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it('renders inline helper description for each execution harness kind', () => {
+    render(
+      <AgentDefinitionEditorDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        agent={null}
+        onSaved={vi.fn()}
+        aiProviders={mockAiProviders}
+      />,
+    );
+
+    const harnessSelect = screen.getByTestId('agent-harness-select');
+    const hintEl = screen.getByTestId('agent-harness-hint');
+
+    // Default: in_app_sdk
+    expect(hintEl.textContent).toContain('Executes in-process against configured AI providers');
+
+    // Switch to cli_pipe
+    fireEvent.change(harnessSelect, { target: { value: 'cli_pipe' } });
+    expect(hintEl.textContent).toContain('Executes through a sandboxed CLI pipe binary');
+
+    // Switch to remote_runner
+    fireEvent.change(harnessSelect, { target: { value: 'remote_runner' } });
+    expect(hintEl.textContent).toContain('Dispatches agent execution jobs to an isolated remote worker');
+  });
+
+  it('surfaces Air-Gap Egress Denied message when submission encounters AIR_GAP_EGRESS_DENIED', async () => {
+    vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValue(
+      new Error('409 Conflict: AIR_GAP_EGRESS_DENIED - egress to cloud provider is denied'),
+    );
+
+    render(
+      <AgentDefinitionEditorDrawer
+        isOpen={true}
+        onClose={vi.fn()}
+        agent={null}
+        onSaved={vi.fn()}
+        aiProviders={mockAiProviders}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('agent-slug-input'), {
+      target: { value: 'airgap-agent' },
+    });
+    fireEvent.change(screen.getByTestId('agent-name-input'), {
+      target: { value: 'Airgap Agent' },
+    });
+    fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-editor-error').textContent).toContain(
+        'Air-Gap Egress Denied: Autonomous agents cannot use cloud providers under active air-gap policy.',
+      );
+    });
+  });
 });
