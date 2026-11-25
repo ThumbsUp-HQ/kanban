@@ -542,12 +542,12 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 ) from exc
 
     # 4. Capability Mask Validation
-    if not (1 <= capability_mask <= MAX_CAPABILITY_MASK):
+    if not (0 <= capability_mask <= MAX_CAPABILITY_MASK):
         raise ProblemException(
             code="INVALID_CAPABILITY_MASK",
             status=422,
             title="Invalid Capability Mask",
-            detail="capability_mask must be between 1 and 255.",
+            detail="capability_mask must be between 0 and 255.",
         )
 
     # 5. Expiration & Unlimited Keys Validation

@@ -1,0 +1,778 @@
+diff --git a/kanban/api/v1/admin/mcp_keys.py b/kanban/api/v1/admin/mcp_keys.py
+index e6f8861f..eb14114a 100644
+--- a/kanban/api/v1/admin/mcp_keys.py
++++ b/kanban/api/v1/admin/mcp_keys.py
+@@ -5,12 +5,13 @@
+ from __future__ import annotations
+ 
+ import contextlib
++import ipaddress
+ import uuid
+ from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
+ from typing import Annotated, Literal
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+-from pydantic import BaseModel, ConfigDict, Field
++from pydantic import BaseModel, ConfigDict, Field, field_validator
+ from sqlalchemy import or_, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -47,13 +48,26 @@ class McpApiKeyMintRequest(BaseModel):
+     allowed_workspace_ids: list[uuid.UUID] | None = None
+     allowed_project_ids: list[uuid.UUID] | None = None
+     allowed_projects: list[str] | None = None
+-    capability_mask: int = Field(default=7, ge=1, le=255)
++    capability_mask: int = Field(default=7, ge=0, le=255)
+     allowed_tools: list[str] | None = None
+     disabled_tools: list[str] = Field(default_factory=list)
+     allowed_cidrs: list[str] | None = None
+     unlimited: bool = False
+     confirm_unlimited: bool = False
+ 
++    @field_validator("allowed_cidrs")
++    @classmethod
++    def validate_allowed_cidrs(cls, v: list[str] | None) -> list[str] | None:
++        """Validate that all allowed CIDR blocks are valid IPv4/IPv6 networks."""
++        if v is not None:
++            for c in v:
++                try:
++                    ipaddress.ip_network(c.strip(), strict=False)
++                except ValueError as exc:
++                    msg = f"Invalid CIDR block: {c}"
++                    raise ValueError(msg) from exc
++        return v
++
+ 
+ class McpApiKeyMintResponse(BaseModel):
+     """Response returned exactly once when an MCP API key is minted."""
+diff --git a/kanban/api/v1/admin/workload_identities.py b/kanban/api/v1/admin/workload_identities.py
+index d89aed21..c50419d5 100644
+--- a/kanban/api/v1/admin/workload_identities.py
++++ b/kanban/api/v1/admin/workload_identities.py
+@@ -4,12 +4,14 @@
+ 
+ from __future__ import annotations
+ 
++import fnmatch
++import re
+ import uuid  # noqa: TC003
+ from datetime import datetime  # noqa: TC003
+ from typing import Annotated, Any, Literal
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+-from pydantic import BaseModel, ConfigDict, Field
++from pydantic import BaseModel, ConfigDict, Field, field_validator
+ from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -47,6 +49,28 @@ class WorkloadPolicyCreateRequest(BaseModel):
+     max_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+     is_enabled: bool = True
+ 
++    @field_validator("issuer")
++    @classmethod
++    def validate_issuer_https(cls, v: str) -> str:
++        """Validate that workload identity issuer uses HTTPS scheme."""
++        v_strip = v.strip()
++        if not v_strip.startswith("https://"):
++            msg = "Workload identity issuer must use HTTPS scheme."
++            raise ValueError(msg)
++        return v_strip
++
++    @field_validator("subject_pattern")
++    @classmethod
++    def validate_subject_pattern(cls, v: str) -> str:
++        """Validate that subject pattern compiles as valid glob/regex."""
++        v_strip = v.strip()
++        try:
++            re.compile(fnmatch.translate(v_strip))
++        except Exception as e:
++            msg = f"Invalid subject pattern: {e}"
++            raise ValueError(msg) from e
++        return v_strip
++
+ 
+ class WorkloadPolicyUpdateRequest(BaseModel):
+     """Payload for updating an existing workload identity policy."""
+@@ -67,6 +91,32 @@ class WorkloadPolicyUpdateRequest(BaseModel):
+     max_ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
+     is_enabled: bool | None = None
+ 
++    @field_validator("issuer")
++    @classmethod
++    def validate_issuer_https(cls, v: str | None) -> str | None:
++        """Validate that workload identity issuer uses HTTPS scheme."""
++        if v is not None:
++            v_strip = v.strip()
++            if not v_strip.startswith("https://"):
++                msg = "Workload identity issuer must use HTTPS scheme."
++                raise ValueError(msg)
++            return v_strip
++        return v
++
++    @field_validator("subject_pattern")
++    @classmethod
++    def validate_subject_pattern(cls, v: str | None) -> str | None:
++        """Validate that subject pattern compiles as valid glob/regex."""
++        if v is not None:
++            v_strip = v.strip()
++            try:
++                re.compile(fnmatch.translate(v_strip))
++            except Exception as e:
++                msg = f"Invalid subject pattern: {e}"
++                raise ValueError(msg) from e
++            return v_strip
++        return v
++
+ 
+ class WorkloadPolicyResponse(BaseModel):
+     """Public representation of a workload identity policy."""
+diff --git a/kanban/api/v1/mcp_keys.py b/kanban/api/v1/mcp_keys.py
+index 72423fcb..898404f4 100644
+--- a/kanban/api/v1/mcp_keys.py
++++ b/kanban/api/v1/mcp_keys.py
+@@ -9,12 +9,13 @@ and tier-matched governance (view=governance) for project, workspace, and server
+ from __future__ import annotations
+ 
+ import contextlib
++import ipaddress
+ import uuid
+ from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
+ from typing import Annotated, Final, Literal
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+-from pydantic import BaseModel, ConfigDict, Field
++from pydantic import BaseModel, ConfigDict, Field, field_validator
+ from sqlalchemy import or_, select, text
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -54,13 +55,26 @@ class UnifiedMcpKeyMintRequest(BaseModel):
+     allowed_workspace_ids: list[uuid.UUID] | None = None
+     allowed_project_ids: list[uuid.UUID] | None = None
+     allowed_projects: list[str] | None = None
+-    capability_mask: int = Field(default=7, ge=1, le=255)
++    capability_mask: int = Field(default=7, ge=0, le=255)
+     allowed_tools: list[str] | None = None
+     disabled_tools: list[str] = Field(default_factory=list)
+     allowed_cidrs: list[str] | None = None
+     unlimited: bool = False
+     confirm_unlimited: bool = False
+ 
++    @field_validator("allowed_cidrs")
++    @classmethod
++    def validate_allowed_cidrs(cls, v: list[str] | None) -> list[str] | None:
++        """Validate that all allowed CIDR blocks are valid IPv4/IPv6 networks."""
++        if v is not None:
++            for c in v:
++                try:
++                    ipaddress.ip_network(c.strip(), strict=False)
++                except ValueError as exc:
++                    msg = f"Invalid CIDR block: {c}"
++                    raise ValueError(msg) from exc
++        return v
++
+ 
+ class UnifiedMcpApiKeyResponse(BaseModel):
+     """Consistent metadata response for an MCP API key without secret hash."""
+diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
+index ddc0518e..a5b69ce4 100644
+--- a/kanban/api/v1/oauth.py
++++ b/kanban/api/v1/oauth.py
+@@ -273,6 +273,16 @@ class AdminOAuthClientCreateRequest(BaseModel):
+         default=None,
+         description="Optional allowed response types",
+     )
++    pkce_enforce: bool = Field(
++        default=True,
++        description="Mandate RFC 7636 PKCE S256",
++    )
++    access_token_ttl: int = Field(
++        default=3600,
++        ge=60,
++        le=86400,
++        description="Access token TTL in seconds",
++    )
+ 
+ 
+ class OAuthClientPatchRequest(BaseModel):
+@@ -1804,6 +1814,14 @@ async def admin_register_oauth_client(
+             detail=f"token_endpoint_auth_method must be one of {valid_auth_methods}.",
+         )
+ 
++    if payload.grant_types and "client_credentials" in payload.grant_types:
++        raise ProblemException(
++            code="UNSUPPORTED_GRANT_TYPE",
++            status=400,
++            title="Unsupported Grant Type",
++            detail="The client_credentials grant type is strictly prohibited in 👍kanban.",
++        )
++
+     if payload.client_type not in ("public", "confidential"):
+         raise ProblemException(
+             code="INVALID_CLIENT_METADATA",
+@@ -1812,6 +1830,14 @@ async def admin_register_oauth_client(
+             detail="client_type must be 'public' or 'confidential'.",
+         )
+ 
++    if payload.client_type == "public" and not payload.pkce_enforce:
++        raise ProblemException(
++            code="INVALID_CLIENT_METADATA",
++            status=400,
++            title="Invalid Client Metadata",
++            detail="Public OAuth 2.1 clients must enforce PKCE S256.",
++        )
++
+     is_confidential = (
+         payload.client_type == "confidential"
+         or payload.token_endpoint_auth_method in ("client_secret_basic", "client_secret_post")
+@@ -1884,6 +1910,9 @@ async def admin_register_oauth_client(
+         "token_endpoint_auth_method": eff_auth_method,
+         "redirect_uris": client_record.redirect_uris,
+         "status": client_record.status,
++        "pkce_enforce": payload.pkce_enforce,
++        "access_token_ttl": payload.access_token_ttl,
++        "grant_types": payload.grant_types,
+         "created_at": client_record.created_at.isoformat(),
+         "updated_at": client_record.updated_at.isoformat(),
+     }
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index d23f1f59..c745ceda 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -542,12 +542,12 @@ async def mint_mcp_api_key(  # noqa: C901, PLR0912, PLR0913, PLR0915
+                 ) from exc
+ 
+     # 4. Capability Mask Validation
+-    if not (1 <= capability_mask <= MAX_CAPABILITY_MASK):
++    if not (0 <= capability_mask <= MAX_CAPABILITY_MASK):
+         raise ProblemException(
+             code="INVALID_CAPABILITY_MASK",
+             status=422,
+             title="Invalid Capability Mask",
+-            detail="capability_mask must be between 1 and 255.",
++            detail="capability_mask must be between 0 and 255.",
+         )
+ 
+     # 5. Expiration & Unlimited Keys Validation
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index 2cc0acb5..e941a629 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -304,11 +304,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+     }
+     setRegisterSubmitting(true);
+     try {
++      const grants = registerGrantTypes
++        .split(/[\n,]/)
++        .map((g) => g.trim())
++        .filter(Boolean);
+       const created = await registerAdminOAuthClient({
+         client_name: registerName.trim() || 'MCP Client',
+         redirect_uris: uris,
+         client_type: registerClientType,
+         token_endpoint_auth_method: registerAuthMethod,
++        pkce_enforce: registerPkceEnforce,
++        access_token_ttl: registerAccessTokenTtl,
++        grant_types: grants.length > 0 ? grants : undefined,
+       });
+       setRegisteredClient(created);
+       setClients((prev) => [created, ...prev]);
+diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+index 045d0953..be441f09 100644
+--- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
++++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+@@ -397,12 +397,17 @@ describe('OAuthClientGovernanceStudio', () => {
+     fireEvent.click(screen.getByTestId('submit-register-btn'));
+ 
+     await waitFor(() => {
+-      expect(registerSpy).toHaveBeenCalledWith({
+-        client_name: 'VS Code Tool',
+-        redirect_uris: ['http://127.0.0.1:9090/cb'],
+-        client_type: 'public',
+-        token_endpoint_auth_method: 'none',
+-      });
++      expect(registerSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          client_name: 'VS Code Tool',
++          redirect_uris: ['http://127.0.0.1:9090/cb'],
++          client_type: 'public',
++          token_endpoint_auth_method: 'none',
++          pkce_enforce: true,
++          access_token_ttl: 3600,
++          grant_types: ['authorization_code', 'refresh_token'],
++        }),
++      );
+       expect(screen.getByTestId('register-success-view')).toBeDefined();
+       expect(screen.getByTestId('registered-client-id').textContent).toBe('client_brand_new_123');
+     });
+@@ -534,12 +539,17 @@ describe('OAuthClientGovernanceStudio', () => {
+     fireEvent.click(screen.getByTestId('submit-register-btn'));
+ 
+     await waitFor(() => {
+-      expect(registerSpy).toHaveBeenCalledWith({
+-        client_name: 'MCP Client',
+-        redirect_uris: ['https://app.example.com/oauth/callback'],
+-        client_type: 'public',
+-        token_endpoint_auth_method: 'private_key_jwt',
+-      });
++      expect(registerSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          client_name: 'MCP Client',
++          redirect_uris: ['https://app.example.com/oauth/callback'],
++          client_type: 'public',
++          token_endpoint_auth_method: 'private_key_jwt',
++          pkce_enforce: true,
++          access_token_ttl: 3600,
++          grant_types: ['authorization_code', 'refresh_token'],
++        }),
++      );
+       expect(screen.getByTestId('registered-client-id').textContent).toContain('client_jwt_123');
+     });
+   });
+@@ -676,12 +686,17 @@ describe('OAuthClientGovernanceStudio', () => {
+     fireEvent.click(screen.getByTestId('submit-register-btn'));
+ 
+     await waitFor(() => {
+-      expect(registerSpy).toHaveBeenCalledWith({
+-        client_name: 'Gemini Agent Service',
+-        redirect_uris: ['https://gemini.google.com/oauth/callback'],
+-        client_type: 'confidential',
+-        token_endpoint_auth_method: 'client_secret_basic',
+-      });
++      expect(registerSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          client_name: 'Gemini Agent Service',
++          redirect_uris: ['https://gemini.google.com/oauth/callback'],
++          client_type: 'confidential',
++          token_endpoint_auth_method: 'client_secret_basic',
++          pkce_enforce: true,
++          access_token_ttl: 3600,
++          grant_types: ['authorization_code', 'refresh_token'],
++        }),
++      );
+       expect(screen.getByTestId('client-secret-panel')).toBeDefined();
+       expect(screen.getByTestId('secret-warning')).toBeDefined();
+       expect(screen.getByTestId('registered-client-secret').textContent).toBe(
+@@ -1289,4 +1304,74 @@ describe('OAuthClientGovernanceStudio', () => {
+ 
+     fireEvent.click(screen.getByTestId('cancel-register-btn'));
+   });
++
++  it('submits customized advanced parameters (PKCE, TTL, grant types) to registerAdminOAuthClient (KAN-417)', async () => {
++    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
++    const registerSpy = vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockResolvedValue({
++      client_id: 'client_custom_adv',
++      client_name: 'Custom Advanced Client',
++      client_type: 'confidential',
++      token_endpoint_auth_method: 'client_secret_post',
++      redirect_uris: ['https://custom.example.com/callback'],
++      status: 'active',
++      created_at: new Date().toISOString(),
++    });
++
++    render(
++      <MemoryRouter initialEntries={['/admin/oauth']}>
++        <OAuthClientGovernanceStudio />
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('register-client-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('register-client-btn'));
++
++    fireEvent.change(screen.getByTestId('input-client-name'), {
++      target: { value: 'Custom Advanced Client' },
++    });
++    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
++      target: { value: 'https://custom.example.com/callback' },
++    });
++    fireEvent.change(screen.getByTestId('select-client-type'), {
++      target: { value: 'confidential' },
++    });
++    fireEvent.change(screen.getByTestId('select-auth-method'), {
++      target: { value: 'client_secret_post' },
++    });
++
++    // Expand Advanced Section
++    fireEvent.click(screen.getByTestId('advanced-oauth-parameters-toggle'));
++
++    // Toggle PKCE to false
++    fireEvent.click(screen.getByTestId('toggle-pkce-s256'));
++
++    // Change TTL to 7200
++    fireEvent.change(screen.getByTestId('input-access-token-ttl'), {
++      target: { value: '7200' },
++    });
++
++    // Change Grant Types
++    fireEvent.change(screen.getByTestId('input-grant-types'), {
++      target: { value: 'authorization_code' },
++    });
++
++    fireEvent.click(screen.getByTestId('submit-register-btn'));
++
++    await waitFor(() => {
++      expect(registerSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          client_name: 'Custom Advanced Client',
++          redirect_uris: ['https://custom.example.com/callback'],
++          client_type: 'confidential',
++          token_endpoint_auth_method: 'client_secret_post',
++          pkce_enforce: false,
++          access_token_ttl: 7200,
++          grant_types: ['authorization_code'],
++        }),
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/oauth/oauthApi.ts b/kanban/web/src/features/oauth/oauthApi.ts
+index 661b7048..09128fd5 100644
+--- a/kanban/web/src/features/oauth/oauthApi.ts
++++ b/kanban/web/src/features/oauth/oauthApi.ts
+@@ -141,6 +141,8 @@ export interface RegisterOAuthClientRequest {
+     | undefined;
+   grant_types?: string[] | undefined;
+   response_types?: string[] | undefined;
++  pkce_enforce?: boolean | undefined;
++  access_token_ttl?: number | undefined;
+ }
+ 
+ export async function registerAdminOAuthClient(
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index d9229b6b..3746fb22 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -220,6 +220,7 @@ export interface McpAccessStudioProps {
+     is_project_admin?: boolean;
+     workspace_role?: string;
+   } | null | undefined;
++  maxKeyTtlDays?: number | undefined;
+ }
+ 
+ interface ProjectOption {
+@@ -236,6 +237,7 @@ export function McpAccessStudio({
+   tier,
+   allowUnlimitedKeys,
+   user: propUser,
++  maxKeyTtlDays,
+ }: McpAccessStudioProps): JSX.Element {
+   const contextClient = useContext(QueryClientContext);
+   const queryClient = contextClient ?? fallbackQueryClient;
+@@ -530,6 +532,9 @@ export function McpAccessStudio({
+     setNewKeyScopeTier(initialTier);
+     setNewKeyProject(effectiveProjectKey);
+     setCapabilityMask(31);
++    if (maxKeyTtlDays && maxKeyTtlDays > 0 && newKeyExpiry > maxKeyTtlDays) {
++      setNewKeyExpiry(maxKeyTtlDays);
++    }
+     setShowMintModal(true);
+   };
+ 
+@@ -1251,6 +1256,70 @@ export function McpAccessStudio({
+                     testId="mint-scope-help"
+                   />
+                 </label>
++
++                {/* Streamlined Segmented Role & Scope Selectors */}
++                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
++                  <button
++                    type="button"
++                    className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'personal_user' ? 'kb-mcp-filter-pill-active' : ''}`}
++                    data-testid="role-pill-personal"
++                    onClick={() => {
++                      setNewKeyOwnerKind('personal_user');
++                      if (newKeyScopeTier === 'global') {
++                        setNewKeyScopeTier('workspace');
++                      }
++                    }}
++                  >
++                    Personal User
++                  </button>
++                  <button
++                    type="button"
++                    className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'service_bot' ? 'kb-mcp-filter-pill-active' : ''}`}
++                    data-testid="role-pill-service_bot"
++                    onClick={() => {
++                      setNewKeyOwnerKind('service_bot');
++                    }}
++                  >
++                    Service Bot
++                  </button>
++                </div>
++
++                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
++                  <button
++                    type="button"
++                    className={`kb-mcp-filter-pill ${newKeyScopeTier === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
++                    data-testid="scope-tier-pill-project"
++                    onClick={() => {
++                      setNewKeyScopeTier('project');
++                    }}
++                  >
++                    Single Project
++                  </button>
++                  <button
++                    type="button"
++                    className={`kb-mcp-filter-pill ${newKeyScopeTier === 'workspace' ? 'kb-mcp-filter-pill-active' : ''}`}
++                    data-testid="scope-tier-pill-workspace"
++                    onClick={() => {
++                      setNewKeyScopeTier('workspace');
++                    }}
++                  >
++                    Entire Workspace
++                  </button>
++                  {isServerAdmin && (
++                    <button
++                      type="button"
++                      className={`kb-mcp-filter-pill ${newKeyScopeTier === 'global' ? 'kb-mcp-filter-pill-active' : ''}`}
++                      data-testid="scope-tier-pill-global"
++                      onClick={() => {
++                        setNewKeyOwnerKind('service_bot');
++                        setNewKeyScopeTier('global');
++                      }}
++                    >
++                      Server / Global
++                    </button>
++                  )}
++                </div>
++
+                 <select
+                   id="mint-key-scope-type-select"
+                   className="kb-mcp-form-select"
+@@ -1342,6 +1411,15 @@ export function McpAccessStudio({
+                     docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                     testId="mcp-expiry-help"
+                   />
++                  {maxKeyTtlDays !== undefined && maxKeyTtlDays > 0 && (
++                    <span
++                      className="kb-mcp-policy-badge"
++                      data-testid="policy-ttl-badge"
++                      style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--kb-color-text-secondary, #8b949e)' }}
++                    >
++                      Workspace policy enforces maximum {maxKeyTtlDays}-day TTL
++                    </span>
++                  )}
+                 </label>
+                 <select
+                   id="mint-expiry-select"
+@@ -1358,11 +1436,14 @@ export function McpAccessStudio({
+                     }
+                   }}
+                 >
+-                  <option value={30}>30 Days</option>
+-                  <option value={60}>60 Days</option>
+-                  <option value={90}>90 Days</option>
+-                  <option value={365}>1 Year</option>
+-                  {allowUnlimited && (
++                  {(!maxKeyTtlDays || maxKeyTtlDays >= 30) && <option value={30}>30 Days</option>}
++                  {(!maxKeyTtlDays || maxKeyTtlDays >= 60) && <option value={60}>60 Days</option>}
++                  {(!maxKeyTtlDays || maxKeyTtlDays >= 90) && <option value={90}>90 Days</option>}
++                  {(!maxKeyTtlDays || maxKeyTtlDays >= 365) && <option value={365}>1 Year</option>}
++                  {maxKeyTtlDays !== undefined && maxKeyTtlDays > 0 && ![30, 60, 90, 365].includes(maxKeyTtlDays) && (
++                    <option value={maxKeyTtlDays}>{maxKeyTtlDays} Days (Max)</option>
++                  )}
++                  {allowUnlimited && !maxKeyTtlDays && (
+                     <option value="unlimited" data-testid="option-unlimited">
+                       Unlimited (not recommended)
+                     </option>
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index 4cf87cea..0aaa4a8d 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -4,6 +4,7 @@
+ import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
+ import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+ import { McpAccessStudio } from './McpAccessStudio';
+ import './McpAccessStudio.css';
+ 
+@@ -82,6 +83,9 @@ export function WorkloadFederationSection({
+   const [submitting, setSubmitting] = useState(false);
+   const isMountedRef = useRef(true);
+ 
++  const isDirty = showModal && Boolean(formName || formIssuer || formClientId || formDesc);
++  useAal2DirtyKeepalive(isDirty);
++
+   useEffect(() => {
+     isMountedRef.current = true;
+     return () => {
+@@ -383,6 +387,59 @@ export function WorkloadFederationSection({
+               </button>
+             </div>
+             <form onSubmit={(e) => void handleSubmit(e)}>
++              {!editingPolicy && (
++                <div
++                  className="kb-mcp-presets-bar"
++                  data-testid="workload-presets-bar"
++                  style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}
++                >
++                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--kb-color-text-secondary, #8b949e)' }}>
++                    1-Click Presets:
++                  </span>
++                  <button
++                    type="button"
++                    className="kb-mcp-filter-pill"
++                    data-testid="preset-github-actions"
++                    onClick={() => {
++                      if (!formName) setFormName('GitHub Actions CI');
++                      setFormIssuer('https://token.actions.githubusercontent.com');
++                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
++                      setFormSubjectPattern('repo:org/repo:ref:refs/heads/*');
++                      setFormSurface('agent');
++                    }}
++                  >
++                    GitHub Actions
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-mcp-filter-pill"
++                    data-testid="preset-gitlab-ci"
++                    onClick={() => {
++                      if (!formName) setFormName('GitLab CI');
++                      setFormIssuer('https://gitlab.com');
++                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
++                      setFormSubjectPattern('project_path:group/project:ref:*:ref_type:branch');
++                      setFormSurface('agent');
++                    }}
++                  >
++                    GitLab CI
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-mcp-filter-pill"
++                    data-testid="preset-kubernetes"
++                    onClick={() => {
++                      if (!formName) setFormName('Kubernetes Workload');
++                      setFormIssuer('https://kubernetes.default.svc.cluster.local');
++                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
++                      setFormSubjectPattern('system:serviceaccount:default:*');
++                      setFormSurface('agent');
++                    }}
++                  >
++                    Kubernetes
++                  </button>
++                </div>
++              )}
+               <div className="kb-mcp-form-group">
+                 <label className="kb-mcp-label" htmlFor="wl-policy-name">Policy Name *</label>
+                 <input
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index daf6a1e9..cd57ad81 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -2474,5 +2474,65 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+         'Key "No Project Bot" for Personal User can access Project (None) and use Agent tools (Read-Only Agent).',
+       );
+     });
++
++    it('supports segmented role and scope selectors and workspace policy TTL clamping (KAN-417)', async () => {
++      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
++      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio
++            tier="workspace"
++            maxKeyTtlDays={90}
++            user={{ is_server_admin: true, is_workspace_admin: true }}
++          />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
++      });
++
++      fireEvent.click(screen.getByTestId('mint-key-button'));
++
++      // Check segmented role pills
++      const personalPill = screen.getByTestId('role-pill-personal');
++      const serviceBotPill = screen.getByTestId('role-pill-service_bot');
++      expect(personalPill).toBeDefined();
++      expect(serviceBotPill).toBeDefined();
++
++      // Check segmented scope pills
++      const projectPill = screen.getByTestId('scope-tier-pill-project');
++      const workspacePill = screen.getByTestId('scope-tier-pill-workspace');
++      const globalPill = screen.getByTestId('scope-tier-pill-global');
++      expect(projectPill).toBeDefined();
++      expect(workspacePill).toBeDefined();
++      expect(globalPill).toBeDefined();
++
++      // Click service bot pill and project pill
++      fireEvent.click(serviceBotPill);
++      fireEvent.click(projectPill);
++
++      const select = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
++      expect(select.value).toBe('service_bot:project');
++
++      // Click global pill
++      fireEvent.click(globalPill);
++      expect(select.value).toBe('service_bot:global');
++
++      // Click personal pill while in global scope to verify auto-reset to workspace
++      fireEvent.click(personalPill);
++      expect(select.value).toBe('personal_user:workspace');
++
++      // Click workspace pill
++      fireEvent.click(workspacePill);
++      expect(select.value).toBe('personal_user:workspace');
++
++      // Check policy TTL badge
++      expect(screen.getByTestId('policy-ttl-badge').textContent).toContain('Workspace policy enforces maximum 90-day TTL');
++
++      // Verify unlimited option is not present due to TTL policy
++      expect(screen.queryByTestId('option-unlimited')).toBeNull();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+index 75837f6a..a6c963d8 100644
+--- a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+@@ -1026,4 +1026,41 @@ describe('WorkloadFederationSection (KAN-74)', () => {
+       expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to load workload policies');
+     });
+   });
++
++  it('pre-populates policy fields with 1-click Workload OIDC preset buttons (KAN-417)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([]);
++    render(<WorkloadFederationSection isAdmin={true} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('add-workload-policy-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
++
++    expect(screen.getByTestId('workload-presets-bar')).toBeDefined();
++
++    // Click GitHub Actions preset
++    fireEvent.click(screen.getByTestId('preset-github-actions'));
++    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('GitHub Actions CI');
++    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://token.actions.githubusercontent.com');
++    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('repo:org/repo:ref:refs/heads/*');
++
++    // Clear name and click GitLab CI preset
++    fireEvent.change(screen.getByTestId('policy-name-input'), { target: { value: '' } });
++    fireEvent.click(screen.getByTestId('preset-gitlab-ci'));
++    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('GitLab CI');
++    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://gitlab.com');
++    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('project_path:group/project:ref:*:ref_type:branch');
++
++    // Clear name and click Kubernetes preset
++    fireEvent.change(screen.getByTestId('policy-name-input'), { target: { value: '' } });
++    fireEvent.click(screen.getByTestId('preset-kubernetes'));
++    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
++    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://kubernetes.default.svc.cluster.local');
++    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('system:serviceaccount:default:*');
++
++    // Click preset when name is already set
++    fireEvent.click(screen.getByTestId('preset-github-actions'));
++    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
++  });
+ });

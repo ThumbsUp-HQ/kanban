@@ -1026,4 +1026,41 @@ describe('WorkloadFederationSection (KAN-74)', () => {
       expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to load workload policies');
     });
   });
+
+  it('pre-populates policy fields with 1-click Workload OIDC preset buttons (KAN-417)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([]);
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('add-workload-policy-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
+
+    expect(screen.getByTestId('workload-presets-bar')).toBeDefined();
+
+    // Click GitHub Actions preset
+    fireEvent.click(screen.getByTestId('preset-github-actions'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('GitHub Actions CI');
+    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://token.actions.githubusercontent.com');
+    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('repo:org/repo:ref:refs/heads/*');
+
+    // Clear name and click GitLab CI preset
+    fireEvent.change(screen.getByTestId('policy-name-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('preset-gitlab-ci'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('GitLab CI');
+    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://gitlab.com');
+    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('project_path:group/project:ref:*:ref_type:branch');
+
+    // Clear name and click Kubernetes preset
+    fireEvent.change(screen.getByTestId('policy-name-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('preset-kubernetes'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
+    expect(screen.getByTestId<HTMLInputElement>('policy-issuer-input').value).toBe('https://kubernetes.default.svc.cluster.local');
+    expect(screen.getByTestId<HTMLInputElement>('policy-subject-pattern-input').value).toBe('system:serviceaccount:default:*');
+
+    // Click preset when name is already set
+    fireEvent.click(screen.getByTestId('preset-github-actions'));
+    expect(screen.getByTestId<HTMLInputElement>('policy-name-input').value).toBe('Kubernetes Workload');
+  });
 });

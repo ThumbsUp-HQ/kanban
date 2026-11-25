@@ -1,0 +1,87 @@
+=== PYTEST UNIT TEST RESULTS ===
+Uninstalled 4 packages in 0.71ms
+Installed 4 packages in 2ms
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 58 items
+
+kanban/tests/oauth/test_oauth_flow.py ..................                 [ 31%]
+kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 46%]
+kanban/tests/api/test_admin_mcp_keys_api.py ....                         [ 53%]
+kanban/tests/auth/test_workload_oidc_exchange.py .......                 [ 65%]
+mcp/tests/test_workload_jwt_auth.py .......                              [ 77%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py ......                    [ 87%]
+kanban/tests/test_feature_comparison_parity.py .......                   [100%]
+
+============================= 58 passed in 19.66s ==============================
+
+=== VITEST UNIT TEST RESULTS ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > supports toggling scope checkboxes
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > closes on Escape key press and backdrop click
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > allows dynamically changing Target Scope between Workspace, Single Project, and Server (KAN-395)
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (15 tests) 511ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 438ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (30 tests) 2888ms
+   ✓ OAuthClientGovernanceStudio (30)
+     ✓ inspects client details in modal and closes modal 324ms
+     ✓ handles search input, status filter pills, and pagination controls 343ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (25 tests) 2079ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles AAL2 cancellation on minting and retries without error banners 455ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (47 tests) 2880ms
+
+ Test Files  5 passed (5)
+      Tests  130 passed (130)
+   Start at  14:48:14
+   Duration  5.25s (tests 54%, environment 24%, import 15%, transform 7%)
+

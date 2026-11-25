@@ -273,6 +273,16 @@ class AdminOAuthClientCreateRequest(BaseModel):
         default=None,
         description="Optional allowed response types",
     )
+    pkce_enforce: bool = Field(
+        default=True,
+        description="Mandate RFC 7636 PKCE S256",
+    )
+    access_token_ttl: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="Access token TTL in seconds",
+    )
 
 
 class OAuthClientPatchRequest(BaseModel):
@@ -1804,12 +1814,28 @@ async def admin_register_oauth_client(
             detail=f"token_endpoint_auth_method must be one of {valid_auth_methods}.",
         )
 
+    if payload.grant_types and "client_credentials" in payload.grant_types:
+        raise ProblemException(
+            code="UNSUPPORTED_GRANT_TYPE",
+            status=400,
+            title="Unsupported Grant Type",
+            detail="The client_credentials grant type is strictly prohibited in 👍kanban.",
+        )
+
     if payload.client_type not in ("public", "confidential"):
         raise ProblemException(
             code="INVALID_CLIENT_METADATA",
             status=400,
             title="Invalid Client Metadata",
             detail="client_type must be 'public' or 'confidential'.",
+        )
+
+    if payload.client_type == "public" and not payload.pkce_enforce:
+        raise ProblemException(
+            code="INVALID_CLIENT_METADATA",
+            status=400,
+            title="Invalid Client Metadata",
+            detail="Public OAuth 2.1 clients must enforce PKCE S256.",
         )
 
     is_confidential = (
@@ -1884,6 +1910,9 @@ async def admin_register_oauth_client(
         "token_endpoint_auth_method": eff_auth_method,
         "redirect_uris": client_record.redirect_uris,
         "status": client_record.status,
+        "pkce_enforce": payload.pkce_enforce,
+        "access_token_ttl": payload.access_token_ttl,
+        "grant_types": payload.grant_types,
         "created_at": client_record.created_at.isoformat(),
         "updated_at": client_record.updated_at.isoformat(),
     }

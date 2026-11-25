@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+import fnmatch
+import re
 import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +49,28 @@ class WorkloadPolicyCreateRequest(BaseModel):
     max_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
     is_enabled: bool = True
 
+    @field_validator("issuer")
+    @classmethod
+    def validate_issuer_https(cls, v: str) -> str:
+        """Validate that workload identity issuer uses HTTPS scheme."""
+        v_strip = v.strip()
+        if not v_strip.startswith("https://"):
+            msg = "Workload identity issuer must use HTTPS scheme."
+            raise ValueError(msg)
+        return v_strip
+
+    @field_validator("subject_pattern")
+    @classmethod
+    def validate_subject_pattern(cls, v: str) -> str:
+        """Validate that subject pattern compiles as valid glob/regex."""
+        v_strip = v.strip()
+        try:
+            re.compile(fnmatch.translate(v_strip))
+        except Exception as e:
+            msg = f"Invalid subject pattern: {e}"
+            raise ValueError(msg) from e
+        return v_strip
+
 
 class WorkloadPolicyUpdateRequest(BaseModel):
     """Payload for updating an existing workload identity policy."""
@@ -66,6 +90,32 @@ class WorkloadPolicyUpdateRequest(BaseModel):
     allowed_cidrs: list[str] | None = None
     max_ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
     is_enabled: bool | None = None
+
+    @field_validator("issuer")
+    @classmethod
+    def validate_issuer_https(cls, v: str | None) -> str | None:
+        """Validate that workload identity issuer uses HTTPS scheme."""
+        if v is not None:
+            v_strip = v.strip()
+            if not v_strip.startswith("https://"):
+                msg = "Workload identity issuer must use HTTPS scheme."
+                raise ValueError(msg)
+            return v_strip
+        return v
+
+    @field_validator("subject_pattern")
+    @classmethod
+    def validate_subject_pattern(cls, v: str | None) -> str | None:
+        """Validate that subject pattern compiles as valid glob/regex."""
+        if v is not None:
+            v_strip = v.strip()
+            try:
+                re.compile(fnmatch.translate(v_strip))
+            except Exception as e:
+                msg = f"Invalid subject pattern: {e}"
+                raise ValueError(msg) from e
+            return v_strip
+        return v
 
 
 class WorkloadPolicyResponse(BaseModel):

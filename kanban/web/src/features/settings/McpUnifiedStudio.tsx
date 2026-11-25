@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { McpAccessStudio } from './McpAccessStudio';
 import './McpAccessStudio.css';
 
@@ -81,6 +82,9 @@ export function WorkloadFederationSection({
   const [formTtl, setFormTtl] = useState('3600');
   const [submitting, setSubmitting] = useState(false);
   const isMountedRef = useRef(true);
+
+  const isDirty = showModal && Boolean(formName || formIssuer || formClientId || formDesc);
+  useAal2DirtyKeepalive(isDirty);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -383,6 +387,59 @@ export function WorkloadFederationSection({
               </button>
             </div>
             <form onSubmit={(e) => void handleSubmit(e)}>
+              {!editingPolicy && (
+                <div
+                  className="kb-mcp-presets-bar"
+                  data-testid="workload-presets-bar"
+                  style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}
+                >
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--kb-color-text-secondary, #8b949e)' }}>
+                    1-Click Presets:
+                  </span>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-github-actions"
+                    onClick={() => {
+                      if (!formName) setFormName('GitHub Actions CI');
+                      setFormIssuer('https://token.actions.githubusercontent.com');
+                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormSubjectPattern('repo:org/repo:ref:refs/heads/*');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    GitHub Actions
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-gitlab-ci"
+                    onClick={() => {
+                      if (!formName) setFormName('GitLab CI');
+                      setFormIssuer('https://gitlab.com');
+                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormSubjectPattern('project_path:group/project:ref:*:ref_type:branch');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    GitLab CI
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-kubernetes"
+                    onClick={() => {
+                      if (!formName) setFormName('Kubernetes Workload');
+                      setFormIssuer('https://kubernetes.default.svc.cluster.local');
+                      setFormClientId(typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com');
+                      setFormSubjectPattern('system:serviceaccount:default:*');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    Kubernetes
+                  </button>
+                </div>
+              )}
               <div className="kb-mcp-form-group">
                 <label className="kb-mcp-label" htmlFor="wl-policy-name">Policy Name *</label>
                 <input

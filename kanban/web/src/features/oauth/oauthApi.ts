@@ -141,6 +141,8 @@ export interface RegisterOAuthClientRequest {
     | undefined;
   grant_types?: string[] | undefined;
   response_types?: string[] | undefined;
+  pkce_enforce?: boolean | undefined;
+  access_token_ttl?: number | undefined;
 }
 
 export async function registerAdminOAuthClient(
