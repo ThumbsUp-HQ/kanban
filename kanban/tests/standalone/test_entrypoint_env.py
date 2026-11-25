@@ -286,7 +286,9 @@ def test_ops_socket_server_lifecycle_and_rpc(tmp_path: Path) -> None:
         assert "Unknown operation: ping_test_op" in resp["message"]
 
         # 2. Test os.geteuid() == 0 branch with mock run_as_postgres
-        mock_proc_ok = SimpleNamespace(returncode=0, stdout=json.dumps({"status": "ok", "msg": "root"}), stderr="")
+        mock_proc_ok = SimpleNamespace(
+            returncode=0, stdout=json.dumps({"status": "ok", "msg": "root"}), stderr=""
+        )
         with (
             patch("os.geteuid", return_value=0),
             patch("deploy.standalone.entrypoint.run_as_postgres", return_value=mock_proc_ok),
@@ -617,7 +619,9 @@ def test_database_bootstrap_and_migrations(tmp_path: Path) -> None:
     assert exc_mig.value.code == 70
 
     # 6. ensure_backup_grants catches exceptions gracefully
-    with patch("deploy.standalone.entrypoint.run_psql_script", side_effect=RuntimeError("psql err")):
+    with patch(
+        "deploy.standalone.entrypoint.run_psql_script", side_effect=RuntimeError("psql err")
+    ):
         ensure_backup_grants(run_dir=str(tmp_path))
 
 
@@ -715,7 +719,10 @@ def test_entrypoint_main_flows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     # 3. Root entrypoint with KeyringError (exit 78)
     with (
         patch("os.getuid", return_value=0),
-        patch("deploy.standalone.entrypoint.load_or_create_keyring", side_effect=KeyringError("Keyring corrupted")),
+        patch(
+            "deploy.standalone.entrypoint.load_or_create_keyring",
+            side_effect=KeyringError("Keyring corrupted"),
+        ),
         patch("deploy.standalone.entrypoint.probe"),
         patch("deploy.standalone.entrypoint.write_standalone_status"),
     ):
@@ -779,6 +786,7 @@ def test_entrypoint_main_flows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
     # 6. Test handle_signal invocation
     import signal
+
     with (
         patch("os.getuid", return_value=0),
         patch("deploy.standalone.entrypoint.load_or_create_keyring", return_value=mock_keyring),
@@ -830,7 +838,10 @@ def test_entrypoint_main_flows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     # 9. Warm start KeyringError exits 78
     with (
         patch("os.getuid", return_value=0),
-        patch("deploy.standalone.entrypoint.load_or_create_keyring", side_effect=KeyringError("Keyring unreadable")),
+        patch(
+            "deploy.standalone.entrypoint.load_or_create_keyring",
+            side_effect=KeyringError("Keyring unreadable"),
+        ),
         patch("deploy.standalone.entrypoint.probe", return_value=mock_ephemeral_status),
         patch("deploy.standalone.entrypoint.write_standalone_status"),
     ):
@@ -855,5 +866,3 @@ def test_resolve_status_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     # 3. Default
     monkeypatch.delenv("KB_RUN_DIR", raising=False)
     assert resolve_status_path().name == "standalone_status.json"
-
-

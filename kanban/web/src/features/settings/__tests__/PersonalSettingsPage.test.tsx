@@ -86,6 +86,17 @@ describe('PersonalSettingsPage', () => {
     vi.mocked(api.fetchMfaStatus).mockResolvedValue(mockMfaStatus);
     vi.mocked(api.fetchPasskeys).mockResolvedValue(mockPasskeys);
     vi.mocked(api.fetchExternalIdentities).mockResolvedValue([]);
+    vi.mocked(api.fetchUserPreferences).mockResolvedValue({
+      principal_id: '11111111-1111-4111-8111-111111111111',
+      workspace_id: 'ws-1',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
+    });
     vi.mocked(authApi.fetchAuthCards).mockResolvedValue({ cards: [] });
   });
 

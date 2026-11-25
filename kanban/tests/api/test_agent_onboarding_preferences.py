@@ -306,7 +306,7 @@ async def test_build_me_response_aal2_active_and_avatar_blob_store() -> None:
         aal2_expires_at=now + timedelta(minutes=15),
     )
     res1 = await build_me_response(req, p1)
-    body1 = json.loads(res1.body.decode("utf-8"))
+    body1 = json.loads(bytes(res1.body).decode("utf-8"))
     assert body1["aal2_active"] is True
     assert body1["aal2_expires_at"] is not None
 
@@ -321,7 +321,7 @@ async def test_build_me_response_aal2_active_and_avatar_blob_store() -> None:
         aal2_last_active_at=now - timedelta(minutes=2),
     )
     res2 = await build_me_response(req, p2)
-    body2 = json.loads(res2.body.decode("utf-8"))
+    body2 = json.loads(bytes(res2.body).decode("utf-8"))
     assert body2["aal2_active"] is True
     assert body2["aal2_expires_at"] is not None
 
@@ -330,6 +330,7 @@ async def test_avatar_sniff_media_type_generic_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verify _process_and_store_avatar wraps unknown sniff exceptions in 415."""
+
     # 1. Unknown sniff exception -> 415 UNSUPPORTED_MEDIA_TYPE
     def mock_sniff(*_args: object, **_kwargs: object) -> None:
         msg = "Corrupted image header"
@@ -517,8 +518,8 @@ async def test_build_me_response_roles_and_capabilities() -> None:
             "is_mcp_credential": False,
         },
     )()
-    res_sa = await build_me_response(req, p_sa)  # type: ignore[arg-type]
-    data_sa = json.loads(res_sa.body.decode("utf-8"))
+    res_sa = await build_me_response(req, p_sa)
+    data_sa = json.loads(bytes(res_sa.body).decode("utf-8"))
     assert data_sa["workspace_role"] == "SERVER_ADMIN"
     assert "ADMIN_AUTH_STUDIO" in data_sa["workspace_capabilities"]
 
@@ -540,8 +541,8 @@ async def test_build_me_response_roles_and_capabilities() -> None:
             "is_mcp_credential": False,
         },
     )()
-    res_guest = await build_me_response(req, p_guest)  # type: ignore[arg-type]
-    data_guest = json.loads(res_guest.body.decode("utf-8"))
+    res_guest = await build_me_response(req, p_guest)
+    data_guest = json.loads(bytes(res_guest.body).decode("utf-8"))
     assert data_guest["workspace_role"] == "WORKSPACE_GUEST"
     assert data_guest["workspace_capabilities"] == []
 
@@ -562,8 +563,8 @@ async def test_build_me_response_roles_and_capabilities() -> None:
             "is_mcp_credential": False,
         },
     )()
-    res_wa = await build_me_response(req, p_wa)  # type: ignore[arg-type]
-    data_wa = json.loads(res_wa.body.decode("utf-8"))
+    res_wa = await build_me_response(req, p_wa)
+    data_wa = json.loads(bytes(res_wa.body).decode("utf-8"))
     assert data_wa["workspace_role"] == "WORKSPACE_ADMIN"
     assert "MANAGE_WORKSPACE_SETTINGS" in data_wa["workspace_capabilities"]
 
@@ -668,5 +669,3 @@ async def test_user_settings_new_local_admin_credential_create(
     )
     assert res_short.status_code == 200
     assert res_short.json()["success"] is True
-
-

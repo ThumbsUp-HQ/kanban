@@ -753,10 +753,13 @@ def _unpack_archive_for_restore(
     if header_peek == b"KBKP":
         payload = archive_path.read_bytes()
         passphrase_val = getattr(key_source, "_passphrase", None)
+        passphrase_str: str | None
         if isinstance(passphrase_val, bytes):
             passphrase_str = passphrase_val.decode("utf-8", errors="replace")
-        else:
+        elif isinstance(passphrase_val, str):
             passphrase_str = passphrase_val
+        else:
+            passphrase_str = None
         master_kek = (
             getattr(key_source, "_key", None)
             if hasattr(key_source, "_key")

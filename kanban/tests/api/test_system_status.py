@@ -1214,7 +1214,6 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
         assert resp_r_missing.status_code == 422
 
 
-
 def test_assert_admin_routes_protected_compliance() -> None:
     """Verify all admin routes declare require_admin_aal2 dependency."""
     app = create_app()

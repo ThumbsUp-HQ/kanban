@@ -215,10 +215,12 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
             )
 
         client.cookies.clear()
-        client.cookies.update({
-            SESSION_COOKIE_NAME: sess_issued.cookie_val,
-            "kb_csrf": sess_issued.csrf_token,
-        })
+        client.cookies.update(
+            {
+                SESSION_COOKIE_NAME: sess_issued.cookie_val,
+                "kb_csrf": sess_issued.csrf_token,
+            }
+        )
         csrf_headers = {"X-CSRF-Token": sess_issued.csrf_token}
 
         # 2. Touch while AAL1 -> returns 200 with aal2_active=False without throwing 403
@@ -245,10 +247,12 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
             assert elevated.aal_level == 2
 
         client.cookies.clear()
-        client.cookies.update({
-            SESSION_COOKIE_NAME: elevated.cookie_val,
-            "kb_csrf": elevated.csrf_token,
-        })
+        client.cookies.update(
+            {
+                SESSION_COOKIE_NAME: elevated.cookie_val,
+                "kb_csrf": elevated.csrf_token,
+            }
+        )
         csrf_headers = {"X-CSRF-Token": elevated.csrf_token}
 
         # 5. Privileged route now succeeds and emits X-KB-AAL2-Expires-At header

@@ -24,7 +24,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from deploy.standalone.pg_config import configure_postgres, generate_role_passwords_sql
-from kanban.api.v1.system_status import encrypt_backup
 from kanban.cli.ctl import main as ctl_main
 from kanban.cli.ops import (
     _handle_backup_create,
@@ -77,6 +76,7 @@ from kanban.standalone.export_service import (
     BackupError as ExportBackupError,
 )
 from kanban.standalone.export_service import (
+    encrypt_backup,
     get_standalone_status,
     run_pg_dump,
 )
@@ -874,4 +874,3 @@ async def test_export_service_edge_cases(tmp_path: Path) -> None:
         assert "-p" in args
         assert "5433" in args
         assert call_args[1]["env"]["PGPASSWORD"] == "custom_pass"
-

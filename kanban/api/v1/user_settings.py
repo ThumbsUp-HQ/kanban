@@ -946,9 +946,7 @@ async def get_user_preferences(
             if isinstance(raw_prefs, dict):
                 prefs_dict = raw_prefs
 
-    active_prefs = (
-        AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs()
-    )
+    active_prefs = AgentOnboardingPrefs(**prefs_dict) if prefs_dict else AgentOnboardingPrefs()
     return UserPreferencesResponse(
         principal_id=str(principal.principal_id),
         workspace_id=str(principal.workspace_id),
@@ -1046,9 +1044,7 @@ async def update_user_preferences(
                 current_prefs_dict = raw_prefs
 
     active_prefs = (
-        AgentOnboardingPrefs(**current_prefs_dict)
-        if current_prefs_dict
-        else AgentOnboardingPrefs()
+        AgentOnboardingPrefs(**current_prefs_dict) if current_prefs_dict else AgentOnboardingPrefs()
     )
     updated_prefs = _merge_agent_onboarding_prefs(active_prefs, body)
 
