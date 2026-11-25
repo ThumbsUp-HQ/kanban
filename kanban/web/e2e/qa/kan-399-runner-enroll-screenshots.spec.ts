@@ -148,6 +148,26 @@ function getMocks(): MockHandlers {
 async function setupMocks(page: Page): Promise<void> {
   await page.unroute('**/api/v1/**');
   await mockApi(page, getMocks());
+  await page.addInitScript(() => {
+    class CleanMockWebSocket extends EventTarget {
+      readyState = 1;
+      url = '';
+      close(): void {
+        // No-op mock
+      }
+      send(): void {
+        // No-op mock
+      }
+      constructor(url: string) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.dispatchEvent(new Event('open'));
+        }, 5);
+      }
+    }
+    (window as unknown as { WebSocket: typeof CleanMockWebSocket }).WebSocket = CleanMockWebSocket;
+  });
 }
 
 test.describe('KAN-399: Runner Enrollment Modal Proofs', () => {
@@ -201,6 +221,12 @@ test.describe('KAN-399: Runner Enrollment Modal Proofs', () => {
     await expect(doneBtn).toBeVisible();
     await expect(doneBtn).toHaveText('Done');
 
+    // Verify Dedicated mTLS notice
+    await expect(page.getByTestId('runner-mtls-notice')).toBeVisible();
+
+    // Ensure zero reconnecting toast
+    await expect(page.locator('.realtime-status-chip')).toHaveCount(0);
+
     // Capture screenshot
     const shotPath = resolve(SCREENSHOT_DIR, 'runner-mint-modal-reveal-1440x900-light.png');
     await page.screenshot({ path: shotPath, fullPage: false });
@@ -235,13 +261,42 @@ test.describe('KAN-399: Runner Enrollment Modal Proofs', () => {
     await expect(page.getByTestId('runner-cli-command')).toContainText('--server-url');
     await expect(page.getByTestId('copy-runner-cli-btn')).toHaveText('Copy CLI Command');
     await expect(page.getByTestId('dismiss-mint-modal-btn')).toHaveText('Done');
+    await expect(page.getByTestId('runner-mtls-notice')).toBeVisible();
+    await expect(page.locator('.realtime-status-chip')).toHaveCount(0);
 
     const shotPath = resolve(SCREENSHOT_DIR, 'runner-mint-modal-reveal-1440x900-dark.png');
     await page.screenshot({ path: shotPath, fullPage: false });
     copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '1440x900-dark.png'));
   });
 
-  test('03: 768x1024 Tablet Portrait - Responsive layout with visible CLI snippet and buttons', async ({
+  test('03: 1024x768 Tablet Landscape - Responsive layout with visible CLI snippet and buttons', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await setupMocks(page);
+
+    await page.goto('/admin/agent-runners');
+    await applyTheme(page, 'light');
+
+    await expect(page.getByTestId('runner-studio-page')).toBeVisible();
+
+    await page.getByTestId('open-mint-modal-btn').click();
+    await expect(page.getByTestId('mint-enrollment-token-modal')).toBeVisible();
+    await page.getByTestId('submit-mint-token-btn').click();
+
+    await expect(page.getByTestId('single-reveal-token-view')).toBeVisible();
+    await expect(page.getByTestId('runner-cli-command')).toContainText('--server-url');
+    await expect(page.getByTestId('copy-runner-cli-btn')).toBeVisible();
+    await expect(page.getByTestId('dismiss-mint-modal-btn')).toHaveText('Done');
+    await expect(page.getByTestId('runner-mtls-notice')).toBeVisible();
+    await expect(page.locator('.realtime-status-chip')).toHaveCount(0);
+
+    const shotPath = resolve(SCREENSHOT_DIR, 'runner-mint-modal-reveal-1024x768.png');
+    await page.screenshot({ path: shotPath, fullPage: false });
+    copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '1024x768.png'));
+  });
+
+  test('04: 768x1024 Tablet Portrait - Responsive layout with visible CLI snippet and buttons', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
@@ -260,13 +315,15 @@ test.describe('KAN-399: Runner Enrollment Modal Proofs', () => {
     await expect(page.getByTestId('runner-cli-command')).toContainText('--server-url');
     await expect(page.getByTestId('copy-runner-cli-btn')).toBeVisible();
     await expect(page.getByTestId('dismiss-mint-modal-btn')).toHaveText('Done');
+    await expect(page.getByTestId('runner-mtls-notice')).toBeVisible();
+    await expect(page.locator('.realtime-status-chip')).toHaveCount(0);
 
     const shotPath = resolve(SCREENSHOT_DIR, 'runner-mint-modal-reveal-768x1024.png');
     await page.screenshot({ path: shotPath, fullPage: false });
     copyFileSync(shotPath, resolve(SCREENSHOT_DIR, '768x1024.png'));
   });
 
-  test('04: 390x844 Mobile Portrait - Single-column responsive modal layout', async ({
+  test('05: 390x844 Mobile Portrait - Single-column responsive modal layout', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -285,6 +342,11 @@ test.describe('KAN-399: Runner Enrollment Modal Proofs', () => {
     await expect(page.getByTestId('runner-cli-command')).toContainText('--server-url');
     await expect(page.getByTestId('copy-runner-cli-btn')).toBeVisible();
     await expect(page.getByTestId('dismiss-mint-modal-btn')).toHaveText('Done');
+    await expect(page.getByTestId('runner-mtls-notice')).toBeVisible();
+    await expect(page.locator('.realtime-status-chip')).toHaveCount(0);
+
+    // Scroll notice into view to guarantee complete visibility without slicing
+    await page.getByTestId('runner-mtls-notice').scrollIntoViewIfNeeded();
 
     const shotPath = resolve(SCREENSHOT_DIR, 'runner-mint-modal-reveal-390x844.png');
     await page.screenshot({ path: shotPath, fullPage: false });

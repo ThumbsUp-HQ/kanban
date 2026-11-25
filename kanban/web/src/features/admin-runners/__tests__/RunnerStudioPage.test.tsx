@@ -628,6 +628,7 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
 
       expect(screen.getByTestId('copy-runner-cli-btn').textContent).toBe('Copy CLI Command');
       expect(screen.getByTestId('dismiss-mint-modal-btn').textContent).toBe('Done');
+      expect(screen.queryByText(/I have safely stored the token/i)).toBeNull();
 
       expect(screen.getByTestId('runner-mtls-notice').textContent).toContain(
         'dedicated mutual TLS port (default :8444)',

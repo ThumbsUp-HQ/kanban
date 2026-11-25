@@ -148,6 +148,8 @@ def test_enroll_runner_persists_ca_pem_0600_and_runner_toml(tmp_path: Path) -> N
     )
 
     assert cfg_path.is_file()
+    assert state_dir.is_dir()
+    assert (state_dir.stat().st_mode & 0o777) == 0o700
     ca_pem = state_dir / "ca.pem"
     runner_toml = state_dir / "runner.toml"
 
@@ -353,6 +355,8 @@ def test_default_runner_state_dir_root(tmp_path: Path, monkeypatch: pytest.Monke
     )
     res = default_runner_state_dir()
     assert res == Path("/var/lib/kanban-runner")
+    assert mock_target.is_dir()
+    assert (mock_target.stat().st_mode & 0o777) == 0o700
 
 
 def test_default_runner_state_dir_user_with_and_without_xdg(

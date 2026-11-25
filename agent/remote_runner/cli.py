@@ -146,7 +146,8 @@ def enroll_runner(  # noqa: PLR0913
     host = hostname or socket.gethostname()
     key_pem, csr_pem = _generate_ecdsa_key_and_csr(host)
 
-    state_dir.mkdir(parents=True, exist_ok=True)
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(state_dir, 0o700)
     key_path = state_dir / "client.key"
     _write_secure_file(key_path, key_pem, mode=0o600)
 
