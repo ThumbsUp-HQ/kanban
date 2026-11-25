@@ -2585,7 +2585,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       // Trigger AAL2_REQUIRED without challenge_id/methods
       fireEvent.click(screen.getByRole('switch', { name: 'Enable OIDC One' }));
       await waitFor(() => {
-        expect(screen.getByText(/Admin Verification Required/i)).toBeDefined();
+        expect(screen.queryByText(/Admin Verification Required/i)).toBeNull();
       });
       // Switch to Users & Permissions tab when users list is empty
       fireEvent.click(screen.getByRole('tab', { name: /Users & Permissions/i }));

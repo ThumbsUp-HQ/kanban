@@ -523,6 +523,7 @@ class OpsSocketServer:
 
     def start(self) -> None:
         """Start listening on the Unix domain socket in a daemon thread."""
+        self.sock_path.parent.mkdir(parents=True, exist_ok=True)
         if self.sock_path.exists():
             self.sock_path.unlink(missing_ok=True)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

@@ -289,6 +289,7 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
         "LANG",
         "KB_STANDALONE_STATUS_PATH",
         "KANBAN_ATTACHMENT_DIR",
+        "KB_OPS_SOCK",
     }
     assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
 
@@ -313,6 +314,7 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
         "KB_MASTER_KEK_B64",
         "KB_AUTH_PEPPER_B64",
         "KB_SESSION_HMAC_KEY_B64",
+        "KB_OPS_SOCK",
     }
     assert kr_env["KB_MASTER_KEK_B64"] == kr.master_kek_b64
 
