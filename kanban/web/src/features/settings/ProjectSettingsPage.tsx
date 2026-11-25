@@ -28,6 +28,8 @@ import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+import { AiStudioPage } from '../admin-ai/AiStudioPage';
+import { AgentStudioPage } from '../admin-agents/AgentStudioPage';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -157,6 +159,7 @@ type SettingsTab =
   | 'members'
   | 'roles'
   | 'integrations'
+  | 'ai-agents'
   | 'trash'
   | 'danger';
 
@@ -178,7 +181,7 @@ export function ProjectSettingsPage(): JSX.Element {
   const rawTab = searchParams?.get('tab');
   const initialTab: SettingsTab =
     rawTab &&
-    ['general', 'states', 'priorities', 'labels', 'members', 'roles', 'integrations', 'trash', 'danger'].includes(
+    ['general', 'states', 'priorities', 'labels', 'members', 'roles', 'integrations', 'ai-agents', 'trash', 'danger'].includes(
       rawTab,
     )
       ? (rawTab as SettingsTab)
@@ -1432,6 +1435,14 @@ export function ProjectSettingsPage(): JSX.Element {
           onClick={() => { handleTabSwitch('integrations'); }}
         >
           Automation & Integrations
+        </button>
+        <button
+          type="button"
+          data-testid="tab-ai-agents"
+          className={`kb-settings-tab ${activeTab === 'ai-agents' ? 'kb-settings-tab-active' : ''}`}
+          onClick={() => { handleTabSwitch('ai-agents'); }}
+        >
+          AI &amp; Agents
         </button>
         <button
           type="button"
@@ -2717,6 +2728,15 @@ export function ProjectSettingsPage(): JSX.Element {
               </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'ai-agents' && (
+          <div className="kb-project-ai-agents-section" data-testid="project-ai-agents-section">
+            <AiStudioPage projectId={project?.id} showSubnav={false} />
+            <div style={{ marginTop: '2rem' }}>
+              <AgentStudioPage projectId={project?.id} />
+            </div>
           </div>
         )}
 

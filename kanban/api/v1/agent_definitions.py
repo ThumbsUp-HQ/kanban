@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+import uuid  # noqa: TC003
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+if TYPE_CHECKING:
+    from database.models.agent_definition import AgentDefinition
+
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,9 +72,12 @@ async def list_agent_definitions(
     workspace: str,
     caller: Caller,
     session: Session,
+    project_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> list[AgentDefinitionResponse]:
     """List all agent definitions in the workspace visible to caller."""
-    return await AgentDefinitionService.list_definitions(session, caller, workspace)
+    return await AgentDefinitionService.list_definitions(
+        session, caller, workspace, project_id=project_id
+    )
 
 
 @router.get(
@@ -120,83 +127,8 @@ async def delete_agent_definition(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-admin_router = APIRouter(
-    prefix="/admin/agent-definitions",
-    tags=["admin-agent-definitions"],
-    dependencies=[Depends(require_admin_aal2)],
-)
-AdminCaller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
-
-
-@admin_router.get("", response_model=list[AgentDefinitionResponse])
-async def admin_list_agent_definitions(
-    caller: AdminCaller, session: Session
-) -> list[AgentDefinitionResponse]:
-    """List agent definitions in caller's workspace under admin authority."""
-    return await AgentDefinitionService.list_definitions(session, caller, str(caller.workspace_id))
-
-
-@admin_router.post(
-    "",
-    status_code=status.HTTP_201_CREATED,
-    response_model=AgentDefinitionResponse,
-)
-async def admin_create_agent_definition(
-    body: AgentDefinitionCreate,
-    caller: AdminCaller,
-    session: Session,
-    response: Response,
-) -> AgentDefinitionResponse:
-    """Create a new agent definition in caller's workspace under admin authority."""
-    result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
-    response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
-    return result
-
-
-@admin_router.get("/{agent}", response_model=AgentDefinitionResponse)
-async def admin_get_agent_definition(
-    agent: str, caller: AdminCaller, session: Session
-) -> AgentDefinitionResponse:
-    """Retrieve an agent definition under admin authority."""
-    return await AgentDefinitionService.get(session, caller, agent)
-
-
-@admin_router.patch("/{agent}", response_model=AgentDefinitionResponse)
-async def admin_patch_agent_definition(
-    agent: str,
-    body: AgentDefinitionPatch,
-    caller: AdminCaller,
-    session: Session,
-) -> AgentDefinitionResponse:
-    """Update an existing agent definition under admin authority."""
-    return await AgentDefinitionService.patch(session, caller, agent, body)
-
-
-@admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
-async def admin_delete_agent_definition(
-    agent: str, caller: AdminCaller, session: Session
-) -> Response:
-    """Delete an agent definition under admin authority."""
-    await AgentDefinitionService.delete(session, caller, agent)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@admin_router.post(
-    "/{agent}:validate",
-    response_model=AgentValidationResponse,
-    operation_id="validate_agent_definition_colon",
-)
-@admin_router.post(
-    "/{agent}/validate",
-    response_model=AgentValidationResponse,
-    operation_id="validate_agent_definition_slash",
-)
-async def admin_validate_agent_definition(
-    agent: str, caller: AdminCaller, session: Session
-) -> AgentValidationResponse:
-    """Run test validation (kanban-agent validate-echo) on an existing agent definition."""
-    agent_def = await AgentDefinitionService.get_by_ref(session, caller, agent)
-
+def _execute_agent_validation(agent_def: AgentDefinition) -> AgentValidationResponse:
+    """Execute validation logic for an agent definition."""
     if agent_def.harness_kind == "cli_pipe":
         try:
             validate_cli_args(
@@ -287,6 +219,105 @@ async def admin_validate_agent_definition(
         tool_trace="Calls: 0; Tools: (none)",
         report_text=report,
     )
+
+
+@router.post(
+    "/agent-definitions/{agent}:validate",
+    response_model=AgentValidationResponse,
+    operation_id="validate_agent_definition_colon",
+)
+@router.post(
+    "/agent-definitions/{agent}/validate",
+    response_model=AgentValidationResponse,
+    operation_id="validate_agent_definition_slash",
+)
+async def validate_agent_definition(
+    agent: str, caller: Caller, session: Session
+) -> AgentValidationResponse:
+    """Run test validation on an existing agent definition visible to caller."""
+    async with timing_floor(floor_ms=25.0):
+        agent_def = await AgentDefinitionService.get_by_ref(session, caller, agent)
+        await AgentDefinitionService.require_admin_role(session, agent_def.project_id)
+        return _execute_agent_validation(agent_def)
+
+
+admin_router = APIRouter(
+    prefix="/admin/agent-definitions",
+    tags=["admin-agent-definitions"],
+    dependencies=[Depends(require_admin_aal2)],
+)
+AdminCaller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
+
+
+@admin_router.get("", response_model=list[AgentDefinitionResponse])
+async def admin_list_agent_definitions(
+    caller: AdminCaller, session: Session
+) -> list[AgentDefinitionResponse]:
+    """List agent definitions in caller's workspace under admin authority."""
+    return await AgentDefinitionService.list_definitions(session, caller, str(caller.workspace_id))
+
+
+@admin_router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AgentDefinitionResponse,
+)
+async def admin_create_agent_definition(
+    body: AgentDefinitionCreate,
+    caller: AdminCaller,
+    session: Session,
+    response: Response,
+) -> AgentDefinitionResponse:
+    """Create a new agent definition in caller's workspace under admin authority."""
+    result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
+    response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
+    return result
+
+
+@admin_router.get("/{agent}", response_model=AgentDefinitionResponse)
+async def admin_get_agent_definition(
+    agent: str, caller: AdminCaller, session: Session
+) -> AgentDefinitionResponse:
+    """Retrieve an agent definition under admin authority."""
+    return await AgentDefinitionService.get(session, caller, agent)
+
+
+@admin_router.patch("/{agent}", response_model=AgentDefinitionResponse)
+async def admin_patch_agent_definition(
+    agent: str,
+    body: AgentDefinitionPatch,
+    caller: AdminCaller,
+    session: Session,
+) -> AgentDefinitionResponse:
+    """Update an existing agent definition under admin authority."""
+    return await AgentDefinitionService.patch(session, caller, agent, body)
+
+
+@admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_agent_definition(
+    agent: str, caller: AdminCaller, session: Session
+) -> Response:
+    """Delete an agent definition under admin authority."""
+    await AgentDefinitionService.delete(session, caller, agent)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.post(
+    "/{agent}:validate",
+    response_model=AgentValidationResponse,
+    operation_id="admin_validate_agent_definition_colon",
+)
+@admin_router.post(
+    "/{agent}/validate",
+    response_model=AgentValidationResponse,
+    operation_id="admin_validate_agent_definition_slash",
+)
+async def admin_validate_agent_definition(
+    agent: str, caller: AdminCaller, session: Session
+) -> AgentValidationResponse:
+    """Run test validation (kanban-agent validate-echo) on an existing agent definition."""
+    agent_def = await AgentDefinitionService.get_by_ref(session, caller, agent)
+    return _execute_agent_validation(agent_def)
 
 
 router.include_router(admin_router)

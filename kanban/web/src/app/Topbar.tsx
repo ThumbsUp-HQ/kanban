@@ -479,22 +479,58 @@ export function Topbar({
                 )}
 
                 {(isWorkspaceAdmin || isServerAdmin) && (
-                  <Link
-                    to="/admin/diagnostics"
-                    role="menuitem"
-                    data-testid="topbar-link-auditor-link"
-                    className="kb-theme-radio kb-avatar-menu-link"
-                    onClick={() => {
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span>
-                      <span aria-hidden="true" className="kb-avatar-menu-icon">
-                        🩺
+                  <>
+                    <Link
+                      to="/admin/diagnostics"
+                      role="menuitem"
+                      data-testid="topbar-link-auditor-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🩺
+                        </span>
+                        Diagnostics & Link Inspector
                       </span>
-                      Diagnostics & Link Inspector
-                    </span>
-                  </Link>
+                    </Link>
+
+                    <Link
+                      to="/workspaces/settings/ai"
+                      role="menuitem"
+                      data-testid="topbar-admin-ai-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🧠
+                        </span>
+                        AI Providers & Token Caps
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/workspaces/settings/agents"
+                      role="menuitem"
+                      data-testid="topbar-admin-agents-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🤖
+                        </span>
+                        Autonomous Agents
+                      </span>
+                    </Link>
+                  </>
                 )}
 
                 {isServerAdmin && (
@@ -513,40 +549,6 @@ export function Topbar({
                           🛡️
                         </span>
                         Admin Auth Studio
-                      </span>
-                    </Link>
-
-                    <Link
-                      to="/admin/ai"
-                      role="menuitem"
-                      data-testid="topbar-admin-ai-link"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🧠
-                        </span>
-                        AI Providers & Token Caps
-                      </span>
-                    </Link>
-
-                    <Link
-                      to="/admin/agents"
-                      role="menuitem"
-                      data-testid="topbar-admin-agents-link"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🤖
-                        </span>
-                        Autonomous Agents
                       </span>
                     </Link>
 

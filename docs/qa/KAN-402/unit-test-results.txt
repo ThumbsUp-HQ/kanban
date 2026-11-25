@@ -1,0 +1,32 @@
+Uninstalled 4 packages in 0.67ms
+Installed 4 packages in 1ms
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan402-994b4fea
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 5 items
+
+kanban/tests/api/test_workspace_project_ai_agents.py::test_workspace_admin_ai_providers_lifecycle PASSED [ 20%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_project_admin_ai_providers_scoping_and_isolation PASSED [ 40%]
+kanban/tests/api/test_workspace_project_ai_agents.py::test_workspace_and_project_agent_definitions_lifecycle PASSED [ 60%]
+kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 80%]
+kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [100%]
+
+============================== 5 passed in 3.15s ===============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan402-994b4fea/kanban/web
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 15ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (4 tests) 211ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (25 tests) 623ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (42 tests) 1166ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (39 tests) 1368ms
+ ✓ src/app/__tests__/MenuConsolidation_KAN363.test.tsx (7 tests) 494ms
+
+ Test Files  6 passed (6)
+      Tests  124 passed (124)
+   Start at  03:41:54
+   Duration  2.58s (environment 43%, tests 38%, import 14%, transform 5%, worker 1%)
+

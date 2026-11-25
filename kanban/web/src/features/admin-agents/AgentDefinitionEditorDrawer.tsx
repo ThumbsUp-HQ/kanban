@@ -28,6 +28,7 @@ interface AgentDefinitionEditorDrawerProps {
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
+  projectId?: string | null | undefined;
 }
 
 const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
@@ -37,11 +38,13 @@ function AgentDefinitionEditorContent({
   agent,
   onSaved,
   aiProviders,
+  projectId,
 }: {
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
+  projectId?: string | null | undefined;
 }): JSX.Element {
   const isEditing = agent !== null;
 
@@ -57,7 +60,7 @@ function AgentDefinitionEditorContent({
       return;
     }
     let isMounted = true;
-    fetchAiProviders()
+    fetchAiProviders(projectId ?? undefined)
       .then((data) => {
         if (isMounted) {
           setFetchedProviders(data);
@@ -69,7 +72,7 @@ function AgentDefinitionEditorContent({
     return () => {
       isMounted = false;
     };
-  }, [aiProviders]);
+  }, [aiProviders, projectId]);
 
   const providers = aiProviders ?? fetchedProviders;
   const matchingProviders = providers.filter(
@@ -158,6 +161,7 @@ function AgentDefinitionEditorContent({
         const payload: AgentDefinitionCreate = {
           slug: slug.trim(),
           display_name: displayName.trim(),
+          project_id: projectId ?? null,
           harness_kind: harnessKind,
           provider_kind: harnessKind === 'in_app_sdk' ? providerKind : null,
           model_id: harnessKind === 'in_app_sdk' ? modelId.trim() : null,
@@ -523,6 +527,7 @@ export function AgentDefinitionEditorDrawer({
   agent,
   onSaved,
   aiProviders,
+  projectId,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -541,6 +546,7 @@ export function AgentDefinitionEditorDrawer({
         agent={agent}
         onSaved={onSaved}
         aiProviders={aiProviders}
+        projectId={projectId}
       />
     </div>
   );

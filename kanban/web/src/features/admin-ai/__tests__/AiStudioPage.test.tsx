@@ -96,13 +96,13 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       // fetchAiProviders
       const list1 = await aiApi.fetchAiProviders();
       expect(list1).toEqual([mockProvider]);
-      expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/providers');
+      expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers');
 
       // fetchAiProviders with project_id
       fetchSpy.mockResolvedValueOnce([mockProvider]);
       const list2 = await aiApi.fetchAiProviders('proj-123');
       expect(list2).toEqual([mockProvider]);
-      expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/providers?project_id=proj-123');
+      expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers?project_id=proj-123');
 
       // fetchAiProvider
       fetchSpy.mockResolvedValueOnce(mockProvider);

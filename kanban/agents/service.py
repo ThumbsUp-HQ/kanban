@@ -271,15 +271,18 @@ class AgentDefinitionService:
 
     @classmethod
     async def list_definitions(
-        cls, session: AsyncSession, caller: PrincipalContext, workspace_ref: str
+        cls,
+        session: AsyncSession,
+        caller: PrincipalContext,
+        workspace_ref: str,
+        project_id: uuid.UUID | None = None,
     ) -> list[AgentDefinitionResponse]:
         """List all readable agent definitions in the workspace ordered by slug."""
         await cls.verify_workspace(session, caller, workspace_ref)
-        stmt = (
-            select(AgentDefinition)
-            .where(AgentDefinition.workspace_id == caller.workspace_id)
-            .order_by(AgentDefinition.slug)
-        )
+        stmt = select(AgentDefinition).where(AgentDefinition.workspace_id == caller.workspace_id)
+        if project_id is not None:
+            stmt = stmt.where(AgentDefinition.project_id == project_id)
+        stmt = stmt.order_by(AgentDefinition.slug)
         results = (await session.execute(stmt)).scalars().all()
         return [_serialize(agent) for agent in results]
 

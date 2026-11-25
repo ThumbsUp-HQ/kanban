@@ -14,7 +14,15 @@ import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './agentStudio.css';
 
-export function AgentStudioPage(): JSX.Element {
+export interface AgentStudioPageProps {
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
+}
+
+export function AgentStudioPage({
+  projectId,
+  workspaceSlug,
+}: AgentStudioPageProps = {}): JSX.Element {
   const [agents, setAgents] = useState<AgentDefinitionResponse[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +40,7 @@ export function AgentStudioPage(): JSX.Element {
 
     async function load() {
       try {
-        const list = await fetchAgentDefinitions();
+        const list = await fetchAgentDefinitions(workspaceSlug ?? 'current', projectId ?? undefined);
         if (!active) return;
         setAgents(list);
       } catch (err: unknown) {
@@ -51,7 +59,7 @@ export function AgentStudioPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [reloadCounter]);
+  }, [reloadCounter, projectId, workspaceSlug]);
 
   const refreshAgents = useCallback((): void => {
     setReloadCounter((c) => c + 1);
@@ -244,6 +252,7 @@ export function AgentStudioPage(): JSX.Element {
         }}
         agent={editingAgent}
         onSaved={refreshAgents}
+        projectId={projectId}
       />
 
       {/* Delete Confirmation Modal */}

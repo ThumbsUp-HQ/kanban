@@ -2004,11 +2004,25 @@ export function AdminMcpRedirect(): JSX.Element {
   return <Navigate to={`/admin/mcp${qs ? `?${qs}` : ''}`} replace />;
 }
 
+export function AdminAiRedirect(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  const qs = nextParams.toString();
+  return <Navigate to={`/workspaces/settings/ai${qs ? `?${qs}` : ''}`} replace />;
+}
+
+export function AdminAgentsRedirect(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  const qs = nextParams.toString();
+  return <Navigate to={`/workspaces/settings/agents${qs ? `?${qs}` : ''}`} replace />;
+}
+
 export function WorkspaceAiRedirect(): JSX.Element {
   const [searchParams] = useSearchParams();
   const nextParams = new URLSearchParams(searchParams);
   const qs = nextParams.toString();
-  return <Navigate to={`/admin/ai${qs ? `?${qs}` : ''}`} replace />;
+  return <Navigate to={`/workspaces/settings/ai${qs ? `?${qs}` : ''}`} replace />;
 }
 
 const projectRouteChildren: RouteObject[] = [
@@ -2170,7 +2184,19 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'workspaces/settings/ai',
-            element: <WorkspaceAiRedirect />,
+            element: (
+              <AdminRouteGuard>
+                <AiStudioPage />
+              </AdminRouteGuard>
+            ),
+          },
+          {
+            path: 'workspaces/settings/agents',
+            element: (
+              <AdminRouteGuard>
+                <AgentStudioPage />
+              </AdminRouteGuard>
+            ),
           },
           {
             path: 'admin',
@@ -2210,11 +2236,11 @@ export const appRoutes: RouteObject[] = [
               },
               {
                 path: 'ai',
-                element: <AiStudioPage />,
+                element: <AdminAiRedirect />,
               },
               {
                 path: 'agents',
-                element: <AgentStudioPage />,
+                element: <AdminAgentsRedirect />,
               },
               {
                 path: 'agent-runners',

@@ -41,7 +41,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
     expect(await fetchAirGapMode()).toBe(false);
   });
 
-  it('reorderAiProviders calls PUT /api/v1/admin/ai/providers/order with ordered_ids', async () => {
+  it('reorderAiProviders calls PUT /api/v1/workspaces/current/ai-providers/order with ordered_ids', async () => {
     const mockReturnedProviders = [
       { id: 'id-1', priority: 10, display_name: 'Provider 1' },
       { id: 'id-2', priority: 20, display_name: 'Provider 2' },
@@ -51,8 +51,8 @@ describe('aiAdminApi tests (KAN-21)', () => {
     const orderedIds = ['id-1', 'id-2'];
     const res = await reorderAiProviders(orderedIds);
     expect(res).toEqual(mockReturnedProviders);
-    expect(fetchSpy).toHaveBeenCalledWith('PUT', '/api/v1/admin/ai/providers/order', {
-      body: { ordered_ids: orderedIds },
+    expect(fetchSpy).toHaveBeenCalledWith('PUT', '/api/v1/workspaces/current/ai-providers/order', {
+      body: { ordered_ids: orderedIds, project_id: undefined },
     });
   });
 
@@ -73,7 +73,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
       base_url: 'http://127.0.0.1:11434',
     });
     expect(resDraft).toEqual(mockProbeResult);
-    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/ai/providers/probe-models', {
+    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/workspaces/current/ai-providers/probe-models', {
       body: {
         provider_kind: 'ollama',
         base_url: 'http://127.0.0.1:11434',
@@ -88,7 +88,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
     expect(resSaved).toEqual(mockProbeResult);
     expect(fetchSpy).toHaveBeenCalledWith(
       'POST',
-      '/api/v1/admin/ai/providers/p-1234-uuid/probe-models',
+      '/api/v1/workspaces/current/ai-providers/p-1234-uuid/probe-models',
       {
         body: { provider_kind: 'openai' },
       },
@@ -113,7 +113,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
       api_key: 'sk-test',
     });
     expect(resDraft).toEqual(mockTestResult);
-    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/ai/providers/test-connection', {
+    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/workspaces/current/ai-providers/test-connection', {
       body: {
         provider_kind: 'openai',
         base_url: 'https://api.openai.com/v1',
@@ -129,7 +129,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
     expect(resSaved).toEqual(mockTestResult);
     expect(fetchSpy).toHaveBeenCalledWith(
       'POST',
-      '/api/v1/admin/ai/providers/p-5678-uuid/test-connection',
+      '/api/v1/workspaces/current/ai-providers/p-5678-uuid/test-connection',
       {
         body: { provider_kind: 'gemini' },
       },
@@ -153,41 +153,41 @@ describe('aiAdminApi tests (KAN-21)', () => {
     // fetchAiProviders
     fetchSpy.mockResolvedValueOnce([mockProvider]);
     expect(await fetchAiProviders()).toEqual([mockProvider]);
-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/providers');
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers');
 
     // fetchAiProviders with projectId
     fetchSpy.mockResolvedValueOnce([mockProvider]);
     expect(await fetchAiProviders('proj-123')).toEqual([mockProvider]);
-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/providers?project_id=proj-123');
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers?project_id=proj-123');
 
     // fetchAiProvider
     fetchSpy.mockResolvedValueOnce(mockProvider);
     expect(await fetchAiProvider('prov-1')).toEqual(mockProvider);
-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/providers/prov-1');
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers/prov-1');
 
     // createAiProvider
     fetchSpy.mockResolvedValueOnce(mockProvider);
     expect(await createAiProvider({ provider_kind: 'ollama', display_name: 'Local' })).toEqual(mockProvider);
-    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/ai/providers', {
+    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/workspaces/current/ai-providers', {
       body: { provider_kind: 'ollama', display_name: 'Local' },
     });
 
     // updateAiProvider
     fetchSpy.mockResolvedValueOnce(mockProvider);
     expect(await updateAiProvider('prov-1', { display_name: 'Updated' })).toEqual(mockProvider);
-    expect(fetchSpy).toHaveBeenCalledWith('PATCH', '/api/v1/admin/ai/providers/prov-1', {
+    expect(fetchSpy).toHaveBeenCalledWith('PATCH', '/api/v1/workspaces/current/ai-providers/prov-1', {
       body: { display_name: 'Updated' },
     });
 
     // disableAiProvider
     fetchSpy.mockResolvedValueOnce(mockProvider);
     expect(await disableAiProvider('prov-1')).toEqual(mockProvider);
-    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/ai/providers/prov-1:disable');
+    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/workspaces/current/ai-providers/prov-1:disable');
 
     // deleteAiProvider
     fetchSpy.mockResolvedValueOnce(undefined);
     await deleteAiProvider('prov-1');
-    expect(fetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/ai/providers/prov-1');
+    expect(fetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/workspaces/current/ai-providers/prov-1');
 
     // fetchBudgets
     const mockBudget = {
@@ -199,12 +199,12 @@ describe('aiAdminApi tests (KAN-21)', () => {
     };
     fetchSpy.mockResolvedValueOnce([mockBudget]);
     expect(await fetchBudgets('prov-1')).toEqual([mockBudget]);
-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/ai/budgets?provider_config_id=prov-1');
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers/budgets?provider_config_id=prov-1');
 
     // setBudget
     fetchSpy.mockResolvedValueOnce(mockBudget);
     expect(await setBudget({ provider_config_id: 'prov-1', period_kind: 'daily', token_cap: 100000 })).toEqual(mockBudget);
-    expect(fetchSpy).toHaveBeenCalledWith('PUT', '/api/v1/admin/ai/budgets', {
+    expect(fetchSpy).toHaveBeenCalledWith('PUT', '/api/v1/workspaces/current/ai-providers/budgets', {
       body: { provider_config_id: 'prov-1', period_kind: 'daily', token_cap: 100000 },
     });
   });

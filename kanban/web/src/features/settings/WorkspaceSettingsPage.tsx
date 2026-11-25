@@ -21,6 +21,8 @@ import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { AiStudioPage } from '../admin-ai/AiStudioPage';
+import { AgentStudioPage } from '../admin-agents/AgentStudioPage';
 import './ProjectSettingsPage.css';
 import './WorkspaceSettingsPage.css';
 
@@ -61,7 +63,7 @@ export function formatHandle(handle?: string | null): string {
   return clean ? `@${clean}` : '';
 }
 
-export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'trash';
+export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'ai' | 'agents' | 'trash';
 
 export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (!hash) return null;
@@ -70,6 +72,8 @@ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (clean === 'tab-members' || clean === 'members') return 'members';
   if (clean === 'tab-groups' || clean === 'groups') return 'groups';
   if (clean === 'tab-roles' || clean === 'roles') return 'roles';
+  if (clean === 'tab-ai' || clean === 'ai') return 'ai';
+  if (clean === 'tab-agents' || clean === 'agents') return 'agents';
   if (clean === 'tab-trash' || clean === 'trash') return 'trash';
   return null;
 }
@@ -884,6 +888,28 @@ export function WorkspaceSettingsPage(): JSX.Element {
               onClick={() => { handleTabChange('roles'); }}
             >
               Roles &amp; Permissions
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-ai"
+              aria-selected={activeTab === 'ai'}
+              data-testid="tab-ai"
+              className={`kb-settings-tab ${activeTab === 'ai' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('ai'); }}
+            >
+              AI Providers
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-agents"
+              aria-selected={activeTab === 'agents'}
+              data-testid="tab-agents"
+              className={`kb-settings-tab ${activeTab === 'agents' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('agents'); }}
+            >
+              Autonomous Agents
             </button>
           </>
         )}
@@ -1704,6 +1730,18 @@ export function WorkspaceSettingsPage(): JSX.Element {
               isServerAdmin={Boolean(currentUser?.is_server_admin)}
               workspaceId={settings?.workspace_id ?? settings?.id}
             />
+          </div>
+        )}
+
+        {activeTab === 'ai' && (
+          <div data-testid="workspace-ai-section">
+            <AiStudioPage showSubnav={false} />
+          </div>
+        )}
+
+        {activeTab === 'agents' && (
+          <div data-testid="workspace-agents-section">
+            <AgentStudioPage />
           </div>
         )}
 

@@ -25,6 +25,7 @@ interface AiProviderEditorDrawerProps {
   airGapMode: boolean;
   onSaved: () => void;
   providersCount?: number | undefined;
+  projectId?: string | null | undefined;
 }
 
 interface TestStatusState {
@@ -91,12 +92,14 @@ function AiProviderEditorContent({
   airGapMode,
   onSaved,
   providersCount,
+  projectId,
 }: {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
   onSaved: () => void;
   providersCount?: number | undefined;
+  projectId?: string | null | undefined;
 }): JSX.Element {
   const isEditing = provider !== null;
 
@@ -264,10 +267,12 @@ function AiProviderEditorContent({
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           }
         : {
             ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
       const res = await probeAiModels(payload, targetProviderId);
@@ -304,10 +309,12 @@ function AiProviderEditorContent({
             base_url: baseUrl.trim() || null,
             api_key: apiKey.trim() || null,
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           }
         : {
             ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
             settings_json: { timeout_ms: timeoutMs },
+            ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
       const res = await testAiConnection(payload, targetProviderId);
@@ -399,6 +406,7 @@ function AiProviderEditorContent({
           api_key: apiKey.trim() ? apiKey.trim() : null,
           is_enabled: true,
           settings: computeSettings(),
+          ...(projectId ? { project_id: projectId } : {}),
         };
 
         await createAiProvider(payload);
@@ -949,6 +957,7 @@ export function AiProviderEditorDrawer({
   airGapMode,
   onSaved,
   providersCount,
+  projectId,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -968,6 +977,7 @@ export function AiProviderEditorDrawer({
         airGapMode={airGapMode}
         onSaved={onSaved}
         providersCount={providersCount}
+        projectId={projectId}
       />
     </div>
   );

@@ -26,7 +26,17 @@ interface CardTestStatus {
   message: string;
 }
 
-export function AiStudioPage(): JSX.Element {
+export interface AiStudioPageProps {
+  projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
+  showSubnav?: boolean | undefined;
+}
+
+export function AiStudioPage({
+  projectId,
+  workspaceSlug,
+  showSubnav,
+}: AiStudioPageProps = {}): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
   const [airGapMode, setAirGapMode] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -53,7 +63,7 @@ export function AiStudioPage(): JSX.Element {
     async function load() {
       try {
         const [provList, isAirGap] = await Promise.all([
-          fetchAiProviders(),
+          fetchAiProviders(projectId ?? undefined, workspaceSlug ?? 'current'),
           fetchAirGapMode(),
         ]);
         if (!active) return;
@@ -76,7 +86,7 @@ export function AiStudioPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [reloadCounter]);
+  }, [reloadCounter, projectId, workspaceSlug]);
 
   const refreshData = useCallback((): void => {
     setReloadCounter((c) => c + 1);
@@ -111,7 +121,9 @@ export function AiStudioPage(): JSX.Element {
     setProviders(newOrder);
     try {
       const orderedIds = newOrder.map((p) => p.id);
-      const updated = await reorderAiProviders(orderedIds);
+      const updated = (projectId || (workspaceSlug && workspaceSlug !== 'current'))
+        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug ?? 'current')
+        : await reorderAiProviders(orderedIds);
       const sorted = [...updated].sort((a, b) => a.priority - b.priority);
       setProviders(sorted);
     } catch (err: unknown) {
@@ -208,7 +220,7 @@ export function AiStudioPage(): JSX.Element {
 
   return (
     <section className="kb-ai-studio" data-testid="ai-studio-page">
-      <AdminStudioSubnav activeTab="ai" />
+      {(showSubnav ?? !projectId) && <AdminStudioSubnav activeTab="ai" />}
       <div className="kb-ai-studio-header">
         <div className="kb-ai-studio-title-group">
           <h1>
@@ -480,6 +492,7 @@ export function AiStudioPage(): JSX.Element {
         airGapMode={airGapMode}
         onSaved={refreshData}
         providersCount={providers.length}
+        projectId={projectId}
       />
 
       {/* Delete Confirmation Modal */}

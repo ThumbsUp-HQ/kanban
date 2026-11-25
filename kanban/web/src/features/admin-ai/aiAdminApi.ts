@@ -56,55 +56,91 @@ export interface BudgetSetRequest {
   token_cap: number;
 }
 
-export async function fetchAiProviders(projectId?: string): Promise<ProviderConfigPublic[]> {
+export async function fetchAiProviders(
+  projectId?: string,
+  workspace = 'current',
+): Promise<ProviderConfigPublic[]> {
   const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
-  return (await apiFetch('GET', `/api/v1/admin/ai/providers${query}` as never)) as ProviderConfigPublic[];
-}
-
-export async function fetchAiProvider(providerId: string): Promise<ProviderConfigPublic> {
   return (await apiFetch(
     'GET',
-    `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}` as never,
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers${query}` as never,
+  )) as ProviderConfigPublic[];
+}
+
+export async function fetchAiProvider(
+  providerId: string,
+  workspace = 'current',
+): Promise<ProviderConfigPublic> {
+  return (await apiFetch(
+    'GET',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}` as never,
   )) as ProviderConfigPublic;
 }
 
-export async function createAiProvider(payload: ProviderConfigCreate): Promise<ProviderConfigPublic> {
-  return (await apiFetch('POST', '/api/v1/admin/ai/providers' as never, { body: payload })) as ProviderConfigPublic;
+export async function createAiProvider(
+  payload: ProviderConfigCreate,
+  workspace = 'current',
+): Promise<ProviderConfigPublic> {
+  return (await apiFetch(
+    'POST',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers` as never,
+    { body: payload },
+  )) as ProviderConfigPublic;
 }
 
 export async function updateAiProvider(
   providerId: string,
   payload: ProviderConfigUpdate,
+  workspace = 'current',
 ): Promise<ProviderConfigPublic> {
   return (await apiFetch(
     'PATCH',
-    `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}` as never,
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}` as never,
     {
       body: payload,
     },
   )) as ProviderConfigPublic;
 }
 
-export async function disableAiProvider(providerId: string): Promise<ProviderConfigPublic> {
+export async function disableAiProvider(
+  providerId: string,
+  workspace = 'current',
+): Promise<ProviderConfigPublic> {
   return (await apiFetch(
     'POST',
-    `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}:disable` as never,
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}:disable` as never,
   )) as ProviderConfigPublic;
 }
 
-export async function deleteAiProvider(providerId: string): Promise<void> {
-  await apiFetch('DELETE', `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}` as never);
+export async function deleteAiProvider(
+  providerId: string,
+  workspace = 'current',
+): Promise<void> {
+  await apiFetch(
+    'DELETE',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}` as never,
+  );
 }
 
-export async function fetchBudgets(providerConfigId: string): Promise<BudgetRecord[]> {
+export async function fetchBudgets(
+  providerConfigId: string,
+  workspace = 'current',
+): Promise<BudgetRecord[]> {
   return (await apiFetch(
     'GET',
-    `/api/v1/admin/ai/budgets?provider_config_id=${encodeURIComponent(providerConfigId)}` as never,
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/budgets?provider_config_id=${encodeURIComponent(providerConfigId)}` as never,
   )) as BudgetRecord[];
 }
 
-export async function setBudget(payload: BudgetSetRequest): Promise<BudgetRecord> {
-  return (await apiFetch('PUT', '/api/v1/admin/ai/budgets' as never, { body: payload })) as BudgetRecord;
+export async function setBudget(
+  payload: BudgetSetRequest,
+  workspace = 'current',
+): Promise<BudgetRecord> {
+  return (await apiFetch(
+    'PUT',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/budgets` as never,
+    { body: payload },
+  )) as BudgetRecord;
 }
 
 export interface ProviderProbeRequest {
@@ -112,6 +148,7 @@ export interface ProviderProbeRequest {
   base_url?: string | null;
   api_key?: string | null;
   settings_json?: Record<string, unknown> | null;
+  project_id?: string | null;
 }
 
 export function isLocalEndpoint(providerKind: string, baseUrl?: string | null): boolean {
@@ -175,28 +212,38 @@ export async function fetchAirGapMode(): Promise<boolean> {
   }
 }
 
-export async function reorderAiProviders(orderedIds: string[]): Promise<ProviderConfigPublic[]> {
-  return (await apiFetch('PUT', '/api/v1/admin/ai/providers/order' as never, {
-    body: { ordered_ids: orderedIds },
-  })) as ProviderConfigPublic[];
+export async function reorderAiProviders(
+  orderedIds: string[],
+  projectId?: string,
+  workspace = 'current',
+): Promise<ProviderConfigPublic[]> {
+  return (await apiFetch(
+    'PUT',
+    `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/order` as never,
+    {
+      body: { ordered_ids: orderedIds, project_id: projectId ?? undefined },
+    },
+  )) as ProviderConfigPublic[];
 }
 
 export async function probeAiModels(
   payload: ProviderProbeRequest,
   providerId?: string,
+  workspace = 'current',
 ): Promise<ProviderProbeResult> {
   const path = providerId
-    ? `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}/probe-models`
-    : '/api/v1/admin/ai/providers/probe-models';
+    ? `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}/probe-models`
+    : `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/probe-models`;
   return (await apiFetch('POST', path as never, { body: payload })) as ProviderProbeResult;
 }
 
 export async function testAiConnection(
   payload: ProviderProbeRequest,
   providerId?: string,
+  workspace = 'current',
 ): Promise<ProviderProbeResult> {
   const path = providerId
-    ? `/api/v1/admin/ai/providers/${encodeURIComponent(providerId)}/test-connection`
-    : '/api/v1/admin/ai/providers/test-connection';
+    ? `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/${encodeURIComponent(providerId)}/test-connection`
+    : `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/test-connection`;
   return (await apiFetch('POST', path as never, { body: payload })) as ProviderProbeResult;
 }

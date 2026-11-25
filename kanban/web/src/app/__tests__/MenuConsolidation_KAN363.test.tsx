@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Topbar } from '../Topbar';
 import { Sidebar } from '../Sidebar';
-import { WorkspaceAiRedirect } from '../routes';
+import { AdminAiRedirect, AdminAgentsRedirect } from '../routes';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { ShellPanelsProvider } from '../shellPanels';
 import { PersonalSettingsPage } from '../../features/settings/PersonalSettingsPage';
@@ -202,7 +202,7 @@ describe('Menu Consolidation KAN-363 Suite (Global Navigation Deduplication)', (
   });
 
   describe('Test Case 3: AI Studio Server vs Workspace Consolidation, Redirect and About Integrity', () => {
-    it('consolidates AI studio in Topbar avatar and removes duplicate Workspace AI Studio entry', () => {
+    it('provides AI Providers and Autonomous Agents in Topbar avatar for workspace admins', () => {
       render(
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
@@ -219,7 +219,7 @@ describe('Menu Consolidation KAN-363 Suite (Global Navigation Deduplication)', (
                     handle: 'admin',
                     display_name: 'Admin User',
                     is_workspace_admin: true,
-                    is_server_admin: true,
+                    is_server_admin: false,
                   }}
                 />
               </MemoryRouter>
@@ -232,29 +232,47 @@ describe('Menu Consolidation KAN-363 Suite (Global Navigation Deduplication)', (
       const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
       fireEvent.click(avatarBtn);
 
-      // Server AI Studio link is present
+      // Workspace AI Studio link is present pointing to /workspaces/settings/ai
       const serverAiLink = screen.getByTestId('topbar-admin-ai-link');
       expect(serverAiLink).toBeDefined();
-      expect(serverAiLink.getAttribute('href')).toBe('/admin/ai');
+      expect(serverAiLink.getAttribute('href')).toBe('/workspaces/settings/ai');
 
-      // Duplicate Workspace AI Studio link (/workspaces/settings/ai) has been eliminated
-      expect(screen.queryByRole('menuitem', { name: /Workspace AI Studio/ })).toBeNull();
+      // Autonomous Agents link is present pointing to /workspaces/settings/agents
+      const agentsLink = screen.getByTestId('topbar-admin-agents-link');
+      expect(agentsLink).toBeDefined();
+      expect(agentsLink.getAttribute('href')).toBe('/workspaces/settings/agents');
     });
 
-    it('redirects /workspaces/settings/ai to /admin/ai preserving query parameters via WorkspaceAiRedirect', () => {
+    it('redirects /admin/ai to /workspaces/settings/ai preserving query parameters via AdminAiRedirect', () => {
       render(
-        <MemoryRouter initialEntries={['/workspaces/settings/ai?tier=workspace&focus=providers']}>
+        <MemoryRouter initialEntries={['/admin/ai?tier=workspace&focus=providers']}>
           <Routes>
-            <Route path="/workspaces/settings/ai" element={<WorkspaceAiRedirect />} />
+            <Route path="/admin/ai" element={<AdminAiRedirect />} />
             <Route
-              path="/admin/ai"
-              element={<div data-testid="destination-admin-ai">Server AI Studio Destination</div>}
+              path="/workspaces/settings/ai"
+              element={<div data-testid="destination-workspace-ai">Workspace AI Studio Destination</div>}
             />
           </Routes>
         </MemoryRouter>,
       );
 
-      expect(screen.getByTestId('destination-admin-ai')).toBeDefined();
+      expect(screen.getByTestId('destination-workspace-ai')).toBeDefined();
+    });
+
+    it('redirects /admin/agents to /workspaces/settings/agents preserving query parameters via AdminAgentsRedirect', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/agents?tier=workspace&focus=agents']}>
+          <Routes>
+            <Route path="/admin/agents" element={<AdminAgentsRedirect />} />
+            <Route
+              path="/workspaces/settings/agents"
+              element={<div data-testid="destination-workspace-agents">Workspace Agents Studio Destination</div>}
+            />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByTestId('destination-workspace-agents')).toBeDefined();
     });
 
     it('preserves clean About 👍kanban links across Topbar, Sidebar, and Personal Settings', async () => {
