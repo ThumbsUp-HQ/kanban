@@ -666,7 +666,9 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     });
 
     // Allow 1s interval to fire
-    await new Promise((r) => setTimeout(r, 1100));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1100));
+    });
 
     // Inactive session renders nothing
     globalThis.fetch = vi.fn().mockImplementation(() => {
@@ -676,11 +678,14 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
       ));
     });
 
-    rerender(
-      <QueryClientProvider client={qc}>
-        <AdminStudioSubnav isServerAdmin={false} />
-      </QueryClientProvider>,
-    );
+    await act(async () => {
+      rerender(
+        <QueryClientProvider client={qc}>
+          <AdminStudioSubnav isServerAdmin={false} />
+        </QueryClientProvider>,
+      );
+      await Promise.resolve();
+    });
   });
 
   it('renders inside MemoryRouter and displays locked pill when aal2_active is false', async () => {
@@ -795,35 +800,49 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     });
 
     // Dispatch kb:aal2-stepup-success
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
+      await Promise.resolve();
     });
 
     // Dispatch kb:aal2-expires-at with expiresAt
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(new CustomEvent('kb:aal2-expires-at', {
         detail: { expiresAt: exp },
       }));
+      await Promise.resolve();
     });
 
     // Dispatch kb:aal2-expires-at with undefined detail
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(new CustomEvent('kb:aal2-expires-at'));
+      await Promise.resolve();
     });
   });
 
-  it('AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted', () => {
+  it('AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted', async () => {
     const qc = new QueryClient();
     qc.setQueryData(['me'], { is_server_admin: true });
 
-    render(
-      <QueryClientProvider client={qc}>
-        <AdminStudioSubnav />
-      </QueryClientProvider>,
-    );
+    let u1: (() => void) | undefined;
+    await act(async () => {
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <AdminStudioSubnav />
+        </QueryClientProvider>,
+      );
+      u1 = unmount;
+      await Promise.resolve();
+    });
+    u1?.();
 
     // Also test without QueryClientProvider and without prop
-    const { unmount } = render(<AdminStudioSubnav />);
-    unmount();
+    let u2: (() => void) | undefined;
+    await act(async () => {
+      const { unmount } = render(<AdminStudioSubnav />);
+      u2 = unmount;
+      await Promise.resolve();
+    });
+    u2?.();
   });
 });

@@ -430,7 +430,7 @@ index 0b0351a2..caaf8675 100644
      # 5. Attempting to approve an already approved approval -> 409 APPROVAL_ALREADY_RESOLVED
      resp_dup = await client.post(
 diff --git a/kanban/web/src/api/__tests__/websudoReplay.test.tsx b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
-index c2c3b944..1768beba 100644
+index c2c3b944..f1f9c04f 100644
 --- a/kanban/web/src/api/__tests__/websudoReplay.test.tsx
 +++ b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
 @@ -214,12 +214,19 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
@@ -621,17 +621,39 @@ index c2c3b944..1768beba 100644
  });
  
  describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
-@@ -510,6 +665,9 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -510,6 +665,11 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
        expect(screen.getByText(/🛡️ Sudo 0:4\d/)).toBeDefined();
      });
  
 +    // Allow 1s interval to fire
-+    await new Promise((r) => setTimeout(r, 1100));
++    await act(async () => {
++      await new Promise((r) => setTimeout(r, 1100));
++    });
 +
      // Inactive session renders nothing
      globalThis.fetch = vi.fn().mockImplementation(() => {
        return Promise.resolve(new Response(
-@@ -595,8 +753,10 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -518,11 +678,14 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+       ));
+     });
+ 
+-    rerender(
+-      <QueryClientProvider client={qc}>
+-        <AdminStudioSubnav isServerAdmin={false} />
+-      </QueryClientProvider>,
+-    );
++    await act(async () => {
++      rerender(
++        <QueryClientProvider client={qc}>
++          <AdminStudioSubnav isServerAdmin={false} />
++        </QueryClientProvider>,
++      );
++      await Promise.resolve();
++    });
+   });
+ 
+   it('renders inside MemoryRouter and displays locked pill when aal2_active is false', async () => {
+@@ -595,8 +758,10 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
      );
  
      await act(async () => {
@@ -644,7 +666,7 @@ index c2c3b944..1768beba 100644
        await vi.advanceTimersByTimeAsync(10_000);
      });
  
-@@ -608,4 +768,62 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -608,4 +773,76 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
  
      vi.useRealTimers();
    });
@@ -675,36 +697,50 @@ index c2c3b944..1768beba 100644
 +    });
 +
 +    // Dispatch kb:aal2-stepup-success
-+    act(() => {
++    await act(async () => {
 +      window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
++      await Promise.resolve();
 +    });
 +
 +    // Dispatch kb:aal2-expires-at with expiresAt
-+    act(() => {
++    await act(async () => {
 +      window.dispatchEvent(new CustomEvent('kb:aal2-expires-at', {
 +        detail: { expiresAt: exp },
 +      }));
++      await Promise.resolve();
 +    });
 +
 +    // Dispatch kb:aal2-expires-at with undefined detail
-+    act(() => {
++    await act(async () => {
 +      window.dispatchEvent(new CustomEvent('kb:aal2-expires-at'));
++      await Promise.resolve();
 +    });
 +  });
 +
-+  it('AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted', () => {
++  it('AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted', async () => {
 +    const qc = new QueryClient();
 +    qc.setQueryData(['me'], { is_server_admin: true });
 +
-+    render(
-+      <QueryClientProvider client={qc}>
-+        <AdminStudioSubnav />
-+      </QueryClientProvider>,
-+    );
++    let u1: (() => void) | undefined;
++    await act(async () => {
++      const { unmount } = render(
++        <QueryClientProvider client={qc}>
++          <AdminStudioSubnav />
++        </QueryClientProvider>,
++      );
++      u1 = unmount;
++      await Promise.resolve();
++    });
++    u1?.();
 +
 +    // Also test without QueryClientProvider and without prop
-+    const { unmount } = render(<AdminStudioSubnav />);
-+    unmount();
++    let u2: (() => void) | undefined;
++    await act(async () => {
++      const { unmount } = render(<AdminStudioSubnav />);
++      u2 = unmount;
++      await Promise.resolve();
++    });
++    u2?.();
 +  });
  });
 diff --git a/kanban/web/src/api/client.ts b/kanban/web/src/api/client.ts
@@ -2372,9 +2408,32 @@ index f3bab3b1..93fd55d6 100644
  
  /* WebSudo countdown and lock pill (KAN-404) */
 diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
-index 418f081c..8f15f241 100644
+index 418f081c..c85c2c6b 100644
 --- a/kanban/web/src/features/admin/AdminStudioSubnav.tsx
 +++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+@@ -52,7 +52,7 @@ function AdminStudioSubnavInner({
+   } | null>(null);
+ 
+   React.useEffect(() => {
+-    let mounted = true;
++    let cancelled = false;
+     const load = async (): Promise<void> => {
+       try {
+         const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
+@@ -60,11 +60,11 @@ function AdminStudioSubnavInner({
+           aal2_active?: boolean;
+           aal2_expires_at?: string | null;
+         };
+-        if (mounted) {
++        if (!cancelled) {
+           setSessionData(res);
+         }
+       } catch {
+-        if (mounted) {
++        if (!cancelled) {
+           setSessionData(null);
+         }
+       }
 @@ -73,9 +73,32 @@ function AdminStudioSubnavInner({
      const interval = setInterval(() => {
        void load();
@@ -2387,7 +2446,7 @@ index 418f081c..8f15f241 100644
 +    const onExpiresAt = (e: Event): void => {
 +      const custom = e as CustomEvent<{ expiresAt?: string } | undefined>;
 +      const expiresAt = custom.detail?.expiresAt;
-+      if (expiresAt && mounted) {
++      if (expiresAt && !cancelled) {
 +        setSessionData(() => ({
 +          authenticated: true,
 +          aal2_active: true,
@@ -2401,7 +2460,8 @@ index 418f081c..8f15f241 100644
 +    window.addEventListener('kb:aal2-expires-at', onExpiresAt);
 +
      return () => {
-       mounted = false;
+-      mounted = false;
++      cancelled = true;
        clearInterval(interval);
 +      window.removeEventListener('kb:aal2-stepup-success', onStepupSuccess);
 +      window.removeEventListener('kb:aal2-expires-at', onExpiresAt);
@@ -2420,7 +2480,7 @@ index 418f081c..8f15f241 100644
        const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
          authenticated?: boolean;
 diff --git a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
-index 72ee3199..d9c7c15b 100644
+index 72ee3199..e8fbda00 100644
 --- a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
 +++ b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
 @@ -3,11 +3,12 @@
@@ -2437,7 +2497,124 @@ index 72ee3199..d9c7c15b 100644
  import { AdminStudioSubnav } from '../AdminStudioSubnav';
  import { LinkAuditorStudio } from '../LinkAuditorStudio';
  import { AdminDiagnosticsStudio } from '../AdminDiagnosticsStudio';
-@@ -283,6 +284,56 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+@@ -208,8 +209,12 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+   // Test Case 1: Horizontal swipe tabs & touch scrolling navigation
+   // =========================================================================
+   describe('Case 1: Horizontal swipe tabs & touch scrolling navigation', () => {
+-    it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', () => {
+-      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
++    it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', async () => {
++      let r: ReturnType<typeof render> | undefined;
++      await act(async () => {
++        r = renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
++        await Promise.resolve();
++      });
+ 
+       const navElement = screen.getByRole('navigation', {
+         name: /Admin MCP and Governance Navigation/i,
+@@ -226,33 +231,45 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+       const activeTab = screen.getByTestId('tab-admin-diagnostics');
+       expect(activeTab.getAttribute('aria-current')).toBe('page');
+       expect(activeTab.classList.contains('admin-studio-subnav__item--active')).toBe(true);
++      r?.unmount();
+     });
+ 
+-    it('renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab', () => {
++    it('renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab', async () => {
+       const queryClient = new QueryClient({
+         defaultOptions: { queries: { retry: false } },
+       });
+-      render(
+-        <QueryClientProvider client={queryClient}>
+-          <MemoryRouter initialEntries={['/admin/ai/new']}>
+-            <AdminStudioSubnav isServerAdmin={true} />
+-          </MemoryRouter>
+-        </QueryClientProvider>,
+-      );
++      let r: ReturnType<typeof render> | undefined;
++      await act(async () => {
++        r = render(
++          <QueryClientProvider client={queryClient}>
++            <MemoryRouter initialEntries={['/admin/ai/new']}>
++              <AdminStudioSubnav isServerAdmin={true} />
++            </MemoryRouter>
++          </QueryClientProvider>,
++        );
++        await Promise.resolve();
++      });
+ 
+       const aiTab = screen.getByTestId('tab-admin-ai');
+       expect(aiTab.getAttribute('aria-current')).toBe('page');
++      r?.unmount();
+     });
+ 
+-    it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', () => {
+-      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
+-      const links = c1.querySelectorAll('a.admin-studio-subnav__item');
+-      expect(links.length).toBeGreaterThanOrEqual(8);
++    it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', async () => {
++      let r1: ReturnType<typeof render> | undefined;
++      await act(async () => {
++        r1 = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
++        await Promise.resolve();
++      });
++      const c1 = r1?.container;
++      const links = c1?.querySelectorAll('a.admin-studio-subnav__item');
++      expect(links && links.length >= 8).toBe(true);
+ 
+-      const authLink = c1.querySelector('[data-testid="tab-admin-auth"]');
++      const authLink = c1?.querySelector('[data-testid="tab-admin-auth"]');
+       expect(authLink).toBeTruthy();
+       expect(authLink?.getAttribute('aria-current')).toBe('page');
+       expect(authLink?.classList.contains('admin-studio-subnav__item--active')).toBe(true);
++      r1?.unmount();
+ 
+       // Outside router with window.location fallback (exact match and prefix match)
+       const origLocation = window.location;
+@@ -261,28 +278,93 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/admin/oauth/clients',
+         };
+-        const { container: c2 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+-        const oauthLink = c2.querySelector('[data-testid="tab-admin-oauth"]');
++        let r2: ReturnType<typeof render> | undefined;
++        await act(async () => {
++          r2 = render(<AdminStudioSubnav isServerAdmin={true} />);
++          await Promise.resolve();
++        });
++        const oauthLink = r2?.container.querySelector('[data-testid="tab-admin-oauth"]');
+         expect(oauthLink?.getAttribute('aria-current')).toBe('page');
++        r2?.unmount();
+ 
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/admin/diagnostics',
+         };
+-        const { container: c3 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+-        const diagLink = c3.querySelector('[data-testid="tab-admin-diagnostics"]');
++        let r3: ReturnType<typeof render> | undefined;
++        await act(async () => {
++          r3 = render(<AdminStudioSubnav isServerAdmin={true} />);
++          await Promise.resolve();
++        });
++        const diagLink = r3?.container.querySelector('[data-testid="tab-admin-diagnostics"]');
+         expect(diagLink?.getAttribute('aria-current')).toBe('page');
++        r3?.unmount();
+ 
+         (window as unknown as { location: unknown }).location = {
+           pathname: '/unknown-route',
+         };
+-        const { container: c4 } = render(<AdminStudioSubnav isServerAdmin={true} />);
+-        const activeItem = c4.querySelector('.admin-studio-subnav__item--active');
++        let r4: ReturnType<typeof render> | undefined;
++        await act(async () => {
++          r4 = render(<AdminStudioSubnav isServerAdmin={true} />);
++          await Promise.resolve();
++        });
++        const activeItem = r4?.container.querySelector('.admin-studio-subnav__item--active');
+         expect(activeItem).toBeNull();
++        r4?.unmount();
+       } finally {
+         (window as unknown as { location: unknown }).location = origLocation;
        }
      });
  

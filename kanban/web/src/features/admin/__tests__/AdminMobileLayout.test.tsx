@@ -209,8 +209,12 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
   // Test Case 1: Horizontal swipe tabs & touch scrolling navigation
   // =========================================================================
   describe('Case 1: Horizontal swipe tabs & touch scrolling navigation', () => {
-    it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', () => {
-      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
+    it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', async () => {
+      let r: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        r = renderWithClient(<AdminStudioSubnav activeTab="diagnostics" isServerAdmin={true} />);
+        await Promise.resolve();
+      });
 
       const navElement = screen.getByRole('navigation', {
         name: /Admin MCP and Governance Navigation/i,
@@ -227,33 +231,45 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
       const activeTab = screen.getByTestId('tab-admin-diagnostics');
       expect(activeTab.getAttribute('aria-current')).toBe('page');
       expect(activeTab.classList.contains('admin-studio-subnav__item--active')).toBe(true);
+      r?.unmount();
     });
 
-    it('renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab', () => {
+    it('renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab', async () => {
       const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
       });
-      render(
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={['/admin/ai/new']}>
-            <AdminStudioSubnav isServerAdmin={true} />
-          </MemoryRouter>
-        </QueryClientProvider>,
-      );
+      let r: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        r = render(
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/admin/ai/new']}>
+              <AdminStudioSubnav isServerAdmin={true} />
+            </MemoryRouter>
+          </QueryClientProvider>,
+        );
+        await Promise.resolve();
+      });
 
       const aiTab = screen.getByTestId('tab-admin-ai');
       expect(aiTab.getAttribute('aria-current')).toBe('page');
+      r?.unmount();
     });
 
-    it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', () => {
-      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
-      const links = c1.querySelectorAll('a.admin-studio-subnav__item');
-      expect(links.length).toBeGreaterThanOrEqual(8);
+    it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', async () => {
+      let r1: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        r1 = render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
+        await Promise.resolve();
+      });
+      const c1 = r1?.container;
+      const links = c1?.querySelectorAll('a.admin-studio-subnav__item');
+      expect(links && links.length >= 8).toBe(true);
 
-      const authLink = c1.querySelector('[data-testid="tab-admin-auth"]');
+      const authLink = c1?.querySelector('[data-testid="tab-admin-auth"]');
       expect(authLink).toBeTruthy();
       expect(authLink?.getAttribute('aria-current')).toBe('page');
       expect(authLink?.classList.contains('admin-studio-subnav__item--active')).toBe(true);
+      r1?.unmount();
 
       // Outside router with window.location fallback (exact match and prefix match)
       const origLocation = window.location;
@@ -262,23 +278,38 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
         (window as unknown as { location: unknown }).location = {
           pathname: '/admin/oauth/clients',
         };
-        const { container: c2 } = render(<AdminStudioSubnav isServerAdmin={true} />);
-        const oauthLink = c2.querySelector('[data-testid="tab-admin-oauth"]');
+        let r2: ReturnType<typeof render> | undefined;
+        await act(async () => {
+          r2 = render(<AdminStudioSubnav isServerAdmin={true} />);
+          await Promise.resolve();
+        });
+        const oauthLink = r2?.container.querySelector('[data-testid="tab-admin-oauth"]');
         expect(oauthLink?.getAttribute('aria-current')).toBe('page');
+        r2?.unmount();
 
         (window as unknown as { location: unknown }).location = {
           pathname: '/admin/diagnostics',
         };
-        const { container: c3 } = render(<AdminStudioSubnav isServerAdmin={true} />);
-        const diagLink = c3.querySelector('[data-testid="tab-admin-diagnostics"]');
+        let r3: ReturnType<typeof render> | undefined;
+        await act(async () => {
+          r3 = render(<AdminStudioSubnav isServerAdmin={true} />);
+          await Promise.resolve();
+        });
+        const diagLink = r3?.container.querySelector('[data-testid="tab-admin-diagnostics"]');
         expect(diagLink?.getAttribute('aria-current')).toBe('page');
+        r3?.unmount();
 
         (window as unknown as { location: unknown }).location = {
           pathname: '/unknown-route',
         };
-        const { container: c4 } = render(<AdminStudioSubnav isServerAdmin={true} />);
-        const activeItem = c4.querySelector('.admin-studio-subnav__item--active');
+        let r4: ReturnType<typeof render> | undefined;
+        await act(async () => {
+          r4 = render(<AdminStudioSubnav isServerAdmin={true} />);
+          await Promise.resolve();
+        });
+        const activeItem = r4?.container.querySelector('.admin-studio-subnav__item--active');
         expect(activeItem).toBeNull();
+        r4?.unmount();
       } finally {
         (window as unknown as { location: unknown }).location = origLocation;
       }

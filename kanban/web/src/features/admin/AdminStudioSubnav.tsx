@@ -52,7 +52,7 @@ function AdminStudioSubnavInner({
   } | null>(null);
 
   React.useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
     const load = async (): Promise<void> => {
       try {
         const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
@@ -60,11 +60,11 @@ function AdminStudioSubnavInner({
           aal2_active?: boolean;
           aal2_expires_at?: string | null;
         };
-        if (mounted) {
+        if (!cancelled) {
           setSessionData(res);
         }
       } catch {
-        if (mounted) {
+        if (!cancelled) {
           setSessionData(null);
         }
       }
@@ -81,7 +81,7 @@ function AdminStudioSubnavInner({
     const onExpiresAt = (e: Event): void => {
       const custom = e as CustomEvent<{ expiresAt?: string } | undefined>;
       const expiresAt = custom.detail?.expiresAt;
-      if (expiresAt && mounted) {
+      if (expiresAt && !cancelled) {
         setSessionData(() => ({
           authenticated: true,
           aal2_active: true,
@@ -95,7 +95,7 @@ function AdminStudioSubnavInner({
     window.addEventListener('kb:aal2-expires-at', onExpiresAt);
 
     return () => {
-      mounted = false;
+      cancelled = true;
       clearInterval(interval);
       window.removeEventListener('kb:aal2-stepup-success', onStepupSuccess);
       window.removeEventListener('kb:aal2-expires-at', onExpiresAt);
