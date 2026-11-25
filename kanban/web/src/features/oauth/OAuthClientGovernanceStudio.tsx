@@ -304,11 +304,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
     }
     setRegisterSubmitting(true);
     try {
+      const grants = registerGrantTypes
+        .split(/[\n,]/)
+        .map((g) => g.trim())
+        .filter(Boolean);
       const created = await registerAdminOAuthClient({
         client_name: registerName.trim() || 'MCP Client',
         redirect_uris: uris,
         client_type: registerClientType,
         token_endpoint_auth_method: registerAuthMethod,
+        pkce_enforce: registerPkceEnforce,
+        access_token_ttl: registerAccessTokenTtl,
+        grant_types: grants.length > 0 ? grants : undefined,
       });
       setRegisteredClient(created);
       setClients((prev) => [created, ...prev]);

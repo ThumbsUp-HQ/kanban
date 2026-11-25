@@ -9,12 +9,13 @@ and tier-matched governance (view=governance) for project, workspace, and server
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import uuid
 from datetime import datetime  # noqa: TC003  # Runtime import required for Pydantic type annotations
 from typing import Annotated, Final, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,12 +55,25 @@ class UnifiedMcpKeyMintRequest(BaseModel):
     allowed_workspace_ids: list[uuid.UUID] | None = None
     allowed_project_ids: list[uuid.UUID] | None = None
     allowed_projects: list[str] | None = None
-    capability_mask: int = Field(default=7, ge=1, le=255)
+    capability_mask: int = Field(default=7, ge=0, le=255)
     allowed_tools: list[str] | None = None
     disabled_tools: list[str] = Field(default_factory=list)
     allowed_cidrs: list[str] | None = None
     unlimited: bool = False
     confirm_unlimited: bool = False
+
+    @field_validator("allowed_cidrs")
+    @classmethod
+    def validate_allowed_cidrs(cls, v: list[str] | None) -> list[str] | None:
+        """Validate that all allowed CIDR blocks are valid IPv4/IPv6 networks."""
+        if v is not None:
+            for c in v:
+                try:
+                    ipaddress.ip_network(c.strip(), strict=False)
+                except ValueError as exc:
+                    msg = f"Invalid CIDR block: {c}"
+                    raise ValueError(msg) from exc
+        return v
 
 
 class UnifiedMcpApiKeyResponse(BaseModel):

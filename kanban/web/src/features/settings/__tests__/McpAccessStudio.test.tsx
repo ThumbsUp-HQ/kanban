@@ -2474,5 +2474,99 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
         'Key "No Project Bot" for Personal User can access Project (None) and use Agent tools (Read-Only Agent).',
       );
     });
+
+    it('supports segmented role and scope selectors and workspace policy TTL clamping (KAN-417)', async () => {
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio
+            tier="workspace"
+            maxKeyTtlDays={90}
+            user={{ is_server_admin: true, is_workspace_admin: true }}
+          />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mint-key-button'));
+
+      // Check segmented role pills
+      const personalPill = screen.getByTestId('role-pill-personal');
+      const serviceBotPill = screen.getByTestId('role-pill-service_bot');
+      expect(personalPill).toBeDefined();
+      expect(serviceBotPill).toBeDefined();
+
+      // Check segmented scope pills
+      const projectPill = screen.getByTestId('scope-tier-pill-project');
+      const workspacePill = screen.getByTestId('scope-tier-pill-workspace');
+      const globalPill = screen.getByTestId('scope-tier-pill-global');
+      expect(projectPill).toBeDefined();
+      expect(workspacePill).toBeDefined();
+      expect(globalPill).toBeDefined();
+
+      // Click service bot pill and project pill
+      fireEvent.click(serviceBotPill);
+      fireEvent.click(projectPill);
+
+      const select = screen.getByTestId<HTMLSelectElement>('mint-key-scope-type-select');
+      expect(select.value).toBe('service_bot:project');
+
+      // Click global pill
+      fireEvent.click(globalPill);
+      expect(select.value).toBe('service_bot:global');
+
+      // Click personal pill while in global scope to verify auto-reset to workspace
+      fireEvent.click(personalPill);
+      expect(select.value).toBe('personal_user:workspace');
+
+      // Click workspace pill
+      fireEvent.click(workspacePill);
+      expect(select.value).toBe('personal_user:workspace');
+
+      // Check policy TTL badge
+      expect(screen.getByTestId('policy-ttl-badge').textContent).toContain('Workspace policy enforces maximum 90-day TTL');
+
+      // Verify unlimited option is not present due to TTL policy
+      expect(screen.queryByTestId('option-unlimited')).toBeNull();
+    });
+
+    it('permits minting a key with capability_mask 0 without disabling submit button (KAN-417)', () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} allowUnlimitedKeys={true} />
+        </MemoryRouter>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('mint-key-button'));
+      });
+
+      act(() => {
+        fireEvent.change(screen.getByTestId('mint-label-input'), {
+          target: { value: 'Zero Mask Key' },
+        });
+        // Expand advanced section
+        fireEvent.click(screen.getByTestId('advanced-capability-restrictions-toggle'));
+      });
+
+      // Uncheck default capability bits (1, 2, 4, 8, 16) so mask becomes 0
+      act(() => {
+        for (const bit of [1, 2, 4, 8, 16]) {
+          const cb = screen.getByTestId<HTMLInputElement>(`cap-bit-${String(bit)}`);
+          if (cb.checked) {
+            fireEvent.click(cb);
+          }
+        }
+      });
+
+      // Submit button should NOT be disabled for mask 0
+      const submitBtn = screen.getByTestId<HTMLButtonElement>('mint-submit-btn');
+      expect(submitBtn.disabled).toBe(false);
+    });
   });
 });

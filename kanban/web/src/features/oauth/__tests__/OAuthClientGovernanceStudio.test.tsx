@@ -397,12 +397,17 @@ describe('OAuthClientGovernanceStudio', () => {
     fireEvent.click(screen.getByTestId('submit-register-btn'));
 
     await waitFor(() => {
-      expect(registerSpy).toHaveBeenCalledWith({
-        client_name: 'VS Code Tool',
-        redirect_uris: ['http://127.0.0.1:9090/cb'],
-        client_type: 'public',
-        token_endpoint_auth_method: 'none',
-      });
+      expect(registerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_name: 'VS Code Tool',
+          redirect_uris: ['http://127.0.0.1:9090/cb'],
+          client_type: 'public',
+          token_endpoint_auth_method: 'none',
+          pkce_enforce: true,
+          access_token_ttl: 3600,
+          grant_types: ['authorization_code', 'refresh_token'],
+        }),
+      );
       expect(screen.getByTestId('register-success-view')).toBeDefined();
       expect(screen.getByTestId('registered-client-id').textContent).toBe('client_brand_new_123');
     });
@@ -534,12 +539,17 @@ describe('OAuthClientGovernanceStudio', () => {
     fireEvent.click(screen.getByTestId('submit-register-btn'));
 
     await waitFor(() => {
-      expect(registerSpy).toHaveBeenCalledWith({
-        client_name: 'MCP Client',
-        redirect_uris: ['https://app.example.com/oauth/callback'],
-        client_type: 'public',
-        token_endpoint_auth_method: 'private_key_jwt',
-      });
+      expect(registerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_name: 'MCP Client',
+          redirect_uris: ['https://app.example.com/oauth/callback'],
+          client_type: 'public',
+          token_endpoint_auth_method: 'private_key_jwt',
+          pkce_enforce: true,
+          access_token_ttl: 3600,
+          grant_types: ['authorization_code', 'refresh_token'],
+        }),
+      );
       expect(screen.getByTestId('registered-client-id').textContent).toContain('client_jwt_123');
     });
   });
@@ -676,12 +686,17 @@ describe('OAuthClientGovernanceStudio', () => {
     fireEvent.click(screen.getByTestId('submit-register-btn'));
 
     await waitFor(() => {
-      expect(registerSpy).toHaveBeenCalledWith({
-        client_name: 'Gemini Agent Service',
-        redirect_uris: ['https://gemini.google.com/oauth/callback'],
-        client_type: 'confidential',
-        token_endpoint_auth_method: 'client_secret_basic',
-      });
+      expect(registerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_name: 'Gemini Agent Service',
+          redirect_uris: ['https://gemini.google.com/oauth/callback'],
+          client_type: 'confidential',
+          token_endpoint_auth_method: 'client_secret_basic',
+          pkce_enforce: true,
+          access_token_ttl: 3600,
+          grant_types: ['authorization_code', 'refresh_token'],
+        }),
+      );
       expect(screen.getByTestId('client-secret-panel')).toBeDefined();
       expect(screen.getByTestId('secret-warning')).toBeDefined();
       expect(screen.getByTestId('registered-client-secret').textContent).toBe(
@@ -1288,5 +1303,75 @@ describe('OAuthClientGovernanceStudio', () => {
     fireEvent.change(grantTypesInput, { target: { value: 'authorization_code,refresh_token' } });
 
     fireEvent.click(screen.getByTestId('cancel-register-btn'));
+  });
+
+  it('submits customized advanced parameters (PKCE, TTL, grant types) to registerAdminOAuthClient (KAN-417)', async () => {
+    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+    const registerSpy = vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockResolvedValue({
+      client_id: 'client_custom_adv',
+      client_name: 'Custom Advanced Client',
+      client_type: 'confidential',
+      token_endpoint_auth_method: 'client_secret_post',
+      redirect_uris: ['https://custom.example.com/callback'],
+      status: 'active',
+      created_at: new Date().toISOString(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/admin/oauth']}>
+        <OAuthClientGovernanceStudio />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-client-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('register-client-btn'));
+
+    fireEvent.change(screen.getByTestId('input-client-name'), {
+      target: { value: 'Custom Advanced Client' },
+    });
+    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
+      target: { value: 'https://custom.example.com/callback' },
+    });
+    fireEvent.change(screen.getByTestId('select-client-type'), {
+      target: { value: 'confidential' },
+    });
+    fireEvent.change(screen.getByTestId('select-auth-method'), {
+      target: { value: 'client_secret_post' },
+    });
+
+    // Expand Advanced Section
+    fireEvent.click(screen.getByTestId('advanced-oauth-parameters-toggle'));
+
+    // Toggle PKCE to false
+    fireEvent.click(screen.getByTestId('toggle-pkce-s256'));
+
+    // Change TTL to 7200
+    fireEvent.change(screen.getByTestId('input-access-token-ttl'), {
+      target: { value: '7200' },
+    });
+
+    // Change Grant Types
+    fireEvent.change(screen.getByTestId('input-grant-types'), {
+      target: { value: 'authorization_code' },
+    });
+
+    fireEvent.click(screen.getByTestId('submit-register-btn'));
+
+    await waitFor(() => {
+      expect(registerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          client_name: 'Custom Advanced Client',
+          redirect_uris: ['https://custom.example.com/callback'],
+          client_type: 'confidential',
+          token_endpoint_auth_method: 'client_secret_post',
+          pkce_enforce: false,
+          access_token_ttl: 7200,
+          grant_types: ['authorization_code'],
+        }),
+      );
+    });
   });
 });

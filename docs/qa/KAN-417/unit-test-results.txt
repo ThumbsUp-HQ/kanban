@@ -1,0 +1,61 @@
+=== PYTEST UNIT TEST RESULTS ===
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 118 items
+
+kanban/tests/oauth/test_device_flow.py ......                            [  5%]
+kanban/tests/oauth/test_oauth_coverage.py .........................      [ 26%]
+kanban/tests/oauth/test_oauth_flow.py ..................                 [ 41%]
+kanban/tests/oauth/test_oauth_unit.py .........................          [ 62%]
+kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 70%]
+kanban/tests/api/test_admin_mcp_keys_api.py ......                       [ 75%]
+kanban/tests/auth/test_workload_oidc_exchange.py .......                 [ 81%]
+mcp/tests/test_workload_jwt_auth.py .......                              [ 87%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py ........                  [ 94%]
+kanban/tests/test_feature_comparison_parity.py .......                   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                         Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------------------
+kanban/api/v1/admin/mcp_keys.py                201      5     58      8    95%   161->151, 164->151, 207->210, 318, 396, 399, 408, 419
+kanban/api/v1/admin/workload_identities.py     154      2     18      2    98%   103, 117, 182->184
+kanban/api/v1/mcp_keys.py                      210      3     80      5    97%   69->76, 333, 346->336, 349-350, 394->397, 470->496
+kanban/api/v1/oauth.py                         921     30    268     22    95%   847->852, 906, 936->941, 939-940, 942-943, 968-970, 1019-1025, 1126, 1190->1193, 1321->1335, 1351-1354, 1403-1405, 1489-1491, 1493, 1498->1497, 1507->1540, 1519-1521, 1530-1531, 1577->1580, 1653->1668, 1674->1678, 1818, 1834, 1932, 2273->2276
+mcp/app.py                                      60      0     18      4    95%   85->93, 96->99, 102->105, 108->112
+----------------------------------------------------------------------------------------
+TOTAL                                         1546     40    442     41    96%
+============================= 118 passed in 50.17s =============================
+
+=== VITEST UNIT TEST RESULTS ===
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (16 tests) 517ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (14 tests) 501ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (30 tests) 3538ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (26 tests) 2709ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (48 tests) 3456ms
+
+ Test Files  5 passed (5)
+      Tests  134 passed (134)
+   Start at  16:23:18
+   Duration  6.10s (tests 58%, environment 20%, import 13%, transform 7%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.03 |    95.98 |   99.64 |   99.06 |                   
+ oauth             |   98.91 |    96.28 |     100 |   98.88 |                   
+  ...ivatePage.tsx |     100 |    96.55 |     100 |     100 | 54-55,113         
+  ...nceStudio.tsx |   98.45 |    96.11 |     100 |   98.39 | 97-98,210,367,436 
+ settings          |   99.11 |    95.85 |   99.35 |   99.19 |                   
+  ...hAppModal.tsx |     100 |    96.07 |     100 |     100 | 78,87-90,98       
+  ...essStudio.tsx |   98.59 |    95.85 |   98.88 |   98.71 | ...61-662,833-834 
+  ...iedStudio.tsx |     100 |     95.6 |     100 |     100 | 99-108,112,117    
+-------------------|---------|----------|---------|---------|-------------------

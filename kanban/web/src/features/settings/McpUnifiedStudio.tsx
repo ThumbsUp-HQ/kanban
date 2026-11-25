@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { McpAccessStudio } from './McpAccessStudio';
 import './McpAccessStudio.css';
 
@@ -82,6 +84,9 @@ export function WorkloadFederationSection({
   const [submitting, setSubmitting] = useState(false);
   const isMountedRef = useRef(true);
 
+  const isDirty = showModal && Boolean(formName || formIssuer || formClientId || formDesc);
+  useAal2DirtyKeepalive(isDirty);
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -157,8 +162,10 @@ export function WorkloadFederationSection({
       .split(',')
       .map((c) => c.trim())
       .filter(Boolean);
-    const parsedCapMask = parseInt(formCapMask, 10) || 255;
-    const parsedTtl = parseInt(formTtl, 10) || 3600;
+    const rawCap = parseInt(formCapMask, 10);
+    const parsedCapMask = Number.isNaN(rawCap) ? 255 : rawCap;
+    const rawTtl = parseInt(formTtl, 10);
+    const parsedTtl = Number.isNaN(rawTtl) ? 3600 : rawTtl;
 
     const action = async (): Promise<void> => {
       try {
@@ -383,12 +390,65 @@ export function WorkloadFederationSection({
               </button>
             </div>
             <form onSubmit={(e) => void handleSubmit(e)}>
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-name">Policy Name *</label>
+              {!editingPolicy && (
+                <div
+                  className="kb-mcp-presets-bar"
+                  data-testid="workload-presets-bar"
+                  style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}
+                >
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--kb-color-text-secondary, #8b949e)' }}>
+                    1-Click Presets:
+                  </span>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-github-actions"
+                    onClick={() => {
+                      if (!formName) setFormName('GitHub Actions CI');
+                      setFormIssuer('https://token.actions.githubusercontent.com');
+                      setFormClientId(window.location.origin);
+                      setFormSubjectPattern('repo:org/repo:ref:refs/heads/*');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    GitHub Actions
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-gitlab-ci"
+                    onClick={() => {
+                      if (!formName) setFormName('GitLab CI');
+                      setFormIssuer('https://gitlab.com');
+                      setFormClientId(window.location.origin);
+                      setFormSubjectPattern('project_path:group/project:ref:*:ref_type:branch');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    GitLab CI
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-mcp-filter-pill"
+                    data-testid="preset-kubernetes"
+                    onClick={() => {
+                      if (!formName) setFormName('Kubernetes Workload');
+                      setFormIssuer('https://kubernetes.default.svc.cluster.local');
+                      setFormClientId(window.location.origin);
+                      setFormSubjectPattern('system:serviceaccount:default:*');
+                      setFormSurface('agent');
+                    }}
+                  >
+                    Kubernetes
+                  </button>
+                </div>
+              )}
+              <div className="kb-mcp-form-row">
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-name">Policy Name *</label>
                 <input
                   id="wl-policy-name"
                   type="text"
-                  className="kb-mcp-input"
+                  className="kb-mcp-form-input"
                   data-testid="policy-name-input"
                   required
                   value={formName}
@@ -396,12 +456,12 @@ export function WorkloadFederationSection({
                 />
               </div>
 
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-desc">Description</label>
+              <div className="kb-mcp-form-row">
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-desc">Description</label>
                 <input
                   id="wl-policy-desc"
                   type="text"
-                  className="kb-mcp-input"
+                  className="kb-mcp-form-input"
                   data-testid="policy-description-input"
                   value={formDesc}
                   onChange={(e) => { setFormDesc(e.target.value); }}
@@ -410,12 +470,12 @@ export function WorkloadFederationSection({
 
               {!editingPolicy && (
                 <>
-                  <div className="kb-mcp-form-group">
-                    <label className="kb-mcp-label" htmlFor="wl-policy-issuer">Issuer URL *</label>
+                  <div className="kb-mcp-form-row">
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-issuer">Issuer URL *</label>
                     <input
                       id="wl-policy-issuer"
                       type="url"
-                      className="kb-mcp-input"
+                      className="kb-mcp-form-input"
                       data-testid="policy-issuer-input"
                       required
                       placeholder="https://token.actions.githubusercontent.com"
@@ -424,12 +484,12 @@ export function WorkloadFederationSection({
                     />
                   </div>
 
-                  <div className="kb-mcp-form-group">
-                    <label className="kb-mcp-label" htmlFor="wl-policy-client-id">Client ID / Audience *</label>
+                  <div className="kb-mcp-form-row">
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-client-id">Client ID / Audience *</label>
                     <input
                       id="wl-policy-client-id"
                       type="text"
-                      className="kb-mcp-input"
+                      className="kb-mcp-form-input"
                       data-testid="policy-client-id-input"
                       required
                       placeholder="https://kanban.example.com"
@@ -438,11 +498,11 @@ export function WorkloadFederationSection({
                     />
                   </div>
 
-                  <div className="kb-mcp-form-group">
-                    <label className="kb-mcp-label" htmlFor="wl-policy-surface">Surface *</label>
+                  <div className="kb-mcp-form-row">
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-surface">Surface *</label>
                     <select
                       id="wl-policy-surface"
-                      className="kb-mcp-select"
+                      className="kb-mcp-form-select"
                       data-testid="policy-surface-select"
                       value={formSurface}
                       onChange={(e) => { setFormSurface(e.target.value as 'agent' | 'docs'); }}
@@ -454,12 +514,12 @@ export function WorkloadFederationSection({
                 </>
               )}
 
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-subject-pattern">Subject Pattern *</label>
+              <div className="kb-mcp-form-row">
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-subject-pattern">Subject Pattern *</label>
                 <input
                   id="wl-policy-subject-pattern"
                   type="text"
-                  className="kb-mcp-input"
+                  className="kb-mcp-form-input"
                   data-testid="policy-subject-pattern-input"
                   required
                   placeholder="repo:org/repo:ref:refs/heads/*"
@@ -468,66 +528,78 @@ export function WorkloadFederationSection({
                 />
               </div>
 
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">
-                  Capability Mask (0-255)
-                  <FieldHelpHint
-                    title="Capability Mask"
-                    summary="Bitmask ceiling governing allowed Model Context Protocol operations."
-                    defaultValue="31 (Standard Developer Agent)"
-                    validValues={['0 to 255']}
-                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
-                    testId="policy-cap-mask-help"
+              <AdvancedSection
+                title="Advanced Parameters"
+                summary="Capability mask ceilings, allowed CIDR ranges, and token TTL"
+                testId="workload-advanced-section"
+                defaultOpen={Boolean(editingPolicy)}
+                activeOverridesCount={
+                  (formCapMask !== '255' ? 1 : 0) +
+                  (formCidrs.trim() ? 1 : 0) +
+                  (formTtl !== '3600' ? 1 : 0)
+                }
+              >
+                <div className="kb-mcp-form-row">
+                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cap-mask">
+                    Capability Mask (0-255)
+                    <FieldHelpHint
+                      title="Capability Mask"
+                      summary="Bitmask ceiling governing allowed Model Context Protocol operations."
+                      defaultValue="31 (Standard Developer Agent)"
+                      validValues={['0 to 255']}
+                      docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                      testId="policy-cap-mask-help"
+                    />
+                  </label>
+                  <input
+                    id="wl-policy-cap-mask"
+                    type="number"
+                    className="kb-mcp-form-input"
+                    data-testid="policy-cap-mask-input"
+                    min="0"
+                    max="255"
+                    value={formCapMask}
+                    onChange={(e) => { setFormCapMask(e.target.value); }}
                   />
-                </label>
-                <input
-                  id="wl-policy-cap-mask"
-                  type="number"
-                  className="kb-mcp-input"
-                  data-testid="policy-cap-mask-input"
-                  min="0"
-                  max="255"
-                  value={formCapMask}
-                  onChange={(e) => { setFormCapMask(e.target.value); }}
-                />
-              </div>
+                </div>
 
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-cidrs">Allowed CIDRs (comma-separated)</label>
-                <input
-                  id="wl-policy-cidrs"
-                  type="text"
-                  className="kb-mcp-input"
-                  data-testid="policy-cidrs-input"
-                  placeholder="192.168.1.0/24, 10.0.0.0/8"
-                  value={formCidrs}
-                  onChange={(e) => { setFormCidrs(e.target.value); }}
-                />
-              </div>
-
-              <div className="kb-mcp-form-group">
-                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">
-                  Max TTL Seconds
-                  <FieldHelpHint
-                    title="Max TTL Seconds"
-                    summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."
-                    defaultValue="3600 seconds (1 hour)"
-                    validValues={['60 to 86400 seconds']}
-                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
-                    testId="policy-ttl-help"
+                <div className="kb-mcp-form-row">
+                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cidrs">Allowed CIDRs (comma-separated)</label>
+                  <input
+                    id="wl-policy-cidrs"
+                    type="text"
+                    className="kb-mcp-form-input"
+                    data-testid="policy-cidrs-input"
+                    placeholder="192.168.1.0/24, 10.0.0.0/8"
+                    value={formCidrs}
+                    onChange={(e) => { setFormCidrs(e.target.value); }}
                   />
-                </label>
-                <input
-                  id="wl-policy-ttl"
-                  type="number"
-                  className="kb-mcp-input"
-                  data-testid="policy-ttl-input"
-                  min="60"
-                  max="86400"
-                  value={formTtl}
-                  onChange={(e) => { setFormTtl(e.target.value); }}
-                />
-              </div>
+                </div>
+
+                <div className="kb-mcp-form-row">
+                  <label className="kb-mcp-form-label" htmlFor="wl-policy-ttl">
+                    Max TTL Seconds
+                    <FieldHelpHint
+                      title="Max TTL Seconds"
+                      summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."
+                      defaultValue="3600 seconds (1 hour)"
+                      validValues={['60 to 86400 seconds']}
+                      docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                      testId="policy-ttl-help"
+                    />
+                  </label>
+                  <input
+                    id="wl-policy-ttl"
+                    type="number"
+                    className="kb-mcp-form-input"
+                    data-testid="policy-ttl-input"
+                    min="60"
+                    max="86400"
+                    value={formTtl}
+                    onChange={(e) => { setFormTtl(e.target.value); }}
+                  />
+                </div>
+              </AdvancedSection>
 
               <div className="kb-mcp-form-actions">
                 <button

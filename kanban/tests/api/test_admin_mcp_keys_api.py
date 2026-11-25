@@ -1,11 +1,13 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
+# ruff: noqa: PLR0915
 """API integration tests for admin MCP keys endpoints and introspection (KB-P4-02a)."""
 
 from __future__ import annotations
 
 import base64
 import json
+import uuid
 from typing import TYPE_CHECKING
 
 import httpx
@@ -13,10 +15,22 @@ import pytest
 from sqlalchemy import text
 from starlette.requests import Request
 
+from database.models.mcp_api_key import McpApiKey
 from kanban.api.deps import PrincipalContext
 from kanban.api.internal.mcp_introspect import get_internal_session
+from kanban.api.v1.admin.mcp_keys import (
+    McpApiKeyMintRequest,
+    _resolve_admin_key_project_list,
+    _resolve_admin_project_id_to_key_map,
+)
 from kanban.app import create_internal_app
 from kanban.security.service_auth import create_internal_service_auth_header
+from kanban.tests.security.helpers import (
+    add_role_binding,
+    create_project,
+    create_user,
+    create_workspace,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -42,7 +56,7 @@ def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
+async def test_admin_mcp_keys_endpoints_lifecycle(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     contract_recorder: ContractRecorder,
@@ -528,3 +542,272 @@ async def test_personal_mcp_keys_api_lifecycle(
     )
     assert resp_server_admin_ok.status_code == 201
     assert resp_server_admin_ok.json()["scope_tier"] == "global"
+
+
+@pytest.mark.asyncio
+async def test_admin_mcp_keys_allowed_projects_and_project_admin_coverage(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test admin MCP keys allowed_projects resolution, project admin list & revoke (KAN-417)."""
+    admin_user = await make_user("proj_admin_cov", workspace_role="WORKSPACE_ADMIN")
+    proj_admin_user = await make_user("proj_admin_user", workspace_role="WORKSPACE_MEMBER")
+    server_admin = await make_user("srv_admin_cov", workspace_role="SERVER_ADMIN")
+
+    for u in (admin_user, proj_admin_user, server_admin):
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+            {
+                "p_id": u.id,
+                "blob": b"\x01" + b"\x00" * 28,
+                "dek": b"\x01" + b"\x00" * 44,
+            },
+        )
+        res = await api_env.seed.execute(
+            text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+            {"p_id": u.id},
+        )
+        p_row = res.mappings().first()
+        if p_row:
+            await api_env.seed.execute(
+                text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+                {"p_fid": p_row["id"]},
+            )
+
+    # Create real project in workspace and bind PROJECT_ADMIN to proj_admin_user
+    real_proj_id = await create_project(
+        api_env.seed,
+        admin_user.workspace_id,
+        identifier="PROJCOV",
+        name="Coverage Project",
+        created_by_id=admin_user.id,
+    )
+    await add_role_binding(
+        api_env.seed,
+        admin_user.workspace_id,
+        proj_admin_user.id,
+        role="PROJECT_ADMIN",
+        scope_type="project",
+        project_id=real_proj_id,
+    )
+    await api_env.seed.commit()
+
+    client = api_env.client
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=2,
+    )
+
+    # 1. Mint key without explicit project_id so allowed_projects[0] becomes project_id
+    fake_allowed_uuid = str(uuid.uuid4())
+    resp_mint = await client.post(
+        "/api/v1/admin/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "project",
+            "allowed_projects": [
+                "NON_EXISTENT_KEY",
+                "PROJCOV",
+                fake_allowed_uuid,
+                "not-a-valid-uuid",
+            ],
+        },
+    )
+    assert resp_mint.status_code == 201
+    mint_data = resp_mint.json()
+    assert mint_data["scope_tier"] == "project"
+    assert "PROJCOV" in mint_data.get("allowed_projects", [])
+    key_id = mint_data["id"]
+
+    # 2. List keys as project admin for that project
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=proj_admin_user.id,
+        workspace_id=proj_admin_user.workspace_id,
+        aal_level=2,
+    )
+    resp_list_member = await client.get("/api/v1/admin/mcp-keys")
+    assert resp_list_member.status_code == 200
+    assert len(resp_list_member.json()) == 1
+    assert resp_list_member.json()[0]["id"] == key_id
+
+    # Filtering by scope_tier != project gets [] (hits line 304)
+    resp_list_member_ws = await client.get("/api/v1/admin/mcp-keys?scope_tier=workspace")
+    assert resp_list_member_ws.status_code == 200
+    assert resp_list_member_ws.json() == []
+
+    # 3. Mint a workspace-scoped key as workspace admin
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=2,
+    )
+    resp_ws_mint = await client.post(
+        "/api/v1/admin/mcp-keys",
+        json={
+            "surface": "agent",
+            "scopes": ["agent:read"],
+            "scope_tier": "workspace",
+        },
+    )
+    assert resp_ws_mint.status_code == 201
+    ws_key_id = resp_ws_mint.json()["id"]
+
+    # 4. As project admin, attempting to revoke a workspace-tier key returns 404 (hits line 408)
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=proj_admin_user.id,
+        workspace_id=proj_admin_user.workspace_id,
+        aal_level=2,
+    )
+    resp_del_ws_fail = await client.delete(f"/api/v1/admin/mcp-keys/{ws_key_id}")
+    assert resp_del_ws_fail.status_code == 404
+
+    # 5. Project admin revoking project-tier key for administered project succeeds (line 421)
+    resp_del_proj_ok = await client.delete(f"/api/v1/admin/mcp-keys/{key_id}")
+    assert resp_del_proj_ok.status_code == 204
+
+    # 6. Revoke key as server admin with mismatched workspace_id (hits line 396 -> 404)
+    ws2_id = await create_workspace(api_env.seed, name="WS-2-Coverage")
+    ws2_user_id = await create_user(
+        api_env.seed, ws2_id, handle="@ws2user", display_name="WS2 User"
+    )
+    await add_role_binding(
+        api_env.seed, ws2_id, ws2_user_id, role="SERVER_ADMIN", scope_type="server"
+    )
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {
+            "p_id": ws2_user_id,
+            "blob": b"\x01" + b"\x00" * 28,
+            "dek": b"\x01" + b"\x00" * 44,
+        },
+    )
+    res = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": ws2_user_id},
+    )
+    p_row = res.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=ws2_user_id,
+        workspace_id=ws2_id,
+        aal_level=2,
+    )
+    resp_del_server_mismatch = await client.delete(f"/api/v1/admin/mcp-keys/{ws_key_id}")
+    assert resp_del_server_mismatch.status_code == 404
+
+    # 7. Revoke key as workspace admin from different workspace (hits line 399 -> 404)
+    other_ws_id = await create_workspace(api_env.seed, name="Other-WS")
+    other_admin_id = await create_user(
+        api_env.seed, other_ws_id, handle="@other_admin", display_name="Other Admin"
+    )
+    await add_role_binding(
+        api_env.seed, other_ws_id, other_admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
+    )
+    await api_env.seed.execute(
+        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
+        {"p_id": other_admin_id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
+    )
+    res = await api_env.seed.execute(
+        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
+        {"p_id": other_admin_id},
+    )
+    p_row = res.mappings().first()
+    if p_row:
+        await api_env.seed.execute(
+            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
+            {"p_fid": p_row["id"]},
+        )
+    await api_env.seed.commit()
+
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=other_admin_id,
+        workspace_id=other_ws_id,
+        aal_level=2,
+    )
+    resp_del_other_ws = await client.delete(f"/api/v1/admin/mcp-keys/{ws_key_id}")
+    assert resp_del_other_ws.status_code == 404
+
+    # 8. Revoke workspace key as proper admin succeeds
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin_user.id,
+        workspace_id=admin_user.workspace_id,
+        aal_level=2,
+    )
+    resp_del_ok = await client.delete(f"/api/v1/admin/mcp-keys/{ws_key_id}")
+    assert resp_del_ok.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_admin_mcp_keys_helper_units(api_env: ApiEnv) -> None:
+    """Direct unit tests for helper edge cases in admin/mcp_keys.py."""
+    # 1. CIDR validator
+    assert McpApiKeyMintRequest.validate_allowed_cidrs(None) is None
+    assert McpApiKeyMintRequest.validate_allowed_cidrs([]) == []
+    assert McpApiKeyMintRequest.validate_allowed_cidrs(["192.168.1.0/24"]) == ["192.168.1.0/24"]
+    with pytest.raises(ValueError, match="Invalid CIDR block"):
+        McpApiKeyMintRequest.validate_allowed_cidrs(["invalid-cidr"])
+
+    # 2. Key project list resolver
+    p_id = uuid.uuid4()
+    dummy_key = McpApiKey(
+        workspace_id=uuid.uuid4(),
+        principal_id=uuid.uuid4(),
+        surface="agent",
+        key_prefix="kb_agt_",
+        key_sha256=b"x" * 32,
+        display_hint="test",
+        scopes=["agent:read"],
+        project_id=p_id,
+        allowed_project_ids=None,
+    )
+    assert _resolve_admin_key_project_list(dummy_key, {p_id: "PROJ-KEY"}) == ["PROJ-KEY"]
+    assert _resolve_admin_key_project_list(dummy_key, {}) == [str(p_id)]
+
+    dummy_key_allowed = McpApiKey(
+        workspace_id=uuid.uuid4(),
+        principal_id=uuid.uuid4(),
+        surface="agent",
+        key_prefix="kb_agt_",
+        key_sha256=b"x" * 32,
+        display_hint="test",
+        scopes=["agent:read"],
+        project_id=None,
+        allowed_project_ids=[p_id],
+    )
+    assert _resolve_admin_key_project_list(
+        dummy_key_allowed, {p_id: "ALLOWED-KEY"}
+    ) == ["ALLOWED-KEY"]
+
+    dummy_key_none = McpApiKey(
+        workspace_id=uuid.uuid4(),
+        principal_id=uuid.uuid4(),
+        surface="agent",
+        key_prefix="kb_agt_",
+        key_sha256=b"x" * 32,
+        display_hint="test",
+        scopes=["agent:read"],
+        project_id=None,
+        allowed_project_ids=None,
+    )
+    assert _resolve_admin_key_project_list(dummy_key_none, {}) is None
+
+    # 3. Project key map resolver
+    assert await _resolve_admin_project_id_to_key_map(api_env.seed, set()) == {}
+    res_map = await _resolve_admin_project_id_to_key_map(api_env.seed, {p_id})
+    assert isinstance(res_map, dict)
+
+    class BadSession:
+        async def execute(self, *_args: object, **_kwargs: object) -> None:
+            msg = "DB fail"
+            raise RuntimeError(msg)
+
+    assert await _resolve_admin_project_id_to_key_map(BadSession(), {p_id}) == {}  # type: ignore[arg-type]
+

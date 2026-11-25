@@ -639,4 +639,58 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
 
     vi.unstubAllGlobals();
   });
+
+  it('covers project caching on second lookup after failure and identifier fallbacks', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { key: 'PROJ-KEY-ONLY', name: 'Key Project' },
+            { identifier: 'PROJ-IDENT-ONLY', name: 'Ident Project' },
+          ]),
+      }),
+    );
+
+    const mockInfo: oauthApi.DeviceCodeInfoResponse = {
+      user_code: 'WDJB-MJHT',
+      client_name: 'Antigravity CLI',
+      client_id: 'client_123',
+      resource: 'https://kanban.example.com/mcp/agent',
+      surface: 'agent',
+      requested_scopes: ['agent:read'],
+      allowed_projects: ['PROJ-KEY-ONLY'],
+      expires_at: new Date(Date.now() + 600000).toISOString(),
+    };
+    // First lookup fails
+    vi.spyOn(oauthApi, 'fetchDeviceCodeInfo')
+      .mockRejectedValueOnce(new Error('Code not found'))
+      .mockResolvedValueOnce(mockInfo);
+
+    render(
+      <MemoryRouter initialEntries={['/activate']}>
+        <DeviceActivatePage />
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByTestId<HTMLInputElement>('user-code-input');
+    fireEvent.change(input, { target: { value: 'WDJBMJHT' } });
+    fireEvent.click(screen.getByTestId('lookup-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Code not found')).toBeDefined();
+    });
+
+    // Lookup second code while projects are already cached in ref from first call
+    fireEvent.change(input, { target: { value: 'BCDFGHJK' } });
+    fireEvent.click(screen.getByTestId('lookup-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('consent-section')).not.toBeNull();
+      expect(oauthApi.fetchDeviceCodeInfo).toHaveBeenCalledTimes(2);
+    });
+
+    vi.unstubAllGlobals();
+  });
 });

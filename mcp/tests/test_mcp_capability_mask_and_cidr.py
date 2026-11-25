@@ -14,12 +14,20 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import uuid
 from typing import Any
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
+from kanban.api.v1.admin.mcp_keys import McpApiKeyMintRequest
+from kanban.api.v1.admin.workload_identities import (
+    WorkloadPolicyCreateRequest,
+    WorkloadPolicyUpdateRequest,
+)
+from kanban.api.v1.mcp_keys import UnifiedMcpKeyMintRequest
 from mcp.app import create_mcp_app
 from mcp.auth import McpAuthContext, McpAuthMiddleware
 from mcp.errors import KbMcpError, McpErrorCode
@@ -487,3 +495,100 @@ async def test_trusted_proxy_client_ip_cidr_validation() -> None:
         )
         assert invalid_resp.status_code == 403
         assert invalid_resp.json()["error"] == "KEY_CIDR_DENIED"
+
+
+def test_mcp_api_key_mint_request_cidr_validation() -> None:
+    """Verify McpApiKeyMintRequest and UnifiedMcpKeyMintRequest validate CIDR blocks."""
+    # Valid CIDRs
+    req_valid = McpApiKeyMintRequest(
+        label="valid",
+        surface="agent",
+        scopes=["agent:read"],
+        allowed_cidrs=["192.168.1.0/24", "10.0.0.1/32", "2001:db8::/32"],
+    )
+    assert req_valid.allowed_cidrs == ["192.168.1.0/24", "10.0.0.1/32", "2001:db8::/32"]
+
+    req_unified_valid = UnifiedMcpKeyMintRequest(
+        label="valid",
+        surface="agent",
+        scopes=["agent:read"],
+        allowed_cidrs=["172.16.0.0/16"],
+    )
+    assert req_unified_valid.allowed_cidrs == ["172.16.0.0/16"]
+
+    # Invalid CIDRs
+    with pytest.raises(ValidationError) as exc_admin:
+        McpApiKeyMintRequest(
+            label="invalid",
+            surface="agent",
+            scopes=["agent:read"],
+            allowed_cidrs=["not-a-cidr"],
+        )
+    assert "Invalid CIDR block: not-a-cidr" in str(exc_admin.value)
+
+    with pytest.raises(ValidationError) as exc_unified:
+        UnifiedMcpKeyMintRequest(
+            label="invalid",
+            surface="agent",
+            scopes=["agent:read"],
+            allowed_cidrs=["999.999.999.999/24"],
+        )
+    assert "Invalid CIDR block: 999.999.999.999/24" in str(exc_unified.value)
+
+
+def test_workload_policy_validators(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify WorkloadPolicyCreateRequest and WorkloadPolicyUpdateRequest validators."""
+    # Valid HTTPS issuer
+    p_create = WorkloadPolicyCreateRequest(
+        name="test",
+        surface="agent",
+        scopes=["agent:read"],
+        issuer="https://token.actions.githubusercontent.com",
+        client_id="kanban-client",
+        subject_pattern="repo:octocat/hello-world:*",
+    )
+    assert p_create.issuer == "https://token.actions.githubusercontent.com"
+
+    # Non-HTTPS issuer rejected
+    with pytest.raises(ValidationError) as exc_issuer:
+        WorkloadPolicyCreateRequest(
+            name="test",
+            surface="agent",
+            scopes=["agent:read"],
+            issuer="http://insecure.issuer.com",
+            client_id="kanban-client",
+            subject_pattern="repo:foo:*",
+        )
+    assert "Workload identity issuer must use HTTPS scheme." in str(exc_issuer.value)
+
+    # Update non-HTTPS issuer rejected
+    with pytest.raises(ValidationError) as exc_update_issuer:
+        WorkloadPolicyUpdateRequest(issuer="http://insecure.issuer.com")
+    assert "Workload identity issuer must use HTTPS scheme." in str(exc_update_issuer.value)
+
+    # Valid update with None
+    p_update = WorkloadPolicyUpdateRequest(issuer=None, subject_pattern=None)
+    assert p_update.issuer is None
+    assert p_update.subject_pattern is None
+
+    # Invalid subject pattern via compile error
+    def mock_compile_fail(*_args: object, **_kwargs: object) -> None:
+        msg = "bad pattern"
+        raise re.error(msg)
+
+    monkeypatch.setattr(re, "compile", mock_compile_fail)
+    with pytest.raises(ValidationError) as exc_subj:
+        WorkloadPolicyCreateRequest(
+            name="test",
+            surface="agent",
+            scopes=["agent:read"],
+            issuer="https://token.actions.githubusercontent.com",
+            client_id="kanban-client",
+            subject_pattern="bad:*",
+        )
+    assert "Invalid subject pattern" in str(exc_subj.value)
+
+    with pytest.raises(ValidationError) as exc_subj_update:
+        WorkloadPolicyUpdateRequest(subject_pattern="bad:*")
+    assert "Invalid subject pattern" in str(exc_subj_update.value)
+

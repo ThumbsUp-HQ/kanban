@@ -1,0 +1,33 @@
+=== RUFF CHECK ===
+All checks passed!
+
+=== CHECK NO DASHES ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+=== TYPESCRIPT TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+> tsc -b --noEmit
+
+
+=== ESLINT ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+> eslint . --max-warnings 0
+
+
+=== VITE BUILD ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan417-b61a8c15/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+✓ 765 modules transformed.
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-BTQjcaUB.css            610.18 kB │ gzip:  86.03 kB
+dist/assets/index-DL05V5cL.js           2,891.41 kB │ gzip: 800.31 kB
+✓ built in 1.24s
+
+=== MYPY ===
+Success: no issues found in 808 source files

@@ -121,7 +121,7 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/admin/w/admin-ws/p/ADM');
   });
 
-  it('supports toggling scope checkboxes', () => {
+  it('supports toggling scope checkboxes', async () => {
     render(
       <MemoryRouter>
         <ConnectOAuthAppModal
@@ -130,6 +130,10 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
         />
       </MemoryRouter>,
     );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     const agentWriteCheck = screen.getByTestId<HTMLInputElement>('scope-check-agent:write');
     expect(agentWriteCheck.checked).toBe(true);
@@ -233,7 +237,7 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     vi.useRealTimers();
   });
 
-  it('closes on Escape key press and backdrop click', () => {
+  it('closes on Escape key press and backdrop click', async () => {
     const handleClose = vi.fn();
     render(
       <MemoryRouter>
@@ -243,6 +247,10 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
         />
       </MemoryRouter>,
     );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     // Backdrop click
     fireEvent.click(screen.getByTestId('connect-oauth-modal-backdrop'));
@@ -614,6 +622,28 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     expect(projectSelect.options.length).toBe(2);
     expect(projectSelect.options[0]?.text).toBe('SAME');
     expect(projectSelect.options[1]?.text).toBe('NONAME');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles unmount while project fetch is pending', () => {
+    let resolvePromise: (val: unknown) => void = () => undefined;
+    const pendingPromise = new Promise((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(pendingPromise));
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    unmount();
+    resolvePromise({
+      ok: true,
+      json: () => Promise.resolve([{ key: 'P1' }]),
+    });
 
     vi.unstubAllGlobals();
   });

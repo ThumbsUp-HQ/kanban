@@ -220,6 +220,7 @@ export interface McpAccessStudioProps {
     is_project_admin?: boolean;
     workspace_role?: string;
   } | null | undefined;
+  maxKeyTtlDays?: number | undefined;
 }
 
 interface ProjectOption {
@@ -236,6 +237,7 @@ export function McpAccessStudio({
   tier,
   allowUnlimitedKeys,
   user: propUser,
+  maxKeyTtlDays,
 }: McpAccessStudioProps): JSX.Element {
   const contextClient = useContext(QueryClientContext);
   const queryClient = contextClient ?? fallbackQueryClient;
@@ -530,6 +532,9 @@ export function McpAccessStudio({
     setNewKeyScopeTier(initialTier);
     setNewKeyProject(effectiveProjectKey);
     setCapabilityMask(31);
+    if (maxKeyTtlDays && maxKeyTtlDays > 0 && newKeyExpiry > maxKeyTtlDays) {
+      setNewKeyExpiry(maxKeyTtlDays);
+    }
     setShowMintModal(true);
   };
 
@@ -1251,6 +1256,70 @@ export function McpAccessStudio({
                     testId="mint-scope-help"
                   />
                 </label>
+
+                {/* Streamlined Segmented Role & Scope Selectors */}
+                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <button
+                    type="button"
+                    className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'personal_user' ? 'kb-mcp-filter-pill-active' : ''}`}
+                    data-testid="role-pill-personal"
+                    onClick={() => {
+                      setNewKeyOwnerKind('personal_user');
+                      if (newKeyScopeTier === 'global') {
+                        setNewKeyScopeTier('workspace');
+                      }
+                    }}
+                  >
+                    Personal User
+                  </button>
+                  <button
+                    type="button"
+                    className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'service_bot' ? 'kb-mcp-filter-pill-active' : ''}`}
+                    data-testid="role-pill-service_bot"
+                    onClick={() => {
+                      setNewKeyOwnerKind('service_bot');
+                    }}
+                  >
+                    Service Bot
+                  </button>
+                </div>
+
+                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <button
+                    type="button"
+                    className={`kb-mcp-filter-pill ${newKeyScopeTier === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
+                    data-testid="scope-tier-pill-project"
+                    onClick={() => {
+                      setNewKeyScopeTier('project');
+                    }}
+                  >
+                    Single Project
+                  </button>
+                  <button
+                    type="button"
+                    className={`kb-mcp-filter-pill ${newKeyScopeTier === 'workspace' ? 'kb-mcp-filter-pill-active' : ''}`}
+                    data-testid="scope-tier-pill-workspace"
+                    onClick={() => {
+                      setNewKeyScopeTier('workspace');
+                    }}
+                  >
+                    Entire Workspace
+                  </button>
+                  {isServerAdmin && (
+                    <button
+                      type="button"
+                      className={`kb-mcp-filter-pill ${newKeyScopeTier === 'global' ? 'kb-mcp-filter-pill-active' : ''}`}
+                      data-testid="scope-tier-pill-global"
+                      onClick={() => {
+                        setNewKeyOwnerKind('service_bot');
+                        setNewKeyScopeTier('global');
+                      }}
+                    >
+                      Server / Global
+                    </button>
+                  )}
+                </div>
+
                 <select
                   id="mint-key-scope-type-select"
                   className="kb-mcp-form-select"
@@ -1342,6 +1411,15 @@ export function McpAccessStudio({
                     docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
                     testId="mcp-expiry-help"
                   />
+                  {maxKeyTtlDays !== undefined && maxKeyTtlDays > 0 && (
+                    <span
+                      className="kb-mcp-policy-badge"
+                      data-testid="policy-ttl-badge"
+                      style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--kb-color-text-secondary, #8b949e)' }}
+                    >
+                      Workspace policy enforces maximum {maxKeyTtlDays}-day TTL
+                    </span>
+                  )}
                 </label>
                 <select
                   id="mint-expiry-select"
@@ -1358,11 +1436,14 @@ export function McpAccessStudio({
                     }
                   }}
                 >
-                  <option value={30}>30 Days</option>
-                  <option value={60}>60 Days</option>
-                  <option value={90}>90 Days</option>
-                  <option value={365}>1 Year</option>
-                  {allowUnlimited && (
+                  {(!maxKeyTtlDays || maxKeyTtlDays >= 30) && <option value={30}>30 Days</option>}
+                  {(!maxKeyTtlDays || maxKeyTtlDays >= 60) && <option value={60}>60 Days</option>}
+                  {(!maxKeyTtlDays || maxKeyTtlDays >= 90) && <option value={90}>90 Days</option>}
+                  {(!maxKeyTtlDays || maxKeyTtlDays >= 365) && <option value={365}>1 Year</option>}
+                  {maxKeyTtlDays !== undefined && maxKeyTtlDays > 0 && ![30, 60, 90, 365].includes(maxKeyTtlDays) && (
+                    <option value={maxKeyTtlDays}>{maxKeyTtlDays} Days (Max)</option>
+                  )}
+                  {allowUnlimited && !maxKeyTtlDays && (
                     <option value="unlimited" data-testid="option-unlimited">
                       Unlimited (not recommended)
                     </option>
@@ -1588,7 +1669,7 @@ export function McpAccessStudio({
                     !newKeyLabel.trim() ||
                     (isUnlimited && !confirmUnlimited) ||
                     Boolean(cidrError) ||
-                    capabilityMask <= 0
+                    capabilityMask < 0
                   }
                 >
                   {minting ? 'Minting...' : 'Mint Key'}
