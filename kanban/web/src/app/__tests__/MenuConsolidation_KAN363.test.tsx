@@ -292,6 +292,17 @@ describe('Menu Consolidation KAN-363 Suite (Global Navigation Deduplication)', (
       });
       vi.mocked(personalApi.fetchPasskeys).mockResolvedValueOnce([]);
       vi.mocked(personalApi.fetchExternalIdentities).mockResolvedValueOnce([]);
+      vi.mocked(personalApi.fetchUserPreferences).mockResolvedValue({
+        principal_id: 'usr-1',
+        workspace_id: 'ws-1',
+        agent_onboarding_prefs: {
+          scope: 'local_only',
+          execution_mode: 'swarm',
+          model_strategy: 'quota_sipping_flash',
+          qa_rigor: 'strict_forensic',
+          custom_notes: '',
+        },
+      });
       vi.mocked(authApi.fetchAuthCards).mockResolvedValueOnce({ cards: [] });
 
       render(
