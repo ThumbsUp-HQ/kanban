@@ -1,0 +1,30 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 160ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (48 tests) 5237ms
+   ✓ DocsCenter & Help System (KAN-16) (48)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (15)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1700ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 549ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 452ms
+
+ Test Files  2 passed (2)
+      Tests  69 passed (69)
+   Start at  14:35:08
+   Duration  6.58s (tests 74%, environment 17%, import 5%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.4 |    95.14 |   98.94 |   99.79 |                   
+ ...downViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+ ...CenterPage.tsx |   99.18 |    91.48 |   97.72 |   99.14 | 264               
+ HelpDrawer.tsx    |     100 |    97.72 |     100 |     100 | 69                
+ docsService.ts    |     100 |    97.14 |     100 |     100 | 46                
+ index.ts          |       0 |        0 |       0 |       0 |                   
+ wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
