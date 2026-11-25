@@ -3,6 +3,7 @@ import {
   ApiProblem,
   dispatchAal2StepUpIfRequired,
   isAal2StepUpCode,
+  isMfaEnrollmentRequiredCode,
   isNotFound,
   isPreconditionFailed,
 } from './problem.ts';
@@ -45,6 +46,8 @@ describe('ApiProblem', () => {
         { path: 'client_id', message: 'Field required' },
         { path: ['public_config', 'issuer'], message: 'Extra fields not permitted' },
         { path: 42, message: 99 },
+        { path: {}, message: 'ignored object path' },
+        { path: false, message: 'ignored boolean path' },
         { path: ['items', 0, null, true], message: 'Invalid item' },
         { path: '', message: 'blank path ignored' },
         { path: 'empty_msg', message: '' },
@@ -77,6 +80,13 @@ describe('ApiProblem', () => {
     expect(isAal2StepUpCode('AAL2_STALE')).toBe(true);
     expect(isAal2StepUpCode('FORBIDDEN')).toBe(false);
     expect(isAal2StepUpCode(null)).toBe(false);
+
+    expect(isMfaEnrollmentRequiredCode('MFA_ENROLLMENT_REQUIRED')).toBe(true);
+    expect(isMfaEnrollmentRequiredCode('FORBIDDEN')).toBe(false);
+    expect(isMfaEnrollmentRequiredCode(null)).toBe(false);
+    expect(isMfaEnrollmentRequiredCode(undefined)).toBe(false);
+    expect(isMfaEnrollmentRequiredCode(123)).toBe(false);
+    expect(isMfaEnrollmentRequiredCode({ code: 'MFA_ENROLLMENT_REQUIRED' })).toBe(false);
 
     const spy = vi.fn();
     window.addEventListener('kb:open-aal2-stepup', spy);

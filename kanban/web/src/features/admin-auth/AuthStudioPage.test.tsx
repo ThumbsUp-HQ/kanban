@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import React from 'react';
+import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthStudioPage, formatHandle } from './AuthStudioPage';
 import * as client from '../../api/client';
@@ -2118,6 +2119,193 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       // 5. Switch back to Auth Provider Cards tab
       fireEvent.click(screen.getByRole('tab', { name: /Auth Provider Cards/i }));
       expect(screen.getByText('Okta SSO')).toBeDefined();
+    });
+  });
+
+  describe('MFA Enrollment Required Banner (KAN-398)', () => {
+    it('renders mfa-enrollment-required-banner when loadCards fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') {
+          throw new ApiProblem(403, {
+            code: 'MFA_ENROLLMENT_REQUIRED',
+            title: 'MFA Required',
+            detail: 'Server admin requires MFA enrollment',
+          });
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
+      });
+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
+      expect(screen.getByRole('link', { name: /profile settings/i })).toBeDefined();
+      expect(screen.getByRole('link', { name: /profile settings/i }).getAttribute('href')).toBe('/settings/profile');
+    });
+
+    it('renders mfa-enrollment-required-banner when checkAccess fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') {
+          throw new ApiProblem(403, {
+            code: 'MFA_ENROLLMENT_REQUIRED',
+            title: 'MFA Required',
+            detail: 'Server admin requires MFA enrollment',
+          });
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
+      });
+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
+    });
+
+    it('renders mfa-enrollment-required-banner with react-router Link when inside a Router', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') {
+          throw new ApiProblem(403, {
+            code: 'MFA_ENROLLMENT_REQUIRED',
+            title: 'MFA Required',
+          });
+        }
+        return {};
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/admin/auth']}>
+          <AuthStudioPage />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
+      });
+      const link = screen.getByRole('link', { name: /profile settings/i });
+      expect(link.getAttribute('href')).toBe('/settings/profile');
+    });
+
+    it('renders mfa-enrollment-required-banner when loadUsers fails with 403 MFA_ENROLLMENT_REQUIRED', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          throw new ApiProblem(403, {
+            code: 'MFA_ENROLLMENT_REQUIRED',
+            title: 'MFA Required',
+          });
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mfa-enrollment-required-banner')).toBeDefined();
+      });
+      expect(screen.queryByText(/Not found or no access/i)).toBeNull();
+    });
+
+    it('switches to Roles tab when tab-roles is clicked', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/principals')) return { principals: [] };
+        if ((path as string).startsWith('/api/v1/admin/rbac/roles')) return [];
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-roles')).toBeDefined();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('tab-roles'));
+      });
+      expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('handles AAL2 step up during loadCards and replays load mutation on success', async () => {
+      let cardsCalls = 0;
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
+        if ((path as string) === '/api/v1/admin/auth-cards') {
+          cardsCalls++;
+          if (cardsCalls === 1) {
+            throw new ApiProblem(403, {
+              code: 'AAL2_REQUIRED',
+            });
+          }
+          return { cards: mockCards };
+        }
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          return { principals: [] };
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      });
+
+      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
+      fireEvent.change(totpInput, { target: { value: '123456' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+      });
+      expect(cardsCalls).toBeGreaterThanOrEqual(2);
+    });
+
+    it('handles AAL2 step up during loadUsers and replays load mutation on success', async () => {
+      let principalCalls = 0;
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          principalCalls++;
+          if (principalCalls === 1) {
+            throw new ApiProblem(403, {
+              code: 'AAL2_REQUIRED',
+            });
+          }
+          return { principals: [] };
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      });
+
+      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
+      fireEvent.change(totpInput, { target: { value: '123456' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+      });
+      expect(principalCalls).toBeGreaterThanOrEqual(2);
     });
   });
 });

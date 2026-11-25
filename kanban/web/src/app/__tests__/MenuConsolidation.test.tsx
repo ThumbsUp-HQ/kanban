@@ -88,6 +88,23 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
       expect(oauthTab.classList.contains('kb-mcp-admin-subnav-active')).toBe(true);
       expect(oauthTab.getAttribute('aria-current')).toBe('page');
     });
+
+    it('filters out server-admin-only tabs when isServerAdmin is false', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/diagnostics']}>
+          <AdminStudioSubnav isServerAdmin={false} activeTab="diagnostics" />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-imports')).toBeNull();
+      expect(screen.queryByTestId('tab-admin-standalone')).toBeNull();
+      expect(screen.getByTestId('tab-admin-diagnostics')).toBeDefined();
+    });
   });
 
   describe('2. AdminMcpRedirect Route', () => {

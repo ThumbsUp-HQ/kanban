@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import { Link, useInRouterContext } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
-import { ApiProblem, isAal2StepUpCode } from '../../api/problem';
+import { ApiProblem, isAal2StepUpCode, isMfaEnrollmentRequiredCode } from '../../api/problem';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AuthCardRow } from './AuthCardRow';
 import { AuthCardEditorDrawer } from './AuthCardEditorDrawer';
@@ -106,10 +107,12 @@ function getProviderBadgeClass(provider: string | undefined): string {
 }
 
 export function AuthStudioPage(): JSX.Element {
+  const inRouter = useInRouterContext();
   const queryClient = React.useContext(QueryClientContext);
   const [currentUser, setCurrentUser] = useState<CurrentUserResponse | null>(null);
   const [isUserLoading, setIsUserLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [mfaEnrollmentRequired, setMfaEnrollmentRequired] = useState(false);
 
   // Studio tab state
   const [activeTab, setActiveTab] = useState<'cards' | 'users' | 'roles'>('cards');
@@ -183,8 +186,12 @@ export function AuthStudioPage(): JSX.Element {
         if (!me.is_server_admin) {
           setAccessDenied(true);
         }
-      } catch {
-        setAccessDenied(true);
+      } catch (err: unknown) {
+        if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
+          setMfaEnrollmentRequired(true);
+        } else {
+          setAccessDenied(true);
+        }
       } finally {
         setIsUserLoading(false);
       }
@@ -201,7 +208,9 @@ export function AuthStudioPage(): JSX.Element {
       const res = await fetchAdminAuthCards();
       setCards(res.cards);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
+      if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
+        setMfaEnrollmentRequired(true);
+      } else if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
         setPendingMutation({ type: 'load' });
         const data = err.data;
         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -228,7 +237,9 @@ export function AuthStudioPage(): JSX.Element {
       const principals = await fetchAdminPrincipals(activeFilter);
       setUsers(Array.isArray(principals) ? principals : []);
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
+      if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
+        setMfaEnrollmentRequired(true);
+      } else if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
         setPendingMutation({ type: 'load' });
         const data = err.data;
         const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
@@ -247,11 +258,11 @@ export function AuthStudioPage(): JSX.Element {
   }, [principalKindFilter]);
 
   useEffect(() => {
-    if (!accessDenied && currentUser?.is_server_admin) {
+    if (!accessDenied && !mfaEnrollmentRequired && currentUser?.is_server_admin) {
       void loadCards();
       void loadUsers();
     }
-  }, [accessDenied, currentUser, loadCards, loadUsers]);
+  }, [accessDenied, currentUser, loadCards, loadUsers, mfaEnrollmentRequired]);
 
   // Sort cards: non-LOCAL_ADMIN sorted by sort_rank (COLLATE "C"), LOCAL_ADMIN pinned at end
   const externalCards = cards
@@ -649,6 +660,31 @@ export function AuthStudioPage(): JSX.Element {
     );
   }
 
+  // MFA Enrollment Required: inform server admin to enroll a second factor in profile settings
+  if (mfaEnrollmentRequired) {
+    return (
+      <div className="auth-studio-page" data-testid="auth-studio-page">
+        <AdminStudioSubnav activeTab="auth" isServerAdmin={currentUser?.is_server_admin} />
+        <div
+          className="auth-empty-state kb-mfa-enrollment-banner"
+          role="alert"
+          data-testid="mfa-enrollment-required-banner"
+        >
+          <h2>Two-Factor Authentication Required</h2>
+          <p>
+            Administrative operations require MFA enrollment. Please configure a second factor in your{' '}
+            {inRouter ? (
+              <Link to="/settings/profile">profile settings</Link>
+            ) : (
+              <a href="/settings/profile">profile settings</a>
+            )}
+            .
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Loading state
   if (isUserLoading || isLoadingCards) {
     return (
@@ -660,7 +696,7 @@ export function AuthStudioPage(): JSX.Element {
 
   return (
     <div className="auth-studio-page" data-testid="auth-studio-page">
-      <AdminStudioSubnav activeTab="auth" />
+      <AdminStudioSubnav activeTab="auth" isServerAdmin={currentUser?.is_server_admin} />
       {/* Studio Header */}
       <header className="auth-studio-header">
         <div className="auth-studio-title-row">
