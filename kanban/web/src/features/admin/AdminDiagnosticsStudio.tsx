@@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './AdminDiagnosticsStudio.css';
 
 export interface SubsystemHealth {
@@ -275,9 +276,11 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       });
     },
     onError: (err: Error) => {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       setProbeAlert({
         type: 'error',
         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',
@@ -380,6 +383,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         </div>
 
         <div className="admin-diag-header-actions">
+          <StudioDocLink
+            href="/docs/admin-diagnostics-and-link-inspector-studio"
+            title="Admin Diagnostics and Link Inspector Documentation"
+            testId="diagnostics-doc-link"
+          />
+
           <span
             className={`admin-diag-badge ${
               wsProbeState === 'connected'

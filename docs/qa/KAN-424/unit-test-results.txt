@@ -1,0 +1,49 @@
+=== UNIT TEST RESULTS REPORT: KAN-424 ===
+Timestamp: 2026-11-25T20:50:30Z
+
+--- PYTEST SUITE (Offline Wiki Bundle Sync & Image Parity) ---
+Command: uv run python -m pytest kanban/tests/test_wiki_bundle_sync.py
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 7 items
+
+kanban/tests/test_wiki_bundle_sync.py .......                            [100%]
+
+============================== 7 passed in 0.12s ===============================
+
+--- VITEST SUITE (Docs Center Feature & Image Coverage) ---
+Command: pnpm --dir kanban/web test -- --run src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx --coverage
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 165ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 5152ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1563ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 494ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 432ms
+
+ Test Files  2 passed (2)
+      Tests  70 passed (70)
+   Start at  15:50:34
+   Duration  6.57s (tests 72%, environment 17%, import 5%, transform 5%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.6 |    96.44 |     100 |     100 |                   
+ ...downViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+ ...CenterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+ HelpDrawer.tsx    |     100 |    97.72 |     100 |     100 | 69                
+ docsService.ts    |     100 |    97.14 |     100 |     100 | 46                
+ index.ts          |       0 |        0 |       0 |       0 |                   
+ wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -1306,3 +1306,20 @@ async def test_restore_backup_ops_socket_engine_dispose(tmp_path: Path) -> None:
         res = await restore_backup_endpoint(request=mock_req)
         assert res["status"] == "success"
         mock_engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_require_server_admin_forbidden(db_session: AsyncSession) -> None:
+    """Test require_server_admin raises 403 INSUFFICIENT_CAPABILITY for non-server-admin."""
+    from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.system_status import require_server_admin
+
+    caller = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        aal_level=2,
+    )
+    with pytest.raises(ProblemException) as exc:
+        await require_server_admin(caller, db_session)
+    assert exc.value.status == 403
+    assert exc.value.code == "INSUFFICIENT_CAPABILITY"

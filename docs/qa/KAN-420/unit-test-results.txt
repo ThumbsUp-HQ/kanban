@@ -1,0 +1,130 @@
+=== PYTEST UNIT TEST RESULTS WITH COVERAGE: KAN-420 ROLLUP ===
+Timestamp: 2026-11-25T21:28:43Z
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 229 items
+
+kanban/tests/importer/test_cutover_verifier.py ...................       [  8%]
+kanban/tests/importer/test_merge_into_existing_project_realistic.py ..   [  9%]
+kanban/tests/importer/test_multi_source_importers.py ..................  [ 17%]
+kanban/tests/importer/test_plane_client.py ...........                   [ 21%]
+kanban/tests/importer/test_plane_db_exporter.py ....................     [ 30%]
+kanban/tests/importer/test_plane_importer.py ..............              [ 36%]
+kanban/tests/importer/test_plane_mapper.py .....                         [ 38%]
+kanban/tests/importer/test_plane_merge_into_project.py ...               [ 40%]
+kanban/tests/importer/test_plane_merge_mode.py ........                  [ 43%]
+kanban/tests/api/test_admin_diagnostics.py ...........                   [ 48%]
+kanban/tests/api/test_admin_imports.py ..                                [ 49%]
+kanban/tests/api/test_admin_link_auditor.py .....                        [ 51%]
+kanban/tests/api/test_system_status.py ...............                   [ 58%]
+kanban/tests/ops/test_backup_crypto.py ..........                        [ 62%]
+kanban/tests/ops/test_backup_restore.py ...                              [ 63%]
+kanban/tests/ops/test_compose_export.py ..                               [ 64%]
+kanban/tests/ops/test_dockerfile_stages.py .                             [ 65%]
+kanban/tests/ops/test_ops_coverage.py .........................          [ 75%]
+kanban/tests/ops/test_sbom.py .......................                    [ 86%]
+kanban/tests/ops/test_scheduled_backup.py ...                            [ 87%]
+kanban/tests/resolve/test_legacy_key_aliases.py .                        [ 87%]
+kanban/tests/standalone/test_compose_export.py ...                       [ 89%]
+kanban/tests/standalone/test_entrypoint_env.py ......................    [ 98%]
+kanban/tests/test_standalone_entrypoint.py ...                           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+deploy/standalone/entrypoint.py         459     16    112     13    95%   381, 478, 547->550, 554->exit, 556, 559-560, 600, 757->763, 787->792, 808, 833->837, 838, 879->891, 882-887, 951, 975->980, 1009
+deploy/standalone/pg_config.py           22      0      4      0   100%
+kanban/api/v1/admin/link_auditor.py      32      0      2      0   100%
+kanban/api/v1/system_status.py          394      8    108     14    96%   163->165, 196->205, 221->223, 467, 578->581, 631->636, 698->701, 703, 705->707, 708->723, 778->783, 816, 861-862, 863->866, 873->903, 882-888
+kanban/ops/backup_service.py            471      7    114      8    97%   144, 162, 244->252, 245->247, 247->252, 275->274, 526-527, 706->705, 759-762
+kanban/standalone/export_service.py     211      3     70     11    95%   102->123, 131->133, 133->135, 188->198, 296, 303-304, 305->308, 329->331, 331->333, 333->335, 335->337, 337->342
+---------------------------------------------------------------------------------
+TOTAL                                  1589     34    410     46    96%
+======================== 229 passed in 78.34s (0:01:18) ========================
+
+=== VITEST UNIT TEST RESULTS WITH COVERAGE: KAN-420 ROLLUP ===
+Timestamp: 2026-11-25T21:30:09Z
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan424-c8c4d191/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (8 tests) 27ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 254ms
+ ✓ src/features/standalone/__tests__/ComposeExportTab.test.tsx (8 tests) 445ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (14 tests) 1115ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (14 tests) 1732ms
+   ✓ LinkAuditorStudio (14)
+     ✓ handles inspect drawer view with JSON snapshots 332ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 559ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (13 tests) 2541ms
+   ✓ AdminDiagnosticsStudio Component (13)
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1535ms
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (40 tests) 4357ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 429ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 618ms
+ ✓ src/features/docs-center/DocsCenter.test.tsx (49 tests) 5962ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ DocsCenterPage Component (10)
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 340ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 333ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 337ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1701ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 496ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 409ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 6065ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 353ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1722ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 515ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 415ms
+
+ Test Files  9 passed (9)
+      Tests  216 passed (216)
+   Start at  16:30:10
+   Duration  7.85s (tests 62%, environment 23%, import 10%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.65 |    95.97 |     100 |   99.82 |                   
+ admin             |   99.44 |    94.21 |     100 |   99.44 |                   
+  ...icsStudio.tsx |     100 |       93 |     100 |     100 | ...30,488,739-746 
+  ...torStudio.tsx |   99.04 |    95.95 |     100 |   99.03 | 226               
+ admin-imports     |     100 |     95.8 |     100 |     100 |                   
+  ...ortStudio.tsx |     100 |    95.36 |     100 |     100 | ...46,337-343,903 
+  ...eImportApi.ts |     100 |      100 |     100 |     100 |                   
+ docs-center       |    99.6 |    96.44 |     100 |     100 |                   
+  ...ownViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+  ...enterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+  HelpDrawer.tsx   |     100 |    97.72 |     100 |     100 | 69                
+  docsService.ts   |     100 |    97.14 |     100 |     100 | 46                
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  wikiManifest.ts  |     100 |      100 |     100 |     100 |                   
+ standalone        |   99.66 |    97.16 |     100 |   99.65 |                   
+  ...ExportTab.tsx |     100 |      100 |     100 |     100 |                   
+  ...atusPanel.tsx |   99.59 |    96.66 |     100 |   99.57 | 65                
+-------------------|---------|----------|---------|---------|-------------------

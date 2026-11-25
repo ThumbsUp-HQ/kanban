@@ -1,0 +1,1416 @@
+diff --git a/Admin-Diagnostics-and-Link-Inspector-Studio.md b/Admin-Diagnostics-and-Link-Inspector-Studio.md
+index 315abcc..e150166 100644
+--- a/Admin-Diagnostics-and-Link-Inspector-Studio.md
++++ b/Admin-Diagnostics-and-Link-Inspector-Studio.md
+@@ -9,171 +9,160 @@ Authoritative operational runbook and engineering architecture guide for the Uni
+ The Unified Admin Diagnostics Studio (mounted at `/admin/diagnostics` and `/admin/link-auditor`) provides enterprise platform administrators with continuous visibility into system health, database migration integrity, Row-Level Security (RLS) enforcement, event relay queues, background worker execution, and object link topology across 👍kanban.
+ 
+ Designed under Security Priority #0 and Agent-First Priority #1, the Diagnostics Studio serves two distinct operational functions:
+-1. **Real-Time Subsystem Health Probing (`/admin/diagnostics`):** Collects synchronous and asynchronous telemetry across PostgreSQL connectivity, connection pool saturation, 76 single-head database migrations, PostgreSQL `FORCE RLS` policy status, transactional outbox message lag, WebSocket hub subscriptions, background job executor states, and Wasmtime/nsjail sandboxed execution runners.
+-2. **Universal Object Graph Link Inspector & Purger (`/admin/link-auditor`):** Discovers, classifies, inspects, and remediates referential integrity anomalies across the Universal Object Graph without locking production tables or requiring downtime.
++1. **Real-Time Subsystem Health Probing** (`/admin/diagnostics`): Collects synchronous and asynchronous telemetry across 7 core subsystems: PostgreSQL RLS connectivity, transactional outbox message lag, background job worker pools, Wasmtime sandboxed execution runners, AI provider runtime availability, remote mTLS runner nodes, and request rate limiters.
++2. **Universal Object Graph Link Inspector & Purger** (`/admin/link-auditor`): Discovers, classifies, inspects, and remediates referential integrity anomalies across 7 invalidity classes without locking production tables or requiring system downtime.
+ 
+ ```mermaid
+ graph TD
+     UI["Admin Diagnostics Studio UI (/admin/diagnostics, /admin/link-auditor)"] --> AAL2["AAL2 Session Gate (require_admin_aal2)"]
+     AAL2 --> Router["FastAPI Diagnostics & Link Auditor Router (/api/v1/admin/*)"]
+-    Router --> DBProbe["PostgreSQL Health & Migration Check (76 Migrations, 92 Tables)"]
++    Router --> DBProbe["PostgreSQL Health & Migration Check (82 Migrations, 100 Tables)"]
+     Router --> RLSProbe["PostgreSQL FORCE RLS Policy Audit"]
+     Router --> RelayProbe["Outbox Relay Broker Telemetry (database/outbox)"]
+     Router --> WSProbe["WebSocket Realtime Hub Ping/Pong Frame Telemetry"]
+     Router --> WasmProbe["Wasmtime & nsjail Sandbox Worker Telemetry"]
+-    Router --> Auditor["Link Auditor Engine (6 Defect Classes)"]
++    Router --> Auditor["Link Auditor Engine (7 Defect Classes)"]
+     Auditor --> Inspector["Forensic Link Inspection Drawer"]
+     Auditor --> Purge["Two-Stage Destructive Confirmation & Blast-Radius Engine"]
+ ```
+ 
++![Admin Diagnostics Studio - Desktop Light](images/slice4-diagnostics-1440x900-light.png)
++
+ ---
+ 
+ ## 2. Multi-Tier Security, Authentication, and AAL2 Session Governance
+ 
+-Every endpoint mounted under `/api/v1/admin/diagnostics` and `/api/v1/admin/link-auditor` enforces Authenticator Assurance Level 2 (AAL2) multi-factor authentication. 
++Every endpoint mounted under `/api/v1/admin/diagnostics` and `/api/v1/admin/object-links:*` enforces Authenticator Assurance Level 2 (AAL2) multi-factor authentication. 
+ 
+ ### Security Invariants
+ - **AAL2 Session Dependency:** Route declarations strictly mandate `Depends(require_admin_aal2)` and `Depends(require_server_admin)` at both the router mount and endpoint handler levels.
+-- **Fail-Closed Route Protection:** Automated tests (`assert_admin_routes_protected`) scan the OpenAPI routing table at build time. Any administrative route lacking explicit AAL2 session validation fails CI/CD immediately.
+-- **Zero-Information Exposure:** Unauthenticated or unauthorized callers receive RFC 7807 problem responses without leaking database schema versions, internal hostnames, CIDR blocks, or subsystem topology.
+-
+-```python
+-# Architecture contract in kanban/api/v1/admin/diagnostics.py
+-router = APIRouter(
+-    prefix="/admin/diagnostics",
+-    tags=["admin-diagnostics"],
+-    dependencies=[Depends(require_admin_aal2)],
+-)
+-```
++- **Fail-Closed Route Protection:** Automated test suites (`assert_admin_routes_protected`) scan the OpenAPI routing table at build time. Any administrative route lacking explicit AAL2 session validation fails CI/CD immediately.
++- **Zero-Information Exposure:** Unauthenticated callers receive RFC 7807 problem responses without leaking database schema versions, internal hostnames, CIDR blocks, or subsystem topology.
+ 
+ ---
+ 
+-## 3. Real-Time Telemetry and Subsystem Probes
++## 3. Real-Time Telemetry and the 7 Core Subsystems
+ 
+ The Diagnostics Studio executes comprehensive health checks against core application subsystems, reporting structured telemetry to the administrative UI and monitoring agents:
+ 
+-### Telemetry Subsystem Breakdown
++### Subsystem Telemetry Breakdown
+ 
+ | Subsystem Component | Metric & Probe Target | Healthy Threshold | Degraded Condition | Remediation Action |
+ | :--- | :--- | :--- | :--- | :--- |
+-| **PostgreSQL Engine** | Latency, connection pool saturation (`pool_size`, `checked_out`) | `< 15ms`, saturation `< 75%` | Latency `> 50ms`, pool exhausted | Scale connection pool (`DB_POOL_SIZE`), tune PostgreSQL `max_connections` |
+-| **Migration Consistency** | Current version vs single-head Alembic tree | `76 / 76` migrations applied | Head mismatch or split branches | Run `kanban-ctl db migrate` or verify Alembic head |
+-| **Row-Level Security** | `FORCE ROW LEVEL SECURITY` status on all tables | 100% (92 of 92 tables) | Any table lacking `FORCE RLS` | Run `kanban-ctl db audit-rls` and apply missing security policies |
+-| **Transactional Outbox** | Queue backlog, dispatch latency, relay loop status | Lag `< 5s`, relay `running` | Backlog `> 1000` events, relay stopped | Inspect `database/outbox/relay.py` worker process and restart daemon |
+-| **Realtime WebSocket Hub** | Active client connections, ping/pong frame roundtrip | Ping latency `< 50ms` | Stalled connections, high dropped frames | Inspect Caddy/reverse-proxy timeouts and client network conditions |
+-| **Async Job Executor** | Active tasks, dead letter queue (DLQ) depth | DLQ depth `= 0` | DLQ depth `> 0`, executor stalled | Inspect dead-letter payloads, clear retry budgets, check worker logs |
+-| **Sandboxed Runners** | Wasmtime AST compiler and nsjail container isolation | Wasmtime initialized, nsjail active | nsjail unavailable (fallback to standalone) | Check kernel namespace support (`CONFIG_USER_NS`) and cgroup limits |
+-
+----
+-
+-## 4. Universal Object Graph Link Auditor and Inspector Studio
+-
+-👍kanban models all work items, digital stickies, technical documents, sprint cycles, and modules as registered entities connected via typed `object_links`. The Link Auditor continuously detects and repairs referential anomalies.
++| **1. PostgreSQL Engine (`postgresql_rls`)** | Latency, connection pool saturation, 82 single-head migrations, `FORCE RLS` on 100 tables | Latency < 15ms, saturation < 75%, 82/82 migrations | Latency > 50ms, pool exhausted, missing migration | Tune `DB_POOL_SIZE`, check Alembic single head, apply missing migrations |
++| **2. Transactional Outbox (`realtime_hub_outbox`)** | Queue backlog, dispatch latency, relay loop status, PostgreSQL LISTEN/NOTIFY | Lag < 5s, relay running | Backlog > 1000 events, relay stopped | Inspect `database/outbox/relay.py` worker process and restart daemon |
++| **3. Job Worker Pool (`job_worker_pool`)** | Active background tasks, concurrency limits, dead-letter queue (DLQ) depth | DLQ depth = 0 | DLQ depth > 0, executor stalled | Inspect failed task payloads, verify resource limits, restart worker |
++| **4. Wasmtime Sandbox (`wasm_script_sandbox`)** | Wasmtime compiler initialization, memory consumption, execution fuel budget | Memory < 32 MiB (33,554,432 bytes), fuel active | Wasmtime compilation failure, fuel exhausted | Inspect custom field scripts for infinite loops, allocate fuel |
++| **5. AI Agent Runtime (`agent_runtime_providers`)** | Provider availability (Ollama, OpenAI, Gemini), response latency, monthly token budget | Primary provider healthy, budget < 90% | Provider timeout, token cap exceeded | Rotate fallback provider, adjust monthly token ceiling |
++| **6. Remote Runner Fleet (`remote_runner_fleet`)** | Connected build nodes over port 8444, mTLS heartbeat status, active task leases | >= 1 runner online, heartbeat < 30s | All runners offline, expired CSR tokens | Mint fresh enrollment token, verify network port :8444 ingress |
++| **7. API Rate Limiter (`rate_limiter`)** | In-memory token bucket capacity, blocked requests, IP throttle health | System error rate = 0% | Memory leak in bucket map, false-positive blocks | Clear expired IP throttle buckets, adjust tier limits |
+ 
+-### The Six Defect Classes
++![Admin Diagnostics Realtime Probe Active](images/slice4-diagnostics-realtime-probe-active.png)
+ 
+-```mermaid
+-classDiagram
+-    class ObjectLinkDefect {
+-        <<enumeration>>
+-        ORPHAN_SOURCE
+-        ORPHAN_TARGET
+-        CROSS_WORKSPACE
+-        INVALID_KIND
+-        INVERTED_DEPENDENCY
+-        DANGLING_PARENT
+-    }
+-```
++### Real-Time Diagnostics Probes
+ 
+-1. **`ORPHAN_SOURCE`:** The link record specifies a `source_id` entity that has been hard-deleted or does not exist in PostgreSQL.
+-2. **`ORPHAN_TARGET`:** The link record specifies a `target_id` entity that no longer exists in PostgreSQL.
+-3. **`CROSS_WORKSPACE`:** The link connects two entities across distinct workspace tenant boundaries without an active federation agreement, violating multi-tenant isolation.
+-4. **`INVALID_KIND`:** The link record specifies an unregistered or deprecated relation kind (valid kinds: `BLOCKS`, `BLOCKED_BY`, `RELATES_TO`, `DUPLICATE_OF`, `PARENT_OF`, `CHILD_OF`).
+-5. **`INVERTED_DEPENDENCY`:** An illegal cyclic or inverted dependency violates topological sort order (e.g. Issue A blocks Issue B while Issue B blocks Issue A).
+-6. **`DANGLING_PARENT`:** A hierarchical child item references a parent container that has been archived, shredded, or purged.
++The studio provides two active latency probes for testing live message paths:
+ 
+-### Forensic Link Inspection Drawer
++1. **PostgreSQL Pub/Sub Probe (`POST /api/v1/admin/diagnostics/probes/realtime`):**
++   Issues a synthetic transactional outbox message and measures the exact roundtrip latency for PostgreSQL `LISTEN` and `NOTIFY` notification delivery. Healthy roundtrips execute in under 1.0 ms.
+ 
+-The Link Auditor interface renders defective links in an interactive inspection drawer. Administrators can review:
+-- Source and target entity types (`issue`, `sticky`, `doc`, `cycle`, `module`).
+-- Link kind and timestamp of creation.
+-- Root cause forensic classification.
+-- Impacted workspace and project keys.
++2. **WebSocket Realtime Probe (`/ws` ping frame):**
++   Initiates a live WebSocket connection from the browser client to the server's `/ws` endpoint, transmits a binary ping frame, and captures the roundtrip pong latency. Live connections establish in ~13 ms with roundtrip latency < 1 ms.
+ 
+-### Two-Stage Destructive Confirmation and Blast-Radius Engine
++![Admin Diagnostics Studio - Desktop Dark](images/slice4-diagnostics-1440x900-dark.png)
++![Admin Diagnostics - Tablet Portrait](images/slice4-diagnostics-768x1024-tablet-portrait.png)
++![Admin Diagnostics - Mobile Portrait](images/slice4-diagnostics-390x844-mobile-portrait.png)
+ 
+-To prevent accidental data loss during remediation, link purging requires explicit two-stage confirmation:
+-1. **Stage 1 (Blast-Radius Calculation):** The administrator requests a purge dry run (`POST /api/v1/admin/link-auditor/purge?dry_run=true`). The server computes the exact list of link IDs scheduled for removal and records a cryptographic summary in session state.
+-2. **Stage 2 (Cryptographic Confirmation):** The administrator confirms the operation by providing the exact confirmation token generated in Stage 1. The server deletes the invalid links inside a single transactional block and writes an immutable entry to the SHA-256 hash-chained `audit_events` ledger.
++---
+ 
+-```json
+-{
+-  "operation": "PURGE_INVALID_OBJECT_LINKS",
+-  "purged_count": 14,
+-  "defect_breakdown": {
+-    "ORPHAN_TARGET": 9,
+-    "CROSS_WORKSPACE": 3,
+-    "INVALID_KIND": 2
+-  },
+-  "dry_run": false,
+-  "confirmed_by_principal": "usr_admin_01",
+-  "audit_event_id": "aud_018f92b7c4d173e2"
+-}
+-```
++## 4. Universal Object Graph Link Auditor Studio (`/admin/link-auditor`)
+ 
+----
++👍kanban models all work items, digital stickies, technical documents, sprint cycles, and modules as registered entities connected via typed `object_links`. The Link Auditor continuously detects and repairs referential anomalies.
+ 
+-## 5. Operational Runbook: Inspections and Disaster Recovery
++![Link Auditor Studio - Desktop Light](images/slice4-link-auditor-1440x900-light.png)
+ 
+-### Routine Diagnostic Inspection
++### The 7 Invalidity Classes
+ 
+-1. Navigate to `/admin/diagnostics` in the web application using an account with `SERVER_ADMIN` credentials.
+-2. Verify that all status indicators in the Subsystem Overview grid display **Operational** (`green`).
+-3. Click **Run Health Probe** to execute active roundtrip latency measurements against the database, outbox relay, and WebSocket hub.
+-4. Review the **Migration State** card to confirm 76/76 migrations are applied with single-head consistency.
+-5. If any subsystem reports **Degraded** or **Down**, click **Inspect Subsystem** to view raw exception logs and performance percentiles.
++The Link Auditor (`POST /api/v1/admin/object-links:audit`) evaluates every link against 7 formal invalidity classes:
+ 
+-### Link Graph Remediation Procedure
++```mermaid
++flowchart TD
++    Scan["Integrity Audit Scan (POST /api/v1/admin/object-links:audit)"] --> C1["1. DANGLING_SOURCE - Source object UUID missing from PostgreSQL"]
++    Scan --> C2["2. DANGLING_TARGET - Target object UUID missing from PostgreSQL"]
++    Scan --> C3["3. SOFT_DELETED_ENDPOINT - Endpoint object soft-deleted past retention window"]
++    Scan --> C4["4. ARCHIVED_POLICY_VIOLATION - Link between active and archived entities violating policy"]
++    Scan --> C5["5. TYPE_MATRIX_VIOLATION - Link kind forbidden between endpoint object types"]
++    Scan --> C6["6. CROSS_WORKSPACE_LEAK - Cross-workspace link violating multi-tenant boundary"]
++    Scan --> C7["7. PERMISSION_SEVERED - Principal lacks access across endpoint boundary"]
++```
+ 
+-1. Switch to the **Link Inspector** tab or navigate directly to `/admin/link-auditor`.
+-2. Click **Start Comprehensive Scan** (`GET /api/v1/admin/link-auditor/scan`).
+-3. Review the defect summary cards grouped by defect class (`ORPHAN_SOURCE`, `ORPHAN_TARGET`, `CROSS_WORKSPACE`, etc.).
+-4. Click on any row to open the **Forensic Inspection Drawer** and review the link metadata.
+-5. Click **Purge Invalid Links** to open the remediation modal.
+-6. Review the calculated blast radius. Type the confirmation phrase `PURGE INVALID LINKS` and confirm.
+-7. Verify that the operation completes successfully and inspect the updated link audit counter (expected: 0 defects).
++1. **`DANGLING_SOURCE`:** The link record specifies a `source_id` entity that no longer exists in the universal objects spine.
++2. **`DANGLING_TARGET`:** The link record specifies a `target_id` entity that has been hard-deleted or does not exist in the database.
++3. **`SOFT_DELETED_ENDPOINT`:** One or both endpoints of the link reference an object soft-deleted beyond the workspace retention threshold.
++4. **`ARCHIVED_POLICY_VIOLATION`:** The link connects an active entity to an archived entity in violation of project archiving policy.
++5. **`TYPE_MATRIX_VIOLATION`:** The relation violates the registered link type matrix allowlist (valid kinds: `BLOCKS`, `BLOCKED_BY`, `RELATES_TO`, `PARENT_OF`, `CHILD_OF`, `DUPLICATES`, `DUPLICATED_BY`, `PROMOTED_TO`, `PROMOTED_FROM`, `MENTIONS`, `REFERENCED_IN`, `ATTACHED_TO`, `DERIVED_FROM`).
++6. **`CROSS_WORKSPACE_LEAK`:** The link connects two entities across distinct workspace tenant boundaries without an active federation agreement, violating multi-tenant isolation.
++7. **`PERMISSION_SEVERED`:** The link endpoints span access boundaries where caller or entity permissions have been revoked or severed.
+ 
+-### Command-Line Diagnostics (Headless & Air-Gapped Environments)
++![Link Auditor Integrity Scan Active](images/slice4-link-auditor-integrity-scan-active.png)
+ 
+-For headless container environments or automated CI/CD maintenance jobs, platform administrators can invoke equivalent diagnostics via `kanban-ctl`:
++### Two-Stage Audited Purge & Mandatory Justification
+ 
+-```bash
+-# Verify database connection and single-head migration consistency
+-kanban-ctl db check-migrations
++To prevent accidental data loss during graph remediation, purging invalid links requires two-stage execution and audited justification:
+ 
+-# Audit all 92 tables for Row-Level Security enforcement
+-kanban-ctl db audit-rls
++1. **Mandatory Administrative Justification (`reason` >= 10 characters):**
++   The administrator must supply a written rationale explaining the purge operation (`LinkPurgeRequest.reason`, 10 to 500 characters). Rationale strings shorter than 10 characters are strictly rejected with HTTP 422 before any deletion occurs.
+ 
+-# Scan universal object graph for orphaned or corrupt links
+-kanban-ctl db audit-links --verbose
++2. **Immutable Audit Ledger Recording:**
++   When the purge executes (`POST /api/v1/admin/object-links:purge`), the deleted links are removed in a single atomic transaction. The server records an immutable `INVALID_OBJECT_LINK_PURGED` event in the hash-chained `activity_records` ledger, returning the total `purged_count` and list of `activity_ids`.
+ 
+-# Perform dry-run link purge
+-kanban-ctl db purge-invalid-links --dry-run
++```json
++{
++  "audit_ids": [
++    "01935b62-1000-7000-8000-000000000001",
++    "01935b62-1000-7000-8000-000000000002"
++  ],
++  "reason": "Purging orphaned test links following Slice-4 cutover verification"
++}
++```
+ 
+-# Execute audited link purge and write to audit chain
+-kanban-ctl db purge-invalid-links --confirm
++```json
++{
++  "purged_count": 2,
++  "activity_ids": [
++    "01935b62-2000-7000-8000-000000000001",
++    "01935b62-2000-7000-8000-000000000002"
++  ]
++}
+ ```
+ 
++![Link Auditor Studio - Desktop Dark](images/slice4-link-auditor-1440x900-dark.png)
++![Link Auditor - Tablet Landscape](images/slice4-link-auditor-1024x768-tablet-landscape.png)
++![Link Auditor - Tablet Portrait](images/slice4-link-auditor-768x1024-tablet-portrait.png)
++
+ ---
+ 
+-## 6. Visual Reference and Studio Screenshots
++## 5. Operational Runbooks: Inspections and Remediation
+ 
+-The Admin Diagnostics Studio provides a clean, breathable interface matching the 👍kanban design system tokens:
++### Runbook 1: Performing Routine Diagnostics and Realtime Health Probing
+ 
+-![Admin Link Auditor Overview](images/46-admin-link-auditor.png)
++1. In the web interface, navigate to `/admin/diagnostics` using an account with `SERVER_ADMIN` privileges.
++2. Complete the WebSudo AAL2 step-up challenge if prompted.
++3. Inspect the Subsystem Health Grid. Verify that all 7 subsystems display **Operational** (`green`).
++4. Click **Run WS Ping** and **Test PG LISTEN/NOTIFY Broker**. The system issues active WebSocket and PostgreSQL outbox probes. Verify that database query latency is < 15ms and WebSocket RTT is < 50ms.
++5. Inspect the **Runtime and Container** card to verify non-root UID execution, cgroup memory limits, and container runtime details.
+ 
+-![Link Auditor Forensic Inspection Drawer](images/47-admin-link-auditor-inspect-drawer.png)
++![Admin Diagnostics - Tablet Landscape](images/slice4-diagnostics-1024x768-tablet-landscape.png)
+ 
+-![Link Auditor Purge Blast-Radius Modal](images/48-admin-link-auditor-purge-modal.png)
++### Runbook 2: Scanning and Purging Invalid Object Links
+ 
+-![Admin Browser QA and Diagnostics View](images/68-admin-browser-qa.png)
++1. Switch to the **Link Inspector** tab or navigate directly to `/admin/link-auditor`.
++2. Click **Run Integrity Scan** (`POST /api/v1/admin/object-links:audit`).
++3. Review the defect summary cards grouped by the 7 `InvalidLinkReason` defect classes.
++4. If defects are identified, click on any row to open the **Forensic Inspection Drawer** and review the link metadata, source/target snapshots, and timestamps.
++5. Select the flagged links to remediate and click **Purge Selected Links** to open the remediation dialog.
++6. Enter an administrative justification of at least 10 characters in the textarea describing why these links are being purged.
++7. Click **Confirm Purge (N)**. The backend executes the audited deletion (`POST /api/v1/admin/object-links:purge`) and writes the audit ledger entry.
++8. Re-run the scan to confirm zero defects remain.
++
++![Link Auditor - Mobile Portrait](images/slice4-link-auditor-390x844-mobile-portrait.png)
+diff --git a/Migration-and-Cutover-Runbook.md b/Migration-and-Cutover-Runbook.md
+index fa07299..2fd2643 100644
+--- a/Migration-and-Cutover-Runbook.md
++++ b/Migration-and-Cutover-Runbook.md
+@@ -4,7 +4,7 @@
+ 
+ Organizations seeking to escape SaaS paywalls, Jira seat taxes, and single-vendor agent lock-in require a safe, deterministic migration path. Legacy project management tools often store data in proprietary formats, making manual migration prone to data loss, dropped comments, and broken ticket linkages.
+ 
+-👍kanban provides a battle-tested **7-Phase Live Cutover Protocol** (`docs/CUTOVER.md`) designed for migrating from legacy issue trackers (such as Jira, Vibe Kanban, or self-hosted boards) to 👍kanban with zero data loss and minimal operational disruption.
++👍kanban provides a battle-tested **7-Phase Live Cutover Protocol** (`docs/CUTOVER.md`) designed for migrating from legacy issue trackers (such as Jira, Plane, GitHub Issues, Linear, or self-hosted boards) to 👍kanban with zero data loss and minimal operational disruption.
+ 
+ ---
+ 
+@@ -12,13 +12,13 @@ Organizations seeking to escape SaaS paywalls, Jira seat taxes, and single-vendo
+ 
+ ```mermaid
+ flowchart TD
+-    P1["Phase 1: Pre-Cutover Readiness & Schema Alignment<br/>- Deploy target stack, configure Multi-Card Auth<br/>- Run healthchecks and verify checksums"]
+-    P2["Phase 2: Read-Only Freeze of Source Platform<br/>- Place legacy tracker in maintenance mode<br/>- Capture baseline snapshot"]
+-    P3["Phase 3: Extraction & Markdown Normalization<br/>- Ingest JSON/XML export<br/>- Run Unicode Surrogate & Paste-Jacking pipeline"]
+-    P4["Phase 4: Universal Object Graph Hydration & Linking<br/>- Populate UOG spine & typed object_links<br/>- Generate redirect aliases"]
+-    P5["Phase 5: Six Non-Bypassable Verification Gates<br/>- Entity counts, Link Auditor, Markdown fidelity,<br/>ACL parity, MCP health, SLA latency"]
+-    P6["Phase 6: DNS Cutover & Traffic Switch<br/>- Point domain to 👍kanban Caddy ingress"]
+-    P7["Phase 7: Post-Cutover Monitoring & Rollback Window<br/>- 7-day read-only fallback window"]
++    P1["Phase 1: Pre-Cutover Readiness - Deploy target stack, configure Multi-Card Auth, verify migrations"]
++    P2["Phase 2: Read-Only Freeze of Source Platform - Place legacy tracker in maintenance mode and capture snapshot"]
++    P3["Phase 3: Extraction & Markdown Normalization - Ingest export, run surrogate guard and paste-jacking pruner"]
++    P4["Phase 4: Universal Object Graph Hydration & Linking - Populate UOG spine, register aliases, establish links"]
++    P5["Phase 5: Six Non-Bypassable Verification Gates - Entity parity, Link Auditor, Markdown, ACLs, MCP, SLAs"]
++    P6["Phase 6: DNS Cutover & Traffic Switch - Point domain to 👍kanban Caddy ingress"]
++    P7["Phase 7: Post-Cutover Monitoring & Rollback Window - 7-day read-only fallback window"]
+ 
+     P1 --> P2
+     P2 --> P3
+@@ -28,28 +28,28 @@ flowchart TD
+     P6 --> P7
+ ```
+ 
+-![Standalone to Production Compose Export](images/27-standalone-compose-export.png)
++![Migration Import Studio - Desktop Light](images/slice4-imports-1440x900-light.png)
+ 
+ ### Phase 1: Pre-Cutover Readiness and Schema Alignment
+-- Deploy target 👍kanban production stack.
+-- Configure Multi-Card Authentication cards to match source identity providers (OIDC/SAML/LDAP).
+-- Run migration pre-flight checks: `uv run kanban-ctl ops healthcheck` and verify source export snapshot checksums (`sha256sum -c manifest.sha256`).
++- Deploy target 👍kanban production stack using `thumbs-up-kanban:latest` or 5-network Compose.
++- Configure Multi-Card Authentication cards to match source identity providers (OIDC, SAML, LDAP, Passkeys).
++- Run migration pre-flight checks: `uv run kanban-ctl db check-migrations` and verify source export snapshot checksums (`sha256sum -c manifest.sha256`).
+ 
+ ### Phase 2: Read-Only Freeze of Source Platform
+ - Place the legacy tracker instance into read-only maintenance mode.
+ - Notify engineering teams and pause active CI/CD webhooks.
+-- Capture baseline snapshot of source database.
++- Capture baseline snapshot of source database and uploaded attachments.
+ 
+ ### Phase 3: Extraction and Markdown Normalization
+-- Extract work items, cycles, modules, pages, stickies, and attachments via source tracker export APIs.
++- Extract work items, cycles, modules, pages, stickies, and attachments via source tracker export APIs or database dumps.
+ - Pass all textual descriptions and comments through the 👍kanban **Canonical Markdown Pipeline**:
+-  - Rejects Unicode lone surrogates.
+-  - Strips hidden DOM paste-jacking sequences.
+-  - Converts legacy HTML into clean, standardized CommonMark.
++  - Rejects Unicode lone surrogates (`0xD800 <= ord(c) <= 0xDFFF` -> `INVALID_UTF8_SURROGATE`) before byte encoding.
++  - Strips hidden DOM paste-jacking sequences and malicious script injection vectors.
++  - Converts proprietary AST trees (Atlassian Document Format ADF, HTML, Markdown) into standardized UTF-8 CommonMark.
+ 
+ ### Phase 4: Universal Object Graph Hydration
+-- Ingest normalized objects into the PostgreSQL Universal Object Graph (`kanban_migrator`).
+-- Translate legacy issue references (`PROJ-123`) into canonical 👍kanban identifiers while creating redirect aliases.
++- Ingest normalized objects into the PostgreSQL Universal Object Graph under `kanban_migrator` authority.
++- Translate legacy issue references (`PROJ-123`, `JIRA-101`, `GH-88`, `ENG-42`) into canonical 👍kanban identifiers while registering permanent `issue_key_aliases` records.
+ - Establish typed `object_links` for all parent-child relationships, sub-issues, and blockers.
+ 
+ ### Phase 5: The Six Non-Bypassable Verification Gates
+@@ -57,66 +57,92 @@ Before DNS can be redirected, the migration must pass all 6 automated verificati
+ 
+ ```mermaid
+ flowchart LR
+-    Gate1["Gate 1<br/>Entity Parity"] --> Gate2["Gate 2<br/>Link Auditor"]
+-    Gate2 --> Gate3["Gate 3<br/>Markdown Fidelity"]
+-    Gate3 --> Gate4["Gate 4<br/>ACL Parity"]
+-    Gate4 --> Gate5["Gate 5<br/>MCP Health"]
+-    Gate5 --> Gate6["Gate 6<br/>SLA Latency"]
++    Gate1["Gate 1 - Entity Parity"] --> Gate2["Gate 2 - Link Auditor"]
++    Gate2 --> Gate3["Gate 3 - Markdown Fidelity"]
++    Gate3 --> Gate4["Gate 4 - ACL Parity"]
++    Gate4 --> Gate5["Gate 5 - MCP Health"]
++    Gate5 --> Gate6["Gate 6 - SLA Latency"]
+     Gate6 --> Cutover["Ready for Live Cutover"]
+ ```
+ 
+-| Gate # | Verification Gate | Success Threshold |
+-| :---: | :--- | :--- |
+-| **1** | **Entity Count Parity** | 100% match across issues, states, cycles, modules, comments, and attachments. |
+-| **2** | **Object Link Auditor** | Zero orphaned links, cross-tenant leaks, or invalid hierarchy cycles. |
+-| **3** | **Markdown Fidelity** | 100% of descriptions render valid Markdown; zero unparsed HTML tags. |
+-| **4** | **Principal & ACL Parity** | All users, groups, and permissions map accurately to 👍kanban roles. |
+-| **5** | **MCP Surface Health** | All 24 MCP tools return clean schemas and pass handshake benchmarks. |
+-| **6** | **Performance Latency** | Board view initial load under 100ms; REST API p95 latency under 50ms. |
++| Gate # | Verification Gate | Success Threshold | Exact Audit Check |
++| :---: | :--- | :--- | :--- |
++| **1** | **Entity Count Parity** | 100% match across issues, states, cycles, modules, comments, and attachments | Verify `extractEntityCounts` matches source metrics exactly |
++| **2** | **Object Link Auditor** | Zero orphaned links, cross-tenant leaks, or invalid hierarchy cycles | `POST /api/v1/admin/object-links:audit` returns 0 invalid links |
++| **3** | **Markdown Fidelity** | 100% of descriptions render valid Markdown; zero unparsed HTML tags | CommonMark AST validator with lone-surrogate rejection |
++| **4** | **Principal & ACL Parity** | All users, groups, and permissions map accurately to 👍kanban roles | Verified user mapping JSON matches active principals |
++| **5** | **MCP Surface Health** | All 24 MCP tools return clean schemas and pass handshake benchmarks | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` initialize with 200 OK |
++| **6** | **Performance Latency** | Board view initial load under 100ms; REST API p95 latency under 50ms | Realtime WebSocket `/ws` probe RTT < 50ms |
+ 
+ ### Phase 6: DNS Cutover and Traffic Switch
+-- Update internal DNS records or reverse proxy routing (e.g. Caddy / Nginx) to point domain `kanban.example.com` to the 👍kanban production ingress (`edge_net`).
+-- Restart agent background workers with updated MCP endpoint URLs.
++- Update internal DNS records or reverse proxy routing (Caddy or Nginx) to point domain `kanban.example.com` to the 👍kanban production ingress (`edge_net`).
++- Restart agent background workers with updated MCP endpoint URLs (`/mcp/agent`).
+ 
+ ### Phase 7: Post-Cutover Monitoring and Rollback Window
+ - Maintain legacy tracker instance in read-only state for a 7-day observation window.
+-- Monitor real-time WebSocket connection stability and activity logs.
++- Monitor real-time WebSocket connection stability, activity logs, and link health in Admin Diagnostics.
+ 
+ ---
+ 
+ ## Migration Import Studio (`/admin/imports`)
+ 
+-To streamline cutover from Plane workspaces to 👍kanban without custom extraction scripts, 👍kanban includes a native **Migration Import Studio** accessible at `/admin/imports` (and `/settings/mcp` -> Migration Studio tab).
++To streamline cutover from legacy issue trackers to 👍kanban without authoring bespoke extraction scripts, 👍kanban provides a native **Migration Import Studio** accessible at `/admin/imports` (and through the Administration navigation under Data Management).
+ 
+ ```mermaid
+ flowchart TD
+-    subgraph PlaneImportPipeline["Migration Import Studio Pipeline"]
+-        Upload["Step 1: Upload Plane Export Bundle<br/>(File upload or paste raw JSON)"] --> Parse["JSON Schema Validation<br/>Verify projects, states, issues, cycles, modules, comments, members"]
+-        Parse --> Metrics["Step 2: Entity Detection & Metrics Cards<br/>Live counts across all 7 entity types"]
+-        Metrics --> DryRun["Step 3: Stage 1 Dry-Run Simulation<br/>Idempotency checks, state mapping preview, conflict detection"]
+-        DryRun --> Live["Step 4: Execute Live Migration<br/>Atomic PostgreSQL transaction (kanban_migrator)"]
+-        Live --> Verify["Step 5: Post-Import Integrity Audit<br/>Run Invalid Object Link Auditor on imported graph"]
++    subgraph ImportPipeline["Migration Import Studio Pipeline"]
++        Upload["Step 1: Select Source & Input Bundle (Plane, Jira, GitHub Issues, Linear, or Portable)"] --> Parse["JSON Schema Validation - Verify projects, states, issues, cycles, modules, comments, members"]
++        Parse --> Metrics["Step 2: Entity Detection & Metrics Cards - Live counts across all 7 entity types"]
++        Metrics --> DryRun["Step 3: Stage 1 Dry-Run Simulation (dry_run=true) - Idempotency checks, state mapping preview, conflict detection"]
++        DryRun --> Live["Step 4: Execute Live Migration (dry_run=false) - Atomic PostgreSQL transaction (kanban_migrator)"]
++        Live --> Verify["Step 5: Post-Import Integrity Audit - Run Invalid Object Link Auditor on imported graph"]
+     end
+ ```
+ 
+-![Migration Import Studio Step 1](images/49-admin-plane-import-studio.png)
++![Migration Import Studio Multi-Source Tabs](images/slice4-imports-multi-source-tabs.png)
++
++### Studio Controls and Backend Contracts
++
++The Migration Import Studio exposes dedicated endpoints for each platform: `POST /api/v1/admin/imports/plane`, `POST /api/v1/admin/imports/jira`, `POST /api/v1/admin/imports/github`, and `POST /api/v1/admin/imports/linear`:
++
++1. **Source Platform Tabs:**
++   Selects the target parser and schema mapping logic for the submitted export payload (`Plane`, `Jira`, `GitHub Issues`, or `Linear`). Selecting a source automatically configures the appropriate entity mapping pipeline and CommonMark converters.
++
++2. **Target Workspace and Project (`workspace_slug`, `project_key`):**
++   Specifies the destination tenant and project key for all imported entities. If omitted, the importer creates or binds to the default workspace and project declared inside the bundle. Imported issues receive canonical sequence numbers under the target project key (e.g. `KAN-1`, `KAN-2`).
++
++3. **Dry-Run Simulation Toggle (`dry_run`):**
++   When enabled (`dry_run=true`), the importer executes a non-destructive simulation against a database savepoint. It calculates entity diff counts, validates referential links, checks user mappings, and generates an `ImportDiffReport` without committing rows to PostgreSQL. When disabled (`dry_run=false`), the import runs inside an atomic database transaction that commits only upon full validation success.
++
++4. **Custom User Mapping JSON (`user_map`):**
++   A JSON dictionary mapping source usernames, legacy IDs, or email addresses to canonical 👍kanban user accounts (e.g. `{"legacy_user": "adamoutler@gmail.com", "usr_123": "engineer@example.com"}`). Unmapped users fall back to the system administrator or are created as external inactive principals depending on organizational configuration.
++
++5. **Legacy Key Alias Preservation (`IssueKeyAlias`):**
++   Whenever legacy issues are imported from Jira, GitHub, or Linear, their historical keys (e.g. `JIRA-101`, `GH-88`, `ENG-42`) are automatically recorded in the `issue_key_aliases` catalog. For API clients querying `GET /api/v1/issues/{issue_key}`, the server returns `200 OK` JSON with the header `X-Kanban-Canonical-Key: {canonical_key}`. For browser navigation where `Accept` includes `text/html` (and not `application/json`), the server returns `HTTP 308 Permanent Redirect` with `Location: /projects/{project_key}/issues/{canonical_key}`.
++
++![Migration Import Studio - Desktop Dark](images/slice4-imports-1440x900-dark.png)
+ 
+ ![Migration Studio Dry-Run Simulation](images/71-plane-migration-dry-run.png)
+ 
+-### Key Migration Capabilities:
+-1. **Direct JSON Ingestion:** Accepts standard Plane export bundles via direct drag-and-drop file upload or pasting raw JSON.
+-2. **Real-Time Entity Metric Cards:** Displays instant counts for detected Projects, States, Issues, Cycles, Modules, Issue Comments, and Members.
+-3. **Stage 1 Dry-Run Simulation:** Simulates the complete import without writing to the database. Displays state mapping translations, identifies potential duplicate keys, and computes idempotency diffs.
+-4. **Atomic Transactional Import:** Live migrations execute within an atomic transaction. If any entity fails validation or violates an object graph invariant, the entire migration rolls back cleanly, leaving existing data untouched.
+-5. **Universal Link Synthesis:** Automatically establishes typed `PARENT_OF`, `BLOCKS`, and `ATTACHED_TO` object links corresponding to source Plane relationships.
++---
++
++## Step-by-Step Operator Guide: Executing a Production Migration
++
++Follow this operational procedure to perform a clean cutover using the visual studio:
++
++1. **Navigate to the Studio:** Log in as a user with `SERVER_ADMIN` credentials, satisfy the AAL2 WebSudo prompt, and open `/admin/imports`.
++2. **Select the Source:** Click on the tab matching your source platform (`Plane`, `Jira`, `GitHub Issues`, or `Linear`).
++3. **Upload Export Payload:** Drag and drop your source export file or paste raw JSON into the input textarea. The studio instantly displays live metric cards showing detected Projects, States, Issues, Cycles, Modules, Comments, and Members.
++4. **Supply User Mapping (Optional):** If user handles differ between the source tracker and 👍kanban, expand the User Mapping section and paste your JSON mapping dictionary.
++5. **Run Stage 1 Dry-Run Simulation:** Click **Stage 1: Preview Dry-Run Diff**. The backend processes the bundle with `dry_run=true` and returns an itemized diff summary detailing entities to be created and any potential conflicts.
++6. **Execute Live Migration:** Once the simulation is verified, click **Stage 2: Execute Live Import**. The backend executes the atomic transaction (`dry_run=false`). A progress indicator tracks hydration progress until completion.
++7. **Verify Post-Import Health:** Switch to `/admin/link-auditor` and click **Run Integrity Scan** to verify zero broken object links. For deep CLI cutover verification against the source export snapshot, execute `kanban-ctl cutover verify --bundle-dir <path_to_export_dir> --workspace <slug> --project <key>`. Request a migrated issue using its legacy key in your browser to confirm HTTP 308 redirection to the new canonical URL.
+ 
+ ---
+ 
+ ## Emergency Rollback Procedure
+ 
+-If a critical business blocker occurs during the cutover window:
+-1. **Revert DNS:** Immediately restore DNS routing to the legacy tracker cluster.
+-2. **Delta Capture:** Run `uv run kanban-ctl cutover verify` / inspect `activity_records` since cutover to extract any tickets updated in 👍kanban during the live window.
+-3. **Reconcile:** Re-apply the delta diff into the source tracker to ensure zero data loss.
+-
+-![Workspace Home After Successful Cutover](images/05-workspace-home.png)
++If an unrecoverable business blocker arises during the live cutover window:
++1. **Revert Ingress DNS:** Immediately restore DNS routing to the legacy tracker cluster.
++2. **Delta Capture:** Query the PostgreSQL immutable activity ledger (`activity_records`) to extract all work items, comments, and state changes committed during the cutover window.
++3. **Reconcile State:** Re-apply the captured delta entries back into the source tracker to ensure absolute data continuity with zero dropped updates.
+diff --git a/Multi-Source-Migration-and-Key-Alias-Redirects.md b/Multi-Source-Migration-and-Key-Alias-Redirects.md
+index ffafc54..46d754c 100644
+--- a/Multi-Source-Migration-and-Key-Alias-Redirects.md
++++ b/Multi-Source-Migration-and-Key-Alias-Redirects.md
+@@ -1,64 +1,76 @@
+ # [Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide
+ 
+-Comprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane-DB, legacy issue key alias redirection, cross-project merge mode, and canonical CSV import/export governance.
++Comprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane, legacy issue key alias redirection, cross-project merge mode, and canonical portable workspace bundle governance.
+ 
+ ---
+ 
+ ## 1. Overview and Lossless Migration Philosophy
+ 
+-Migrating issue tracking infrastructure between legacy platforms often introduces severe data loss: rich-text formatting degrades into corrupted markup, custom field hierarchies fracture, media attachments break into dead hyperlinks, and historical issue keys (`JIRA-101`, `PROJ-42`, `GH-89`) vanish, destroying institutional knowledge and broken permalinks across pull requests and documentation.
++Migrating issue tracking infrastructure between legacy platforms often introduces severe data loss: rich-text formatting degrades into corrupted markup, custom field hierarchies fracture, media attachments break into dead hyperlinks, and historical issue keys (`JIRA-101`, `PROJ-42`, `GH-89`, `ENG-42`) vanish, destroying institutional knowledge and breaking permalinks across pull requests, git commits, and documentation.
+ 
+ 👍kanban resolves these challenges through an end-to-end, multi-source migration pipeline engineered under three core principles:
+-1. **Canonical Markdown Normalization:** Ingests proprietary document trees (such as Atlassian Document Format or raw HTML) and converts them into standardized, sanitized UTF-8 Markdown with strict UTF-16 lone surrogate rejection.
+-2. **Deterministic Key Alias Routing (`IssueKeyAlias`):** Retains every historical issue key from upstream systems in a dedicated alias catalog, providing automatic HTTP 301/308 redirection across REST API and web interfaces.
+-3. **Lossless Media Attachment Streaming:** Streams binary assets directly from legacy object stores (e.g. MinIO or S3) through HMAC-signed media shields, preventing SSRF attacks and broken image references.
++1. **Canonical Markdown Normalization:** Ingests proprietary document trees (such as Atlassian Document Format or raw HTML) and converts them into standardized, sanitized UTF-8 Markdown with strict UTF-16 lone surrogate rejection (`0xD800 <= ord(c) <= 0xDFFF`).
++2. **Deterministic Key Alias Routing** (`IssueKeyAlias`): Retains every historical issue key from upstream systems in a dedicated alias catalog, providing automatic HTTP 308 permanent redirection across REST API and web interfaces.
++3. **Lossless Media Attachment Streaming:** Streams binary assets directly from legacy object stores through HMAC-signed media shields, preventing SSRF attacks and broken image references.
+ 
+ ```mermaid
+ graph TD
+-    Sources["Source Platforms (Jira, GitHub, Linear, Plane-DB, CSV)"] --> Ingestion["Streaming Ingestion & Sanitization Engine"]
++    Sources["Source Platforms (Plane, Jira, GitHub, Linear, Portable)"] --> Ingestion["Streaming Ingestion & Sanitization Engine"]
+     Ingestion --> MarkdownConv["Canonical Markdown Converter (ADF/HTML -> GFM)"]
+     Ingestion --> MediaStream["HMAC Media Proxy Attachment Storage"]
+-    Ingestion --> AliasRouter["IssueKeyAlias Catalog (301/308 Redirection Engine)"]
++    Ingestion --> AliasRouter["IssueKeyAlias Catalog (308 Redirection Engine)"]
+     Ingestion --> RLSInsert["PostgreSQL FORCE RLS Transactional Insertion"]
+     RLSInsert --> UniversalGraph["Universal Object Graph (Issues, Stickies, Docs, Links)"]
+ ```
+ 
++![Migration Import Studio Multi-Source Tabs](images/slice4-imports-multi-source-tabs.png)
++
+ ---
+ 
+-## 2. Multi-Source Importer Architecture
++## 2. Multi-Source Importer Architecture & Source Options
+ 
+-The migration subsystem in `kanban/importer/` provides modular importers tailored to specific platform export formats:
++The migration subsystem in `kanban/importer/` and `/api/v1/admin/imports` provides modular ingestion drivers tailored to each platform export format:
+ 
+-### Supported Importers and Capability Matrix
++### Supported Importers Capability Matrix
+ 
+ | Source Tracker | Input Format | Converted Entities | Custom Fields & Mapping | Attachment Ingestion |
+ | :--- | :--- | :--- | :--- | :--- |
+-| **Jira Cloud & Server/DC** | JSON export bundle / REST dump | Issues, Subtasks, Comments, Worklogs, Links | Full ADF/HTML to Markdown conversion, user account mapping | Extracted and routed through HMAC media shield |
+-| **GitHub Issues** | Issues JSON export / REST API dump | Issues, Pull Request links, Milestones, Labels | Milestones mapped to Cycles; Labels mapped to ProjectLabels | Downloaded and cryptographically hashed |
++| **Plane Workspaces** | Native JSON export bundle / API dump | Workspaces, Projects, States, Issues, Cycles, Modules, Comments, Members | 1:1 Universal Object Graph restoration | S3/MinIO media streamed through media shield |
++| **Jira Cloud & Server/DC** | JSON export bundle / REST dump | Issues, Subtasks, Comments, Worklogs, Links | Full ADF/HTML to CommonMark conversion, user mapping | Extracted and routed through HMAC media shield |
++| **GitHub Issues** | Issues JSON export / REST API dump | Issues, PR references, Milestones, Labels | Milestones mapped to Cycles; Labels mapped to ProjectLabels | Downloaded and cryptographically hashed |
+ | **Linear** | Linear JSON export / CSV archive | Issues, Cycles, Modules, Relations, Triage states | State taxonomy normalization; relations mapped to object_links | Assets fetched with token authorization |
+-| **Plane-DB** | PostgreSQL dump + MinIO bucket (`scripts/export_plane_db.py`) | Workspaces, Projects, States, Issues, Docs, Stickies | 1:1 Universal Object Graph restoration | Direct streaming from MinIO S3 bucket |
+-| **Canonical CSV** | RFC 4180 CSV / Password-Protected ZIP (AES-256) (`KAN-316`) | 16-column canonical work items | JSON-encoded custom fields; CWE-1236 neutralized | Attachment metadata linked via URLs |
++| **Portable Bundle** | Canonical `.tar.gz` archive (`downloadPortableExport`) | Full workspace spine, entities, docs, pages, stickies | Preserves exact Universal Object Graph schema | Complete asset package with SHA-256 checksums |
++
++![Migration Import Studio - Desktop Light](images/slice4-imports-1440x900-light.png)
++
++### Setting-by-Setting Technical Reference
++
++Each migration operation is configured through specific parameters submitted to the dedicated endpoints (`POST /api/v1/admin/imports/plane`, `POST /api/v1/admin/imports/jira`, `POST /api/v1/admin/imports/github`, `POST /api/v1/admin/imports/linear`):
++
++1. **Source Bundle Payload (`bundle_data` or `bundle_name`):**
++   The raw JSON export payload (uploaded or pasted) or file path in imports storage. Each source handler validates expected JSON schemas, maps native statuses to canonical workflow state categories, and extracts textual fields through safe CommonMark converters.
+ 
+-### Jira ADF to Canonical Markdown Conversion
++2. **Target Workspace Slug (`workspace_slug`):**
++   Identifies the target workspace tenant within PostgreSQL. If specified, the importer attaches entities to this existing workspace; if omitted, the caller's active workspace is used.
+ 
+-Atlassian Document Format (ADF) stores rich text as deeply nested JSON node trees. The Jira importer traverses these AST nodes, translating them into standard GitHub Flavored Markdown:
+-- Nested bullet lists, ordered lists, and task checklists.
+-- Code blocks with language syntax tags.
+-- Blockquotes, callout panels, and horizontal rules.
+-- Table grids with cell alignments.
+-- Inline mentions, status tags, and hyperlinks.
++3. **Target Project Key (`project_key`):**
++   Identifies the destination project prefix (e.g. `KAN`, `JIRA`, `GH`, `LIN`). All imported issues receive sequential sequence IDs under this project key while recording their upstream keys in `issue_key_aliases`.
+ 
+-Unrecognized node types fall back safely to formatted plain text, preventing pipeline crashes during bulk migrations.
++4. **Dry-Run Validation Flag (`dry_run`):**
++   Controls transaction execution mode. When set to `true`, the server processes the payload inside a database savepoint, computes entity count diffs, verifies referential links, and returns an `ImportDiffReport` without committing data. When set to `false`, the operation executes inside an atomic database transaction that rolls back completely if any validation error occurs.
++
++5. **User Mapping Specification (`user_map`):**
++   A JSON object providing explicit mappings from source usernames, emails, or account IDs to canonical 👍kanban user accounts. Format: `{"source_username_or_email": "canonical_email_or_handle"}`. Unmapped principals fall back to system defaults.
+ 
+ ---
+ 
+-## 3. Legacy Key Alias Routing and Permalinks
++## 3. Legacy Key Alias Routing and HTTP 308 Permalinks
+ 
+-To preserve external hyperlinks in pull requests, commit messages, and external tickets, 👍kanban implements persistent key aliasing.
++To preserve external hyperlinks in pull requests, commit messages, Slack threads, and external documentation, 👍kanban implements persistent key aliasing.
+ 
+ ### Schema and Model Architecture
+ 
+-The `issue_key_aliases` table (managed via `database/models/issue_alias.py` and single-head migration `p6_03_multi_source_imports_and_aliases`) records historical keys:
++The `issue_key_aliases` table records historical keys across all imported projects:
+ 
+ ```sql
+ CREATE TABLE issue_key_aliases (
+@@ -73,130 +85,95 @@ CREATE TABLE issue_key_aliases (
+ );
+ ```
+ 
+-### HTTP Redirection Flow
++### HTTP Redirection Flow (`kanban/api/v1/issues.py:211-218`)
+ 
+-When a user or external API client requests an issue using an obsolete key:
++When a user, browser, or external API client requests an issue using an obsolete key (`GET /api/v1/issues/{issue_key}`):
+ 1. The resolver queries `issues` by current key (`project.key + '-' + sequence_id`).
+ 2. If not found, it queries `issue_key_aliases` by `legacy_key` within the caller's authorized workspace.
+-3. If an alias match exists, the REST API returns `HTTP 308 Permanent Redirect` with the `Location` header set to `/api/v1/issues/{canonical_key}`.
+-4. The web frontend navigates smoothly to the new canonical URL without breaking user state.
++3. If an alias match exists, the response header `X-Kanban-Canonical-Key: {canonical_key}` is populated.
++4. For API clients (where `Accept` is `application/json` or does not request HTML), the REST API returns `200 OK` JSON with the complete issue payload.
++5. For browser navigation (where `Accept` includes `text/html` and not `application/json`), the server returns `HTTP 308 Permanent Redirect` with `Location: /projects/{project_key}/issues/{canonical_key}`.
+ 
+ ```mermaid
+ sequenceDiagram
+-    participant Client as Web Browser / API Client
++    participant Browser as Web Browser (Accept: text/html)
++    participant APIClient as API Client (Accept: application/json)
+     participant API as FastAPI Issue Router (/api/v1/issues/{key})
+     participant DB as PostgreSQL (issues & issue_key_aliases)
+ 
+-    Client->>API: GET /api/v1/issues/JIRA-101
+-    API->>DB: SELECT * FROM issues WHERE key = 'JIRA-101'
+-    DB-->>API: 0 rows returned
+-    API->>DB: SELECT canonical_key FROM issue_key_aliases WHERE legacy_key = 'JIRA-101'
+-    DB-->>API: 1 row returned ('KAN-42')
+-    API-->>Client: HTTP 308 Permanent Redirect (Location: /api/v1/issues/KAN-42)
+-    Client->>API: GET /api/v1/issues/KAN-42
+-    API->>DB: SELECT * FROM issues WHERE key = 'KAN-42'
+-    DB-->>API: Issue payload
+-    API-->>Client: HTTP 200 OK
+-```
+-
+----
+-
+-## 4. Cross-Project Merge Mode (`KANBA -> KAN`)
+-
+-During organizational consolidations, teams frequently need to merge entire projects into a single target project. The cross-project merge mode executes this consolidation losslessly:
+-
+-### Merge Execution Steps
+-1. **Entity Re-Keying:** Each issue from the source project is re-keyed to the destination project prefix (e.g. `KANBA-15` becomes `KAN-248`), with sequence numbers allocated sequentially to avoid collisions.
+-2. **Alias Registration:** The original key (`KANBA-15`) is recorded in `issue_key_aliases` pointing to the new issue ID.
+-3. **Object Link Rewiring:** All directional relations (`PARENT_OF`, `BLOCKS`, `RELATES_TO`) in `object_links` pointing to the old issue are updated in place.
+-4. **State Taxonomy Mapping:** Workflow states from the source project are mapped to equivalent states in the target project via an interactive alignment table.
+-5. **Activity Log Continuity:** Historical audit entries are preserved and appended with a merge marker documenting the consolidation event.
+-
+----
+-
+-## 5. Canonical CSV Import, Export, and Password-Protected ZIP (AES-256) Packaging
+-
+-Ticket `KAN-316` establishes enterprise CSV data interchange governance across system, workspace, and role tiers:
+-
+-### 16 Canonical CSV Columns
++    Browser->>API: GET /api/v1/issues/JIRA-101 (Accept: text/html)
++    API->>DB: Query issue_key_aliases ('JIRA-101' -> 'KAN-1')
++    API-->>Browser: HTTP 308 Permanent Redirect (Location: /projects/KAN/issues/KAN-1)
+ 
+-Exports and imports follow a deterministic 16-column RFC 4180 layout:
+-1. `key`: Canonical issue key (e.g. `KAN-42`).
+-2. `project_key`: Target project identifier.
+-3. `summary`: Concise issue title.
+-4. `description_markdown`: Canonical Markdown body text.
+-5. `state`: Current workflow state name.
+-6. `priority`: Priority name (`urgent`, `high`, `medium`, `low`).
+-7. `assignees`: Semicolon-delimited list of assignee usernames.
+-8. `labels`: Semicolon-delimited list of project labels.
+-9. `cycle`: Sprint cycle name or identifier.
+-10. `modules`: Semicolon-delimited list of functional modules.
+-11. `parent_key`: Parent issue key for hierarchical tasks.
+-12. `start_date`: ISO-8601 calendar start date (`YYYY-MM-DD`).
+-13. `due_date`: ISO-8601 calendar deadline date (`YYYY-MM-DD`).
+-14. `created_at`: Creation timestamp with timezone.
+-15. `updated_at`: Modification timestamp with timezone.
+-16. `custom_fields_json`: Serialized JSON dictionary of custom field values.
+-
+-### CWE-1236 Formula Injection Defense
+-
+-Spreadsheet applications (such as Microsoft Excel and LibreOffice Calc) interpret leading characters (`=`, `+`, `-`, `@`, `\t`, `\r`) as executable formulas. To eliminate CSV formula injection (CWE-1236):
+-- **On Export:** Any cell beginning with a formula trigger character is neutralized by prepending a single quote (`'`).
+-- **On Import:** The importer strips the protective prefix (`desanitize_cell_from_import`) before storing prose in PostgreSQL.
+-
+-### Password-Protected ZIP (AES-256) Packaging
+-
+-For highly confidential environments, CSV archives can be exported inside password-protected ZIP (AES-256) containers:
+-- **Cryptographic Standard:** AES-256 in Counter Mode (CTR) with PBKDF2-HMAC-SHA256 key derivation (1000 iterations) and 10-byte HMAC-SHA256 authentication tags.
+-- **Strict Password Policy:** Passwords must meet a minimum length of 12 characters.
+-- **Volatile Memory Sanitization:** Cryptographic key buffers are actively zeroized (`zeroize(aes_key, hmac_key)`) in mandatory Python `finally` blocks to prevent memory residue attacks.
+-- **Zip-Bomb & Path Traversal Guards:** Enforces uncompressed size ratios and validates file paths against directory escape attempts.
+-
+----
+-
+-## 6. Step-by-Step Operator Runbook: Dry Run and Cutover
+-
+-### Step 1: Pre-Migration Validation and Dry Run
+-
+-Before importing production data, execute a non-destructive dry run:
+-
+-```bash
+-# Export source Plane database and MinIO media objects
+-python -m scripts.export_plane_db \
+-  --db-url "postgresql://plane:secret@plane-db:5432/plane" \
+-  --minio-endpoint "http://minio:9000" \
+-  --minio-bucket "plane-uploads" \
+-  --output-dir "/backups/plane-export"
+-
+-# Validate export bundle integrity and print summary metrics
+-kanban-ctl import plane-bundle /backups/plane-export --dry-run
++    APIClient->>API: GET /api/v1/issues/JIRA-101 (Accept: application/json)
++    API->>DB: Query issue_key_aliases ('JIRA-101' -> 'KAN-1')
++    API-->>APIClient: HTTP 200 OK (X-Kanban-Canonical-Key: KAN-1, JSON payload)
+ ```
+ 
+-Review the dry-run output to verify total counts for workspaces, projects, states, issues, documents, and media attachments.
+-
+-### Step 2: Executing Live Cutover
+-
+-Once dry-run validation passes:
++![Migration Import Studio - Tablet Landscape](images/slice4-imports-1024x768-tablet-landscape.png)
++![Migration Import Studio - Tablet Portrait](images/slice4-imports-768x1024-tablet-portrait.png)
+ 
+-```bash
+-# Execute live import with key alias generation and media streaming
+-kanban-ctl import plane-bundle /backups/plane-export \
+-  --target-workspace "kanban" \
+-  --target-project "KAN" \
+-  --record-aliases \
+-  --confirm
+-```
++---
+ 
+-### Step 3: Post-Migration Audit and Verification
++## 4. Step-by-Step Operator Guides for All 4 Sources
++
++### Guide A: Importing from Plane
++
++1. Generate an export bundle from Plane (`Settings -> Export -> JSON`).
++2. In 👍kanban, navigate to `/admin/imports` and select the **Plane** tab.
++3. Upload the `.json` bundle file or paste the contents into the JSON editor.
++4. Review the detected entity metrics (Projects, States, Issues, Cycles, Modules, Comments).
++5. Click **Stage 1: Preview Dry-Run Diff** to verify state mapping and idempotency.
++6. Click **Stage 2: Execute Live Import** to commit the migration transaction.
++
++### Guide B: Importing from Jira Cloud or Server
++
++1. Generate a Jira JSON backup or query issues via Jira REST API.
++2. Ensure descriptions and comments are formatted as ADF JSON or raw HTML.
++3. In 👍kanban, select the **Jira** tab in the Migration Import Studio.
++4. Paste the Jira export bundle into the payload box.
++5. In the User Mapping field, provide a JSON dictionary mapping Jira account IDs or emails to 👍kanban users:
++   ```json
++   {
++     "557058:ba01fb4a-28e4-4a27-a641-752a71d87e0b": "alice@example.com",
++     "bob.builder@jira.local": "bob@example.com"
++   }
++   ```
++6. Click **Stage 1: Preview Dry-Run Diff** to verify ADF conversion to CommonMark.
++7. Click **Stage 2: Execute Live Import**. All issues receive canonical `KAN-x` keys, and historical keys (`JIRA-101`) are registered as aliases.
++
++### Guide C: Importing from GitHub Issues
++
++1. Export issues from GitHub using the GitHub REST API (`GET /repos/{owner}/{repo}/issues?state=all`) or `gh` CLI:
++   ```bash
++   gh issue list --state all --limit 1000 --json number,title,body,state,labels,milestone,comments,assignees > gh-issues.json
++   ```
++2. In the Migration Import Studio, select the **GitHub Issues** tab.
++3. Upload `gh-issues.json`. Milestones automatically map to 👍kanban Sprint Cycles; GitHub labels map to Project Labels.
++4. Provide username mapping for GitHub handles to corporate email addresses.
++5. Execute **Stage 1: Preview Dry-Run Diff** followed by **Stage 2: Execute Live Import**. Old issue keys (`GH-1`, `GH-2`) redirect seamlessly.
++
++### Guide D: Importing from Linear
++
++1. Export your Linear workspace data via `Settings -> Workspace -> Export -> JSON`.
++2. In 👍kanban, select the **Linear** tab.
++3. Paste the Linear JSON archive. Linear cycles, project modules, and parent-child relations are automatically recognized.
++4. Verify user mappings for Linear team members.
++5. Execute **Stage 1: Preview Dry-Run Diff** and **Stage 2: Execute Live Import**. Linear identifiers (`ENG-42`) become permanent aliases.
++
++![Migration Import Studio - Mobile Portrait](images/slice4-imports-390x844-mobile-portrait.png)
+ 
+-1. Verify that all issues are indexed and searchable via the web interface.
+-2. Test legacy URL redirection by requesting an old key in your browser (e.g. `http://localhost:8000/issues/KANBA-1`). Confirm that the browser redirects automatically to the new canonical key (`KAN-1`).
+-3. Navigate to `/admin/link-auditor` and execute a scan to confirm zero orphaned object links.
++![Migration Dry-Run and Validation Results](images/71-plane-migration-dry-run.png)
+ 
+ ---
+ 
+-## 7. Visual Reference and Studio Screenshots
++## 5. Portable Workspace Bundles (`.tar.gz`)
+ 
+-![Migration Import Studio Configuration](images/49-admin-plane-import-studio.png)
++For exporting portable, human-readable workspace archives between distinct 👍kanban installations:
+ 
+-![Migration Dry-Run and Validation Results](images/71-plane-migration-dry-run.png)
++1. **Export Procedure:** In `/admin/imports` under the **Portable Workspace Export** section (or via `POST /api/v1/admin/exports/portable`), enter the target workspace slug, toggle **Scrub secrets and sensitive tokens from markdown** (`scrub: true`) if sensitive tokens should be redacted from text and markdown fields, and click **Download Portable Bundle (.tar.gz)**.
++2. **Bundle Contents:**
++   - `entities.jsonl`: Universal spine of issues, stickies, docs, cycles, and modules.
++   - `docs/`: Canonical Markdown documents with intact folder hierarchies.
++   - `links.jsonl`: Typed `object_links` representing graph topology.
++   - `manifest.json`: Cryptographic SHA-256 manifest and schema version metadata.
+diff --git a/Production-Promotion-and-Backup-Runbook.md b/Production-Promotion-and-Backup-Runbook.md
+index bfbf897..eb2a90d 100644
+--- a/Production-Promotion-and-Backup-Runbook.md
++++ b/Production-Promotion-and-Backup-Runbook.md
+@@ -1,24 +1,24 @@
+-# [Guide] Production Promotion and Backup Runbook
++# [Guide] Production Promotion and Encrypted Backup Runbook
+ 
+ ## Overview
+ 
+-Teams frequently evaluate software in a standalone environment before promoting it to a production cluster. In conventional ticketing platforms, moving from a single test container to a hardened multi-container architecture requires painful manual database migrations, re-uploading media assets, and rebuilding configuration.
++Teams frequently evaluate software in a lightweight standalone environment before promoting it to a hardened production cluster. In conventional ticketing platforms, moving from a single test container to a production architecture requires painful manual database migrations, re-uploading media assets, and rebuilding configurations from scratch.
+ 
+-👍kanban provides a streamlined, reliable **Production Promotion and Encrypted Backup Architecture** (`docs/PROMOTION_AND_BACKUP.md`). With standardized tools, administrators can promote standalone deployments or execute disaster recovery with minimal downtime.
++👍kanban provides a streamlined, reliable **Production Promotion and Encrypted Backup Architecture** (`docs/PROMOTION_AND_BACKUP.md`). With standardized tools and privilege-separated daemons, administrators can promote standalone deployments or execute disaster recovery with minimal downtime and cryptographic certainty.
+ 
+ ---
+ 
+ ## Standalone to Production Promotion Workflow
+ 
+-Moving from a single-container standalone instance (`docker run`) to the 5-network production stack (`docker compose`) takes five sequential steps:
++Moving from a single-container standalone instance (`docker run -d -p 8080:8080 thumbs-up-kanban:latest`) to the compartmentalized 5-network production stack (`docker compose`) takes five sequential steps:
+ 
+ ```mermaid
+ flowchart TD
+-    S1["Step 1: Drain Active Traffic<br/>kanban-ctl promote --drain --timeout=30s<br/>Halt requests and flush WAL"]
+-    S2["Step 2: Export Production Compose Bundle<br/>kanban-ctl promote --export-compose ./deploy/prod/<br/>Generate 5-network compose and config"]
+-    S3["Step 3: Transfer PostgreSQL Data Volume<br/>Copy /var/lib/kanban/data to production volume<br/>Hardware-level data preservation"]
+-    S4["Step 4: Launch Production Stack<br/>docker compose -f deploy/prod/docker-compose.yml up -d<br/>Compartmentalized 5-network isolation"]
+-    S5["Step 5: Post-Promotion Verification<br/>kanban-ctl health --full && kanban-ctl audit-links<br/>Verify 100% integrity"]
++    S1["Step 1: Drain Active Traffic - Graceful container stop / maintenance mode - Halt requests and flush WAL"]
++    S2["Step 2: Export Production Compose Bundle - GET /api/v1/admin/standalone/compose-export - Generate 5-network compose and scrubbed .env"]
++    S3["Step 3: Transfer PostgreSQL Data Volume - Copy /var/lib/kanban/data to production volume - Hardware-level data preservation"]
++    S4["Step 4: Launch Production Stack - docker compose -f deploy/prod/docker-compose.yml up -d - Compartmentalized 5-network isolation"]
++    S5["Step 5: Post-Promotion Verification - Check container health and migrations - Verify 100% integrity"]
+ 
+     S1 --> S2
+     S2 --> S3
+@@ -26,132 +26,146 @@ flowchart TD
+     S4 --> S5
+ ```
+ 
+-![Standalone to Production Compose Export Modal](images/27-standalone-compose-export.png)
++![Standalone Status and Backups Studio - Desktop Light](images/slice4-standalone-1440x900-light.png)
+ 
+-### Detailed Execution Steps
++### The 5 Isolated Production Networks
+ 
+-#### Step 1: Drain Active Traffic
+-Halt incoming requests and flush PostgreSQL Write-Ahead Logs (WAL):
+-```bash
+-docker exec -it thumbs-up-kanban kanban-ctl promote --drain --timeout=30s
+-```
+-
+-#### Step 2: Export Production Configuration
+-Generate the hardened 5-network `docker-compose.yml` and environment templates from the running instance:
+-```bash
+-docker exec -it thumbs-up-kanban kanban-ctl promote --export-compose /tmp/deploy/
+-docker cp thumbs-up-kanban:/tmp/deploy ./deploy-prod
+-```
+-
+-#### Step 3: Transfer Persistent Volumes
+-Copy the internal database directory to the dedicated production storage volume:
+-```bash
+-docker volume create kanban_postgres_prod_data
+-docker run --rm \
+-  -v kanban_data:/from:ro \
+-  -v kanban_postgres_prod_data:/to \
+-  alpine cp -a /from/. /to/
+-```
+-
+-#### Step 4: Launch Production Stack
+-Start the compartmentalized multi-container cluster:
+-```bash
+-cd deploy-prod
+-docker compose up -d
+-```
+-
+-#### Step 5: Post-Promotion Verification
+-Confirm service availability and object graph integrity:
+-```bash
+-docker compose exec app kanban-ctl health --full
+-docker compose exec app kanban-ctl audit-links --dry-run
+-```
++The generated production `docker-compose.yml` divides services across five strictly isolated Docker bridge networks:
++1. **`edge_net`:** Connects the Caddy TLS ingress proxy to the external network and routes HTTPS traffic into the web/API service. No database or Redis containers attach to `edge_net`.
++2. **`app_net`:** Connects the FastAPI backend service to the web client, internal caches, and the outbox event relay.
++3. **`data_net`:** Restricted network connecting the backend service strictly to PostgreSQL 16 and Redis. Containers on `edge_net` or `sandbox_net` have zero network route to `data_net`.
++4. **`sandbox_net`:** Air-gapped network for untrusted custom field scripts and Wasmtime runners, blocking all external egress.
++5. **`egress_llm_net`:** Egress-only network allowing AI provider connections (OpenAI, Gemini, Ollama) and mTLS runner heartbeats on port 8444 while preventing inbound lateral movement.
+ 
+ ---
+ 
+-## Encrypted KBBAK1 Backup Archive Format
++## Encrypted Backup Formats: KBKP Streaming vs KBBAK1 Snapshots
+ 
+-👍kanban implements a unified backup format named **KBBAK1**. Rather than taking unencrypted raw SQL dumps, KBBAK1 produces an encrypted, tamper-evident bundle:
++👍kanban implements dual encrypted backup engines engineered for distinct operational scenarios:
+ 
+ ```mermaid
+ flowchart LR
+-    subgraph Contents["KBBAK1 Archive Members"]
+-        M["manifest.json<br/>(SHA-256 Checksums, Versions)"]
+-        D["database.sql.gz<br/>(Complete PostgreSQL Dump)"]
+-        O["object_graph.jsonl<br/>(Universal Spine & Links)"]
+-        A["media/<br/>(Attachments & Visual Assets)"]
++    subgraph DirectStream["Direct Download (KBKP Streaming)"]
++        K1["POST /api/v1/admin/standalone/backup - Streaming AES-256-GCM Envelope"] --> K2["Direct Client Browser Download - kanban-backup.kbbak (KBKP 34-byte header)"]
+     end
+ 
+-    subgraph Crypto["Cryptographic Envelope"]
+-        KDF["PBKDF2 KDF<br/>(600,000 Iterations)"]
+-        AES["AES-256-GCM<br/>Ciphertext Stream"]
++    subgraph ServerSnapshot["Automated Snapshots (KBBAK1 Archive)"]
++        B1["POST /api/v1/admin/standalone/backups/run-now - Fixed-op daemon (.kb_ops.sock)"] --> B2["Stored in /var/lib/kanban/data/backups - kanban-backup-TIMESTAMP.kbbak (KBBAK1)"]
+     end
+-
+-    Contents --> KDF
+-    KDF --> AES
+-    AES --> Bundle[".kbbak1 Encrypted Bundle"]
+ ```
+ 
+-### KBBAK1 Archive Structure
+-- **`manifest.json`:** Contains platform version, schema migration hash, tenant IDs, and SHA-256 checksums of all internal components.
+-- **`database.sql.gz`:** Complete PostgreSQL cluster dump including all schemas, RLS policies, and extensions.
+-- **`object_graph.jsonl`:** Portable Universal Object Graph spine and typed links export for cross-version reconciliation.
+-- **`media/`:** Uploaded attachments, document assets, and user avatars.
+-
+-### Cryptographic Envelope
+-The entire tarball is encrypted using AES-256-GCM. The encryption key is derived from the administrative backup secret (`BACKUP_KEY`) using PBKDF2 with 600,000 iterations:
+-```bash
+-# Create an encrypted backup archive
+-kanban-ctl backup create \
+-  --encrypt \
+-  --output /var/backups/kanban-$(date +%Y%m%d-%H%M%S).kbbak1
+-```
++### 1. Streaming Direct Download (`KBKP` Format)
++- **Endpoint:** `POST /api/v1/admin/standalone/backup`
++- **Mechanism:** Streams an AES-256-GCM encrypted payload directly to the operator's web browser without buffering the full archive on server disk.
++- **Envelope Header:** 34-byte binary header: `KBKP` (4 bytes magic) + `version` (`1`, 1 byte) + `kdf_mode` (`1`=PBKDF2-HMAC-SHA256 600,000 iterations, `2`=HKDF-SHA256, 1 byte) + `salt` (16 bytes) + `nonce` (12 bytes), followed by the AES-256-GCM ciphertext stream of raw `pg_dump --format=custom` bytes terminated with a 16-byte authentication tag.
++- **Passphrase Contract:** Derived via PBKDF2-HMAC-SHA256 with 600,000 iterations. Passphrases must be at least 16 characters in length.
+ 
+-![System Settings and Environment Configuration](images/26-system-settings.png)
++### 2. Server-Side Automated Snapshots (`KBBAK1` Format)
++- **Endpoint:** `POST /api/v1/admin/standalone/backups/run-now`
++- **Daemon Privilege Separation:** Managed by a dedicated, root-privileged local daemon communicating strictly over UNIX domain socket `/run/postgresql/.kb_ops.sock` (mode `0660`, group `65532`). The web application process running as non-root user `kanban_app` cannot directly invoke shell scripts or bypass database controls; it issues fixed-operation JSON-line IPC commands (`"pg_dump_raw"`, `"restore_backup"`, `"scheduled_backup"`).
++- **Storage Location:** Saved in `/var/lib/kanban/data/backups` with ISO-8601 timestamps (e.g. `kanban-backup-20261125T144207Z.kbbak`).
++- **Archive Structure:** Tar archive prefixed with 37-byte header `KBBAK1\x00\x01` using Argon2id (`KDF_MODE_ARGON2ID` with 64 MiB memory, time=3, parallelism=4) or `KDF_MODE_RAW`, encrypting 4 MiB AES-256-GCM chunks of a tar bundle containing `manifest.json`, `database.pgdump`, `attachments/`, and optional `secrets_carryover.json`.
++
++![Standalone Backups and Snapshot History](images/slice4-standalone-backups-snapshot-history.png)
+ 
+ ---
+ 
+-## Visual Backup and Disaster Recovery Studio (`/admin/standalone`)
++## Visual Backup & Promotion Studio (`/admin/standalone`)
+ 
+-In addition to CLI automation, administrators managing standalone and hybrid deployments can trigger backups, configure schedules, and execute disaster recovery through the visual studio at `/admin/standalone`.
++The Standalone Status and Backups Studio is mounted at `/admin/standalone` (and through the Administration navigation under Deployment & Backups). It provides three tabs:
+ 
+-```mermaid
+-flowchart TD
+-    subgraph StandaloneStudio["System Storage, Backups & Deployment Studio"]
+-        Tab1["Storage & Capabilities Health<br/>Disk usage, DB size, WAL status"]
+-        Tab2["Backup, Auto-Backup & Restore<br/>Manual Encrypted (.kbbak), Schedules, 2-Stage Restore"]
+-        Tab3["Docker Compose Export<br/>Hardened multi-container production bundle"]
+-    end
+-```
++1. **Storage & Capabilities Health:** Inspects runtime deployment mode, disk mount points, total database size, WAL generation rate, and container cgroup memory/CPU limits.
++2. **Backup, Auto-Backup & Restore:** Triggers manual encrypted backups, schedules automated recurring snapshots, inspects historical server backups, and manages 2-stage restores.
++3. **Docker Compose Export:** Generates the production 5-network `docker-compose.yml` and secret-scrubbed `.env.example` file.
++
++![Standalone Status Studio - Desktop Dark](images/slice4-standalone-1440x900-dark.png)
++
++### Studio Controls & Backend Setting Reference
++
++1. **Passphrase Input (`passphrase`):**
++   Client-supplied encryption passphrase (minimum 16 characters). Used for client-side key derivation on direct downloads and for unlocking backup archives during restore. Never stored in PostgreSQL or logged.
++
++2. **Automated Backup Schedule (`enabled`, `interval_hours`):**
++   Configures periodic automated snapshots. Values for `interval_hours` range from `1` to `168` hours (default `24`). Snapshots are created by the root-privileged `/run/postgresql/.kb_ops.sock` background daemon.
++
++3. **Retention Policy (`retention_count`):**
++   Controls the number of automated snapshot files retained on disk (range `1` to `90`, default `7`). The snapshot purger automatically deletes older archives while preserving the newest snapshots.
+ 
+-![Visual Backup and Disaster Recovery Studio](images/57-standalone-backup-restore-modal.png)
++4. **Confirmation Overwrite (`confirm_overwrite`):**
++   Mandatory safety string required for destructive database restores (`POST /api/v1/admin/standalone/restore`). Must be set to the exact string `"RESTORE"`. Submissions with missing or incorrect confirmation strings are rejected with HTTP 422 before any database teardown begins.
+ 
+-### Studio Features:
+-1. **Manual Encrypted Backup (`.kbbak`):** Enter a client-side passphrase (minimum 16 characters) to generate and download an AES-256-GCM encrypted snapshot directly to the operator's machine. The passphrase is never stored on the server.
+-2. **Automated Scheduled Backups:** Enable periodic automated backups with customizable backup intervals (e.g. every 24 hours) and snapshot retention windows (e.g. keep latest 7 snapshots).
+-3. **Existing Server Snapshots List:** Browse, inspect file sizes, creation timestamps, and download historical server snapshots with a single click.
+-4. **Two-Stage Database Restore:** Restoring a database snapshot requires two-stage verification: Step 1 verifies cryptographic archive integrity without touching the database; Step 2 requires explicit typed confirmation before applying the restore.
++![Visual Backup and Disaster Recovery Studio Modal](images/57-standalone-backup-restore-modal.png)
++
++5. **Tamper Verification Gate:**
++   Prior to applying any restore, the backend executes `POST /api/v1/admin/standalone/backup/verify`. If even a single bit of ciphertext has been modified or corrupted, the GCM authentication tag verification fails and the operation halts with HTTP 422.
++
++![Standalone Status Studio - Tablet Landscape](images/slice4-standalone-1024x768-tablet-landscape.png)
++![Standalone Status Studio - Tablet Portrait](images/slice4-standalone-768x1024-tablet-portrait.png)
+ 
+ ---
+ 
+-## Disaster Recovery and Restoration
++## Step-by-Step Operator Runbooks
++
++### Runbook 1: Creating an Encrypted Backup Snapshot
+ 
+-Restoring a cluster from an encrypted backup archive is completely automated.
++1. Navigate to `/admin/standalone` and open the **Backup, Auto-Backup & Restore** tab.
++2. Under **Manual Encrypted Backup (.kbbak)**, enter an encryption passphrase meeting the 16-character minimum requirement.
++3. Click **Download Encrypted Backup (.kbbak)**. The server streams the encrypted `KBKP` archive directly to your browser via `POST /api/v1/admin/standalone/backup`.
++4. Alternatively, click **Run Backup Now** to invoke the background daemon. The new snapshot appears in the Server Snapshots table with its exact byte size and timestamp.
+ 
+-```bash
+-# Step 1: Validate archive integrity without restoring
+-kanban-ctl backup verify --input /var/backups/kanban-snapshot.kbbak1
++### Runbook 2: Restoring from an Encrypted Backup Archive
+ 
+-# Step 2: Execute full disaster recovery restoration
+-kanban-ctl backup restore \
+-  --input /var/backups/kanban-snapshot.kbbak1 \
+-  --decrypt \
+-  --confirm-overwrite
++Restoring a database snapshot completely replaces existing database state with the archive contents. Follow this two-stage procedure:
++
++1. In `/admin/standalone`, scroll to **Restore Database (2-Stage Verification)**.
++2. Select an existing server snapshot from the dropdown, or upload a local `.kbbak` archive file.
++3. Enter the exact passphrase used when creating the backup.
++4. Click **Step 1: Verify Backup Archive**. The backend validates the GCM authentication tag via `POST /api/v1/admin/standalone/backup/verify` and verifies internal component checksums without touching the database.
++5. In the confirmation input box, type the uppercase confirmation phrase `RESTORE`.
++6. Click **Step 2: Restore Database**. The backend executes `POST /api/v1/admin/standalone/restore`, enters single-user maintenance mode, terminates existing sessions, restores all tables and sequences, re-establishes RLS policies, and reconnects the application.
++
++```mermaid
++sequenceDiagram
++    participant Admin as Administrator UI
++    participant API as FastAPI Backend (/api/v1/admin/standalone/*)
++    participant Ops as Ops Daemon (/run/postgresql/.kb_ops.sock)
++    participant DB as PostgreSQL 16 (kanban)
++
++    Admin->>API: POST /restore (archive, passphrase, confirm_overwrite="RESTORE")
++    API->>API: Validate confirm_overwrite == "RESTORE" (422 if mismatched)
++    API->>API: Derive key via Argon2id or raw secret
++    API->>API: Verify AES-256-GCM auth tag (422 if tampered/wrong passphrase)
++    API->>Ops: IPC {"op": "restore_backup", "archive_path": path}
++    Ops->>DB: Terminate connections & drop/re-create tables
++    Ops->>DB: Ingest database.pgdump & restore sequences
++    Ops->>DB: Execute audit-rls (assert FORCE RLS on all tables)
++    Ops-->>API: Restore completed (100 tables restored)
++    API-->>Admin: HTTP 200 OK (Restore Successful)
+ ```
+ 
+-### Post-Restore Automated Verification
+-Following database restoration:
+-1. All database sequences are automatically synchronized.
+-2. The **Invalid Object Link Auditor** executes immediately to verify referential integrity.
+-3. RLS policies are audited to confirm that `kanban_app` lacks bypass permissions.
+-4. Active WebSocket sessions are broadcast a reconnect signal.
++### Runbook 3: Promoting Standalone to Production Multi-Container Compose
++
++1. In `/admin/standalone`, switch to the **Docker Compose Export** tab.
++2. In the UI, click **Download docker-compose.yml** and click **Copy .env.example** (or use the CLI command `kanban-ctl promote export-compose --out-dir /opt/kanban-prod --domain kanban.example.com` to generate `docker-compose.yml`, `Caddyfile`, and `.env.production`).
++3. Set up the target directory on your production host:
++   ```bash
++   mkdir -p /opt/kanban-prod && cd /opt/kanban-prod
++   # Place docker-compose.yml, Caddyfile, and .env here
++   ```
++4. Copy your standalone PostgreSQL data volume:
++   ```bash
++   docker run --rm -v kanban_data:/from:ro -v kanban_prod_pgdata:/to alpine cp -a /from/. /to/
++   ```
++5. Review `.env.example`, populate production domain names and TLS certificates, and rename to `.env`.
++6. Start the production stack:
++   ```bash
++   docker compose up -d
++   ```
++7. Verify container status, migration state, and system health:
++   ```bash
++   docker compose ps
++   curl -sf http://localhost:8080/api/v1/system/status
++   docker compose exec app kanban-ctl db check-migrations
++   ```
++
++![Standalone Status Studio - Mobile Portrait](images/slice4-standalone-390x844-mobile-portrait.png)
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+index d4b20f8..907f8ce 100644
+--- a/Studio-Configuration-Reference.md
++++ b/Studio-Configuration-Reference.md
+@@ -1,6 +1,6 @@
+ # [Informational] Studio Configuration Reference
+ 
+-Authoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 👍kanban Studios.
++Authoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 14 👍kanban Studios.
+ 
+ ---
+ 
+@@ -201,14 +201,131 @@ The Remote Runners Studio (`/admin/agent-runners`) configures distributed build
+ ## 11. Standalone & Promotion Studio
+ The Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.
+ 
++![Standalone Status Studio - Desktop Light](images/slice4-standalone-1440x900-light.png)
++
+ 
+ ### Standalone & Promotion Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |
+-| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |
+-| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |
+-| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |
+-| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |
+-| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |
++| `deployment_mode` | Current platform runtime environment | `standalone_embedded_pg`, `production_multi_container` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |
++| `passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Encrypts archive into streaming KBKP or snapshot KBBAK1 format |
++| `auto_backup_enabled` | Recurring automated background snapshot toggle | Boolean (`true` / `false`) | `false` | Instructs .kb_ops.sock daemon to create automated snapshots |
++| `backup_interval_hours`| Frequency of automated snapshot execution | Integer between 1 and 168 hours | `24` | Governs Recovery Point Objective (RPO) and background IO scheduling |
++| `snapshot_retention_count` | Number of historical snapshot archives retained on server disk | Integer between 1 and 90 | `7` | Purges older snapshots automatically while keeping latest N snapshots |
++| `confirm_overwrite` | Confirmation phrase required for destructive restore | Exact string `"RESTORE"` | None | Prevents accidental database erasure during snapshot restoration |
++| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (`/var/lib/kanban/data/backups`) | `/var/lib/kanban/data/backups` | Isolated storage managed by `/run/postgresql/.kb_ops.sock` daemon |
++| `compose_networks` | Network isolation topology for exported compose bundle | 5 networks (`edge_net`, `app_net`, `data_net`, `sandbox_net`, `egress_llm_net`) | 5 networks | Eliminates single-network lateral movement across services |
++
++![Standalone Backups and Snapshot History](images/slice4-standalone-backups-snapshot-history.png)
++
++### Setting-by-Setting Technical Paragraphs
++
++- **`deployment_mode`:** Detects whether 👍kanban is executing inside a single standalone container (`standalone_embedded_pg`, typically launched via `docker run -p 8080:8080 thumbs-up-kanban:latest` with internal PostgreSQL 16) or within a compartmentalized production cluster (`production_multi_container`). In standalone mode, external Redis is optional and background tasks run in-process, whereas multi-container mode unlocks dedicated worker containers and nsjail container isolation.
++- **`passphrase`:** The client-supplied cryptographic passphrase submitted during manual streaming backup download (`POST /api/v1/admin/standalone/backup`) and database restoration (`POST /api/v1/admin/standalone/restore`). Must be at least 16 characters in length. The server derives an AES-256-GCM symmetric key via PBKDF2-HMAC-SHA256 across 600,000 iterations for KBKP streaming downloads, or Argon2id for KBBAK1 archives.
++- **`auto_backup_enabled`:** Toggles automated recurring background snapshots executed by the root-privileged `/run/postgresql/.kb_ops.sock` daemon. When enabled, the daemon captures full PostgreSQL state and object graph assets into `/var/lib/kanban/data/backups` using the timestamped `KBBAK1` format without interrupting active HTTP or WebSocket connections.
++- **`backup_interval_hours`:** Configures the interval between automated snapshot runs. The backend permits values between 1 and 168 hours (default 24 hours). This setting determines how frequently the `/run/postgresql/.kb_ops.sock` daemon wakes to execute scheduled pg_dump snapshot routines.
++- **`snapshot_retention_count`:** Defines the maximum number of automated snapshot `.kbbak` archives preserved within `/var/lib/kanban/data/backups` (configurable from 1 to 90, default 7). When a newly generated snapshot exceeds this threshold, the snapshot manager unlinks the oldest archives while verifying that at least the configured retention count remains accessible.
++- **`confirm_overwrite`:** The mandatory safety gate required by the destructive database restore endpoint (`POST /api/v1/admin/standalone/restore`). The payload must contain the exact uppercase string `"RESTORE"`. Any request containing mismatched, lowercase, or omitted confirmation tokens is immediately rejected with HTTP 422 before any database sequence is touched or tables are dropped.
++- **`backup_storage_path`:** The server-side directory where automated `.kbbak` archives reside (`/var/lib/kanban/data/backups`). This path is protected with restrictive permissions and managed exclusively by the fixed-operation socket daemon.
++- **`compose_networks`:** The 5-network topology exported by `GET /api/v1/admin/standalone/compose-export`. Separates traffic across `edge_net` (Caddy TLS ingress), `app_net` (FastAPI backend), `data_net` (PostgreSQL 16 and Redis), `sandbox_net` (untrusted Wasm and runner execution), and `egress_llm_net` (outbound AI provider traffic). Accompanied by a secret-scrubbed `.env.example` file.
++
++---
++
++## 12. Migration Import Studio
++The Migration Import Studio (`/admin/imports`) provides lossless data ingestion from Plane, Jira, GitHub Issues, Linear, and canonical portable workspace bundles.
++
++![Migration Import Studio Multi-Source Tabs](images/slice4-imports-multi-source-tabs.png)
++
++
++### Migration Import Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `workspace_slug` | Destination workspace tenant identifier | Lowercase alphanumeric ASCII with hyphens | Active workspace | Attaches imported entities to specified tenant under PostgreSQL RLS |
++| `project_key` | Destination project prefix key (e.g. `KAN`, `JIRA`) | Uppercase ASCII alphanumeric (2 to 10 chars) | Bundle default | Re-keys issues sequentially while preserving historical keys as aliases |
++| `dry_run` | Non-destructive simulation toggle | Boolean (`true` / `false`) | `false` | Calculates entity diffs inside a database savepoint without persisting |
++| `user_map` | Mapping dictionary from source users to canonical users | JSON dictionary of strings | `{}` | Binds historical authors, assignees, and commenters to active principals |
++| `export_workspace_slug` | Target workspace for generating portable bundles | Existing workspace slug | Current | Exports canonical `.tar.gz` archive containing entities, docs, and links |
++| `export_scrub` | Redacts sensitive secrets and tokens during export | Boolean (`true` / `false`) | `false` | Scrubs passwords, bearer tokens, and credentials from markdown before export |
++
++![Migration Import Studio - Desktop Light](images/slice4-imports-1440x900-light.png)
++
++### Setting-by-Setting Technical Paragraphs
++
++- **`per_source_endpoints`:** Ingestion is executed via 4 distinct per-platform endpoints: `POST /api/v1/admin/imports/plane` (Plane workspace JSON), `POST /api/v1/admin/imports/jira` (Jira Cloud/Server JSON or REST dump with ADF support), `POST /api/v1/admin/imports/github` (GitHub Issues REST/CLI JSON), and `POST /api/v1/admin/imports/linear` (Linear JSON archive). Each parser normalizes rich text into sanitized UTF-8 CommonMark while strictly rejecting Unicode lone surrogates.
++- **`workspace_slug` and `project_key`:** Defines the destination tenant context and issue key prefix for the imported dataset. If specified, issues are allocated sequential integer sequence IDs under the destination project key (e.g. `KAN-1`, `KAN-2`). If left empty, the importer provisions or resolves the workspace and project names specified within the input bundle.
++- **`dry_run`:** Controls whether database modifications are committed. When set to `true`, the importer runs within a PostgreSQL `SAVEPOINT`, parses all entities, validates foreign keys, checks user mappings, and emits an `ImportDiffReport` before rolling back the savepoint. When set to `false`, the operation executes within an atomic database transaction that commits only upon 100% validation success.
++- **`user_map`:** A JSON dictionary mapping source account identifiers, legacy usernames, or email addresses to canonical 👍kanban user accounts (e.g. `{"legacy_dev": "alice@example.com"}`). Unmapped accounts fall back to system defaults, ensuring that ownership, assignments, and historical comments remain traceable.
++- **`legacy_key_aliases`:** Upstream issue keys (such as `JIRA-101`, `GH-88`, `ENG-42`) are automatically extracted and recorded in the `issue_key_aliases` catalog. When queries arrive for obsolete keys (`GET /api/v1/issues/{issue_key}`), API clients receive `200 OK` JSON with header `X-Kanban-Canonical-Key: {canonical_key}`, while browser requests requesting `text/html` receive `HTTP 308 Permanent Redirect` with `Location: /projects/{project_key}/issues/{canonical_key}`.
++- **`export_workspace_slug` and `export_scrub`:** Used by the portable workspace exporter (`POST /api/v1/admin/exports/portable`) to generate a compressed `.tar.gz` bundle. When `scrub=true` (`export_scrub` in UI), secret patterns and authentication tokens are actively redacted from prose fields before packaging.
++
++---
++
++## 13. Admin Diagnostics & Realtime Probes Studio
++The Admin Diagnostics Studio (`/admin/diagnostics`) monitors subsystem health, executes active telemetry probes, and tracks container resource limits.
++
++![Admin Diagnostics Studio - Desktop Light](images/slice4-diagnostics-1440x900-light.png)
++
++
++### Admin Diagnostics Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `postgresql_rls` | PostgreSQL connectivity, pool saturation, migrations, RLS | 82 migrations, 100 tables `FORCE RLS` | Continuous | Core persistence and tenant isolation; latency threshold < 15ms |
++| `realtime_hub_outbox` | Transactional outbox relay and dispatch loop | Backlog depth, lag seconds, listener status | Continuous | Event delivery to WebSocket subscribers; lag threshold < 5s |
++| `job_worker_pool` | Background asynchronous task execution engine | Active tasks, worker concurrency, DLQ depth | Continuous | Processes asynchronous jobs; dead-letter queue must equal 0 |
++| `wasm_script_sandbox` | Wasmtime AST compiler and script sandbox execution | Compiler state, memory limits, fuel budget | Continuous | Sandboxed custom fields; fuel caps prevent infinite execution loops |
++| `agent_runtime_providers`| Health and latency of active AI model providers | `openai`, `gemini`, `ollama` provider status | Continuous | Informs sparkle completions and AI gates; reports monthly budget |
++| `remote_runner_fleet` | Connected mTLS build runner nodes over port :8444 | Online runner count, heartbeat timestamp | Continuous | Distributed workload execution; heartbeats must arrive within 30s |
++| `rate_limiter` | In-memory token bucket and IP throttle health | Bucket capacity, blocked IP count, error rate | Continuous | Protects API endpoints from volumetric denial-of-service |
++| `realtime_pubsub_probe` | Active PostgreSQL LISTEN/NOTIFY latency measurement | Latency milliseconds (target < 1.0ms) | On Demand | Validates database pub/sub bus responsiveness |
++| `websocket_ws_probe` | Real WebSocket ping/pong frame roundtrip measurement | Latency milliseconds (target < 50ms) | On Demand | Validates client-to-server WebSocket bidirectional messaging |
++
++![Admin Diagnostics Realtime Probe Active](images/slice4-diagnostics-realtime-probe-active.png)
++
++### Setting-by-Setting Technical Paragraphs
++
++- **`postgresql_rls`:** Evaluates database health via `GET /api/v1/admin/diagnostics`. Asserts that the single-head Alembic migration tree is fully applied (82/82 migrations), connection pool saturation remains under 75%, and all 100 application tables enforce `FORCE ROW LEVEL SECURITY`. Connection latency is sampled continuously with healthy thresholds < 15ms.
++- **`realtime_hub_outbox`:** Tracks the transactional outbox relay daemon (`database/outbox/relay.py`). Measures the unprocessed message queue depth, average dispatch lag (healthy < 5s), and PostgreSQL `LISTEN/NOTIFY` channel subscription status. Stalled outboxes trigger immediate administrative alerts.
++- **`job_worker_pool`:** Monitors asynchronous background task executors responsible for webhook dispatch, automated snapshot creation, and audit logging. Reports total active tasks, concurrency utilization, and dead-letter queue (DLQ) depth. Any non-zero DLQ count indicates unhandled job failures requiring inspection.
++- **`wasm_script_sandbox`:** Monitors the in-process Wasmtime runtime executing custom field formulas and transition helpers. Verifies compiler initialization, memory consumption caps (default 32 MiB / 33,554,432 bytes per instance), and fuel budget limits preventing CPU exhaustion.
++- **`agent_runtime_providers`:** Asserts the availability and response latency of registered AI model providers (`gemini`, `openai`, `ollama`). Reports monthly token consumption against configured budget ceilings, warning administrators before cloud budget caps halt automated transition gates.
++- **`remote_runner_fleet`:** Tracks external execution nodes connected via mutual TLS (mTLS) over dedicated port `:8444`. Reports active runner counts, certificate expiration dates, and heartbeat timestamps. Runners failing to report within 30 seconds are marked offline and their active leases rescheduled.
++- **`rate_limiter`:** Reports the runtime state of in-memory token bucket rate limiters across public and authenticated routes. Tracks blocked request volumes and active IP throttle mappings, ensuring system resilience against abusive traffic.
++- **`realtime_pubsub_probe` and `websocket_ws_probe`:** On-demand latency probes. The pub/sub probe (`POST /api/v1/admin/diagnostics/probes/realtime`) injects a synthetic outbox notification and captures `LISTEN/NOTIFY` roundtrip time (typically ~0.38ms). The WebSocket probe initiates a live `/ws` binary ping frame in the operator's browser, measuring connection setup (~13.7ms) and ping/pong roundtrip latency (~0.44ms).
++
++---
++
++## 14. Universal Object Graph Link Auditor Studio
++The Universal Object Graph Link Auditor Studio (`/admin/link-auditor`) inspects, classifies, and remediates referential integrity anomalies across all registered entities.
++
++![Link Auditor Studio - Desktop Light](images/slice4-link-auditor-1440x900-light.png)
++
++
++### Link Auditor Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `audit_ids` | Flagged link audit record UUIDs selected for purge | List of 1 to 200 UUIDs | Mandatory in purge | Scope of destructive link deletion in single atomic transaction |
++| `reason` | Mandatory administrative justification for link purge | String (10 to 500 characters) | Mandatory in purge | Recorded in immutable activity ledger; rejects < 10 chars with 422 |
++| `status_filter` | Filter tabs for inspecting audit record lifecycle | `unpurged`, `purged`, `resolved`, `all` | `unpurged` | Isolates active anomalies from resolved historical records |
++| `reason_filter` | Filters links by formal invalidity category | All 7 `InvalidLinkReason` codes | `ALL` | Isolates specific defect patterns for forensic inspection |
++
++![Link Auditor Integrity Scan Active](images/slice4-link-auditor-integrity-scan-active.png)
++
++### Setting-by-Setting Technical Paragraphs
++
++- **`audit_scan`:** Triggered via `POST /api/v1/admin/object-links:audit` (or the **Run Integrity Scan** button). Traverses `object_links` and returns summary counts across all 7 formal `InvalidLinkReason` codes without acquiring table locks.
++- **`reason_filter`:** Allows administrators to filter detected anomalies across the 7 formal `InvalidLinkReason` classes:
++  1. `DANGLING_SOURCE`: Source object UUID does not exist in the universal object spine.
++  2. `DANGLING_TARGET`: Target object UUID does not exist in the database.
++  3. `SOFT_DELETED_ENDPOINT`: One or both endpoints reference an object soft-deleted beyond the retention window.
++  4. `ARCHIVED_POLICY_VIOLATION`: Link connects active and archived entities violating project archiving rules.
++  5. `TYPE_MATRIX_VIOLATION`: Relation violates the registered link type matrix allowlist.
++  6. `CROSS_WORKSPACE_LEAK`: Link connects entities across disjoint workspace boundaries without federation.
++  7. `PERMISSION_SEVERED`: Endpoints span boundaries where caller or entity permissions have been severed.
++- **`audit_ids`:** The explicit list of 1 to 200 audit record UUIDs submitted to `POST /api/v1/admin/object-links:purge`. Submissions with fewer than 1 or more than 200 items are rejected with HTTP 422.
++- **`reason`:** The mandatory rationale string required by `POST /api/v1/admin/object-links:purge`. The string must contain at least 10 non-whitespace characters (e.g. `"Decommissioning orphaned test links post-cutover"`). Rationale strings containing fewer than 10 characters are rejected with HTTP 422.
++- **`status_filter`:** Selects the display subset in the Studio UI: `unpurged` (flagged items requiring operator intervention), `purged` (historically purged records), `resolved` (links where the underlying anomaly was repaired), or `all`.
++- **`immutable_audit_ledger`:** Every completed purge operation writes an immutable `INVALID_OBJECT_LINK_PURGED` event to `activity_records`. The response returns `purged_count` and the list of `activity_ids` emitted to the ledger for forensic verification.
+diff --git a/Universal-Object-Graph-and-Link-Auditor.md b/Universal-Object-Graph-and-Link-Auditor.md
+index dbe0f38..b5c498d 100644
+--- a/Universal-Object-Graph-and-Link-Auditor.md
++++ b/Universal-Object-Graph-and-Link-Auditor.md
+@@ -62,19 +62,20 @@ All inter-object relationships are stored in the centralized `object_links` tabl
+ 
+ In active development environments, soft deletes, project migrations, and permission adjustments can produce invalid relationships. Rather than allowing broken links to silently corrupt views or leak references, 👍kanban runs an automated **Invalid Object Link Auditor** (`database/auditor/`).
+ 
+-### The 6-Class Invalid Link Detection Matrix
++### The 7-Class Invalid Link Detection Matrix
+ 
+-The auditor continuously scans the `object_links` table, categorizing anomalies into 6 strict violation classes:
++The auditor continuously scans the `object_links` table, categorizing anomalies into 7 strict `InvalidLinkReason` violation classes:
+ 
+ ```mermaid
+ flowchart LR
+     Scan["Auditor Background Worker"] --> Check{"Analyze object_links"}
+-    Check --> C1["1. Orphaned Source"]
+-    Check --> C2["2. Orphaned Target"]
+-    Check --> C3["3. Cross-Tenant Leak"]
+-    Check --> C4["4. Disallowed Self-Ref"]
+-    Check --> C5["5. Hierarchy Cycle"]
+-    Check --> C6["6. Schema Violation"]
++    Check --> C1["1. DANGLING_SOURCE"]
++    Check --> C2["2. DANGLING_TARGET"]
++    Check --> C3["3. SOFT_DELETED_ENDPOINT"]
++    Check --> C4["4. ARCHIVED_POLICY_VIOLATION"]
++    Check --> C5["5. TYPE_MATRIX_VIOLATION"]
++    Check --> C6["6. CROSS_WORKSPACE_LEAK"]
++    Check --> C7["7. PERMISSION_SEVERED"]
+     
+     C1 --> Remediate["Remediation Action"]
+     C2 --> Remediate
+@@ -82,28 +83,36 @@ flowchart LR
+     C4 --> Remediate
+     C5 --> Remediate
+     C6 --> Remediate
++    C7 --> Remediate
+     
+-    Remediate --> DryRun["--dry-run: Generate Audit Report"]
+-    Remediate --> Purge["--purge: Delete & Append Ledger"]
++    Remediate --> ScanRep["POST /api/v1/admin/object-links:audit"]
++    Remediate --> PurgeRep["POST /api/v1/admin/object-links:purge"]
+ ```
+ 
+-1. **Orphaned Source:** The source object ID does not exist in the active object spine.
+-2. **Orphaned Target:** The target object ID does not exist or has been deleted.
+-3. **Cross-Tenant Leak:** The source and target objects belong to different workspaces, violating tenant isolation.
+-4. **Disallowed Self-Reference:** An object links to itself in an invalid manner (e.g. `KAN-5 BLOCKS KAN-5`).
+-5. **Illegal Hierarchy Cycle:** A circular dependency exists in `PARENT_OF` or `BLOCKS` graphs (e.g. A blocks B, B blocks C, C blocks A).
+-6. **Schema-Violating Pair:** A link kind connects incompatible entity types (e.g. a `STICKY` claiming to `BLOCK` a `WORKSPACE`).
++1. **`DANGLING_SOURCE`:** The source object ID does not exist in the active universal object spine.
++2. **`DANGLING_TARGET`:** The target object ID does not exist or has been hard-deleted.
++3. **`SOFT_DELETED_ENDPOINT`:** One or both endpoints reference an object soft-deleted beyond the retention window.
++4. **`ARCHIVED_POLICY_VIOLATION`:** The link connects an active entity to an archived entity in violation of project archiving policy.
++5. **`TYPE_MATRIX_VIOLATION`:** The relation violates the registered link type matrix allowlist.
++6. **`CROSS_WORKSPACE_LEAK`:** The source and target objects belong to different workspaces, violating multi-tenant isolation.
++7. **`PERMISSION_SEVERED`:** The link endpoints span access boundaries where caller or entity permissions have been severed.
+ 
+-### Audited Purging and Dry-Run Reporting
++### Audited Purging and Two-Stage Remediation
+ 
+-Platform administrators can inspect and remediate graph health through administrative APIs and CLI commands:
++Platform administrators can inspect and remediate graph health through administrative APIs and the visual studio at `/admin/link-auditor`:
++- **Audit Scan:** `POST /api/v1/admin/object-links:audit` traverses `object_links` and returns summary counts by invalidity reason.
++- **Audited Purge:** `POST /api/v1/admin/object-links:purge` accepts `audit_ids` (1 to 200 UUIDs) and mandatory `reason` (10 to 500 characters), returning `purged_count` and emitting immutable `INVALID_OBJECT_LINK_PURGED` events in the hash-chained `activity_records` ledger.
+ 
+ ```bash
+-# Run link audit in dry-run mode (read-only verification)
+-kanban-ctl audit-links --dry-run
+-
+-# Execute clean purge of corrupted links with full audit logging
+-kanban-ctl audit-links --purge --reason "Monthly maintenance cycle"
++# Run link audit integrity scan via REST API
++curl -X POST https://kanban.example.com/api/v1/admin/object-links:audit \
++  -H "Authorization: Bearer <ADMIN_TOKEN>"
++
++# Execute audited purge of corrupted links with mandatory reason (>=10 chars)
++curl -X POST https://kanban.example.com/api/v1/admin/object-links:purge \
++  -H "Authorization: Bearer <ADMIN_TOKEN>" \
++  -H "Content-Type: application/json" \
++  -d '{"audit_ids": ["0192e4a1-0000-7000-8000-000000000001"], "reason": "Monthly maintenance cycle"}'
+ ```
+ 
+ All purged links are written to the immutable `audit_ledger` with the operator ID, timestamp, and the exact violation class, ensuring forensic traceability.
+@@ -140,11 +149,12 @@ sequenceDiagram
+ 
+ ![Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)
+ 
+-### 1. Six-Class Breakdown Cards
+-The top of the studio displays real-time counts across the 6 anomaly classes:
++### 1. Seven-Class Breakdown Cards
++The top of the studio displays real-time counts across the 7 anomaly classes:
+ - **Dangling Source:** Source entity does not exist in the universal object graph.
+ - **Dangling Target:** Target entity does not exist or has been permanently removed.
+ - **Soft-Deleted Endpoint:** Endpoint entity is marked soft-deleted while link remains active.
++- **Archived Policy Violation:** Link connects an active entity to an archived entity in violation of project archiving policy.
+ - **Cross-Workspace Leak:** Link crosses workspace boundaries without multi-tenant grant.
+ - **Type Matrix Violation:** Link connects object kinds prohibited by the universal type matrix.
+ - **Permission Severed:** Access boundary severed between linked entities.
+diff --git a/images/slice4-diagnostics-1024x768-tablet-landscape.png b/images/slice4-diagnostics-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..02d6b61
+Binary files /dev/null and b/images/slice4-diagnostics-1024x768-tablet-landscape.png differ
+diff --git a/images/slice4-diagnostics-1440x900-dark.png b/images/slice4-diagnostics-1440x900-dark.png
+new file mode 100644
+index 0000000..32ce9ec
+Binary files /dev/null and b/images/slice4-diagnostics-1440x900-dark.png differ
+diff --git a/images/slice4-diagnostics-1440x900-light.png b/images/slice4-diagnostics-1440x900-light.png
+new file mode 100644
+index 0000000..76d48a9
+Binary files /dev/null and b/images/slice4-diagnostics-1440x900-light.png differ
+diff --git a/images/slice4-diagnostics-390x844-mobile-portrait.png b/images/slice4-diagnostics-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..cbae5d3
+Binary files /dev/null and b/images/slice4-diagnostics-390x844-mobile-portrait.png differ
+diff --git a/images/slice4-diagnostics-768x1024-tablet-portrait.png b/images/slice4-diagnostics-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..bc5d86e
+Binary files /dev/null and b/images/slice4-diagnostics-768x1024-tablet-portrait.png differ
+diff --git a/images/slice4-diagnostics-realtime-probe-active.png b/images/slice4-diagnostics-realtime-probe-active.png
+new file mode 100644
+index 0000000..7ffbec5
+Binary files /dev/null and b/images/slice4-diagnostics-realtime-probe-active.png differ
+diff --git a/images/slice4-imports-1024x768-tablet-landscape.png b/images/slice4-imports-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..402a995
+Binary files /dev/null and b/images/slice4-imports-1024x768-tablet-landscape.png differ
+diff --git a/images/slice4-imports-1440x900-dark.png b/images/slice4-imports-1440x900-dark.png
+new file mode 100644
+index 0000000..b30d7d2
+Binary files /dev/null and b/images/slice4-imports-1440x900-dark.png differ
+diff --git a/images/slice4-imports-1440x900-light.png b/images/slice4-imports-1440x900-light.png
+new file mode 100644
+index 0000000..db040e1
+Binary files /dev/null and b/images/slice4-imports-1440x900-light.png differ
+diff --git a/images/slice4-imports-390x844-mobile-portrait.png b/images/slice4-imports-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..14d6c31
+Binary files /dev/null and b/images/slice4-imports-390x844-mobile-portrait.png differ
+diff --git a/images/slice4-imports-768x1024-tablet-portrait.png b/images/slice4-imports-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..a2a527c
+Binary files /dev/null and b/images/slice4-imports-768x1024-tablet-portrait.png differ
+diff --git a/images/slice4-imports-multi-source-tabs.png b/images/slice4-imports-multi-source-tabs.png
+new file mode 100644
+index 0000000..dc2583a
+Binary files /dev/null and b/images/slice4-imports-multi-source-tabs.png differ
+diff --git a/images/slice4-link-auditor-1024x768-tablet-landscape.png b/images/slice4-link-auditor-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..0e3a97b
+Binary files /dev/null and b/images/slice4-link-auditor-1024x768-tablet-landscape.png differ
+diff --git a/images/slice4-link-auditor-1440x900-dark.png b/images/slice4-link-auditor-1440x900-dark.png
+new file mode 100644
+index 0000000..6b76603
+Binary files /dev/null and b/images/slice4-link-auditor-1440x900-dark.png differ
+diff --git a/images/slice4-link-auditor-1440x900-light.png b/images/slice4-link-auditor-1440x900-light.png
+new file mode 100644
+index 0000000..fa75b9b
+Binary files /dev/null and b/images/slice4-link-auditor-1440x900-light.png differ
+diff --git a/images/slice4-link-auditor-390x844-mobile-portrait.png b/images/slice4-link-auditor-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..97c2484
+Binary files /dev/null and b/images/slice4-link-auditor-390x844-mobile-portrait.png differ
+diff --git a/images/slice4-link-auditor-768x1024-tablet-portrait.png b/images/slice4-link-auditor-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..ddf26dc
+Binary files /dev/null and b/images/slice4-link-auditor-768x1024-tablet-portrait.png differ
+diff --git a/images/slice4-link-auditor-integrity-scan-active.png b/images/slice4-link-auditor-integrity-scan-active.png
+new file mode 100644
+index 0000000..7c0792d
+Binary files /dev/null and b/images/slice4-link-auditor-integrity-scan-active.png differ
+diff --git a/images/slice4-standalone-1024x768-tablet-landscape.png b/images/slice4-standalone-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..820f1f9
+Binary files /dev/null and b/images/slice4-standalone-1024x768-tablet-landscape.png differ
+diff --git a/images/slice4-standalone-1440x900-dark.png b/images/slice4-standalone-1440x900-dark.png
+new file mode 100644
+index 0000000..e9441e5
+Binary files /dev/null and b/images/slice4-standalone-1440x900-dark.png differ
+diff --git a/images/slice4-standalone-1440x900-light.png b/images/slice4-standalone-1440x900-light.png
+new file mode 100644
+index 0000000..16174be
+Binary files /dev/null and b/images/slice4-standalone-1440x900-light.png differ
+diff --git a/images/slice4-standalone-390x844-mobile-portrait.png b/images/slice4-standalone-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..393440e
+Binary files /dev/null and b/images/slice4-standalone-390x844-mobile-portrait.png differ
+diff --git a/images/slice4-standalone-768x1024-tablet-portrait.png b/images/slice4-standalone-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..4b053fa
+Binary files /dev/null and b/images/slice4-standalone-768x1024-tablet-portrait.png differ
+diff --git a/images/slice4-standalone-backups-snapshot-history.png b/images/slice4-standalone-backups-snapshot-history.png
+new file mode 100644
+index 0000000..2bc9ec7
+Binary files /dev/null and b/images/slice4-standalone-backups-snapshot-history.png differ

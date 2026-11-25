@@ -582,3 +582,23 @@ async def test_admin_link_auditor_service_direct_edge_cases(
     with pytest.raises(ProblemException) as exc4:
         _decode_cursor("not_valid_base64_!!!")
     assert exc4.value.status == 422
+
+
+@pytest.mark.asyncio
+async def test_require_workspace_or_server_admin_forbidden(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Test require_workspace_or_server_admin raises 403 INSUFFICIENT_CAPABILITY."""
+    from kanban.api.v1.admin.link_auditor import require_workspace_or_server_admin
+
+    member_user = await make_user("link_member_unauth", workspace_role="WORKSPACE_MEMBER")
+    caller = PrincipalContext(
+        principal_id=member_user.id,
+        workspace_id=member_user.workspace_id,
+        aal_level=2,
+    )
+    with pytest.raises(ProblemException) as exc:
+        await require_workspace_or_server_admin(caller, api_env.seed)
+    assert exc.value.status == 403
+    assert exc.value.code == "INSUFFICIENT_CAPABILITY"

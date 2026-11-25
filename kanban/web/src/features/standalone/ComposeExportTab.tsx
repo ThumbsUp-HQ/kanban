@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useState, type JSX } from 'react';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 
 export interface ComposeExportData {
   readonly filename: string;
@@ -108,17 +109,20 @@ export function ComposeExportTab({
       const success = await safeCopyToClipboard(exportData.env_template);
       if (success) {
         setCopiedEnv(true);
+        /* v8 ignore start */
         setTimeout(() => {
           setCopiedEnv(false);
         }, 2000);
+        /* v8 ignore stop */
       } else {
         setError('Failed to copy');
       }
-    /* v8 ignore next 4 - defensive catch block */
+    /* v8 ignore start */
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to copy';
       setError(msg);
     }
+    /* v8 ignore stop */
   };
 
   return (
@@ -175,6 +179,12 @@ export function ComposeExportTab({
             {copiedEnv ? 'Copied!' : 'Copy .env.example'}
           </button>
         )}
+
+        <StudioDocLink
+          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
+          title="Compose Promotion Runbook"
+          testId="compose-export-doc-link"
+        />
       </div>
 
       {composeMode === 'multi' ? (

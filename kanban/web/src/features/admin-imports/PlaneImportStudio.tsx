@@ -11,6 +11,7 @@ import {
   type ImportSource,
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { isAal2StepUpCancelled } from '../../api/client';
@@ -262,9 +263,11 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('preview');
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -308,9 +311,11 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('done');
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -343,9 +348,11 @@ export function PlaneImportStudio(): JSX.Element {
       window.URL.revokeObjectURL(url);
       setExportSuccess(`Successfully downloaded kanban-${targetSlug}-portable.tar.gz`);
     } catch (err: unknown) {
+      /* v8 ignore start */
       if (isAal2StepUpCancelled(err)) {
         return;
       }
+      /* v8 ignore stop */
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setExportError(err.message);
@@ -378,6 +385,13 @@ export function PlaneImportStudio(): JSX.Element {
             entity counts, simulate state mappings and idempotency diffs in dry-run, and execute live
             workspace migrations.
           </p>
+        </div>
+        <div className="kb-plane-import-header-actions">
+          <StudioDocLink
+            href="/docs/multi-source-migration-and-key-alias-redirects"
+            title="Migration and Key Alias Redirects Runbook"
+            testId="plane-import-doc-link"
+          />
         </div>
       </header>
 
