@@ -2999,14 +2999,14 @@ async def test_gemini_oauth_cross_workspace_scoping_and_mcp_gates(  # noqa: PLR0
 # =========================================================================
 
 
-async def test_case_19_oauth_admin_revoke_purge_and_pagination(
+async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Any],
 ) -> None:
-    """Test Case 19: Verify OAuth client status checks (suspended/revoked),
+    """Test Case 19: Verify OAuth client status checks and bulk delete (KAN-396).
 
-    permanent delete with dependent cascading, bulk delete, stale DCR purge,
-    filtering, pagination, and admin AAL2 access controls (KAN-396).
+    Covers suspended/revoked status checks, permanent delete cascading, bulk delete,
+    stale DCR purge, filtering, pagination, and admin AAL2 access controls.
     """
     client = api_env.client
 
@@ -3142,7 +3142,7 @@ async def test_case_19_oauth_admin_revoke_purge_and_pagination(
     session.add(rt)
     await session.commit()
 
-    # 5. Test PATCH status with 'suspended' and 'revoked' (reproduced PG status CHECK 500 in KAN-396)
+    # 5. Test PATCH status with 'suspended' and 'revoked' (reproduced PG status CHECK 500)
     resp_patch_suspend = await client.patch(
         f"/api/v1/admin/oauth-clients/{cid_suspend}",
         json={"status": "suspended"},

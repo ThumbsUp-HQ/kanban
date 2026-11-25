@@ -218,14 +218,54 @@ test.describe('KAN-396 Visual Verification: OAuth Governance Studio Layout and A
     });
     expect(overflowCheck.hasHorizontalOverflow).toBe(false);
 
-    // 5. Verify action button bounding boxes are 100% inside viewport width
-    const confirmBox = await confirmRevokeBtn.boundingBox();
-    expect(confirmBox).not.toBeNull();
-    if (confirmBox) {
-      expect(confirmBox.x + confirmBox.width).toBeLessThanOrEqual(
-        page.viewportSize()?.width ?? 1440,
-      );
+    // 5. Verify action button bounding boxes are 100% inside viewport width for ALL 6 controls
+    const controls = [
+      { name: 'Delete', locator: page.getByTestId('delete-btn-client_suspended_cli') },
+      { name: 'Confirm Revoke', locator: confirmRevokeBtn },
+      { name: 'Edit URIs', locator: page.getByTestId('edit-uris-btn-client_suspended_cli') },
+      { name: 'Suspend', locator: page.getByTestId('suspend-btn-client_dcr_stale') },
+      { name: 'Delete Selected (1)', locator: deleteSelectedBtn },
+      { name: 'Purge Unused / Revoked Clients', locator: page.getByTestId('purge-clients-btn') },
+    ];
+
+    for (const ctrl of controls) {
+      await expect(ctrl.locator).toBeVisible();
+      const box = await ctrl.locator.boundingBox();
+      expect(box, `${ctrl.name} bounding box must not be null`).not.toBeNull();
+      if (box) {
+        expect(box.x, `${ctrl.name} left edge inside viewport`).toBeGreaterThanOrEqual(0);
+        expect(
+          box.x + box.width,
+          `${ctrl.name} right edge inside viewport`,
+        ).toBeLessThanOrEqual((page.viewportSize()?.width ?? 1440) + 1);
+      }
     }
+
+    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, and remove overlays
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      const mainCanvas = document.querySelector('.kb-main-canvas');
+      if (mainCanvas) {
+        mainCanvas.scrollTop = 0;
+      }
+      document.querySelectorAll('*').forEach((el) => {
+        if (el.scrollTop > 0) {
+          el.scrollTop = 0;
+        }
+      });
+      document
+        .querySelectorAll(
+          '[class*="offline"], [class*="toast"], .kb-toast-container, [role="status"]',
+        )
+        .forEach((el) => {
+          if (!el.closest('[data-testid="oauth-client-governance-studio"]')) {
+            el.remove();
+          }
+        });
+    });
+    await page.waitForTimeout(200);
 
     // Capture Light screenshot
     await applyTheme(page, 'light');

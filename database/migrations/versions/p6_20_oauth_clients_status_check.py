@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Update oauth_clients status check constraint for suspended and revoked
+"""Update oauth_clients status check constraint for suspended and revoked.
 
 Revision ID: p6_20_oauth_clients_status_check
 Revises: p6_19_server_admin_cross_workspace_role_access

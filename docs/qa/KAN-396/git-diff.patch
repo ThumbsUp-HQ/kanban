@@ -42,13 +42,13 @@ index 00000000..a8309f83
 +    CHECK (status IN ('active', 'pending_admin_approval', 'disabled', 'suspended', 'revoked'));
 diff --git a/database/migrations/versions/p6_20_oauth_clients_status_check.py b/database/migrations/versions/p6_20_oauth_clients_status_check.py
 new file mode 100644
-index 00000000..fdd2f377
+index 00000000..dc599707
 --- /dev/null
 +++ b/database/migrations/versions/p6_20_oauth_clients_status_check.py
 @@ -0,0 +1,28 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
-+"""Update oauth_clients status check constraint for suspended and revoked
++"""Update oauth_clients status check constraint for suspended and revoked.
 +
 +Revision ID: p6_20_oauth_clients_status_check
 +Revises: p6_19_server_admin_cross_workspace_role_access
@@ -497,7 +497,7 @@ index 71f90c60..de20ce64 100644
  # RFC 8628 Device Flow Activation & Personal MCP Keys
  # =========================================================================
 diff --git a/kanban/tests/oauth/test_oauth_flow.py b/kanban/tests/oauth/test_oauth_flow.py
-index 6118fec5..d81ab0cc 100644
+index 6118fec5..2ca0dfef 100644
 --- a/kanban/tests/oauth/test_oauth_flow.py
 +++ b/kanban/tests/oauth/test_oauth_flow.py
 @@ -13,18 +13,22 @@ import secrets
@@ -537,14 +537,14 @@ index 6118fec5..d81ab0cc 100644
 +# =========================================================================
 +
 +
-+async def test_case_19_oauth_admin_revoke_purge_and_pagination(
++async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
 +    api_env: ApiEnv,
 +    make_user: Callable[..., Any],
 +) -> None:
-+    """Test Case 19: Verify OAuth client status checks (suspended/revoked),
++    """Test Case 19: Verify OAuth client status checks and bulk delete (KAN-396).
 +
-+    permanent delete with dependent cascading, bulk delete, stale DCR purge,
-+    filtering, pagination, and admin AAL2 access controls (KAN-396).
++    Covers suspended/revoked status checks, permanent delete cascading, bulk delete,
++    stale DCR purge, filtering, pagination, and admin AAL2 access controls.
 +    """
 +    client = api_env.client
 +
@@ -680,7 +680,7 @@ index 6118fec5..d81ab0cc 100644
 +    session.add(rt)
 +    await session.commit()
 +
-+    # 5. Test PATCH status with 'suspended' and 'revoked' (reproduced PG status CHECK 500 in KAN-396)
++    # 5. Test PATCH status with 'suspended' and 'revoked' (reproduced PG status CHECK 500)
 +    resp_patch_suspend = await client.patch(
 +        f"/api/v1/admin/oauth-clients/{cid_suspend}",
 +        json={"status": "suspended"},
@@ -897,10 +897,10 @@ index 2c02c218..701c188e 100644
  def test_wiki_manifest_synchronization() -> None:
 diff --git a/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts b/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts
 new file mode 100644
-index 00000000..c9d405ff
+index 00000000..4ffc70eb
 --- /dev/null
 +++ b/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,284 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -1121,14 +1121,54 @@ index 00000000..c9d405ff
 +    });
 +    expect(overflowCheck.hasHorizontalOverflow).toBe(false);
 +
-+    // 5. Verify action button bounding boxes are 100% inside viewport width
-+    const confirmBox = await confirmRevokeBtn.boundingBox();
-+    expect(confirmBox).not.toBeNull();
-+    if (confirmBox) {
-+      expect(confirmBox.x + confirmBox.width).toBeLessThanOrEqual(
-+        page.viewportSize()?.width ?? 1440,
-+      );
++    // 5. Verify action button bounding boxes are 100% inside viewport width for ALL 6 controls
++    const controls = [
++      { name: 'Delete', locator: page.getByTestId('delete-btn-client_suspended_cli') },
++      { name: 'Confirm Revoke', locator: confirmRevokeBtn },
++      { name: 'Edit URIs', locator: page.getByTestId('edit-uris-btn-client_suspended_cli') },
++      { name: 'Suspend', locator: page.getByTestId('suspend-btn-client_dcr_stale') },
++      { name: 'Delete Selected (1)', locator: deleteSelectedBtn },
++      { name: 'Purge Unused / Revoked Clients', locator: page.getByTestId('purge-clients-btn') },
++    ];
++
++    for (const ctrl of controls) {
++      await expect(ctrl.locator).toBeVisible();
++      const box = await ctrl.locator.boundingBox();
++      expect(box, `${ctrl.name} bounding box must not be null`).not.toBeNull();
++      if (box) {
++        expect(box.x, `${ctrl.name} left edge inside viewport`).toBeGreaterThanOrEqual(0);
++        expect(
++          box.x + box.width,
++          `${ctrl.name} right edge inside viewport`,
++        ).toBeLessThanOrEqual((page.viewportSize()?.width ?? 1440) + 1);
++      }
 +    }
++
++    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, and remove overlays
++    await page.evaluate(() => {
++      window.scrollTo(0, 0);
++      document.documentElement.scrollTop = 0;
++      document.body.scrollTop = 0;
++      const mainCanvas = document.querySelector('.kb-main-canvas');
++      if (mainCanvas) {
++        mainCanvas.scrollTop = 0;
++      }
++      document.querySelectorAll('*').forEach((el) => {
++        if (el.scrollTop > 0) {
++          el.scrollTop = 0;
++        }
++      });
++      document
++        .querySelectorAll(
++          '[class*="offline"], [class*="toast"], .kb-toast-container, [role="status"]',
++        )
++        .forEach((el) => {
++          if (!el.closest('[data-testid="oauth-client-governance-studio"]')) {
++            el.remove();
++          }
++        });
++    });
++    await page.waitForTimeout(200);
 +
 +    // Capture Light screenshot
 +    await applyTheme(page, 'light');
@@ -1146,7 +1186,7 @@ index 00000000..c9d405ff
 +  });
 +});
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index af341d2a..1119ea4d 100644
+index af341d2a..2135e81c 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 +++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 @@ -4,7 +4,7 @@
@@ -1353,7 +1393,7 @@ index af341d2a..1119ea4d 100644
  .kb-oauth-gov-table-wrap {
    width: 100%;
    max-width: 100%;
-@@ -120,13 +283,43 @@
+@@ -120,13 +283,49 @@
  
  .kb-oauth-gov-table {
    width: 100%;
@@ -1368,19 +1408,25 @@ index af341d2a..1119ea4d 100644
 +}
 +
 +.kb-oauth-gov-col-app {
-+  width: 24%;
++  width: 23%;
++  overflow-wrap: anywhere;
++  word-break: break-word;
 +}
 +
 +.kb-oauth-gov-col-type {
-+  width: 10%;
++  width: 12%;
++  white-space: nowrap;
 +}
 +
 +.kb-oauth-gov-col-status {
-+  width: 11%;
++  width: 13%;
++  white-space: nowrap;
 +}
 +
 +.kb-oauth-gov-col-uris {
-+  width: 21%;
++  width: 20%;
++  overflow-wrap: anywhere;
++  word-break: break-word;
 +}
 +
 +.kb-oauth-gov-col-date {
@@ -1389,7 +1435,7 @@ index af341d2a..1119ea4d 100644
 +}
 +
 +.kb-oauth-gov-col-actions {
-+  width: 22%;
++  width: 20%;
 +}
 +
  .kb-oauth-gov-th {
@@ -1398,7 +1444,7 @@ index af341d2a..1119ea4d 100644
    border-bottom: 2px solid var(--kb-color-border-subtle, #30363d);
    color: var(--kb-color-text-secondary, #8b949e);
    font-weight: 600;
-@@ -134,19 +327,30 @@
+@@ -134,7 +333,7 @@
  }
  
  .kb-oauth-gov-td {
@@ -1406,11 +1452,8 @@ index af341d2a..1119ea4d 100644
 +  padding: 12px 14px;
    border-bottom: 1px solid var(--kb-color-border-subtle, #30363d);
    vertical-align: middle;
-+  overflow-wrap: anywhere;
-+  word-break: break-word;
  }
- 
- .kb-oauth-gov-tr:hover {
+@@ -143,10 +342,19 @@
    background-color: var(--bg-hover);
  }
  
@@ -1430,7 +1473,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-client-id {
-@@ -156,6 +360,11 @@
+@@ -156,6 +364,11 @@
    background-color: rgba(110, 118, 129, 0.1);
    padding: 2px 6px;
    border-radius: 4px;
@@ -1442,7 +1485,15 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-badge {
-@@ -193,11 +402,17 @@
+@@ -167,6 +380,7 @@
+   font-size: 0.75rem;
+   font-weight: 600;
+   text-transform: uppercase;
++  white-space: nowrap;
+ }
+ 
+ .kb-oauth-gov-badge-active {
+@@ -193,11 +407,17 @@
    border: 1px solid rgba(248, 81, 73, 0.3);
  }
  
@@ -1461,7 +1512,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-uri-code {
-@@ -207,17 +422,19 @@
+@@ -207,17 +427,19 @@
    background-color: rgba(110, 118, 129, 0.1);
    padding: 2px 6px;
    border-radius: 4px;
@@ -1486,7 +1537,7 @@ index af341d2a..1119ea4d 100644
    flex-wrap: wrap;
  }
  
-@@ -232,6 +449,7 @@
+@@ -232,6 +454,7 @@
    color: var(--kb-color-text-primary, #f0f6fc);
    cursor: pointer;
    transition: all 0.15s ease-in-out;
@@ -1494,7 +1545,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-btn:hover {
-@@ -265,10 +483,21 @@
+@@ -265,10 +488,21 @@
    background-color: rgba(248, 81, 73, 0.2);
  }
  
@@ -1516,7 +1567,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-confirm-revoke-btn {
-@@ -281,6 +510,28 @@
+@@ -281,6 +515,28 @@
    font-size: 0.75rem;
    font-weight: 600;
    cursor: pointer;
@@ -1545,7 +1596,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-cancel-btn {
-@@ -292,6 +543,12 @@
+@@ -292,6 +548,12 @@
    border-radius: 6px;
    font-size: 0.75rem;
    cursor: pointer;
@@ -1558,7 +1609,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-alert {
-@@ -299,6 +556,10 @@
+@@ -299,6 +561,10 @@
    margin-bottom: 16px;
    border-radius: 6px;
    font-size: 0.875rem;
@@ -1569,7 +1620,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-gov-alert-error {
-@@ -320,54 +581,98 @@
+@@ -320,54 +586,98 @@
    font-style: italic;
  }
  
@@ -1687,7 +1738,7 @@ index af341d2a..1119ea4d 100644
  .kb-oauth-detail-row {
    display: flex;
    flex-direction: column;
-@@ -375,77 +680,16 @@
+@@ -375,77 +685,16 @@
  }
  
  .kb-oauth-detail-label {
@@ -1770,7 +1821,7 @@ index af341d2a..1119ea4d 100644
  }
  
  .kb-oauth-form-field {
-@@ -454,49 +698,57 @@
+@@ -454,49 +703,57 @@
    gap: 6px;
  }
  
@@ -1853,7 +1904,7 @@ index af341d2a..1119ea4d 100644
    padding: 16px;
    background-color: var(--kb-color-bg-surface-raised, #161b22);
    border: 1px solid var(--border-warning, #d29922);
-@@ -523,10 +775,12 @@
+@@ -523,10 +780,12 @@
    flex: 1;
  }
  
@@ -1867,7 +1918,7 @@ index af341d2a..1119ea4d 100644
      overflow-x: hidden;
      box-sizing: border-box;
    }
-@@ -544,7 +798,7 @@
+@@ -544,7 +803,7 @@
    }
  
    .kb-oauth-gov-section {
@@ -1876,7 +1927,7 @@ index af341d2a..1119ea4d 100644
      width: 100%;
      max-width: 100%;
      min-width: 0;
-@@ -554,101 +808,110 @@
+@@ -554,101 +813,122 @@
    .kb-oauth-gov-section-header {
      width: 100%;
      min-width: 0;
@@ -2009,6 +2060,25 @@ index af341d2a..1119ea4d 100644
    }
  
 -  .kb-oauth-gov-table-wrap {
+-    width: 100%;
++  .kb-oauth-gov-table .kb-oauth-gov-col-app,
++  .kb-oauth-gov-table .kb-oauth-gov-col-uris {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 4px;
++  }
++
++  .kb-oauth-gov-table .kb-oauth-gov-col-app .kb-oauth-gov-client-id {
+     max-width: 100%;
+-    min-width: 0;
+-    overflow-x: auto;
+-    margin: 0;
+-    padding: 0;
+-    box-sizing: border-box;
++    width: fit-content;
+   }
+ 
+-  .kb-oauth-gov-register-btn {
 +  .kb-oauth-gov-td-actions {
 +    margin-top: 8px;
 +    padding-top: 8px !important;
@@ -2018,16 +2088,9 @@ index af341d2a..1119ea4d 100644
 +  .kb-oauth-gov-btn-group,
 +  .kb-oauth-gov-confirm-bar {
 +    justify-content: flex-start;
-     width: 100%;
--    max-width: 100%;
--    min-width: 0;
--    overflow-x: auto;
--    margin: 0;
--    padding: 0;
--    box-sizing: border-box;
-   }
- 
--  .kb-oauth-gov-register-btn {
++    width: 100%;
++  }
++
 +  .kb-oauth-gov-pagination {
 +    flex-direction: column;
 +    align-items: stretch;
@@ -2736,7 +2799,7 @@ index 54f32b06..5e5c5aca 100644
                </h3>
                <button
 diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-index fb904aba..83600a09 100644
+index fb904aba..6fda86fd 100644
 --- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
 +++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
 @@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router';
@@ -2747,7 +2810,7 @@ index fb904aba..83600a09 100644
  import * as clipboardModule from '../../../utils/clipboard';
  
  const mockClients: oauthApi.OAuthClientItem[] = [
-@@ -886,4 +887,371 @@ describe('OAuthClientGovernanceStudio', () => {
+@@ -886,4 +887,404 @@ describe('OAuthClientGovernanceStudio', () => {
      resolvePromise(mockClients);
      await Promise.resolve();
    });
@@ -2993,66 +3056,97 @@ index fb904aba..83600a09 100644
 +    );
 +
 +    // No error alert rendered when step-up is cancelled
-+    await Promise.resolve();
-+    expect(screen.queryByTestId('error-alert')).toBeNull();
++    await waitFor(() => {
++      expect(screen.queryByTestId('error-alert')).toBeNull();
++    });
 +
 +    // Also in action handlers
 +    vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
-+    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(new Aal2StepUpCancelledError());
-+    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValueOnce(new Aal2StepUpCancelledError());
-+    vi.spyOn(oauthApi, 'bulkDeleteAdminOAuthClients').mockRejectedValueOnce(new Aal2StepUpCancelledError());
-+    vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockRejectedValueOnce(new Aal2StepUpCancelledError());
++    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
++    vi.spyOn(oauthApi, 'deleteAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
++    vi.spyOn(oauthApi, 'bulkDeleteAdminOAuthClients').mockRejectedValue(new Aal2StepUpCancelledError());
++    vi.spyOn(oauthApi, 'registerAdminOAuthClient').mockRejectedValue(new Aal2StepUpCancelledError());
 +
-+    fireEvent.click(screen.getByTestId('refresh-clients-btn'));
++    act(() => {
++      fireEvent.click(screen.getByTestId('refresh-clients-btn'));
++    });
 +    await waitFor(() => {
 +      expect(screen.getByTestId('suspend-btn-client_active_app')).toBeDefined();
 +    });
 +
 +    // Suspend cancel
-+    fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
-+    await Promise.resolve();
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('suspend-btn-client_active_app'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Revoke cancel
-+    fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
-+    fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
-+    await Promise.resolve();
++    act(() => {
++      fireEvent.click(screen.getByTestId('revoke-btn-client_active_app'));
++    });
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('confirm-revoke-client_active_app'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Delete cancel
-+    fireEvent.click(screen.getByTestId('delete-btn-client_active_app'));
-+    fireEvent.click(screen.getByTestId('confirm-delete-client_active_app'));
-+    await Promise.resolve();
++    act(() => {
++      fireEvent.click(screen.getByTestId('delete-btn-client_active_app'));
++    });
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('confirm-delete-client_active_app'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Bulk delete cancel
-+    fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
-+    fireEvent.click(screen.getByTestId('delete-selected-btn'));
-+    fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
-+    await Promise.resolve();
++    act(() => {
++      fireEvent.click(screen.getByTestId('select-client-checkbox-client_active_app'));
++      fireEvent.click(screen.getByTestId('delete-selected-btn'));
++    });
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('confirm-bulk-delete-btn'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Purge cancel
-+    fireEvent.click(screen.getByTestId('purge-clients-btn'));
-+    fireEvent.click(screen.getByTestId('confirm-purge-btn'));
-+    await Promise.resolve();
++    act(() => {
++      fireEvent.click(screen.getByTestId('purge-clients-btn'));
++    });
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('confirm-purge-btn'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Register cancel
-+    fireEvent.click(screen.getByTestId('register-client-btn'));
++    act(() => {
++      fireEvent.click(screen.getByTestId('register-client-btn'));
++    });
 +    fireEvent.change(screen.getByTestId('input-redirect-uris'), {
 +      target: { value: 'http://127.0.0.1:9090/cb' },
 +    });
-+    fireEvent.click(screen.getByTestId('submit-register-btn'));
-+    await Promise.resolve();
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('submit-register-btn'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('register-error-alert')).toBeNull();
 +
 +    // Edit URIs cancel
-+    fireEvent.click(screen.getByTestId('cancel-register-btn'));
-+    fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
++    act(() => {
++      fireEvent.click(screen.getByTestId('cancel-register-btn'));
++    });
++    act(() => {
++      fireEvent.click(screen.getByTestId('edit-uris-btn-client_active_app'));
++    });
 +    vi.spyOn(oauthApi, 'patchAdminOAuthClient').mockRejectedValueOnce(new Aal2StepUpCancelledError());
-+    fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
-+    await Promise.resolve();
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('submit-edit-uris-btn'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('edit-uris-error')).toBeNull();
 +  });
 +
@@ -3083,8 +3177,10 @@ index fb904aba..83600a09 100644
 +
 +    // Test approve with Aal2StepUpCancelledError
 +    patchSpy.mockRejectedValueOnce(new Aal2StepUpCancelledError());
-+    fireEvent.click(screen.getByTestId('approve-btn-client_disabled_no_name'));
-+    await Promise.resolve();
++    await act(async () => {
++      fireEvent.click(screen.getByTestId('approve-btn-client_disabled_no_name'));
++      await Promise.resolve();
++    });
 +    expect(screen.queryByTestId('error-alert')).toBeNull();
 +
 +    // Test Edit URIs with missing client_name (uses client_id in title)
