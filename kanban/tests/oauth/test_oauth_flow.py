@@ -3116,9 +3116,7 @@ async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
     # Seed an active grant and refresh token for cid_dcr_active so purge skips it
     session = api_env.seed
     c_obj = (
-        await session.execute(
-            select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active)
-        )
+        await session.execute(select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active))
     ).scalar_one()
 
     grant = OAuthGrant(
@@ -3199,18 +3197,14 @@ async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
     )
     assert resp_del_soft.status_code == 204
     c_zebra_check = (
-        await session.execute(
-            select(OAuthClient).where(OAuthClient.client_id == cid_zebra)
-        )
+        await session.execute(select(OAuthClient).where(OAuthClient.client_id == cid_zebra))
     ).scalar_one()
     assert c_zebra_check.status == "revoked"
 
     # 8. Test DELETE with ?permanent=true and dependent table cascading
     # Create dependent rows for cid_active: grant, code, rt, revoked_jti, device_code
     c_active_obj = (
-        await session.execute(
-            select(OAuthClient).where(OAuthClient.client_id == cid_active)
-        )
+        await session.execute(select(OAuthClient).where(OAuthClient.client_id == cid_active))
     ).scalar_one()
 
     grant_a = OAuthGrant(
@@ -3278,24 +3272,26 @@ async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
 
     # Verify client and all dependent rows are gone
     c_check = (
-        await session.execute(
-            select(OAuthClient).where(OAuthClient.client_id == cid_active)
-        )
+        await session.execute(select(OAuthClient).where(OAuthClient.client_id == cid_active))
     ).scalar_one_or_none()
     assert c_check is None
 
     grants_check = (
-        await session.execute(
-            select(OAuthGrant).where(OAuthGrant.client_id == c_active_obj.id)
-        )
-    ).scalars().all()
+        (await session.execute(select(OAuthGrant).where(OAuthGrant.client_id == c_active_obj.id)))
+        .scalars()
+        .all()
+    )
     assert len(grants_check) == 0
 
     rts_check = (
-        await session.execute(
-            select(OAuthRefreshToken).where(OAuthRefreshToken.client_id == c_active_obj.id)
+        (
+            await session.execute(
+                select(OAuthRefreshToken).where(OAuthRefreshToken.client_id == c_active_obj.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(rts_check) == 0
 
     # 9. Test POST /api/v1/admin/oauth-clients/bulk-delete
@@ -3325,8 +3321,6 @@ async def test_case_19_oauth_admin_revoke_purge_and_pagination(  # noqa: PLR0915
 
     # Verify cid_dcr_active still exists in DB
     active_dcr_check = (
-        await session.execute(
-            select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active)
-        )
+        await session.execute(select(OAuthClient).where(OAuthClient.client_id == cid_dcr_active))
     ).scalar_one_or_none()
     assert active_dcr_check is not None

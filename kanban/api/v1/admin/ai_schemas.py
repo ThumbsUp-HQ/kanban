@@ -235,4 +235,3 @@ class AISettingsPublic(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     air_gap_mode: bool = Field(description="Whether air-gap zero-egress mode is enforced")
-

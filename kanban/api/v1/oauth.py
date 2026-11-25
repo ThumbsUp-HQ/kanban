@@ -299,8 +299,7 @@ class OAuthClientBulkDeleteRequest(BaseModel):
     purge_unused_dcr: bool = Field(
         default=False,
         description=(
-            "Purge dynamic client registration clients with no active non-expired "
-            "tokens or grants"
+            "Purge dynamic client registration clients with no active non-expired tokens or grants"
         ),
     )
     purge_revoked: bool = Field(
@@ -1935,14 +1934,10 @@ async def _permanently_delete_clients(
     )
 
     # 6. oauth_grants (FK -> oauth_clients.id)
-    await session.execute(
-        delete(OAuthGrant).where(OAuthGrant.client_id.in_(client_uuids))
-    )
+    await session.execute(delete(OAuthGrant).where(OAuthGrant.client_id.in_(client_uuids)))
 
     # 7. oauth_clients
-    del_res = await session.execute(
-        delete(OAuthClient).where(OAuthClient.id.in_(client_uuids))
-    )
+    del_res = await session.execute(delete(OAuthClient).where(OAuthClient.id.in_(client_uuids)))
     return del_res.rowcount or len(client_uuids)
 
 

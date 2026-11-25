@@ -15,9 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database.models.base import Base
 
 OAuthClientType = Literal["public", "confidential"]
-OAuthClientStatus = Literal[
-    "active", "pending_admin_approval", "disabled", "suspended", "revoked"
-]
+OAuthClientStatus = Literal["active", "pending_admin_approval", "disabled", "suspended", "revoked"]
 OAuthSurface = Literal["agent", "docs", "admin"]
 
 

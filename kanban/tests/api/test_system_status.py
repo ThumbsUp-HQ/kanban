@@ -884,7 +884,9 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://kanban_test@/kanban_test?host=/tmp/kb-pgsock")
+    monkeypatch.setenv(
+        "DATABASE_URL", "postgresql+asyncpg://kanban_test@/kanban_test?host=/tmp/kb-pgsock"
+    )
 
     ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
@@ -1006,7 +1008,9 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
             assert resp_v_kbbak.status_code == 200
             assert resp_v_kbbak.json()["format"] == "kbbak"
 
-        with patch("kanban.api.v1.system_status.verify_backup", side_effect=ValueError("Corrupted tar")):
+        with patch(
+            "kanban.api.v1.system_status.verify_backup", side_effect=ValueError("Corrupted tar")
+        ):
             resp_v_err = await client.post(
                 "/api/v1/admin/standalone/backup/verify",
                 json={"filename": "test.kbbak"},
@@ -1084,7 +1088,10 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
             assert resp_r_file.json()["status"] == "success"
 
         # 8. Restore execution exception (500)
-        with patch("kanban.api.v1.system_status.restore_backup", side_effect=RuntimeError("pg_restore failed")):
+        with patch(
+            "kanban.api.v1.system_status.restore_backup",
+            side_effect=RuntimeError("pg_restore failed"),
+        ):
             resp_r_exc = await client.post(
                 "/api/v1/admin/standalone/restore",
                 json={

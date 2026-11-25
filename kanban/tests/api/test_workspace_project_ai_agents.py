@@ -254,7 +254,9 @@ async def test_workspace_admin_ai_providers_lifecycle(
     assert resp_slash_dis.json()["is_enabled"] is False
 
     # 7b. Negative: Disable non-existent provider -> 404
-    resp_dis_404 = await client.post(f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}:disable")
+    resp_dis_404 = await client.post(
+        f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}:disable"
+    )
     assert resp_dis_404.status_code == 404
 
     # 8. Set and fetch budget
@@ -369,7 +371,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
     ws_admin = await make_user("ws_admin_scope", workspace_role="WORKSPACE_ADMIN")
     viewer_user = await make_user("viewer_user", workspace_role="WORKSPACE_MEMBER")
 
-    proj_a_id = await make_project("PRJA", created_by=admin_a, roles={admin_a: "PROJECT_ADMIN", viewer_user: "VIEWER"})
+    proj_a_id = await make_project(
+        "PRJA", created_by=admin_a, roles={admin_a: "PROJECT_ADMIN", viewer_user: "VIEWER"}
+    )
     proj_b_id = await make_project("PRJB", created_by=admin_b, roles={admin_b: "PROJECT_ADMIN"})
 
     wid = str(api_env.workspace_id)
@@ -403,7 +407,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
         "is_enabled": True,
         "project_id": p_a_str,
     }
-    resp = await api_env.client.post(f"/api/v1/workspaces/{wid}/ai-providers", json=create_payload_a)
+    resp = await api_env.client.post(
+        f"/api/v1/workspaces/{wid}/ai-providers", json=create_payload_a
+    )
     assert resp.status_code == 201, resp.text
     prov_a_id = resp.json()["id"]
     assert resp.json()["project_id"] == p_a_str
@@ -441,7 +447,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
     assert resp_patch_a.json()["display_name"] == "Project A Ollama Updated"
 
     # 2. Admin A lists providers filtered by project_id -> returns provider A
-    resp = await api_env.client.get(f"/api/v1/workspaces/{wid}/ai-providers", params={"project_id": p_a_str})
+    resp = await api_env.client.get(
+        f"/api/v1/workspaces/{wid}/ai-providers", params={"project_id": p_a_str}
+    )
     assert resp.status_code == 200
     providers = resp.json()
     assert len(providers) == 1
@@ -516,7 +524,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
         "ordered_ids": [prov_a_2_id, prov_a_id],
         "project_id": p_a_str,
     }
-    resp = await api_env.client.put(f"/api/v1/workspaces/{wid}/ai-providers/order", json=reorder_payload)
+    resp = await api_env.client.put(
+        f"/api/v1/workspaces/{wid}/ai-providers/order", json=reorder_payload
+    )
     assert resp.status_code == 200
     reordered = resp.json()
     assert reordered[0]["id"] == prov_a_2_id
@@ -524,7 +534,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
 
     # Negative: Admin B tries to reorder Project A providers -> 403
     as_principal(admin_b)
-    resp = await api_env.client.put(f"/api/v1/workspaces/{wid}/ai-providers/order", json=reorder_payload)
+    resp = await api_env.client.put(
+        f"/api/v1/workspaces/{wid}/ai-providers/order", json=reorder_payload
+    )
     assert resp.status_code == 403
 
     # Negative: Admin A tries to reorder without project_id -> 403
@@ -600,7 +612,9 @@ async def test_project_admin_ai_providers_scoping_and_isolation(
 
     # Delete second project provider
     as_principal(admin_a)
-    resp_del_a2 = await api_env.client.delete(f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_2_id}")
+    resp_del_a2 = await api_env.client.delete(
+        f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_2_id}"
+    )
     assert resp_del_a2.status_code == 204
 
 
@@ -719,7 +733,9 @@ async def test_workspace_and_project_agent_definitions_lifecycle(
     proj_admin = await make_user("proj_admin_agent", workspace_role="WORKSPACE_MEMBER")
     member_user = await make_user("member_agent", workspace_role="WORKSPACE_MEMBER")
 
-    proj_id = await make_project("AGNT", created_by=proj_admin, roles={proj_admin: "PROJECT_ADMIN", member_user: "MEMBER"})
+    proj_id = await make_project(
+        "AGNT", created_by=proj_admin, roles={proj_admin: "PROJECT_ADMIN", member_user: "MEMBER"}
+    )
 
     wid = str(api_env.workspace_id)
     pid_str = str(proj_id)
@@ -734,7 +750,9 @@ async def test_workspace_and_project_agent_definitions_lifecycle(
         "model_id": "gemini-2.5-flash",
         "timeout_ms": 45000,
     }
-    resp = await api_env.client.post(f"/api/v1/workspaces/{wid}/agent-definitions", json=ws_agent_payload)
+    resp = await api_env.client.post(
+        f"/api/v1/workspaces/{wid}/agent-definitions", json=ws_agent_payload
+    )
     assert resp.status_code == 201, resp.text
     ws_agent_id = resp.json()["id"]
 
@@ -749,7 +767,9 @@ async def test_workspace_and_project_agent_definitions_lifecycle(
         "project_id": pid_str,
         "timeout_ms": 60000,
     }
-    resp = await api_env.client.post(f"/api/v1/workspaces/{wid}/agent-definitions", json=proj_agent_payload)
+    resp = await api_env.client.post(
+        f"/api/v1/workspaces/{wid}/agent-definitions", json=proj_agent_payload
+    )
     assert resp.status_code == 201, resp.text
     proj_agent_id = resp.json()["id"]
     assert resp.json()["project_id"] == pid_str
@@ -971,4 +991,3 @@ async def test_server_admin_agent_definitions_lifecycle(
     # 6. Delete agent via admin route
     resp_del = await client.delete(f"/api/v1/admin/agent-definitions/{ag_id}")
     assert resp_del.status_code == 204
-

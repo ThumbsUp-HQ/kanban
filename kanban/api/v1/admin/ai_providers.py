@@ -1286,11 +1286,13 @@ async def workspace_delete_provider(
     "/{provider_id}:disable",
     response_model=ProviderConfigPublic,
     summary="Disable AI provider configuration",
+    operation_id="workspace_disable_provider_colon",
 )
 @workspace_router.post(
     "/{provider_id}/disable",
     response_model=ProviderConfigPublic,
     summary="Disable AI provider configuration",
+    operation_id="workspace_disable_provider_slash",
 )
 async def workspace_disable_provider(
     workspace: str,
@@ -1405,4 +1407,3 @@ async def workspace_check_saved_provider_connection(  # noqa: PLR0913, PLR0917
             air_gap_mode=is_air_gap,
         )
         return ProviderProbeResult.model_validate(probe_res)
-
