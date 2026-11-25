@@ -206,10 +206,10 @@ async def test_admin_imports_security_and_execution(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. Unauthenticated -> 401
         pre_csrf = generate_csrf_token(PRE_SESSION_ID, key_material.session_hmac_key)
+        client.cookies.set(CSRF_COOKIE_NAME, pre_csrf)
         res_anon = await client.post(
             "/api/v1/admin/imports/plane",
             json={"bundle_name": "plane-kanba", "dry_run": True},
-            cookies={CSRF_COOKIE_NAME: pre_csrf},
             headers={CSRF_HEADER_NAME: pre_csrf},
         )
         assert res_anon.status_code == 401

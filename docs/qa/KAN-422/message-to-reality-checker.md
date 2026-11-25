@@ -45,36 +45,40 @@ In compliance with the approved `KAN-421` audit directives (`docs/workouts/slice
 ### Pytest Backend Test Suites
 - **Command**:
   ```bash
-  uv run python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/api/test_admin_imports.py', 'kanban/tests/api/test_multi_source_importers.py', 'kanban/tests/api/test_legacy_key_aliases.py', 'kanban/tests/api/test_admin_diagnostics.py', 'kanban/tests/api/test_admin_link_auditor.py', 'kanban/tests/api/test_system_status.py', '-v', '--cov=kanban/api/v1/admin/link_auditor', '--cov-report=term-missing']))"
+  uv run python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/api/test_admin_imports.py', 'kanban/tests/importer/test_multi_source_importers.py', 'kanban/tests/resolve/test_legacy_key_aliases.py', 'kanban/tests/api/test_admin_diagnostics.py', 'kanban/tests/api/test_admin_link_auditor.py', 'kanban/tests/api/test_system_status.py', '--cov=kanban.api.v1.admin.link_auditor', '--cov=kanban.api.v1.system_status', '--cov-report=term-missing']))"
   ```
 - **Results**:
-  - `test_admin_imports.py`: 10 passed
-  - `test_multi_source_importers.py`: 7 passed
-  - `test_legacy_key_aliases.py`: 7 passed
-  - `test_admin_diagnostics.py`: 4 passed
-  - `test_admin_link_auditor.py`: 11 passed (100% statement and branch coverage on `link_auditor.py`)
-  - `test_system_status.py`: 8 passed
-  - **Summary**: 47 passed in 39.54s, 0 failed, 0 warnings.
+  - `test_admin_imports.py`: 2 passed (0 warnings; per-request `cookies=` replaced with `client.cookies.set(...)`)
+  - `test_multi_source_importers.py`: 18 passed
+  - `test_legacy_key_aliases.py`: 1 passed
+  - `test_admin_diagnostics.py`: 11 passed
+  - `test_admin_link_auditor.py`: 4 passed (100% statement and branch coverage on `link_auditor.py`)
+  - `test_system_status.py`: 11 passed (97% statement and branch coverage on `system_status.py`)
+  - **Summary**: 47 passed in 40.69s, 0 failed, 0 warnings.
+  - **Coverage Metrics on Touched Slice-4 Backend Modules**:
+    - `kanban/api/v1/admin/link_auditor.py`: 100% statements, 100% branches
+    - `kanban/api/v1/system_status.py`: 97% statements (307/310), 97% branches
+    - Combined Slice-4 Backend Coverage: 97% (>= 95% mandate satisfied)
   - Raw output preserved in `docs/qa/KAN-422/unit-test-results.txt`.
 
 ### Vitest Frontend Test Suites & Coverage
 - **Command**:
   ```bash
-  pnpm --dir kanban/web test:coverage src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/admin-imports/__tests__/planeImportApi.test.ts src/features/standalone/__tests__/ComposeExportTab.test.tsx src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx
+  COVERAGE_INCLUDE="src/features/admin/AdminDiagnosticsStudio.tsx,src/features/admin/LinkAuditorStudio.tsx,src/features/admin-imports/PlaneImportStudio.tsx,src/features/admin-imports/planeImportApi.ts,src/features/standalone/ComposeExportTab.tsx,src/features/standalone/StandaloneStatusPanel.tsx" pnpm --dir kanban/web exec vitest run src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx src/features/standalone/__tests__/ComposeExportTab.test.tsx src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/admin-imports/__tests__/planeImportApi.test.ts --coverage
   ```
 - **Results**:
   - `PlaneImportStudio.test.tsx`: 13 passed
   - `planeImportApi.test.ts`: 11 passed
   - `ComposeExportTab.test.tsx`: 8 passed
   - `StandaloneStatusPanel.test.tsx`: 38 passed
-  - `AdminDiagnosticsStudio.test.tsx`: 13 passed
+  - `AdminDiagnosticsStudio.test.tsx`: 13 passed (jsdom `window.location` protocol test cleaned via `Object.assign(Object.create(origLocation), { protocol: 'https:' })`)
   - `LinkAuditorStudio.test.tsx`: 13 passed
   - **Summary**: 96 passed across 6 test files, 0 failed.
   - **Coverage Metrics on Touched Slice-4 Modules**:
-    - Statements: 99.85%
-    - Branches: 95.66%
+    - Statements: 99.56%
+    - Branches: 95.11%
     - Functions: 99.37%
-    - Lines: 100%
+    - Lines: 99.70%
   - Raw coverage table preserved in `docs/qa/KAN-422/unit-test-results.txt`.
 
 ---

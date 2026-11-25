@@ -1,3 +1,5 @@
+Uninstalled 4 packages in 0.64ms
+Installed 4 packages in 2ms
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8
@@ -13,76 +15,67 @@ kanban/tests/api/test_admin_diagnostics.py ...........                   [ 68%]
 kanban/tests/api/test_admin_link_auditor.py ....                         [ 76%]
 kanban/tests/api/test_system_status.py ...........                       [100%]
 
-=============================== warnings summary ===============================
-kanban/tests/api/test_admin_imports.py::test_admin_imports_security_and_execution
-  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
-    return await self.request(
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                                  Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------------------
 kanban/api/v1/admin/link_auditor.py      32      0      2      0   100%
+kanban/api/v1/system_status.py          310      3     78     10    97%   179->188, 186-187, 204->206, 520->523, 567->572, 637->640, 642, 644->646, 647->656, 694->697, 709->714
 ---------------------------------------------------------------------------------
-TOTAL                                    32      0      2      0   100%
-======================== 47 passed, 1 warning in 39.54s ========================
+TOTAL                                   342      3     80     10    97%
+============================= 47 passed in 40.69s ==============================
 
 
 ============================= Vitest Test & Coverage =============================
 
 
-> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8/kanban/web
-> vitest run src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx src/features/standalone/__tests__/ComposeExportTab.test.tsx src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/admin-imports/__tests__/planeImportApi.test.ts --coverage
-
-
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (11 tests) 27ms
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (11 tests) 30ms
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/features/standalone/__tests__/ComposeExportTab.test.tsx (8 tests) 323ms
+ ✓ src/features/standalone/__tests__/ComposeExportTab.test.tsx (8 tests) 316ms
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (13 tests) 968ms
- ✓ src/features/admin/LinkAuditorStudio.test.tsx (13 tests) 1544ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (13 tests) 993ms
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (13 tests) 1524ms
    ✓ LinkAuditorStudio (13)
-     ✓ handles inspect drawer view with JSON snapshots 349ms
-     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 441ms
+     ✓ handles inspect drawer view with JSON snapshots 344ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 426ms
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (13 tests) 2314ms
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (13 tests) 2374ms
    ✓ AdminDiagnosticsStudio Component (13)
-     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1532ms
- ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (38 tests) 3681ms
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1536ms
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (38 tests) 3781ms
    ✓ StandaloneStatusPanel (24)
-     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 366ms
-     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 536ms
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 388ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 552ms
 
  Test Files  6 passed (6)
       Tests  96 passed (96)
-   Start at  03:52:39
-   Duration  5.10s (tests 53%, environment 27%, import 13%, transform 5%, worker 2%)
+   Start at  05:05:56
+   Duration  5.20s (tests 53%, environment 27%, import 13%, transform 5%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.85 |    95.66 |   99.37 |     100 |                   
+All files          |   99.56 |    95.11 |   99.37 |    99.7 |                   
  admin             |     100 |    94.53 |     100 |     100 |                   
   ...icsStudio.tsx |     100 |       93 |     100 |     100 | ...20,478,729-736 
   ...torStudio.tsx |     100 |    96.84 |     100 |     100 | 123,355,838       
  admin-imports     |     100 |    95.85 |     100 |     100 |                   
   ...ortStudio.tsx |     100 |    95.36 |     100 |     100 | ...44,325-331,871 
   ...eImportApi.ts |     100 |      100 |     100 |     100 |                   
- standalone        |   99.66 |    96.56 |   98.18 |     100 |                   
+ standalone        |   99.01 |    95.14 |   98.18 |   99.32 |                   
   ...ExportTab.tsx |     100 |      100 |     100 |     100 |                   
-  ...atusPanel.tsx |   99.58 |    95.96 |   97.72 |     100 | ...97,281,308,321 
+  ...atusPanel.tsx |   98.79 |    94.32 |   97.72 |   99.17 | 96,98             
 -------------------|---------|----------|---------|---------|-------------------

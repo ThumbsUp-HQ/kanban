@@ -581,9 +581,9 @@ async def verify_backup_endpoint(  # noqa: C901, PLR0912, PLR0915
     try:
         if file_bytes.startswith(b"KBKP"):
             kek_bytes = (
-                getattr(key_source, "master_kek", None)
-                if hasattr(key_source, "master_kek")
-                else None
+                getattr(key_source, "_key", None)
+                if hasattr(key_source, "_key")
+                else getattr(key_source, "master_kek", None)
             )
             decrypted = decrypt_backup(file_bytes, passphrase=passphrase, master_kek=kek_bytes)
             return {

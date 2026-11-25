@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -14,10 +15,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import text
+from starlette.requests import Request
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.session import RLSSessionFactory
@@ -803,7 +803,19 @@ async def test_case_8_backup_schedule_and_snapshots_api(  # noqa: PLR0915
         )
         assert resp_bad_sched.status_code == 422
 
-        # 8. PUT backup schedule OS persistence error (500)
+        # 8. PUT backup schedule OS persistence error (500) and ValueError (422)
+        with patch(
+            "kanban.api.v1.system_status.update_backup_schedule",
+            side_effect=ValueError("Invalid retention count range"),
+        ):
+            resp_val_err = await client.put(
+                "/api/v1/admin/standalone/backup-schedule",
+                json={"enabled": True, "interval_hours": 24, "retention_count": 7},
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_val_err.status_code == 422
+            assert "INVALID_BACKUP_SCHEDULE" in resp_val_err.text
+
         with patch(
             "kanban.api.v1.system_status.update_backup_schedule",
             side_effect=OSError("Read-only filesystem"),
@@ -839,9 +851,30 @@ async def test_case_8_backup_schedule_and_snapshots_api(  # noqa: PLR0915
             assert resp_run_none.status_code == 500
             assert "BACKUP_RUN_FAILED" in resp_run_none.text
 
+        # 10. POST run-now success
+        with patch(
+            "kanban.api.v1.system_status.run_scheduled_backup_pass",
+            return_value=SimpleNamespace(
+                archive_path=Path("/tmp/test.kbbak"),
+                size_bytes=128,
+                manifest=SimpleNamespace(to_dict=lambda: {"format": "kbbak"}),
+                duration_seconds=0.25,
+            ),
+        ):
+            resp_run_ok = await client.post(
+                "/api/v1/admin/standalone/backups/run-now",
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_run_ok.status_code == 200
+            assert resp_run_ok.json()["status"] == "success"
+
+        # 11. Download invalid filename character (400)
+        resp_bad_dl = await client.get("/api/v1/admin/standalone/backups/bad%20name.kbbak")
+        assert resp_bad_dl.status_code == 400
+
 
 @pytest.mark.asyncio
-async def test_case_9_backup_verify_and_restore_api(
+async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
     db_session: AsyncSession,
     key_material: KeyMaterial,
     tmp_path: Path,
@@ -851,6 +884,7 @@ async def test_case_9_backup_verify_and_restore_api(
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("KB_BACKUP_DIR", str(backup_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://kanban_test@/kanban_test?host=/tmp/kb-pgsock")
 
     ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
     factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
@@ -888,6 +922,212 @@ async def test_case_9_backup_verify_and_restore_api(
         )
         assert resp_r_fail.status_code == 422
         assert "INVALID_CONFIRM_OVERWRITE" in resp_r_fail.text
+
+        # 3. Verify multipart form upload and use_master_kek
+        with patch.object(
+            Request,
+            "form",
+            AsyncMock(
+                return_value={
+                    "file": SimpleNamespace(
+                        read=AsyncMock(return_value=enc_kbkp),
+                        filename="test.kbkp",
+                    ),
+                    "passphrase": test_passphrase,
+                }
+            ),
+        ):
+            resp_v_form = await client.post(
+                "/api/v1/admin/standalone/backup/verify",
+                headers={
+                    CSRF_HEADER_NAME: csrf_token,
+                    "content-type": "multipart/form-data; boundary=boundary",
+                },
+            )
+            assert resp_v_form.status_code == 200
+            assert resp_v_form.json()["valid"] is True
+
+        enc_kek = encrypt_backup(plain_dump, master_kek=key_material.master_kek)
+        with patch.object(
+            Request,
+            "form",
+            AsyncMock(
+                return_value={
+                    "file": SimpleNamespace(
+                        read=AsyncMock(return_value=enc_kek),
+                        filename="test_kek.kbkp",
+                    ),
+                    "use_master_kek": "true",
+                }
+            ),
+        ):
+            resp_v_kek = await client.post(
+                "/api/v1/admin/standalone/backup/verify",
+                headers={
+                    CSRF_HEADER_NAME: csrf_token,
+                    "content-type": "multipart/form-data; boundary=boundary",
+                },
+            )
+            assert resp_v_kek.status_code == 200
+            assert resp_v_kek.json()["valid"] is True
+
+        # 4. Verify invalid filename and missing payload
+        resp_v_trav = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "../etc/passwd"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_trav.status_code == 400
+
+        resp_v_missing = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "nonexistent.kbbak"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_missing.status_code == 404
+
+        resp_v_empty = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_empty.status_code == 422
+
+        # 5. Verify .kbbak format with mock verify_backup
+        kbbak_file = backup_dir / "test.kbbak"
+        kbbak_file.write_bytes(b"MOCK_KBBAK_TAR_BYTES")
+        with patch("kanban.api.v1.system_status.verify_backup") as mock_v:
+            mock_v.return_value = SimpleNamespace(to_dict=lambda: {"format": "kbbak", "version": 1})
+            resp_v_kbbak = await client.post(
+                "/api/v1/admin/standalone/backup/verify",
+                json={"filename": "test.kbbak"},
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_v_kbbak.status_code == 200
+            assert resp_v_kbbak.json()["format"] == "kbbak"
+
+        with patch("kanban.api.v1.system_status.verify_backup", side_effect=ValueError("Corrupted tar")):
+            resp_v_err = await client.post(
+                "/api/v1/admin/standalone/backup/verify",
+                json={"filename": "test.kbbak"},
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_v_err.status_code == 422
+            assert "BACKUP_VERIFICATION_FAILED" in resp_v_err.text
+
+        # 6. Restore invalid filename and missing payload
+        resp_r_trav = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"filename": "../test.kbbak", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_trav.status_code == 400
+
+        resp_r_notfound = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"filename": "notfound.kbbak", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_notfound.status_code == 404
+
+        resp_r_empty = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_empty.status_code == 422
+
+        # 7. Restore successful execution via multipart upload and filename
+        with (
+            patch("kanban.api.v1.system_status.restore_backup") as mock_r,
+            patch.object(
+                Request,
+                "form",
+                AsyncMock(
+                    return_value={
+                        "file": SimpleNamespace(
+                            read=AsyncMock(return_value=b"RESTORE_MOCK_PAYLOAD"),
+                            filename="upload.kbbak",
+                        ),
+                        "confirm_overwrite": "RESTORE",
+                        "use_master_kek": "true",
+                    }
+                ),
+            ),
+        ):
+            mock_r.return_value = SimpleNamespace(
+                workspaces_verified=1,
+                links_audited=0,
+                duration_seconds=0.42,
+            )
+            resp_r_upload = await client.post(
+                "/api/v1/admin/standalone/restore",
+                headers={
+                    CSRF_HEADER_NAME: csrf_token,
+                    "content-type": "multipart/form-data; boundary=boundary",
+                },
+            )
+            assert resp_r_upload.status_code == 200
+            assert resp_r_upload.json()["status"] == "success"
+            assert resp_r_upload.json()["workspaces_verified"] == 1
+
+            resp_r_file = await client.post(
+                "/api/v1/admin/standalone/restore",
+                json={
+                    "filename": "test.kbkp",
+                    "confirm_overwrite": "RESTORE",
+                    "passphrase": test_passphrase,
+                },
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_r_file.status_code == 200
+            assert resp_r_file.json()["status"] == "success"
+
+        # 8. Restore execution exception (500)
+        with patch("kanban.api.v1.system_status.restore_backup", side_effect=RuntimeError("pg_restore failed")):
+            resp_r_exc = await client.post(
+                "/api/v1/admin/standalone/restore",
+                json={
+                    "filename": "test.kbkp",
+                    "confirm_overwrite": "RESTORE",
+                    "passphrase": test_passphrase,
+                },
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_r_exc.status_code == 500
+            assert "RESTORE_EXECUTION_FAILED" in resp_r_exc.text
+
+        # 9. Download missing backup file (404)
+        resp_dl_missing = await client.get("/api/v1/admin/standalone/backups/missing-file.kbbak")
+        assert resp_dl_missing.status_code == 404
+
+        # 10. Restore with default key source (no passphrase, no kek)
+        with patch("kanban.api.v1.system_status.restore_backup") as mock_r:
+            mock_r.return_value = SimpleNamespace(
+                workspaces_verified=1,
+                links_audited=0,
+                duration_seconds=0.1,
+            )
+            resp_no_key = await client.post(
+                "/api/v1/admin/standalone/restore",
+                json={
+                    "filename": "test.kbkp",
+                    "confirm_overwrite": "RESTORE",
+                },
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_no_key.status_code == 200
+
+        # 11. Target database URL not configured (500)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        app.state.settings = None
+        resp_db_err = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"filename": "test.kbkp", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_db_err.status_code == 500
+        assert "DATABASE_UNAVAILABLE" in resp_db_err.text
 
 
 def test_assert_admin_routes_protected_compliance() -> None:
