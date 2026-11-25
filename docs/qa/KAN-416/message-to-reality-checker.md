@@ -2,7 +2,7 @@
 
 - **Ticket**: KAN-416 (`[SLICE-3-P1][KB-MCP-OAUTH-AUDIT]` Phase 1: Read-Only Setting Inventory & Simplification Audit for Slice 3)
 - **Parent Epic**: KAN-415 (`[EPIC][SLICE-3-MCP-OAUTH]`)
-- **Branch**: `fix/KAN-416-rc1` (created from `main`)
+- **Branch**: `fix/p1-audits-rc2` (consolidated Round 2 on `main` at `71b847ba`, base branch `fix/KAN-416-rc1`)
 - **Review Status**: Dual Specialist Review (`api-spec` and `ui-spec`) APPROVED; Reality Checker Gate: Pending Clean-Room Reality-Checker re-audit
 - **Deliverable Path**: `docs/workouts/slice-3-mcp-oauth/01-audit-and-cuts.md`
 

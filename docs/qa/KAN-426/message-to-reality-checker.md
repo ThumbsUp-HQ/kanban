@@ -3,8 +3,8 @@
 - **Ticket**: `KAN-426` (`[SLICE-5-P1][KB-GOVERNANCE-AUDIT] Phase 1: Workspace/Project Settings, Custom Scripted Fields & Workflows Setting Inventory & Audit`)
 - **Parent Epic**: `KAN-425` (`[EPIC][SLICE-5-WORKSPACE-PROJECT-WORKFLOWS]`)
 - **Next Phase**: `KAN-427` (`Phase 2 Simplification & Wiring`)
-- **Branch**: `fix/KAN-426-rc1`
-- **Base Commit**: `620f66cd`
+- **Branch**: `fix/p1-audits-rc2` (consolidated Round 2 on `main` at `71b847ba`, base branch `fix/KAN-426-rc1`)
+- **Base Commit**: `71b847ba`
 - **Review Status**:
   - API Specialist Review: `APPROVED` (`docs/qa/KAN-426/api-specialist-review.md`)
   - UI Specialist Review: `APPROVED` (`docs/qa/KAN-426/ui-specialist-review.md`)
@@ -61,5 +61,6 @@
 
 5. **Compliance & Invariants**:
    - Zero Unicode em/en-dashes (`check_no_dashes.py` exits 0 with 0 violations).
-   - 100% of cited repository file paths verified to exist (22/22 paths).
+   - 100% of cited repository file paths verified to exist (23/23 paths including `kanban/repos/url_policy.py`).
    - Zero source code mutations in Phase 1 (read-only audit).
+   - Posted updated Phase 1 Handoff Packet comments to both `KAN-425` (comment ID `KAN-425#c-01a2116e`) and `KAN-427` (comment ID `KAN-427#c-01a2116e`) via kanban MCP `add_comment`.
