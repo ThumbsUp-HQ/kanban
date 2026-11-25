@@ -53,5 +53,22 @@
     - 21 tests passing (100% pass rate).
     - Statements: 100%, Branches: 100%, Functions: 100%, Lines: 100% across all files in `features/admin-runners/`.
     - Explicit test assertions for `copy-runner-cli-btn`, `dismiss-mint-modal-btn` label `"Done"`, `--server-url` presence, and clipboard fallback behavior.
+- **Playwright E2E Visual Verification**:
+  - `e2e/qa/kan-399-runner-enroll-screenshots.spec.ts`:
+    - 4 responsive tests passing across desktop, tablet, and mobile devices.
+
+---
+
+## 4. Visual Proof Screenshots Catalog (`docs/qa/KAN-399/screenshots/`)
+
+| Screenshot File | Viewport | Theme | Key Verifications Captured |
+|:---|:---|:---|:---|
+| `runner-mint-modal-reveal-1440x900-light.png` | 1440x900 | Light | Canonical `--server-url`, `Copy CLI Command` button, single-reveal token, `Done` button |
+| `runner-mint-modal-reveal-1440x900-dark.png` | 1440x900 | Dark | Dark theme WCAG contrast, `--server-url`, `Copy CLI Command`, `Done` button |
+| `runner-mint-modal-reveal-768x1024.png` | 768x1024 | Light (Tablet) | Responsive tablet portrait hierarchy, non-clipped CLI box, action buttons |
+| `runner-mint-modal-reveal-390x844.png` | 390x844 | Light (Mobile) | Single-column mobile layout, full-width `Done` CTA, horizontal scroll on CLI pre |
+| `runner-mint-modal-cli-copied-feedback.png` | 1440x900 | Light | Active `"✓ Copied!"` visual feedback on `copy-runner-cli-btn` click |
+
+All screenshots visually reviewed and verified with zero text or control clipping.
 
 Verdict: **`APPROVED`**. The UI updates deliver intuitive ergonomics, clear feedback, and 100% design system alignment.

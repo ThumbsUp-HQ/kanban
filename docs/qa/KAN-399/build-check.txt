@@ -3,14 +3,12 @@
 ======================================================================
 All checks passed!
 
-
 EXIT CODE: 0
 
 ======================================================================
 2. ruff format --check agent/
 ======================================================================
 137 files already formatted
-
 
 EXIT CODE: 0
 
@@ -19,13 +17,11 @@ EXIT CODE: 0
 ======================================================================
 Success: no issues found in 135 source files
 
-
 EXIT CODE: 0
 
 ======================================================================
 4. check_no_dashes.py --all
 ======================================================================
-
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-24bb4c0d/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 
 EXIT CODE: 0
@@ -38,7 +34,6 @@ EXIT CODE: 0
 > tsc -b --noEmit
 
 
-
 EXIT CODE: 0
 
 ======================================================================
@@ -47,7 +42,6 @@ EXIT CODE: 0
 
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-24bb4c0d/kanban/web
 > eslint . --max-warnings 0
-
 
 
 EXIT CODE: 0
@@ -69,13 +63,11 @@ dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-BDRiaUTY.css            594.73 kB │ gzip:  83.52 kB
 dist/assets/index-B10tPeqk.js           2,869.94 kB │ gzip: 794.34 kB
 
-✓ built in 1.31s
-
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.36s
 
 EXIT CODE: 0
-

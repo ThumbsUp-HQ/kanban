@@ -2,33 +2,15 @@
 1. Python Agent Remote Runner Unit Tests & Coverage (pytest)
 ======================================================================
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-24bb4c0d/.venv/bin/python
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-24bb4c0d
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 20 items
+collected 20 items
 
-agent/tests/test_remote_runner.py::test_runner_config_toml_loading PASSED [  5%]
-agent/tests/test_remote_runner.py::test_enroll_runner_persists_ca_pem_0600_and_runner_toml PASSED [ 10%]
-agent/tests/test_remote_runner.py::test_daemon_signs_pop_challenge_automatically PASSED [ 15%]
-agent/tests/test_remote_runner.py::test_daemon_full_pop_handshake_flow PASSED [ 20%]
-agent/tests/test_remote_runner.py::test_default_runner_state_dir_env_override PASSED [ 25%]
-agent/tests/test_remote_runner.py::test_default_runner_state_dir_root PASSED [ 30%]
-agent/tests/test_remote_runner.py::test_default_runner_state_dir_user_with_and_without_xdg PASSED [ 35%]
-agent/tests/test_remote_runner.py::test_default_runner_config_path_variations PASSED [ 40%]
-agent/tests/test_remote_runner.py::test_cli_enroll_server_url_and_url_alias PASSED [ 45%]
-agent/tests/test_remote_runner.py::test_cli_enroll_and_run_defaults PASSED [ 50%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_runner_config_defaults_and_validation PASSED [ 55%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_key_permissions_validation PASSED [ 60%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_load_runner_config PASSED [ 65%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_cli_token_cmdline_secrecy PASSED [ 70%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_enroll_runner_flow PASSED [ 75%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_cli_subcommands_dispatch PASSED [ 80%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_runner_config_url_without_scheme PASSED [ 85%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_write_secure_file_error_cleanup PASSED [ 90%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_run_daemon_lifecycle PASSED [ 95%]
-agent/tests/remote_runner/test_config_and_enroll.py::test_main_cli_error_branches PASSED [100%]
+agent/tests/test_remote_runner.py ..........                             [ 50%]
+agent/tests/remote_runner/test_config_and_enroll.py ..........           [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
@@ -42,8 +24,7 @@ agent/remote_runner/daemon.py       200     86     52     11    50%   85->87, 11
 agent/remote_runner/executor.py      93     69     28      0    20%   64-232
 -----------------------------------------------------------------------------
 TOTAL                               548    160    144     18    66%
-============================== 20 passed in 3.05s ==============================
-
+============================== 20 passed in 2.90s ==============================
 
 EXIT CODE: 0
 
@@ -58,15 +39,15 @@ EXIT CODE: 0
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan399-24bb4c0d/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (21 tests) 2891ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (21 tests) 2838ms
    ✓ RunnerStudioPage & Components (KANBA-219) (21)
      ✓ MintEnrollmentTokenModal component (11)
-       ✓ resets copied state after 2 seconds 2122ms
+       ✓ resets copied state after 2 seconds 2127ms
 
  Test Files  1 passed (1)
       Tests  21 passed (21)
-   Start at  00:30:16
-   Duration  4.11s (tests 76%, environment 17%, import 5%, transform 1%, worker 1%)
+   Start at  00:45:34
+   Duration  3.98s (tests 77%, environment 17%, import 5%, transform 1%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -78,5 +59,24 @@ All files          |     100 |      100 |     100 |     100 |
  ...ersAdminApi.ts |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
 
+EXIT CODE: 0
+
+======================================================================
+3. Playwright E2E Responsive Screenshots & Visual Proofs (playwright)
+======================================================================
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 4 tests using 4 workers
+
+  ✓  4 [desktop] › e2e/qa/kan-399-runner-enroll-screenshots.spec.ts:269:3 › KAN-399: Runner Enrollment Modal Proofs › 04: 390x844 Mobile Portrait - Single-column responsive modal layout (902ms)
+  ✓  3 [desktop] › e2e/qa/kan-399-runner-enroll-screenshots.spec.ts:244:3 › KAN-399: Runner Enrollment Modal Proofs › 03: 768x1024 Tablet Portrait - Responsive layout with visible CLI snippet and buttons (1.0s)
+  ✓  1 [desktop] › e2e/qa/kan-399-runner-enroll-screenshots.spec.ts:218:3 › KAN-399: Runner Enrollment Modal Proofs › 02: 1440x900 Desktop Dark - Mint modal single-reveal view in dark theme (1.1s)
+  ✓  2 [desktop] › e2e/qa/kan-399-runner-enroll-screenshots.spec.ts:166:3 › KAN-399: Runner Enrollment Modal Proofs › 01: 1440x900 Desktop Light - Mint modal single-reveal view with --server-url, Copy CLI Command, and Done (1.3s)
+
+  4 passed (29.1s)
 
 EXIT CODE: 0
