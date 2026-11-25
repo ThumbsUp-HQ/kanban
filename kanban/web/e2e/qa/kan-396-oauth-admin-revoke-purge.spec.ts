@@ -241,7 +241,8 @@ test.describe('KAN-396 Visual Verification: OAuth Governance Studio Layout and A
       }
     }
 
-    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, and remove overlays
+    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, remove overlays,
+    // and inject full-capture styles so page.screenshot({ fullPage: true }) captures full scroll height
     await page.evaluate(() => {
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
@@ -264,6 +265,8 @@ test.describe('KAN-396 Visual Verification: OAuth Governance Studio Layout and A
             el.remove();
           }
         });
+
+      document.documentElement.classList.add('qa-fullpage-capture');
     });
     await page.waitForTimeout(200);
 

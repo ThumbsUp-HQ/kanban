@@ -897,10 +897,10 @@ index 2c02c218..701c188e 100644
  def test_wiki_manifest_synchronization() -> None:
 diff --git a/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts b/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts
 new file mode 100644
-index 00000000..4ffc70eb
+index 00000000..54665c9c
 --- /dev/null
 +++ b/kanban/web/e2e/qa/kan-396-oauth-admin-revoke-purge.spec.ts
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,287 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -1144,7 +1144,8 @@ index 00000000..4ffc70eb
 +      }
 +    }
 +
-+    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, and remove overlays
++    // 6. Reset scroll positions to 0 on main canvas and all scrollable containers, remove overlays,
++    // and inject full-capture styles so page.screenshot({ fullPage: true }) captures full scroll height
 +    await page.evaluate(() => {
 +      window.scrollTo(0, 0);
 +      document.documentElement.scrollTop = 0;
@@ -1167,6 +1168,8 @@ index 00000000..4ffc70eb
 +            el.remove();
 +          }
 +        });
++
++      document.documentElement.classList.add('qa-fullpage-capture');
 +    });
 +    await page.waitForTimeout(200);
 +
@@ -1186,7 +1189,7 @@ index 00000000..4ffc70eb
 +  });
 +});
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index af341d2a..2135e81c 100644
+index af341d2a..dbebd35d 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 +++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 @@ -4,7 +4,7 @@
@@ -1885,10 +1888,8 @@ index af341d2a..2135e81c 100644
 +.kb-oauth-help-text {
 +  font-size: 0.75rem;
 +  color: var(--kb-color-text-secondary, #8b949e);
- }
- 
--.kb-oauth-client-secret-panel {
--  margin: 16px 0;
++}
++
 +.kb-oauth-modal-footer {
 +  display: flex;
 +  align-items: center;
@@ -1897,8 +1898,10 @@ index af341d2a..2135e81c 100644
 +  margin-top: 24px;
 +  padding-top: 16px;
 +  border-top: 1px solid var(--kb-color-border-subtle, #30363d);
-+}
-+
+ }
+ 
+-.kb-oauth-client-secret-panel {
+-  margin: 16px 0;
 +.kb-oauth-secret-banner {
 +  margin-top: 16px;
    padding: 16px;
@@ -1927,7 +1930,7 @@ index af341d2a..2135e81c 100644
      width: 100%;
      max-width: 100%;
      min-width: 0;
-@@ -554,101 +813,122 @@
+@@ -554,101 +813,136 @@
    .kb-oauth-gov-section-header {
      width: 100%;
      min-width: 0;
@@ -1968,10 +1971,12 @@ index af341d2a..2135e81c 100644
    }
  
 -  .kb-oauth-gov-header > div {
+-    width: 100%;
 +  .kb-oauth-gov-search-wrap {
++    flex: 0 0 auto;
+     min-width: 0;
 +    max-width: 100%;
-     width: 100%;
--    min-width: 0;
++    width: 100%;
    }
  
 -  .kb-oauth-gov-title {
@@ -2088,8 +2093,10 @@ index af341d2a..2135e81c 100644
 +  .kb-oauth-gov-btn-group,
 +  .kb-oauth-gov-confirm-bar {
 +    justify-content: flex-start;
-+    width: 100%;
-+  }
+     width: 100%;
+-    justify-content: center;
+-    white-space: normal;
+   }
 +
 +  .kb-oauth-gov-pagination {
 +    flex-direction: column;
@@ -2099,10 +2106,20 @@ index af341d2a..2135e81c 100644
 +
 +  .kb-oauth-gov-page-controls {
 +    justify-content: space-between;
-     width: 100%;
--    justify-content: center;
--    white-space: normal;
-   }
++    width: 100%;
++  }
++}
++
++/* QA Full-Content Capture Modifier for CSP-Compliant Screenshots */
++html.qa-fullpage-capture,
++html.qa-fullpage-capture body,
++html.qa-fullpage-capture #root,
++html.qa-fullpage-capture .kb-app-shell,
++html.qa-fullpage-capture .kb-main-canvas {
++  height: auto !important;
++  min-height: 100vh !important;
++  max-height: none !important;
++  overflow: visible !important;
  }
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
 index 54f32b06..5e5c5aca 100644

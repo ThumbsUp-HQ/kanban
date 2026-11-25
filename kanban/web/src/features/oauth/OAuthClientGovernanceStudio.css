@@ -834,6 +834,8 @@
   }
 
   .kb-oauth-gov-search-wrap {
+    flex: 0 0 auto;
+    min-width: 0;
     max-width: 100%;
     width: 100%;
   }
@@ -931,4 +933,16 @@
     justify-content: space-between;
     width: 100%;
   }
+}
+
+/* QA Full-Content Capture Modifier for CSP-Compliant Screenshots */
+html.qa-fullpage-capture,
+html.qa-fullpage-capture body,
+html.qa-fullpage-capture #root,
+html.qa-fullpage-capture .kb-app-shell,
+html.qa-fullpage-capture .kb-main-canvas {
+  height: auto !important;
+  min-height: 100vh !important;
+  max-height: none !important;
+  overflow: visible !important;
 }

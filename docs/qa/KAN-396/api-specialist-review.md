@@ -5,7 +5,7 @@
 - **Reviewer Persona**: API & Security Architect (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
 - **Branch**: `feat/KAN-396-oauth-admin-revoke-purge`
 - **Base Commit**: `5b75379d`
-- **Head Commit**: `1b017021` (Feature commit `72071659`)
+- **Head Commit**: `19de454a` (Round 3 Final Remediation)
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -20,7 +20,7 @@ This review specifically verifies:
 2. **Server Admin AAL2 Route Protection**: Ensuring all administrative endpoints (`GET /api/v1/admin/oauth-clients`, `PATCH /api/v1/admin/oauth-clients/{client_id}`, `DELETE /api/v1/admin/oauth-clients/{client_id}`, and `POST /api/v1/admin/oauth-clients/bulk-delete`) strictly declare and enforce `Depends(require_admin_aal2)`.
 3. **Hard Delete & Cascading Deletion Safety**: Verification of `_permanently_delete_clients` cleaning up all 5 dependent tables (`oauth_revoked_jtis`, `oauth_refresh_tokens`, `oauth_authorization_codes`, `oauth_device_codes`, `oauth_grants`) without leaving orphaned foreign key references.
 4. **Bulk Deletion & DCR Purge Guardrails**: Verification that `_has_active_grants_or_tokens` actively protects DCR clients holding unexpired tokens or active grants from being purged.
-5. **Unit Test Coverage & Build Quality**: Achieving `>=95%` coverage on `kanban/api/v1/oauth.py` (96%) and `database/models/oauth.py` (100%), 0 ruff errors, 0 mypy issues, and zero Unicode em/en-dashes.
+5. **Unit Test Coverage & Build Quality**: Achieving `>=95%` coverage on `kanban/api/v1/oauth.py` (96%) and `database/models/oauth.py` (100%), 91/91 passed Pytest tests with migration lifecycle included, 0 ruff errors, 0 mypy issues, and zero Unicode em/en-dashes.
 
 ---
 
@@ -84,12 +84,18 @@ All operations are executed within the current `AsyncSession` transaction and co
 ### A. Python Backend Suite
 Executed backend tests:
 ```bash
-/home/adamoutler/kanban/.venv/bin/python -m pytest kanban/tests/oauth/test_oauth_flow.py database/tests/migrations/test_p6_20_oauth_clients_status_check_migration.py kanban/tests/security/test_admin_routes_protected.py -v
+KB_TEST_PGHOST="/tmp/kb-pgsock-396" KB_TEST_PGSOCKET_DIR="/tmp/kb-pgsock-396" \
+uv run coverage run -m pytest \
+  database/tests/migrations/test_p6_20_oauth_clients_status_check_migration.py \
+  database/tests/test_p1_17_models.py \
+  kanban/tests/oauth/ \
+  kanban/tests/security/test_admin_routes_protected.py \
+  kanban/tests/test_feature_comparison_parity.py -v
 ```
 **Results**:
-- 21/21 passed in 12.82s.
+- 91/91 passed in 39.45s with 0 warnings.
 - `test_case_19_oauth_admin_revoke_purge_and_pagination`: PASSED (verifies patch to suspended/revoked, pagination headers, search filtering, permanent cascade deletion, bulk delete with active token protection, and unprivileged user 401/403 rejection).
-- Full OAuth test suite: 90/90 passed in 38.46s.
+- Migration lifecycle test `test_p6_20_oauth_clients_status_check_migration_lifecycle`: PASSED (verifies upgrade -> rollback -> upgrade on real PostgreSQL).
 - Coverage:
   - `database/models/oauth.py`: **100%**
   - `kanban/api/v1/oauth.py`: **96%** (exceeds `>=95%` gate)
@@ -98,13 +104,17 @@ Executed backend tests:
 ### B. Frontend Vitest Suite
 Executed web tests:
 ```bash
-pnpm vitest run src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx src/features/oauth/__tests__/oauthApi.test.ts
+pnpm --dir kanban/web exec vitest run \
+  src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx \
+  src/features/oauth/__tests__/oauthApi.test.ts \
+  --coverage
 ```
 **Results**:
-- 37/37 passed in 3.30s.
-- Coverage on `OAuthClientGovernanceStudio.tsx`: **97.58% Stmts, 95.53% Branch, 98.93% Funcs, 97.50% Lines**.
-- Coverage on `oauthApi.ts`: **100% across all metrics**.
-
+- 37/37 passed in 4.21s with 0 warnings.
+- Coverage:
+  - `OAuthClientGovernanceStudio.tsx`: **98.18% Statements, 96.64% Branches, 98.93% Functions, 98.12% Lines**
+  - `oauthApi.ts`: **100% Statements, 100% Branches, 100% Functions, 100% Lines**
+  - Combined: **98.30% Statements, 96.98% Branches, 99.00% Functions, 98.24% Lines** (exceeds `>=95%` threshold)
 ### C. Build & Hygiene
 - Migration audit: Clean exit code 0, 82 migrations, single head `p6_20_oauth_clients_status_check`.
 - `ruff check`: All checks passed.

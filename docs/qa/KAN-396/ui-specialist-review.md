@@ -4,7 +4,7 @@
 - **Ticket ID**: `KAN-396` (`[KB-OAUTH-ADMIN-REVOKE-PURGE-LAYOUT] Fix /admin/oauth Clipped Action Buttons, Fix PostgreSQL status CHECK 500 on Revoke/Suspend & Add Bulk Delete / Purge Stale OAuth Clients`)
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `feat/KAN-396-oauth-admin-revoke-purge`
-- **Commit**: `72071659`
+- **Commit**: `19de454a` (Round 3 Final Remediation)
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -72,11 +72,16 @@ All screenshots visually inspected via `read_file` confirming zero text clipping
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - `src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx` (37 passed).
-  - Coverage: 97.58% Statements, 95.53% Branches, 98.93% Functions, 97.50% Lines on `OAuthClientGovernanceStudio.tsx` (`>=95%` gate achieved).
+  - `src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx` and `oauthApi.test.ts` (37 passed in 4.21s with 0 warnings).
+  - Coverage: 98.18% Statements, 96.64% Branches, 98.93% Functions, 98.12% Lines on `OAuthClientGovernanceStudio.tsx` (`>=95%` gate achieved).
+  - Combined Frontend Coverage: **98.30% Statements, 96.98% Branches, 99.00% Functions, 98.24% Lines**.
 - **Python Backend Suite**:
-  - `database/models/oauth.py` 100%, `kanban/api/v1/oauth.py` 96% coverage across 90 passed tests.
+  - `database/models/oauth.py` 100%, `kanban/api/v1/oauth.py` 96% coverage across 91 passed tests (including `test_p6_20_oauth_clients_status_check_migration_lifecycle`).
   - Clean reversible database migration #82 (`p6_20_oauth_clients_status_check`).
+- **5-Viewport Playwright E2E Visual Verification**:
+  - 5/5 viewports passed with 0 CSP violations, full document height captured via `qa-fullpage-capture` class.
+  - Zero 164px gap above filter pills on mobile (`flex: 0 0 auto; min-width: 0; width: 100%`).
+  - Visually audited all 10 PNGs via `read_file` confirming complete visibility of header, compact toolbar, client cards, stacked client IDs, single-line badges, all 6 action buttons, and pagination.
 
 ---
 
