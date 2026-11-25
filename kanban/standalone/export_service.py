@@ -12,10 +12,12 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import shutil
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -263,7 +265,7 @@ def decrypt_backup(
         raise RestoreError(msg) from exc
 
 
-async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
+async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     pg_dump_bin: str | None = None,
     db_name: str = "kanban",
@@ -275,6 +277,34 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
     database_url: str | None = None,
 ) -> bytes:
     """Execute pg_dump over direct subprocess (zero shell) and return raw bytes."""
+    ops_sock = Path(
+        os.environ.get("KB_OPS_SOCK")
+        or (f"{socket_dir}/.kb_ops.sock" if socket_dir else "/run/postgresql/.kb_ops.sock")
+    )
+    is_socket = await asyncio.to_thread(ops_sock.is_socket)
+    if is_socket:
+        dump_err: BackupError | None = None
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(120.0)
+                client.connect(str(ops_sock))
+                client.sendall(json.dumps({"op": "pg_dump_raw"}).encode("utf-8") + b"\n")
+                raw = b""
+                while not raw.endswith(b"\n"):
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    raw += chunk
+                resp = json.loads(raw.decode("utf-8"))
+                if resp.get("status") == "ok":
+                    return base64.b64decode(resp["data_b64"])
+                msg = f"Privileged pg_dump failed: {resp.get('message')}"
+                dump_err = BackupError(msg)
+        except (OSError, json.JSONDecodeError, KeyError) as exc:
+            logger.warning("Failed to dump via ops socket: %s; falling back to direct dump", exc)
+        if dump_err is not None:
+            raise dump_err
+
     binary = (
         pg_dump_bin
         or os.environ.get("KB_PG_DUMP_PATH")
@@ -288,7 +318,11 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
     resolved_port = port or os.environ.get("PGPORT")
     env_password: str | None = None
 
-    url_str = database_url or (getattr(settings, "database_url", None) if settings else None)
+    url_str = (
+        database_url
+        or os.environ.get("KANBAN_MIGRATOR_DATABASE_URL")
+        or (getattr(settings, "database_url", None) if settings else None)
+    )
     if url_str:
         try:
             parsed_url = make_url(str(url_str))
@@ -309,6 +343,7 @@ async def run_pg_dump(  # noqa: C901, PLR0912, PLR0913
         binary,
         "--format=custom",
         "--no-password",
+        "--enable-row-security",
         "-U",
         resolved_db_user,
         "-d",

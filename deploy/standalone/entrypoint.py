@@ -7,15 +7,22 @@ UID 65532 to run Uvicorn, and coordinates graceful shutdown under tini.
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import hashlib
+import io
+import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from deploy.standalone.keyring import (
@@ -31,6 +38,8 @@ from deploy.standalone.storage_probe import (
     probe,
     write_standalone_status,
 )
+from kanban.ops.backup_crypto import PassphraseKeySource, RawKeySource
+from kanban.ops.backup_service import create_backup, restore_backup
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -88,6 +97,33 @@ def run_as_postgres(
         full_cmd,
         capture_output=True,
         text=True,
+        timeout=timeout,
+        check=check,
+        env=env,
+    )
+
+
+def run_as_postgres_bytes(
+    cmd: list[str],
+    *,
+    timeout: float = 60.0,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    """Execute a command as OS user 'postgres' via setpriv returning binary stdout."""
+    full_cmd = [
+        BIN_SETPRIV,
+        "--reuid=postgres",
+        "--regid=postgres",
+        "--init-groups",
+        "--inh-caps=-all",
+        "--no-new-privs",
+        "--",
+        *cmd,
+    ]
+    return subprocess.run(  # noqa: S603
+        full_cmd,
+        capture_output=True,
         timeout=timeout,
         check=check,
         env=env,
@@ -263,7 +299,11 @@ def bootstrap_database(
     log_phase("bootstrap_sql", "roles, database, and extensions initialized")
 
 
-def run_migrations(pgdata: Path, alembic_ini: Path, run_dir: str = DEFAULT_RUN_DIR) -> None:
+def run_migrations(
+    pgdata: Path,
+    alembic_ini: Path,
+    run_dir: str = DEFAULT_RUN_DIR,
+) -> None:
     """Run Alembic migrations under kanban_migrator and revoke login privilege afterwards."""
     if not alembic_ini.is_file():
         log_phase("migrations", "MIGRATIONS_SKIPPED_NO_ALEMBIC_INI")
@@ -341,6 +381,247 @@ def ensure_backup_grants(run_dir: str = DEFAULT_RUN_DIR) -> None:
         log_phase("backup_grants", "granted SELECT on alembic_version to kanban_app")
     except Exception as exc:  # noqa: BLE001
         log_phase("backup_grants", f"Warning: grant SELECT on alembic_version failed: {exc}")
+
+
+MAX_OPS_PAYLOAD_SIZE: int = 1_048_576
+
+
+def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
+    op = req.get("op")
+    run_dir = req.get("run_dir", DEFAULT_RUN_DIR)
+
+    if op == "pg_dump_raw":
+        dump_bin = shutil.which("pg_dump") or "/usr/lib/postgresql/16/bin/pg_dump"
+        cmd = [
+            dump_bin,
+            "-U",
+            "postgres",
+            "-d",
+            "kanban",
+            "-h",
+            run_dir,
+            "--format=custom",
+            "--enable-row-security",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, check=True, timeout=120.0)  # noqa: S603
+        return {
+            "status": "ok",
+            "data_b64": base64.b64encode(proc.stdout).decode("ascii"),
+            "size_bytes": len(proc.stdout),
+        }
+
+    if op == "restore_backup":
+        archive_path = Path(req["archive_path"]).resolve()
+        allowed = ("/var/lib/kanban/", "/tmp/")  # noqa: S108
+        if not any(str(archive_path).startswith(p) for p in allowed):
+            msg = f"Restricted archive path: {archive_path}"
+            raise ValueError(msg)
+        if not archive_path.is_file():
+            msg = f"Archive not found: {archive_path}"
+            raise FileNotFoundError(msg)
+
+        passphrase = req.get("passphrase")
+        raw_key_b64 = req.get("raw_key_b64")
+        if passphrase:
+            key_source = PassphraseKeySource(passphrase)
+        elif raw_key_b64:
+            key_source = RawKeySource(base64.b64decode(raw_key_b64))
+        else:
+            keyring_path = Path(
+                req.get("keyring_path", "/var/lib/kanban/data/secrets/keyring.json")
+            )
+            keyring = load_or_create_keyring(keyring_path)
+            key_source = RawKeySource(keyring.master_kek)
+
+        target_db_url = f"postgresql+asyncpg://postgres@/kanban?host={run_dir}"
+        report = restore_backup(
+            archive_path=archive_path,
+            target_db_url=target_db_url,
+            key_source=key_source,
+            confirm_overwrite=req.get("confirm_overwrite", True),
+        )
+        return {
+            "status": "ok",
+            "report": {
+                "workspaces_verified": report.workspaces_verified,
+                "links_audited": report.links_audited,
+                "duration_seconds": report.duration_seconds,
+            },
+        }
+
+    if op == "scheduled_backup":
+        backup_dir = Path(req.get("backup_dir", "/var/lib/kanban/data/backups"))
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        dest = backup_dir / f"kanban-backup-{ts}.kbbak"
+        raw_key_b64 = req.get("raw_key_b64")
+        if raw_key_b64:
+            key_source = RawKeySource(base64.b64decode(raw_key_b64))
+        else:
+            keyring_path = Path(
+                req.get("keyring_path", "/var/lib/kanban/data/secrets/keyring.json")
+            )
+            keyring = load_or_create_keyring(keyring_path)
+            key_source = RawKeySource(keyring.master_kek)
+        target_db_url = f"postgresql+asyncpg://postgres@/kanban?host={run_dir}"
+
+        report = create_backup(
+            db_url=target_db_url,
+            out_path=dest,
+            key_source=key_source,
+            include_secrets=True,
+        )
+        with contextlib.suppress(OSError):
+            os.chown(dest, -1, 65532)
+            dest.chmod(0o640)
+        return {
+            "status": "ok",
+            "filename": dest.name,
+            "size_bytes": report.size_bytes,
+            "duration_seconds": report.duration_seconds,
+        }
+
+    msg = f"Unknown operation: {op}"
+    raise ValueError(msg)
+
+
+def execute_privileged_op(req_json_str: str) -> int:
+    """Execute a privileged database operation under OS user 'postgres'."""
+    try:
+        req = json.loads(req_json_str)
+        out = _execute_op_inner(req)
+        sys.stdout.write(json.dumps(out) + "\n")
+    except Exception as exc:  # noqa: BLE001
+        err_out = {
+            "status": "error",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
+        sys.stdout.write(json.dumps(err_out) + "\n")
+        return 1
+    else:
+        return 0
+
+
+class OpsSocketServer:
+    """Fixed-op Unix-domain socket RPC listener for privileged operations."""
+
+    def __init__(
+        self,
+        run_dir: str = DEFAULT_RUN_DIR,
+        keyring: Keyring | None = None,
+    ) -> None:
+        """Initialize socket server for privileged operations."""
+        self.run_dir = run_dir
+        self.keyring = keyring
+        self.sock_path = Path(run_dir) / ".kb_ops.sock"
+        self._server_sock: socket.socket | None = None
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start listening on the Unix domain socket in a daemon thread."""
+        if self.sock_path.exists():
+            self.sock_path.unlink(missing_ok=True)
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.bind(str(self.sock_path))
+        sock.listen(10)
+        try:
+            self.sock_path.chmod(0o660)
+            os.chown(self.sock_path, 0, 65532)
+        except (PermissionError, OSError):
+            with contextlib.suppress(OSError):
+                self.sock_path.chmod(0o666)
+        self._server_sock = sock
+        self._running = True
+        self._thread = threading.Thread(target=self._serve, daemon=True, name="kb-ops-rpc")
+        self._thread.start()
+        log_phase("ops_rpc", f"Ops RPC server listening on {self.sock_path}")
+
+    def stop(self) -> None:
+        """Stop the socket listener."""
+        self._running = False
+        if self._server_sock:
+            with contextlib.suppress(Exception):
+                self._server_sock.close()
+        with contextlib.suppress(OSError):
+            self.sock_path.unlink(missing_ok=True)
+
+    def _serve(self) -> None:
+        while self._running:
+            if self._server_sock is None:
+                break
+            try:
+                conn, _ = self._server_sock.accept()
+            except OSError:
+                break
+            client_thread = threading.Thread(
+                target=self._handle_client,
+                args=(conn,),
+                daemon=True,
+            )
+            client_thread.start()
+
+    def _handle_client(self, conn: socket.socket) -> None:
+        with conn:
+            try:
+                data = b""
+                while not data.endswith(b"\n") and len(data) < MAX_OPS_PAYLOAD_SIZE:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                if not data:
+                    return
+                req = json.loads(data.decode("utf-8"))
+                req["run_dir"] = self.run_dir
+                if self.keyring and "raw_key_b64" not in req and not req.get("passphrase"):
+                    req["raw_key_b64"] = base64.b64encode(self.keyring.master_kek).decode("ascii")
+                req_json_str = json.dumps(req)
+
+                if os.geteuid() == 0:
+                    python_bin = sys.executable or "/opt/kanban/.venv/bin/python3"
+                    cmd = [
+                        python_bin,
+                        "-c",
+                        (
+                            "import sys; "
+                            "from deploy.standalone.entrypoint import execute_privileged_op; "
+                            "sys.exit(execute_privileged_op(sys.argv[1]))"
+                        ),
+                        req_json_str,
+                    ]
+                    proc = run_as_postgres(cmd, timeout=300.0, check=False)
+                    out_text = proc.stdout.strip()
+                    if not out_text:
+                        err_msg = proc.stderr or "Empty response from privileged op"
+                        out_text = json.dumps(
+                            {
+                                "status": "error",
+                                "message": err_msg,
+                            }
+                        )
+                else:
+                    old_stdout = sys.stdout
+                    try:
+                        buf = io.StringIO()
+                        sys.stdout = buf
+                        execute_privileged_op(req_json_str)
+                        out_text = buf.getvalue().strip()
+                    finally:
+                        sys.stdout = old_stdout
+
+                conn.sendall(out_text.encode("utf-8") + b"\n")
+            except Exception as exc:  # noqa: BLE001
+                err_resp = json.dumps(
+                    {
+                        "status": "error",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                    }
+                )
+                with contextlib.suppress(Exception):
+                    conn.sendall(err_resp.encode("utf-8") + b"\n")
 
 
 def build_uvicorn_command() -> list[str]:
@@ -450,6 +731,8 @@ def build_child_env(
         env["KB_MASTER_KEK_B64"] = keyring.master_kek_b64
         env["KB_AUTH_PEPPER_B64"] = keyring.auth_pepper_b64
         env["KB_SESSION_HMAC_KEY_B64"] = keyring.session_hmac_key_b64
+
+    env["KB_OPS_SOCK"] = str(Path(run_dir) / ".kb_ops.sock")
 
     return env
 
@@ -644,6 +927,8 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
             configure_postgres(pgdata, run_dir=run_dir)
         start_postgres(pgdata, run_dir=run_dir)
         ensure_backup_grants(run_dir=run_dir)
+        ops_server = OpsSocketServer(run_dir=run_dir, keyring=keyring)
+        ops_server.start()
     else:
         # Storage probe & ephemeral warning
         status = probe(pgdata.parent, mode="standalone_embedded_pg")
@@ -672,6 +957,8 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
         bootstrap_database(run_dir=run_dir, keyring=keyring)
         run_migrations(pgdata, alembic_ini, run_dir=run_dir)
         ensure_backup_grants(run_dir=run_dir)
+        ops_server = OpsSocketServer(run_dir=run_dir, keyring=keyring)
+        ops_server.start()
         if current_digest:
             mig_digest_file.parent.mkdir(parents=True, exist_ok=True)
             mig_digest_file.write_text(current_digest, encoding="utf-8")
@@ -690,6 +977,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
     # Install signal handlers
     def handle_signal(_signum: int, _frame: object) -> None:
         log_phase("shutdown", "shutdown signal received; terminating services")
+        ops_server.stop()
         shutdown_uvicorn(uvicorn_proc)
         stop_postgres(pgdata, mode="fast")
         sys.exit(0)
@@ -698,7 +986,10 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
     signal.signal(signal.SIGINT, handle_signal)
 
     # 8. Enter supervisor loop
-    return supervisor_loop(uvicorn_proc, pgdata)
+    try:
+        return supervisor_loop(uvicorn_proc, pgdata)
+    finally:
+        ops_server.stop()
 
 
 if __name__ == "__main__":

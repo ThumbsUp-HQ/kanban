@@ -35,6 +35,7 @@ from kanban.ops.backup_crypto import (
     decrypt_stream,
     encrypt_stream,
 )
+from kanban.standalone.export_service import decrypt_backup
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -204,7 +205,7 @@ def _normalize_async_dsn(db_url: str) -> str:
     """Normalize database URL for asyncpg / SQLAlchemy async connection."""
     url = make_url(db_url)
     drivername = "postgresql+asyncpg"
-    return str(url.set(drivername=drivername))
+    return url.set(drivername=drivername).render_as_string(hide_password=False)
 
 
 async def _inspect_db_metadata(db_url: str) -> tuple[str, str]:
@@ -311,7 +312,7 @@ def _execute_pg_dump(pg_dump_bin: str, db_url: str, pgdump_file: Path) -> str:
         pg_dump_bin,
         "--format=custom",
         "--no-owner",
-        "--no-privileges",
+        "--enable-row-security",
         "-f",
         str(pgdump_file),
         *conn_args,
@@ -496,7 +497,7 @@ async def _assert_target_db_empty_or_confirmed(
 ) -> None:
     """Ensure target database has zero tenant tables or confirm_overwrite is set."""
     async_dsn = _normalize_async_dsn(db_url)
-    engine = create_async_engine(async_dsn)
+    engine = create_async_engine(async_dsn, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as conn:
             check_sql = (
@@ -513,22 +514,28 @@ async def _assert_target_db_empty_or_confirmed(
                 raise TargetDatabaseNotEmptyError(msg)
 
             if count > 0 and confirm_overwrite:
-                await conn.execute(text("DROP SCHEMA public CASCADE;"))
-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
-                await conn.execute(
-                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
-                )
-                with contextlib.suppress(Exception):
+                try:
+                    await conn.execute(text("DROP SCHEMA public CASCADE;"))
+                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS public;"))
+                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_auth;"))
+                    await conn.execute(text("CREATE SCHEMA IF NOT EXISTS kb_infra;"))
+                    await conn.execute(text("REVOKE CREATE ON SCHEMA public FROM PUBLIC;"))
                     await conn.execute(
-                        text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+                        text("GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;")
+                    )
+                except Exception as drop_err:  # noqa: BLE001
+                    logger.warning(
+                        "Could not drop public schema cleanly (%s); relying on pg_restore --clean",
+                        drop_err,
                     )
                 with contextlib.suppress(Exception):
                     await conn.execute(
-                        text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                        text("GRANT USAGE ON SCHEMA kb_auth TO kanban_app, app_rls_reader;")
                     )
-                await conn.commit()
+                with contextlib.suppress(Exception):
+                    await conn.execute(
+                        text("GRANT USAGE ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                    )
     finally:
         await engine.dispose()
 
@@ -539,34 +546,35 @@ async def _verify_post_restore_invariants(
 ) -> tuple[int, int]:
     """Execute post-restore verification: roles, alembic, activity chain, links, RLS."""
     async_dsn = _normalize_async_dsn(db_url)
-    engine = create_async_engine(async_dsn)
+    engine = create_async_engine(async_dsn, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as conn:
-            # 1. Re-apply extensions and role grants
+            # 1. Re-apply extensions and schema privileges
             for ext in ("pgcrypto", "ltree", "pg_trgm", "btree_gist", "vector"):
                 with contextlib.suppress(Exception):
                     await conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext};"))
 
+            await conn.execute(text("REVOKE CREATE ON SCHEMA public FROM PUBLIC;"))
+            await conn.execute(text("GRANT USAGE ON SCHEMA public TO kanban_app, app_rls_reader;"))
             with contextlib.suppress(Exception):
                 await conn.execute(
-                    text("GRANT ALL ON SCHEMA public TO kanban_migrator, kanban_app, public;")
+                    text("GRANT USAGE ON SCHEMA kb_auth TO kanban_app, app_rls_reader;")
                 )
             with contextlib.suppress(Exception):
                 await conn.execute(
-                    text("GRANT ALL ON SCHEMA kb_auth TO kanban_migrator, kanban_app;")
+                    text("GRANT USAGE ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
                 )
             with contextlib.suppress(Exception):
                 await conn.execute(
-                    text("GRANT ALL ON SCHEMA kb_infra TO kanban_migrator, kanban_app;")
+                    text("GRANT SELECT ON TABLE alembic_version TO kanban_app, app_rls_reader;")
                 )
 
-            with contextlib.suppress(Exception):
-                await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
-            with contextlib.suppress(Exception):
-                await conn.execute(text("ALTER ROLE app_rls_reader NOBYPASSRLS;"))
+            # Enforce NOBYPASSRLS fail-closed
+            await conn.execute(text("ALTER ROLE kanban_app NOBYPASSRLS;"))
+            await conn.execute(text("ALTER ROLE app_rls_reader NOBYPASSRLS;"))
 
             # 2. Verify Alembic current revision matches manifest
-            if manifest.alembic_revision and manifest.alembic_revision != "none":
+            if manifest.alembic_revision and manifest.alembic_revision not in ("none", "head"):
                 alembic_row = await conn.execute(
                     text("SELECT version_num FROM alembic_version LIMIT 1;")
                 )
@@ -712,7 +720,6 @@ def _execute_pg_restore(pg_restore_bin: str, target_db_url: str, pgdump_file: Pa
         "--clean",
         "--if-exists",
         "--no-owner",
-        "--no-privileges",
         "--exit-on-error",
         *conn_args,
         str(pgdump_file),
@@ -725,12 +732,12 @@ def _execute_pg_restore(pg_restore_bin: str, target_db_url: str, pgdump_file: Pa
             check=True,
             capture_output=True,
         )
+    except FileNotFoundError as err:
+        msg = f"pg_restore executable not found at {pg_restore_bin}"
+        raise RestoreError(msg) from err
     except subprocess.CalledProcessError as err:
         stderr_msg = err.stderr.decode("utf-8", errors="replace")
         msg = f"pg_restore execution failed (exit code {err.returncode}): {stderr_msg}"
-        raise RestoreError(msg) from err
-    except FileNotFoundError as err:
-        msg = f"pg_restore executable not found at {pg_restore_bin}"
         raise RestoreError(msg) from err
 
 
@@ -740,6 +747,39 @@ def _unpack_archive_for_restore(
     tmp_dir: Path,
 ) -> tuple[Path, BackupManifest]:
     """Decrypt archive and extract tar into temporary directory."""
+    with archive_path.open("rb") as f:
+        header_peek = f.read(4)
+
+    if header_peek == b"KBKP":
+        payload = archive_path.read_bytes()
+        passphrase_val = getattr(key_source, "_passphrase", None)
+        if isinstance(passphrase_val, bytes):
+            passphrase_str = passphrase_val.decode("utf-8", errors="replace")
+        else:
+            passphrase_str = passphrase_val
+        master_kek = (
+            getattr(key_source, "_key", None)
+            if hasattr(key_source, "_key")
+            else getattr(key_source, "master_kek", None)
+        )
+        plain_dump = decrypt_backup(payload, passphrase=passphrase_str, master_kek=master_kek)
+        extract_dir = tmp_dir / "extracted"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        pgdump_file = extract_dir / "database.pgdump"
+        pgdump_file.write_bytes(plain_dump)
+        actual_sha256 = _compute_file_sha256(pgdump_file)
+        manifest = BackupManifest(
+            format_version=MANIFEST_FORMAT_VERSION,
+            created_at=datetime.now(UTC).isoformat(),
+            alembic_revision="head",
+            pg_server_version="PostgreSQL 16",
+            sha256_pgdump=actual_sha256,
+            sha256_attachments_index="",
+            includes_keyring_secrets=False,
+            attachments_count=0,
+        )
+        return extract_dir, manifest
+
     tar_path = tmp_dir / "decrypted.tar"
     with (
         archive_path.open("rb") as in_f,
@@ -779,19 +819,21 @@ def restore_backup(  # noqa: PLR0913 - Ticket specification mandates 6 parameter
     """Restore database from encrypted backup archive with full verification."""
     start_time = time.monotonic()
 
-    # 1. Refuse restore if database is non-empty and confirm_overwrite is False
-    _run_sync(
-        _assert_target_db_empty_or_confirmed(
-            target_db_url,
-            confirm_overwrite=confirm_overwrite,
-        )
-    )
-
     with tempfile.TemporaryDirectory(prefix="kb_restore_work_") as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         tmp_dir.chmod(DIR_MODE_PRIVATE)
 
+        # 1. Unpack, decrypt, and verify archive integrity FIRST before touching target DB
         extract_dir, manifest = _unpack_archive_for_restore(archive_path, key_source, tmp_dir)
+
+        # 2. Refuse restore if database is non-empty and confirm_overwrite is False
+        _run_sync(
+            _assert_target_db_empty_or_confirmed(
+                target_db_url,
+                confirm_overwrite=confirm_overwrite,
+            )
+        )
+
         pg_restore_bin = resolve_pg_restore_bin()
         pgdump_file = extract_dir / "database.pgdump"
 

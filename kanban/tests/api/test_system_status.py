@@ -1,20 +1,24 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: E501
+# ruff: noqa: E501, PLC0415, S106
 """Integration and unit tests for System Status, Encrypted Backup, and Compose Export (KB-P3-52)."""
 
 from __future__ import annotations
 
+import base64
+import json
+import os
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 
 if TYPE_CHECKING:
@@ -557,7 +561,7 @@ async def test_case_4_backup_encryption_and_decryption_edge_cases() -> None:
         encrypt_backup(b"data")
 
     # 2. Valid payload for subsequent corruption tests
-    valid_enc = encrypt_backup(b"valid-data", passphrase="a-strong-passphrase-16+")  # noqa: S106
+    valid_enc = encrypt_backup(b"valid-data", passphrase="a-strong-passphrase-16+")
 
     # 3. Payload too short
     with pytest.raises(RestoreError, match="Payload too short"):
@@ -566,17 +570,17 @@ async def test_case_4_backup_encryption_and_decryption_edge_cases() -> None:
     # 4. Invalid magic header
     corrupt_magic = b"FAIL" + valid_enc[4:]
     with pytest.raises(RestoreError, match="Invalid magic header"):
-        decrypt_backup(corrupt_magic, passphrase="a-strong-passphrase-16+")  # noqa: S106
+        decrypt_backup(corrupt_magic, passphrase="a-strong-passphrase-16+")
 
     # 5. Invalid version
     corrupt_version = valid_enc[:4] + b"\x02" + valid_enc[5:]
     with pytest.raises(RestoreError, match="Unsupported backup version"):
-        decrypt_backup(corrupt_version, passphrase="a-strong-passphrase-16+")  # noqa: S106
+        decrypt_backup(corrupt_version, passphrase="a-strong-passphrase-16+")
 
     # 6. Unknown KDF mode
     corrupt_kdf = valid_enc[:5] + b"\x99" + valid_enc[6:]
     with pytest.raises(RestoreError, match="Unknown KDF mode"):
-        decrypt_backup(corrupt_kdf, passphrase="a-strong-passphrase-16+")  # noqa: S106
+        decrypt_backup(corrupt_kdf, passphrase="a-strong-passphrase-16+")
 
     # 7. Missing passphrase on PBKDF2 payload
     with pytest.raises(RestoreError, match="Passphrase required"):
@@ -589,7 +593,7 @@ async def test_case_4_backup_encryption_and_decryption_edge_cases() -> None:
 
     # 9. Decryption failure on corrupted ciphertext / wrong passphrase
     with pytest.raises(RestoreError, match="Decryption failed"):
-        decrypt_backup(valid_enc, passphrase="wrong-passphrase-16+")  # noqa: S106
+        decrypt_backup(valid_enc, passphrase="wrong-passphrase-16+")
 
 
 @pytest.mark.asyncio
@@ -925,6 +929,29 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
         assert resp_r_fail.status_code == 422
         assert "INVALID_CONFIRM_OVERWRITE" in resp_r_fail.text
 
+        # Test invalid base64 and invalid filename handling on verify
+        resp_v_bad_b64 = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"file_base64": "a"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_bad_b64.status_code == 422
+
+        resp_v_bad_fn = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "../evil_path.kbbak"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_bad_fn.status_code == 400
+
+        # Test invalid base64 on restore
+        resp_r_bad_b64 = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"file_base64": "a", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_bad_b64.status_code == 422
+
         # 3. Verify multipart form upload and use_master_kek
         with patch.object(
             Request,
@@ -1064,6 +1091,8 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
                 links_audited=0,
                 duration_seconds=0.42,
             )
+            app.state.engine = AsyncMock()
+            app.state.engine.dispose = AsyncMock()
             resp_r_upload = await client.post(
                 "/api/v1/admin/standalone/restore",
                 headers={
@@ -1136,9 +1165,145 @@ async def test_case_9_backup_verify_and_restore_api(  # noqa: PLR0915
         assert resp_db_err.status_code == 500
         assert "DATABASE_UNAVAILABLE" in resp_db_err.text
 
+        # 12. Download backup invalid filename traversal (400)
+        resp_dl_bad = await client.get("/api/v1/admin/standalone/backups/..%2Fevil.kbbak")
+        assert resp_dl_bad.status_code in (400, 404)
+
+        # 13. Verify backup invalid filename and missing payload (400, 422)
+        resp_v_bad_name = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={"filename": "../forbidden.kbbak"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_bad_name.status_code == 400
+
+        resp_v_missing = await client.post(
+            "/api/v1/admin/standalone/backup/verify",
+            json={},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_v_missing.status_code == 422
+
+        # 14. Verify backup KBKP format
+        fake_kbkp = b"KBKP" + b"\x00" * 60
+        with patch("kanban.api.v1.system_status.decrypt_backup", return_value=b"DUMP_CONTENT"):
+            resp_v_kbkp = await client.post(
+                "/api/v1/admin/standalone/backup/verify",
+                json={
+                    "file_base64": base64.b64encode(fake_kbkp).decode("ascii"),
+                    "passphrase": test_passphrase,
+                },
+                headers={CSRF_HEADER_NAME: csrf_token},
+            )
+            assert resp_v_kbkp.status_code == 200
+            assert resp_v_kbkp.json()["format"] == "kbkp"
+
+        # 15. Restore backup missing payload (422) and invalid filename (400)
+        resp_r_bad_name = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"filename": "../bad.kbbak", "confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_bad_name.status_code == 400
+
+        resp_r_missing = await client.post(
+            "/api/v1/admin/standalone/restore",
+            json={"confirm_overwrite": "RESTORE"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+        )
+        assert resp_r_missing.status_code == 422
+
+
 
 def test_assert_admin_routes_protected_compliance() -> None:
     """Verify all admin routes declare require_admin_aal2 dependency."""
     app = create_app()
     unprotected = assert_admin_routes_protected(app)
     assert not unprotected, f"Unprotected admin routes detected: {unprotected}"
+
+
+@pytest.mark.asyncio
+async def test_system_status_workspace_air_gap_sqlalchemy_error() -> None:
+    """Test system status endpoint handles SQLAlchemyError during workspace air gap check."""
+    from kanban.api.v1.system_status import _assemble_system_status_response
+
+    mock_caller = MagicMock()
+    mock_caller.workspace_id = uuid.uuid4()
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = [
+        MagicMock(scalar_one=MagicMock(return_value=True)),
+        SQLAlchemyError("DB error"),
+    ]
+
+    mock_req = MagicMock()
+    mock_req.app.state.settings = Settings()
+    mock_req.app.openapi.return_value = {"info": {"version": "1.0.0"}, "paths": {}}
+
+    resp = await _assemble_system_status_response(
+        caller=mock_caller,
+        session=mock_session,
+        request=mock_req,
+    )
+    assert resp.air_gap_mode is False
+
+
+@pytest.mark.asyncio
+async def test_run_backup_now_ops_socket_oserror_fallback(tmp_path: Path) -> None:
+    """Test run_backup_now falls back to direct pass when ops socket raises OSError."""
+    from kanban.api.v1.system_status import run_backup_now_endpoint
+
+    fake_sock = tmp_path / "fake.sock"
+    fake_sock.touch()
+
+    mock_req = MagicMock()
+    mock_req.app.state.settings = Settings()
+
+    with (
+        patch("pathlib.Path.is_socket", return_value=True),
+        patch("socket.socket", side_effect=OSError("Socket connect failure")),
+        patch.dict(os.environ, {"KB_OPS_SOCK": str(fake_sock)}),
+        patch(
+            "kanban.api.v1.system_status.run_scheduled_backup_pass",
+            return_value=MagicMock(filename="backup.kbbak", size_bytes=100),
+        ),
+    ):
+        res = await run_backup_now_endpoint(request=mock_req)
+        assert res["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_restore_backup_ops_socket_engine_dispose(tmp_path: Path) -> None:
+    """Test restore_backup_endpoint disposes app engine when ops socket restore succeeds."""
+    from kanban.api.v1.system_status import restore_backup_endpoint
+
+    fake_sock = tmp_path / "fake.sock"
+    fake_sock.touch()
+
+    mock_req = MagicMock()
+    mock_req.headers = {"content-type": "application/json"}
+    mock_req.json = AsyncMock(
+        return_value={
+            "file_base64": base64.b64encode(b"dummy_payload").decode("ascii"),
+            "confirm_overwrite": "RESTORE",
+        }
+    )
+    mock_engine = AsyncMock()
+    mock_req.app.state.engine = mock_engine
+    mock_req.app.state.key_material = None
+
+    mock_client = MagicMock()
+    mock_client.recv.side_effect = [
+        json.dumps({"status": "ok", "report": {"workspaces_verified": 1}}).encode("utf-8") + b"\n",
+        b"",
+    ]
+
+    with (
+        patch("pathlib.Path.is_socket", return_value=True),
+        patch("socket.socket") as mock_sock_cls,
+        patch.dict(os.environ, {"KB_OPS_SOCK": str(fake_sock)}),
+    ):
+        mock_sock_cls.return_value.__enter__.return_value = mock_client
+        res = await restore_backup_endpoint(request=mock_req)
+        assert res["status"] == "success"
+        mock_engine.dispose.assert_awaited_once()

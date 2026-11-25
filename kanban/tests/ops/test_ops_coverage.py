@@ -10,16 +10,21 @@ Targeted tests to ensure >=95% branch and line coverage across:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import io
 import json
 import os
 import subprocess
 import tarfile
-from typing import TYPE_CHECKING
-from unittest.mock import patch
+from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from deploy.standalone.pg_config import configure_postgres, generate_role_passwords_sql
+from kanban.api.v1.system_status import encrypt_backup
 from kanban.cli.ctl import main as ctl_main
 from kanban.cli.ops import (
     _handle_backup_create,
@@ -37,14 +42,18 @@ from kanban.ops.backup_crypto import (
     BackupIntegrityError,
     PassphraseKeySource,
     RawKeySource,
+    encrypt_stream,
 )
 from kanban.ops.backup_service import (
+    CANONICAL_PG_DUMP_PATH,
+    CANONICAL_PG_RESTORE_PATH,
     BackupError,
     BackupManifest,
     RestoreError,
     RestoreVerificationError,
     TargetDatabaseNotEmptyError,
     _atomic_write_encrypted_tar,
+    _build_tar_archive,
     _execute_pg_dump,
     _execute_pg_restore,
     _inspect_db_metadata,
@@ -52,7 +61,9 @@ from kanban.ops.backup_service import (
     _read_secrets_carryover,
     _restore_attachments,
     _restore_secrets,
+    _run_sync,
     _safe_extract_tar,
+    _unpack_archive_for_restore,
     _verify_post_restore_invariants,
     resolve_pg_dump_bin,
     resolve_pg_restore_bin,
@@ -62,9 +73,15 @@ from kanban.ops.compose_export import (
     _load_standalone_keyring,
     export_production_bundle,
 )
+from kanban.standalone.export_service import (
+    BackupError as ExportBackupError,
+)
+from kanban.standalone.export_service import (
+    get_standalone_status,
+    run_pg_dump,
+)
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from typing import Any
 
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -571,3 +588,290 @@ async def test_verify_post_restore_invariants_alembic_mismatch(pg_worker_db: Asy
     )
     with pytest.raises(RestoreVerificationError, match="Post-restore Alembic revision mismatch"):
         await _verify_post_restore_invariants(db_url, mismatch_manifest)
+
+
+def test_deploy_standalone_pg_config(tmp_path: Path) -> None:
+    """Test configure_postgres and generate_role_passwords_sql in deploy.standalone.pg_config."""
+    pgdata = tmp_path / "pgdata"
+    configure_postgres(pgdata, run_dir="/run/postgresql")
+    assert (pgdata / "conf.d" / "kanban.conf").is_file()
+    assert (pgdata / "pg_hba.conf").is_file()
+    assert (pgdata / "pg_ident.conf").is_file()
+
+    # When postgresql.conf exists without include_dir
+    main_conf = pgdata / "postgresql.conf"
+    main_conf.write_text("# main conf\n", encoding="utf-8")
+    configure_postgres(pgdata, run_dir="/run/postgresql")
+    assert "include_dir = 'conf.d'" in main_conf.read_text(encoding="utf-8")
+
+    # When include_dir already exists, re-running is idempotent
+    configure_postgres(pgdata, run_dir="/run/postgresql")
+
+    sql = generate_role_passwords_sql("scram_app_pw", "scram_mig_pw")
+    assert "scram_app_pw" in sql
+    assert "scram_mig_pw" in sql
+
+
+@pytest.mark.asyncio
+async def test_export_service_edge_coverage(tmp_path: Path) -> None:
+    """Cover run_pg_dump and get_standalone_status fallback branches."""
+    # 1. URL parsing in run_pg_dump with mock subprocess
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
+        proc_mock = AsyncMock()
+        proc_mock.communicate = AsyncMock(return_value=(b"DUMP_DATA", b""))
+        proc_mock.returncode = 0
+        mock_exec.return_value = proc_mock
+
+        out = await run_pg_dump(
+            pg_dump_bin="pg_dump",
+            database_url="postgresql://customuser:custompass@customhost:5433/customdb",
+        )
+        assert out == b"DUMP_DATA"
+
+        # Malformed URL parsing fallback
+        out_bad = await run_pg_dump(
+            pg_dump_bin="pg_dump",
+            database_url="://bad_url",
+        )
+        assert out_bad == b"DUMP_DATA"
+
+    # 2. Subprocess execution error in run_pg_dump
+    with (
+        pytest.raises(ExportBackupError, match="Subprocess execution error during pg_dump"),
+        patch("asyncio.create_subprocess_exec", side_effect=RuntimeError("Subprocess failed")),
+    ):
+        await run_pg_dump(pg_dump_bin="pg_dump")
+
+    # 3. get_standalone_status fallback when status file is absent
+    # and mode is standalone_embedded_pg
+    fake_settings = SimpleNamespace(
+        deployment_mode="standalone_embedded_pg",
+        air_gap_mode=False,
+        local_llm_endpoint_host="localhost",
+    )
+    status = get_standalone_status(
+        status_path=tmp_path / "absent_status.json",
+        settings=fake_settings,  # type: ignore[arg-type]
+    )
+    assert status["deployment_mode"] == "standalone_embedded_pg"
+
+
+def test_backup_service_kbkp_and_integrity_edge_cases(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test legacy KBKP extraction, sha256 verification mismatch, and resolver fallbacks."""
+    # 1. Legacy KBKP extraction
+    enc_data = encrypt_backup(b"PGDUMP_SAMPLE_DATA", passphrase="test_passphrase_123")  # noqa: S106
+    kbkp_path = tmp_path / "sample.kbkp"
+    kbkp_path.write_bytes(enc_data)
+
+    work_kbkp = tmp_path / "work_kbkp"
+    work_kbkp.mkdir(parents=True, exist_ok=True)
+    extract_dir, manifest = _unpack_archive_for_restore(
+        kbkp_path,
+        PassphraseKeySource("test_passphrase_123"),
+        work_kbkp,
+    )
+    assert (extract_dir / "database.pgdump").is_file()
+    assert manifest.alembic_revision == "head"
+
+    # 2. SHA256 mismatch during restore extraction
+    tar_dir = tmp_path / "tar_content"
+    tar_dir.mkdir(parents=True)
+    (tar_dir / "database.pgdump").write_bytes(b"DATA_1")
+    manifest_dict = {
+        "format_version": 1,
+        "created_at": "2026-11-11T00:00:00Z",
+        "alembic_revision": "head",
+        "pg_server_version": "16",
+        "sha256_pgdump": "DIFFERENT_SHA256_HASH",
+        "sha256_attachments_index": "",
+        "includes_keyring_secrets": False,
+        "attachments_count": 0,
+    }
+    (tar_dir / "manifest.json").write_text(json.dumps(manifest_dict), encoding="utf-8")
+    tar_archive = tmp_path / "archive.tar"
+    _build_tar_archive(tar_dir, tar_archive)
+
+    key = os.urandom(32)
+    kbbak_file = tmp_path / "corrupted_sha.kbbak"
+    with tar_archive.open("rb") as inf, kbbak_file.open("wb") as outf:
+        encrypt_stream(inf, outf, RawKeySource(key))
+
+    work_corrupted = tmp_path / "work_corrupted"
+    work_corrupted.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(BackupIntegrityError, match=r"database\.pgdump SHA-256 verification failed"):
+        _unpack_archive_for_restore(kbbak_file, RawKeySource(key), work_corrupted)
+
+    # 3. Resolver fallbacks
+    fake_pg_dump = tmp_path / "fake_pg_dump"
+    fake_pg_dump.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("KB_PG_DUMP_BIN", str(fake_pg_dump))
+    assert resolve_pg_dump_bin() == str(fake_pg_dump)
+
+    fake_pg_restore = tmp_path / "fake_pg_restore"
+    fake_pg_restore.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("KB_PG_RESTORE_BIN", str(fake_pg_restore))
+    assert resolve_pg_restore_bin() == str(fake_pg_restore)
+
+
+def test_backup_service_additional_coverage_branches(tmp_path: Path) -> None:
+    """Test _run_sync outside loop, _restore_secrets, and _execute_pg_restore returncode."""
+    # 1. _run_sync outside loop
+    res = _run_sync(asyncio.sleep(0.001, result="ok"))
+    assert res == "ok"
+
+    # 2. _restore_secrets non-dict
+    extract_dir = tmp_path / "extract_non_dict"
+    extract_dir.mkdir(parents=True)
+    (extract_dir / "secrets_carryover.json").write_text("[]", encoding="utf-8")
+    assert _restore_secrets(extract_dir, tmp_path / "target_keyring.json") is False
+
+    # 3. _execute_pg_restore returncode not in (0, 1)
+    mock_err = subprocess.CalledProcessError(2, ["pg_restore"], stderr=b"pg_restore fatal error")
+    with (
+        patch("subprocess.run", side_effect=mock_err),
+        pytest.raises(RestoreError, match=r"pg_restore execution failed \(exit code 2\)"),
+    ):
+        _execute_pg_restore("pg_restore", "postgresql://localhost/db", tmp_path / "dump.pgdump")
+
+
+@pytest.mark.asyncio
+async def test_backup_service_health_verification_failures() -> None:
+    """Test _verify_post_restore_invariants error branches."""
+    manifest = MagicMock(spec=BackupManifest)
+    manifest.alembic_revision = None
+
+    def _make_mock_engine(
+        *,
+        chain_valid: bool = True,
+        broken_count: int = 0,
+        rls_active: bool = True,
+    ) -> MagicMock:
+        mock_conn = AsyncMock()
+
+        async def _exec(statement: object, params: object = None) -> object:
+            _ = params
+            sql_text = str(getattr(statement, "text", statement))
+            if "SELECT id FROM workspaces" in sql_text:
+                mock_res = MagicMock()
+                mock_res.scalars.return_value.all.return_value = ["ws-1"]
+                return mock_res
+            if "verify_activity_chain" in sql_text:
+                mock_res = MagicMock()
+                mock_res.mappings.return_value.one.return_value = {
+                    "is_valid": chain_valid,
+                    "failure_reason": None if chain_valid else "Hash mismatch at sequence 4",
+                }
+                return mock_res
+            if "audit_object_links" in sql_text:
+                mock_res = MagicMock()
+                mock_res.scalar.return_value = broken_count
+                return mock_res
+            if "relforcerowsecurity" in sql_text or "relrowsecurity" in sql_text:
+                mock_res = MagicMock()
+                mock_res.fetchall.return_value = [("issues", rls_active, rls_active)]
+                return mock_res
+            return AsyncMock()
+
+        mock_conn.execute.side_effect = _exec
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value.__aenter__.return_value = mock_conn
+        mock_engine.dispose = AsyncMock()
+        return mock_engine
+
+    # 1. Activity chain invalid
+    engine1 = _make_mock_engine(chain_valid=False)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine1),
+        pytest.raises(RestoreVerificationError, match=r"Activity chain verification failed"),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+    # 2. Audit object links broken count > 0
+    engine2 = _make_mock_engine(chain_valid=True, broken_count=5)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine2),
+        pytest.raises(
+            RestoreVerificationError, match=r"audit_object_links discovered 5 broken links"
+        ),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+    # 3. FORCE ROW LEVEL SECURITY inactive
+    engine3 = _make_mock_engine(chain_valid=True, broken_count=0, rls_active=False)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine3),
+        pytest.raises(
+            RestoreVerificationError, match=r"FORCE ROW LEVEL SECURITY is inactive on table issues"
+        ),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+
+def test_bin_resolvers_full_fallbacks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test resolve_pg_dump_bin and resolve_pg_restore_bin fallbacks."""
+    _ = tmp_path
+    monkeypatch.delenv("KB_PG_DUMP_BIN", raising=False)
+    monkeypatch.delenv("KB_PG_RESTORE_BIN", raising=False)
+
+    # When canonical file exists
+    with patch("pathlib.Path.is_file", return_value=True):
+        assert resolve_pg_dump_bin() == CANONICAL_PG_DUMP_PATH
+        assert resolve_pg_restore_bin() == CANONICAL_PG_RESTORE_PATH
+
+    # When canonical does not exist, but shutil.which finds binary
+    with (
+        patch("pathlib.Path.is_file", return_value=False),
+        patch("shutil.which", side_effect=lambda name: f"/custom/bin/{name}"),
+    ):
+        assert resolve_pg_dump_bin() == "/custom/bin/pg_dump"
+        assert resolve_pg_restore_bin() == "/custom/bin/pg_restore"
+
+    # When which fails, but fallback /usr/bin exists
+    def mock_is_file(self: Path) -> bool:
+        return "/usr/bin/pg_" in str(self)
+
+    with (
+        patch.object(Path, "is_file", mock_is_file),
+        patch("shutil.which", return_value=None),
+    ):
+        assert resolve_pg_dump_bin() == "/usr/bin/pg_dump"
+        assert resolve_pg_restore_bin() == "/usr/bin/pg_restore"
+
+
+@pytest.mark.asyncio
+async def test_export_service_edge_cases(tmp_path: Path) -> None:
+    """Test get_standalone_status probe exception fallback and run_pg_dump URL parsing."""
+    # 1. get_standalone_status probe failure fallback
+    with (
+        patch("kanban.standalone.export_service.probe", side_effect=RuntimeError("probe error")),
+        patch.dict(os.environ, {"KANBAN_DEPLOYMENT_MODE": "standalone_embedded_pg"}),
+    ):
+        status = get_standalone_status(status_path=tmp_path / "nonexistent.json")
+        assert status["deployment_mode"] == "standalone_embedded_pg"
+        assert status["tier_b_sandbox_available"] is False
+
+    # 2. run_pg_dump with database_url parsing (host, port, user, password, db)
+    mock_proc = AsyncMock()
+    mock_proc.communicate.return_value = (b"DUMP_DATA", b"")
+    mock_proc.returncode = 0
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+        data = await run_pg_dump(
+            database_url="postgresql://custom_user:custom_pass@custom_host:5433/custom_db",
+            socket_dir=None,
+        )
+        assert data == b"DUMP_DATA"
+        call_args = mock_exec.call_args
+        args = call_args[0]
+        assert "-U" in args
+        assert "custom_user" in args
+        assert "-d" in args
+        assert "custom_db" in args
+        assert "-h" in args
+        assert "custom_host" in args
+        assert "-p" in args
+        assert "5433" in args
+        assert call_args[1]["env"]["PGPASSWORD"] == "custom_pass"
+
