@@ -22,7 +22,7 @@ vi.mock('../../api/client', () => ({
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
   },
-  apiFetch: vi.fn().mockResolvedValue({}),
+  apiFetch: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
 }));
 
 vi.mock('../../features/settings/settingsApi', () => ({
@@ -47,6 +47,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     const allTabs = [
       { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️' },
       { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠' },
+      { id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' },
       { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
       { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
       { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
@@ -55,7 +56,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
     ] as const;
 
-    it('renders all 8 tabs with navigation aria-label and accessible markup in router', () => {
+    it('renders all 9 tabs with navigation aria-label and accessible markup in router', () => {
       render(
         <MemoryRouter initialEntries={['/admin/mcp']}>
           <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />

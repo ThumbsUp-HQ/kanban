@@ -1,0 +1,118 @@
+================================================================================
+1. Frontend Vitest Feature Test Suites (173 tests, >=95% branch coverage)
+================================================================================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan412-8436ea57/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 20ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (7 tests) 409ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 920ms
+ ✓ src/app/__tests__/MenuConsolidation.test.tsx (10 tests) 482ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (50 tests) 1903ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (47 tests) 2045ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (47)
+     ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 313ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 2872ms
+   ✓ RunnerStudioPage & Components (KANBA-219) (22)
+     ✓ MintEnrollmentTokenModal component (12)
+       ✓ resets copied state after 2 seconds 2124ms
+
+ Test Files  7 passed (7)
+      Tests  173 passed (173)
+   Start at  15:02:05
+   Duration  4.46s (tests 49%, environment 33%, import 12%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.16 |    95.96 |   99.41 |    98.8 |                   
+ admin-agents      |   98.73 |    95.89 |     100 |   99.33 |                   
+  ...torDrawer.tsx |   99.07 |    95.48 |     100 |   99.05 | 236               
+  ...tudioPage.tsx |      98 |     97.5 |     100 |     100 | 73                
+ admin-ai          |   97.78 |    95.86 |   99.02 |    98.5 |                   
+  ...dgetModal.tsx |     100 |    97.56 |     100 |     100 | 123,213           
+  ...torDrawer.tsx |   99.62 |    96.02 |     100 |     100 | ...56,368,395,416 
+  AiStudioPage.tsx |    93.5 |    94.26 |   97.56 |   94.96 | 237-246           
+ admin-runners     |     100 |    97.61 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    97.61 |     100 |     100 | 128               
+-------------------|---------|----------|---------|---------|-------------------
+
+================================================================================
+2. Backend Pytest AI / Agent / Runner Feature Test Suites (63 tests)
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan412-8436ea57/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan412-8436ea57
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 63 items
+
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_1_positive_rest_lifecycle_and_budget_usage PASSED [  1%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_3_security_secret_suppression PASSED [  3%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_4_security_member_isolation PASSED [  4%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_5_security_csrf_and_airgap PASSED [  6%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_6_negative_base_url_ssrf_and_invalid_token_cap PASSED [  7%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_7_boundary_key_length_and_patch_clear PASSED [  9%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_9_audit_activity_records PASSED [ 11%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_additional_coverage_branches PASSED [ 12%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_reorder PASSED [ 14%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_probe_and_test_connection PASSED [ 15%]
+kanban/tests/ai_config/test_net_guard.py::test_hard_denied_networks_completeness PASSED [ 17%]
+kanban/tests/ai_config/test_net_guard.py::test_is_local_or_private_ip PASSED [ 19%]
+kanban/tests/ai_config/test_net_guard.py::test_is_private_lan_hostname PASSED [ 20%]
+kanban/tests/ai_config/test_net_guard.py::test_is_local_base_url PASSED  [ 22%]
+kanban/tests/ai_config/test_net_guard.py::test_resolve_and_pin_literal_success PASSED [ 23%]
+kanban/tests/ai_config/test_net_guard.py::test_resolve_and_pin_metadata_rejection PASSED [ 25%]
+kanban/tests/ai_config/test_net_guard.py::test_resolve_and_pin_cgnat_rejection PASSED [ 26%]
+kanban/tests/ai_config/test_net_guard.py::test_resolve_and_pin_outside_allowed_cidrs PASSED [ 28%]
+kanban/tests/ai_config/test_net_guard.py::test_resolve_and_pin_dns_resolver PASSED [ 30%]
+kanban/tests/ai_config/test_net_guard.py::test_extract_ip_helper PASSED  [ 31%]
+kanban/tests/ai_config/test_net_guard.py::test_local_and_private_cidrs_and_ssrf_blocked_error PASSED [ 33%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_1_positive_create_cli_pipe_and_codex PASSED [ 34%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo] PASSED [ 36%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--YOLO] PASSED [ 38%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo=true] PASSED [ 39%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-skip-permissions] PASSED [ 41%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously] PASSED [ 42%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-foo] PASSED [ 44%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--full-auto] PASSED [ 46%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--allow-all-tools=1] PASSED [ 47%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args0] PASSED [ 49%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args1] PASSED [ 50%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args2] PASSED [ 52%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args3] PASSED [ 53%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3b_security_binary_allowlist PASSED [ 55%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_4_security_arg_boundaries_and_opaque_injection PASSED [ 57%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_5_runtime_argv_assertion_catches_tampered_records PASSED [ 58%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_6_rls_member_denial_and_cross_workspace_404 PASSED [ 60%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_7_boundary_and_validation PASSED [ 61%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_8_delete_and_agent_in_use PASSED [ 63%]
+kanban/tests/agents/test_agent_definitions_api.py::test_crud_endpoints_get_list_patch PASSED [ 65%]
+kanban/tests/agents/test_agent_definitions_api.py::test_duplicate_slug_conflict_409 PASSED [ 66%]
+kanban/tests/agents/test_agent_definitions_api.py::test_workspace_slug_lookup PASSED [ 68%]
+kanban/tests/agents/test_agent_definitions_api.py::test_project_scoped_agent_lifecycle PASSED [ 69%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_create PASSED [ 71%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_patch PASSED [ 73%]
+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [ 74%]
+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [ 76%]
+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 77%]
+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 79%]
+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 80%]
+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 82%]
+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 84%]
+agent/tests/test_remote_runner.py::test_runner_config_toml_loading PASSED [ 85%]
+agent/tests/test_remote_runner.py::test_enroll_runner_persists_ca_pem_0600_and_runner_toml PASSED [ 87%]
+agent/tests/test_remote_runner.py::test_daemon_signs_pop_challenge_automatically PASSED [ 88%]
+agent/tests/test_remote_runner.py::test_daemon_full_pop_handshake_flow PASSED [ 90%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_env_override PASSED [ 92%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_root PASSED [ 93%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_user_with_and_without_xdg PASSED [ 95%]
+agent/tests/test_remote_runner.py::test_default_runner_config_path_variations PASSED [ 96%]
+agent/tests/test_remote_runner.py::test_cli_enroll_server_url_and_url_alias PASSED [ 98%]
+agent/tests/test_remote_runner.py::test_cli_enroll_and_run_defaults PASSED [100%]
+
+============================= 63 passed in 17.80s ==============================

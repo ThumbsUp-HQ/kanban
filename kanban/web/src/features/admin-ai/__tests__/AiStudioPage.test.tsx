@@ -797,8 +797,8 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       });
     });
 
-    it('renders unlimited cap when token_cap is 0', async () => {
-      const unlimitedBudgets: BudgetRecord[] = [
+    it('renders zero-allowance freeze when token_cap is 0 and unlimited when no budgets (KAN-412 fix)', async () => {
+      const zeroFreezeBudgets: BudgetRecord[] = [
         {
           period_kind: 'monthly',
           period_start: '2026-11-01',
@@ -807,8 +807,25 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
           tokens_reserved: 0,
         },
       ];
-      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(unlimitedBudgets);
+      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(zeroFreezeBudgets);
 
+      const { unmount } = render(
+        <AiBudgetModal
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Zero-Allowance Freeze \(0 tokens\)/)).toBeDefined();
+        expect(screen.getByText(/Frozen \(0 tokens allowance\)/)).toBeDefined();
+        expect(screen.getByTestId('zero-cap-freeze-warning')).toBeDefined();
+      });
+
+      unmount();
+
+      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue([]);
       render(
         <AiBudgetModal
           isOpen={true}
@@ -819,6 +836,73 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Unlimited')).toBeDefined();
+        expect(screen.getByText('No cap enforced')).toBeDefined();
+      });
+    });
+
+    it('handles mode toggle pills, presets, and freeze warning in AiBudgetModal (KAN-412)', async () => {
+      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
+      const firstBudget = mockBudgets[0];
+      if (!firstBudget) {
+        throw new Error('Expected mock budget at index 0');
+      }
+      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue(firstBudget);
+
+      render(
+        <AiBudgetModal
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('cap-mode-enforce-btn')).toBeDefined();
+        expect(screen.getByTestId('cap-mode-unlimited-btn')).toBeDefined();
+        expect(screen.getByTestId('budget-presets-row')).toBeDefined();
+      });
+
+      // Test presets: 1M, 5M, 25M, 100M, and 0 (Freeze)
+      const capInput = screen.getByTestId<HTMLInputElement>('budget-token-cap-input');
+
+      fireEvent.click(screen.getByTestId('preset-budget-5m-btn'));
+      expect(capInput.value).toBe('5000000');
+
+      fireEvent.click(screen.getByTestId('preset-budget-25m-btn'));
+      expect(capInput.value).toBe('25000000');
+
+      fireEvent.click(screen.getByTestId('preset-budget-100m-btn'));
+      expect(capInput.value).toBe('100000000');
+
+      fireEvent.click(screen.getByTestId('preset-budget-1m-btn'));
+      expect(capInput.value).toBe('1000000');
+
+      // Click Freeze preset -> surfaces warning banner
+      fireEvent.click(screen.getByTestId('preset-budget-0-freeze-btn'));
+      expect(capInput.value).toBe('0');
+      expect(screen.getByTestId('zero-cap-freeze-warning')).toBeDefined();
+
+      // Switch to Unlimited mode
+      fireEvent.click(screen.getByTestId('cap-mode-unlimited-btn'));
+      expect(screen.getByTestId('budget-unlimited-note')).toBeDefined();
+      expect(screen.queryByTestId('budget-token-cap-input')).toBeNull();
+
+      // Switch back to Enforce mode to verify restoration
+      fireEvent.click(screen.getByTestId('cap-mode-enforce-btn'));
+      expect(screen.getByTestId<HTMLInputElement>('budget-token-cap-input').value).toBe('1000000');
+
+      // Switch to Unlimited mode for save
+      fireEvent.click(screen.getByTestId('cap-mode-unlimited-btn'));
+
+      // Save in unlimited mode submits 10_000_000_000
+      fireEvent.click(screen.getByTestId('save-budget-btn'));
+      await waitFor(() => {
+        expect(setBudgetSpy).toHaveBeenCalledWith({
+          provider_config_id: 'prov-openai-1',
+          project_id: undefined,
+          period_kind: 'monthly',
+          token_cap: 10000000000,
+        });
       });
     });
 

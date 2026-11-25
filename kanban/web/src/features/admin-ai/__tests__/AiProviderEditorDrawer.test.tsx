@@ -1753,5 +1753,129 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
         provNullBase.id,
       );
     });
+
+    it('applies 1-click presets for ollama, openai, and gemini', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Verify preset buttons exist
+      expect(screen.getByTestId('preset-ollama-btn')).toBeDefined();
+      expect(screen.getByTestId('preset-openai-btn')).toBeDefined();
+      expect(screen.getByTestId('preset-gemini-btn')).toBeDefined();
+
+      // Click Ollama preset
+      fireEvent.click(screen.getByTestId('preset-ollama-btn'));
+      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('ollama');
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Local Ollama Runtime');
+      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('http://127.0.0.1:11434');
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('llama3.2, qwen2.5-coder');
+
+      // Click OpenAI preset
+      fireEvent.click(screen.getByTestId('preset-openai-btn'));
+      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('openai');
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('OpenAI / OpenAI-Compatible');
+      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://api.openai.com/v1');
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('gpt-4o, gpt-4o-mini');
+
+      // Click Gemini preset
+      fireEvent.click(screen.getByTestId('preset-gemini-btn'));
+      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('gemini');
+      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Google Gemini Workspace');
+      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://generativelanguage.googleapis.com');
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('gemini-2.5-pro, gemini-2.5-flash');
+    });
+
+    it('disables cloud presets and options in air-gap mode', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={true}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const openaiBtn = screen.getByTestId<HTMLButtonElement>('preset-openai-btn');
+      const geminiBtn = screen.getByTestId<HTMLButtonElement>('preset-gemini-btn');
+      expect(openaiBtn.disabled).toBe(true);
+      expect(geminiBtn.disabled).toBe(true);
+
+      const selectEl = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+      const openaiOpt = selectEl.querySelector<HTMLOptionElement>('option[value="openai"]');
+      const geminiOpt = selectEl.querySelector<HTMLOptionElement>('option[value="gemini"]');
+      expect(openaiOpt).not.toBeNull();
+      expect(geminiOpt).not.toBeNull();
+      expect(openaiOpt?.disabled).toBe(true);
+      expect(geminiOpt?.disabled).toBe(true);
+      expect(openaiOpt?.textContent).toContain('(Blocked by Air-Gap Policy)');
+      expect(geminiOpt?.textContent).toContain('(Blocked by Air-Gap Policy)');
+    });
+
+    it('surfaces AIR_GAP_EGRESS_DENIED on probe and test connection', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: false,
+        error_code: 'AIR_GAP_EGRESS_DENIED',
+        message: 'Egress to external host 142.250.80.46 prohibited by air-gap firewall',
+        models: [],
+        latency_ms: 0,
+        model_count: 0,
+      });
+      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: false,
+        error_code: 'AIR_GAP_EGRESS_DENIED',
+        message: 'Egress to external host 142.250.80.46 prohibited by air-gap firewall',
+        models: [],
+        latency_ms: 0,
+        model_count: 0,
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-error').textContent).toContain('Egress to external host');
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: Egress to external host');
+      });
+    });
+
+    it('silently ignores Aal2StepUpCancelledError on probe models', async () => {
+      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValue(new Aal2StepUpCancelledError());
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('probe-loading')).toBeNull();
+      });
+      expect(screen.queryByTestId('probe-error')).toBeNull();
+    });
   });
 });

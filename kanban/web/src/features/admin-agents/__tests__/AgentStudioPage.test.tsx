@@ -757,5 +757,30 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
         expect(screen.queryByTestId('agent-studio-error')).toBeNull();
       });
     });
+
+    it('renders AdminStudioSubnav when showSubnav is not false and not inside project', async () => {
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
+      render(<AgentStudioPage isServerAdmin={true} /> as React.ReactElement);
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-admin-agents')).toBeDefined();
+      });
+    });
+
+    it('suppresses AdminStudioSubnav when projectId is present or showSubnav is false', async () => {
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
+      const { unmount } = render(<AgentStudioPage projectId="proj-123" />);
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-card-agent-1')).toBeDefined();
+      });
+      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
+
+      unmount();
+
+      render(<AgentStudioPage showSubnav={false} />);
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-card-agent-1')).toBeDefined();
+      });
+      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
+    });
   });
 });

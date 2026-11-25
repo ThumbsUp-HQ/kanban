@@ -1,0 +1,1044 @@
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
+index c3461b39..76e36220 100644
+--- a/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
++++ b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
+@@ -30,7 +30,7 @@ vi.mock('../../api/client', () => ({
+     patch: vi.fn().mockResolvedValue({}),
+     delete: vi.fn().mockResolvedValue({}),
+   },
+-  apiFetch: vi.fn().mockResolvedValue({}),
++  apiFetch: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
+ }));
+ 
+ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+@@ -53,6 +53,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+ 
+       expect(screen.getByTestId('tab-admin-auth')).toBeDefined();
+       expect(screen.getByTestId('tab-admin-ai')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-agents')).toBeDefined();
+       expect(screen.getByTestId('tab-admin-runners')).toBeDefined();
+       expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
+       expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
+@@ -98,6 +99,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+ 
+       expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
++      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();
+@@ -115,6 +117,7 @@ describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
+ 
+       expect(screen.queryByTestId('tab-admin-auth')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-ai')).toBeNull();
++      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-runners')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
+       expect(screen.queryByTestId('tab-admin-oauth')).toBeNull();
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
+index d7806ed8..f9dd9b8f 100644
+--- a/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
++++ b/kanban/web/src/app/__tests__/MenuConsolidation_KAN362.test.tsx
+@@ -22,7 +22,7 @@ vi.mock('../../api/client', () => ({
+     patch: vi.fn().mockResolvedValue({}),
+     delete: vi.fn().mockResolvedValue({}),
+   },
+-  apiFetch: vi.fn().mockResolvedValue({}),
++  apiFetch: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
+ }));
+ 
+ vi.mock('../../features/settings/settingsApi', () => ({
+@@ -47,6 +47,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+     const allTabs = [
+       { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️' },
+       { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠' },
++      { id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' },
+       { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
+       { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
+       { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
+@@ -55,7 +56,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
+       { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
+     ] as const;
+ 
+-    it('renders all 8 tabs with navigation aria-label and accessible markup in router', () => {
++    it('renders all 9 tabs with navigation aria-label and accessible markup in router', () => {
+       render(
+         <MemoryRouter initialEntries={['/admin/mcp']}>
+           <AdminStudioSubnav activeTab="mcp" isServerAdmin={true} />
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index c07a0682..db7f6b35 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -235,7 +235,11 @@ function AgentDefinitionEditorContent({
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      setError(err instanceof Error ? err.message : 'Failed to save agent definition');
++      const rawMsg = err instanceof Error ? err.message : 'Failed to save agent definition';
++      const msg = rawMsg.includes('AIR_GAP_EGRESS_DENIED')
++        ? 'Air-Gap Egress Denied: Autonomous agents cannot use cloud providers under active air-gap policy.'
++        : rawMsg;
++      setError(msg);
+     }
+   };
+ 
+@@ -321,6 +325,14 @@ function AgentDefinitionEditorContent({
+             <option value="cli_pipe">CLI Pipe (Sandboxed Zero-Shell Binary)</option>
+             <option value="remote_runner">Remote Runner (mTLS Isolated Worker)</option>
+           </select>
++          <span className="kb-form-hint" data-testid="agent-harness-hint">
++            {harnessKind === 'in_app_sdk' &&
++              'Executes in-process against configured AI providers (OpenAI, Gemini, Ollama) via native SDK.'}
++            {harnessKind === 'cli_pipe' &&
++              'Executes through a sandboxed CLI pipe binary (agy or codex) using standard I/O streaming.'}
++            {harnessKind === 'remote_runner' &&
++              'Dispatches agent execution jobs to an isolated remote worker via secure mTLS WebSocket.'}
++          </span>
+         </div>
+ 
+         {harnessKind === 'in_app_sdk' && (
+diff --git a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+index 41117d2a..5b35b6fa 100644
+--- a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
++++ b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+@@ -10,6 +10,7 @@ import {
+ import { AgentValidationModal } from './AgentValidationModal';
+ import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { isAal2StepUpCancelled } from '../../api/client';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+ import './agentStudio.css';
+@@ -17,11 +18,15 @@ import './agentStudio.css';
+ export interface AgentStudioPageProps {
+   projectId?: string | null | undefined;
+   workspaceSlug?: string | undefined;
++  showSubnav?: boolean | undefined;
++  isServerAdmin?: boolean | undefined;
+ }
+ 
+ export function AgentStudioPage({
+   projectId,
+   workspaceSlug,
++  showSubnav,
++  isServerAdmin,
+ }: AgentStudioPageProps = {}): JSX.Element {
+   const [agents, setAgents] = useState<AgentDefinitionResponse[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+@@ -78,6 +83,9 @@ export function AgentStudioPage({
+ 
+   return (
+     <section className="kb-agent-studio" data-testid="agent-studio-page">
++      {(showSubnav ?? !projectId) && (
++        <AdminStudioSubnav activeTab="agents" isServerAdmin={isServerAdmin} />
++      )}
+       <div className="kb-agent-studio-header">
+         <div className="kb-agent-studio-title-group">
+           <h1>
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+index 7b763de9..42dd94b4 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -235,4 +235,60 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       expect(onClose).toHaveBeenCalled();
+     });
+   });
++
++  it('renders inline helper description for each execution harness kind', () => {
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        agent={null}
++        onSaved={vi.fn()}
++        aiProviders={mockAiProviders}
++      />,
++    );
++
++    const harnessSelect = screen.getByTestId('agent-harness-select');
++    const hintEl = screen.getByTestId('agent-harness-hint');
++
++    // Default: in_app_sdk
++    expect(hintEl.textContent).toContain('Executes in-process against configured AI providers');
++
++    // Switch to cli_pipe
++    fireEvent.change(harnessSelect, { target: { value: 'cli_pipe' } });
++    expect(hintEl.textContent).toContain('Executes through a sandboxed CLI pipe binary');
++
++    // Switch to remote_runner
++    fireEvent.change(harnessSelect, { target: { value: 'remote_runner' } });
++    expect(hintEl.textContent).toContain('Dispatches agent execution jobs to an isolated remote worker');
++  });
++
++  it('surfaces Air-Gap Egress Denied message when submission encounters AIR_GAP_EGRESS_DENIED', async () => {
++    vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValue(
++      new Error('409 Conflict: AIR_GAP_EGRESS_DENIED - egress to cloud provider is denied'),
++    );
++
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        agent={null}
++        onSaved={vi.fn()}
++        aiProviders={mockAiProviders}
++      />,
++    );
++
++    fireEvent.change(screen.getByTestId('agent-slug-input'), {
++      target: { value: 'airgap-agent' },
++    });
++    fireEvent.change(screen.getByTestId('agent-name-input'), {
++      target: { value: 'Airgap Agent' },
++    });
++    fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('agent-editor-error').textContent).toContain(
++        'Air-Gap Egress Denied: Autonomous agents cannot use cloud providers under active air-gap policy.',
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+index 83148894..f1d63f51 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+@@ -757,5 +757,30 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
+         expect(screen.queryByTestId('agent-studio-error')).toBeNull();
+       });
+     });
++
++    it('renders AdminStudioSubnav when showSubnav is not false and not inside project', async () => {
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
++      render(<AgentStudioPage isServerAdmin={true} /> as React.ReactElement);
++      await waitFor(() => {
++        expect(screen.getByTestId('tab-admin-agents')).toBeDefined();
++      });
++    });
++
++    it('suppresses AdminStudioSubnav when projectId is present or showSubnav is false', async () => {
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
++      const { unmount } = render(<AgentStudioPage projectId="proj-123" />);
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-card-agent-1')).toBeDefined();
++      });
++      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
++
++      unmount();
++
++      render(<AgentStudioPage showSubnav={false} />);
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-card-agent-1')).toBeDefined();
++      });
++      expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+index 22ee06cd..6b8b3ed5 100644
+--- a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
++++ b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+@@ -32,6 +32,7 @@ function AiBudgetModalContent({
+   const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+   const [isSaving, setIsSaving] = useState<boolean>(false);
++  const [capMode, setCapMode] = useState<'enforce' | 'unlimited'>('enforce');
+   const [periodKind, setPeriodKind] = useState<'daily' | 'monthly'>('monthly');
+   const [tokenCap, setTokenCap] = useState<string>('1000000');
+   const [error, setError] = useState<string | null>(null);
+@@ -50,9 +51,13 @@ function AiBudgetModalContent({
+         if (monthly) {
+           setTokenCap(String(monthly.token_cap));
+           setPeriodKind('monthly');
++          setCapMode('enforce');
+         } else if (records[0]) {
+           setTokenCap(String(records[0].token_cap));
+           setPeriodKind(records[0].period_kind);
++          setCapMode('enforce');
++        } else {
++          setCapMode('unlimited');
+         }
+       } catch (err: unknown) {
+         if (!active) return;
+@@ -75,11 +80,12 @@ function AiBudgetModalContent({
+   const capNum = currentBudget?.token_cap ?? 0;
+   const usedNum = currentBudget?.tokens_used ?? 0;
+   const reservedNum = currentBudget?.tokens_reserved ?? 0;
++  const isZeroFreeze = currentBudget !== undefined && capNum === 0;
+   const percentUsed = capNum > 0 ? Math.min(100, Math.round(((usedNum + reservedNum) / capNum) * 100)) : 0;
+ 
+   const handleSaveBudget = async (e: React.SyntheticEvent): Promise<void> => {
+     e.preventDefault();
+-    const cap = parseInt(tokenCap, 10);
++    const cap = capMode === 'unlimited' ? 10000000000 : parseInt(tokenCap, 10);
+     if (isNaN(cap) || cap < 0) {
+       setError('Token cap must be a non-negative integer');
+       return;
+@@ -156,7 +162,12 @@ function AiBudgetModalContent({
+                 {reservedNum > 0 && ` (+${reservedNum.toLocaleString()} reserved)`}
+               </span>
+               <span>
+-                <strong>Cap:</strong> {capNum > 0 ? `${capNum.toLocaleString()} tokens` : 'Unlimited'}
++                <strong>Cap:</strong>{' '}
++                {isZeroFreeze
++                  ? 'Zero-Allowance Freeze (0 tokens)'
++                  : capNum > 0
++                    ? `${capNum.toLocaleString()} tokens`
++                    : 'Unlimited'}
+               </span>
+             </div>
+ 
+@@ -179,16 +190,49 @@ function AiBudgetModalContent({
+             <div className="kb-budget-stats-row">
+               <span>{String(percentUsed)}% consumed</span>
+               <span>
+-                {capNum > usedNum + reservedNum
+-                  ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
+-                  : capNum > 0
+-                    ? '0 tokens remaining'
+-                    : 'No cap enforced'}
++                {isZeroFreeze
++                  ? 'Frozen (0 tokens allowance)'
++                  : capNum > usedNum + reservedNum
++                    ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
++                    : capNum > 0
++                      ? '0 tokens remaining'
++                      : 'No cap enforced'}
+               </span>
+             </div>
+           </div>
+ 
+           <form noValidate onSubmit={(e) => { void handleSaveBudget(e); }}>
++            <div className="kb-budget-mode-toggle" role="radiogroup" aria-label="Budget Quota Enforcement Mode">
++              <button
++                type="button"
++                role="radio"
++                aria-checked={capMode === 'enforce'}
++                className={`kb-btn ${capMode === 'enforce' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
++                onClick={() => {
++                  setCapMode('enforce');
++                  if (!tokenCap || tokenCap === '10000000000') {
++                    setTokenCap('1000000');
++                  }
++                }}
++                data-testid="cap-mode-enforce-btn"
++              >
++                Enforce Token Cap
++              </button>
++              <button
++                type="button"
++                role="radio"
++                aria-checked={capMode === 'unlimited'}
++                className={`kb-btn ${capMode === 'unlimited' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
++                onClick={() => {
++                  setCapMode('unlimited');
++                  setTokenCap('10000000000');
++                }}
++                data-testid="cap-mode-unlimited-btn"
++              >
++                Unlimited Quota (No Cap)
++              </button>
++            </div>
++
+             <div className="kb-form-group">
+               <label htmlFor="budget-period-select" className="kb-form-label">
+                 Accounting Period
+@@ -205,33 +249,95 @@ function AiBudgetModalContent({
+               </select>
+             </div>
+ 
+-            <div className="kb-form-group">
+-              <label htmlFor="budget-token-cap-input" className="kb-form-label">
+-                Maximum Token Cap
+-                <FieldHelpHint
+-                  title="Maximum Token Cap"
+-                  summary="Hard token usage ceiling enforced during the accounting window."
+-                  defaultValue="0 (Zero-allowance freeze) or positive quota"
+-                  docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
+-                  testId="budget-token-cap-help"
+-                />
+-              </label>
+-              <input
+-                id="budget-token-cap-input"
+-                type="number"
+-                min="0"
+-                max="10000000000"
+-                className="kb-form-input"
+-                value={tokenCap}
+-                onChange={(e) => { setTokenCap(e.target.value); }}
+-                placeholder="e.g. 5000000"
+-                data-testid="budget-token-cap-input"
+-                required
+-              />
+-              <span className="kb-form-hint">
+-                Enter 0 for zero-allowance freeze or an integer token quota (e.g. 1,000,000).
+-              </span>
+-            </div>
++            {capMode === 'enforce' && (
++              <>
++                <div className="kb-budget-presets-row" data-testid="budget-presets-row">
++                  <span className="kb-budget-presets-label">Presets:</span>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
++                    onClick={() => { setTokenCap('1000000'); }}
++                    data-testid="preset-budget-1m-btn"
++                  >
++                    1M
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
++                    onClick={() => { setTokenCap('5000000'); }}
++                    data-testid="preset-budget-5m-btn"
++                  >
++                    5M
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
++                    onClick={() => { setTokenCap('25000000'); }}
++                    data-testid="preset-budget-25m-btn"
++                  >
++                    25M
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
++                    onClick={() => { setTokenCap('100000000'); }}
++                    data-testid="preset-budget-100m-btn"
++                  >
++                    100M
++                  </button>
++                  <button
++                    type="button"
++                    className="kb-btn kb-btn-secondary kb-budget-preset-btn kb-budget-preset-btn--freeze"
++                    onClick={() => { setTokenCap('0'); }}
++                    data-testid="preset-budget-0-freeze-btn"
++                  >
++                    0 (Freeze)
++                  </button>
++                </div>
++
++                <div className="kb-form-group">
++                  <label htmlFor="budget-token-cap-input" className="kb-form-label">
++                    Maximum Token Cap
++                    <FieldHelpHint
++                      title="Maximum Token Cap"
++                      summary="Hard token usage ceiling enforced during the accounting window."
++                      defaultValue="0 (Zero-allowance freeze) or positive quota"
++                      docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
++                      testId="budget-token-cap-help"
++                    />
++                  </label>
++                  <input
++                    id="budget-token-cap-input"
++                    type="number"
++                    min="0"
++                    max="10000000000"
++                    className="kb-form-input"
++                    value={tokenCap}
++                    onChange={(e) => { setTokenCap(e.target.value); }}
++                    placeholder="e.g. 5000000"
++                    data-testid="budget-token-cap-input"
++                    required
++                  />
++                  <span className="kb-form-hint">
++                    Enter 0 for zero-allowance freeze or an integer token quota (e.g. 1,000,000).
++                  </span>
++                </div>
++
++                {tokenCap === '0' && (
++                  <div className="kb-zero-cap-warning" role="alert" data-testid="zero-cap-freeze-warning">
++                    <strong>⚠️ Hard AI Freeze:</strong> 0 tokens set: Completions through this provider are completely frozen.
++                  </div>
++                )}
++              </>
++            )}
++
++            {capMode === 'unlimited' && (
++              <div className="kb-budget-unlimited-note" data-testid="budget-unlimited-note">
++                <p>
++                  Unlimited Quota (No Cap) is active. Completions through {provider.display_name} will run without an enforced token budget ceiling.
++                </p>
++              </div>
++            )}
+ 
+             <div className="kb-modal-footer">
+               <button
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index b46b8660..596db8a6 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -272,6 +272,35 @@ function AiProviderEditorContent({
+     }
+   };
+ 
++  const applyPreset = (kind: 'ollama' | 'openai' | 'gemini'): void => {
++    if (isEditing) return;
++    setError(null);
++    setProviderKind(kind);
++    setProbedModels(null);
++    if (kind === 'ollama') {
++      setDisplayName('Local Ollama Runtime');
++      setBaseUrl('http://127.0.0.1:11434');
++      setModelAllowlist('llama3.2, qwen2.5-coder');
++      if (!residencyTierManual) {
++        setResidencyTier('local_only');
++      }
++    } else if (kind === 'openai') {
++      setDisplayName('OpenAI / OpenAI-Compatible');
++      setBaseUrl('https://api.openai.com/v1');
++      setModelAllowlist('gpt-4o, gpt-4o-mini');
++      if (!residencyTierManual) {
++        setResidencyTier('cloud_standard');
++      }
++    } else {
++      setDisplayName('Google Gemini Workspace');
++      setBaseUrl('https://generativelanguage.googleapis.com');
++      setModelAllowlist('gemini-2.5-pro, gemini-2.5-flash');
++      if (!residencyTierManual) {
++        setResidencyTier('cloud_standard');
++      }
++    }
++  };
++
+   const handleBaseUrlChange = (newUrl: string): void => {
+     setBaseUrl(newUrl);
+     if (!residencyTierManual) {
+@@ -335,7 +364,10 @@ function AiProviderEditorContent({
+           setModelAllowlist(res.models.join(', '));
+         }
+       } else {
+-        setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
++        const msg = res.error_code === 'AIR_GAP_EGRESS_DENIED'
++          ? (res.message ?? 'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.')
++          : (res.message ?? res.error_code ?? 'Model probing failed');
++        setProbeError(msg);
+       }
+     } catch (err: unknown) {
+       if (isAal2StepUpCancelled(err)) {
+@@ -380,9 +412,12 @@ function AiProviderEditorContent({
+           message: `Connected in ${String(Math.round(res.latency_ms))}ms - ${String(res.model_count)} models available`,
+         });
+       } else {
++        const msg = res.error_code === 'AIR_GAP_EGRESS_DENIED'
++          ? (res.message ?? 'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.')
++          : `${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`;
+         setTestStatus({
+           kind: 'error',
+-          message: `Connection failed: ${res.error_code ?? 'ERROR'}${res.message ? ` - ${res.message}` : ''}`,
++          message: `Connection failed: ${msg}`,
+         });
+       }
+     } catch (err: unknown) {
+@@ -562,8 +597,12 @@ function AiProviderEditorContent({
+             data-testid="provider-kind-select"
+           >
+             <option value="ollama">Ollama (Local / Zero Egress)</option>
+-            <option value="openai">OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM)</option>
+-            <option value="gemini">Google Gemini (Cloud)</option>
++            <option value="openai" disabled={airGapMode}>
++              OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM){airGapMode ? ' (Blocked by Air-Gap Policy)' : ''}
++            </option>
++            <option value="gemini" disabled={airGapMode}>
++              Google Gemini (Cloud){airGapMode ? ' (Blocked by Air-Gap Policy)' : ''}
++            </option>
+           </select>
+           <span className="kb-form-hint">
+             {providerKind === 'ollama' &&
+@@ -573,6 +612,39 @@ function AiProviderEditorContent({
+             {providerKind === 'gemini' &&
+               'Google Gemini generative language API.'}
+           </span>
++          {!isEditing && (
++            <div className="kb-provider-presets-row" data-testid="provider-presets-row">
++              <span className="kb-provider-presets-label">Quick Presets:</span>
++              <button
++                type="button"
++                className="kb-btn kb-btn-secondary kb-preset-btn"
++                onClick={() => { applyPreset('ollama'); }}
++                data-testid="preset-ollama-btn"
++              >
++                🦙 Ollama Local
++              </button>
++              <button
++                type="button"
++                className="kb-btn kb-btn-secondary kb-preset-btn"
++                disabled={airGapMode}
++                title={airGapMode ? 'Cloud provider egress is blocked by Air-Gap Policy' : undefined}
++                onClick={() => { applyPreset('openai'); }}
++                data-testid="preset-openai-btn"
++              >
++                🤖 OpenAI
++              </button>
++              <button
++                type="button"
++                className="kb-btn kb-btn-secondary kb-preset-btn"
++                disabled={airGapMode}
++                title={airGapMode ? 'Cloud provider egress is blocked by Air-Gap Policy' : undefined}
++                onClick={() => { applyPreset('gemini'); }}
++                data-testid="preset-gemini-btn"
++              >
++                ✨ Google Gemini
++              </button>
++            </div>
++          )}
+         </div>
+ 
+         {/* 2. Display Name */}
+@@ -665,6 +737,40 @@ function AiProviderEditorContent({
+           )}
+         </div>
+ 
++        {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
++        <div className="kb-form-group">
++          <label htmlFor="provider-base-url-input" className="kb-form-label">
++            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
++          </label>
++          <input
++            id="provider-base-url-input"
++            type="url"
++            className="kb-form-input"
++            value={baseUrl}
++            onChange={(e) => { handleBaseUrlChange(e.target.value); }}
++            placeholder={
++              providerKind === 'ollama'
++                ? 'http://127.0.0.1:11434'
++                : providerKind === 'gemini'
++                  ? 'https://generativelanguage.googleapis.com'
++                  : 'https://api.openai.com/v1'
++            }
++            autoComplete="off"
++            data-1p-ignore="true"
++            data-lpignore="true"
++            data-bwignore="true"
++            data-form-type="other"
++            data-testid="provider-base-url-input"
++          />
++          <span className="kb-form-hint">
++            {providerKind === 'ollama'
++              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
++              : providerKind === 'gemini'
++                ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
++                : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
++          </span>
++        </div>
++
+         {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+@@ -808,39 +914,11 @@ function AiProviderEditorContent({
+         {/* 6. Advanced Model & Harness Configuration */}
+         <AdvancedSection
+           title="Advanced Settings"
+-          summary="Base URL, temperature, max tokens, mTLS client certificates, and data residency overrides"
++          summary="Temperature, max tokens, mTLS client certificates, and data residency overrides"
+           testId="advanced-settings-details"
+           className="kb-advanced-model-harness-section"
+         >
+           <div data-testid="advanced-model-harness-config">
+-            <div className="kb-form-group">
+-              <label htmlFor="provider-base-url-input" className="kb-form-label">
+-                HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+-              </label>
+-              <input
+-                id="provider-base-url-input"
+-                type="url"
+-                className="kb-form-input"
+-                value={baseUrl}
+-                onChange={(e) => { handleBaseUrlChange(e.target.value); }}
+-                placeholder={
+-                  providerKind === 'ollama'
+-                    ? 'http://127.0.0.1:11434'
+-                    : providerKind === 'gemini'
+-                      ? 'https://generativelanguage.googleapis.com'
+-                      : 'https://api.openai.com/v1'
+-                }
+-                data-testid="provider-base-url-input"
+-              />
+-              <span className="kb-form-hint">
+-                {providerKind === 'ollama'
+-                  ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+-                  : providerKind === 'gemini'
+-                    ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
+-                    : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}
+-              </span>
+-            </div>
+-
+             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
+               <div className="kb-form-group">
+                 <label htmlFor="provider-temperature-input" className="kb-form-label">
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+index 704475b6..78adb7db 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -1753,5 +1753,129 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+         provNullBase.id,
+       );
+     });
++
++    it('applies 1-click presets for ollama, openai, and gemini', () => {
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      // Verify preset buttons exist
++      expect(screen.getByTestId('preset-ollama-btn')).toBeDefined();
++      expect(screen.getByTestId('preset-openai-btn')).toBeDefined();
++      expect(screen.getByTestId('preset-gemini-btn')).toBeDefined();
++
++      // Click Ollama preset
++      fireEvent.click(screen.getByTestId('preset-ollama-btn'));
++      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('ollama');
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Local Ollama Runtime');
++      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('http://127.0.0.1:11434');
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('llama3.2, qwen2.5-coder');
++
++      // Click OpenAI preset
++      fireEvent.click(screen.getByTestId('preset-openai-btn'));
++      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('openai');
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('OpenAI / OpenAI-Compatible');
++      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://api.openai.com/v1');
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('gpt-4o, gpt-4o-mini');
++
++      // Click Gemini preset
++      fireEvent.click(screen.getByTestId('preset-gemini-btn'));
++      expect(screen.getByTestId<HTMLSelectElement>('provider-kind-select').value).toBe('gemini');
++      expect(screen.getByTestId<HTMLInputElement>('provider-name-input').value).toBe('Google Gemini Workspace');
++      expect(screen.getByTestId<HTMLInputElement>('provider-base-url-input').value).toBe('https://generativelanguage.googleapis.com');
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('gemini-2.5-pro, gemini-2.5-flash');
++    });
++
++    it('disables cloud presets and options in air-gap mode', () => {
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={true}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      const openaiBtn = screen.getByTestId<HTMLButtonElement>('preset-openai-btn');
++      const geminiBtn = screen.getByTestId<HTMLButtonElement>('preset-gemini-btn');
++      expect(openaiBtn.disabled).toBe(true);
++      expect(geminiBtn.disabled).toBe(true);
++
++      const selectEl = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
++      const openaiOpt = selectEl.querySelector<HTMLOptionElement>('option[value="openai"]');
++      const geminiOpt = selectEl.querySelector<HTMLOptionElement>('option[value="gemini"]');
++      expect(openaiOpt).not.toBeNull();
++      expect(geminiOpt).not.toBeNull();
++      expect(openaiOpt?.disabled).toBe(true);
++      expect(geminiOpt?.disabled).toBe(true);
++      expect(openaiOpt?.textContent).toContain('(Blocked by Air-Gap Policy)');
++      expect(geminiOpt?.textContent).toContain('(Blocked by Air-Gap Policy)');
++    });
++
++    it('surfaces AIR_GAP_EGRESS_DENIED on probe and test connection', async () => {
++      vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
++        ok: false,
++        error_code: 'AIR_GAP_EGRESS_DENIED',
++        message: 'Egress to external host 142.250.80.46 prohibited by air-gap firewall',
++        models: [],
++        latency_ms: 0,
++        model_count: 0,
++      });
++      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++        ok: false,
++        error_code: 'AIR_GAP_EGRESS_DENIED',
++        message: 'Egress to external host 142.250.80.46 prohibited by air-gap firewall',
++        models: [],
++        latency_ms: 0,
++        model_count: 0,
++      });
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('probe-error').textContent).toContain('Egress to external host');
++      });
++
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Connection failed: Egress to external host');
++      });
++    });
++
++    it('silently ignores Aal2StepUpCancelledError on probe models', async () => {
++      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValue(new Aal2StepUpCancelledError());
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      await waitFor(() => {
++        expect(screen.queryByTestId('probe-loading')).toBeNull();
++      });
++      expect(screen.queryByTestId('probe-error')).toBeNull();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+index 0d8b3570..b4c0761c 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+@@ -797,8 +797,8 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+       });
+     });
+ 
+-    it('renders unlimited cap when token_cap is 0', async () => {
+-      const unlimitedBudgets: BudgetRecord[] = [
++    it('renders zero-allowance freeze when token_cap is 0 and unlimited when no budgets (KAN-412 fix)', async () => {
++      const zeroFreezeBudgets: BudgetRecord[] = [
+         {
+           period_kind: 'monthly',
+           period_start: '2026-11-01',
+@@ -807,8 +807,25 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+           tokens_reserved: 0,
+         },
+       ];
+-      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(unlimitedBudgets);
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(zeroFreezeBudgets);
+ 
++      const { unmount } = render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByText(/Zero-Allowance Freeze \(0 tokens\)/)).toBeDefined();
++        expect(screen.getByText(/Frozen \(0 tokens allowance\)/)).toBeDefined();
++        expect(screen.getByTestId('zero-cap-freeze-warning')).toBeDefined();
++      });
++
++      unmount();
++
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue([]);
+       render(
+         <AiBudgetModal
+           isOpen={true}
+@@ -819,6 +836,73 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+ 
+       await waitFor(() => {
+         expect(screen.getByText('Unlimited')).toBeDefined();
++        expect(screen.getByText('No cap enforced')).toBeDefined();
++      });
++    });
++
++    it('handles mode toggle pills, presets, and freeze warning in AiBudgetModal (KAN-412)', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const firstBudget = mockBudgets[0];
++      if (!firstBudget) {
++        throw new Error('Expected mock budget at index 0');
++      }
++      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue(firstBudget);
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('cap-mode-enforce-btn')).toBeDefined();
++        expect(screen.getByTestId('cap-mode-unlimited-btn')).toBeDefined();
++        expect(screen.getByTestId('budget-presets-row')).toBeDefined();
++      });
++
++      // Test presets: 1M, 5M, 25M, 100M, and 0 (Freeze)
++      const capInput = screen.getByTestId<HTMLInputElement>('budget-token-cap-input');
++
++      fireEvent.click(screen.getByTestId('preset-budget-5m-btn'));
++      expect(capInput.value).toBe('5000000');
++
++      fireEvent.click(screen.getByTestId('preset-budget-25m-btn'));
++      expect(capInput.value).toBe('25000000');
++
++      fireEvent.click(screen.getByTestId('preset-budget-100m-btn'));
++      expect(capInput.value).toBe('100000000');
++
++      fireEvent.click(screen.getByTestId('preset-budget-1m-btn'));
++      expect(capInput.value).toBe('1000000');
++
++      // Click Freeze preset -> surfaces warning banner
++      fireEvent.click(screen.getByTestId('preset-budget-0-freeze-btn'));
++      expect(capInput.value).toBe('0');
++      expect(screen.getByTestId('zero-cap-freeze-warning')).toBeDefined();
++
++      // Switch to Unlimited mode
++      fireEvent.click(screen.getByTestId('cap-mode-unlimited-btn'));
++      expect(screen.getByTestId('budget-unlimited-note')).toBeDefined();
++      expect(screen.queryByTestId('budget-token-cap-input')).toBeNull();
++
++      // Switch back to Enforce mode to verify restoration
++      fireEvent.click(screen.getByTestId('cap-mode-enforce-btn'));
++      expect(screen.getByTestId<HTMLInputElement>('budget-token-cap-input').value).toBe('1000000');
++
++      // Switch to Unlimited mode for save
++      fireEvent.click(screen.getByTestId('cap-mode-unlimited-btn'));
++
++      // Save in unlimited mode submits 10_000_000_000
++      fireEvent.click(screen.getByTestId('save-budget-btn'));
++      await waitFor(() => {
++        expect(setBudgetSpy).toHaveBeenCalledWith({
++          provider_config_id: 'prov-openai-1',
++          project_id: undefined,
++          period_kind: 'monthly',
++          token_cap: 10000000000,
++        });
+       });
+     });
+ 
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index ab2d8e53..39f58eb6 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -983,3 +983,90 @@
+   }
+ }
+ 
++/* Provider Presets Toolbar */
++.kb-provider-presets-row {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: var(--space-2, 8px);
++  margin-top: var(--space-2, 8px);
++}
++
++.kb-provider-presets-label {
++  font-size: var(--text-xs, 12px);
++  font-weight: 600;
++  color: var(--kb-color-text-secondary, #6b7280);
++}
++
++.kb-preset-btn {
++  padding: 4px 10px;
++  font-size: var(--text-xs, 12px);
++  border-radius: var(--radius-sm, 6px);
++  cursor: pointer;
++}
++
++/* Budget Mode Toggle & Presets */
++.kb-budget-mode-toggle {
++  display: flex;
++  gap: var(--space-2, 8px);
++  margin-bottom: var(--space-4, 16px);
++}
++
++.kb-budget-presets-row {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: var(--space-2, 8px);
++  margin-bottom: var(--space-3, 12px);
++}
++
++.kb-budget-presets-label {
++  font-size: var(--text-xs, 12px);
++  font-weight: 600;
++  color: var(--kb-color-text-secondary, #6b7280);
++}
++
++.kb-budget-preset-btn {
++  padding: 4px 8px;
++  font-size: var(--text-xs, 12px);
++  border-radius: var(--radius-sm, 6px);
++  cursor: pointer;
++}
++
++.kb-budget-preset-btn--freeze {
++  color: var(--danger-fg, #ef4444);
++}
++
++.kb-zero-cap-warning {
++  padding: var(--space-3, 12px);
++  border-radius: var(--radius-md, 8px);
++  background-color: var(--bg-danger-subtle, #fef2f2);
++  border: 1px solid var(--border-danger, #f87171);
++  color: var(--danger-fg, #b91c1c);
++  font-size: var(--text-xs, 12px);
++  margin-top: var(--space-2, 8px);
++  line-height: 1.4;
++}
++
++[data-theme='dark'] .kb-zero-cap-warning {
++  background-color: #451a1a;
++  border-color: #ef4444;
++  color: #fca5a5;
++}
++
++.kb-budget-unlimited-note {
++  padding: var(--space-3, 12px);
++  border-radius: var(--radius-md, 8px);
++  background-color: var(--kb-color-bg-surface-secondary, #f9fafb);
++  border: 1px solid var(--kb-color-border-subtle, #e5e7eb);
++  font-size: var(--text-sm, 14px);
++  color: var(--kb-color-text-secondary, #4b5563);
++  margin-bottom: var(--space-4, 16px);
++}
++
++[data-theme='dark'] .kb-budget-unlimited-note {
++  background-color: #111827;
++  border-color: #374151;
++  color: #9ca3af;
++}
++
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+index c85c2c6b..812b3962 100644
+--- a/kanban/web/src/features/admin/AdminStudioSubnav.tsx
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+@@ -9,12 +9,12 @@ import { apiFetch } from '../../api/client';
+ import './AdminStudioSubnav.css';
+ 
+ export interface AdminStudioSubnavProps {
+-  activeTab?: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
++  activeTab?: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
+   isServerAdmin?: boolean | undefined;
+ }
+ 
+ interface AdminTabDefinition {
+-  id: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
++  id: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
+   testId: string;
+   label: string;
+   path: string;
+@@ -25,6 +25,7 @@ interface AdminTabDefinition {
+ const ADMIN_TABS: AdminTabDefinition[] = [
+   { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️', serverOnly: true },
+   { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠', serverOnly: true },
++  { id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖', serverOnly: true },
+   { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀', serverOnly: true },
+   { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑', serverOnly: true },
+   { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐', serverOnly: true },

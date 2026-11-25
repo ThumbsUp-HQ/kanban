@@ -10,6 +10,7 @@ import {
 import { AgentValidationModal } from './AgentValidationModal';
 import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { isAal2StepUpCancelled } from '../../api/client';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './agentStudio.css';
@@ -17,11 +18,15 @@ import './agentStudio.css';
 export interface AgentStudioPageProps {
   projectId?: string | null | undefined;
   workspaceSlug?: string | undefined;
+  showSubnav?: boolean | undefined;
+  isServerAdmin?: boolean | undefined;
 }
 
 export function AgentStudioPage({
   projectId,
   workspaceSlug,
+  showSubnav,
+  isServerAdmin,
 }: AgentStudioPageProps = {}): JSX.Element {
   const [agents, setAgents] = useState<AgentDefinitionResponse[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -78,6 +83,9 @@ export function AgentStudioPage({
 
   return (
     <section className="kb-agent-studio" data-testid="agent-studio-page">
+      {(showSubnav ?? !projectId) && (
+        <AdminStudioSubnav activeTab="agents" isServerAdmin={isServerAdmin} />
+      )}
       <div className="kb-agent-studio-header">
         <div className="kb-agent-studio-title-group">
           <h1>
