@@ -4,67 +4,69 @@ rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 73 items
+collected 92 items
 
-kanban/tests/api/test_workspace_project_ai_agents.py .....               [  6%]
-kanban/tests/security/test_admin_routes_protected.py ..                  [  9%]
-kanban/tests/api/admin/test_ai_providers_api.py ..........               [ 23%]
-kanban/tests/agents/test_agent_definitions_api.py ...................... [ 53%]
-...                                                                      [ 57%]
-kanban/tests/agents/test_cli_policy.py ...............................   [100%]
+kanban/tests/api/test_workspace_project_ai_agents.py .....               [  5%]
+kanban/tests/security/test_admin_routes_protected.py ..                  [  7%]
+kanban/tests/api/admin/test_ai_providers_api.py ..........               [ 18%]
+kanban/tests/agents/test_agent_definitions_api.py ...................... [ 42%]
+...                                                                      [ 45%]
+kanban/tests/agents/test_cli_policy.py ...............................   [ 79%]
+kanban/tests/ai_config/test_service.py ...................               [100%]
 
-============================= 73 passed in 40.42s ==============================
-Name                                  Stmts   Miss Branch BrPart  Cover
------------------------------------------------------------------------
-kanban/agents/service.py                145      2     34      3    97%
-kanban/api/v1/admin/ai_providers.py     489     22     88      5    95%
+============================= 92 passed in 39.62s ==============================
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+kanban/agents/service.py                145      2     34      3    97%   86->exit, 218, 375
+kanban/ai_config/service.py             456     19    160      9    95%   242-251, 265-266, 306-307, 571-572, 674-675, 710, 720, 907->932, 927-928, 982
+kanban/api/v1/admin/ai_providers.py     489     22     88      5    95%   63-68, 79-80, 229, 627, 711, 784->exit, 858-860, 1000-1012, 1094-1095, 1213
 kanban/api/v1/agent_definitions.py       97      0      4      0   100%
------------------------------------------------------------------------
-TOTAL                                   731     24    126      8    96%
+---------------------------------------------------------------------------------
+TOTAL                                  1187     43    286     17    96%
 
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan402-994b4fea/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 32ms
- ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 395ms
- ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (25 tests) 927ms
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (43 tests) 1874ms
- ✓ src/app/__tests__/MenuConsolidation_KAN363.test.tsx (8 tests) 778ms
- ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (41 tests) 2178ms
-   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (41)
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 27ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 314ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (26 tests) 825ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (43 tests) 1726ms
+ ✓ src/app/__tests__/MenuConsolidation_KAN363.test.tsx (8 tests) 707ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (43 tests) 2139ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (43)
      ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
-       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 352ms
- ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (38 tests) 3341ms
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 342ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (38 tests) 3075ms
    ✓ WorkspaceSettingsPage (KANBA-202) (38)
-     ✓ renders workspace settings page and updates workspace name and slug 484ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (40 tests) 4215ms
+     ✓ renders workspace settings page and updates workspace name and slug 444ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (40 tests) 4152ms
    ✓ ProjectSettingsPage (KANBA-202) (40)
-     ✓ renders project settings page tabs and switches between them 334ms
-     ✓ handles error states on workflow states, priorities, labels, and trash restore 312ms
+     ✓ renders project settings page tabs and switches between them 332ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 319ms
 
  Test Files  8 passed (8)
-      Tests  207 passed (207)
-   Start at  05:26:29
-   Duration  6.22s (tests 54%, environment 27%, import 12%, transform 5%, worker 2%)
+      Tests  210 passed (210)
+   Start at  05:45:54
+   Duration  5.87s (tests 56%, environment 28%, import 12%, transform 3%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |    99.3 |    94.97 |   98.56 |   99.82 |                   
- admin-agents      |    99.5 |     95.5 |     100 |     100 |                   
+All files          |   99.57 |    95.68 |   99.28 |     100 |                   
+ admin-agents      |    99.5 |    96.03 |     100 |     100 |                   
   ...torDrawer.tsx |     100 |    95.12 |     100 |     100 | 66-67,71,143,176  
-  ...tudioPage.tsx |   97.95 |    96.77 |     100 |     100 | 69                
+  ...tudioPage.tsx |   97.95 |    96.96 |     100 |     100 | 69                
   ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
-  ...nitionsApi.ts |     100 |       75 |     100 |     100 | 75                
+  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
   cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
- admin-ai          |   99.36 |    95.86 |     100 |     100 |                   
+ admin-ai          |   99.36 |    96.44 |     100 |     100 |                   
   ...dgetModal.tsx |     100 |    96.66 |     100 |     100 | 53,117            
   ...torDrawer.tsx |     100 |     95.6 |     100 |     100 | ...17,322,325,420 
-  AiStudioPage.tsx |   98.57 |    94.44 |     100 |     100 | ...44,156-159,252 
+  AiStudioPage.tsx |   98.58 |    97.27 |     100 |     100 | 124,157-160       
   aiAdminApi.ts    |   97.91 |    98.52 |     100 |     100 | 172               
- settings          |   99.24 |     94.4 |   97.58 |   99.72 |                   
-  ...tingsPage.tsx |   99.43 |    94.66 |   99.35 |   99.84 | 1443              
-  ...tingsPage.tsx |   98.97 |    94.07 |   94.62 |   99.55 | 899-910           
+ settings          |   99.66 |     95.2 |   98.79 |     100 |                   
+  ...tingsPage.tsx |   99.57 |    95.01 |     100 |     100 | ...1073-1076,1735 
+  ...tingsPage.tsx |   99.79 |    95.44 |   96.77 |     100 | ...82,500,680,707 
 -------------------|---------|----------|---------|---------|-------------------

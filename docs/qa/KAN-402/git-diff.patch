@@ -2427,7 +2427,7 @@ index 2b78bfc9..0aa5797e 100644
      </div>
    );
 diff --git a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
-index c45f5cae..99830256 100644
+index c45f5cae..a85fcad5 100644
 --- a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
 +++ b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
 @@ -14,7 +14,15 @@ import { dispatchAal2StepUpIfRequired } from '../../api/problem';
@@ -2447,15 +2447,18 @@ index c45f5cae..99830256 100644
    const [agents, setAgents] = useState<AgentDefinitionResponse[]>([]);
    const [isLoading, setIsLoading] = useState<boolean>(true);
    const [error, setError] = useState<string | null>(null);
-@@ -32,7 +40,7 @@ export function AgentStudioPage(): JSX.Element {
+@@ -32,9 +40,9 @@ export function AgentStudioPage(): JSX.Element {
  
      async function load() {
        try {
 -        const list = await fetchAgentDefinitions();
 +        const list = await fetchAgentDefinitions(workspaceSlug ?? 'current', projectId ?? undefined);
          if (!active) return;
-         setAgents(list);
+-        setAgents(list);
++        setAgents(Array.isArray(list) ? list : []);
        } catch (err: unknown) {
+         if (!active) return;
+         dispatchAal2StepUpIfRequired(err);
 @@ -51,7 +59,7 @@ export function AgentStudioPage(): JSX.Element {
      return () => {
        active = false;
@@ -2536,6 +2539,40 @@ index 6cbed2a9..7b763de9 100644
 +      expect(onClose).toHaveBeenCalled();
 +    });
 +  });
+ });
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+index f1955a35..44b25efc 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+@@ -157,6 +157,14 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
+       const list = await agentApi.fetchAgentDefinitions();
+       expect(list).toEqual([mockAgentSdk]);
+ 
++      fetchSpy.mockResolvedValueOnce([mockAgentSdk]);
++      const listWithProject = await agentApi.fetchAgentDefinitions('my-ws', 'proj-123');
++      expect(listWithProject).toEqual([mockAgentSdk]);
++      expect(fetchSpy).toHaveBeenCalledWith(
++        'GET',
++        '/api/v1/workspaces/my-ws/agent-definitions?project_id=proj-123',
++      );
++
+       fetchSpy.mockResolvedValueOnce(mockAgentSdk);
+       const single = await agentApi.fetchAgentDefinition('reality-checker');
+       expect(single).toEqual(mockAgentSdk);
+@@ -712,5 +720,14 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
+         expect(onClose).toHaveBeenCalled();
+       });
+     });
++    it('handles non-array response from fetchAgentDefinitions gracefully', async () => {
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue(
++        {} as unknown as agentApi.AgentDefinitionResponse[],
++      );
++      render(<AgentStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('empty-agents-placeholder')).toBeDefined();
++      });
++    });
+   });
  });
 diff --git a/kanban/web/src/features/admin-agents/agentDefinitionsApi.ts b/kanban/web/src/features/admin-agents/agentDefinitionsApi.ts
 index 671ba19e..3b60aa54 100644
@@ -2819,7 +2856,7 @@ index 309700b3..6a30f96e 100644
      </div>
    );
 diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
-index bbece436..e6b2774d 100644
+index bbece436..d39998cb 100644
 --- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
 +++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
 @@ -26,7 +26,17 @@ interface CardTestStatus {
@@ -2841,7 +2878,7 @@ index bbece436..e6b2774d 100644
    const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
    const [airGapMode, setAirGapMode] = useState<boolean>(false);
    const [isLoading, setIsLoading] = useState<boolean>(true);
-@@ -53,8 +63,14 @@ export function AiStudioPage(): JSX.Element {
+@@ -53,11 +63,18 @@ export function AiStudioPage(): JSX.Element {
      async function load() {
        try {
          const [provList, isAirGap] = await Promise.all([
@@ -2857,8 +2894,13 @@ index bbece436..e6b2774d 100644
 +            : fetchAirGapMode(),
          ]);
          if (!active) return;
-         const sorted = [...provList].sort((a, b) => a.priority - b.priority);
-@@ -76,7 +92,7 @@ export function AiStudioPage(): JSX.Element {
+-        const sorted = [...provList].sort((a, b) => a.priority - b.priority);
++        const rawList = Array.isArray(provList) ? provList : [];
++        const sorted = [...rawList].sort((a, b) => a.priority - b.priority);
+         setProviders(sorted);
+         setAirGapMode(isAirGap);
+       } catch (err: unknown) {
+@@ -76,7 +93,7 @@ export function AiStudioPage(): JSX.Element {
      return () => {
        active = false;
      };
@@ -2867,7 +2909,7 @@ index bbece436..e6b2774d 100644
  
    const refreshData = useCallback((): void => {
      setReloadCounter((c) => c + 1);
-@@ -85,9 +101,17 @@ export function AiStudioPage(): JSX.Element {
+@@ -85,9 +102,17 @@ export function AiStudioPage(): JSX.Element {
    const handleToggleEnable = async (provider: ProviderConfigPublic): Promise<void> => {
      try {
        if (provider.is_enabled) {
@@ -2887,7 +2929,7 @@ index bbece436..e6b2774d 100644
        }
        refreshData();
      } catch (err: unknown) {
-@@ -98,7 +122,11 @@ export function AiStudioPage(): JSX.Element {
+@@ -98,7 +123,11 @@ export function AiStudioPage(): JSX.Element {
    const handleConfirmDelete = async (): Promise<void> => {
      if (!providerToDelete) return;
      try {
@@ -2900,7 +2942,7 @@ index bbece436..e6b2774d 100644
        setProviderToDelete(null);
        refreshData();
      } catch (err: unknown) {
-@@ -111,7 +139,11 @@ export function AiStudioPage(): JSX.Element {
+@@ -111,7 +140,11 @@ export function AiStudioPage(): JSX.Element {
      setProviders(newOrder);
      try {
        const orderedIds = newOrder.map((p) => p.id);
@@ -2913,7 +2955,7 @@ index bbece436..e6b2774d 100644
        const sorted = [...updated].sort((a, b) => a.priority - b.priority);
        setProviders(sorted);
      } catch (err: unknown) {
-@@ -177,7 +209,9 @@ export function AiStudioPage(): JSX.Element {
+@@ -177,7 +210,9 @@ export function AiStudioPage(): JSX.Element {
      }));
  
      try {
@@ -2924,7 +2966,7 @@ index bbece436..e6b2774d 100644
        if (res.ok) {
          setCardTestStatuses((prev) => ({
            ...prev,
-@@ -208,14 +242,16 @@ export function AiStudioPage(): JSX.Element {
+@@ -208,14 +243,16 @@ export function AiStudioPage(): JSX.Element {
  
    return (
      <section className="kb-ai-studio" data-testid="ai-studio-page">
@@ -2943,7 +2985,7 @@ index bbece436..e6b2774d 100644
            </p>
          </div>
  
-@@ -467,6 +503,7 @@ export function AiStudioPage(): JSX.Element {
+@@ -467,6 +504,7 @@ export function AiStudioPage(): JSX.Element {
          onClose={() => { setSelectedBudgetProvider(null); }}
          provider={selectedBudgetProvider}
          onBudgetUpdated={refreshData}
@@ -2951,7 +2993,7 @@ index bbece436..e6b2774d 100644
        />
  
        {/* Editor Drawer */}
-@@ -480,6 +517,8 @@ export function AiStudioPage(): JSX.Element {
+@@ -480,6 +518,8 @@ export function AiStudioPage(): JSX.Element {
          airGapMode={airGapMode}
          onSaved={refreshData}
          providersCount={providers.length}
@@ -3073,7 +3115,7 @@ index 03f02de7..93a10b3f 100644
    });
  });
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
-index 900d8b6c..0db5d4ba 100644
+index 900d8b6c..a9b34ac1 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 @@ -96,13 +96,13 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
@@ -3092,7 +3134,7 @@ index 900d8b6c..0db5d4ba 100644
  
        // fetchAiProvider
        fetchSpy.mockResolvedValueOnce(mockProvider);
-@@ -1841,5 +1841,137 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+@@ -1841,5 +1841,232 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
        expect(normalBar.className).not.toContain('kb-budget-progress--danger');
        expect(normalBar.className).not.toContain('kb-budget-progress--warning');
      });
@@ -3226,6 +3268,101 @@ index 900d8b6c..0db5d4ba 100644
 +          }),
 +          'finance-team',
 +        );
++      });
++    });
++    it('supports projectId scoping for subtitle copy and reorderAiProviders', async () => {
++      const mockProjectProviders: ProviderConfigPublic[] = [
++        {
++          id: 'prov-proj-1',
++          provider_kind: 'openai',
++          display_name: 'Project OpenAI',
++          base_url: 'https://api.openai.com/v1',
++          model_allowlist: ['gpt-4o'],
++          residency_tier: 'cloud_standard',
++          priority: 10,
++          settings: {},
++          api_key_set: true,
++          is_enabled: true,
++          project_id: 'proj-kan-uuid',
++        },
++        {
++          id: 'prov-proj-2',
++          provider_kind: 'ollama',
++          display_name: 'Project Ollama',
++          base_url: 'http://localhost:11434',
++          model_allowlist: ['gemma3:4b'],
++          residency_tier: 'local_only',
++          priority: 20,
++          settings: {},
++          api_key_set: false,
++          is_enabled: true,
++          project_id: 'proj-kan-uuid',
++        },
++      ];
++
++      const fetchSpy = vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue(mockProjectProviders);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
++        {
++          id: 'prov-proj-2',
++          provider_kind: 'ollama',
++          display_name: 'Project Ollama',
++          base_url: 'http://localhost:11434',
++          model_allowlist: ['gemma3:4b'],
++          residency_tier: 'local_only',
++          priority: 10,
++          settings: {},
++          api_key_set: false,
++          is_enabled: true,
++          project_id: 'proj-kan-uuid',
++        },
++        {
++          id: 'prov-proj-1',
++          provider_kind: 'openai',
++          display_name: 'Project OpenAI',
++          base_url: 'https://api.openai.com/v1',
++          model_allowlist: ['gpt-4o'],
++          residency_tier: 'cloud_standard',
++          priority: 20,
++          settings: {},
++          api_key_set: true,
++          is_enabled: true,
++          project_id: 'proj-kan-uuid',
++        },
++      ]);
++
++      render(<AiStudioPage projectId="proj-kan-uuid" showSubnav={false} />);
++
++      await waitFor(() => {
++        expect(fetchSpy).toHaveBeenCalledWith('proj-kan-uuid');
++        expect(screen.getByTestId('provider-card-prov-proj-1')).toBeDefined();
++      });
++
++      expect(screen.getByText(/Configure project LLM providers, failover priority stack/i)).toBeDefined();
++
++      act(() => {
++        fireEvent.click(screen.getByTestId('move-down-btn-prov-proj-1'));
++      });
++      await waitFor(() => {
++        expect(reorderSpy).toHaveBeenCalledWith(['prov-proj-2', 'prov-proj-1'], 'proj-kan-uuid');
++        expect(screen.getByTestId('provider-rank-prov-proj-2').textContent).toBe('#1');
++      });
++
++      // Boundary move edge cases (toIndex < 0 and toIndex >= providers.length)
++      act(() => {
++        fireEvent.click(screen.getByTestId('move-up-btn-prov-proj-2'));
++        fireEvent.click(screen.getByTestId('move-down-btn-prov-proj-1'));
++      });
++    });
++
++    it('handles non-array response from fetchAiProviders gracefully', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue(
++        {} as unknown as ProviderConfigPublic[],
++      );
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      render(<AiStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('empty-providers-placeholder')).toBeDefined();
 +      });
 +    });
    });
@@ -3699,525 +3836,127 @@ index 440d36ee..f04c56f1 100644
          {activeTab === 'trash' && (
            <div className="kb-members-section" data-testid="workspace-trash-studio">
              <div className="kb-settings-header">
-diff --git a/scripts/capture_kan402_screenshots.mjs b/scripts/capture_kan402_screenshots.mjs
-new file mode 100644
-index 00000000..a89dcab6
---- /dev/null
-+++ b/scripts/capture_kan402_screenshots.mjs
-@@ -0,0 +1,516 @@
-+// Copyright 2026 Kanban Platform Contributors
-+// Apache-2.0 License. See LICENSE for details.
-+
-+import fs from 'node:fs';
-+import path from 'node:path';
-+import { spawn } from 'node:child_process';
-+
-+let chromium;
-+try {
-+  ({ chromium } = await import('/home/adamoutler/.npm/_npx/81bbc6515d992ace/node_modules/playwright/index.mjs'));
-+} catch {
-+  try {
-+    ({ chromium } = await import('playwright'));
-+  } catch {
-+    ({ chromium } = await import('@playwright/test'));
-+  }
-+}
-+
-+const PORT = 18402;
-+const BASE_URL = `http://127.0.0.1:${PORT}`;
-+const OUT_DIR = path.resolve('docs/qa/KAN-402/screenshots');
-+
-+const VIEWPORTS = [
-+  {
-+    name: '01-desktop-1440x900',
-+    width: 1440,
-+    height: 900,
-+  },
-+  {
-+    name: '02-desktop-1440x900-dark',
-+    width: 1440,
-+    height: 900,
-+  },
-+  {
-+    name: '03-tablet-landscape-1024x768',
-+    width: 1024,
-+    height: 768,
-+  },
-+  {
-+    name: '04-tablet-portrait-768x1024',
-+    width: 768,
-+    height: 1024,
-+  },
-+  {
-+    name: '05-mobile-portrait-390x844',
-+    width: 390,
-+    height: 844,
-+  },
-+];
-+
-+async function waitForServer(url, timeoutMs = 30000) {
-+  const start = Date.now();
-+  while (Date.now() - start < timeoutMs) {
-+    try {
-+      const res = await fetch(url);
-+      if (res.ok || res.status === 200 || res.status === 404) {
-+        return;
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index 0813a4d9..6eb13101 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -44,6 +44,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+       await Promise.resolve();
+       const url: string = path;
++      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
++        return [];
 +      }
-+    } catch {
-+      // Retry
-+    }
-+    await new Promise((r) => setTimeout(r, 400));
-+  }
-+  throw new Error(`Timeout waiting for preview server at ${url}`);
-+}
+       if (url.includes('/api/v1/projects/KAN/members')) {
+         return [
+           {
+@@ -105,6 +108,14 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+     fireEvent.click(dangerTab);
+     expect(screen.getByText('Move Project to Trash')).toBeDefined();
+     expect(screen.getByTestId('request-delete-btn')).toBeDefined();
 +
-+async function setupInterceptions(page, userRole = 'WORKSPACE_ADMIN') {
-+  await page.route('**/*', async (route) => {
-+    const url = route.request().url();
-+    const method = route.request().method();
-+
-+    // Do NOT intercept HTML/JS/CSS assets or page navigation
-+    if (!url.includes('/api/')) {
-+      return route.continue();
-+    }
-+
-+    if (url.includes('/api/v1/setup/status')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ initialized: true, is_initialized: true, requires_setup: false }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/notifications')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0, unread_count: 0 }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/auth/session')) {
-+      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          authenticated: true,
-+          mfa_pending: false,
-+          csrf_token: 'mock-csrf-token-12345',
-+          principal_id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
-+          workspace_id: 'ws_default',
-+          aal_level: isWorkspaceAdmin ? 2 : 1,
-+          aal2_active: isWorkspaceAdmin,
-+          aal2_expires_at: isWorkspaceAdmin ? new Date(Date.now() + 890_000).toISOString() : null,
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/users/me') || url.includes('/api/v1/auth/me')) {
-+      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
-+          email: isWorkspaceAdmin ? 'wsadmin@kanban.local' : 'projadmin@kanban.local',
-+          username: isWorkspaceAdmin ? 'wsadmin' : 'projadmin',
-+          display_name: isWorkspaceAdmin ? 'Workspace Administrator' : 'Project Administrator',
-+          is_server_admin: false,
-+          is_workspace_admin: isWorkspaceAdmin,
-+          workspace_role: isWorkspaceAdmin ? 'WORKSPACE_ADMIN' : 'MEMBER',
-+          aal_level: isWorkspaceAdmin ? 2 : 1,
-+          auth_aal: isWorkspaceAdmin ? 'aal2' : 'aal1',
-+          aal2_active: isWorkspaceAdmin,
-+        }),
-+      });
-+    }
-+
-+    // AI Providers (Workspace & Project)
-+    if (url.includes('/ai-providers')) {
-+      if (url.includes('project_id=')) {
-+        return route.fulfill({
-+          status: 200,
-+          contentType: 'application/json',
-+          body: JSON.stringify([
-+            {
-+              id: 'b1b1b1b1-1111-4000-8000-000000000001',
-+              slug: 'project-openai-dedicated',
-+              name: 'Project Dedicated OpenAI',
-+              provider_kind: 'openai',
-+              model_allowlist: ['gpt-4o', 'o3-mini'],
-+              enabled: true,
-+              priority: 1,
-+              project_id: 'proj-kan-uuid',
-+              api_key_set: true,
-+              created_at: '2026-11-15T10:00:00Z',
-+              updated_at: '2026-11-24T12:00:00Z',
-+            },
-+          ]),
-+        });
++    // Switch to AI & Agents Tab
++    const aiAgentsTab = screen.getByTestId('tab-ai-agents');
++    expect(aiAgentsTab).toBeDefined();
++    fireEvent.click(aiAgentsTab);
++    expect(await screen.findByTestId('project-ai-agents-section')).toBeDefined();
++    expect(screen.getByTestId('ai-studio-page')).toBeDefined();
++    expect(screen.getByTestId('agent-studio-page')).toBeDefined();
+   });
+ 
+   it('allows adding and removing project members with role selection', async () => {
+@@ -392,6 +403,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       await Promise.resolve();
+       const url: string = path;
+       const m = method.toUpperCase();
++      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
++        return [];
 +      }
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          {
-+            id: 'a1a1a1a1-1111-4000-8000-000000000001',
-+            slug: 'anthropic-workspace',
-+            name: 'Anthropic Claude Workspace',
-+            provider_kind: 'anthropic',
-+            model_allowlist: ['claude-3-7-sonnet', 'claude-3-5-haiku'],
-+            enabled: true,
-+            priority: 1,
-+            project_id: null,
-+            api_key_set: true,
-+            created_at: '2026-11-01T10:00:00Z',
-+            updated_at: '2026-11-20T12:00:00Z',
-+          },
-+          {
-+            id: 'a2a2a2a2-2222-4000-8000-000000000002',
-+            slug: 'ollama-local-cluster',
-+            name: 'Ollama Air-Gapped Local',
-+            provider_kind: 'ollama',
-+            model_allowlist: ['deepseek-coder:6.7b', 'llama3.1:8b'],
-+            enabled: true,
-+            priority: 2,
-+            project_id: null,
-+            api_key_set: false,
-+            created_at: '2026-11-05T10:00:00Z',
-+            updated_at: '2026-11-22T12:00:00Z',
-+          },
-+        ]),
-+      });
-+    }
-+
-+    // Agent Definitions (Workspace & Project)
-+    if (url.includes('/agent-definitions')) {
-+      if (url.includes('project_id=')) {
-+        return route.fulfill({
-+          status: 200,
-+          contentType: 'application/json',
-+          body: JSON.stringify([
-+            {
-+              id: 'd1d1d1d1-1111-4000-8000-000000000001',
-+              workspace_id: 'ws_default',
-+              project_id: 'proj-kan-uuid',
-+              principal_id: 'usr_sprint_bot',
-+              slug: 'project-sprint-bot',
-+              display_name: 'Project Sprint Assistant',
-+              harness_kind: 'in_app_sdk',
-+              provider_kind: 'openai',
-+              model_id: 'gpt-4o',
-+              cli_args: [],
-+              repo_access_mode: 'bare_git_tools',
-+              mcp_allowed_tools: ['kanban_issues', 'git_log'],
-+              system_instructions_md: 'Automated release notes and sprint burndown generator for Platform Core.',
-+              timeout_ms: 45000,
-+            },
-+          ]),
-+        });
+       if (url.includes('/api/v1/projects/KAN/members')) {
+         return [];
+       }
+@@ -2038,6 +2052,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+           ],
+         };
+       }
++      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
++        return [];
 +      }
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          {
-+            id: 'c1c1c1c1-1111-4000-8000-000000000001',
-+            workspace_id: 'ws_default',
-+            project_id: null,
-+            principal_id: 'usr_triage_bot',
-+            slug: 'workspace-triage-bot',
-+            display_name: 'Workspace Triage Agent',
-+            harness_kind: 'in_app_sdk',
-+            provider_kind: 'anthropic',
-+            model_id: 'claude-3-5-haiku',
-+            cli_args: [],
-+            repo_access_mode: 'none',
-+            mcp_allowed_tools: ['issues_list', 'issues_update'],
-+            system_instructions_md: 'You are a workspace triage agent that categorizes incoming work items.',
-+            timeout_ms: 30000,
-+          },
-+          {
-+            id: 'c2c2c2c2-2222-4000-8000-000000000002',
-+            workspace_id: 'ws_default',
-+            project_id: null,
-+            principal_id: 'usr_sec_agent',
-+            slug: 'security-auditor-agent',
-+            display_name: 'Security Auditor Agent',
-+            harness_kind: 'cli_pipe',
-+            provider_kind: 'gemini',
-+            model_id: 'gemini-3.8-flash',
-+            cli_args: ['-p', 'audit'],
-+            repo_access_mode: 'ro_vfs_mount',
-+            mcp_allowed_tools: ['git_diff', 'ast_grep'],
-+            system_instructions_md: 'Autonomous security scanner performing forensic AST audits on pull requests.',
-+            timeout_ms: 60000,
-+          },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces/current/settings') || url.includes('/api/v1/admin/workspace-settings') || url.includes('/api/v1/workspaces/ws_default/settings')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          workspace_id: 'ws_default',
-+          air_gap_mode: false,
-+        }),
-+      });
-+    }
-+
-+    if (url.endsWith('/workspaces/current') || url.includes('/workspaces/current?')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'ws_default',
-+          name: 'Platform Engineering',
-+          slug: 'kanban',
-+          is_current: true,
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces') && method === 'GET' && !url.includes('/ai-providers') && !url.includes('/agent-definitions') && !url.includes('/settings')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'ws_default', slug: 'kanban', name: 'Platform Engineering' },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects') && !url.includes('/ai-providers') && !url.includes('/agent-definitions')) {
-+      if (url.endsWith('/projects') || url.includes('/projects?')) {
-+        return route.fulfill({
-+          status: 200,
-+          contentType: 'application/json',
-+          body: JSON.stringify([
-+            { id: 'proj-kan-uuid', key: 'KAN', name: 'Platform Core', workspace_id: 'ws_default' },
-+          ]),
-+        });
+       if (url.includes('/api/v1/projects/KAN/members')) {
+         return [];
+       }
+@@ -2084,6 +2101,9 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+           },
+         ];
+       }
++      if (url.includes('/api/v1/workspaces') && (url.includes('/ai-providers') || url.includes('/agent-definitions'))) {
++        return [];
 +      }
-+      if (url.includes('/projects/KAN') || url.includes('/projects/proj-kan-uuid')) {
-+        if (url.includes('/members')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/states')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/priorities')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/labels')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/custom-fields')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/integrations')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/modules')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        if (url.includes('/trash')) {
-+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-+        }
-+        return route.fulfill({
-+          status: 200,
-+          contentType: 'application/json',
-+          body: JSON.stringify({
-+            id: 'proj-kan-uuid',
-+            key: 'KAN',
-+            identifier: 'KAN',
-+            name: 'Platform Core',
-+            description_markdown: 'Platform Core Project with Dedicated Autonomous AI Agents',
-+            workspace_id: 'ws_default',
-+            modules_enabled: true,
-+            skip_loaded_sequence_numbers: false,
-+            default_module_ids: [],
-+            auto_archive_days: 30,
-+            capabilities: ['ADMIN', 'EDIT', 'READ'],
-+            is_project_admin: true,
-+          }),
-+        });
+       if (url.includes('/api/v1/projects/KAN/members')) {
+         return [
+           {
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index bece5e6c..d1567cd5 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -46,6 +46,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+           workspace_role: 'SERVER_ADMIN',
+         };
+       }
++      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
++        return [];
 +      }
-+    }
+       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+         return {
+           id: 'ws-1',
+@@ -128,6 +131,20 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     fireEvent.click(generalTab);
+     expect(screen.getByTestId('workspace-general-form')).toBeDefined();
+     expect(screen.getByTestId('link-workspace-mcp')).toBeDefined();
 +
++    // Switch to AI Providers tab
++    const aiTab = screen.getByTestId('tab-ai');
++    expect(aiTab).toBeDefined();
++    fireEvent.click(aiTab);
++    expect(await screen.findByTestId('workspace-ai-section')).toBeDefined();
++    expect(screen.getByTestId('ai-studio-page')).toBeDefined();
 +
-+
-+    if (url.includes('/api/')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({}),
-+      });
-+    }
-+
-+    return route.continue();
-+  });
-+}
-+
-+async function main() {
-+  fs.mkdirSync(OUT_DIR, { recursive: true });
-+
-+  console.log(`Starting preview server on port ${PORT}...`);
-+  const previewProc = spawn(
-+    'pnpm',
-+    ['--dir', 'kanban/web', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
-+    { stdio: 'inherit' }
-+  );
-+
-+  try {
-+    await waitForServer(BASE_URL);
-+    console.log(`Preview server ready at ${BASE_URL}`);
-+
-+    const browser = await chromium.launch({
-+      executablePath: '/usr/bin/google-chrome',
-+      headless: true,
-+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-+    });
-+
-+    async function captureItem({ vp, colorScheme, url, selector, filename, role }) {
-+      console.log(`Capturing ${filename} (${vp.width}x${vp.height} ${colorScheme})...`);
-+      const context = await browser.newContext({
-+        viewport: { width: vp.width, height: vp.height },
-+        colorScheme,
-+      });
-+      const page = await context.newPage();
-+      await setupInterceptions(page, role);
-+      await page.goto(url, { waitUntil: 'networkidle' });
-+      await page.evaluate((theme) => {
-+        document.documentElement.dataset.theme = theme;
-+        localStorage.setItem('theme', theme);
-+      }, colorScheme);
-+      await page.waitForSelector(selector, { timeout: 10000 });
-+      await page.waitForTimeout(500);
-+      await page.screenshot({
-+        path: path.join(OUT_DIR, filename),
-+        fullPage: false,
-+      });
-+      await context.close();
-+    }
-+
-+    // 1. Viewport 1440x900 light
-+    await captureItem({
-+      vp: VIEWPORTS[0],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/workspaces/settings/ai`,
-+      selector: '[data-testid="ai-studio-page"]',
-+      filename: '01-workspace-ai-desktop-1440x900-light.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[0],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/workspaces/settings/agents`,
-+      selector: '[data-testid="agent-studio-page"]',
-+      filename: '01-workspace-agents-desktop-1440x900-light.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[0],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
-+      selector: '[data-testid="project-ai-agents-section"]',
-+      filename: '01-project-ai-agents-desktop-1440x900-light.png',
-+      role: 'PROJECT_ADMIN',
-+    });
-+
-+    // 2. Viewport 1440x900 dark
-+    await captureItem({
-+      vp: VIEWPORTS[1],
-+      colorScheme: 'dark',
-+      url: `${BASE_URL}/workspaces/settings/ai`,
-+      selector: '[data-testid="ai-studio-page"]',
-+      filename: '02-workspace-ai-desktop-1440x900-dark.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[1],
-+      colorScheme: 'dark',
-+      url: `${BASE_URL}/workspaces/settings/agents`,
-+      selector: '[data-testid="agent-studio-page"]',
-+      filename: '02-workspace-agents-desktop-1440x900-dark.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[1],
-+      colorScheme: 'dark',
-+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
-+      selector: '[data-testid="project-ai-agents-section"]',
-+      filename: '02-project-ai-agents-desktop-1440x900-dark.png',
-+      role: 'PROJECT_ADMIN',
-+    });
-+
-+    // 3. Viewport 1024x768 Tablet Landscape
-+    await captureItem({
-+      vp: VIEWPORTS[2],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/workspaces/settings/ai`,
-+      selector: '[data-testid="ai-studio-page"]',
-+      filename: '03-workspace-ai-tablet-landscape-1024x768.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[2],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
-+      selector: '[data-testid="project-ai-agents-section"]',
-+      filename: '03-project-ai-agents-tablet-landscape-1024x768.png',
-+      role: 'PROJECT_ADMIN',
-+    });
-+
-+    // 4. Viewport 768x1024 Tablet Portrait
-+    await captureItem({
-+      vp: VIEWPORTS[3],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/workspaces/settings/ai`,
-+      selector: '[data-testid="ai-studio-page"]',
-+      filename: '04-workspace-ai-tablet-portrait-768x1024.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[3],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
-+      selector: '[data-testid="project-ai-agents-section"]',
-+      filename: '04-project-ai-agents-tablet-portrait-768x1024.png',
-+      role: 'PROJECT_ADMIN',
-+    });
-+
-+    // 5. Viewport 390x844 Mobile Portrait
-+    await captureItem({
-+      vp: VIEWPORTS[4],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/workspaces/settings/ai`,
-+      selector: '[data-testid="ai-studio-page"]',
-+      filename: '05-workspace-ai-mobile-390x844.png',
-+      role: 'WORKSPACE_ADMIN',
-+    });
-+    await captureItem({
-+      vp: VIEWPORTS[4],
-+      colorScheme: 'light',
-+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
-+      selector: '[data-testid="project-ai-agents-section"]',
-+      filename: '05-project-ai-agents-mobile-390x844.png',
-+      role: 'PROJECT_ADMIN',
-+    });
-+
-+    await browser.close();
-+    console.log('All 5 viewport screenshots captured successfully in docs/qa/KAN-402/screenshots/');
-+  } finally {
-+    previewProc.kill();
-+  }
-+}
-+
-+main().catch((err) => {
-+  console.error('Screenshot capture failed:', err);
-+  process.exit(1);
-+});
++    // Switch to Autonomous Agents tab
++    const agentsTab = screen.getByTestId('tab-agents');
++    expect(agentsTab).toBeDefined();
++    fireEvent.click(agentsTab);
++    expect(await screen.findByTestId('workspace-agents-section')).toBeDefined();
++    expect(screen.getByTestId('agent-studio-page')).toBeDefined();
+   });
+ 
+   it('renders 403 access denied when standard member visits workspace settings', async () => {
+@@ -1055,6 +1072,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+       if (url.includes('/api/v1/auth/me')) {
+         return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' };
+       }
++      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
++        return [];
++      }
+       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+         return { id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' };
+       }
+@@ -1293,6 +1313,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+       if (url.includes('/api/v1/auth/me')) {
+         return Promise.resolve({ id: 'admin-1', is_server_admin: true, is_workspace_admin: true, workspace_role: 'SERVER_ADMIN' });
+       }
++      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
++        return Promise.resolve([]);
++      }
+       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+         return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+       }
+@@ -2641,6 +2664,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+           workspace_role: 'SERVER_ADMIN',
+         };
+       }
++      if (url.includes('/ai-providers') || url.includes('/agent-definitions')) {
++        return [];
++      }
+       if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+         return {
+           id: 'ws-1',

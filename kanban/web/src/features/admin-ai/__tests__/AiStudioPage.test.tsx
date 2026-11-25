@@ -1973,5 +1973,100 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
         );
       });
     });
+    it('supports projectId scoping for subtitle copy and reorderAiProviders', async () => {
+      const mockProjectProviders: ProviderConfigPublic[] = [
+        {
+          id: 'prov-proj-1',
+          provider_kind: 'openai',
+          display_name: 'Project OpenAI',
+          base_url: 'https://api.openai.com/v1',
+          model_allowlist: ['gpt-4o'],
+          residency_tier: 'cloud_standard',
+          priority: 10,
+          settings: {},
+          api_key_set: true,
+          is_enabled: true,
+          project_id: 'proj-kan-uuid',
+        },
+        {
+          id: 'prov-proj-2',
+          provider_kind: 'ollama',
+          display_name: 'Project Ollama',
+          base_url: 'http://localhost:11434',
+          model_allowlist: ['gemma3:4b'],
+          residency_tier: 'local_only',
+          priority: 20,
+          settings: {},
+          api_key_set: false,
+          is_enabled: true,
+          project_id: 'proj-kan-uuid',
+        },
+      ];
+
+      const fetchSpy = vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue(mockProjectProviders);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
+        {
+          id: 'prov-proj-2',
+          provider_kind: 'ollama',
+          display_name: 'Project Ollama',
+          base_url: 'http://localhost:11434',
+          model_allowlist: ['gemma3:4b'],
+          residency_tier: 'local_only',
+          priority: 10,
+          settings: {},
+          api_key_set: false,
+          is_enabled: true,
+          project_id: 'proj-kan-uuid',
+        },
+        {
+          id: 'prov-proj-1',
+          provider_kind: 'openai',
+          display_name: 'Project OpenAI',
+          base_url: 'https://api.openai.com/v1',
+          model_allowlist: ['gpt-4o'],
+          residency_tier: 'cloud_standard',
+          priority: 20,
+          settings: {},
+          api_key_set: true,
+          is_enabled: true,
+          project_id: 'proj-kan-uuid',
+        },
+      ]);
+
+      render(<AiStudioPage projectId="proj-kan-uuid" showSubnav={false} />);
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith('proj-kan-uuid');
+        expect(screen.getByTestId('provider-card-prov-proj-1')).toBeDefined();
+      });
+
+      expect(screen.getByText(/Configure project LLM providers, failover priority stack/i)).toBeDefined();
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('move-down-btn-prov-proj-1'));
+      });
+      await waitFor(() => {
+        expect(reorderSpy).toHaveBeenCalledWith(['prov-proj-2', 'prov-proj-1'], 'proj-kan-uuid');
+        expect(screen.getByTestId('provider-rank-prov-proj-2').textContent).toBe('#1');
+      });
+
+      // Boundary move edge cases (toIndex < 0 and toIndex >= providers.length)
+      act(() => {
+        fireEvent.click(screen.getByTestId('move-up-btn-prov-proj-2'));
+        fireEvent.click(screen.getByTestId('move-down-btn-prov-proj-1'));
+      });
+    });
+
+    it('handles non-array response from fetchAiProviders gracefully', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue(
+        {} as unknown as ProviderConfigPublic[],
+      );
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      render(<AiStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('empty-providers-placeholder')).toBeDefined();
+      });
+    });
   });
 });

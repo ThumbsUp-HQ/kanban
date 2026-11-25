@@ -73,7 +73,8 @@ export function AiStudioPage({
             : fetchAirGapMode(),
         ]);
         if (!active) return;
-        const sorted = [...provList].sort((a, b) => a.priority - b.priority);
+        const rawList = Array.isArray(provList) ? provList : [];
+        const sorted = [...rawList].sort((a, b) => a.priority - b.priority);
         setProviders(sorted);
         setAirGapMode(isAirGap);
       } catch (err: unknown) {

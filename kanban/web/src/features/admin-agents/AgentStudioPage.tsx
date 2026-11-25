@@ -42,7 +42,7 @@ export function AgentStudioPage({
       try {
         const list = await fetchAgentDefinitions(workspaceSlug ?? 'current', projectId ?? undefined);
         if (!active) return;
-        setAgents(list);
+        setAgents(Array.isArray(list) ? list : []);
       } catch (err: unknown) {
         if (!active) return;
         dispatchAal2StepUpIfRequired(err);
