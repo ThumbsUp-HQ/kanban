@@ -51,16 +51,45 @@ OAUTH_CONSENT_CSRF_MAX_TTL: Final[int] = 600
 
 CONSENT_STYLE_CSS: Final[str] = """:root {
   --bg: #0f172a;
+  --card: #1e293b;
   --card-bg: #1e293b;
   --border: #334155;
   --text: #f8fafc;
   --text-muted: #94a3b8;
+  --muted: #94a3b8;
   --primary: #3b82f6;
   --primary-hover: #2563eb;
   --danger: #ef4444;
   --danger-hover: #dc2626;
   --badge-bg: #1e3a8a;
   --badge-text: #93c5fd;
+  --badge-host-bg: #090d16;
+  --surface-raised: #151f30;
+  --scope-name: #cbd5e1;
+  --btn-deny-bg: #334155;
+  --btn-deny-hover: #475569;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --card-bg: #ffffff;
+    --border: #cbd5e1;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --muted: #475569;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --badge-bg: #dbeafe;
+    --badge-text: #1e40af;
+    --badge-host-bg: #f1f5f9;
+    --surface-raised: #f1f5f9;
+    --scope-name: #0f172a;
+    --btn-deny-bg: #e2e8f0;
+    --btn-deny-hover: #cbd5e1;
+  }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -74,21 +103,21 @@ body {
   padding: 1rem;
 }
 .consent-card {
-  background-color: var(--card-bg);
+  background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   max-width: 480px;
   width: 100%;
   padding: 2rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
 }
 .header { text-align: center; margin-bottom: 1.5rem; }
 .app-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
 .host-badge {
   display: inline-block;
   font-size: 0.8125rem;
-  color: var(--text-muted);
-  background: #090d16;
+  color: var(--muted);
+  background: var(--badge-host-bg);
   padding: 0.25rem 0.625rem;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -98,7 +127,7 @@ body {
 .user-badge {
   text-align: center;
   font-size: 0.8125rem;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-top: 0.5rem;
 }
 .user-badge strong {
@@ -120,7 +149,7 @@ body {
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: var(--muted);
   margin-bottom: 0.5rem;
 }
 .scope-list {
@@ -128,7 +157,7 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 1.25rem;
-  background: #151f30;
+  background: var(--surface-raised);
   padding: 0.75rem;
   border-radius: 8px;
 }
@@ -144,13 +173,13 @@ body {
   flex-direction: column;
   gap: 0.125rem;
 }
-.scope-name { font-family: monospace; color: #cbd5e1; font-weight: 600; }
-.scope-desc { font-size: 0.75rem; color: var(--text-muted); }
+.scope-name { font-family: monospace; color: var(--scope-name); font-weight: 600; }
+.scope-desc { font-size: 0.75rem; color: var(--muted); }
 .project-selector { margin-bottom: 1.5rem; }
 .project-selector select {
   width: 100%;
   padding: 0.5rem;
-  background: #151f30;
+  background: var(--surface-raised);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -170,8 +199,8 @@ body {
 }
 .btn-approve { background: var(--primary); color: white; }
 .btn-approve:hover { background: var(--primary-hover); }
-.btn-deny { background: #334155; color: var(--text); }
-.btn-deny:hover { background: #475569; }"""
+.btn-deny { background: var(--btn-deny-bg); color: var(--text); }
+.btn-deny:hover { background: var(--btn-deny-hover); }"""
 
 CONSENT_STYLE_SHA256: Final[str] = base64.b64encode(
     hashlib.sha256(CONSENT_STYLE_CSS.encode("utf-8")).digest()

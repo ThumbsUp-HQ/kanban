@@ -1,61 +1,71 @@
-# Integration Reality-Checker Briefing: KAN-395
+# Integration Reality-Checker Briefing: KAN-395 (Round-1 QA Remediation)
 
 - **Ticket**: KAN-395 (Support 1,200+ character OAuth state tokens, RFC 8707 Resource Scoping, and MCP Protocol Negotiation for Google Gemini MCP OAuth 2.1 integration)
-- **Branch**: `main` (merged from `feat/KAN-395-gemini-oauth-state`)
-- **Feature Commit**: `88ea5d865af34f95a2d532f3cefb9285ca8da8e9`
-- **Live QA Container**: `kanban-gemini-qa` on `192.168.1.133:18921` behind NPM TLS `https://gemini-qa-temp.hackedyour.info` (verified with live Google Gemini and cleaned up)
+- **Branch**: `fix/KAN-395-rc1` (created from `main`)
+- **Remediation Target**: Round-1 QA Remediation responding to clean-room reality-checker audit.
 - **Review Status**:
   - API Specialist Review: APPROVED (`docs/qa/KAN-395/api-specialist-review.md`)
   - UI Specialist Review: APPROVED (`docs/qa/KAN-395/ui-specialist-review.md`)
 
-## Key Verified Deliverables
+## Round-1 QA Remediation Actions Completed
 
-1. **OAuth State Expansion & Strict Boundary Validation**:
-   - Raised `MAX_STATE_LEN` from 512 to 4096 (4 KiB) in `kanban/api/v1/oauth.py` with updated RFC 6749 400 `invalid_request` description (`State parameter exceeds 4096 characters`).
-   - Boundary tests confirm 4096 characters accepted and 4097 characters rejected.
-   - HMAC CSRF binding (`v1|{sess_str}|{client_id}|{redirect_uri}|{code_challenge}|{state}|{surface}|{exp}`) verified against 1,200+ char state tokens with zero truncation.
+1. **`ConnectOAuthAppModal.css` Mobile URL Wrapping and Vertical Spacing**:
+   - Modified `.kb-connect-oauth-url` with `white-space: normal; word-break: break-all; overflow-wrap: anywhere; min-width: 0;` so long URLs wrap cleanly without horizontal truncation or blowouts on `390x844` mobile.
+   - Adjusted `.kb-connect-oauth-card` height allowance to `max-height: min(94vh, 860px)` and tightened vertical padding/margins across `.kb-connect-oauth-header` (12px 20px), `.kb-connect-oauth-body` (12px 20px, gap 10px), `.kb-connect-oauth-endpoints` (10px 12px, gap 8px), `.kb-connect-oauth-tabs` (min-height 36px, gap 6px), `.kb-connect-oauth-tab` (height 32px, padding 4px 10px), and `.kb-connect-oauth-gemini-hint` (padding 6px 10px, gap 3px, margin 0 on `<p>`).
+   - Verified via Playwright screenshots on `1440x900` that the entire Gemini hint AND code snippet fit visibly above the fold with zero mid-line slicing of `agent:write.`, even when the dynamic `Target Project` selector is active!
+   - On `390x844` mobile portrait, connector tabs wrap cleanly across two rows without slicing at any scroll edge or clipping the close button.
 
-2. **RFC 6749 Redirect URI Parameter Integrity**:
-   - Replaced fragile query string concatenation with `_redirect_with_params` using `sep = "&" if "?" in redirect_uri else "?"` across all eight OAuth authorization 302 redirect points in `kanban/api/v1/oauth.py`.
-   - Prevents corrupt `?a=1?code=...` URLs when OAuth clients provide existing callback query parameters.
+2. **Light Theme Support in `CONSENT_STYLE_CSS` (`kanban/oauth/server.py`)**:
+   - Added full `@media (prefers-color-scheme: light)` CSS variables block to `CONSENT_STYLE_CSS` with crisp WCAG AA light-mode tokens:
+     - `--bg: #f8fafc`
+     - `--card: #ffffff`
+     - `--card-bg: #ffffff`
+     - `--border: #cbd5e1`
+     - `--text: #0f172a`
+     - `--text-muted: #475569`
+     - `--muted: #475569`
+     - `--primary: #2563eb`
+     - `--primary-hover: #1d4ed8`
+     - `--danger: #dc2626`
+     - `--danger-hover: #b91c1c`
+     - `--badge-bg: #dbeafe`
+     - `--badge-text: #1e40af`
+     - `--badge-host-bg: #f1f5f9`
+     - `--surface-raised: #f1f5f9`
+     - `--scope-name: #0f172a`
+     - `--btn-deny-bg: #e2e8f0`
+     - `--btn-deny-hover: #cbd5e1`
+   - Added automated unit test assertion in `kanban/tests/oauth/test_oauth_unit.py` verifying `@media (prefers-color-scheme: light)` is present in `render_consent_screen` output.
+   - Verified light mode renders a genuine, distinct light-theme consent screen.
 
-3. **Deep Login Redirect & Query Parameter Safety**:
-   - Raised query parameter length limits in `kanban/api/v1/auth_cards_public.py` (`next` and `return_to`) and `kanban/api/v1/auth_oidc.py` (`return_to`) from 2048 to 8192 characters.
-   - Updated `RETURN_TO_REGEX` in `kanban/auth/oidc/flow.py` to allow `{0,8192}` characters and RFC 3986 sub-delim characters (`@,;!$'()*`).
-   - Updated `SAFE_NEXT_REGEX` in `kanban/web/src/features/auth/authApi.ts` to accommodate valid query sub-delimiters and characters without dropping long OAuth authorization redirects back to `/`.
+3. **Complete Verbatim `unit-test-results.txt`**:
+   - `docs/qa/KAN-395/unit-test-results.txt` contains complete, unabridged, verbatim output from BOTH test suites:
+     - Backend: `uv run pytest mcp/tests/test_protocol.py mcp/tests/test_metadata.py kanban/tests/oauth/ --cov=kanban.api.v1.oauth --cov=kanban.oauth --cov=mcp.protocol --cov=mcp.metadata -v`: 65 passed in 31.25s, 84% combined coverage.
+     - Frontend: `COVERAGE_INCLUDE="src/features/settings/ConnectOAuthAppModal.tsx,src/features/settings/McpAccessStudio.tsx,src/features/auth/LoginPage.tsx" pnpm --dir kanban/web test src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx src/features/settings/__tests__/McpAccessStudio.test.tsx src/features/auth/LoginPage.test.tsx --coverage`: 3 test files passed, 85 passed tests in 5.74s, 99.48% line coverage, 95.64% branch coverage (exceeding >=95% gate).
 
-4. **RFC 8707 Target Workspace Scoping (Eliminated Live Gemini `403 KEY_SCOPE_VIOLATION`)**:
-   - Implemented `_resolve_target_scope` in `kanban/api/v1/oauth.py` parsing RFC 8707 `resource` parameters (`/mcp/{surface}/w/{ws_slug}/p/{proj_key}`, `/mcp/{surface}/w/{ws_slug}`, or `/mcp/{surface}`).
-   - Validates caller membership in target workspace via `kb_auth_switch_workspace(:ws_id, :p_id)`, failing closed with 403 `access_denied` if unauthorized.
-   - Binds `OAuthGrant`, `OAuthAuthorizationCode`, and minted JWTs to the target workspace under PostgreSQL `FORCE RLS` rather than the caller browser session active workspace (`default`).
-   - Added `scope_tier` claim (`"server"`, `"workspace"`, `"project"`) and updated `mcp/scoping.py` so server-level tokens can access any authorized workspace.
+4. **Multi-Viewport Zero-Mock Screenshots Recaptured**:
+   - All 14 Playwright screenshots in `docs/qa/KAN-395/screenshots/` recaptured fresh via `scripts/capture_kan395_rc1_screenshots.mjs`:
+     - `oauth-consent-screen-1200-state-1440x900-light.png`: SHA-256 `4c262251deff1290fefa4330db0a651b895230f3ab785eee7054287088bbeea5`
+     - `oauth-consent-screen-1200-state-1440x900-dark.png`: SHA-256 `bdff9e40094c81717e4299942beb5d2a0d72ef464cc3d6be713285dba542b002` (distinct SHA-256 hashes!)
+     - `oauth-consent-screen-1200-state-1024x768.png`
+     - `oauth-consent-screen-1200-state-768x1024.png`
+     - `oauth-consent-screen-1200-state-390x844.png`
+     - `connect-oauth-modal-gemini-workspace-1440x900-light.png`
+     - `connect-oauth-modal-gemini-workspace-1440x900-dark.png`
+     - `connect-oauth-modal-gemini-workspace-1024x768.png`
+     - `connect-oauth-modal-gemini-workspace-768x1024.png`
+     - `connect-oauth-modal-gemini-workspace-390x844.png`
+     - `connect-oauth-modal-gemini-project-1440x900-light.png`
+     - `connect-oauth-modal-gemini-project-390x844.png`
+     - `connect-oauth-modal-gemini-server-1440x900-light.png`
+     - `connect-oauth-modal-gemini-server-390x844.png`
+     - `live-gemini-oauth-consent.png` preserved intact from live production verification.
 
-5. **MCP Protocol Version Negotiation & HTTP Method Conformance**:
-   - Supported protocol versions `2025-11-25`, `2025-06-18`, and `2025-03-26` in `mcp/protocol.py` (`SUPPORTED_PROTOCOL_VERSIONS`).
-   - Header `mcp-protocol-version` validates against supported versions; `_handle_initialize` dynamically negotiates `protocolVersion` to match the client's supported version.
-   - HTTP `HEAD` returns 200 OK with `Allow: POST, DELETE, HEAD` and `Content-Type: application/json`.
-   - Streamable HTTP `GET` strictly returns 405 Method Not Allowed with `Allow: POST, DELETE, HEAD` per spec.
-
-6. **Chained Reverse-Proxy & TLS Termination Support**:
-   - Hardened `resolve_public_base_url` across `kanban/oauth/server.py`, `mcp/metadata.py`, and `mcp/auth.py` to correctly extract the first client-facing hop from comma-separated headers (`X-Forwarded-Proto` and `X-Forwarded-Host`), prioritizing `KANBAN_PUBLIC_ORIGIN`.
-
-7. **Dynamic Target Scope Selector & Gemini Connected App Guidance**:
-   - Added in-modal Target Scope control (`Workspace`, `Single Project`, `Server`) in `ConnectOAuthAppModal.tsx`.
-   - Added dedicated `Gemini App` tab with instructional callout for Google Gemini Connected Apps setup.
-   - Added word-break responsive wrapping in consent screen `render_consent_screen` for long redirect URIs and 1,200+ char state tokens.
-
-8. **Test & Static Analysis Verification**:
-   - Backend: 486/486 tests pass (437 in `mcp/tests/`, 49 in `kanban/tests/oauth/`), including regression test `test_gemini_oauth_cross_workspace_scoping_and_mcp_gates`.
-   - Frontend: 85/85 vitest tests pass (`ConnectOAuthAppModal.test.tsx`, `McpAccessStudio.test.tsx`, `LoginPage.test.tsx`).
-   - Ruff: 0 errors (`uv run ruff check`).
-   - Mypy: 0 issues across all touched modules.
-   - Typecheck: 0 errors (`pnpm --dir kanban/web typecheck`).
-   - Zero em/en-dashes verified (`python3 scripts/check_no_dashes.py --all`).
-
-9. **Live Real Google Gemini Production Verification**:
-   - Real Google Gemini (`clientInfo: {"name": "Gemini", "version": "1.0.0"}`) connected live via `gemini.google.com/devmode` to `https://gemini-qa-temp.hackedyour.info/mcp/agent/w/kanban`.
-   - Full OAuth 2.1 handshake completed with 1,200+ char state token and RFC 8707 resource targeting workspace `kanban`.
-   - MCP protocol version `2025-11-25` negotiated successfully.
-   - `tools/list` returned all 10 tools (`search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`, `update_workpad`).
-   - Live tool execution: `read_ticket("KAN-1")` executed with 200 OK, returning ticket summary and description intact (`docs/qa/KAN-395/live-fullstack-proof.txt`).
-   - Screenshots: 14 zero-mock Playwright multi-viewport captures + live consent screen capture in `docs/qa/KAN-395/screenshots/`.
+5. **Static Checks and Linting (`docs/qa/KAN-395/build-check.txt`)**:
+   - Ruff check: All checks passed!
+   - Ruff format check: 807 files already formatted!
+   - Mypy: Success: no issues found in 803 source files!
+   - Plain ASCII check: Verified with `scripts/check_no_dashes.py --all` (0 em/en-dashes).
+   - TypeScript: `pnpm --dir kanban/web typecheck` (0 errors).
+   - ESLint: `pnpm --dir kanban/web lint` (0 errors, 0 warnings).
+   - Web Build: `pnpm --dir kanban/web build` (built in 1.34s).
