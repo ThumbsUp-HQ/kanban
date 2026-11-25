@@ -5,7 +5,7 @@
 - **Reviewer Persona**: API & Security Architect (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f`
-- **Head Commit**: `cac0ea4e`
+- **Head Commit**: `e0f893fe`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 

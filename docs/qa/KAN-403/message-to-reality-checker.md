@@ -4,7 +4,7 @@
 - **Ticket ID**: KAN-403 (`[KB-LOCAL-FOLDER-ONBOARDING-PROMPT] Default /llms.txt Onboarding to Local Project Folder (.agents/skills/ & AGENTS.md) & Add User/Project AgentOnboardingPromptCard`)
 - **Branch**: `feat/KAN-403-local-folder-onboarding`
 - **Base Commit**: `0a204b9f` (from `main`, linear Alembic head #82 `p6_20_oauth_clients_status_check`)
-- **Head Commit**: `cac0ea4e`
+- **Head Commit**: `e0f893fe`
 
 ## Forensic Verification Summary
 

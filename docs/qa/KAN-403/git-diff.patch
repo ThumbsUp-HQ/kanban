@@ -1280,10 +1280,10 @@ index e4f0f42a..bbf7512e 100644
          <MemoryRouter initialEntries={['/docs/home']}>
 diff --git a/kanban/web/src/features/settings/AgentOnboardingPromptCard.css b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
 new file mode 100644
-index 00000000..d98645d1
+index 00000000..e2041f36
 --- /dev/null
 +++ b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,216 @@
 +/* Copyright 2026 Kanban Platform Contributors */
 +/* Apache-2.0 License. See LICENSE for details. */
 +
@@ -1480,6 +1480,15 @@ index 00000000..d98645d1
 +  min-height: auto !important;
 +  max-height: none !important;
 +  overflow: visible !important;
++}
++
++body.kb-screenshot-unconstrained .kb-topbar,
++body.kb-screenshot-unconstrained header,
++body.kb-screenshot-unconstrained .app-topbar,
++body.kb-screenshot-unconstrained .topbar,
++body.kb-screenshot-unconstrained nav {
++  position: static !important;
++  top: auto !important;
 +}
 +
 +body.kb-screenshot-unconstrained .realtime-status-chip,
@@ -1919,10 +1928,10 @@ index c7d5b9ee..b81df0ad 100644
          {activeTab === 'states' && (
 diff --git a/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
 new file mode 100644
-index 00000000..488fe31e
+index 00000000..d1496559
 --- /dev/null
 +++ b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
-@@ -0,0 +1,488 @@
+@@ -0,0 +1,491 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2253,14 +2262,15 @@ index 00000000..488fe31e
 +
 +    vi.useFakeTimers();
 +    try {
-+      act(() => {
++      await act(async () => {
 +        fireEvent.click(saveBtn);
++        await vi.advanceTimersByTimeAsync(0);
 +      });
 +
 +      expect(screen.getByTestId('onboarding-save-success')).toBeDefined();
 +
-+      act(() => {
-+        vi.advanceTimersByTime(3000);
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(3100);
 +      });
 +
 +      expect(screen.queryByTestId('onboarding-save-success')).toBeNull();
@@ -2269,7 +2279,7 @@ index 00000000..488fe31e
 +    }
 +  });
 +
-+  it('resets copied state after timeout and handles copy failure', () => {
++  it('resets copied state after timeout and handles copy failure', async () => {
 +    vi.mocked(personalSettingsApi.fetchUserPreferences).mockResolvedValueOnce({
 +      principal_id: '01a2-test',
 +      workspace_id: '01a2-ws',
@@ -2289,22 +2299,24 @@ index 00000000..488fe31e
 +
 +    vi.useFakeTimers();
 +    try {
-+      act(() => {
++      await act(async () => {
 +        fireEvent.click(copyBtn);
++        await vi.advanceTimersByTimeAsync(0);
 +      });
 +
 +      expect(copyBtn.textContent).toContain('Copied Prompt!');
 +
-+      act(() => {
-+        vi.advanceTimersByTime(2000);
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(2100);
 +      });
 +
 +      expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
 +
 +      // Test copy failure (returns false)
 +      vi.mocked(clipboardUtil.copyToClipboard).mockResolvedValueOnce(false);
-+      act(() => {
++      await act(async () => {
 +        fireEvent.click(copyBtn);
++        await vi.advanceTimersByTimeAsync(0);
 +      });
 +
 +      expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
@@ -2660,10 +2672,10 @@ index 33079ff5..5764ad0d 100644
 +}
 diff --git a/scripts/capture_kan403_screenshots.mjs b/scripts/capture_kan403_screenshots.mjs
 new file mode 100644
-index 00000000..88f31aac
+index 00000000..0bcedb70
 --- /dev/null
 +++ b/scripts/capture_kan403_screenshots.mjs
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,383 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -2938,7 +2950,15 @@ index 00000000..88f31aac
 +      const saveBtn = page.locator('[data-testid="save-agent-onboarding-prefs-btn"]');
 +      await copyBtn.scrollIntoViewIfNeeded();
 +      await saveBtn.scrollIntoViewIfNeeded();
-+      await page.waitForTimeout(500);
++      await page.waitForTimeout(300);
++
++      // Scroll back to top so static topbar sits cleanly at y=0 without overlapping the card
++      await page.evaluate(() => {
++        window.scrollTo(0, 0);
++        const canvas = document.querySelector('.kb-main-canvas');
++        if (canvas) canvas.scrollTop = 0;
++      });
++      await page.waitForTimeout(300);
 +
 +      await page.screenshot({
 +        path: path.join(OUT_DIR, filename),
