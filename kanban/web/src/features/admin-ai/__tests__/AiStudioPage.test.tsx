@@ -914,6 +914,50 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       });
     });
 
+    it('initializes in unlimited mode when loaded budget has token_cap >= 10_000_000_000 (round-trip persistence)', async () => {
+      const unlimitedBudgets: BudgetRecord[] = [
+        {
+          period_kind: 'monthly',
+          period_start: '2026-11-01',
+          token_cap: 10000000000,
+          tokens_used: 1250000,
+          tokens_reserved: 0,
+        },
+      ];
+      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(unlimitedBudgets);
+      const firstUnlimited = unlimitedBudgets[0];
+      if (!firstUnlimited) {
+        throw new Error('Expected unlimited mock budget');
+      }
+      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue(firstUnlimited);
+
+      render(
+        <AiBudgetModal
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Unlimited (No Cap)')).toBeDefined();
+        expect(screen.getByText('Unlimited (10B ceiling)')).toBeDefined();
+        expect(screen.getByTestId('budget-unlimited-note')).toBeDefined();
+        expect(screen.queryByTestId('budget-token-cap-input')).toBeNull();
+      });
+
+      // Saving preserves unlimited ceiling of 10_000_000_000
+      fireEvent.click(screen.getByTestId('save-budget-btn'));
+      await waitFor(() => {
+        expect(setBudgetSpy).toHaveBeenCalledWith({
+          provider_config_id: 'prov-openai-1',
+          project_id: undefined,
+          period_kind: 'monthly',
+          token_cap: 10000000000,
+        });
+      });
+    });
+
     it('handles unmount during load in AiStudioPage and AiBudgetModal (resolve and reject)', () => {
       let resolveProv!: (v: ProviderConfigPublic[]) => void;
       vi.spyOn(aiApi, 'fetchAiProviders').mockReturnValue(

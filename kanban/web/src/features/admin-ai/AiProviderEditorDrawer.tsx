@@ -209,13 +209,20 @@ function AiProviderEditorContent({
         maxTokensModified
       );
     }
+    const initialModelAllowlist = provider.model_allowlist.join(', ');
     return (
       displayName !== provider.display_name ||
       apiKey.trim() !== '' ||
       baseUrl !== (provider.base_url ?? '') ||
       clearExistingKey ||
       residencyTier !== initialResidency ||
-      providerKind !== provider.provider_kind
+      providerKind !== provider.provider_kind ||
+      modelAllowlist !== initialModelAllowlist ||
+      timeoutMs !== initialTimeoutMs ||
+      temperatureModified ||
+      topPModified ||
+      maxTokensModified ||
+      mtlsCertPem !== initialMtlsCert
     );
   }, [
     provider,
@@ -228,7 +235,9 @@ function AiProviderEditorContent({
     defaultBaseUrl,
     modelAllowlist,
     mtlsCertPem,
+    initialMtlsCert,
     timeoutMs,
+    initialTimeoutMs,
     temperatureModified,
     topPModified,
     maxTokensModified,

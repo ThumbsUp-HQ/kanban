@@ -30,14 +30,14 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 
 2. **AI Budget Modal Hard Freeze & UX Clarity Fix (`AiBudgetModal.tsx`)**:
    - Resolved the display bug where `capNum === 0` rendered misleading `'Unlimited'` / `'No cap enforced'`: now explicitly renders `'Zero-Allowance Freeze (0 tokens)'`.
-   - Added explicit mode toggle pills: **`Enforce Token Cap`** vs **`Unlimited Quota (No Cap)`**, making quota policy unambiguous.
-   - Added 1-click monthly token budget quick-pick presets: **`1M`**, **`5M`**, **`25M`**, **`100M`**, and **`0 Freeze`**.
-   - Added an explicit warning banner when `token_cap === 0`: **`0 tokens set: Completions through this provider are completely frozen.`**
+   - Added explicit mode toggle pills: **`Enforce Token Cap`** (`cap-mode-enforce-btn`) vs **`Unlimited Quota (No Cap)`** (`cap-mode-unlimited-btn`), making quota policy unambiguous.
+   - Added 1-click monthly token budget quick-pick presets: **`1M`**, **`5M`**, **`25M`**, **`100M`**, and **`0 Freeze`** (`preset-budget-0-freeze-btn`).
+   - Added an explicit warning banner when `token_cap === 0`: **`0 tokens set: Completions through this provider are completely frozen.`** (`zero-cap-freeze-warning`).
+   - Round-trip persistence: when `token_cap >= 10_000_000_000` on load, initializes in unlimited mode, displaying `'Unlimited (No Cap)'` and `'Unlimited (10B ceiling)'`.
 
 3. **Unified Navigation & Agent Studio Integration (`AdminStudioSubnav.tsx` & `AgentStudioPage.tsx`)**:
    - Added the missing `'agents'` tab to `ADMIN_TABS` in `AdminStudioSubnav.tsx` with icon `🤖`, label `'Agents'`, and route `'/admin/agents'`.
    - Mounted `<AdminStudioSubnav activeTab="agents" />` in `AgentStudioPage.tsx` when `(showSubnav ?? !projectId)` is true, while keeping it cleanly suppressed when embedded inside Workspace or Project settings per `KAN-402`.
-   - Fixed agent card property rendering to safely handle `ag.cli_args` array joining and `ag.mcp_allowed_tools` chip mapping.
 
 4. **Agent Definition Editor Drawer Enhancements (`AgentDefinitionEditorDrawer.tsx`)**:
    - Added inline harness hint box (`data-testid="agent-harness-hint"`) displaying practical explanations for `in_app_sdk` (in-process API completions), `cli_pipe` (local CLI piping e.g. `agy -p`), and `remote_runner` (outbound mTLS runner pools).
@@ -77,7 +77,7 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 ### Detailed Code Modifications
 
 #### 1. AI Provider Editor Drawer (`AiProviderEditorDrawer.tsx` & `aiStudio.css`)
-- **1-Click Preset Buttons (`data-testid="preset-ollama"`, `preset-openai`, `preset-gemini`)**:
+- **1-Click Preset Buttons (`data-testid="preset-ollama-btn"`, `preset-openai-btn`, `preset-gemini-btn`)**:
   - `Ollama`: Sets `provider_kind="ollama"`, `display_name="Local Ollama Runtime"`, `base_url="http://127.0.0.1:11434"`, `residency_tier="local_only"`, suggested models `llama3.2, qwen2.5-coder`.
   - `OpenAI`: Sets `provider_kind="openai"`, `display_name="OpenAI GPT-4o"`, `base_url="https://api.openai.com/v1"`, `residency_tier="cloud_standard"`, suggested models `gpt-4o, gpt-4o-mini`.
   - `Google Gemini`: Sets `provider_kind="gemini"`, `display_name="Google Gemini Workspace"`, `base_url="https://generativelanguage.googleapis.com"`, `residency_tier="cloud_standard"`, suggested models `gemini-2.5-flash, gemini-2.5-pro`.
@@ -89,22 +89,22 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
   - Cloud `<option>` tags in `provider-kind-select` are marked `disabled` with `(Blocked by Air-Gap Policy)` suffix.
   - If a cloud provider was previously selected, switches default selection to `ollama`.
 - **AAL2 Dirty Keepalive Integration**:
-  - Computes `isDirty` by comparing current form state against initial loaded provider values.
+  - Computes `isDirty` by comparing current form state against initial loaded provider values (including `modelAllowlist`, `timeoutMs`, sampling overrides, and `mtlsCertPem`).
   - Passes `isDirty` to `useAal2DirtyKeepalive(isDirty)` to maintain admin session freshness while typing.
 
 #### 2. AI Budget Modal (`AiBudgetModal.tsx` & `aiStudio.css`)
-- **Bug Fix for Cap 0 Display**:
+- **Bug Fix for Cap 0 Display & Unlimited Persistence**:
   - Replaced ambiguous ternary with explicit helper:
-    - `capNum === 0`: Returns `'Zero-Allowance Freeze (0 tokens)'`.
-    - `capNum === null` / undefined: Returns `'Unlimited (No Cap)'`.
+    - `isZeroFreeze` (`capNum === 0`): Returns `'Zero-Allowance Freeze (0 tokens)'`.
+    - `isUnlimitedCeiling` (`capNum >= 10000000000`) or no cap: Returns `'Unlimited (No Cap)'` and `'Unlimited (10B ceiling)'`.
     - `capNum > 0`: Returns formatted string `${capNum.toLocaleString()} tokens`.
 - **Mode Toggle Pills (`Enforce Token Cap` vs `Unlimited Quota`)**:
-  - `data-testid="budget-mode-enforced"`: Sets `isUnlimited = false` and defaults cap to `5,000,000` if previously null.
-  - `data-testid="budget-mode-unlimited"`: Sets `isUnlimited = true`, clearing input and persisting `token_cap: null`.
+  - `data-testid="cap-mode-enforce-btn"`: Sets `capMode = 'enforce'` and defaults cap to `1,000,000` tokens if switching from unlimited or empty.
+  - `data-testid="cap-mode-unlimited-btn"`: Sets `capMode = 'unlimited'`, persisting `token_cap: 10000000000` (10B ceiling per `BudgetSetRequest` schema).
 - **Token Quick-Pick Presets**:
-  - Quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 Freeze` immediately populate the token cap input.
+  - Quick-pick buttons for `1M`, `5M`, `25M`, `100M`, and `0 Freeze` (`preset-budget-0-freeze-btn`) immediately populate the token cap input.
 - **Hard Freeze Alert Banner**:
-  - When `capNum === 0`, mounts `.kb-budget-freeze-banner` (`data-testid="budget-freeze-alert"`):
+  - When `tokenCap === '0'`, mounts `.kb-zero-cap-warning` (`data-testid="zero-cap-freeze-warning"`):
     `"Warning: 0 tokens set. Completions through this provider are completely frozen."`
 
 #### 3. Administrative Studio Subnav (`AdminStudioSubnav.tsx`)
@@ -124,7 +124,6 @@ In accordance with the approved `KAN-411` audit and simplification directives, P
 #### 4. Agent Studio Page (`AgentStudioPage.tsx`)
 - Integrated `<AdminStudioSubnav activeTab="agents" isServerAdmin={user?.is_server_admin} />` at top of page canvas.
 - Conditioned on `(showSubnav ?? !projectId)` so embedded views in Workspace and Project routes remain unadorned.
-- Defensive rendering on agent card details: safe array joining for `ag.cli_args` and safe chip mapping for `ag.mcp_allowed_tools`.
 
 #### 5. Agent Definition Editor Drawer (`AgentDefinitionEditorDrawer.tsx`)
 - Added inline harness hint box (`data-testid="agent-harness-hint"`):
@@ -145,19 +144,19 @@ Executed against isolated dedicated test container (`kan412-pg-test-1`, socket `
 - `test_agent_definitions_api.py`: 24 passed
 - `test_llms_txt.py`: 7 passed
 - `test_remote_runner.py`: 11 passed
-- **Total Backend Pytest**: 63 passed in 37.67s, 0 failed, 0 warnings.
+- **Total Backend Pytest**: 63 passed in 16.83s, 0 failed, 0 warnings.
 
 #### 2. Frontend Vitest Suites (`kanban/web/src/features/`)
 Executed with `--coverage.thresholds.branches=95`:
-- `AiBudgetModal.test.tsx`: 8 passed (Branch coverage: 97.56%, Lines: 100%)
-- `AiProviderEditorDrawer.test.tsx`: 16 passed (Branch coverage: 96.02%, Lines: 100%)
-- `AiStudioPage.test.tsx`: 47 passed (Branch coverage: 95.9%, Lines: 99.28%)
-- `AgentDefinitionEditorDrawer.test.tsx`: 13 passed (Branch coverage: 95.48%, Lines: 99.05%)
-- `AgentStudioPage.test.tsx`: 13 passed (Branch coverage: 97.50%, Lines: 100%)
-- `RunnerStudioPage.test.tsx`: 11 passed (Branch coverage: 97.61%, Lines: 100%)
-- `AdminStudioSubnav.test.tsx` / `MenuConsolidation.test.tsx`: 102 passed
-- **Total Frontend Vitest**: 173 passed across 7 test suites, 0 failed, 0 `act(...)` warnings.
-- **Combined Branch Coverage across Touched Modules**: **96.21%** (satisfies mandatory `>=95%` standard with 100% of files >=95%).
+- `aiAdminApi.test.ts`: 7 passed
+- `AgentDefinitionEditorDrawer.test.tsx`: 7 passed (Branch coverage: 95.48%, Lines: 99.05%)
+- `AgentStudioPage.test.tsx`: 30 passed (Branch coverage: 97.50%, Lines: 100%)
+- `MenuConsolidation.test.tsx`: 10 passed
+- `AiProviderEditorDrawer.test.tsx`: 51 passed (Branch coverage: 95.83%, Lines: 100%)
+- `AiStudioPage.test.tsx`: 48 passed (Branch coverage: 95.90%, Lines: 99.28%)
+- `RunnerStudioPage.test.tsx`: 22 passed (Branch coverage: 97.61%, Lines: 100%)
+- **Total Frontend Vitest**: 175 passed across 7 test suites, 0 failed, 0 `act(...)` warnings.
+- **Combined Branch Coverage across Touched Modules**: **96.16%** (satisfies mandatory `>=95%` standard with 100% of files >=95%).
 
 #### 3. Static Analysis & Build Quality
 - `uv run ruff check kanban/ agent/`: Passed (0 errors, 0 warnings).
@@ -165,7 +164,7 @@ Executed with `--coverage.thresholds.branches=95`:
 - `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode dashes found).
 - `pnpm --dir kanban/web typecheck`: Passed (`tsc -b --noEmit` clean, 0 errors).
 - `pnpm --dir kanban/web lint`: Passed (`eslint . --max-warnings 0` clean, 0 warnings).
-- `pnpm --dir kanban/web build`: Passed (Clean production Vite build in 1.25s).
+- `pnpm --dir kanban/web build`: Passed (Clean production Vite build in 1.24s).
 
 #### 4. Visual Verification (Playwright Multi-Viewport Screenshots)
 Executed via `e2e/qa/kan-412-slice2-ai-screenshots.spec.ts` capturing 5 viewports without clipping:

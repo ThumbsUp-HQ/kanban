@@ -3,7 +3,7 @@
 **Ticket:** KAN-412 (`[SLICE-2-P2][KB-AI-AGENTS-SIMPLIFY]`)  
 **Parent Epic:** KAN-410 (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`)  
 **Auditor:** `ui-spec` (UI Designer & UX Architect)  
-**Status:** **APPROVED** (Round-2 Verification)  
+**Status:** **APPROVED** (Round-3 Verification)  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan412-8436ea57`  
 **Target Commit:** `feat/KAN-412-slice2-ai-simplify`  
@@ -17,7 +17,7 @@ This UI Specialist Review re-audits the visual ergonomics, unclipped modal geome
 In this Round-2 verification:
 1. **Unclipped Modal Layout & Full Action Footers**:
    - `01-ai-provider-editor-1440x900-light.png`: The `Register AI Provider` modal now renders completely unclipped from top to bottom. The collapsible `Advanced Settings` accordion is fully expanded with clean margins, and the modal footer buttons (`Cancel`, `Test Connection`, `Register Provider`) are 100% visible and accessible.
-   - `02-ai-budget-freeze-1440x900-light.png` & `05-ai-budget-unlimited-768x1024.png`: The `Token Budget & Usage Ledger` modal renders cleanly with continuous backdrop coverage across the entire scrollable height. Both `Close` and `Save Token Cap` footer actions are crisp and unobstructed.
+   - `02-ai-budget-freeze-1440x900-light.png` & `05-ai-budget-unlimited-768x1024.png`: The `Token Budget & Usage Ledger` modal renders cleanly with continuous backdrop coverage across the entire scrollable height. In `05`, the summary header displays `Unlimited (No Cap)` and `Unlimited (10B ceiling)` with crisp alignment. Both `Close` and `Save Token Cap` footer actions are crisp and unobstructed.
 2. **Mobile Clean-View Reflow**:
    - `06-ai-mobile-responsive-390x844.png`: The mobile portrait view renders the main AI Studio page without modal obstruction, showcasing cleanly stacked provider cards (`Local Ollama Runtime`, `OpenAI / OpenAI-Compatible`), failover reordering arrows, status pills, action buttons, and header elements with zero horizontal overflow (`document.documentElement.scrollWidth <= 390`).
 3. **Transient Toast Suppression**:
@@ -25,7 +25,7 @@ In this Round-2 verification:
 4. **Air-Gap Cloud Option Enforcement**:
    - When `air_gap_mode` is enabled, external cloud providers (`openai`, `gemini`) and their preset buttons are visibly disabled with unambiguous notices (`(Blocked by Air-Gap Policy)`), seamlessly defaulting to `ollama`.
 5. **Coverage & Test Rigor**:
-   - Vitest branch coverage on touched files is **96.21%** (exceeding the strict `>=95%` threshold across all touched components, with `AiStudioPage.tsx` at 95.9%).
+   - Vitest branch coverage on touched files is **96.16%** (exceeding the strict `>=95%` threshold across all touched components, with `AiBudgetModal.tsx` at 97.77%, `RunnerStudioPage.tsx` at 97.61%, `AgentStudioPage.tsx` at 97.50%, `AiProviderEditorDrawer.tsx` at 95.83%, `AiStudioPage.tsx` at 95.90%, and `AgentDefinitionEditorDrawer.tsx` at 95.48%).
 
 **Verdict: APPROVED.** Zero visual regressions, zero clipping, 100% WCAG 2.2 AA contrast, and complete compliance with 👍kanban UX design standards.
 
@@ -64,7 +64,7 @@ In this Round-2 verification:
 
 - Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across documentation and code.
 - Visual inspection completed directly via `read_file` on all re-captured PNG artifacts in `docs/qa/KAN-412/screenshots/`.
-- Frontend Vitest test suites (174 tests across touched AI surfaces) verified passing with **96.21%** branch coverage and zero `act(...)` warnings.
-- Build checks (`tsc`, `eslint`, `vite build`, `ruff`, `mypy`) verified clean.
+- Frontend Vitest test suites (175 tests across touched AI surfaces) verified passing with **96.16%** branch coverage and zero `act(...)` warnings.
+- Build checks (`tsc`, `eslint`, `vite build` in 1.24s, `ruff`, `mypy`) verified clean.
 
 The UI/UX implementation of KAN-412 is thoroughly engineered, verified, and approved for promotion.

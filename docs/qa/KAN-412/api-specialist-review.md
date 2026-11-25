@@ -61,12 +61,12 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 63 passed in 17.80s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, and `test_remote_runner.py`.
+   - 63 passed in 16.83s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, and `test_remote_runner.py`.
    - 0 failures, 0 errors, 0 warnings.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 173 passed across 7 test suites (`aiAdminApi`, `AgentDefinitionEditorDrawer`, `AgentStudioPage`, `MenuConsolidation`, `AiProviderEditorDrawer`, `AiStudioPage`, `RunnerStudioPage`).
-   - Branch coverage: **95.96%** across touched files (`AgentDefinitionEditorDrawer.tsx` 95.48%, `AgentStudioPage.tsx` 97.5%, `AiBudgetModal.tsx` 97.56%, `AiProviderEditorDrawer.tsx` 96.02%, `RunnerStudioPage.tsx` 97.61%).
+   - 175 passed across 7 test suites (`aiAdminApi`, `AgentDefinitionEditorDrawer`, `AgentStudioPage`, `MenuConsolidation`, `AiProviderEditorDrawer`, `AiStudioPage`, `RunnerStudioPage`).
+   - Branch coverage: **96.16%** across touched files (`AgentDefinitionEditorDrawer.tsx` 95.48%, `AgentStudioPage.tsx` 97.5%, `AiBudgetModal.tsx` 97.77%, `AiProviderEditorDrawer.tsx` 95.83%, `AiStudioPage.tsx` 95.90%, `RunnerStudioPage.tsx` 97.61%).
    - 0 `act(...)` stderr warnings.
 
 3. **Build & Static Analysis Pipeline**:
@@ -74,7 +74,7 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
    - `mypy`: 0 issues found in 815 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.25s.
+   - `vite build`: Succeeded in 1.24s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -87,7 +87,7 @@ The implementation in `feat/KAN-412-slice2-ai-simplify` strictly preserves and r
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 63 backend and 173 frontend passing tests.
+  - `unit-test-results.txt`: Documents 63 backend and 175 frontend passing tests.
   - `git-diff.patch`: Clean diff with 0 untracked files.
   - `screenshots/`: 5 multi-viewport unclipped PNG captures.
   - `changed-files-manifest.txt` and `SHA256SUMS.txt`: Verified with `sha256sum -c`.

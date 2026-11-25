@@ -48,16 +48,19 @@ function AiBudgetModalContent({
         if (!active) return;
         setBudgets(records);
         const monthly = records.find((b) => b.period_kind === 'monthly');
-        if (monthly) {
-          setTokenCap(String(monthly.token_cap));
-          setPeriodKind('monthly');
-          setCapMode('enforce');
-        } else if (records[0]) {
-          setTokenCap(String(records[0].token_cap));
-          setPeriodKind(records[0].period_kind);
-          setCapMode('enforce');
+        const primary = monthly ?? records[0];
+        if (primary) {
+          setPeriodKind(primary.period_kind);
+          if (primary.token_cap >= 10000000000) {
+            setCapMode('unlimited');
+            setTokenCap('10000000000');
+          } else {
+            setCapMode('enforce');
+            setTokenCap(String(primary.token_cap));
+          }
         } else {
           setCapMode('unlimited');
+          setTokenCap('10000000000');
         }
       } catch (err: unknown) {
         if (!active) return;
@@ -81,7 +84,11 @@ function AiBudgetModalContent({
   const usedNum = currentBudget?.tokens_used ?? 0;
   const reservedNum = currentBudget?.tokens_reserved ?? 0;
   const isZeroFreeze = currentBudget !== undefined && capNum === 0;
-  const percentUsed = capNum > 0 ? Math.min(100, Math.round(((usedNum + reservedNum) / capNum) * 100)) : 0;
+  const isUnlimitedCeiling = capNum >= 10000000000;
+  const percentUsed =
+    !isUnlimitedCeiling && capNum > 0
+      ? Math.min(100, Math.round(((usedNum + reservedNum) / capNum) * 100))
+      : 0;
 
   const handleSaveBudget = async (e: React.SyntheticEvent): Promise<void> => {
     e.preventDefault();
@@ -165,9 +172,11 @@ function AiBudgetModalContent({
                 <strong>Cap:</strong>{' '}
                 {isZeroFreeze
                   ? 'Zero-Allowance Freeze (0 tokens)'
-                  : capNum > 0
-                    ? `${capNum.toLocaleString()} tokens`
-                    : 'Unlimited'}
+                  : isUnlimitedCeiling
+                    ? 'Unlimited (No Cap)'
+                    : capNum > 0
+                      ? `${capNum.toLocaleString()} tokens`
+                      : 'Unlimited'}
               </span>
             </div>
 
@@ -192,11 +201,13 @@ function AiBudgetModalContent({
               <span>
                 {isZeroFreeze
                   ? 'Frozen (0 tokens allowance)'
-                  : capNum > usedNum + reservedNum
-                    ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
-                    : capNum > 0
-                      ? '0 tokens remaining'
-                      : 'No cap enforced'}
+                  : isUnlimitedCeiling
+                    ? 'Unlimited (10B ceiling)'
+                    : capNum > usedNum + reservedNum
+                      ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
+                      : capNum > 0
+                        ? '0 tokens remaining'
+                        : 'No cap enforced'}
               </span>
             </div>
           </div>

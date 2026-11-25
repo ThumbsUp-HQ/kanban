@@ -1,40 +1,40 @@
 ================================================================================
-1. Frontend Vitest Feature Test Suites (173 tests, >=95% branch coverage)
+1. Frontend Vitest Feature Test Suites (175 tests, >=95% branch coverage)
 ================================================================================
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan412-8436ea57/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 20ms
- ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (7 tests) 409ms
- ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 920ms
- ✓ src/app/__tests__/MenuConsolidation.test.tsx (10 tests) 482ms
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (50 tests) 1903ms
- ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (47 tests) 2045ms
-   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (47)
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 25ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (7 tests) 367ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 912ms
+ ✓ src/app/__tests__/MenuConsolidation.test.tsx (10 tests) 441ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1705ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (48 tests) 1951ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (48)
      ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
-       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 313ms
- ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 2872ms
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 301ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 2808ms
    ✓ RunnerStudioPage & Components (KANBA-219) (22)
      ✓ MintEnrollmentTokenModal component (12)
        ✓ resets copied state after 2 seconds 2124ms
 
  Test Files  7 passed (7)
-      Tests  173 passed (173)
-   Start at  15:02:05
-   Duration  4.46s (tests 49%, environment 33%, import 12%, transform 3%, worker 2%)
+      Tests  175 passed (175)
+   Start at  15:57:42
+   Duration  4.31s (tests 49%, environment 31%, import 13%, transform 4%, worker 3%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.01 |    96.21 |     100 |    99.7 |                   
+All files          |   99.01 |    96.16 |     100 |    99.7 |                   
  admin-agents      |   98.73 |    95.89 |     100 |   99.33 |                   
   ...torDrawer.tsx |   99.07 |    95.48 |     100 |   99.05 | 236               
   ...tudioPage.tsx |      98 |     97.5 |     100 |     100 | 73                
- admin-ai          |   98.99 |    96.22 |     100 |   99.78 |                   
-  ...dgetModal.tsx |     100 |    97.56 |     100 |     100 | 123,213           
-  ...torDrawer.tsx |   99.62 |    96.02 |     100 |     100 | ...56,368,395,416 
+ admin-ai          |   98.99 |    96.15 |     100 |   99.78 |                   
+  ...dgetModal.tsx |     100 |    97.77 |     100 |     100 | 130,224           
+  ...torDrawer.tsx |   99.62 |    95.83 |     100 |     100 | ...65,377,404,425 
   AiStudioPage.tsx |    97.4 |     95.9 |     100 |   99.28 | 241               
  admin-runners     |     100 |    97.61 |     100 |     100 |                   
   ...tudioPage.tsx |     100 |    97.61 |     100 |     100 | 128               
@@ -115,4 +115,4 @@ agent/tests/test_remote_runner.py::test_default_runner_config_path_variations PA
 agent/tests/test_remote_runner.py::test_cli_enroll_server_url_and_url_alias PASSED [ 98%]
 agent/tests/test_remote_runner.py::test_cli_enroll_and_run_defaults PASSED [100%]
 
-============================= 63 passed in 17.80s ==============================
+============================= 63 passed in 16.83s ==============================

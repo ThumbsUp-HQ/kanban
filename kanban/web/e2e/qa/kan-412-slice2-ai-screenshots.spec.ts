@@ -116,17 +116,19 @@ const mockProviders = [
 
 const mockBudgets = [
   {
-    provider_id: 'prov-01',
+    provider_config_id: 'prov-01',
     token_cap: 0,
     tokens_used: 150000,
-    reset_period: 'monthly',
+    tokens_reserved: 0,
+    period_kind: 'monthly',
     period_start: '2026-11-01T00:00:00Z',
   },
   {
-    provider_id: 'prov-02',
-    token_cap: 25000000,
+    provider_config_id: 'prov-02',
+    token_cap: 10000000000,
     tokens_used: 1250000,
-    reset_period: 'monthly',
+    tokens_reserved: 0,
+    period_kind: 'monthly',
     period_start: '2026-11-01T00:00:00Z',
   },
 ];
@@ -296,6 +298,16 @@ async function setupPageMocks(page: Page, airGapMode = false): Promise<void> {
     window.EventSource = MockEventSource;
   });
   await mockApi(page, getMocks(airGapMode));
+  await page.route('**/ai-providers/budgets*', async (route) => {
+    const url = new URL(route.request().url());
+    const provId = url.searchParams.get('provider_config_id');
+    const matched = mockBudgets.filter((b) => !provId || b.provider_config_id === provId);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(matched.length > 0 ? matched : [mockBudgets[0]]),
+    });
+  });
 }
 
 test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Proofs', () => {
@@ -444,9 +456,9 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     await page.getByTestId('manage-budget-btn-prov-02').click();
     await expect(page.getByTestId('ai-budget-modal')).toBeVisible();
 
-    // Click Unlimited Quota pill
-    await page.getByTestId('cap-mode-unlimited-btn').click();
+    // Verify loaded in Unlimited Quota mode with informative note
     await expect(page.getByTestId('budget-unlimited-note')).toBeVisible();
+    await expect(page.getByText('Unlimited (No Cap)')).toBeVisible();
 
     await unclipForFullPage(page);
 
