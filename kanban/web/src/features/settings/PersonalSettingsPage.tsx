@@ -410,7 +410,8 @@ export function PersonalSettingsPage(): JSX.Element {
       if (res.recovery_codes.length > 0) {
         setRecoveryModalCodes(res.recovery_codes);
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Invalid TOTP code.');
     }
   };
@@ -460,7 +461,8 @@ export function PersonalSettingsPage(): JSX.Element {
       setSuccessMsg('Passkey renamed.');
       setErrorMsg(null);
       void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
-    } catch (err) {
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Failed to rename passkey.');
     }
   };

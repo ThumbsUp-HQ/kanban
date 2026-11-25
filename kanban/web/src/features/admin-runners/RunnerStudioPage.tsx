@@ -38,6 +38,7 @@ export function RunnerStudioPage(): JSX.Element {
         setRunners(list);
       } catch (err: unknown) {
         if (!active) return;
+        if (isAal2StepUpCancelled(err)) return;
         setError(err instanceof Error ? err.message : 'Failed to load remote runners');
       } finally {
         if (active) {

@@ -600,5 +600,17 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
 
       expect(screen.getByText(/kanban-agent-runner enroll --server-url/)).toBeDefined();
     });
+
+    it('silently ignores Aal2StepUpCancelledError during load with zero error alerts (KAN-404)', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockRejectedValueOnce(
+        new clientModule.Aal2StepUpCancelledError(),
+      );
+      render(<RunnerStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('runner-studio-error')).toBeNull();
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -2135,10 +2135,11 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(screen.getByTestId('tab-roles')).toBeDefined();
       });
 
-      act(() => {
-        fireEvent.click(screen.getByTestId('tab-roles'));
+      fireEvent.click(screen.getByTestId('tab-roles'));
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
+        expect(screen.getByTestId('rbac-policy-builder')).toBeDefined();
       });
-      expect(screen.getByTestId('tab-roles').getAttribute('aria-selected')).toBe('true');
     });
 
     it('handles AAL2 step up during loadCards and replays load mutation on success', async () => {
@@ -2191,6 +2192,62 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         expect(principalCalls).toBeGreaterThanOrEqual(1);
       });
       expect(screen.queryByText(/Failed to load/i)).toBeNull();
+    });
+
+    it('preserves card health and produces zero error alerts on Aal2StepUpCancelledError during handshake test (KAN-404)', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).startsWith('/api/v1/admin/auth-cards/c-okta/test-handshake')) {
+          throw new Aal2StepUpCancelledError();
+        }
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          return { principals: [] };
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('test-handshake-okta')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('test-handshake-okta'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('health-chip-okta').textContent).toContain('UNVERIFIED');
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('preserves card order and produces zero error alerts on Aal2StepUpCancelledError during reorder (KAN-404)', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).includes('/reorder')) {
+          throw new Aal2StepUpCancelledError();
+        }
+        if ((path as string).startsWith('/api/v1/admin/principals')) {
+          return { principals: [] };
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Move Okta SSO down')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByLabelText('Move Okta SSO down'));
+
+      await waitFor(() => {
+        expect(screen.queryByText('Failed to reorder card.')).toBeNull();
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 });

@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useCallback, useContext, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef, type JSX } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
@@ -418,13 +418,21 @@ export function McpAccessStudio({
   // 2-step inline revocation confirmation states
   const [confirmRevokeKeyId, setConfirmRevokeKeyId] = useState<string | null>(null);
   const [confirmRevokeAppId, setConfirmRevokeAppId] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const loadData = useCallback(async (): Promise<void> => {
     if (isDenied) {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
       return;
     }
-    setLoading(true);
+    if (isMountedRef.current) setLoading(true);
     try {
       if (activeView === 'governance') {
         const fetched = await fetchUnifiedMcpKeys({
@@ -432,8 +440,10 @@ export function McpAccessStudio({
           scope_tier: activeScope !== 'all' ? activeScope : undefined,
           project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
         });
-        setKeys(fetched);
-        setConnectedApps([]);
+        if (isMountedRef.current) {
+          setKeys(fetched);
+          setConnectedApps([]);
+        }
       } else {
         const [fetchedKeys, fetchedApps] = await Promise.all([
           fetchUnifiedMcpKeys({
@@ -443,15 +453,19 @@ export function McpAccessStudio({
           }),
           fetchConnectedApps(),
         ]);
-        setKeys(fetchedKeys);
-        setConnectedApps(fetchedApps);
+        if (isMountedRef.current) {
+          setKeys(fetchedKeys);
+          setConnectedApps(fetchedApps);
+        }
       }
     } catch (err: unknown) {
       if (isAal2StepUpCancelled(err)) {
         return;
       }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [activeView, activeScope, effectiveProjectKey, tier, isDenied]);
 

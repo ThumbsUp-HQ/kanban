@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { McpAccessStudio } from './McpAccessStudio';
@@ -80,22 +80,38 @@ export function WorkloadFederationSection({
   const [formCidrs, setFormCidrs] = useState('');
   const [formTtl, setFormTtl] = useState('3600');
   const [submitting, setSubmitting] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const fetchPolicies = useCallback(async (): Promise<void> => {
     if (!isAdmin) return;
-    setLoading(true);
-    setError(null);
+    if (isMountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const data = (await apiFetch(
         'GET',
         '/api/v1/admin/workload-identities',
       )) as WorkloadIdentityPolicyItem[] | undefined;
-      setPolicies(Array.isArray(data) ? data : []);
+      if (isMountedRef.current) {
+        setPolicies(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
-      if (isAal2StepUpCancelled(err)) return;
-      setError(err instanceof Error ? err.message : 'Failed to load workload policies');
+      if (isMountedRef.current) {
+        if (isAal2StepUpCancelled(err)) return;
+        setError(err instanceof Error ? err.message : 'Failed to load workload policies');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [isAdmin]);
 

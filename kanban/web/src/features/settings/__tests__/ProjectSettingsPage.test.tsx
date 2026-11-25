@@ -3647,13 +3647,15 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
       const nameHint = await screen.findByTestId('proj-name-help');
       fireEvent.focus(nameHint);
-      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('Default:');
-      expect(screen.getByTestId('proj-name-help-popover').textContent).toContain('My Project');
+      const namePopover = await screen.findByTestId('proj-name-help-popover');
+      expect(namePopover.textContent).toContain('Default:');
+      expect(namePopover.textContent).toContain('My Project');
       fireEvent.blur(nameHint);
 
       const modulesHint = screen.getByTestId('proj-modules-help');
       fireEvent.focus(modulesHint);
-      expect(screen.getByTestId('proj-modules-help-popover').textContent).toContain('Enabled (true)');
+      const modulesPopover = await screen.findByTestId('proj-modules-help-popover');
+      expect(modulesPopover.textContent).toContain('Enabled (true)');
       fireEvent.blur(modulesHint);
 
       // Expand advanced section
@@ -3661,12 +3663,14 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
 
       const skipHint = screen.getByTestId('proj-skip-seq-help');
       fireEvent.focus(skipHint);
-      expect(screen.getByTestId('proj-skip-seq-help-popover').textContent).toContain('Inherits Workspace Default (Enabled)');
+      const skipPopover = await screen.findByTestId('proj-skip-seq-help-popover');
+      expect(skipPopover.textContent).toContain('Inherits Workspace Default (Enabled)');
       fireEvent.blur(skipHint);
 
       const autoArchiveHint = screen.getByTestId('proj-auto-archive-help');
       fireEvent.focus(autoArchiveHint);
-      expect(screen.getByTestId('proj-auto-archive-help-popover').textContent).toContain('Disabled (blank; e.g. 30 days)');
+      const autoArchivePopover = await screen.findByTestId('proj-auto-archive-help-popover');
+      expect(autoArchivePopover.textContent).toContain('Disabled (blank; e.g. 30 days)');
     });
 
     it('silently ignores Aal2StepUpCancelledError during save with zero role="alert" banners (KAN-404)', async () => {

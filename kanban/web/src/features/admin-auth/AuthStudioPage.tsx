@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
@@ -159,6 +159,14 @@ export function AuthStudioPage(): JSX.Element {
   // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // 1. Fetch current user and verify Server Admin access
   useEffect(() => {
     async function checkAccess() {
@@ -168,18 +176,22 @@ export function AuthStudioPage(): JSX.Element {
           '/api/v1/auth/me' as never,
         );
         const me = rawMe as CurrentUserResponse;
+        if (!isMountedRef.current) return;
         setCurrentUser(me);
         if (!me.is_server_admin) {
           setAccessDenied(true);
         }
       } catch (err: unknown) {
+        if (!isMountedRef.current) return;
         if (err instanceof ApiProblem && isMfaEnrollmentRequiredCode(err.code)) {
           setMfaEnrollmentRequired(true);
         } else {
           setAccessDenied(true);
         }
       } finally {
-        setIsUserLoading(false);
+        if (isMountedRef.current) {
+          setIsUserLoading(false);
+        }
       }
     }
 
@@ -188,12 +200,17 @@ export function AuthStudioPage(): JSX.Element {
 
   // 2. Fetch cards if admin access confirmed
   const loadCards = useCallback(async () => {
-    setIsLoadingCards(true);
-    setGeneralError(null);
+    if (isMountedRef.current) {
+      setIsLoadingCards(true);
+      setGeneralError(null);
+    }
     try {
       const res = await fetchAdminAuthCards();
-      setCards(res.cards);
+      if (isMountedRef.current) {
+        setCards(res.cards);
+      }
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       if (isAal2StepUpCancelled(err)) {
         return;
       }
@@ -207,19 +224,26 @@ export function AuthStudioPage(): JSX.Element {
         setGeneralError('Failed to load authentication cards.');
       }
     } finally {
-      setIsLoadingCards(false);
+      if (isMountedRef.current) {
+        setIsLoadingCards(false);
+      }
     }
   }, []);
 
   // 3. Fetch principals if admin access confirmed
   const loadUsers = useCallback(async (filter?: string) => {
-    setIsLoadingUsers(true);
-    setUserActionError(null);
+    if (isMountedRef.current) {
+      setIsLoadingUsers(true);
+      setUserActionError(null);
+    }
     try {
       const activeFilter = filter !== undefined ? (filter === 'ALL' ? undefined : filter) : (principalKindFilter === 'ALL' ? undefined : principalKindFilter);
       const principals = await fetchAdminPrincipals(activeFilter);
-      setUsers(Array.isArray(principals) ? principals : []);
+      if (isMountedRef.current) {
+        setUsers(Array.isArray(principals) ? principals : []);
+      }
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       if (isAal2StepUpCancelled(err)) {
         return;
       }
@@ -233,7 +257,9 @@ export function AuthStudioPage(): JSX.Element {
         setUserActionError('Failed to load user principals.');
       }
     } finally {
-      setIsLoadingUsers(false);
+      if (isMountedRef.current) {
+        setIsLoadingUsers(false);
+      }
     }
   }, [principalKindFilter]);
 
@@ -310,6 +336,7 @@ export function AuthStudioPage(): JSX.Element {
         ),
       );
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setCards((prev) =>
         prev.map((c) =>
           c.id === card.id
@@ -370,8 +397,9 @@ export function AuthStudioPage(): JSX.Element {
         sort_rank: newRank,
       });
       setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
-    } catch {
+    } catch (err: unknown) {
       setCards(previousCards);
+      if (isAal2StepUpCancelled(err)) return;
       setGeneralError('Failed to reorder card.');
     }
   };
@@ -433,8 +461,9 @@ export function AuthStudioPage(): JSX.Element {
         sort_rank: newRank,
       });
       setCards((prev) => prev.map((c) => (c.id === draggedCard.id ? updated : c)));
-    } catch {
+    } catch (err: unknown) {
       setCards(previousCards);
+      if (isAal2StepUpCancelled(err)) return;
       setGeneralError('Failed to reorder card.');
     }
   };
@@ -752,12 +781,6 @@ export function AuthStudioPage(): JSX.Element {
               {kind === 'ALL' ? 'All Principals' : kind === 'USER' ? 'Users' : kind === 'GROUP' ? 'Groups' : 'Agents'}
             </button>
           ))}
-        </div>
-      )}
-
-      {activeTab === 'roles' && (
-        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
-          <RbacPolicyBuilder isServerAdmin={true} />
         </div>
       )}
 

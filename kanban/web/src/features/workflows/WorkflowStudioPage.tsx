@@ -93,7 +93,10 @@ export function WorkflowStudioPage({
 
   const rules = rulesQuery.data ?? [];
   const isLoading = rulesQuery.isLoading;
-  const generalError = rulesQuery.error ? rulesQuery.error.message : null;
+  const generalError =
+    rulesQuery.error && !isAal2StepUpCancelled(rulesQuery.error)
+      ? rulesQuery.error.message
+      : null;
 
   // Dialog and drawer state
   const attachParam = searchParams.get('attach');

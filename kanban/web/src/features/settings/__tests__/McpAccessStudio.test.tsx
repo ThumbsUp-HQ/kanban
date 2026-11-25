@@ -52,6 +52,10 @@ vi.mock('../../../app/useSystemStatus', () => ({
   })),
 }));
 
+vi.mock('../McpUnifiedStudio', () => ({
+  WorkloadFederationSection: () => <div data-testid="mock-workload-federation" />,
+}));
+
 describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   const mockKeys: settingsApi.McpApiKeyItem[] = [
     {
@@ -1515,17 +1519,32 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
 
     // Toggle views
-    fireEvent.click(screen.getByTestId('view-governance-btn'));
-    fireEvent.click(screen.getByTestId('view-mine-btn'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('view-governance-btn'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('view-mine-btn'));
+      await Promise.resolve();
+    });
 
     // Toggle scope pills
-    fireEvent.click(screen.getByTestId('scope-pill-project'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('scope-pill-project'));
+      await Promise.resolve();
+    });
     expect(screen.getByTestId('scope-project-container')).not.toBeNull();
-    fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
+      await Promise.resolve();
+    });
 
-    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
-    fireEvent.click(screen.getByTestId('scope-pill-server'));
-    fireEvent.click(screen.getByTestId('scope-pill-all'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('scope-pill-workspace'));
+      fireEvent.click(screen.getByTestId('scope-pill-server'));
+      fireEvent.click(screen.getByTestId('scope-pill-all'));
+      await Promise.resolve();
+    });
   });
 
   it('supports minting personal_user and project scoped keys with custom CIDRs', async () => {

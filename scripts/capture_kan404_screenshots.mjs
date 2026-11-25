@@ -70,6 +70,26 @@ async function waitForServer(url, timeoutMs = 30000) {
 }
 
 async function setupInterceptions(page, state) {
+  await page.addInitScript(() => {
+    class MockWS extends EventTarget {
+      constructor(url, protocols) {
+        super();
+        this.url = url;
+        this.protocols = protocols;
+        this.readyState = 1;
+        setTimeout(() => {
+          this.dispatchEvent(new Event('open'));
+        }, 10);
+      }
+      send() {}
+      close() {
+        this.readyState = 3;
+        this.dispatchEvent(new Event('close'));
+      }
+    }
+    window.WebSocket = MockWS;
+  });
+
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
@@ -676,12 +696,6 @@ async function main() {
 
       const sudoPill = page.locator('[data-testid="admin-sudo-pill"]');
       await sudoPill.waitFor({ state: 'visible', timeout: 5000 });
-
-      await page.evaluate(() => {
-        document.querySelectorAll('.realtime-status-chip').forEach((el) => {
-          el.style.display = 'none';
-        });
-      });
 
       // Scroll so both the sudo pill and the AuthCardRow are visible
       const authCard = page.locator('.auth-card-row').first();
