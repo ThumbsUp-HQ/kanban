@@ -3,11 +3,10 @@
 
 import React, { useState, type JSX, type ChangeEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, getCsrfToken } from '../../api/client';
+import { apiFetch, getCsrfToken, isAal2StepUpCancelled } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { NotFoundView } from '../../app/routes';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './LinkAuditorStudio.css';
 
@@ -223,7 +222,9 @@ export function LinkAuditorStudio(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
     },
     onError: (err: unknown) => {
-      dispatchAal2StepUpIfRequired(err);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Scan execution failed.';
       setStatusAlert({ type: 'error', message: msg });
     },
@@ -261,7 +262,9 @@ export function LinkAuditorStudio(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
     },
     onError: (err: unknown) => {
-      dispatchAal2StepUpIfRequired(err);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Purge execution failed.';
       setStatusAlert({ type: 'error', message: msg });
     },

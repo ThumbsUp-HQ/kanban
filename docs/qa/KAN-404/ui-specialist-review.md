@@ -3,8 +3,8 @@
 ## Ticket Reference
 - **Ticket ID**: `KAN-404` (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
-- **Branch**: `feat/KAN-404-websudo-sliding-replay`
-- **Commit**: `f24f31e8`
+- **Branch**: `fix/KAN-404-rc1`
+- **Commit**: `f50e8d82`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
@@ -52,7 +52,7 @@ Audited all 5 zero-mock Playwright screenshots in `docs/qa/KAN-404/screenshots/`
 |:---|:---|:---|:---|
 | **1440x900** | `01-desktop-1440x900-light-websudo-modal-over-drawer.png` | Light | `WebSudoModalHost` centered at `z-index: 10050` cleanly overlaid above open `AuthCardEditorDrawer`; underlying LDAP form state fully intact; zero occlusion. |
 | **1440x900** | `02-desktop-1440x900-dark-admin-sudo-pill-active.png` | Dark | Dark theme contrast compliant; `admin-sudo-pill` active with countdown and `Lock` button right-aligned in `AdminStudioSubnav`; unclipped cards. |
-| **1024x768** | `03-desktop-1024x768-light-websudo-replay-success.png` | Light | Landscape laptop viewport; successful in-place request replay; `Sudo Locked` pill visible; no layout overflow. |
+| **1024x768** | `03-desktop-1024x768-light-websudo-replay-success.png` | Light | Landscape laptop viewport; successful in-place request replay; `Sudo 14:50 \| Lock` pill visible; no layout overflow. |
 | **768x1024** | `04-tablet-portrait-768x1024-light-websudo-modal.png` | Light | Tablet portrait; centered AAL2 modal with Passkey and Authenticator tabs; accessible touch buttons. |
 | **390x844** | `05-mobile-portrait-390x844-light-admin-sudo-pill-locked.png` | Light | Mobile portrait; single-column layout; `admin-sudo-pill` displays `🔒 Sudo Locked` without clipping navigation tabs. |
 
@@ -75,11 +75,11 @@ All screenshots visually inspected via `read_file` confirming zero text clipping
 ## 4. Test Verification Summary
 
 - **Vitest Suite**:
-  - `kanban/web/src/api/__tests__/websudoReplay.test.tsx` (16 passed)
-  - 100% statement, function, and line coverage on `WebSudoModalHost.tsx`.
-  - 98.46% branch coverage on `AdminStudioSubnav.tsx`.
+  - 609 passed across 19 test suites with branch coverage >= 95% (All files: 99.36% stmts / 96.29% branch / 99.60% funcs / 99.41% lines).
+  - 100% statement, function, branch, and line coverage on `WebSudoModalHost.tsx`.
+  - 100% branch coverage and 100% statement/line coverage on `AdminStudioSubnav.tsx`.
 - **Python Backend Suite**:
-  - `kanban/tests/auth/test_websudo_sliding_aal2.py` and `database/tests/migrations/test_p6_18_websudo_sliding_aal2_migration.py` (17 passed).
+  - 38 Pytest backend tests passed in 20.92s with >= 95% coverage on all target modules.
   - 100% of admin routes pass `test_admin_routes_protected.py`.
 
 ---

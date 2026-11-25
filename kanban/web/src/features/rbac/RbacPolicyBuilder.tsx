@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useRef, useState, type JSX, type ChangeEvent, type SyntheticEvent } from 'react';
-import { apiFetch } from '../../api/client';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import './RbacPolicyBuilder.css';
 
 export interface RbacRole {
@@ -102,14 +102,23 @@ export function RbacPolicyBuilder({
   const [isCreating, setIsCreating] = useState(false);
 
   const checkboxRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Fetch roles
   const loadRoles = async (): Promise<void> => {
-    setErrorMsg(null);
+    if (isMountedRef.current) setErrorMsg(null);
     try {
       const fetched = (await apiFetch('GET', '/api/v1/admin/rbac/roles' as never)) as RbacRole[];
       /* v8 ignore next */
       const safeFetched = Array.isArray(fetched) ? fetched : [];
+      if (!isMountedRef.current) return;
       setRoles(safeFetched);
 
       // Load permissions for each role
@@ -142,6 +151,8 @@ export function RbacPolicyBuilder({
         }
       }
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
+      if (isAal2StepUpCancelled(err)) return;
       const e = err as { detail?: string; message?: string };
       /* v8 ignore next */
       setErrorMsg(e.detail ?? e.message ?? 'Failed to load RBAC roles.');

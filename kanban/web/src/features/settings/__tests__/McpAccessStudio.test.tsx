@@ -14,7 +14,6 @@ import {
 } from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
-import { ApiProblem } from '../../../api/problem';
 
 vi.mock('../../auth/SecondFactorStep', () => ({
   SecondFactorStep: ({
@@ -51,6 +50,10 @@ vi.mock('../../../app/useSystemStatus', () => ({
     isLoading: false,
     error: null,
   })),
+}));
+
+vi.mock('../McpUnifiedStudio', () => ({
+  WorkloadFederationSection: () => <div data-testid="mock-workload-federation" />,
 }));
 
 describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
@@ -1378,14 +1381,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     expect(deleteBit.checked).toBe(true);
   });
 
-  it('handles AAL2 step-up challenge on mint, load, and revoke operations', async () => {
-    // 1. AAL2 on loadData
+  it('handles AAL2 cancellation on mint, load, and revoke operations', async () => {
+    // 1. AAL2 cancellation on loadData
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(
-      new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'chal-load',
-        methods: ['webauthn', 'totp'],
-      }),
+      new clientModule.Aal2StepUpCancelledError(),
     );
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
@@ -1396,26 +1395,17 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(settingsApi.fetchUnifiedMcpKeys).toHaveBeenCalled();
     });
-
-    // Close via 'x' button
-    fireEvent.click(screen.getByText('x'));
     expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
     unmount();
 
-    // 2. AAL2 on minting
+    // 2. AAL2 cancellation on minting
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
-    const aal2MintProblem = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'chal-mint',
-      methods: ['totp'],
-    });
     vi
       .spyOn(settingsApi, 'mintUnifiedMcpKey')
-      .mockRejectedValueOnce(aal2MintProblem)
-      .mockRejectedValueOnce(aal2MintProblem)
-      .mockRejectedValueOnce(aal2MintProblem)
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce({
         id: 'k-stepped-up',
         label: 'Step-Up Key',
@@ -1448,57 +1438,36 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalledTimes(1);
     });
-
-    // Test error and cancel
-    fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
-    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
-    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-
-    // Re-submit and test expired
-    fireEvent.click(screen.getByTestId('mint-submit-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
-    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
 
     // Re-submit and test success
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
 
     await waitFor(() => {
       expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
     });
     fireEvent.click(screen.getByTestId('modal-close-button'));
 
-    // 3. AAL2 on revoke
+    // 3. AAL2 cancellation on revoke
     const revokeSpy = vi
       .spyOn(settingsApi, 'revokeUnifiedMcpKey')
-      .mockRejectedValueOnce(
-        new ApiProblem(403, {
-          code: 'AAL2_REQUIRED',
-          challenge_id: 'chal-revoke',
-          methods: ['totp'],
-        }),
-      )
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce(undefined);
 
     fireEvent.click(screen.getByTestId('revoke-btn-k-stepped-up'));
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-
-    revokeSpy.mockResolvedValueOnce(undefined);
-    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
-    await waitFor(() => {
       expect(revokeSpy).toHaveBeenCalledWith('k-stepped-up');
+    });
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('revoke-btn-k-stepped-up'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+    await waitFor(() => {
+      expect(revokeSpy).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -1550,17 +1519,32 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
 
     // Toggle views
-    fireEvent.click(screen.getByTestId('view-governance-btn'));
-    fireEvent.click(screen.getByTestId('view-mine-btn'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('view-governance-btn'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('view-mine-btn'));
+      await Promise.resolve();
+    });
 
     // Toggle scope pills
-    fireEvent.click(screen.getByTestId('scope-pill-project'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('scope-pill-project'));
+      await Promise.resolve();
+    });
     expect(screen.getByTestId('scope-project-container')).not.toBeNull();
-    fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
+      await Promise.resolve();
+    });
 
-    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
-    fireEvent.click(screen.getByTestId('scope-pill-server'));
-    fireEvent.click(screen.getByTestId('scope-pill-all'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('scope-pill-workspace'));
+      fireEvent.click(screen.getByTestId('scope-pill-server'));
+      fireEvent.click(screen.getByTestId('scope-pill-all'));
+      await Promise.resolve();
+    });
   });
 
   it('supports minting personal_user and project scoped keys with custom CIDRs', async () => {
@@ -1625,10 +1609,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
   });
 
-  it('handles AAL2_STALE challenge on loadData, minting, and revoking with default fallbacks and error reporting', async () => {
-    // 1. Stale on loadData
+  it('handles AAL2 cancellation on loadData, minting, and revoking without errors and reports generic errors', async () => {
+    // 1. Cancellation on loadData
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(
-      new ApiProblem(403, { code: 'AAL2_STALE' }),
+      new clientModule.Aal2StepUpCancelledError(),
     );
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
@@ -1639,15 +1623,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(settingsApi.fetchUnifiedMcpKeys).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByText('x'));
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
     unmount();
 
-    // 2. Stale on minting with default fallbacks
+    // 2. Cancellation on minting
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce(
-      new ApiProblem(403, { code: 'AAL2_STALE' }),
+      new clientModule.Aal2StepUpCancelledError(),
     );
 
     const { unmount: unmount2 } = render(
@@ -1665,12 +1649,12 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
     unmount2();
 
-    // 3. Stale on revoke
+    // 3. Cancellation on revoke
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
       {
         id: 'k-stale-rev',
@@ -1687,7 +1671,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       },
     ]);
     const revokeSpy = vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce(
-      new ApiProblem(403, { code: 'AAL2_STALE' }),
+      new clientModule.Aal2StepUpCancelledError(),
     );
 
     render(
@@ -1704,9 +1688,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(revokeSpy).toHaveBeenCalledWith('k-stale-rev');
     });
-    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
 
     // Also cover regular Error on revoke
     revokeSpy.mockRejectedValueOnce(new Error('Generic revoke failure'));
@@ -1798,11 +1782,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
   });
 
-  it('completes AAL2 challenge on loadData and mints global key with invalid CIDR submit edge case', async () => {
-    // 1. AAL2 on loadData resolved via MFA success
-    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
-      .mockRejectedValueOnce(new ApiProblem(403, { code: 'AAL2_REQUIRED', challenge_id: 'c1' }))
-      .mockResolvedValueOnce([]);
+  it('mints global key with invalid CIDR submit edge case', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1815,14 +1796,10 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
     });
 
-    // 2. Select Global scope in mint modal, enter invalid CIDR, and force form submit
+    // Select Global scope in mint modal, enter invalid CIDR, and force form submit
     fireEvent.click(screen.getByTestId('mint-key-button'));
     fireEvent.change(screen.getByTestId('mint-key-scope-type-select'), { target: { value: 'service_bot:global' } });
     fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Global Key' } });

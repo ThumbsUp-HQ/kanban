@@ -27,9 +27,16 @@ export class Aal2StepUpCancelledError extends Error {
   }
 }
 
+export function isAal2StepUpCancelled(err: unknown): boolean {
+  return (
+    err instanceof Aal2StepUpCancelledError ||
+    (err instanceof Error && err.name === 'Aal2StepUpCancelledError')
+  );
+}
+
 export type Aal2StepUpHandler = (challenge: {
-  challengeId?: string;
-  methods?: string[];
+  challengeId?: string | undefined;
+  methods?: string[] | undefined;
 }) => Promise<boolean>;
 
 let activeAal2StepUpHandler: Aal2StepUpHandler | null = null;
@@ -37,6 +44,10 @@ let pendingAal2StepUp: Promise<boolean> | null = null;
 
 export function registerAal2StepUpHandler(handler: Aal2StepUpHandler | null): void {
   activeAal2StepUpHandler = handler;
+}
+
+export function getActiveAal2StepUpHandler(): Aal2StepUpHandler | null {
+  return activeAal2StepUpHandler;
 }
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -254,6 +265,12 @@ async function executeRequest(
   }
 
   let response = await fetch(resolved, init);
+  const initialExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+  if (initialExpiresAt && typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: initialExpiresAt } })
+    );
+  }
   let contentType = response.headers.get('content-type') ?? '';
 
   if (!response.ok) {
@@ -278,7 +295,7 @@ async function executeRequest(
       if (!pendingAal2StepUp) {
         const bodyObj = problemBody as Record<string, unknown>;
         const challengeId =
-          typeof bodyObj.challenge_id === 'string' ? bodyObj.challenge_id : 'aal2-stepup';
+          typeof bodyObj.challenge_id === 'string' ? bodyObj.challenge_id : undefined;
         const methods = Array.isArray(bodyObj.methods)
           ? (bodyObj.methods as string[])
           : ['webauthn', 'totp'];
@@ -308,6 +325,12 @@ async function executeRequest(
       init.signal = timeoutSignal(opts.signal);
 
       response = await fetch(resolved, init);
+      const replayExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+      if (replayExpiresAt && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: replayExpiresAt } })
+        );
+      }
       contentType = response.headers.get('content-type') ?? '';
 
       if (!response.ok) {

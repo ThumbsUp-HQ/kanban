@@ -17,17 +17,9 @@ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
-import { Aal2StepUpCancelledError } from '../../api/client';
+import { isAal2StepUpCancelled } from '../../api/client';
 import './OAuthClientGovernanceStudio.css';
-
-function isAal2StepUpCancelled(err: unknown): boolean {
-  return (
-    err instanceof Aal2StepUpCancelledError ||
-    (err instanceof Error && err.name === 'Aal2StepUpCancelledError')
-  );
-}
 
 export interface OAuthClientGovernanceStudioProps {
   isServerAdmin?: boolean;
@@ -109,7 +101,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       setError(err instanceof Error ? err.message : 'Failed to load registered OAuth clients.');
     } finally {
       setLoading(false);
@@ -135,7 +126,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -157,7 +147,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -179,7 +168,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -207,7 +195,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -234,7 +221,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -260,7 +246,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -333,7 +318,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setRegisterError(err.message);
       } else {
@@ -402,7 +386,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
       if (isAal2StepUpCancelled(err)) {
         return;
       }
-      dispatchAal2StepUpIfRequired(err);
       if (err instanceof Error) {
         setEditError(err.message);
       } else {

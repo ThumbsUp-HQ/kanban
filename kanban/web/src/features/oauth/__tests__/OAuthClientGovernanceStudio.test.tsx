@@ -246,10 +246,7 @@ describe('OAuthClientGovernanceStudio', () => {
     });
   });
 
-  it('renders ErrorHelpHint and dispatches kb:open-aal2-stepup on AAL2_STALE or AAL2_REQUIRED error (KAN-393)', async () => {
-    const stepUpListener = vi.fn();
-    window.addEventListener('kb:open-aal2-stepup', stepUpListener);
-
+  it('renders ErrorHelpHint on AAL2_STALE or AAL2_REQUIRED error', async () => {
     const aal2Prob = new ApiProblem(403, {
       code: 'AAL2_STALE',
       detail: 'AAL2 verification is stale (950s > 900s).',
@@ -269,9 +266,6 @@ describe('OAuthClientGovernanceStudio', () => {
       expect(screen.getByTestId('error-alert')).toBeDefined();
       expect(screen.getByTestId('error-help-doc-link')).toBeDefined();
     });
-
-    expect(stepUpListener).toHaveBeenCalledTimes(1);
-    window.removeEventListener('kb:open-aal2-stepup', stepUpListener);
   });
 
   it('handles action patch and delete error branches', async () => {
@@ -1131,6 +1125,8 @@ describe('OAuthClientGovernanceStudio', () => {
     // No error alert rendered when step-up is cancelled
     await waitFor(() => {
       expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     // Also in action handlers
@@ -1153,6 +1149,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Revoke cancel
     act(() => {
@@ -1163,6 +1160,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Delete cancel
     act(() => {
@@ -1173,6 +1171,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Bulk delete cancel
     act(() => {
@@ -1184,6 +1183,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Purge cancel
     act(() => {
@@ -1194,6 +1194,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Register cancel
     act(() => {
@@ -1255,6 +1256,7 @@ describe('OAuthClientGovernanceStudio', () => {
       await Promise.resolve();
     });
     expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
 
     // Test Edit URIs with missing client_name (uses client_id in title)
     fireEvent.click(screen.getByTestId('edit-uris-btn-client_disabled_no_name'));

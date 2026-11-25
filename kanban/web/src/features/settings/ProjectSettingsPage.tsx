@@ -16,7 +16,7 @@
 import React, { useContext, useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
-import { apiFetch } from '../../api/client';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { qk } from '../../api/queryKeys';
 import { StateBadge } from '../../components/state/StateBadge';
@@ -506,10 +506,9 @@ export function ProjectSettingsPage(): JSX.Element {
           }
         }
       } catch (err: unknown) {
-        if (active) {
-          const errObj = err as { message?: string };
-          setErrorMessage(errObj.message ?? 'Failed to load project settings.');
-        }
+        if (!active || isAal2StepUpCancelled(err)) return;
+        const errObj = err as { message?: string };
+        setErrorMessage(errObj.message ?? 'Failed to load project settings.');
       } finally {
         if (active) setIsLoading(false);
       }
@@ -577,6 +576,7 @@ export function ProjectSettingsPage(): JSX.Element {
         }
         setSuccessMessage('Project settings saved successfully.');
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update project settings.');
       } finally {
@@ -634,6 +634,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${created.name}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
         const rawMsg =
@@ -714,6 +715,7 @@ export function ProjectSettingsPage(): JSX.Element {
 
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawMsg =
           err instanceof ApiProblem
@@ -805,6 +807,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
         const rawMsg =
@@ -877,6 +880,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Priority "${created.label}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create priority.');
       }
@@ -900,6 +904,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage('Priority deleted.');
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
       }
@@ -960,6 +965,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Priority "${updated.label}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update priority.');
       }
@@ -1000,6 +1006,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Label "${created.name}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create label.');
       }
@@ -1052,6 +1059,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Label "${updated.name}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update label.');
       }
@@ -1099,6 +1107,7 @@ export function ProjectSettingsPage(): JSX.Element {
         invalidateProjectCaches();
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string };
       const fallbackMsg =
         auditModalKind === 'state'
@@ -1143,6 +1152,7 @@ export function ProjectSettingsPage(): JSX.Element {
           setMembers(memRes.items);
         }
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to add project member.');
       } finally {
@@ -1168,6 +1178,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setMembers((prev) => prev.filter((m) => m.principal_id !== principalId));
         setSuccessMessage('Member removed from project.');
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to remove project member.');
       }
@@ -1226,6 +1237,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setTrashedItems((prev) => prev.filter((t) => t.id !== item.id));
         setSuccessMessage(`Successfully restored ${item.title || item.key}.`);
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to restore item.');
       }
@@ -1261,6 +1273,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setDestructiveToken(res);
         setDangerStage('requested');
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setDangerError(errObj.message ?? 'Failed to initiate project deletion.');
       }
@@ -1302,6 +1315,7 @@ export function ProjectSettingsPage(): JSX.Element {
 
         void navigate('/');
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setDangerError(errObj.message ?? 'Failed to execute project deletion.');
         setDangerStage('requested');

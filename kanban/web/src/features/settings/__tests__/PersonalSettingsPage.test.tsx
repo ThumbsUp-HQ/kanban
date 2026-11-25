@@ -10,6 +10,7 @@ import { PersonalSettingsPage } from '../PersonalSettingsPage';
 import * as api from '../personalSettingsApi';
 import * as authApi from '../../auth/authApi';
 import { ApiProblem } from '../../../api/problem';
+import { Aal2StepUpCancelledError } from '../../../api/client';
 
 vi.mock('../personalSettingsApi');
 vi.mock('../../auth/authApi');
@@ -511,14 +512,8 @@ describe('PersonalSettingsPage', () => {
     expect(api.changePassword).not.toHaveBeenCalled();
   });
 
-  it('intercepts AAL2_REQUIRED error on password change and opens step-up dialog', async () => {
-    vi.mocked(api.changePassword).mockRejectedValue(
-      new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'stepup-chall-1',
-        methods: ['totp'],
-      }),
-    );
+  it('silently ignores Aal2StepUpCancelledError on password change without error banner', async () => {
+    vi.mocked(api.changePassword).mockRejectedValue(new Aal2StepUpCancelledError());
 
     renderComponent();
 
@@ -532,12 +527,10 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByTestId('change-password-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      expect(api.changePassword).toHaveBeenCalled();
     });
 
-    // Cancel step-up dialog
-    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
-    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('alert-error')).toBeNull();
     expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
   });
 
@@ -647,13 +640,8 @@ describe('PersonalSettingsPage', () => {
     });
   });
 
-  it('handles AAL2 required stepup challenge on sensitive actions', async () => {
-    const aal2Error = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'chal-xyz',
-      methods: ['totp', 'webauthn'],
-    });
-    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error).mockResolvedValueOnce(undefined);
+  it('silently ignores Aal2StepUpCancelledError on sensitive actions', async () => {
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
@@ -665,38 +653,12 @@ describe('PersonalSettingsPage', () => {
 
     fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
 
-    // Step-up modal appears
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.deletePasskey).toHaveBeenCalledWith('pk-1');
     });
 
-    // Test second factor callbacks
-    fireEvent.click(screen.getByTestId('mock-2fa-error'));
-    expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
-
-    // Test success callback triggers retry of pending action
-    fireEvent.click(screen.getByTestId('mock-2fa-success'));
-    await waitFor(() => {
-      expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
-    });
-
-    // Trigger AAL2 again to test onSessionExpired and onCancel
-    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
-    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mock-2fa-expired'));
-    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
-
-    // Trigger AAL2 again to test onCancel
-    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
-    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mock-2fa-cancel'));
-    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+    expect(screen.queryByTestId('alert-error')).toBeNull();
+    expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
   });
 
   it('handles SVG avatar rejection and empty avatar file selection', async () => {
@@ -813,15 +775,9 @@ describe('PersonalSettingsPage', () => {
       recovery_codes_remaining: 10,
     });
 
-    const aal2Error = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'chal-sec-actions',
-      methods: ['totp'],
-    });
-
-    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2Error);
-    vi.mocked(api.deleteTotp).mockRejectedValueOnce(aal2Error);
-    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    vi.mocked(api.deleteTotp).mockRejectedValueOnce(new Aal2StepUpCancelledError());
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     renderComponent();
 
@@ -831,12 +787,12 @@ describe('PersonalSettingsPage', () => {
 
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    // 1. Delete passkey triggers AAL2
+    // 1. Delete passkey triggers AAL2 cancellation silently
     fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.deletePasskey).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByText('BtnMockCancel'));
+    expect(screen.queryByTestId('alert-error')).toBeNull();
 
     // Delete passkey string error fallback
     vi.mocked(api.deletePasskey).mockRejectedValueOnce('String delete passkey failure');
@@ -845,12 +801,11 @@ describe('PersonalSettingsPage', () => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to delete passkey.');
     });
 
-    // 2. Disable TOTP triggers AAL2
+    // 2. Disable TOTP triggers AAL2 cancellation silently
     fireEvent.click(screen.getByTestId('disable-totp-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.deleteTotp).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByText('BtnMockCancel'));
 
     // Disable TOTP string error fallback
     vi.mocked(api.deleteTotp).mockRejectedValueOnce('String delete totp failure');
@@ -859,12 +814,11 @@ describe('PersonalSettingsPage', () => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to disable TOTP.');
     });
 
-    // 3. Regenerate recovery codes triggers AAL2
+    // 3. Regenerate recovery codes triggers AAL2 cancellation silently
     fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.regenerateRecoveryCodes).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByText('BtnMockCancel'));
 
     // Regenerate recovery codes string error fallback
     vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce('String regen codes failure');
@@ -994,20 +948,15 @@ describe('PersonalSettingsPage', () => {
     });
   });
 
-  it('covers AAL2_REQUIRED with fallback challengeId and methods, plus rename and confirm string errors', async () => {
+  it('covers Aal2StepUpCancelledError on enrollTotp, plus rename and confirm string errors', async () => {
     const localClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const aal2FallbackError = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 123,
-      methods: 'invalid-non-array',
-    });
 
     vi.mocked(api.fetchMfaStatus).mockResolvedValue({
       totp_enabled: false,
       passkeys_count: 1,
       recovery_codes_remaining: 10,
     });
-    vi.mocked(api.enrollTotp).mockRejectedValue(aal2FallbackError);
+    vi.mocked(api.enrollTotp).mockRejectedValue(new Aal2StepUpCancelledError());
     vi.mocked(api.confirmTotp).mockRejectedValue('String TOTP reject');
     vi.mocked(api.renamePasskey).mockRejectedValue('String rename reject');
 
@@ -1023,8 +972,9 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(enableTotpBtn);
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      expect(api.enrollTotp).toHaveBeenCalled();
     });
+    expect(screen.queryByTestId('alert-error')).toBeNull();
 
     // Rename passkey string rejection
     await waitFor(() => {
@@ -1119,11 +1069,10 @@ describe('PersonalSettingsPage', () => {
       expect(screen.getByTestId('alert-error').textContent).toContain('Failed to unlink identity.');
     });
 
-    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
-    vi.mocked(api.unlinkIdentity).mockRejectedValue(aal2Error);
+    vi.mocked(api.unlinkIdentity).mockRejectedValue(new Aal2StepUpCancelledError());
     fireEvent.click(screen.getByTestId('unlink-identity-ident-2'));
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.unlinkIdentity).toHaveBeenCalled();
     });
   });
 
@@ -1403,14 +1352,13 @@ describe('PersonalSettingsPage', () => {
     });
   });
 
-  it('covers SecondFactorStep callbacks (success without pendingAction, expired, error)', async () => {
+  it('silently ignores Aal2StepUpCancelledError on regenerateRecoveryCodes', async () => {
     vi.mocked(api.fetchMfaStatus).mockResolvedValue({
       totp_enabled: true,
       passkeys_count: 1,
       recovery_codes_remaining: 10,
     });
-    const aal2Error = new ApiProblem(403, { code: 'AAL2_REQUIRED' });
-    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
+    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     renderComponent();
     await waitFor(() => {
@@ -1419,21 +1367,9 @@ describe('PersonalSettingsPage', () => {
 
     fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
+      expect(api.regenerateRecoveryCodes).toHaveBeenCalled();
     });
-
-    fireEvent.click(screen.getByText('BtnMockError'));
-    fireEvent.click(screen.getByText('BtnMockSuccess'));
-    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
-
-    // Trigger AAL2 again to test expired
-    vi.mocked(api.regenerateRecoveryCodes).mockRejectedValueOnce(aal2Error);
-    fireEvent.click(screen.getByTestId('regenerate-recovery-codes-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-second-factor-step')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('BtnMockExpired'));
-    expect(screen.queryByTestId('mock-second-factor-step')).toBeNull();
+    expect(screen.queryByTestId('alert-error')).toBeNull();
   });
 
   it('covers passkey-only 2FA with undefined recovery codes count', async () => {
@@ -1985,15 +1921,9 @@ describe('PersonalSettingsPage', () => {
     });
   });
 
-  it('intercepts AAL2_STALE on sensitive actions and completes step-up', async () => {
-    const aal2StaleProblem = new ApiProblem(403, {
-      code: 'AAL2_STALE',
-      challenge_id: 'stale-chall',
-      methods: ['webauthn', 'totp'],
-    });
-
-    // 1. Password change with AAL2_STALE
-    vi.mocked(api.changePassword).mockRejectedValueOnce(aal2StaleProblem);
+  it('silently ignores Aal2StepUpCancelledError across sensitive actions', async () => {
+    // 1. Password change with Aal2StepUpCancelledError
+    vi.mocked(api.changePassword).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     renderComponent();
     await waitFor(() => {
@@ -2007,43 +1937,27 @@ describe('PersonalSettingsPage', () => {
     fireEvent.click(screen.getByTestId('change-password-btn'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      expect(api.changePassword).toHaveBeenCalledTimes(1);
     });
+    expect(screen.queryByTestId('alert-error')).toBeNull();
 
-    // Mock successful password change on retry after step-up
-    vi.mocked(api.changePassword).mockResolvedValueOnce({ ok: true, message: 'Password updated' });
-    fireEvent.click(screen.getByTestId('mock-2fa-success'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
-      expect(api.changePassword).toHaveBeenCalledTimes(2);
-    });
-
-    // 2. Passkey delete with AAL2_STALE
+    // 2. Passkey delete with Aal2StepUpCancelledError
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2StaleProblem);
+    vi.mocked(api.deletePasskey).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      expect(api.deletePasskey).toHaveBeenCalledTimes(1);
     });
+    expect(screen.queryByTestId('alert-error')).toBeNull();
 
-    vi.mocked(api.deletePasskey).mockResolvedValueOnce(undefined);
-    fireEvent.click(screen.getByTestId('mock-2fa-success'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
-      expect(api.deletePasskey).toHaveBeenCalledTimes(2);
-    });
-
-    // 3. Test Key with AAL2_STALE
-    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(aal2StaleProblem);
+    // 3. Test Key with Aal2StepUpCancelledError
+    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(new Aal2StepUpCancelledError());
     fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+      expect(api.fetchWebauthnAuthenticationOptions).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByTestId('mock-2fa-cancel'));
-    expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
+    expect(screen.queryByTestId('alert-error')).toBeNull();
 
     confirmSpy.mockRestore();
   });
@@ -2144,29 +2058,9 @@ describe('PersonalSettingsPage', () => {
       window.location = originalLocation;
     });
 
-    it('handles AAL2_REQUIRED when connecting OIDC provider and resumes after step-up', async () => {
+    it('silently ignores Aal2StepUpCancelledError when connecting OIDC provider', async () => {
       vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
-      const aal2Problem = new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'ch-link-1',
-        methods: ['totp'],
-      });
-      vi.mocked(api.startLinkIdentity)
-        .mockRejectedValueOnce(aal2Problem)
-        .mockResolvedValueOnce({
-          mode: 'redirect',
-          authorize_url: 'https://idp.example.com/oauth/authorize?state=stepup',
-        });
-
-      const originalLocation = window.location;
-      // @ts-expect-error mocking window.location
-      delete window.location;
-      // @ts-expect-error mocking window.location
-      window.location = {
-        href: '',
-        pathname: '/settings/profile',
-        search: '',
-      } as unknown as Location;
+      vi.mocked(api.startLinkIdentity).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
       renderComponent();
 
@@ -2177,20 +2071,11 @@ describe('PersonalSettingsPage', () => {
       fireEvent.click(screen.getByTestId('connect-provider-github'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+        expect(api.startLinkIdentity).toHaveBeenCalledWith('github');
       });
 
-      // Complete 2FA
-      fireEvent.click(screen.getByTestId('mock-2fa-success'));
-
-      await waitFor(() => {
-        expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
-        expect(api.startLinkIdentity).toHaveBeenCalledTimes(2);
-        expect(window.location.href).toBe('https://idp.example.com/oauth/authorize?state=stepup');
-      });
-
-      // @ts-expect-error test location restoring
-      window.location = originalLocation;
+      expect(screen.queryByTestId('alert-error')).toBeNull();
+      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
     });
 
     it('handles connecting LDAP provider via modal and links successfully', async () => {
@@ -2236,22 +2121,9 @@ describe('PersonalSettingsPage', () => {
       });
     });
 
-    it('handles AAL2_REQUIRED when linking LDAP provider and resumes after step-up', async () => {
+    it('silently ignores Aal2StepUpCancelledError when linking LDAP provider', async () => {
       vi.mocked(authApi.fetchAuthCards).mockResolvedValue(mockAuthCards);
-      const aal2Problem = new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'ch-ldap-aal2',
-        methods: ['totp'],
-      });
-      vi.mocked(api.startLinkIdentity)
-        .mockRejectedValueOnce(aal2Problem)
-        .mockResolvedValueOnce({
-          mode: 'ldap_credentials',
-          link_intent_id: 'intent-ldap-2',
-        });
-      vi.mocked(api.linkLdapIdentity).mockResolvedValue({
-        linked: true,
-      });
+      vi.mocked(api.startLinkIdentity).mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
       renderComponent();
 
@@ -2275,20 +2147,11 @@ describe('PersonalSettingsPage', () => {
       fireEvent.click(screen.getByTestId('submit-ldap-link-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
+        expect(api.startLinkIdentity).toHaveBeenCalledWith('corp-ldap');
       });
 
-      fireEvent.click(screen.getByTestId('mock-2fa-success'));
-
-      await waitFor(() => {
-        expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
-        expect(api.linkLdapIdentity).toHaveBeenCalledWith(
-          'intent-ldap-2',
-          'alice_ldap',
-          'secret123',
-        );
-        expect(screen.queryByTestId('ldap-credentials-modal')).toBeNull();
-      });
+      expect(screen.queryByTestId('ldap-modal-error')).toBeNull();
+      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
     });
 
     it('renders empty providers notice and admin link for server admins when no external cards enabled', async () => {

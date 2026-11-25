@@ -1,11 +1,8 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useCallback, type JSX } from 'react';
-import { apiFetch } from '../../api/client';
-import { ApiProblem } from '../../api/problem';
-import { SecondFactorStep } from '../auth/SecondFactorStep';
-import type { MfaMethod } from '../auth/authApi';
+import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { McpAccessStudio } from './McpAccessStudio';
 import './McpAccessStudio.css';
@@ -63,18 +60,6 @@ export interface WorkloadFederationSectionProps {
   isAdmin?: boolean;
 }
 
-function extractAal2Challenge(err: unknown): { challengeId: string; methods: MfaMethod[] } | null {
-  if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-    const data = err.data as Record<string, unknown> | undefined;
-    const challengeId = typeof data?.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-    const methods = Array.isArray(data?.methods)
-      ? (data.methods as MfaMethod[])
-      : (['webauthn', 'totp'] as MfaMethod[]);
-    return { challengeId, methods };
-  }
-  return null;
-}
-
 export function WorkloadFederationSection({
   isAdmin = false,
 }: WorkloadFederationSectionProps): JSX.Element {
@@ -95,40 +80,43 @@ export function WorkloadFederationSection({
   const [formCidrs, setFormCidrs] = useState('');
   const [formTtl, setFormTtl] = useState('3600');
   const [submitting, setSubmitting] = useState(false);
+  const isMountedRef = useRef(true);
 
-  // AAL2 state
-  const [aal2Challenge, setAal2Challenge] = useState<{
-    challengeId: string;
-    methods: MfaMethod[];
-  } | null>(null);
-  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const fetchPolicies = useCallback(async (): Promise<void> => {
     if (!isAdmin) return;
-    setLoading(true);
-    setError(null);
+    if (isMountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const data = (await apiFetch(
         'GET',
         '/api/v1/admin/workload-identities',
       )) as WorkloadIdentityPolicyItem[] | undefined;
-      setPolicies(Array.isArray(data) ? data : []);
+      if (isMountedRef.current) {
+        setPolicies(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
-      const challenge = extractAal2Challenge(err);
-      if (challenge) {
-        setAal2Challenge(challenge);
-        setPendingAction(() => async () => {
-          await fetchPolicies();
-        });
-      } else {
+      if (isMountedRef.current) {
+        if (isAal2StepUpCancelled(err)) return;
         setError(err instanceof Error ? err.message : 'Failed to load workload policies');
       }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [isAdmin]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchPolicies();
   }, [fetchPolicies]);
 
@@ -209,15 +197,8 @@ export function WorkloadFederationSection({
         setShowModal(false);
         await fetchPolicies();
       } catch (err) {
-        const challenge = extractAal2Challenge(err);
-        if (challenge) {
-          setAal2Challenge(challenge);
-          setPendingAction(() => async () => {
-            await action();
-          });
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to save workload policy');
-        }
+        if (isAal2StepUpCancelled(err)) return;
+        setError(err instanceof Error ? err.message : 'Failed to save workload policy');
       } finally {
         setSubmitting(false);
       }
@@ -227,58 +208,31 @@ export function WorkloadFederationSection({
   };
 
   const handleToggle = async (pol: WorkloadIdentityPolicyItem): Promise<void> => {
-    const action = async (): Promise<void> => {
-      try {
-        await apiFetch(
-          'PATCH',
-          `/api/v1/admin/workload-identities/${pol.id}` as unknown as keyof import('../../api/schema.gen.ts').paths,
-          { body: { is_enabled: !pol.is_enabled } },
-        );
-        await fetchPolicies();
-      } catch (err) {
-        const challenge = extractAal2Challenge(err);
-        if (challenge) {
-          setAal2Challenge(challenge);
-          setPendingAction(() => async () => {
-            await action();
-          });
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to toggle policy');
-        }
-      }
-    };
-    await action();
+    setError(null);
+    try {
+      await apiFetch(
+        'PATCH',
+        `/api/v1/admin/workload-identities/${pol.id}` as unknown as keyof import('../../api/schema.gen.ts').paths,
+        { body: { is_enabled: !pol.is_enabled } },
+      );
+      await fetchPolicies();
+    } catch (err) {
+      if (isAal2StepUpCancelled(err)) return;
+      setError(err instanceof Error ? err.message : 'Failed to toggle policy');
+    }
   };
 
   const handleDelete = async (policyId: string): Promise<void> => {
-    const action = async (): Promise<void> => {
-      try {
-        await apiFetch(
-          'DELETE',
-          `/api/v1/admin/workload-identities/${policyId}` as unknown as keyof import('../../api/schema.gen.ts').paths,
-        );
-        await fetchPolicies();
-      } catch (err) {
-        const challenge = extractAal2Challenge(err);
-        if (challenge) {
-          setAal2Challenge(challenge);
-          setPendingAction(() => async () => {
-            await action();
-          });
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to delete policy');
-        }
-      }
-    };
-    await action();
-  };
-
-  const handleAal2Success = async (): Promise<void> => {
-    const next = pendingAction;
-    setAal2Challenge(null);
-    setPendingAction(null);
-    if (next) {
-      await next();
+    setError(null);
+    try {
+      await apiFetch(
+        'DELETE',
+        `/api/v1/admin/workload-identities/${policyId}` as unknown as keyof import('../../api/schema.gen.ts').paths,
+      );
+      await fetchPolicies();
+    } catch (err) {
+      if (isAal2StepUpCancelled(err)) return;
+      setError(err instanceof Error ? err.message : 'Failed to delete policy');
     }
   };
 
@@ -594,55 +548,6 @@ export function WorkloadFederationSection({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Step-Up Modal */}
-      {aal2Challenge && (
-        <div className="kb-snippet-modal-backdrop" data-testid="aal2-modal-backdrop">
-          <div
-            className="kb-snippet-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="aal2-modal-title"
-            data-testid="aal2-modal-card"
-          >
-            <div className="kb-snippet-modal-header">
-              <h2 id="aal2-modal-title" className="kb-snippet-modal-title">
-                Admin Verification Required (AAL2)
-              </h2>
-              <button
-                type="button"
-                className="kb-snippet-modal-close-btn"
-                onClick={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              >
-                x
-              </button>
-            </div>
-            <div className="kb-mcp-studio-section">
-              <SecondFactorStep
-                challengeId={aal2Challenge.challengeId}
-                methods={aal2Challenge.methods}
-                onSuccess={() => {
-                  void handleAal2Success();
-                }}
-                onError={() => {
-                  // Handled inside SecondFactorStep
-                }}
-                onSessionExpired={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-                onCancel={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              />
-            </div>
           </div>
         </div>
       )}

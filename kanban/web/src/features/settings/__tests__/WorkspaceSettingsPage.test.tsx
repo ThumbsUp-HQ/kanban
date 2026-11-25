@@ -2818,4 +2818,49 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.focus(skipHint);
     expect(screen.getByTestId('ws-skip-seq-help-popover').textContent).toContain('Enabled (true)');
   });
+
+  it('silently ignores Aal2StepUpCancelledError during general settings save with zero role="alert" banners (KAN-404)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return {
+          id: 'user-admin',
+          is_server_admin: true,
+          is_workspace_admin: true,
+          workspace_role: 'SERVER_ADMIN',
+        };
+      }
+      if (url.includes('/api/v1/workspaces/current')) {
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+        };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {
+          workspace_id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+          issue_import_enabled: true,
+          issue_export_allowed_roles: ['workspace_admin', 'project_admin', 'member'],
+        };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'PATCH') {
+        throw new clientModule.Aal2StepUpCancelledError();
+      }
+      return [];
+    });
+
+    renderComponent();
+    const saveBtn = await screen.findByTestId('save-workspace-btn');
+    fireEvent.click(saveBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByTestId('workspace-settings-error')).toBeNull();
+    });
+  });
 });

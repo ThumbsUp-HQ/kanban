@@ -5,6 +5,7 @@ import React, { useState, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   createAiProvider,
   updateAiProvider,
@@ -107,16 +108,16 @@ function AiProviderEditorContent({
   const isEditing = provider !== null;
 
   const defaultKind = airGapMode ? 'ollama' : 'openai';
+  const defaultDisplayName = airGapMode ? 'Local Ollama Runtime' : 'OpenAI / OpenAI-Compatible';
+  const defaultBaseUrl = airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1';
   const [providerKind, setProviderKind] = useState<string>(
     provider?.provider_kind ?? defaultKind,
   );
   const [displayName, setDisplayName] = useState<string>(
-    provider?.display_name ??
-      (airGapMode ? 'Local Ollama Runtime' : 'OpenAI / OpenAI-Compatible'),
+    provider?.display_name ?? defaultDisplayName,
   );
   const [baseUrl, setBaseUrl] = useState<string>(
-    provider?.base_url ??
-      (airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'),
+    provider?.base_url ?? defaultBaseUrl,
   );
   const [modelAllowlist, setModelAllowlist] = useState<string>(
     provider?.model_allowlist ? provider.model_allowlist.join(', ') : '',
@@ -192,6 +193,51 @@ function AiProviderEditorContent({
 
   const isCloudKind = providerKind === 'openai' || providerKind === 'gemini';
   const isLocal = isLocalEndpoint(providerKind, baseUrl);
+
+  const isDirty = React.useMemo(() => {
+    if (!provider) {
+      return Boolean(
+        apiKey.trim() ||
+        providerKind !== defaultKind ||
+        displayName.trim() !== defaultDisplayName ||
+        baseUrl.trim() !== defaultBaseUrl ||
+        modelAllowlist.trim() !== '' ||
+        mtlsCertPem.trim() !== '' ||
+        timeoutMs !== 30000 ||
+        temperatureModified ||
+        topPModified ||
+        maxTokensModified
+      );
+    }
+    return (
+      displayName !== provider.display_name ||
+      apiKey.trim() !== '' ||
+      baseUrl !== (provider.base_url ?? '') ||
+      clearExistingKey ||
+      residencyTier !== initialResidency ||
+      providerKind !== provider.provider_kind
+    );
+  }, [
+    provider,
+    apiKey,
+    providerKind,
+    defaultKind,
+    displayName,
+    defaultDisplayName,
+    baseUrl,
+    defaultBaseUrl,
+    modelAllowlist,
+    mtlsCertPem,
+    timeoutMs,
+    temperatureModified,
+    topPModified,
+    maxTokensModified,
+    clearExistingKey,
+    residencyTier,
+    initialResidency,
+  ]);
+
+  useAal2DirtyKeepalive(isDirty);
 
   const handleKindChange = (newKind: string): void => {
     setProviderKind(newKind);
@@ -292,6 +338,9 @@ function AiProviderEditorContent({
         setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setProbeError(err instanceof Error ? err.message : 'Failed to probe models');
     } finally {
       setIsProbing(false);
@@ -337,6 +386,9 @@ function AiProviderEditorContent({
         });
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setTestStatus({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Connection test failed',
@@ -432,6 +484,9 @@ function AiProviderEditorContent({
       onClose();
     } catch (err: unknown) {
       setIsSaving(false);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to save provider configuration');
     }
   };
@@ -975,7 +1030,6 @@ export function AiProviderEditorDrawer({
   projectId,
   workspaceSlug,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
-  useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
 
   return (

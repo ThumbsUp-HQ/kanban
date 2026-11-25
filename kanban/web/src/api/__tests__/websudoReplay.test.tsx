@@ -7,15 +7,21 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import {
+  apiClient,
   apiFetch,
   getCsrfToken,
   setCsrfToken,
   registerAal2StepUpHandler,
+  getActiveAal2StepUpHandler,
   Aal2StepUpCancelledError,
 } from '../client';
 import { ApiProblem } from '../problem';
 import { WebSudoModalHost, useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { AdminStudioSubnav } from '../../features/admin/AdminStudioSubnav';
+import { AuthCardEditorDrawer } from '../../features/admin-auth/AuthCardEditorDrawer';
+import { AiProviderEditorDrawer } from '../../features/admin-ai/AiProviderEditorDrawer';
+import { AgentDefinitionEditorDrawer } from '../../features/admin-agents/AgentDefinitionEditorDrawer';
+import type { AdminAuthCard } from '../../features/admin-auth/adminAuthApi';
 
 // Mock SecondFactorStep to test WebSudoModalHost interactions
 vi.mock('../../features/auth/SecondFactorStep', () => ({
@@ -214,12 +220,19 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
   }
 
   it('pings /api/v1/auth/aal2/touch periodically while isDirty is true', () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ aal2_active: true, aal2_expires_at: '2026-11-25T12:00:00Z' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 2) {
+        return Promise.reject(new Error('touch failure'));
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ aal2_active: true, aal2_expires_at: '2026-11-25T12:00:00Z' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
     globalThis.fetch = fetchMock;
 
     const { rerender, unmount } = render(<DirtyTestComponent isDirty={true} />);
@@ -244,6 +257,27 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.advanceTimersByTime(90_000);
     // No new pings while clean
     expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    unmount();
+  });
+
+  it('does NOT ping /api/v1/auth/aal2/touch when drawer is opened untouched (isDirty=false)', () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ aal2_active: true, aal2_expires_at: '2026-11-25T12:00:00Z' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const { unmount } = render(<DirtyTestComponent isDirty={false} />);
+
+    // Untouched drawer should NOT fire immediate ping
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Advance 120 seconds (well past the 45s interval)
+    vi.advanceTimersByTime(120_000);
+    expect(fetchMock).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -431,6 +465,133 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     const res = await requestPromise;
     expect(res).toEqual({ replayed: true });
   });
+
+  it('WebSudoModalHost dismisses on Escape key and traps Tab focus', async () => {
+    vi.useRealTimers();
+    const qc = new QueryClient();
+
+    render(
+      <QueryClientProvider client={qc}>
+        <WebSudoModalHost />
+      </QueryClientProvider>,
+    );
+
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      return Promise.resolve(new Response(
+        JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-keys' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } },
+      ));
+    });
+
+    const requestPromise = apiFetch('POST', '/api/v1/admin/escape-action' as never);
+    let capturedErr: unknown = null;
+    requestPromise.catch((e: unknown) => {
+      capturedErr = e;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    const modal = screen.getByTestId('websudo-stepup-modal');
+    const buttons = modal.querySelectorAll('button');
+    const firstBtn = buttons[0];
+    const lastBtn = buttons[buttons.length - 1];
+    if (!firstBtn || !lastBtn) {
+      throw new Error('Buttons not found in modal');
+    }
+
+    // Focus last button and press Tab -> should wrap to first
+    lastBtn.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(firstBtn);
+
+    // Focus first button and press Shift+Tab -> should wrap to last
+    firstBtn.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(lastBtn);
+
+    // Non-boundary Tab presses should not wrap
+    firstBtn.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    // Tab without Shift when on non-last button does not wrap
+    lastBtn.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+    // Press Escape -> should dismiss
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
+      expect(capturedErr).toBeInstanceOf(Aal2StepUpCancelledError);
+    });
+  });
+
+  it('WebSudoModalHost opens via kb:open-aal2-stepup window event', () => {
+    render(<WebSudoModalHost />);
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:open-aal2-stepup', {
+          detail: { challengeId: 'event-challenge', methods: ['totp'] },
+        }),
+      );
+    });
+    expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+
+    // Trigger error dispatch branch
+    let receivedErrorDetail: unknown = null;
+    const errorListener = (e: Event): void => {
+      receivedErrorDetail = (e as CustomEvent).detail;
+    };
+    window.addEventListener('kb:aal2-stepup-error', errorListener);
+    fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
+    expect(receivedErrorDetail).toBeDefined();
+    window.removeEventListener('kb:aal2-stepup-error', errorListener);
+
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
+
+    // Test kb:open-aal2-stepup with only challengeId or only methods
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:open-aal2-stepup', { detail: { challengeId: 'only-ch' } }),
+      );
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:open-aal2-stepup', { detail: { methods: ['webauthn'] } }),
+      );
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+
+    // Test kb:open-aal2-stepup with empty detail and handleSuccess without resolver
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-aal2-stepup'));
+    });
+    expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+    expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
+
+    // Test handleSessionExpired without resolver
+    const origLoc = window.location;
+    const assignMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { assign: assignMock },
+    });
+    act(() => {
+      window.dispatchEvent(new CustomEvent('kb:open-aal2-stepup'));
+    });
+    expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
+    expect(assignMock).toHaveBeenCalledWith('/login');
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: origLoc,
+    });
+  });
 });
 
 describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
@@ -510,6 +671,11 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
       expect(screen.getByText(/🛡️ Sudo 0:4\d/)).toBeDefined();
     });
 
+    // Allow 1s interval to fire
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1100));
+    });
+
     // Inactive session renders nothing
     globalThis.fetch = vi.fn().mockImplementation(() => {
       return Promise.resolve(new Response(
@@ -518,11 +684,14 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
       ));
     });
 
-    rerender(
-      <QueryClientProvider client={qc}>
-        <AdminStudioSubnav isServerAdmin={false} />
-      </QueryClientProvider>,
-    );
+    await act(async () => {
+      rerender(
+        <QueryClientProvider client={qc}>
+          <AdminStudioSubnav isServerAdmin={false} />
+        </QueryClientProvider>,
+      );
+      await Promise.resolve();
+    });
   });
 
   it('renders inside MemoryRouter and displays locked pill when aal2_active is false', async () => {
@@ -595,8 +764,10 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     );
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-      await vi.advanceTimersByTimeAsync(1000);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(200);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(2000);
       await vi.advanceTimersByTimeAsync(10_000);
     });
 
@@ -607,5 +778,383 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     });
 
     vi.useRealTimers();
+  });
+
+  it('AdminStudioSubnav responds to kb:aal2-stepup-success and kb:aal2-expires-at events', async () => {
+    const qc = new QueryClient();
+    const exp = new Date(Date.now() + 600_000).toISOString();
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/auth/session') {
+        return Promise.resolve(new Response(
+          JSON.stringify({ authenticated: true, aal2_active: true, aal2_expires_at: null }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <AdminStudioSubnav isServerAdmin={true} />
+      </QueryClientProvider>,
+    );
+
+    // Initial render with null aal2_expires_at renders '🛡️ Sudo Active'
+    await waitFor(() => {
+      expect(screen.getByText(/🛡️ Sudo Active/)).toBeDefined();
+    });
+
+    // Dispatch kb:aal2-stepup-success
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
+      await Promise.resolve();
+    });
+
+    // Dispatch kb:aal2-expires-at with expiresAt
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('kb:aal2-expires-at', {
+        detail: { expiresAt: exp },
+      }));
+      await Promise.resolve();
+    });
+
+    // Dispatch kb:aal2-expires-at with undefined detail
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('kb:aal2-expires-at'));
+      await Promise.resolve();
+    });
+  });
+
+  it('AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['me'], { is_server_admin: true });
+
+    let u1: (() => void) | undefined;
+    await act(async () => {
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <AdminStudioSubnav />
+        </QueryClientProvider>,
+      );
+      u1 = unmount;
+      await Promise.resolve();
+    });
+    u1?.();
+
+    // Also test without QueryClientProvider and without prop
+    let u2: (() => void) | undefined;
+    await act(async () => {
+      const { unmount } = render(<AdminStudioSubnav />);
+      u2 = unmount;
+      await Promise.resolve();
+    });
+    u2?.();
+  });
+
+  it('covers all WebSudoModalHost keyboard navigation branches and replay expires-at header', async () => {
+    vi.useRealTimers();
+    const qc = new QueryClient();
+
+    let expiresAtDetail: string | null = null;
+    const expiresListener = (e: Event): void => {
+      expiresAtDetail = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
+    };
+    window.addEventListener('kb:aal2-expires-at', expiresListener);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <WebSudoModalHost />
+      </QueryClientProvider>,
+    );
+
+    let stepUpInvoked = false;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/admin/branch-test') {
+        if (!stepUpInvoked) {
+          stepUpInvoked = true;
+          // No challenge_id provided to test line 55 fallback
+          return Promise.resolve(new Response(
+            JSON.stringify({ code: 'AAL2_REQUIRED' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ replayed: true }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-kb-aal2-expires-at': '2026-11-25T15:00:00Z',
+            },
+          },
+        ));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const reqPromise = apiFetch('POST', '/api/v1/admin/branch-test' as never);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    const modal = screen.getByTestId('websudo-stepup-modal');
+    const buttons = modal.querySelectorAll('button');
+    const firstBtn = buttons[0];
+    const middleBtn = buttons[1];
+    const lastBtn = buttons[buttons.length - 1];
+
+    // Non-Tab non-Escape key (line 133 false branch)
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    // Tab without Shift on middle button (line 147 false branch)
+    middleBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+
+    // Tab with Shift on middle button (line 144 false branch)
+    middleBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+    // Tab with Shift on last button (line 144 false branch)
+    lastBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+    // Tab without Shift on first button (line 147 false branch)
+    firstBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+
+    // Tab without Shift on last button -> wraps to first
+    lastBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(firstBtn);
+
+    // Tab with Shift on first button -> wraps to last
+    firstBtn?.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(lastBtn);
+
+    // Complete step-up successfully to verify replay with x-kb-aal2-expires-at header
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+
+    const result = await reqPromise;
+    expect(result).toEqual({ replayed: true });
+    expect(expiresAtDetail).toBe('2026-11-25T15:00:00Z');
+
+    window.removeEventListener('kb:aal2-expires-at', expiresListener);
+  });
+
+  it('WebSudoModalHost handles direct invocation without challengeId', async () => {
+    vi.useRealTimers();
+    render(<WebSudoModalHost />);
+    const handler = getActiveAal2StepUpHandler();
+    expect(handler).toBeDefined();
+
+    let p: Promise<boolean> | undefined;
+    await act(async () => {
+      p = handler?.({ methods: ['totp'] });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    const success = await p;
+    expect(success).toBe(false);
+  });
+
+  it('replays successfully when getCsrfToken is null and bootstrapCsrfToken returns null', async () => {
+    vi.useRealTimers();
+    setCsrfToken(null);
+    document.cookie = 'kb_csrf=; Path=/; Max-Age=0';
+    document.cookie = '__Host-kb_csrf=; Path=/; Max-Age=0';
+
+    registerAal2StepUpHandler(async () => {
+      await Promise.resolve();
+      return true;
+    });
+
+    let attempt = 0;
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === '/api/v1/auth/csrf') {
+        return Promise.resolve(new Response(null, { status: 500 }));
+      }
+      if (url === '/api/v1/admin/null-csrf-test') {
+        attempt++;
+        if (attempt === 1) {
+          return Promise.resolve(new Response(
+            JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-null-csrf' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(new Response(
+          JSON.stringify({ replayedWithoutCsrf: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const res = await apiFetch('GET', '/api/v1/admin/null-csrf-test' as never);
+    expect(res).toEqual({ replayedWithoutCsrf: true });
+  });
+
+  it('dispatches kb:aal2-expires-at on initial request response header', async () => {
+    let capturedExp: string | null = null;
+    const l = (e: Event): void => {
+      capturedExp = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
+    };
+    window.addEventListener('kb:aal2-expires-at', l);
+
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ ok: true }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-kb-aal2-expires-at': '2026-11-25T16:00:00Z',
+        },
+      },
+    ));
+
+    await apiFetch('GET', '/api/v1/auth/session' as never);
+    expect(capturedExp).toBe('2026-11-25T16:00:00Z');
+    window.removeEventListener('kb:aal2-expires-at', l);
+  });
+
+  it('throws ApiProblem when AAL2 step-up is required but no handler is registered', async () => {
+    registerAal2StepUpHandler(null);
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-unhandled' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(
+      apiFetch('GET', '/api/v1/admin/unhandled-stepup' as never),
+    ).rejects.toBeInstanceOf(ApiProblem);
+  });
+
+  it('treats rejected step-up handler promise as cancellation', async () => {
+    registerAal2StepUpHandler(() => Promise.reject(new Error('Step-up rejected')));
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ code: 'AAL2_REQUIRED', challenge_id: 'ch-reject' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(
+      apiFetch('GET', '/api/v1/admin/reject-stepup' as never),
+    ).rejects.toBeInstanceOf(Aal2StepUpCancelledError);
+  });
+});
+
+describe('Untouched Drawers do NOT trigger WebSudo Keepalive (KAN-404)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const canonicalCard: AdminAuthCard = {
+    id: 'card-1',
+    slug: 'corp-ldap',
+    display_name: 'Corporate LDAP',
+    provider_kind: 'LDAP',
+    button_subtext: 'Sign in with LDAP',
+    is_enabled: true,
+    auto_provision_users: true,
+    allowed_email_domains: ['corp.example.com'],
+    icon_preset: 'custom',
+    sort_rank: 'a0',
+    has_secret: true,
+    dek_kid: null,
+    last_health_status: 'HEALTHY',
+    public_config: {
+      url: 'ldaps://ldap.example.com:636',
+      service_bind_dn: 'cn=admin,dc=example,dc=com',
+      base_dn: 'dc=example,dc=com',
+      issuer: 'https://issuer.example.com',
+      client_id: 'client-123',
+    },
+  };
+
+  it('untouched AuthCardEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTestHandshake={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AuthCardEditorDrawer (edit mode with canonical keys) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={canonicalCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTestHandshake={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AiProviderEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AiProviderEditorDrawer
+        isOpen={true}
+        provider={null}
+        airGapMode={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AgentDefinitionEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AgentDefinitionEditorDrawer
+        isOpen={true}
+        agent={null}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
   });
 });

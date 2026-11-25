@@ -10,7 +10,7 @@ import {
 import { AgentValidationModal } from './AgentValidationModal';
 import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
+import { isAal2StepUpCancelled } from '../../api/client';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './agentStudio.css';
 
@@ -44,8 +44,7 @@ export function AgentStudioPage({
         if (!active) return;
         setAgents(Array.isArray(list) ? list : []);
       } catch (err: unknown) {
-        if (!active) return;
-        dispatchAal2StepUpIfRequired(err);
+        if (!active || isAal2StepUpCancelled(err)) return;
         setError(err instanceof Error ? err.message : 'Failed to load agent definitions');
       } finally {
         if (active) {
@@ -72,6 +71,7 @@ export function AgentStudioPage({
       setAgentToDelete(null);
       refreshAgents();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to delete agent definition');
     }
   };

@@ -13,6 +13,7 @@ import {
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { isAal2StepUpCancelled } from '../../api/client';
 import './PlaneImportStudio.css';
 
 export interface EntityCounts {
@@ -261,6 +262,9 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('preview');
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -304,6 +308,9 @@ export function PlaneImportStudio(): JSX.Element {
       setDiffReport(report);
       setStage('done');
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setError(err.message);
@@ -336,6 +343,9 @@ export function PlaneImportStudio(): JSX.Element {
       window.URL.revokeObjectURL(url);
       setExportSuccess(`Successfully downloaded kanban-${targetSlug}-portable.tar.gz`);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       /* v8 ignore next 5 */
       if (err instanceof Error) {
         setExportError(err.message);

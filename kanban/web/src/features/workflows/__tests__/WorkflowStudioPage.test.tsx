@@ -10,7 +10,7 @@ import { WorkflowStudioPage } from '../WorkflowStudioPage';
 import { AttachHookDialog } from '../AttachHookDialog';
 import { CustomFieldDefinitionEditor } from '../../custom-fields/CustomFieldDefinitionEditor';
 import * as api from '../api';
-import { ApiProblem } from '../../../api/problem';
+import { Aal2StepUpCancelledError } from '../../../api/client';
 
 describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
   let queryClient: QueryClient;
@@ -171,23 +171,12 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
     expect(container.querySelectorAll('script')).toHaveLength(0);
   });
 
-  it('triggers AAL2 step-up challenge modal on 403 AAL2_REQUIRED and retries mutation on elevation (Mandatory Test Case 5)', async () => {
+  it('silently ignores Aal2StepUpCancelledError on hook detach (Mandatory Test Case 5)', async () => {
     vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
 
-    const aal2Problem = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'challenge-xyz',
-      methods: ['totp'],
-    });
-
-    let attempts = 0;
-    vi.spyOn(api, 'deleteWorkflowHook').mockImplementation(async () => {
-      await Promise.resolve();
-      attempts++;
-      if (attempts === 1) {
-        throw aal2Problem;
-      }
-    });
+    const deleteSpy = vi.spyOn(api, 'deleteWorkflowHook').mockRejectedValueOnce(
+      new Aal2StepUpCancelledError(),
+    );
 
     renderPage();
 
@@ -199,23 +188,19 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
     const detachBtn = screen.getByRole('button', { name: 'Detach require-qa-proof-link' });
     fireEvent.click(detachBtn);
 
-    // Verify AAL2 step-up modal appears
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(deleteSpy).toHaveBeenCalledWith('hook-1');
     });
+
+    expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
   });
 
-  it('triggers AAL2 step-up challenge modal on 403 AAL2_STALE (KAN-393)', async () => {
+  it('silently ignores Aal2StepUpCancelledError on hook toggle (KAN-393)', async () => {
     vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
 
-    const aal2StaleProblem = new ApiProblem(403, {
-      code: 'AAL2_STALE',
-      detail: 'AAL2 verification is stale (950s > 900s).',
-      challenge_id: 'challenge-stale-xyz',
-      methods: ['totp'],
-    });
-
-    vi.spyOn(api, 'deleteWorkflowHook').mockRejectedValue(aal2StaleProblem);
+    const disableSpy = vi.spyOn(api, 'disableWorkflowHook').mockRejectedValueOnce(
+      new Aal2StepUpCancelledError(),
+    );
 
     renderPage();
 
@@ -223,12 +208,14 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(screen.getByText('require-qa-proof-link')).toBeDefined();
     });
 
-    const detachBtn = screen.getByRole('button', { name: 'Detach require-qa-proof-link' });
-    fireEvent.click(detachBtn);
+    const toggleBtn = screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' });
+    fireEvent.click(toggleBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(disableSpy).toHaveBeenCalledWith('hook-1');
     });
+
+    expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
   });
 
   it('renders empty state CTA when transition has 0 hooks (Mandatory Test Case 6)', async () => {
@@ -302,13 +289,11 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
     });
   });
 
-  it('handles edit hook, detach hook, and AAL2 intercept with fallback challenge values and success retry', async () => {
+  it('handles edit hook, detach hook, and AAL2 cancellation without error banners', async () => {
     vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
     const deleteSpy = vi.spyOn(api, 'deleteWorkflowHook').mockResolvedValue(undefined);
     vi.spyOn(api, 'disableWorkflowHook')
-      .mockRejectedValueOnce(
-        new ApiProblem(403, { code: 'AAL2_REQUIRED' }), // no challenge_id, no methods
-      )
+      .mockRejectedValueOnce(new Aal2StepUpCancelledError())
       .mockResolvedValueOnce(undefined);
 
     renderPage();
@@ -333,21 +318,14 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(deleteSpy).toHaveBeenCalledWith('hook-1');
     });
 
-    // 3. Toggle hook with AAL2 requirement (fallback methods/challengeId branch)
+    // 3. Toggle hook with AAL2 cancellation
     const toggle = screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' });
     fireEvent.click(toggle);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(api.disableWorkflowHook).toHaveBeenCalled();
     });
-
-    // Close AAL2 modal via cancel button
-    const closeAal2Btn = screen.getByRole('button', { name: /Cancel/i });
-    fireEvent.click(closeAal2Btn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-    });
+    expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
   });
 
   it('renders rules with from_state === null, handles non-AAL2 error on toggle, and resolves route projectKey param', async () => {

@@ -21,6 +21,7 @@ export interface SecondFactorStepProps {
   onError: (formattedError: FormattedError) => void;
   onSessionExpired: () => void;
   onCancel?: () => void;
+  cancelButtonLabel?: string;
 }
 
 export function SecondFactorStep({
@@ -30,6 +31,7 @@ export function SecondFactorStep({
   onError,
   onSessionExpired,
   onCancel,
+  cancelButtonLabel,
 }: SecondFactorStepProps): JSX.Element {
   const supportsWebAuthn = isWebAuthnSupported();
 
@@ -369,7 +371,7 @@ export function SecondFactorStep({
             onClick={onCancel}
             disabled={isVerifying}
           >
-            Cancel and return to sign-in
+            {cancelButtonLabel ?? 'Cancel and return to sign-in'}
           </button>
         </div>
       )}

@@ -4,12 +4,11 @@
 import React, { useState, type JSX } from 'react';
 import { useLocation } from 'react-router';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiFetch } from '../../api/client';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './AdminDiagnosticsStudio.css';
 
@@ -276,7 +275,9 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       });
     },
     onError: (err: Error) => {
-      dispatchAal2StepUpIfRequired(err);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setProbeAlert({
         type: 'error',
         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',

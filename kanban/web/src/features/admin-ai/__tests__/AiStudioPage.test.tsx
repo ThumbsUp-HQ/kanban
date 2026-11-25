@@ -2068,5 +2068,50 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
         expect(screen.getByTestId('empty-providers-placeholder')).toBeDefined();
       });
     });
+
+    it('silently ignores Aal2StepUpCancelledError during load with zero role="alert" banners', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      render(<AiStudioPage />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('loading-spinner')).toBeNull();
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByTestId('ai-studio-error')).toBeNull();
+    });
+
+    it('silently ignores Aal2StepUpCancelledError during toggle enablement with zero role="alert" banners', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+      render(<AiStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('toggle-enable-btn-prov-openai-1')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-openai-1'));
+      await waitFor(() => {
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByTestId('ai-studio-error')).toBeNull();
+      });
+    });
+
+    it('silently ignores Aal2StepUpCancelledError during delete with zero role="alert" banners', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      vi.spyOn(aiApi, 'deleteAiProvider').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+      render(<AiStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('delete-provider-btn-prov-openai-1')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('delete-provider-btn-prov-openai-1'));
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-delete-provider-btn')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('confirm-delete-provider-btn'));
+      await waitFor(() => {
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByTestId('ai-studio-error')).toBeNull();
+      });
+    });
   });
 });

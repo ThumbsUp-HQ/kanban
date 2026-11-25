@@ -912,26 +912,11 @@ describe('Workflow Studio Coverage Booster', () => {
       });
     });
 
-    it('exercises AAL2 challenge TOTP verification and replay', async () => {
+    it('exercises Aal2StepUpCancelledError on hook toggle', async () => {
       vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
-      const aal2Err = new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'stepup-totp-1',
-        methods: ['totp'],
-      });
-
       const disableSpy = vi
         .spyOn(api, 'disableWorkflowHook')
-        .mockRejectedValueOnce(aal2Err)
-        .mockResolvedValueOnce(undefined);
-
-      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
-        await Promise.resolve();
-        if (typeof path === 'string' && path.includes('/auth/totp/verify')) {
-          return { status: 'authenticated' };
-        }
-        return {};
-      });
+        .mockRejectedValueOnce(new client.Aal2StepUpCancelledError());
 
       render(
         <QueryClientProvider client={queryClient}>
@@ -945,33 +930,36 @@ describe('Workflow Studio Coverage Booster', () => {
         expect(screen.getByText('require-qa-proof-link')).toBeDefined();
       });
 
-      // Toggle hook -> triggers AAL2 modal
+      // Toggle hook -> silently handles cancellation
       fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' }));
 
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-        expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
+        expect(disableSpy).toHaveBeenCalledWith('hook-1');
       });
-
-      // Enter 6-digit TOTP
-      fireEvent.change(screen.getByLabelText(/6-digit Authenticator Code/i), {
-        target: { value: '123456' },
-      });
-
-      await waitFor(() => {
-        expect(disableSpy).toHaveBeenCalledTimes(2);
-        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-      });
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
     });
 
-    it('exercises AAL2 challenge cancel and session expired handlers', async () => {
-      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
-      const aal2Err = new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'stepup-1',
-        methods: ['totp'],
-      });
-      vi.spyOn(api, 'disableWorkflowHook').mockRejectedValue(aal2Err);
+    it('exercises Aal2StepUpCancelledError on hook enable', async () => {
+      const disabledRule: api.TransitionRule = {
+        from_state: 'In Review',
+        to_state: 'Done',
+        active_hook_count: 0,
+        hooks: [
+          {
+            id: 'hook-cancel-test',
+            name: 'test-cancel-hook',
+            from_state: 'In Review',
+            to_state: 'Done',
+            hook_kind: 'sync_validator',
+            sort_rank: '01',
+            failure_policy: 'fail_closed',
+            manifest_sha256: 'deadbeef123',
+            is_enabled: false,
+          },
+        ],
+      };
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([disabledRule]);
+      const enableSpy = vi.spyOn(api, 'enableWorkflowHook').mockRejectedValue(new client.Aal2StepUpCancelledError());
 
       render(
         <QueryClientProvider client={queryClient}>
@@ -982,21 +970,17 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('require-qa-proof-link')).toBeDefined();
+        expect(screen.getByText('test-cancel-hook')).toBeDefined();
       });
 
-      // Toggle hook -> triggers AAL2 modal
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Toggle require-qa-proof-link' }));
+      const toggle = screen.getByRole('checkbox', { name: 'Toggle test-cancel-hook' });
+      fireEvent.click(toggle);
 
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+        expect(enableSpy).toHaveBeenCalledWith('hook-cancel-test');
       });
-
-      // Click Cancel in AAL2 modal
-      fireEvent.click(screen.getByRole('button', { name: /Cancel and return to sign-in/i }));
-      await waitFor(() => {
-        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-      });
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
 
     it('exercises enabling a disabled hook and AAL2 challenge on update with session expiration', async () => {
@@ -1023,21 +1007,7 @@ describe('Workflow Studio Coverage Booster', () => {
       const enableSpy = vi.spyOn(api, 'enableWorkflowHook').mockResolvedValue(undefined);
       const updateSpy = vi
         .spyOn(api, 'updateWorkflowHook')
-        .mockRejectedValueOnce(
-          new ApiProblem(403, {
-            code: 'AAL2_REQUIRED',
-            challenge_id: 'stepup-update',
-            methods: ['totp'],
-          }),
-        );
-
-      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
-        await Promise.resolve();
-        if (typeof path === 'string' && path.includes('/auth/totp/verify')) {
-          throw new ApiProblem(401, { code: 'CHALLENGE_EXPIRED', message: 'Expired' });
-        }
-        return {};
-      });
+        .mockRejectedValueOnce(new client.Aal2StepUpCancelledError());
 
       render(
         <QueryClientProvider client={queryClient}>
@@ -1058,26 +1028,16 @@ describe('Workflow Studio Coverage Booster', () => {
         expect(enableSpy).toHaveBeenCalledWith('hook-disabled');
       });
 
-      // 2. Edit hook and trigger AAL2 challenge on update
+      // 2. Edit hook and trigger Aal2StepUpCancelledError on update
       fireEvent.click(screen.getByRole('button', { name: 'Edit disabled-hook' }));
       expect(screen.getByText('Edit Hook: disabled-hook')).toBeDefined();
 
       fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
 
-      // AAL2 modal opens
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+        expect(updateSpy).toHaveBeenCalled();
       });
-      expect(updateSpy).toHaveBeenCalled();
-
-      // Enter TOTP that triggers CHALLENGE_EXPIRED -> onSessionExpired
-      fireEvent.change(screen.getByLabelText(/6-digit Authenticator Code/i), {
-        target: { value: '999999' },
-      });
-
-      await waitFor(() => {
-        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-      });
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
     });
 
     it('exercises projectQuery capabilities success, failure, and non-admin states', async () => {
@@ -1154,12 +1114,9 @@ describe('Workflow Studio Coverage Booster', () => {
 
       // Test reorder AAL2 challenge
       vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(api.DEFAULT_S14_4_RULES);
-      const aal2Err = new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'stepup-reorder',
-        methods: ['totp'],
-      });
-      vi.spyOn(api, 'reorderWorkflowHooks').mockRejectedValueOnce(aal2Err);
+      const reorderSpy = vi
+        .spyOn(api, 'reorderWorkflowHooks')
+        .mockRejectedValueOnce(new client.Aal2StepUpCancelledError());
 
       const qcReorder = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       render(
@@ -1174,11 +1131,12 @@ describe('Workflow Studio Coverage Booster', () => {
         expect(screen.getByText('require-qa-proof-link')).toBeDefined();
       });
 
-      // Move hook down to trigger reorder AAL2 challenge
+      // Move hook down to trigger reorder
       fireEvent.click(screen.getByRole('button', { name: 'Move require-qa-proof-link down' }));
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+        expect(reorderSpy).toHaveBeenCalled();
       });
+      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
     });
 
     it('renders empty studio state when rules array is empty', async () => {

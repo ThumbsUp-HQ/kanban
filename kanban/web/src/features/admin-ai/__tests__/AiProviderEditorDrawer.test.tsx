@@ -11,6 +11,7 @@ import {
 } from '../AiProviderEditorDrawer';
 import * as aiApi from '../aiAdminApi';
 import type { ProviderConfigPublic } from '../aiAdminApi';
+import { Aal2StepUpCancelledError } from '../../../api/client';
 
 describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
   const mockExistingProvider: ProviderConfigPublic = {
@@ -1650,6 +1651,107 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
           'engineering',
         );
       });
+    });
+
+    it('silently ignores Aal2StepUpCancelledError on save and test connection (KAN-404)', async () => {
+      const cancelErr = new Aal2StepUpCancelledError();
+      vi.spyOn(aiApi, 'createAiProvider').mockRejectedValue(cancelErr);
+      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValue(cancelErr);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.queryByText('Connection test failed')).toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(screen.queryByText('Failed to save provider configuration')).toBeNull();
+      });
+    });
+
+    it('handles test connection and save with projectId, workspaceSlug, and non-Error failures', async () => {
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockRejectedValue('Raw string error');
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+        ...mockExistingProvider,
+        id: 'new-prov-1',
+      });
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          provider={null}
+          airGapMode={false}
+          onSaved={onSaved}
+          projectId="proj-test-1"
+          workspaceSlug="ws-test-slug"
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByText('Connection test failed')).toBeDefined();
+      });
+      expect(testSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ project_id: 'proj-test-1' }),
+        undefined,
+        'ws-test-slug',
+      );
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ project_id: 'proj-test-1' }),
+          'ws-test-slug',
+        );
+        expect(onSaved).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
+      });
+    });
+
+    it('tests connection on existing provider with null base_url and projectId', async () => {
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 10,
+        model_count: 2,
+        models: ['m1'],
+      });
+      const provNullBase: ProviderConfigPublic = {
+        ...mockExistingProvider,
+        base_url: null,
+      };
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={provNullBase}
+          airGapMode={false}
+          onSaved={vi.fn()}
+          projectId="proj-existing-test"
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByText(/Connected in 10ms/)).toBeDefined();
+      });
+      expect(testSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ project_id: 'proj-existing-test' }),
+        provNullBase.id,
+      );
     });
   });
 });

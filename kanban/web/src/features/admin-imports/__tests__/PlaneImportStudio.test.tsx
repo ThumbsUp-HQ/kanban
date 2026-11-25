@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { PlaneImportStudio, extractEntityCounts } from '../PlaneImportStudio';
 import * as planeImportApi from '../planeImportApi';
+import { Aal2StepUpCancelledError } from '../../../api/client';
 
 const sampleBundle = {
   projects: [{ id: 'p1', identifier: 'KB', name: 'Kanban Project' }],
@@ -528,5 +529,24 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     const dryRunBtn = screen.getByTestId('run-dry-run-btn');
     fireEvent.click(dryRunBtn);
     expect(screen.getAllByText(/Invalid User Mapping JSON/i).length).toBeGreaterThan(0);
+  });
+
+  it('silently ignores Aal2StepUpCancelledError during import with zero role="alert" banners (KAN-404)', async () => {
+    vi.spyOn(planeImportApi, 'submitPlaneImport').mockRejectedValue(
+      new Aal2StepUpCancelledError(),
+    );
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId('mode-paste-btn'));
+    const textarea = screen.getByTestId('paste-textarea');
+    fireEvent.change(textarea, { target: { value: JSON.stringify(sampleBundle) } });
+
+    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 });
