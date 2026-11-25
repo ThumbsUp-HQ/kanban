@@ -73,6 +73,28 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     expect(screen.getByTestId('studio-title').textContent).toContain(
       'Migration Import Studio',
     );
+    expect(screen.getByTestId('studio-title').textContent).not.toContain(
+      'Plane Migration Import Studio',
+    );
+    expect(screen.getByTestId('studio-title').textContent.trim()).toBe(
+      'Migration Import Studio',
+    );
+
+    // Verify studio title remains "Migration Import Studio" when switching sources
+    fireEvent.click(screen.getByTestId('source-jira-btn'));
+    expect(screen.getByTestId('studio-title').textContent.trim()).toBe('Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).not.toContain('Plane Migration');
+
+    fireEvent.click(screen.getByTestId('source-github-btn'));
+    expect(screen.getByTestId('studio-title').textContent.trim()).toBe('Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).not.toContain('Plane Migration');
+
+    fireEvent.click(screen.getByTestId('source-linear-btn'));
+    expect(screen.getByTestId('studio-title').textContent.trim()).toBe('Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).not.toContain('Plane Migration');
+
+    fireEvent.click(screen.getByTestId('source-plane-btn'));
+    expect(screen.getByTestId('studio-title').textContent.trim()).toBe('Migration Import Studio');
     expect(screen.getByTestId('dropzone-area')).toBeDefined();
 
     // Trigger dry-run without bundle
