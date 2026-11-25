@@ -11,7 +11,7 @@
 
 ## 1. Scope & Design Assessment
 
-A detailed audit of the setting inventory and UX simplification proposals for Slice 2 was conducted across all 8 frontend components, encompassing all 127 cataloged settings (119 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
+A detailed audit of the setting inventory and UX simplification proposals for Slice 2 was conducted across all 8 frontend components, encompassing all 128 cataloged settings (120 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
 
 ### 1.1 `AiStudioPage.tsx`
 - **Component Layout & Controls:**
@@ -82,4 +82,4 @@ A detailed audit of the setting inventory and UX simplification proposals for Sl
 
 ## 3. Verdict
 
-**APPROVED.** The simplification proposals enhance usability, eliminate confusing UI states, accurately catalog all 127 settings, and provide an actionable blueprint for Phase 2 (`KAN-412`).
+**APPROVED.** The simplification proposals enhance usability, eliminate confusing UI states, accurately catalog all 128 settings, and provide an actionable blueprint for Phase 2 (`KAN-412`).

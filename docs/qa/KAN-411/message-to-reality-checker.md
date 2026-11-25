@@ -15,7 +15,7 @@
 
 1. **Setting-by-Setting Inventory & Simplification Audit:**
    - File: `docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md`
-   - Complete setting-by-setting inventory covering 100% of controls across 127 items (119 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
+   - Complete setting-by-setting inventory covering 100% of controls across 128 items (120 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
      - `kanban/web/src/features/admin-ai/AiStudioPage.tsx`
      - `kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx`
      - `kanban/web/src/features/admin-ai/AiBudgetModal.tsx`

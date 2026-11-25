@@ -11,12 +11,12 @@
 
 ## 1. Scope & Backend Topology Audit
 
-A comprehensive forensic audit of the Slice 2 setting inventory and simplification audit document (`docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md`) was performed against all relevant backend routers, services, and CLI endpoints across all 127 cataloged settings (119 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
+A comprehensive forensic audit of the Slice 2 setting inventory and simplification audit document (`docs/workouts/slice-2-ai-agents-runners/01-audit-and-cuts.md`) was performed against all relevant backend routers, services, and CLI endpoints across all 128 cataloged settings (120 KEEP, 4 SIMPLIFY, 4 MOVE_TO_ADVANCED, 0 MERGE, 0 CUT):
 
 ### 1.1 AI Provider Management (`kanban/api/v1/admin/ai_providers.py`)
 - **Air-Gap Egress vs Probe Semantics:**
   - `POST /api/v1/admin/ai/providers` and `PATCH /api/v1/admin/ai/providers/{id}` strictly enforce air-gap policy at the persistence boundary: attempting to configure or update cloud endpoints while air-gap mode is active raises `409 AIR_GAP_EGRESS_DENIED`.
-  - `POST /api/v1/admin/ai/providers/probe-models` and `POST /api/v1/admin/ai/providers/{id}/probe-models` execute probe diagnostics gracefully: if air-gap mode is active, the endpoint does not throw an unhandled 409; instead, it returns `200 ProviderProbeResult(ok=False, error="Air gap egress blocked")`.
+  - `POST /api/v1/admin/ai/providers/probe-models` and `POST /api/v1/admin/ai/providers/{id}/probe-models` execute probe diagnostics gracefully: if air-gap mode is active, the endpoint does not throw an unhandled 409; instead, it returns `200 ProviderProbeResult(ok=False, error_code="AIR_GAP_EGRESS_DENIED", message=...)`.
 - **Secret Envelope & Key Clearing:**
   - Write-only envelope encryption (KEK/DEK) is strictly preserved.
   - The `clear-key-checkbox` control in `AiProviderEditorDrawer.tsx` sends `api_key: null` in the `PATCH` payload to clear stored secret envelope material (NOT a separate pseudo-parameter like `clear_api_key`).
@@ -65,7 +65,7 @@ A comprehensive forensic audit of the Slice 2 setting inventory and simplificati
 ## 2. API Contract & Wiring Verification
 
 1. **Setting-by-Setting Mapping Parity:**
-   Every one of the 127 UI controls identified in the inventory table maps accurately to a real backend endpoint, schema, or CLI parameter.
+   Every one of the 128 UI controls identified in the inventory table maps accurately to a real backend endpoint, schema, or CLI parameter.
 2. **Security & Boundary Invariants:**
    - Envelope encryption for stored provider keys is strictly enforced.
    - Air-gap policy enforcement is documented and tested fail-closed (`409 AIR_GAP_EGRESS_DENIED` on mutating endpoints; non-crashing `200 ProviderProbeResult(ok=False)` on diagnostic probes).

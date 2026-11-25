@@ -108,7 +108,7 @@ Dispositions are categorized as:
 | `AgentStudioPage` | Edit Agent Action (`edit-agent-btn`) | Secondary Action Button | Opens the editor drawer with populated agent definition. | Wired to `editingAgent` drawer state. | KEEP |
 | `AgentStudioPage` | Delete Agent Action (`delete-agent-btn`) | Danger Action Button | Prompts for confirmation and removes agent definition. | Wired to `DELETE /api/v1/admin/agent-definitions/{agent}` (`agentDefinitionsApi.ts:102`). | KEEP |
 | `AgentStudioPage` | Delete Agent Modal (`delete-agent-modal`, `cancel-delete-agent-btn`, `confirm-delete-agent-btn`) | Modal Dialog & Action Buttons | Confirmation dialog requiring explicit verification before deleting an agent. | Wired to `agentToDelete` state in `AgentStudioPage.tsx:256-278`. | KEEP |
-| `AgentDefinitionEditorDrawer` | Close Agent Drawer Action (`close-agent-drawer-btn`) | Header Close Button | Closes agent definition drawer without saving changes. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:261`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Close Agent Drawer Action (`close-agent-drawer-btn`) | Header Close Button | Closes agent definition drawer without saving changes. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:193-195`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Agent Slug (`agent-slug-input`) | Text Input (`^[a-z0-9][a-z0-9-]{1,62}$`) | Permanent handle identifier (disabled when editing). | Bound to `body.slug`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Display Name (`agent-name-input`) | Text Input (Required) | Human-readable name for the autonomous agent. | Bound to `body.display_name`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Autonomous Harness (`agent-harness-select`) | Select: `in_app_sdk`, `cli_pipe`, `remote_runner` | Selects execution harness architecture (disabled when editing). | Bound to `body.harness_kind`. | KEEP |
@@ -121,9 +121,9 @@ Dispositions are categorized as:
 | `AgentDefinitionEditorDrawer` | Repo Access Mode (`agent-repo-mode-select`) | Select: `none`, `bare_git_tools`, `ro_vfs_mount` | Filesystem access policy for this agent. | Bound to `body.repo_access_mode`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Allowed MCP Tools (`tool-checkbox-${tool}`) | Checkbox Grid | Fine-grained tool permission filters for this agent principal. | Bound to `body.mcp_allowed_tools`. | KEEP |
 | `AgentDefinitionEditorDrawer` | System Instructions (`agent-instructions-textarea`) | Markdown Textarea | Prompt instructions and behavioural rules for the agent. | Bound to `body.system_instructions_md`. | KEEP |
-| `AgentDefinitionEditorDrawer` | Cancel Agent Drawer Action (`cancel-agent-drawer-btn`) | Secondary Button | Dismisses agent definition edits without saving. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:268`. | KEEP |
-| `AgentDefinitionEditorDrawer` | Save Agent Action (`save-agent-btn`) | Primary Submit Button | Submits agent definition for creation or update. | Wired to submit handler in `AgentDefinitionEditorDrawer.tsx:363`. | KEEP |
-| `AgentValidationModal` | Close Validation Modal Action (`close-validation-modal-btn`) | Header Close Button | Closes test validation modal. | Wired to `onClose` callback in `AgentValidationModal.tsx:321`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Cancel Agent Drawer Action (`cancel-agent-drawer-btn`) | Secondary Button | Dismisses agent definition edits without saving. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:500-501`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Save Agent Action (`save-agent-btn`) | Primary Submit Button | Submits agent definition for creation or update. | Wired to submit button in `AgentDefinitionEditorDrawer.tsx:509` (form submit handler at lines 116-182). | KEEP |
+| `AgentValidationModal` | Close Validation Modal Action (`close-validation-modal-btn`) | Header Close Button | Closes test validation modal. | Wired to `onClose` callback in `AgentValidationModal.tsx:60-62`. | KEEP |
 | `AgentValidationModal` | Validation Verdict Badge (`validation-verdict-badge`) | Status Badge | Indicates pass or fail verdict from local forensic verification test. | Bound to `AgentValidationResponse.valid` and `exit_code`. | KEEP |
 | `AgentValidationModal` | Validation Summary Card (`validation-summary`) | Metadata Summary Box | Displays validation status, execution latency, and token consumption counts. | Bound to `AgentValidationResponse.status`, `latency_ms`, `tokens_in`, `tokens_out`. | KEEP |
 | `AgentValidationModal` | Validation Report Output (`validation-report-output`) | Monospace `<pre>` Display | Displays structured 4-section verification report (`validate-echo`). | Populated from `AgentValidationResponse.report_text`. | KEEP |
@@ -156,14 +156,14 @@ Dispositions are categorized as:
 | `MintEnrollmentTokenModal` | Example CLI Ingestion Command (`runner-cli-command`) | Monospace `<pre>` Block | Shell command example to enroll runner daemon via stdin. | Formatted template string (Already Implemented on main via KAN-399: emits `--server-url`). | KEEP |
 | `MintEnrollmentTokenModal` | Copy Runner CLI Action (`copy-runner-cli-btn`) | Secondary Button | Copies full CLI enrollment command to clipboard with '✓ Copied!' feedback. | Already Implemented on main via KAN-399 (`MintEnrollmentTokenModal.tsx:234`). | KEEP |
 | `MintEnrollmentTokenModal` | Dismiss Mint Modal Action (`dismiss-mint-modal-btn`) | Primary Action Button | Closes single-reveal view and purges token from React state. | Local modal state `handleClose` (Already Implemented on main via KAN-399: labeled 'Done'). | KEEP |
-| `agent/remote_runner/cli.py` | Server Base URL (`--server-url`) | CLI Option (Required string) | Base HTTPS URL of kanban server for daemon enrollment. | Mapped to `server_url` parameter in `enroll_runner()` (`cli.py:234`). | KEEP |
-| `agent/remote_runner/cli.py` | Token Stdin Flag (`--token-stdin`) | CLI Flag (store_true, required) | Enforces reading enrollment token from stdin to protect `/proc/<pid>/cmdline` from token leakage. | Mapped to `sys.stdin.read().strip()` in enroll handler (`cli.py:238`). | KEEP |
-| `agent/remote_runner/cli.py` | Runner Pool Slug (`--pool`) | CLI Option (Required string) | Pool identifier where daemon registers. | Mapped to `dest="pool_slug"` parameter in `enroll_runner()` (`cli.py:243`). | KEEP |
+| `agent/remote_runner/cli.py` | Server Base URL (`--server-url`) | CLI Option (Required string) | Base HTTPS URL of kanban server for daemon enrollment. | Mapped to `server_url` parameter in `enroll_runner()` (`cli.py:280/:320`). | KEEP |
+| `agent/remote_runner/cli.py` | Token Stdin Flag (`--token-stdin`) | CLI Flag (store_true, required) | Enforces reading enrollment token from stdin to protect `/proc/<pid>/cmdline` from token leakage. | Mapped to `sys.stdin.read().strip()` in enroll handler (`cli.py:287/:317`). | KEEP |
+| `agent/remote_runner/cli.py` | Runner Pool Slug (`--pool`) | CLI Option (Required string) | Pool identifier where daemon registers. | Mapped to `dest="pool_slug"` parameter in `enroll_runner()` (`cli.py:292/:322`). | KEEP |
 | `agent/remote_runner/cli.py` | State Directory (`--state-dir`) | CLI Option (Path) | Filesystem directory to store certificates, keys, and runner config. | Mapped to `default_runner_state_dir()` (Already Implemented on main via KAN-399: enforces `0o700`). | KEEP |
-| `agent/remote_runner/cli.py` | Node Hostname (`--hostname`) | CLI Option (String, optional) | Hostname used as Common Name in certificate signing request. | Mapped to `hostname` parameter in `enroll_runner()` (`cli.py:250`). | KEEP |
-| `agent/remote_runner/cli.py` | Server CA Bundle Path (`--ca-cert`) | CLI Option (Path, optional) | Path to server CA certificate bundle for custom TLS validation. | Mapped to `dest="ca_cert_path"` in `enroll_runner()` (`cli.py:251`). | KEEP |
+| `agent/remote_runner/cli.py` | Node Hostname (`--hostname`) | CLI Option (String, optional) | Hostname used as Common Name in certificate signing request. | Mapped to `hostname` parameter in `enroll_runner()` (`cli.py:299/:324`). | KEEP |
+| `agent/remote_runner/cli.py` | Server CA Bundle Path (`--ca-cert`) | CLI Option (Path, optional) | Path to server CA certificate bundle for custom TLS validation. | Mapped to `dest="ca_cert_path"` in `enroll_runner()` (`cli.py:301/:325`). | KEEP |
 | `agent/remote_runner/cli.py` | Config File (`run --config`) | CLI Option (Path) | Path to configuration YAML/TOML file for starting runner daemon. | Mapped to `default_runner_config_path()` (Already Implemented on main via KAN-399). | KEEP |
-| `agent/remote_runner/cli.py` | CLI Token Rejection Guard (`--token` flag rejection) | Security Invariant Guard | Immediately aborts with exit code 2 if `--token` is passed on CLI to prevent `/proc/<pid>/cmdline` exposure. | Pre-parsing argument loop check in `main()` (`cli.py:218-224`). | KEEP |
+| `agent/remote_runner/cli.py` | CLI Token Rejection Guard (`--token` flag rejection) | Security Invariant Guard | Immediately aborts with exit code 2 if `--token` is passed on CLI to prevent `/proc/<pid>/cmdline` exposure. | Pre-parsing argument loop check in `main()` (`cli.py:263-269`). | KEEP |
 | `kanban/ops/llms_txt.py` | Onboarding Prompt Template (`ONBOARDING_PROMPT_TEMPLATE`) | Formatted String Template | Canonical 1-click prompt instructing AI coding agents to read /llms.txt and conduct setup interview. | Served in `LlmsSkillsCatalogResponse` via `/api/v1/system/skills` (`llms_txt.py:51`). | KEEP |
 | `kanban/ops/llms_txt.py` | Compact llms.txt Template (`_LLMS_TXT_TEMPLATE`) | Markdown Document Template | Compact map providing platform overview, 3 MCP surfaces, and kanban-ticket rules. | Served at `/llms.txt` with ETag and byte budget enforcement (`llms_txt.py:269`). | KEEP |
 | `kanban/ops/llms_txt.py` | Workflow Setup Skill Axis 4 `[4C]` (`_SKILL_WORKFLOW_SETUP_MD`) | Skill Asset Markdown | Onboarding interview Axis 4 defining persistence scope option `[4C]` (Both Project & Global). | Served at `/llms-skills/kanban-workflow-setup.md` (`llms_txt.py:154`). | KEEP |
@@ -176,8 +176,8 @@ Dispositions are categorized as:
 
 ### 2.1 Inventory Disposition Summary
 
-- **Total Settings Cataloged:** 127
-- **KEEP:** 119 (93.7%)
+- **Total Settings Cataloged:** 128
+- **KEEP:** 120 (93.8%)
 - **SIMPLIFY:** 4 (3.1%)
 - **MOVE_TO_ADVANCED:** 4 (3.1%)
 - **MERGE:** 0 (0.0%)

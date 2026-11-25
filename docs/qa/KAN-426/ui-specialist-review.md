@@ -25,23 +25,25 @@ This review evaluated 100% of the UI screens, drawers, dialogs, form groups, and
 
 ## 2. Evaluation of Proposed Dispositions & UX Cuts
 
-The proposed cuts and simplifications in `docs/workouts/slice-5-workspace-project-workflows/01-audit-and-cuts.md` target real user friction points while honoring design tokens and ergonomics:
-1. **Timeout Configuration Presets (`WorkspaceSettingsPage.tsx`):**
-   Adding duration pills (`15m`, `30m`, `1h`, `4h` for idle up to 12h / 720m; `8h`, `24h`, `7d` for absolute) eliminates cognitive friction caused by raw minute numbers while retaining the exact underlying inputs.
-2. **Progressive Disclosure for Niche Policies:**
-   Moving `workspace-default-skip-loaded-seq-checkbox` and `project-skip-loaded-seq-checkbox` into collapsible `<AdvancedSection>` panels cleans up the primary form without losing functionality.
-3. **Static Callout Cleanup:**
-   Converting `workspace-webhook-restrictions` from a form group into an informational security card prevents users from expecting an editable input field.
-4. **State Reordering Ergonomics (`ProjectSettingsPage.tsx`):**
-   Introducing incremental `Move Up` and `Move Down` controls removes the clunky manual editing of numeric sort order fields.
-5. **WIP Limit Form Validation:**
-   Client-side validation ensuring `wip_soft_limit <= wip_hard_limit` prevents frustrating backend 400 rejection errors on submission.
-6. **Execution Tier Guidance (`CustomFieldDefinitionEditor.tsx`):**
-   Automatically disabling Tier B nsjail in standalone container environments with an explanatory badge eliminates broken runs and guides users toward Tier A WebAssembly.
-7. **Dual-Control Compliance Clarity (`EscalationApprovalPanel.tsx`):**
-   Explicitly displaying that the author cannot approve their own escalation request prevents confusion when the approve button is disabled.
-8. **DryRunDrawer Simulation Banner & Field Diff Display:**
-   Adding a prominent top banner asserting simulation isolation and a visual before/after field diff display in `DryRunDrawer.tsx` provides clear feedback on hook transformations without mutating live tickets.
+The genuine Phase 2 proposals in `docs/workouts/slice-5-workspace-project-workflows/01-audit-and-cuts.md` Sections 3 & 4 target real user friction points while honoring design tokens and ergonomics:
+1. **Timeout Configuration Presets & Informational Security Banner (`WorkspaceSettingsPage.tsx`):**
+   Adding duration pills (`15m`, `30m`, `1h`, `4h` for idle up to 12h / 720m; `8h`, `24h`, `7d` for absolute) eliminates cognitive friction, while converting `workspace-webhook-restrictions` from a static form group into an informational security callout clarifies read-only network restrictions.
+2. **Trash Retention Consolidation (`MERGE`):**
+   Consolidating duplicate trash retention controls from the Trash tab into the canonical General tab eliminates setting divergence and confusion.
+3. **Circular Hierarchy Prevention:**
+   Disabling member additions and highlighting invalid rows when circular group inheritance is detected prevents submission failures.
+4. **Project Settings Danger Zone & Priority Palette (`ProjectSettingsPage.tsx`):**
+   Adding a quick-select emoji palette for `priority-emoji-input`, and applying distinct color styling and blast radius counters to Stage 1 soft-delete (`mode="trash"`) versus Stage 2 permanent purge cards.
+5. **Custom Field Format Metadata Form & Tamper Diff Notice (`CustomFieldDefinitionEditor.tsx`):**
+   Providing structured inputs for text, number, and badge formats (with raw JSON fallback toggle) reduces schema syntax errors, while making the tamper warning alert display old versus new manifest SHA256 digests prior to saving.
+6. **Workflow Hook Kind Clarity & Mutable Field Toggles (`AttachHookDialog.tsx`):**
+   Adding descriptive copy differentiating `sync_validator`, `sync_mutator`, and `agent_interceptor` hooks, paired with quick "Select All" and "Clear All" toggles for authorized mutable fields.
+7. **DryRunDrawer Simulation Banner & Visual Field Diff (`DryRunDrawer.tsx`):**
+   Adding a prominent top banner asserting simulation isolation (`DRY-RUN SIMULATION: No database changes were committed.`) and a unified visual before-and-after field diff display for proposed mutations.
+8. **Git Repository Bare Mirror SSRF Hints (`GitRepoBindingsSection.tsx`):**
+   Providing informative error callouts explaining SSRF blocks on private/internal IP ranges and cloud metadata endpoints.
+9. **Timezone Auto-Detection & Passkey vs Security Key Terminology (`PersonalSettingsPage.tsx`):**
+   Adding an "Auto-Detect Timezone" button with search filter for `timezone-select`, and updating explanatory subtext distinguishing synced biometric Passkeys from physical hardware Security Keys.
 
 ---
 

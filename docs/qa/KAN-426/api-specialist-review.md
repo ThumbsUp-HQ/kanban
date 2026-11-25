@@ -52,7 +52,7 @@ The inventory table in `docs/workouts/slice-5-workspace-project-workflows/01-aud
 - MOVE_TO_ADVANCED: 0
 - CUT: 0
 
-The Rev-2 Phase 2 proposals (DryRunDrawer prominent top simulation banner and visual before/after field diff display, duration presets for timeouts, and client-side WIP validation) preserve full API payload parity and introduce zero breaking schema changes.
+The Rev-2/Rev-3 Phase 2 proposals (DryRunDrawer prominent top simulation banner and visual before/after field diff display, duration presets for timeouts, MERGE trash retention consolidation, priority emoji palette, format metadata schema form, tamper SHA256 diff notice, and Git SSRF hints) preserve full API payload parity and introduce zero breaking schema changes.
 
 ---
 
