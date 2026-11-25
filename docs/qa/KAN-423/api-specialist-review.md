@@ -38,13 +38,13 @@
 
 ### Test Suite & Code Quality Verification
 
-- **Backend Pytest Suite:** 193 passed in 65.68s with 95% total coverage across all changed modules (`deploy/standalone/pg_config.py` 100%, `kanban/api/v1/system_status.py` 97%, `kanban/ops/backup_service.py` 93%, `kanban/standalone/export_service.py` 95%).
-- **Frontend Vitest Suite:** 95 passed across 6 test suites in 5.84s with 95.87% branch coverage (`AdminDiagnosticsStudio.tsx` 93%, `LinkAuditorStudio.tsx` 96.84%, `PlaneImportStudio.tsx` 95.36%, `planeImportApi.ts` 100%, `ComposeExportTab.tsx` 100%, `StandaloneStatusPanel.tsx` 96.66%).
+- **Backend Pytest Suite:** 224 passed in 79.24s with 96% total coverage across all changed modules (`deploy/standalone/entrypoint.py` 95%, `deploy/standalone/pg_config.py` 100%, `kanban/api/v1/system_status.py` 96%, `kanban/ops/backup_service.py` 98%, `kanban/standalone/export_service.py` 95%).
+- **Frontend Vitest Suite:** 95 passed across 6 test suites in 5.31s with 95.87% branch coverage (`AdminDiagnosticsStudio.tsx` 93%, `LinkAuditorStudio.tsx` 96.84%, `PlaneImportStudio.tsx` 95.36%, `planeImportApi.ts` 100%, `ComposeExportTab.tsx` 100%, `StandaloneStatusPanel.tsx` 96.66%).
 - **Static Analysis & Linters:**
-  - `uv run ruff check kanban/ database/`: Clean (All checks passed, 0 errors, 0 warnings).
+  - `uv run ruff check kanban/ deploy/`: Clean (All checks passed, 0 errors, 0 warnings).
   - `pnpm --dir kanban/web typecheck`: Clean (0 errors).
   - `pnpm --dir kanban/web lint`: Clean (0 warnings).
-  - `pnpm --dir kanban/web build`: Clean (0 errors, 762 modules transformed).
+  - `pnpm --dir kanban/web build`: Clean (0 errors, 762 modules transformed in 1.22s).
 - **Prohibited Characters:** `python3 scripts/check_no_dashes.py --all` passed with exit code 0 (zero forbidden Unicode em/en-dashes).
 - **Forensic Packet:** 24 zero-mock Playwright screenshots verified across 5 responsive viewports.
 

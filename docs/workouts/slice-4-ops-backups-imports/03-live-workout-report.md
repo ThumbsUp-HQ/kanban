@@ -159,7 +159,7 @@ POST /api/v1/admin/standalone/backups/run-now HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"status": "success", "archive": "kanban-backup-20261125T131944Z.kbbak", "duration_seconds": 0.38}
+{"status": "success", "filename": "kanban-backup-20261125T131944Z.kbbak", "size_bytes": 985088, "duration_seconds": 0.38}
 ```
 - **Archive Verification:**
   - Executed `POST /api/v1/admin/standalone/backup/verify` with valid archive: returned HTTP 200, format version 1, 100 tables detected.
@@ -170,7 +170,7 @@ Content-Type: application/json
 {"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]"}
 
 HTTP/1.1 200 OK
-{"valid": true, "format": "kbbak", "tables_detected": 100, "alembic_head": "head"}
+{"valid": true, "format": "kbbak", "size_bytes": 985088, "manifest": {"version": 1, "format": "kbbak"}}
 ```
 - **Tamper Rejection (Bit-Flip):**
   - Modified byte offset 512 in the encrypted payload.
@@ -202,7 +202,7 @@ Content-Type: application/json
 {"filename": "kanban-backup-20261125T131944Z.kbbak", "passphrase": "[REDACTED]", "confirm_overwrite": "RESTORE"}
 
 HTTP/1.1 200 OK
-{"status": "success", "workspaces_verified": 1, "links_audited": 1, "duration_seconds": 4.88}
+{"status": "success", "message": "Database restored successfully", "workspaces_verified": 1, "links_audited": 1, "duration_seconds": 4.88}
 ```
 
 #### Workout C: Production 5-Network docker-compose.yml Export
@@ -248,7 +248,7 @@ POST /api/v1/admin/diagnostics/probes/realtime HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"db_query_latency_ms": 0.22, "listen_notify_rtt_ms": 0.38, "status": "healthy"}
+{"success": true, "db_latency_ms": 0.22, "notify_rtt_ms": 0.38, "channel": "kb_diag_7b3a4f1e9c20", "message": "PostgreSQL LISTEN/NOTIFY probe succeeded"}
 ```
 - **Live WebSocket Ping Probe (Playwright Chromium):**
   - Real browser connected to `ws://127.0.0.1:18923/ws`.
@@ -319,7 +319,7 @@ All 24 screenshots were captured using Playwright Chromium against the live cont
 | 21 | `slice4-imports-multi-source-tabs.png` | 1440x900 | Active Source Selection Flow | PASS: Visual proof of source selection and user mapping input |
 | 22 | `slice4-standalone-backups-snapshot-history.png` | 1440x900 | Backup Snapshots Table | PASS: Snapshot history table populated with download actions |
 | 23 | `slice4-diagnostics-realtime-probe-active.png` | 1440x900 | Active Realtime Probe RTT | PASS: Live roundtrip latency metrics displayed in badge |
-| 24 | `slice4-link-auditor-integrity-scan-active.png` | 1440x900 | Link Integrity Scan Triggered | PASS: Scan progress indicator and zero broken links confirmation |
+| 24 | `slice4-link-auditor-integrity-scan-active.png` | 1440x900 | Link Integrity Scan Triggered | PASS: Scan completed banner and 2 flagged invalid links (Dangling Target, Soft-Deleted Endpoint) rendered in table |
 
 Screenshots are mirrored in:
 - `docs/workouts/slice-4-ops-backups-imports/screenshots/`
@@ -330,21 +330,22 @@ Screenshots are mirrored in:
 ### Automated Test Coverage & Static Gates
 
 - **Unit Test Execution (`docs/qa/KAN-423/unit-test-results.txt`):**
-  - Pytest Backend Suites: **193 passed in 65.68s** (100% pass rate, 95% total coverage across changed modules).
-  - Vitest Frontend Suites: **95 passed in 5.84s** across 6 suites (100% pass rate, 95.87% branch coverage).
+  - Pytest Backend Suites: **224 passed in 79.24s** (100% pass rate, 96% total coverage across changed modules).
+  - Vitest Frontend Suites: **95 passed in 5.31s** across 6 suites (100% pass rate, 95.87% branch coverage).
   - Component Coverage:
+    - `deploy.standalone.entrypoint`: 95% Coverage.
     - `deploy.standalone.pg_config`: 100% Coverage.
-    - `kanban.api.v1.system_status`: 97% Coverage.
-    - `kanban.ops.backup_service`: 93% Coverage.
+    - `kanban.api.v1.system_status`: 96% Coverage.
+    - `kanban.ops.backup_service`: 98% Coverage.
     - `kanban.standalone.export_service`: 95% Coverage.
     - `admin-imports`: 100% Statements, 95.8% Branches, 100% Functions, 100% Lines.
     - `standalone`: 99.33% Statements, 97.18% Branches, 98.21% Functions, 99.65% Lines.
 - **Static Analysis & Build Verification (`docs/qa/KAN-423/build-check.txt`):**
-  - Ruff Linter: `uv run ruff check kanban/ database/` -> All checks passed (0 warnings, 0 errors).
+  - Ruff Linter: `uv run ruff check kanban/ deploy/` -> All checks passed (0 warnings, 0 errors).
   - No Dashes Check: `python3 scripts/check_no_dashes.py --all` -> Exited 0 with 0 Unicode dashes.
   - TypeScript Typecheck: `tsc -b --noEmit` -> Exited 0.
   - ESLint: `eslint . --max-warnings 0` -> Exited 0.
-  - Vite Production Build: `vite build` -> Exited 0 in 1.21s.
+  - Vite Production Build: `vite build` -> Exited 0 in 1.22s.
 
 ---
 

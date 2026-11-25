@@ -46,11 +46,15 @@
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .link-auditor-btn {
-  height: 38px;
-  padding: 0 16px;
+  height: auto;
+  min-height: 44px;
+  padding: 8px 14px;
+  line-height: 1.25;
+  white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 600;
   border-radius: 6px;
@@ -61,7 +65,6 @@
   justify-content: center;
   gap: 8px;
   transition: background-color 0.15s ease, border-color 0.15s ease;
-  min-height: 44px;
   min-width: 44px;
 }
 
@@ -694,12 +697,18 @@
   .link-auditor-header__actions {
     width: 100%;
     display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
     justify-content: stretch;
   }
 
   .link-auditor-header__actions .link-auditor-btn {
-    flex: 1;
+    flex: 1 1 100%;
     min-height: var(--tap-min, 44px);
+    height: auto;
+    padding: 8px 14px;
+    line-height: 1.25;
+    white-space: nowrap;
     justify-content: center;
   }
 

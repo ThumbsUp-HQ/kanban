@@ -16,9 +16,10 @@ import json
 import os
 import subprocess
 import tarfile
+from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -44,6 +45,8 @@ from kanban.ops.backup_crypto import (
     encrypt_stream,
 )
 from kanban.ops.backup_service import (
+    CANONICAL_PG_DUMP_PATH,
+    CANONICAL_PG_RESTORE_PATH,
     BackupError,
     BackupManifest,
     RestoreError,
@@ -79,7 +82,6 @@ from kanban.standalone.export_service import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from typing import Any
 
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -733,3 +735,143 @@ def test_backup_service_additional_coverage_branches(tmp_path: Path) -> None:
         pytest.raises(RestoreError, match=r"pg_restore execution failed \(exit code 2\)"),
     ):
         _execute_pg_restore("pg_restore", "postgresql://localhost/db", tmp_path / "dump.pgdump")
+
+
+@pytest.mark.asyncio
+async def test_backup_service_health_verification_failures() -> None:
+    """Test _verify_post_restore_invariants error branches."""
+    manifest = MagicMock(spec=BackupManifest)
+    manifest.alembic_revision = None
+
+    def _make_mock_engine(
+        *,
+        chain_valid: bool = True,
+        broken_count: int = 0,
+        rls_active: bool = True,
+    ) -> MagicMock:
+        mock_conn = AsyncMock()
+
+        async def _exec(statement: object, params: object = None) -> object:
+            _ = params
+            sql_text = str(getattr(statement, "text", statement))
+            if "SELECT id FROM workspaces" in sql_text:
+                mock_res = MagicMock()
+                mock_res.scalars.return_value.all.return_value = ["ws-1"]
+                return mock_res
+            if "verify_activity_chain" in sql_text:
+                mock_res = MagicMock()
+                mock_res.mappings.return_value.one.return_value = {
+                    "is_valid": chain_valid,
+                    "failure_reason": None if chain_valid else "Hash mismatch at sequence 4",
+                }
+                return mock_res
+            if "audit_object_links" in sql_text:
+                mock_res = MagicMock()
+                mock_res.scalar.return_value = broken_count
+                return mock_res
+            if "relforcerowsecurity" in sql_text or "relrowsecurity" in sql_text:
+                mock_res = MagicMock()
+                mock_res.fetchall.return_value = [("issues", rls_active, rls_active)]
+                return mock_res
+            return AsyncMock()
+
+        mock_conn.execute.side_effect = _exec
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value.__aenter__.return_value = mock_conn
+        mock_engine.dispose = AsyncMock()
+        return mock_engine
+
+    # 1. Activity chain invalid
+    engine1 = _make_mock_engine(chain_valid=False)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine1),
+        pytest.raises(RestoreVerificationError, match=r"Activity chain verification failed"),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+    # 2. Audit object links broken count > 0
+    engine2 = _make_mock_engine(chain_valid=True, broken_count=5)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine2),
+        pytest.raises(
+            RestoreVerificationError, match=r"audit_object_links discovered 5 broken links"
+        ),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+    # 3. FORCE ROW LEVEL SECURITY inactive
+    engine3 = _make_mock_engine(chain_valid=True, broken_count=0, rls_active=False)
+    with (
+        patch("kanban.ops.backup_service.create_async_engine", return_value=engine3),
+        pytest.raises(
+            RestoreVerificationError, match=r"FORCE ROW LEVEL SECURITY is inactive on table issues"
+        ),
+    ):
+        await _verify_post_restore_invariants("postgresql+asyncpg://app@/kanban", manifest)
+
+
+def test_bin_resolvers_full_fallbacks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Test resolve_pg_dump_bin and resolve_pg_restore_bin fallbacks."""
+    _ = tmp_path
+    monkeypatch.delenv("KB_PG_DUMP_BIN", raising=False)
+    monkeypatch.delenv("KB_PG_RESTORE_BIN", raising=False)
+
+    # When canonical file exists
+    with patch("pathlib.Path.is_file", return_value=True):
+        assert resolve_pg_dump_bin() == CANONICAL_PG_DUMP_PATH
+        assert resolve_pg_restore_bin() == CANONICAL_PG_RESTORE_PATH
+
+    # When canonical does not exist, but shutil.which finds binary
+    with (
+        patch("pathlib.Path.is_file", return_value=False),
+        patch("shutil.which", side_effect=lambda name: f"/custom/bin/{name}"),
+    ):
+        assert resolve_pg_dump_bin() == "/custom/bin/pg_dump"
+        assert resolve_pg_restore_bin() == "/custom/bin/pg_restore"
+
+    # When which fails, but fallback /usr/bin exists
+    def mock_is_file(self: Path) -> bool:
+        return "/usr/bin/pg_" in str(self)
+
+    with (
+        patch.object(Path, "is_file", mock_is_file),
+        patch("shutil.which", return_value=None),
+    ):
+        assert resolve_pg_dump_bin() == "/usr/bin/pg_dump"
+        assert resolve_pg_restore_bin() == "/usr/bin/pg_restore"
+
+
+@pytest.mark.asyncio
+async def test_export_service_edge_cases(tmp_path: Path) -> None:
+    """Test get_standalone_status probe exception fallback and run_pg_dump URL parsing."""
+    # 1. get_standalone_status probe failure fallback
+    with (
+        patch("kanban.standalone.export_service.probe", side_effect=RuntimeError("probe error")),
+        patch.dict(os.environ, {"KANBAN_DEPLOYMENT_MODE": "standalone_embedded_pg"}),
+    ):
+        status = get_standalone_status(status_path=tmp_path / "nonexistent.json")
+        assert status["deployment_mode"] == "standalone_embedded_pg"
+        assert status["tier_b_sandbox_available"] is False
+
+    # 2. run_pg_dump with database_url parsing (host, port, user, password, db)
+    mock_proc = AsyncMock()
+    mock_proc.communicate.return_value = (b"DUMP_DATA", b"")
+    mock_proc.returncode = 0
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+        data = await run_pg_dump(
+            database_url="postgresql://custom_user:custom_pass@custom_host:5433/custom_db",
+            socket_dir=None,
+        )
+        assert data == b"DUMP_DATA"
+        call_args = mock_exec.call_args
+        args = call_args[0]
+        assert "-U" in args
+        assert "custom_user" in args
+        assert "-d" in args
+        assert "custom_db" in args
+        assert "-h" in args
+        assert "custom_host" in args
+        assert "-p" in args
+        assert "5433" in args
+        assert call_args[1]["env"]["PGPASSWORD"] == "custom_pass"
+
