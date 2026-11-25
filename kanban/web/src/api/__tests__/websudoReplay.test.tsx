@@ -55,7 +55,7 @@ vi.mock('../../features/auth/SecondFactorStep', () => ({
 
 afterEach(() => {
   cleanup();
-  registerAal2StepUpHandler(null as never);
+  registerAal2StepUpHandler(null);
   vi.restoreAllMocks();
 });
 
@@ -292,7 +292,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    const { unmount } = render(
+    render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -349,7 +349,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    const { unmount } = render(
+    render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -391,7 +391,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
       value: { assign: assignMock, search: '', href: 'http://localhost/' },
     });
 
-    const { unmount } = render(
+    render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -476,7 +476,7 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
     vi.useRealTimers();
     const qc = new QueryClient();
 
-    const { unmount } = render(
+    render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,
@@ -868,7 +868,7 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     };
     window.addEventListener('kb:aal2-expires-at', expiresListener);
 
-    const { unmount } = render(
+    render(
       <QueryClientProvider client={qc}>
         <WebSudoModalHost />
       </QueryClientProvider>,

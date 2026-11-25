@@ -712,10 +712,12 @@ def test_entrypoint_main_flows(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     with (
         patch("deploy.standalone.entrypoint.probe"),
         patch("deploy.standalone.entrypoint.write_standalone_status"),
-        patch("os.execv") as mock_execv,
+        patch("os.execv", side_effect=SystemExit(0)) as mock_execv,
+        pytest.raises(SystemExit) as exc_ext,
     ):
         entrypoint_main()
-        assert mock_execv.called
+    assert exc_ext.value.code == 0
+    assert mock_execv.called
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     # 2. Non-root user rejection (exit 78)

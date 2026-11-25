@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -45,6 +46,7 @@ def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
         workspace_id=user.workspace_id,
         token_scopes=("session",),
         aal_level=2,
+        aal2_verified_at=datetime.now(UTC),
     )
     return api_env.client
 
