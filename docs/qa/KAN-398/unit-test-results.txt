@@ -1,0 +1,85 @@
+=======================================================================
+PYTEST: KAN-398 Backend & Migration Unit Tests
+=======================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan398-54b76162/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan398-54b76162
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 4 items
+
+kanban/tests/auth/test_admin_auth_cards_access.py::test_app_principal_has_role_sql_server_admin_without_workspace PASSED [ 25%]
+kanban/tests/auth/test_admin_auth_cards_access.py::test_app_principal_has_role_sql_workspace_and_project_scoping PASSED [ 50%]
+kanban/tests/auth/test_admin_auth_cards_access.py::test_admin_auth_cards_endpoint_access_matrix PASSED [ 75%]
+database/tests/migrations/test_p6_17_server_admin_role_access_migration.py::test_p6_17_server_admin_role_access_migration_lifecycle PASSED [100%]
+
+============================== 4 passed in 1.48s ===============================
+
+=======================================================================
+VITEST: KAN-398 Frontend Unit Tests and Coverage
+=======================================================================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan398-54b76162/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/api/problem.test.ts (11 tests) 12ms
+ ✓ src/app/__tests__/MenuConsolidation.test.tsx (9 tests) 407ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (50 tests) 7237ms
+   ✓ AuthStudioPage (KB-P3-36) (50)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 352ms
+     ✓ opens drawer to add a new auth card and appends created card 729ms
+     ✓ opens drawer to edit an existing card and updates it 314ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 360ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 582ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ opens Reset Password modal and resets user password 356ms
+       ✓ covers role change in add user modal and cancelling reset password modal 369ms
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 834ms
+
+ Test Files  3 passed (3)
+      Tests  70 passed (70)
+   Start at  00:53:05
+   Duration  8.68s (tests 68%, environment 19%, import 9%, transform 4%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.62 |    95.82 |   99.15 |     100 |                   
+ api               |     100 |      100 |     100 |     100 |                   
+  problem.ts       |     100 |      100 |     100 |     100 |                   
+ features/admin    |     100 |      100 |     100 |     100 |                   
+  ...dioSubnav.tsx |     100 |      100 |     100 |     100 |                   
+ ...res/admin-auth |   98.41 |    94.88 |   99.01 |     100 |                   
+  ...tudioPage.tsx |   98.41 |    94.88 |   99.01 |     100 | ...94,599,605,627 
+-------------------|---------|----------|---------|---------|-------------------
+
+=======================================================================
+PLAYWRIGHT: KAN-398 E2E Screenshot Verification Suite
+=======================================================================
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 15 tests using 10 workers
+
+  ✓   1 [desktop] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:287:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 03-subnav-workspace-admin: captures server tabs filtered out for non-server admin (2.2s)
+  ✓  10 [mobile-landscape] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:234:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 01-mfa-enrollment-banner: captures light and dark across viewports (2.0s)
+  ✓   3 [desktop] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:234:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 01-mfa-enrollment-banner: captures light and dark across viewports (2.3s)
+  ✓   7 [mobile] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:234:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 01-mfa-enrollment-banner: captures light and dark across viewports (2.1s)
+  ✓   6 [tablet] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:234:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 01-mfa-enrollment-banner: captures light and dark across viewports (2.2s)
+  ✓   8 [mobile] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:287:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 03-subnav-workspace-admin: captures server tabs filtered out for non-server admin (2.2s)
+  ✓   5 [desktop] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:260:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 02-subnav-server-admin: captures all 8 tabs visible for server admin (2.4s)
+  ✓   2 [mobile] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:260:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 02-subnav-server-admin: captures all 8 tabs visible for server admin (2.5s)
+  ✓   4 [tablet] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:260:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 02-subnav-server-admin: captures all 8 tabs visible for server admin (2.4s)
+  ✓   9 [tablet] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:287:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 03-subnav-workspace-admin: captures server tabs filtered out for non-server admin (2.3s)
+  ✓  11 [mobile-landscape] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:287:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 03-subnav-workspace-admin: captures server tabs filtered out for non-server admin (1.2s)
+  ✓  13 [tablet-portrait] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:234:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 01-mfa-enrollment-banner: captures light and dark across viewports (1.4s)
+  ✓  12 [mobile-landscape] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:260:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 02-subnav-server-admin: captures all 8 tabs visible for server admin (1.5s)
+  ✓  14 [tablet-portrait] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:287:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 03-subnav-workspace-admin: captures server tabs filtered out for non-server admin (1.5s)
+  ✓  15 [tablet-portrait] › e2e/qa/kan-398-admin-auth-access-screenshots.spec.ts:260:3 › KAN-398 Visual Verification: Admin Auth Access and MFA Banner › 02-subnav-server-admin: captures all 8 tabs visible for server admin (1.5s)
+
+  15 passed (35.5s)

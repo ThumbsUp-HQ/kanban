@@ -107,6 +107,11 @@ export function isAal2StepUpCode(code: unknown): boolean {
   return typeof code === 'string' && /^AAL2_(?:REQUIRED|STALE)$/.test(code);
 }
 
+/** True for MFA_ENROLLMENT_REQUIRED problem code (KAN-398). */
+export function isMfaEnrollmentRequiredCode(code: unknown): boolean {
+  return typeof code === 'string' && code === 'MFA_ENROLLMENT_REQUIRED';
+}
+
 /** Dispatches global kb:open-aal2-stepup event when err is an AAL2 ApiProblem (KAN-393). */
 export function dispatchAal2StepUpIfRequired(err: unknown): boolean {
   if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
