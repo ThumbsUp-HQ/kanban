@@ -44,7 +44,7 @@
   - `uv run ruff check kanban/ deploy/`: Clean (All checks passed, 0 errors, 0 warnings).
   - `pnpm --dir kanban/web typecheck`: Clean (0 errors).
   - `pnpm --dir kanban/web lint`: Clean (0 warnings).
-  - `pnpm --dir kanban/web build`: Clean (0 errors, 762 modules transformed in 1.22s).
+  - `pnpm --dir kanban/web build`: Clean (0 errors, 762 modules transformed in 1.19s).
 - **Prohibited Characters:** `python3 scripts/check_no_dashes.py --all` passed with exit code 0 (zero forbidden Unicode em/en-dashes).
 - **Forensic Packet:** 24 zero-mock Playwright screenshots verified across 5 responsive viewports.
 

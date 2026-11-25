@@ -2,7 +2,7 @@
 ## Phase 3 Live Container Verification & Forensic Workout Report (`KAN-423`)
 
 - **Author:** `b-kan423` (Swarm Agent)
-- **Target Branch:** git branch `feat/KAN-423-slice4-live-workout` (created from `main` at `0a204b9f`)
+- **Target Branch:** git branch `feat/KAN-423-slice4-live-workout` (base `0a204b9f`, code commit `e2a028c0`)
 - **Parent Epic:** `KAN-420` (`[EPIC][SLICE-4-OPS-BACKUPS-IMPORTS]`)
 - **Preceding Phase Tickets:** `KAN-421` (Phase 1 Read-Only Inventory and Simplification Audit), `KAN-422` (Phase 2 UI Simplification & Wiring)
 - **Downstream Phase Ticket:** `KAN-424` (Phase 4 Wiki Documentation & Runbooks)
@@ -29,9 +29,9 @@ Phase 3 (`KAN-423`) executes end-to-end live container verification, in-flight b
    - Validated custom `user_map` JSON resolution.
    - Proved atomic rollback on malformed input (HTTP 422 with zero partial database mutations).
    - Proved legacy issue key alias resolution and 308 permanent redirect (`JIRA-101` -> `KAN-1`, `GH-88` -> `KAN-3`, `ENG-42` -> `KAN-5`).
-2. **Workout B (Standalone Encrypted `.kbbak` Backup, Tamper Rejection & Clean Restore):**
-   - Created valid encrypted backup archive via `POST /api/v1/admin/standalone/backup` (`KBBAK1` AES-256-GCM framing, 962 KB).
-   - Triggered automated background snapshot via `POST /api/v1/admin/standalone/backups/run-now` (HTTP 200).
+2. **Workout B (Standalone Encrypted Backup, Tamper Rejection & Clean Restore):**
+   - Created valid encrypted backup archive via `POST /api/v1/admin/standalone/backup` (`KBKP` AES-256-GCM framing).
+   - Triggered automated background snapshot via `POST /api/v1/admin/standalone/backups/run-now` (`KBBAK1` AES-256-GCM tar archive `kanban-backup-20261125T144207Z.kbbak`, 1,054,822 bytes / 1030.1 KB).
    - Verified backup archive integrity via `POST /api/v1/admin/standalone/backup/verify` (HTTP 200).
    - Proved cryptographic tamper resistance: single-bit ciphertext modification rejected with HTTP 422 before database execution.
    - Proved wrong passphrase rejection (HTTP 422).
@@ -108,14 +108,14 @@ HTTP/1.1 200 OK
 POST /api/v1/admin/imports/jira HTTP/1.1
 Host: 127.0.0.1:18923
 Content-Type: application/json
-{"bundle_data": {"corrupted": "schema"}, "project_key": "JIRA", "dry_run": false}
+{"bundle_data": {"issues": [{"key": "JIRA-101", "summary": "Hostile Attachment", "attachments": [{"filename": "../etc/passwd", "content_base64": "cm9vdD..."}]}]}, "project_key": "JIRA", "dry_run": false}
 
-HTTP/1.1 422 Unprocessable Entity
-{"code": "IMPORT_INTEGRITY_FAILED", "detail": "Bundle validation failed: missing mandatory issue definitions"}
+HTTP/1.1 422 Unprocessable Content
+{"code": "IMPORT_INTEGRITY_FAILED", "detail": "Path traversal detected in attachment filename: ../etc/passwd"}
 ```
 - **Legacy Issue Key Resolution & Permanent Redirect:**
   - `GET /api/v1/issues/JIRA-101` -> HTTP 200 resolving to canonical issue `KAN-1`.
-  - `GET /projects/KAN/issues/JIRA-101` -> HTTP 308 redirecting to `/projects/KAN/issues/KAN-1`.
+  - `GET /api/v1/issues/JIRA-101` (Accept: text/html) -> HTTP 308 redirecting to `/projects/KAN/issues/KAN-1`.
   - `GET /api/v1/issues/GH-88` -> HTTP 200 resolving to `KAN-3`.
   - `GET /api/v1/issues/ENG-42` -> HTTP 200 resolving to `KAN-5`.
 ```http
@@ -123,7 +123,7 @@ GET /api/v1/issues/JIRA-101 HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"id": "01a212a8-1001-7000-8000-000000000001", "object_id": "01a212a8-1001-7000-8000-000000000001", "key": "KAN-1", "summary": "Parent Jira Epic for Workout A", "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "state": {"id": "01a212a8-0001-7000-8000-000000000001", "name": "Backlog", "category": "backlog"}}
+{"id": "01a212a8-1001-7000-8000-000000000001", "object_id": "01a212a8-1001-7000-8000-000000000001", "key": "KAN-1", "summary": "Parent Jira Epic for Workout A", "description_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "state": {"id": "01a212a8-0001-7000-8000-000000000001", "name": "Backlog", "group": "backlog", "color_hex": "#64748b"}}
 ```
 ```http
 GET /api/v1/issues/JIRA-101 HTTP/1.1
@@ -138,7 +138,7 @@ Location: /projects/KAN/issues/KAN-1
 - **Manual Backup Generation:**
   - Executed `POST /api/v1/admin/standalone/backup` with 32-character passphrase.
   - Response: HTTP 200 with `content-type: application/octet-stream`.
-  - Archive Size: 1,054,822 bytes (1030.1 KB). Magic header verified: `KBBAK1` (AES-256-GCM).
+  - Archive Size: 985,088 bytes. Magic header verified: `KBKP` (AES-256-GCM).
 ```http
 POST /api/v1/admin/standalone/backup HTTP/1.1
 Host: 127.0.0.1:18923
@@ -147,7 +147,7 @@ Content-Type: application/json
 
 HTTP/1.1 200 OK
 Content-Type: application/octet-stream
-[KBBAK1 AES-256-GCM 1,054,822 bytes]
+[KBKP AES-256-GCM 985,088 bytes]
 ```
 - **Automated Snapshot Trigger:**
   - Executed `POST /api/v1/admin/standalone/backups/run-now`.
@@ -157,7 +157,7 @@ POST /api/v1/admin/standalone/backups/run-now HTTP/1.1
 Host: 127.0.0.1:18923
 
 HTTP/1.1 200 OK
-{"status": "success", "archive": "kanban-backup-20261125T144207Z.kbbak", "duration_seconds": 0.38}
+{"status": "success", "archive": "kanban-backup-20261125T144207Z.kbbak", "size_bytes": 1054822, "duration_seconds": 0.38}
 ```
 - **Archive Verification:**
   - Executed `POST /api/v1/admin/standalone/backup/verify` with valid archive: returned HTTP 200, format version 1, 100 tables detected.
@@ -343,7 +343,7 @@ Screenshots are mirrored in:
   - No Dashes Check: `python3 scripts/check_no_dashes.py --all` -> Exited 0 with 0 Unicode dashes.
   - TypeScript Typecheck: `tsc -b --noEmit` -> Exited 0.
   - ESLint: `eslint . --max-warnings 0` -> Exited 0.
-  - Vite Production Build: `vite build` -> Exited 0 in 1.22s.
+  - Vite Production Build: `vite build` -> Exited 0 in 1.19s.
 
 ---
 
