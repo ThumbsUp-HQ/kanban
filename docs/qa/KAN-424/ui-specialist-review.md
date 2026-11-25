@@ -64,14 +64,14 @@ All 30 screenshots visually inspected via `read_file` confirming zero text clipp
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - `src/features/docs-center/__tests__/DocsCenter.test.tsx` & `DocsCenterImages.test.tsx`: 70 passed in 6.60s with 0 warnings.
+  - `src/features/docs-center/__tests__/DocsCenter.test.tsx` & `DocsCenterImages.test.tsx`: 70 passed in 6.57s with 0 warnings.
   - Coverage: 99.6% Statements, 96.44% Branches, 100% Lines.
 - **Backend Pytest Parity Suite**:
   - `kanban/tests/test_wiki_bundle_sync.py`: 7 passed in 0.12s. Verified 100% image parity (95 images matching SHA-256) and 0 unreferenced orphans.
 - **Playwright Visual Verification**:
-  - `e2e/qa/kan-424-slice4-docs-screenshots.spec.ts`: 1 passed capturing 30 unclipped multi-viewport screenshots and validating 0 horizontal overflow at 390px.
+  - `e2e/qa/kan-424-slice4-docs-screenshots.spec.ts`: 5 passed in 58.3s capturing 30 unclipped multi-viewport screenshots and validating 0 horizontal overflow at 390px.
 - **Offline Wiki Bundle Sync**:
-  - `scripts/sync_wiki_bundle.py`: 34 chapters synced into `wikiManifest.ts` (570,546 bytes) and 95 images copied into `public/docs-images/`.
+  - `scripts/sync_wiki_bundle.py`: 34 chapters synced into `wikiManifest.ts` (571,296 bytes) and 95 images copied into `public/docs-images/`.
   - Zero broken UI doc links across all 8 Slice-4 help links (`docHref` verification passed).
 - **Static Quality & Build Gates**:
   - `check_no_dashes.py --all`: 0 violations.
