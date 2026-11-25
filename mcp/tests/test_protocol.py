@@ -16,6 +16,8 @@ from starlette.routing import Route
 from mcp.app import create_mcp_app
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.protocol import (
+    PROTOCOL_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS,
     InMemorySessionStore,
     McpProtocolHandler,
     _format_flag_val,
@@ -522,7 +524,7 @@ async def test_method_not_allowed_and_tool_result_types(mcp_client: httpx.AsyncC
         # PUT reaches handler.handle_request line 180
         resp_put = await client.put("/mcp/agent")
         assert resp_put.status_code == 405
-        assert resp_put.headers.get("allow") == "POST, DELETE"
+        assert resp_put.headers.get("allow") == "POST, DELETE, HEAD"
 
         # Initialize
         init_res = await client.post(
@@ -1172,3 +1174,72 @@ async def test_case_13_protocol_coverage_exhaustion() -> None:
     handler._validate_tool_arguments_schema(
         spec_schema, {"mandatory": "ok", "nullable_str": None, "bad_prop": 123}
     )
+
+
+@pytest.mark.asyncio
+async def test_mcp_protocol_version_negotiation_and_http_methods(
+    mcp_client: httpx.AsyncClient,
+) -> None:
+    """Verify MCP protocol version negotiation and HTTP method conformance."""
+    # 1. HEAD returns 200 OK with correct headers and empty body
+    head_resp = await mcp_client.head("/mcp/agent")
+    assert head_resp.status_code == 200
+    assert "POST" in head_resp.headers.get("allow", "")
+    assert head_resp.headers.get("content-type") == "application/json"
+    assert head_resp.text == ""
+
+    # 2. GET returns 405 Method Not Allowed
+    get_resp = await mcp_client.get("/mcp/agent")
+    assert get_resp.status_code == 405
+    assert "POST" in get_resp.headers.get("allow", "")
+
+    # 3. PUT returns 405 Method Not Allowed
+    put_resp = await mcp_client.put("/mcp/agent")
+    assert put_resp.status_code == 405
+    assert "POST" in put_resp.headers.get("allow", "")
+
+    # 4. Protocol version negotiation across all supported versions
+    for proto in sorted(SUPPORTED_PROTOCOL_VERSIONS):
+        resp = await mcp_client.post(
+            "/mcp/agent",
+            headers={"mcp-protocol-version": proto},
+            json={
+                "jsonrpc": "2.0",
+                "id": f"init-{proto}",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": proto,
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-client", "version": "1.0.0"},
+                },
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["result"]["protocolVersion"] == proto
+
+    # 5. Unsupported mcp-protocol-version header returns 400
+    bad_header_resp = await mcp_client.post(
+        "/mcp/agent",
+        headers={"mcp-protocol-version": "2024-11-05"},
+        json={"jsonrpc": "2.0", "id": "init-bad", "method": "initialize"},
+    )
+    assert bad_header_resp.status_code == 400
+    assert "Unsupported MCP-Protocol-Version" in bad_header_resp.text
+
+    # 6. Unknown protocolVersion in params falls back to PROTOCOL_VERSION
+    fallback_resp = await mcp_client.post(
+        "/mcp/agent",
+        json={
+            "jsonrpc": "2.0",
+            "id": "init-fallback",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "unknown-proto-9999",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0.0"},
+            },
+        },
+    )
+    assert fallback_resp.status_code == 200
+    assert fallback_resp.json()["result"]["protocolVersion"] == PROTOCOL_VERSION

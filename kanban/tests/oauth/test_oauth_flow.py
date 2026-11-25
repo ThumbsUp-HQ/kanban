@@ -2516,13 +2516,13 @@ async def test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect(  
         assert resp_head.status_code == 200
         assert "POST" in resp_head.headers.get("allow", "")
 
-        # GET probe succeeds with 200 status payload
+        # GET probe returns 405 Method Not Allowed per MCP Streamable HTTP spec
         resp_get = await mcp_client.get(
             f"/mcp/agent/w/{ws_slug}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-        assert resp_get.status_code == 200
-        assert resp_get.json()["status"] == "ok"
+        assert resp_get.status_code == 405
+        assert "POST" in resp_get.headers.get("allow", "")
 
         # POST initialize succeeds and returns Mcp-Session-Id
         init_resp = await mcp_client.post(
@@ -2794,12 +2794,13 @@ async def test_gemini_oauth_cross_workspace_scoping_and_mcp_gates(  # noqa: PLR0
         )
         assert resp_h.status_code == 200
 
-        # GET probe 200 OK
+        # GET probe returns 405 Method Not Allowed per MCP Streamable HTTP spec
         resp_g = await mcp_b.get(
             f"/mcp/agent/w/{ws_kanban_slug}",
             headers={"Authorization": f"Bearer {token_b}"},
         )
-        assert resp_g.status_code == 200
+        assert resp_g.status_code == 405
+        assert "POST" in resp_g.headers.get("allow", "")
 
         # POST initialize 200 OK
         resp_init_b = await mcp_b.post(

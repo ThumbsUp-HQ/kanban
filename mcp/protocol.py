@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PROTOCOL_VERSION",
+    "SUPPORTED_PROTOCOL_VERSIONS",
     "UNTRUSTED_TAINT_BLOCKED_TOOLS",
     "InMemorySessionStore",
     "McpProtocolHandler",
@@ -51,6 +52,9 @@ __all__ = [
 ]
 
 PROTOCOL_VERSION: Final[str] = "2025-06-18"
+SUPPORTED_PROTOCOL_VERSIONS: Final[frozenset[str]] = frozenset(
+    {"2025-11-25", "2025-06-18", "2025-03-26"}
+)
 
 UNTRUSTED_TAINT_BLOCKED_TOOLS: Final[frozenset[str]] = frozenset(
     {
@@ -332,25 +336,18 @@ class McpProtocolHandler:
             return Response(
                 "",
                 status_code=200,
-                headers={"Content-Type": "application/json", "Allow": "POST, DELETE, GET, HEAD"},
-            )
-
-        if request.method == "GET":
-            return JSONResponse(
-                {"status": "ok", "service": "kanban-mcp", "protocol": "2025-06-18"},
-                status_code=200,
-                headers={"Allow": "POST, DELETE, GET, HEAD"},
+                headers={"Content-Type": "application/json", "Allow": "POST, DELETE, HEAD"},
             )
 
         if request.method not in ("POST", "DELETE"):
             return Response(
                 f"Method {request.method} not allowed",
                 status_code=405,
-                headers={"Allow": "POST, DELETE, GET, HEAD"},
+                headers={"Allow": "POST, DELETE, HEAD"},
             )
 
         proto_ver = request.headers.get("mcp-protocol-version")
-        if proto_ver is not None and proto_ver != PROTOCOL_VERSION:
+        if proto_ver is not None and proto_ver not in SUPPORTED_PROTOCOL_VERSIONS:
             return Response(
                 f"Unsupported MCP-Protocol-Version '{proto_ver}', expected '{PROTOCOL_VERSION}'",
                 status_code=400,
@@ -673,8 +670,15 @@ class McpProtocolHandler:
             ):
                 list_changed = False
 
+        req_proto = params.get("protocolVersion") if isinstance(params, dict) else None
+        negotiated_proto = (
+            req_proto
+            if isinstance(req_proto, str) and req_proto in SUPPORTED_PROTOCOL_VERSIONS
+            else PROTOCOL_VERSION
+        )
+
         result: dict[str, Any] = {
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": negotiated_proto,
             "capabilities": {
                 "tools": {
                     "listChanged": list_changed,

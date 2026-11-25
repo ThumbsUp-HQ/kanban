@@ -1,21 +1,22 @@
-=== Ruff Check ===
+=== RUFF CHECK ===
 All checks passed!
-=== Ruff Format Check ===
-11 files already formatted
-=== Mypy Typecheck ===
-Success: no issues found in 6 source files
-=== Check No Dashes ===
-=== Frontend Typecheck ===
+=== RUFF FORMAT CHECK ===
+74 files already formatted
+=== MYPY ===
+Success: no issues found in 5 source files
+=== CHECK NO DASHES ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-27c4f7fc/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== PNPM TYPECHECK ===
 
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-27c4f7fc/kanban/web
 > tsc -b --noEmit
 
-=== Frontend Lint ===
+=== PNPM LINT ===
 
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-27c4f7fc/kanban/web
 > eslint . --max-warnings 0
 
-=== Frontend Build ===
+=== PNPM BUILD ===
 
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-27c4f7fc/kanban/web
 > tsc -b && vite build
@@ -30,4 +31,9 @@ dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-BDRiaUTY.css            594.73 kB │ gzip:  83.52 kB
 dist/assets/index-DXUMIZTl.js           2,869.44 kB │ gzip: 794.27 kB
 
-✓ built in 1.26s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.21s
