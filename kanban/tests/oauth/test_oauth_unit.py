@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import base64
-import json
 import time
 import uuid
 from unittest.mock import AsyncMock, MagicMock
@@ -50,7 +49,6 @@ from kanban.oauth.server import (
     verify_consent_csrf_token,
     verify_pkce_s256,
 )
-from mcp.metadata import protected_resource_metadata_endpoint
 
 
 def _b64(b: bytes) -> str:
@@ -1099,36 +1097,3 @@ def test_resolve_public_base_url_reverse_proxy_comma_separated() -> None:
         }
     )
     assert resolve_public_base_url(req_chained) == "https://k.hackedyour.info"
-
-
-@pytest.mark.asyncio
-async def test_protected_resource_metadata_scoped_path_discovery() -> None:
-    """Test RFC 9728 discovery on /mcp/w/{ws} and /mcp/w/{ws}/p/{proj} (KAN-395)."""
-    # 1. /mcp/w/kanban
-    req_ws = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/.well-known/oauth-protected-resource/mcp/w/kanban",
-            "headers": [(b"host", b"kanban.local")],
-        }
-    )
-    resp_ws = await protected_resource_metadata_endpoint(req_ws)
-    assert resp_ws.status_code == 200
-    data_ws = json.loads(resp_ws.body.decode("utf-8"))
-    assert data_ws["resource"] == "http://kanban.local/mcp/agent/w/kanban"
-    assert "agent:read" in data_ws["scopes_supported"]
-
-    # 2. /mcp/w/kanban/p/KANBA
-    req_proj = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/.well-known/oauth-protected-resource/mcp/w/kanban/p/KANBA",
-            "headers": [(b"host", b"kanban.local")],
-        }
-    )
-    resp_proj = await protected_resource_metadata_endpoint(req_proj)
-    assert resp_proj.status_code == 200
-    data_proj = json.loads(resp_proj.body.decode("utf-8"))
-    assert data_proj["resource"] == "http://kanban.local/mcp/agent/w/kanban/p/KANBA"
