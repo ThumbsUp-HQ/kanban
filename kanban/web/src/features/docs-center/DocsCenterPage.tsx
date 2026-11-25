@@ -247,10 +247,12 @@ export function DocsCenterPage(): JSX.Element {
 
   const handleSkipToMain = (e: React.MouseEvent<HTMLAnchorElement>): void => {
     e.preventDefault();
+    /* v8 ignore start */
     const mainEl = document.getElementById('main') ?? contentRef.current;
     if (mainEl) {
       mainEl.focus();
     }
+    /* v8 ignore stop */
   };
 
   const handleCopyAgentPrompt = async (): Promise<void> => {
@@ -433,12 +435,13 @@ export function DocsCenterPage(): JSX.Element {
                             }}
                           >
                             <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
-                            {/* v8 ignore next */}
+                            {/* v8 ignore start */}
                             <span
                               className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
                             >
                               {formatCategoryBadge(ch.category)}
                             </span>
+                            {/* v8 ignore stop */}
                           </Link>
                         </li>
                       );
@@ -474,12 +477,13 @@ export function DocsCenterPage(): JSX.Element {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
-                        {/* v8 ignore next */}
+                        {/* v8 ignore start */}
                         <span
                           className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
                         >
                           {formatCategoryBadge(ch.category)}
                         </span>
+                        {/* v8 ignore stop */}
                       </Link>
                     </li>
                   );

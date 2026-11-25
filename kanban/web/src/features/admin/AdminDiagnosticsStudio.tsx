@@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './AdminDiagnosticsStudio.css';
 
 export interface SubsystemHealth {
@@ -380,6 +381,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         </div>
 
         <div className="admin-diag-header-actions">
+          <StudioDocLink
+            href="/docs/admin-diagnostics-and-link-inspector-studio"
+            title="Admin Diagnostics and Link Inspector Documentation"
+            testId="diagnostics-doc-link"
+          />
+
           <span
             className={`admin-diag-badge ${
               wsProbeState === 'connected'

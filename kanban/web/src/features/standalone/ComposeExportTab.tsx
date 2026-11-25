@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useState, type JSX } from 'react';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 
 export interface ComposeExportData {
   readonly filename: string;
@@ -175,6 +176,12 @@ export function ComposeExportTab({
             {copiedEnv ? 'Copied!' : 'Copy .env.example'}
           </button>
         )}
+
+        <StudioDocLink
+          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
+          title="Compose Promotion Runbook"
+          testId="compose-export-doc-link"
+        />
       </div>
 
       {composeMode === 'multi' ? (

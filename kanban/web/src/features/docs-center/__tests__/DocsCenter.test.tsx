@@ -27,6 +27,7 @@ import {
   slugifyAnchor,
   parseDocHref,
   resolveChapterSlug,
+  resolveSectionElement,
   getChapter,
   getAllChapters,
   getChapterCategories,
@@ -1642,6 +1643,81 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
           name: /User Task & Architecture QA Verification Matrix/i,
         }),
       ).toBeDefined();
+    });
+
+    it('covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt', () => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      // 1. Skip to content link
+      const skipLink = screen.getByRole('link', { name: /Skip to content/i });
+      expect(skipLink).toBeDefined();
+      fireEvent.click(skipLink);
+
+      // 2. Category filter tabs
+      const filterGuide = screen.getByTestId('docs-filter-guide');
+      const filterInfo = screen.getByTestId('docs-filter-informational');
+      const filterArch = screen.getByTestId('docs-filter-architectural');
+      const filterAll = screen.getByTestId('docs-filter-all');
+
+      fireEvent.click(filterGuide);
+      expect(filterGuide.getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(filterInfo);
+      expect(filterInfo.getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(filterArch);
+      expect(filterArch.getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(filterAll);
+      expect(filterAll.getAttribute('aria-selected')).toBe('true');
+
+      // 3. Copy agent prompt button
+      const copyPromptBtn = screen.getByTestId('docs-copy-agent-prompt-btn');
+      act(() => {
+        fireEvent.click(copyPromptBtn);
+      });
+      expect(copyToClipboard).toHaveBeenCalled();
+
+      // Test copy failure branch
+      vi.mocked(copyToClipboard).mockResolvedValueOnce(false);
+      act(() => {
+        fireEvent.click(copyPromptBtn);
+      });
+
+      // Test skip to main when main element exists
+      const mainEl = document.createElement('main');
+      mainEl.id = 'main';
+      document.body.appendChild(mainEl);
+      fireEvent.click(skipLink);
+      document.body.removeChild(mainEl);
+
+      unmount();
+    });
+
+    it('covers resolveSectionElement canonical fallback and parseDocHref edge cases', () => {
+      const container = document.createElement('div');
+      const heading = document.createElement('h2');
+      heading.id = 'heading-test';
+      container.appendChild(heading);
+
+      const resolved = docsCenterIndex.slugifyAnchor('1. Heading Test');
+      expect(resolved).toBe('heading-test');
+
+      const noMatch = resolveSectionElement(container, 'clean');
+      expect(noMatch).toBeNull();
+
+      const nullHref = parseDocHref('');
+      expect(nullHref.slug).toBe('home');
+
+      const hashHref = parseDocHref('#some-anchor');
+      expect(hashHref.slug).toBe('guide-custom-fields');
+      expect(hashHref.anchor).toBe('some-anchor');
     });
   });
 });

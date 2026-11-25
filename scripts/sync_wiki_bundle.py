@@ -10,7 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-DEFAULT_WIKI_DIR = "/home/adamoutler/kanban/thumbs-up-kanban.wiki"
+DEFAULT_WIKI_DIR = (
+    "thumbs-up-kanban.wiki"
+    if Path("thumbs-up-kanban.wiki").is_dir()
+    else "/home/adamoutler/kanban/thumbs-up-kanban.wiki"
+)
 DEFAULT_OUT_FILE = "kanban/web/src/features/docs-center/wikiManifest.ts"
 DEFAULT_PUBLIC_DIR = "kanban/web/public"
 
