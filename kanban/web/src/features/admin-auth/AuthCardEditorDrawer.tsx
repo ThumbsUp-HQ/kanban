@@ -256,9 +256,9 @@ export function AuthCardEditorDrawer({
       allowedEmailDomains !== cardDomains ||
       iconPreset !== card.icon_preset ||
       clientId !== (typeof cardPub.client_id === 'string' ? cardPub.client_id : '') ||
-      issuerUrl !== (typeof cardPub.issuer_url === 'string' ? cardPub.issuer_url : '') ||
-      serverUrl !== (typeof cardPub.server_url === 'string' ? cardPub.server_url : '') ||
-      bindDn !== (typeof cardPub.bind_dn === 'string' ? cardPub.bind_dn : '') ||
+      issuerUrl !== (typeof cardPub.issuer === 'string' ? cardPub.issuer : (typeof cardPub.issuer_url === 'string' ? cardPub.issuer_url : '')) ||
+      serverUrl !== (typeof cardPub.url === 'string' ? cardPub.url : (typeof cardPub.server_url === 'string' ? cardPub.server_url : '')) ||
+      bindDn !== (typeof cardPub.service_bind_dn === 'string' ? cardPub.service_bind_dn : (typeof cardPub.bind_dn === 'string' ? cardPub.bind_dn : '')) ||
       baseDn !== (typeof cardPub.base_dn === 'string' ? cardPub.base_dn : '')
     );
   }, [

@@ -17,7 +17,7 @@ import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
+import { isAal2StepUpCancelled } from '../../api/client';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './aiStudio.css';
 
@@ -78,8 +78,7 @@ export function AiStudioPage({
         setProviders(sorted);
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
-        if (!active) return;
-        dispatchAal2StepUpIfRequired(err);
+        if (!active || isAal2StepUpCancelled(err)) return;
         setError(err instanceof Error ? err.message : 'Failed to load AI providers');
       } finally {
         if (active) {
@@ -116,6 +115,7 @@ export function AiStudioPage({
       }
       refreshData();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to toggle provider enablement');
     }
   };
@@ -131,6 +131,7 @@ export function AiStudioPage({
       setProviderToDelete(null);
       refreshData();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to delete provider');
     }
   };
@@ -149,6 +150,7 @@ export function AiStudioPage({
       setProviders(sorted);
     } catch (err: unknown) {
       setProviders(previousOrder);
+      if (isAal2StepUpCancelled(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to reorder providers');
     }
   };
@@ -231,6 +233,18 @@ export function AiStudioPage({
         }));
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        setCardTestStatuses((prev) => {
+          const next: Record<string, CardTestStatus> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            if (k !== provider.id) {
+              next[k] = v;
+            }
+          }
+          return next;
+        });
+        return;
+      }
       setCardTestStatuses((prev) => ({
         ...prev,
         [provider.id]: {

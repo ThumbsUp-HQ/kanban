@@ -729,5 +729,33 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
         expect(screen.getByTestId('empty-agents-placeholder')).toBeDefined();
       });
     });
+
+    it('silently ignores Aal2StepUpCancelledError during load with zero role="alert" banners', async () => {
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+      render(<AgentStudioPage />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('loading-spinner')).toBeNull();
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByTestId('agent-studio-error')).toBeNull();
+    });
+
+    it('silently ignores Aal2StepUpCancelledError during delete with zero role="alert" banners', async () => {
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
+      vi.spyOn(agentApi, 'deleteAgentDefinition').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+      render(<AgentStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('delete-agent-btn-agent-1')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('delete-agent-btn-agent-1'));
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-delete-agent-btn')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('confirm-delete-agent-btn'));
+      await waitFor(() => {
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByTestId('agent-studio-error')).toBeNull();
+      });
+    });
   });
 });

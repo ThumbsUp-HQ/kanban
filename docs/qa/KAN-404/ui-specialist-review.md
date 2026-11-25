@@ -52,7 +52,7 @@ Audited all 5 zero-mock Playwright screenshots in `docs/qa/KAN-404/screenshots/`
 |:---|:---|:---|:---|
 | **1440x900** | `01-desktop-1440x900-light-websudo-modal-over-drawer.png` | Light | `WebSudoModalHost` centered at `z-index: 10050` cleanly overlaid above open `AuthCardEditorDrawer`; underlying LDAP form state fully intact; zero occlusion. |
 | **1440x900** | `02-desktop-1440x900-dark-admin-sudo-pill-active.png` | Dark | Dark theme contrast compliant; `admin-sudo-pill` active with countdown and `Lock` button right-aligned in `AdminStudioSubnav`; unclipped cards. |
-| **1024x768** | `03-desktop-1024x768-light-websudo-replay-success.png` | Light | Landscape laptop viewport; successful in-place request replay; `Sudo Locked` pill visible; no layout overflow. |
+| **1024x768** | `03-desktop-1024x768-light-websudo-replay-success.png` | Light | Landscape laptop viewport; successful in-place request replay; `Sudo 14:50 \| Lock` pill visible; no layout overflow. |
 | **768x1024** | `04-tablet-portrait-768x1024-light-websudo-modal.png` | Light | Tablet portrait; centered AAL2 modal with Passkey and Authenticator tabs; accessible touch buttons. |
 | **390x844** | `05-mobile-portrait-390x844-light-admin-sudo-pill-locked.png` | Light | Mobile portrait; single-column layout; `admin-sudo-pill` displays `🔒 Sudo Locked` without clipping navigation tabs. |
 

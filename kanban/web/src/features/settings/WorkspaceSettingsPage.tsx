@@ -14,7 +14,7 @@
 import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../../api/client';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
@@ -254,6 +254,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const raw = Array.isArray(res) ? res : ((res).items ?? []);
       setGroupMembers(raw);
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to load group members.');
     } finally {
@@ -353,10 +354,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
           // May be restricted or mock in tests
         }
       } catch (err: unknown) {
-        if (active) {
-          const errObj = err as { message?: string; detail?: string };
-          setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
-        }
+        if (!active || isAal2StepUpCancelled(err)) return;
+        const errObj = err as { message?: string; detail?: string };
+        setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
       } finally {
         if (active) setIsLoading(false);
       }
@@ -396,6 +396,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setTrashRetention(res.retention_days);
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to load trashed items.'));
     } finally {
       setIsLoadingTrash(false);
@@ -431,6 +432,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setTrashActionSuccess(`Trash retention policy updated to ${String(trashRetention)} days.`);
         await loadWorkspaceTrash();
       } catch (err: unknown) {
+        if (isAal2StepUpCancelled(err)) return;
         setTrashActionError(getTrashError(err, 'Failed to update trash retention policy.'));
       } finally {
         setIsSavingRetention(false);
@@ -454,6 +456,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setTrashActionSuccess(`Restored ${(item.title ?? item.key) ?? item.kind} successfully.`);
       await loadWorkspaceTrash();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to restore item.'));
     }
   };
@@ -484,6 +487,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setTypedConfirmPhrase('');
       setPurgeReason('');
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
       setPurgeTarget(null);
       setPurgeConfirmationToken(null);
@@ -534,6 +538,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPurgeReason('');
       await loadWorkspaceTrash();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
     } finally {
       setIsExecutingPurge(false);

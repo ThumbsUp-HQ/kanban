@@ -1004,10 +1004,15 @@ index 0b0351a2..caaf8675 100644
      # 5. Attempting to approve an already approved approval -> 409 APPROVAL_ALREADY_RESOLVED
      resp_dup = await client.post(
 diff --git a/kanban/web/src/api/__tests__/websudoReplay.test.tsx b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
-index c2c3b944..33b65391 100644
+index c2c3b944..7899c4f9 100644
 --- a/kanban/web/src/api/__tests__/websudoReplay.test.tsx
 +++ b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
-@@ -11,6 +11,7 @@ import {
+@@ -7,15 +7,21 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import {
++  apiClient,
+   apiFetch,
    getCsrfToken,
    setCsrfToken,
    registerAal2StepUpHandler,
@@ -1015,7 +1020,16 @@ index c2c3b944..33b65391 100644
    Aal2StepUpCancelledError,
  } from '../client';
  import { ApiProblem } from '../problem';
-@@ -214,12 +215,19 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
+ import { WebSudoModalHost, useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+ import { AdminStudioSubnav } from '../../features/admin/AdminStudioSubnav';
++import { AuthCardEditorDrawer } from '../../features/admin-auth/AuthCardEditorDrawer';
++import { AiProviderEditorDrawer } from '../../features/admin-ai/AiProviderEditorDrawer';
++import { AgentDefinitionEditorDrawer } from '../../features/admin-agents/AgentDefinitionEditorDrawer';
++import type { AdminAuthCard } from '../../features/admin-auth/adminAuthApi';
+ 
+ // Mock SecondFactorStep to test WebSudoModalHost interactions
+ vi.mock('../../features/auth/SecondFactorStep', () => ({
+@@ -214,12 +220,19 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
    }
  
    it('pings /api/v1/auth/aal2/touch periodically while isDirty is true', () => {
@@ -1041,7 +1055,7 @@ index c2c3b944..33b65391 100644
      globalThis.fetch = fetchMock;
  
      const { rerender, unmount } = render(<DirtyTestComponent isDirty={true} />);
-@@ -248,6 +256,27 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
+@@ -248,6 +261,27 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
      unmount();
    });
  
@@ -1069,7 +1083,7 @@ index c2c3b944..33b65391 100644
    it('WebSudoModalHost opens on stepup challenge and resolves with user success', async () => {
      vi.useRealTimers();
      const qc = new QueryClient();
-@@ -431,6 +460,133 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
+@@ -431,6 +465,133 @@ describe('WebSudoModalHost and Dirty Keepalive (KAN-404)', () => {
      const res = await requestPromise;
      expect(res).toEqual({ replayed: true });
    });
@@ -1203,7 +1217,7 @@ index c2c3b944..33b65391 100644
  });
  
  describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
-@@ -510,6 +666,11 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -510,6 +671,11 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
        expect(screen.getByText(/🛡️ Sudo 0:4\d/)).toBeDefined();
      });
  
@@ -1215,7 +1229,7 @@ index c2c3b944..33b65391 100644
      // Inactive session renders nothing
      globalThis.fetch = vi.fn().mockImplementation(() => {
        return Promise.resolve(new Response(
-@@ -518,11 +679,14 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -518,11 +684,14 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
        ));
      });
  
@@ -1235,7 +1249,7 @@ index c2c3b944..33b65391 100644
    });
  
    it('renders inside MemoryRouter and displays locked pill when aal2_active is false', async () => {
-@@ -595,8 +759,10 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -595,8 +764,10 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
      );
  
      await act(async () => {
@@ -1248,7 +1262,7 @@ index c2c3b944..33b65391 100644
        await vi.advanceTimersByTimeAsync(10_000);
      });
  
-@@ -608,4 +774,273 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+@@ -608,4 +779,382 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
  
      vi.useRealTimers();
    });
@@ -1520,6 +1534,115 @@ index c2c3b944..33b65391 100644
 +    await expect(
 +      apiFetch('GET', '/api/v1/admin/reject-stepup' as never),
 +    ).rejects.toBeInstanceOf(Aal2StepUpCancelledError);
++  });
++});
++
++describe('Untouched Drawers do NOT trigger WebSudo Keepalive (KAN-404)', () => {
++  beforeEach(() => {
++    vi.useFakeTimers();
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++    vi.restoreAllMocks();
++  });
++
++  const canonicalCard: AdminAuthCard = {
++    id: 'card-1',
++    slug: 'corp-ldap',
++    display_name: 'Corporate LDAP',
++    provider_kind: 'LDAP',
++    button_subtext: 'Sign in with LDAP',
++    is_enabled: true,
++    auto_provision_users: true,
++    allowed_email_domains: ['corp.example.com'],
++    icon_preset: 'custom',
++    sort_rank: 'a0',
++    has_secret: true,
++    dek_kid: null,
++    last_health_status: 'HEALTHY',
++    public_config: {
++      url: 'ldaps://ldap.example.com:636',
++      service_bind_dn: 'cn=admin,dc=example,dc=com',
++      base_dn: 'dc=example,dc=com',
++      issuer: 'https://issuer.example.com',
++      client_id: 'client-123',
++    },
++  };
++
++  it('untouched AuthCardEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
++    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
++    render(
++      <AuthCardEditorDrawer
++        isOpen={true}
++        card={null}
++        onClose={vi.fn()}
++        onSave={vi.fn()}
++        onTestHandshake={vi.fn()}
++      />,
++    );
++
++    act(() => {
++      vi.advanceTimersByTime(90_000);
++    });
++
++    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
++  });
++
++  it('untouched AuthCardEditorDrawer (edit mode with canonical keys) does not trigger WebSudo keepalive', () => {
++    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
++    render(
++      <AuthCardEditorDrawer
++        isOpen={true}
++        card={canonicalCard}
++        onClose={vi.fn()}
++        onSave={vi.fn()}
++        onTestHandshake={vi.fn()}
++      />,
++    );
++
++    act(() => {
++      vi.advanceTimersByTime(90_000);
++    });
++
++    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
++  });
++
++  it('untouched AiProviderEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
++    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        provider={null}
++        airGapMode={false}
++        onClose={vi.fn()}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    act(() => {
++      vi.advanceTimersByTime(90_000);
++    });
++
++    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
++  });
++
++  it('untouched AgentDefinitionEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
++    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        agent={null}
++        onClose={vi.fn()}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    act(() => {
++      vi.advanceTimersByTime(90_000);
++    });
++
++    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
 +  });
  });
 diff --git a/kanban/web/src/api/client.test.ts b/kanban/web/src/api/client.test.ts
@@ -2104,8 +2227,77 @@ index 0aa5797e..c07a0682 100644
    if (!isOpen) return null;
  
    return (
+diff --git a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+index a85fcad5..41117d2a 100644
+--- a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
++++ b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+@@ -10,7 +10,7 @@ import {
+ import { AgentValidationModal } from './AgentValidationModal';
+ import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
++import { isAal2StepUpCancelled } from '../../api/client';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+ import './agentStudio.css';
+ 
+@@ -44,8 +44,7 @@ export function AgentStudioPage({
+         if (!active) return;
+         setAgents(Array.isArray(list) ? list : []);
+       } catch (err: unknown) {
+-        if (!active) return;
+-        dispatchAal2StepUpIfRequired(err);
++        if (!active || isAal2StepUpCancelled(err)) return;
+         setError(err instanceof Error ? err.message : 'Failed to load agent definitions');
+       } finally {
+         if (active) {
+@@ -72,6 +71,7 @@ export function AgentStudioPage({
+       setAgentToDelete(null);
+       refreshAgents();
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setError(err instanceof Error ? err.message : 'Failed to delete agent definition');
+     }
+   };
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+index 44b25efc..83148894 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+@@ -729,5 +729,33 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
+         expect(screen.getByTestId('empty-agents-placeholder')).toBeDefined();
+       });
+     });
++
++    it('silently ignores Aal2StepUpCancelledError during load with zero role="alert" banners', async () => {
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++      render(<AgentStudioPage />);
++      await waitFor(() => {
++        expect(screen.queryByTestId('loading-spinner')).toBeNull();
++      });
++      expect(screen.queryByRole('alert')).toBeNull();
++      expect(screen.queryByTestId('agent-studio-error')).toBeNull();
++    });
++
++    it('silently ignores Aal2StepUpCancelledError during delete with zero role="alert" banners', async () => {
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
++      vi.spyOn(agentApi, 'deleteAgentDefinition').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++      render(<AgentStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('delete-agent-btn-agent-1')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('delete-agent-btn-agent-1'));
++      await waitFor(() => {
++        expect(screen.getByTestId('confirm-delete-agent-btn')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('confirm-delete-agent-btn'));
++      await waitFor(() => {
++        expect(screen.queryByRole('alert')).toBeNull();
++        expect(screen.queryByTestId('agent-studio-error')).toBeNull();
++      });
++    });
+   });
+ });
 diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-index 6a30f96e..3d0ff976 100644
+index 6a30f96e..b46b8660 100644
 --- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 @@ -5,6 +5,7 @@ import React, { useState, type JSX } from 'react';
@@ -2116,17 +2308,44 @@ index 6a30f96e..3d0ff976 100644
  import {
    createAiProvider,
    updateAiProvider,
-@@ -193,6 +194,27 @@ function AiProviderEditorContent({
+@@ -107,16 +108,16 @@ function AiProviderEditorContent({
+   const isEditing = provider !== null;
+ 
+   const defaultKind = airGapMode ? 'ollama' : 'openai';
++  const defaultDisplayName = airGapMode ? 'Local Ollama Runtime' : 'OpenAI / OpenAI-Compatible';
++  const defaultBaseUrl = airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1';
+   const [providerKind, setProviderKind] = useState<string>(
+     provider?.provider_kind ?? defaultKind,
+   );
+   const [displayName, setDisplayName] = useState<string>(
+-    provider?.display_name ??
+-      (airGapMode ? 'Local Ollama Runtime' : 'OpenAI / OpenAI-Compatible'),
++    provider?.display_name ?? defaultDisplayName,
+   );
+   const [baseUrl, setBaseUrl] = useState<string>(
+-    provider?.base_url ??
+-      (airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'),
++    provider?.base_url ?? defaultBaseUrl,
+   );
+   const [modelAllowlist, setModelAllowlist] = useState<string>(
+     provider?.model_allowlist ? provider.model_allowlist.join(', ') : '',
+@@ -193,6 +194,51 @@ function AiProviderEditorContent({
    const isCloudKind = providerKind === 'openai' || providerKind === 'gemini';
    const isLocal = isLocalEndpoint(providerKind, baseUrl);
  
 +  const isDirty = React.useMemo(() => {
 +    if (!provider) {
 +      return Boolean(
-+        displayName.trim() ||
 +        apiKey.trim() ||
-+        baseUrl.trim() ||
-+        providerKind !== 'gemini'
++        providerKind !== defaultKind ||
++        displayName.trim() !== defaultDisplayName ||
++        baseUrl.trim() !== defaultBaseUrl ||
++        modelAllowlist.trim() !== '' ||
++        mtlsCertPem.trim() !== '' ||
++        timeoutMs !== 30000 ||
++        temperatureModified ||
++        topPModified ||
++        maxTokensModified
 +      );
 +    }
 +    return (
@@ -2137,14 +2356,42 @@ index 6a30f96e..3d0ff976 100644
 +      residencyTier !== initialResidency ||
 +      providerKind !== provider.provider_kind
 +    );
-+  }, [provider, displayName, apiKey, baseUrl, clearExistingKey, residencyTier, initialResidency, providerKind]);
++  }, [
++    provider,
++    apiKey,
++    providerKind,
++    defaultKind,
++    displayName,
++    defaultDisplayName,
++    baseUrl,
++    defaultBaseUrl,
++    modelAllowlist,
++    mtlsCertPem,
++    timeoutMs,
++    temperatureModified,
++    topPModified,
++    maxTokensModified,
++    clearExistingKey,
++    residencyTier,
++    initialResidency,
++  ]);
 +
 +  useAal2DirtyKeepalive(isDirty);
 +
    const handleKindChange = (newKind: string): void => {
      setProviderKind(newKind);
      if (airGapMode && (newKind === 'openai' || newKind === 'gemini')) {
-@@ -337,6 +359,9 @@ function AiProviderEditorContent({
+@@ -292,6 +338,9 @@ function AiProviderEditorContent({
+         setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
+       }
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       setProbeError(err instanceof Error ? err.message : 'Failed to probe models');
+     } finally {
+       setIsProbing(false);
+@@ -337,6 +386,9 @@ function AiProviderEditorContent({
          });
        }
      } catch (err: unknown) {
@@ -2154,7 +2401,7 @@ index 6a30f96e..3d0ff976 100644
        setTestStatus({
          kind: 'error',
          message: err instanceof Error ? err.message : 'Connection test failed',
-@@ -432,6 +457,9 @@ function AiProviderEditorContent({
+@@ -432,6 +484,9 @@ function AiProviderEditorContent({
        onClose();
      } catch (err: unknown) {
        setIsSaving(false);
@@ -2164,7 +2411,7 @@ index 6a30f96e..3d0ff976 100644
        setError(err instanceof Error ? err.message : 'Failed to save provider configuration');
      }
    };
-@@ -975,7 +1003,6 @@ export function AiProviderEditorDrawer({
+@@ -975,7 +1030,6 @@ export function AiProviderEditorDrawer({
    projectId,
    workspaceSlug,
  }: AiProviderEditorDrawerProps): JSX.Element | null {
@@ -2172,6 +2419,72 @@ index 6a30f96e..3d0ff976 100644
    if (!isOpen) return null;
  
    return (
+diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+index d39998cb..1e829b4d 100644
+--- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
++++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+@@ -17,7 +17,7 @@ import { AiBudgetModal } from './AiBudgetModal';
+ import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
++import { isAal2StepUpCancelled } from '../../api/client';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+ import './aiStudio.css';
+ 
+@@ -78,8 +78,7 @@ export function AiStudioPage({
+         setProviders(sorted);
+         setAirGapMode(isAirGap);
+       } catch (err: unknown) {
+-        if (!active) return;
+-        dispatchAal2StepUpIfRequired(err);
++        if (!active || isAal2StepUpCancelled(err)) return;
+         setError(err instanceof Error ? err.message : 'Failed to load AI providers');
+       } finally {
+         if (active) {
+@@ -116,6 +115,7 @@ export function AiStudioPage({
+       }
+       refreshData();
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setError(err instanceof Error ? err.message : 'Failed to toggle provider enablement');
+     }
+   };
+@@ -131,6 +131,7 @@ export function AiStudioPage({
+       setProviderToDelete(null);
+       refreshData();
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setError(err instanceof Error ? err.message : 'Failed to delete provider');
+     }
+   };
+@@ -149,6 +150,7 @@ export function AiStudioPage({
+       setProviders(sorted);
+     } catch (err: unknown) {
+       setProviders(previousOrder);
++      if (isAal2StepUpCancelled(err)) return;
+       setError(err instanceof Error ? err.message : 'Failed to reorder providers');
+     }
+   };
+@@ -231,6 +233,18 @@ export function AiStudioPage({
+         }));
+       }
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) {
++        setCardTestStatuses((prev) => {
++          const next: Record<string, CardTestStatus> = {};
++          for (const [k, v] of Object.entries(prev)) {
++            if (k !== provider.id) {
++              next[k] = v;
++            }
++          }
++          return next;
++        });
++        return;
++      }
+       setCardTestStatuses((prev) => ({
+         ...prev,
+         [provider.id]: {
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 index 93a10b3f..704475b6 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
@@ -2291,8 +2604,63 @@ index 93a10b3f..704475b6 100644
 +    });
    });
  });
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+index a9b34ac1..0d8b3570 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+@@ -2068,5 +2068,50 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+         expect(screen.getByTestId('empty-providers-placeholder')).toBeDefined();
+       });
+     });
++
++    it('silently ignores Aal2StepUpCancelledError during load with zero role="alert" banners', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      render(<AiStudioPage />);
++      await waitFor(() => {
++        expect(screen.queryByTestId('loading-spinner')).toBeNull();
++      });
++      expect(screen.queryByRole('alert')).toBeNull();
++      expect(screen.queryByTestId('ai-studio-error')).toBeNull();
++    });
++
++    it('silently ignores Aal2StepUpCancelledError during toggle enablement with zero role="alert" banners', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      vi.spyOn(aiApi, 'disableAiProvider').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++      render(<AiStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('toggle-enable-btn-prov-openai-1')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-openai-1'));
++      await waitFor(() => {
++        expect(screen.queryByRole('alert')).toBeNull();
++        expect(screen.queryByTestId('ai-studio-error')).toBeNull();
++      });
++    });
++
++    it('silently ignores Aal2StepUpCancelledError during delete with zero role="alert" banners', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockProvider]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      vi.spyOn(aiApi, 'deleteAiProvider').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++      render(<AiStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('delete-provider-btn-prov-openai-1')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('delete-provider-btn-prov-openai-1'));
++      await waitFor(() => {
++        expect(screen.getByTestId('confirm-delete-provider-btn')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('confirm-delete-provider-btn'));
++      await waitFor(() => {
++        expect(screen.queryByRole('alert')).toBeNull();
++        expect(screen.queryByTestId('ai-studio-error')).toBeNull();
++      });
++    });
+   });
+ });
 diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
-index 34ddb929..1e7bdc9e 100644
+index 34ddb929..06fd4a14 100644
 --- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
 @@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, type JSX } from 'react';
@@ -2347,9 +2715,9 @@ index 34ddb929..1e7bdc9e 100644
 +      allowedEmailDomains !== cardDomains ||
 +      iconPreset !== card.icon_preset ||
 +      clientId !== (typeof cardPub.client_id === 'string' ? cardPub.client_id : '') ||
-+      issuerUrl !== (typeof cardPub.issuer_url === 'string' ? cardPub.issuer_url : '') ||
-+      serverUrl !== (typeof cardPub.server_url === 'string' ? cardPub.server_url : '') ||
-+      bindDn !== (typeof cardPub.bind_dn === 'string' ? cardPub.bind_dn : '') ||
++      issuerUrl !== (typeof cardPub.issuer === 'string' ? cardPub.issuer : (typeof cardPub.issuer_url === 'string' ? cardPub.issuer_url : '')) ||
++      serverUrl !== (typeof cardPub.url === 'string' ? cardPub.url : (typeof cardPub.server_url === 'string' ? cardPub.server_url : '')) ||
++      bindDn !== (typeof cardPub.service_bind_dn === 'string' ? cardPub.service_bind_dn : (typeof cardPub.bind_dn === 'string' ? cardPub.bind_dn : '')) ||
 +      baseDn !== (typeof cardPub.base_dn === 'string' ? cardPub.base_dn : '')
 +    );
 +  }, [
@@ -2975,6 +3343,48 @@ index 3c290fe4..48bf90ae 100644
      margin-top: var(--space-2, 8px);
      padding-top: var(--space-2, 8px);
      border-top: 1px solid var(--border-subtle);
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index e1f25a13..dfb94afc 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -13,6 +13,7 @@ import {
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
++import { isAal2StepUpCancelled } from '../../api/client';
+ import './PlaneImportStudio.css';
+ 
+ export interface EntityCounts {
+@@ -261,6 +262,9 @@ export function PlaneImportStudio(): JSX.Element {
+       setDiffReport(report);
+       setStage('preview');
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       /* v8 ignore next 5 */
+       if (err instanceof Error) {
+         setError(err.message);
+@@ -304,6 +308,9 @@ export function PlaneImportStudio(): JSX.Element {
+       setDiffReport(report);
+       setStage('done');
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       /* v8 ignore next 5 */
+       if (err instanceof Error) {
+         setError(err.message);
+@@ -336,6 +343,9 @@ export function PlaneImportStudio(): JSX.Element {
+       window.URL.revokeObjectURL(url);
+       setExportSuccess(`Successfully downloaded kanban-${targetSlug}-portable.tar.gz`);
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       /* v8 ignore next 5 */
+       if (err instanceof Error) {
+         setExportError(err.message);
 diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
 index cf12779a..236be191 100644
 --- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
@@ -3218,6 +3628,35 @@ index 9cacc5b1..6bed8f69 100644
      white-space: nowrap;
      padding: 0 var(--space-3, 12px);
      flex: 0 1 auto;
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 56b4e5b0..51da8f59 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -4,12 +4,11 @@
+ import React, { useState, type JSX } from 'react';
+ import { useLocation } from 'react-router';
+ import { useQuery, useMutation } from '@tanstack/react-query';
+-import { apiFetch } from '../../api/client';
++import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { NotFoundView } from '../../app/routes';
+ import { LinkAuditorStudio } from './LinkAuditorStudio';
+ import { AdminStudioSubnav } from './AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+ import './AdminDiagnosticsStudio.css';
+ 
+@@ -276,7 +275,9 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+       });
+     },
+     onError: (err: Error) => {
+-      dispatchAal2StepUpIfRequired(err);
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       setProbeAlert({
+         type: 'error',
+         message: err.message.length > 0 ? err.message : 'Realtime probe execution failed',
 diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.css b/kanban/web/src/features/admin/AdminStudioSubnav.css
 index f3bab3b1..93fd55d6 100644
 --- a/kanban/web/src/features/admin/AdminStudioSubnav.css
@@ -3339,6 +3778,45 @@ index 418f081c..c85c2c6b 100644
      try {
        const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
          authenticated?: boolean;
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+index aef3c596..5521eb78 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+@@ -3,11 +3,10 @@
+ 
+ import React, { useState, type JSX, type ChangeEvent } from 'react';
+ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+-import { apiFetch, getCsrfToken } from '../../api/client';
++import { apiFetch, getCsrfToken, isAal2StepUpCancelled } from '../../api/client';
+ import { qk } from '../../api/queryKeys';
+ import { NotFoundView } from '../../app/routes';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+ import './LinkAuditorStudio.css';
+ 
+@@ -223,7 +222,9 @@ export function LinkAuditorStudio(): JSX.Element {
+       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
+     },
+     onError: (err: unknown) => {
+-      dispatchAal2StepUpIfRequired(err);
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       const msg = err instanceof Error ? err.message : 'Scan execution failed.';
+       setStatusAlert({ type: 'error', message: msg });
+     },
+@@ -261,7 +262,9 @@ export function LinkAuditorStudio(): JSX.Element {
+       void queryClient.invalidateQueries({ queryKey: ['admin', 'object-links'] });
+     },
+     onError: (err: unknown) => {
+-      dispatchAal2StepUpIfRequired(err);
++      if (isAal2StepUpCancelled(err)) {
++        return;
++      }
+       const msg = err instanceof Error ? err.message : 'Purge execution failed.';
+       setStatusAlert({ type: 'error', message: msg });
+     },
 diff --git a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
 index 72ee3199..e8fbda00 100644
 --- a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
@@ -3560,6 +4038,128 @@ index d1377741..05671d9c 100644
            </button>
          </div>
        )}
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index 4925c573..2cc0acb5 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -17,18 +17,10 @@ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+-import { dispatchAal2StepUpIfRequired } from '../../api/problem';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+-import { Aal2StepUpCancelledError } from '../../api/client';
++import { isAal2StepUpCancelled } from '../../api/client';
+ import './OAuthClientGovernanceStudio.css';
+ 
+-function isAal2StepUpCancelled(err: unknown): boolean {
+-  return (
+-    err instanceof Aal2StepUpCancelledError ||
+-    (err instanceof Error && err.name === 'Aal2StepUpCancelledError')
+-  );
+-}
+-
+ export interface OAuthClientGovernanceStudioProps {
+   isServerAdmin?: boolean;
+ }
+@@ -109,7 +101,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       setError(err instanceof Error ? err.message : 'Failed to load registered OAuth clients.');
+     } finally {
+       setLoading(false);
+@@ -135,7 +126,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -157,7 +147,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -179,7 +168,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -207,7 +195,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -234,7 +221,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -260,7 +246,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setError(err.message);
+       } else {
+@@ -333,7 +318,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setRegisterError(err.message);
+       } else {
+@@ -402,7 +386,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+       if (isAal2StepUpCancelled(err)) {
+         return;
+       }
+-      dispatchAal2StepUpIfRequired(err);
+       if (err instanceof Error) {
+         setEditError(err.message);
+       } else {
+diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+index 6fda86fd..72d53d13 100644
+--- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
++++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+@@ -246,10 +246,7 @@ describe('OAuthClientGovernanceStudio', () => {
+     });
+   });
+ 
+-  it('renders ErrorHelpHint and dispatches kb:open-aal2-stepup on AAL2_STALE or AAL2_REQUIRED error (KAN-393)', async () => {
+-    const stepUpListener = vi.fn();
+-    window.addEventListener('kb:open-aal2-stepup', stepUpListener);
+-
++  it('renders ErrorHelpHint on AAL2_STALE or AAL2_REQUIRED error', async () => {
+     const aal2Prob = new ApiProblem(403, {
+       code: 'AAL2_STALE',
+       detail: 'AAL2 verification is stale (950s > 900s).',
+@@ -269,9 +266,6 @@ describe('OAuthClientGovernanceStudio', () => {
+       expect(screen.getByTestId('error-alert')).toBeDefined();
+       expect(screen.getByTestId('error-help-doc-link')).toBeDefined();
+     });
+-
+-    expect(stepUpListener).toHaveBeenCalledTimes(1);
+-    window.removeEventListener('kb:open-aal2-stepup', stepUpListener);
+   });
+ 
+   it('handles action patch and delete error branches', async () => {
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
 index b1a7e31e..059f5763 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.tsx
@@ -4086,6 +4686,228 @@ index 98a168ee..3694d9dc 100644
  
        {/* Passkey / FIDO2 Security Key Enrollment Modal */}
        <PasskeyEnrollModal
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index c7d5b9ee..68789e31 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -16,7 +16,7 @@
+ import React, { useContext, useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
+ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+ import { QueryClientContext } from '@tanstack/react-query';
+-import { apiFetch } from '../../api/client';
++import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+ import { qk } from '../../api/queryKeys';
+ import { StateBadge } from '../../components/state/StateBadge';
+@@ -505,10 +505,9 @@ export function ProjectSettingsPage(): JSX.Element {
+           }
+         }
+       } catch (err: unknown) {
+-        if (active) {
+-          const errObj = err as { message?: string };
+-          setErrorMessage(errObj.message ?? 'Failed to load project settings.');
+-        }
++        if (!active || isAal2StepUpCancelled(err)) return;
++        const errObj = err as { message?: string };
++        setErrorMessage(errObj.message ?? 'Failed to load project settings.');
+       } finally {
+         if (active) setIsLoading(false);
+       }
+@@ -576,6 +575,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         }
+         setSuccessMessage('Project settings saved successfully.');
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to update project settings.');
+       } finally {
+@@ -633,6 +633,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Workflow state "${created.name}" created.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string; code?: string };
+         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
+         const rawMsg =
+@@ -713,6 +714,7 @@ export function ProjectSettingsPage(): JSX.Element {
+ 
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string; code?: string };
+         const rawMsg =
+           err instanceof ApiProblem
+@@ -804,6 +806,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string; detail?: string; code?: string };
+         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
+         const rawMsg =
+@@ -876,6 +879,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Priority "${created.label}" created.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create priority.');
+       }
+@@ -899,6 +903,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage('Priority deleted.');
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
+       }
+@@ -959,6 +964,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Priority "${updated.label}" updated.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to update priority.');
+       }
+@@ -999,6 +1005,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Label "${created.name}" created.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to create label.');
+       }
+@@ -1051,6 +1058,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setSuccessMessage(`Label "${updated.name}" updated.`);
+         invalidateProjectCaches();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to update label.');
+       }
+@@ -1098,6 +1106,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         invalidateProjectCaches();
+       }
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string };
+       const fallbackMsg =
+         auditModalKind === 'state'
+@@ -1142,6 +1151,7 @@ export function ProjectSettingsPage(): JSX.Element {
+           setMembers(memRes.items);
+         }
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to add project member.');
+       } finally {
+@@ -1167,6 +1177,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setMembers((prev) => prev.filter((m) => m.principal_id !== principalId));
+         setSuccessMessage('Member removed from project.');
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to remove project member.');
+       }
+@@ -1225,6 +1236,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setTrashedItems((prev) => prev.filter((t) => t.id !== item.id));
+         setSuccessMessage(`Successfully restored ${item.title || item.key}.`);
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setErrorMessage(errObj.message ?? 'Failed to restore item.');
+       }
+@@ -1260,6 +1272,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         setDestructiveToken(res);
+         setDangerStage('requested');
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setDangerError(errObj.message ?? 'Failed to initiate project deletion.');
+       }
+@@ -1301,6 +1314,7 @@ export function ProjectSettingsPage(): JSX.Element {
+ 
+         void navigate('/');
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         const errObj = err as { message?: string };
+         setDangerError(errObj.message ?? 'Failed to execute project deletion.');
+         setDangerStage('requested');
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index f04c56f1..81f4ffd8 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -14,7 +14,7 @@
+ import React, { useEffect, useState, type JSX, type SyntheticEvent } from 'react';
+ import { Link, useLocation } from 'react-router';
+ import { useQueryClient } from '@tanstack/react-query';
+-import { apiFetch } from '../../api/client';
++import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+@@ -254,6 +254,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       const raw = Array.isArray(res) ? res : ((res).items ?? []);
+       setGroupMembers(raw);
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       const errObj = err as { message?: string; detail?: string };
+       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to load group members.');
+     } finally {
+@@ -353,10 +354,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
+           // May be restricted or mock in tests
+         }
+       } catch (err: unknown) {
+-        if (active) {
+-          const errObj = err as { message?: string; detail?: string };
+-          setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
+-        }
++        if (!active || isAal2StepUpCancelled(err)) return;
++        const errObj = err as { message?: string; detail?: string };
++        setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
+       } finally {
+         if (active) setIsLoading(false);
+       }
+@@ -396,6 +396,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         setTrashRetention(res.retention_days);
+       }
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setTrashActionError(getTrashError(err, 'Failed to load trashed items.'));
+     } finally {
+       setIsLoadingTrash(false);
+@@ -431,6 +432,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+         setTrashActionSuccess(`Trash retention policy updated to ${String(trashRetention)} days.`);
+         await loadWorkspaceTrash();
+       } catch (err: unknown) {
++        if (isAal2StepUpCancelled(err)) return;
+         setTrashActionError(getTrashError(err, 'Failed to update trash retention policy.'));
+       } finally {
+         setIsSavingRetention(false);
+@@ -454,6 +456,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setTrashActionSuccess(`Restored ${(item.title ?? item.key) ?? item.kind} successfully.`);
+       await loadWorkspaceTrash();
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setTrashActionError(getTrashError(err, 'Failed to restore item.'));
+     }
+   };
+@@ -484,6 +487,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setTypedConfirmPhrase('');
+       setPurgeReason('');
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
+       setPurgeTarget(null);
+       setPurgeConfirmationToken(null);
+@@ -534,6 +538,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+       setPurgeReason('');
+       await loadWorkspaceTrash();
+     } catch (err: unknown) {
++      if (isAal2StepUpCancelled(err)) return;
+       setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
+     } finally {
+       setIsExecutingPurge(false);
 diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 index 731d415c..38c3717e 100644
 --- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx

@@ -246,10 +246,7 @@ describe('OAuthClientGovernanceStudio', () => {
     });
   });
 
-  it('renders ErrorHelpHint and dispatches kb:open-aal2-stepup on AAL2_STALE or AAL2_REQUIRED error (KAN-393)', async () => {
-    const stepUpListener = vi.fn();
-    window.addEventListener('kb:open-aal2-stepup', stepUpListener);
-
+  it('renders ErrorHelpHint on AAL2_STALE or AAL2_REQUIRED error', async () => {
     const aal2Prob = new ApiProblem(403, {
       code: 'AAL2_STALE',
       detail: 'AAL2 verification is stale (950s > 900s).',
@@ -269,9 +266,6 @@ describe('OAuthClientGovernanceStudio', () => {
       expect(screen.getByTestId('error-alert')).toBeDefined();
       expect(screen.getByTestId('error-help-doc-link')).toBeDefined();
     });
-
-    expect(stepUpListener).toHaveBeenCalledTimes(1);
-    window.removeEventListener('kb:open-aal2-stepup', stepUpListener);
   });
 
   it('handles action patch and delete error branches', async () => {

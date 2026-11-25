@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import {
+  apiClient,
   apiFetch,
   getCsrfToken,
   setCsrfToken,
@@ -17,6 +18,10 @@ import {
 import { ApiProblem } from '../problem';
 import { WebSudoModalHost, useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { AdminStudioSubnav } from '../../features/admin/AdminStudioSubnav';
+import { AuthCardEditorDrawer } from '../../features/admin-auth/AuthCardEditorDrawer';
+import { AiProviderEditorDrawer } from '../../features/admin-ai/AiProviderEditorDrawer';
+import { AgentDefinitionEditorDrawer } from '../../features/admin-agents/AgentDefinitionEditorDrawer';
+import type { AdminAuthCard } from '../../features/admin-auth/adminAuthApi';
 
 // Mock SecondFactorStep to test WebSudoModalHost interactions
 vi.mock('../../features/auth/SecondFactorStep', () => ({
@@ -1042,5 +1047,114 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
     await expect(
       apiFetch('GET', '/api/v1/admin/reject-stepup' as never),
     ).rejects.toBeInstanceOf(Aal2StepUpCancelledError);
+  });
+});
+
+describe('Untouched Drawers do NOT trigger WebSudo Keepalive (KAN-404)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const canonicalCard: AdminAuthCard = {
+    id: 'card-1',
+    slug: 'corp-ldap',
+    display_name: 'Corporate LDAP',
+    provider_kind: 'LDAP',
+    button_subtext: 'Sign in with LDAP',
+    is_enabled: true,
+    auto_provision_users: true,
+    allowed_email_domains: ['corp.example.com'],
+    icon_preset: 'custom',
+    sort_rank: 'a0',
+    has_secret: true,
+    dek_kid: null,
+    last_health_status: 'HEALTHY',
+    public_config: {
+      url: 'ldaps://ldap.example.com:636',
+      service_bind_dn: 'cn=admin,dc=example,dc=com',
+      base_dn: 'dc=example,dc=com',
+      issuer: 'https://issuer.example.com',
+      client_id: 'client-123',
+    },
+  };
+
+  it('untouched AuthCardEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={null}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTestHandshake={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AuthCardEditorDrawer (edit mode with canonical keys) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AuthCardEditorDrawer
+        isOpen={true}
+        card={canonicalCard}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        onTestHandshake={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AiProviderEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AiProviderEditorDrawer
+        isOpen={true}
+        provider={null}
+        airGapMode={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
+  });
+
+  it('untouched AgentDefinitionEditorDrawer (create mode) does not trigger WebSudo keepalive', () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    render(
+      <AgentDefinitionEditorDrawer
+        isOpen={true}
+        agent={null}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+
+    expect(postSpy).not.toHaveBeenCalledWith('/api/v1/auth/aal2/touch');
   });
 });
