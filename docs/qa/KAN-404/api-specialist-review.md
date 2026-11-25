@@ -2,7 +2,7 @@
 
 - **Ticket ID:** KAN-404 (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona:** Senior Backend & API Security Architect (`@api-spec`)
-- **Branch:** `fix/KAN-404-rc1` (commit `15438915`)
+- **Branch:** `fix/KAN-404-rc1` (commit `006eb550`)
 - **Status:** APPROVED
 - **Date:** 2026-11-25
 

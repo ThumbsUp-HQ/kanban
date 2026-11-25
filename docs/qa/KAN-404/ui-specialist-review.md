@@ -4,7 +4,7 @@
 - **Ticket ID**: `KAN-404` (`[GATE-0][KB-WEBSUDO-SLIDING-AND-REPLAY] Global Sliding-Window WebSudo (AAL2) + Singleflight In-Place Modal & Transparent Request Replay`)
 - **Reviewer Persona**: UI/UX Design Specialist (`.agents/agents/ui-designer.md` / `.agents/agents/ux-architect.md`)
 - **Branch**: `fix/KAN-404-rc1`
-- **Commit**: `15438915`
+- **Commit**: `006eb550`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
