@@ -49,19 +49,23 @@ export function WebSudoModalHost(): JSX.Element | null {
   const queryClient = useContext(QueryClientContext) ?? null;
 
   useEffect(() => {
-    registerAal2StepUpHandler((challenge) => {
-      return new Promise<boolean>((resolve) => {
-        setChallengeId(challenge.challengeId ?? 'aal2-stepup');
-        if (challenge.methods && Array.isArray(challenge.methods)) {
-          setMethods(challenge.methods as MfaMethod[]);
-        }
-        resolverRef.current = resolve;
-        setIsOpen(true);
+    if (typeof registerAal2StepUpHandler === 'function') {
+      registerAal2StepUpHandler((challenge) => {
+        return new Promise<boolean>((resolve) => {
+          setChallengeId(challenge.challengeId ?? 'aal2-stepup');
+          if (challenge.methods && Array.isArray(challenge.methods)) {
+            setMethods(challenge.methods as MfaMethod[]);
+          }
+          resolverRef.current = resolve;
+          setIsOpen(true);
+        });
       });
-    });
+    }
 
     return () => {
-      registerAal2StepUpHandler(null);
+      if (typeof registerAal2StepUpHandler === 'function') {
+        registerAal2StepUpHandler(null);
+      }
     };
   }, []);
 

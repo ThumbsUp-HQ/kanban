@@ -12,6 +12,8 @@ import { AppShell } from '../AppShell';
 import { ProjectSettingsPage } from '../../features/settings/ProjectSettingsPage';
 
 vi.mock('../../api/client', () => ({
+  registerAal2StepUpHandler: vi.fn(),
+  unregisterAal2StepUpHandler: vi.fn(),
   apiClient: {
     get: vi.fn((url: string) => {
       if (url.includes('/api/v1/projects/KAN/members')) {

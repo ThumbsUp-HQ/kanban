@@ -98,6 +98,9 @@ export function setCsrfToken(token: string | null): void {
 
 /** Reads the `__Host-kb_csrf` or `kb_csrf` cookie value, or cached token fallback, or null when absent. */
 export function getCsrfToken(): string | null {
+  if (cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
+    return cachedCsrfToken;
+  }
   if (typeof document !== 'undefined') {
     const matches = [...document.cookie.matchAll(CSRF_COOKIE_RE)];
     if (matches.length > 0) {
@@ -113,9 +116,6 @@ export function getCsrfToken(): string | null {
         }
       }
     }
-  }
-  if (cachedCsrfToken !== null && cachedCsrfToken.length > 0) {
-    return cachedCsrfToken;
   }
   return null;
 }

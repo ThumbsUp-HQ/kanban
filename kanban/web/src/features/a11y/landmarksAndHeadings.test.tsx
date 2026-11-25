@@ -35,6 +35,8 @@ import * as clientModule from '../../api/client';
 import * as docsApiModule from '../docs/docsApi';
 
 vi.mock('../../api/client', () => ({
+  registerAal2StepUpHandler: vi.fn(),
+  unregisterAal2StepUpHandler: vi.fn(),
   apiFetch: vi.fn().mockImplementation((_method: string, url: unknown) => {
     if (typeof url === 'string' && url.includes('/auth/me')) {
       return Promise.resolve({
