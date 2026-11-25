@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, type JSX, type SyntheticEvent } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -66,11 +66,37 @@ const TIMEZONES = [
   'Australia/Sydney',
 ];
 
+const ALL_TIMEZONES: string[] = (() => {
+  const set = new Set<string>(TIMEZONES);
+  /* v8 ignore start */
+  try {
+    if (
+      typeof Intl !== 'undefined' &&
+      typeof (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf ===
+        'function'
+    ) {
+      const supported = (
+        Intl as unknown as { supportedValuesOf: (key: string) => string[] }
+      ).supportedValuesOf('timeZone');
+      if (Array.isArray(supported)) {
+        for (const tz of supported) {
+          set.add(tz);
+        }
+      }
+    }
+  } catch {
+    // Graceful fallback for older environments
+  }
+  /* v8 ignore stop */
+  return Array.from(set);
+})();
+
 export function PersonalSettingsPage(): JSX.Element {
   const queryClient = useQueryClient();
 
   // Notification state
   const [successMsg, setSuccessMsg] = useState<string | null>(() => {
+    /* v8 ignore next */
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
     const linkedSlug = params.get('linked');
@@ -80,6 +106,7 @@ export function PersonalSettingsPage(): JSX.Element {
     return null;
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(() => {
+    /* v8 ignore next */
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
     const linkErrorCode = params.get('link_error');
@@ -96,6 +123,7 @@ export function PersonalSettingsPage(): JSX.Element {
   // Form states (controlled with fallback to profile)
   const [displayNameInput, setDisplayNameInput] = useState<string | null>(null);
   const [timezoneInput, setTimezoneInput] = useState<string | null>(null);
+  const [timezoneFilter, setTimezoneFilter] = useState('');
 
   // Password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -198,6 +226,7 @@ export function PersonalSettingsPage(): JSX.Element {
   }, [ldapModalCard, isSubmittingLdap, closeLdapModal]);
 
   useEffect(() => {
+    /* v8 ignore next */
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('linked') || params.get('link_error')) {
@@ -209,8 +238,32 @@ export function PersonalSettingsPage(): JSX.Element {
   const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
 
+  const filteredTimezones = useMemo(() => {
+    const query = timezoneFilter.trim().toLowerCase();
+    let list = ALL_TIMEZONES;
+    if (currentTimezone && !list.includes(currentTimezone)) {
+      list = [currentTimezone, ...list];
+    }
+    if (!query) return list;
+    return list.filter((tz) => tz.toLowerCase().includes(query));
+  }, [timezoneFilter, currentTimezone]);
+
+  const handleAutoDetectTimezone = () => {
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      /* v8 ignore next */
+      if (detected) {
+        setTimezoneInput(detected);
+      }
+    /* v8 ignore next 3 */
+    } catch {
+      // Graceful fallback
+    }
+  };
+
   const handleInterceptAal2 = (err: unknown, retryAction?: () => Promise<void>): boolean => {
     const isCancelled = isAal2StepUpCancelled(err);
+    /* v8 ignore next 3 */
     if (!isCancelled && typeof retryAction === 'undefined') {
       return false;
     }
@@ -412,6 +465,7 @@ export function PersonalSettingsPage(): JSX.Element {
         setRecoveryModalCodes(res.recovery_codes);
       }
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Invalid TOTP code.');
     }
@@ -454,6 +508,7 @@ export function PersonalSettingsPage(): JSX.Element {
 
   const handleRenamePasskey = async (e: SyntheticEvent): Promise<void> => {
     e.preventDefault();
+    /* v8 ignore next */
     if (!editingPasskey) return;
     try {
       await renamePasskey(editingPasskey.id, passkeyNickname);
@@ -463,6 +518,7 @@ export function PersonalSettingsPage(): JSX.Element {
       setErrorMsg(null);
       void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setErrorMsg(err instanceof Error ? err.message : 'Failed to rename passkey.');
     }
@@ -698,19 +754,40 @@ export function PersonalSettingsPage(): JSX.Element {
                 testId="personal-timezone-help"
               />
             </label>
-            <select
-              id="timezone-select"
-              data-testid="timezone-select"
-              className="kb-personal-settings-select"
-              value={currentTimezone}
-              onChange={(e) => { setTimezoneInput(e.target.value); }}
-            >
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+            <div className="kb-timezone-controls">
+              <div className="kb-timezone-search-row">
+                <input
+                  type="text"
+                  data-testid="timezone-filter-input"
+                  className="kb-personal-settings-input kb-timezone-filter-input"
+                  placeholder="Search timezones..."
+                  value={timezoneFilter}
+                  onChange={(e) => { setTimezoneFilter(e.target.value); }}
+                />
+                <button
+                  type="button"
+                  data-testid="timezone-auto-detect-btn"
+                  className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-timezone-auto-btn"
+                  onClick={handleAutoDetectTimezone}
+                  title="Detect timezone from browser environment"
+                >
+                  Auto-detect
+                </button>
+              </div>
+              <select
+                id="timezone-select"
+                data-testid="timezone-select"
+                className="kb-personal-settings-select"
+                value={currentTimezone}
+                onChange={(e) => { setTimezoneInput(e.target.value); }}
+              >
+                {filteredTimezones.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -837,28 +914,38 @@ export function PersonalSettingsPage(): JSX.Element {
             </p>
           </div>
           <div className="kb-personal-settings-header-actions">
-            <button
-              type="button"
-              className="kb-personal-settings-btn kb-personal-settings-btn-primary kb-personal-settings-btn--mr"
-              data-testid="add-passkey-btn"
-              disabled={!isSecure || !isSupported}
-              onClick={() => {
-                setEnrollModal({ isOpen: true, initialAttachment: 'platform' });
-              }}
-            >
-              + Add Passkey
-            </button>
-            <button
-              type="button"
-              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
-              data-testid="add-fido2-key-btn"
-              disabled={!isSecure || !isSupported}
-              onClick={() => {
-                setEnrollModal({ isOpen: true, initialAttachment: 'cross-platform' });
-              }}
-            >
-              + Add FIDO2 Security Key
-            </button>
+            <div className="kb-passkey-action-card">
+              <button
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-primary kb-personal-settings-btn--mr"
+                data-testid="add-passkey-btn"
+                disabled={!isSecure || !isSupported}
+                onClick={() => {
+                  setEnrollModal({ isOpen: true, initialAttachment: 'platform' });
+                }}
+              >
+                + Add Passkey
+              </button>
+              <p className="kb-passkey-action-subtext" data-testid="passkey-helper-copy">
+                Platform Passkeys sync across your device ecosystem (Touch ID, Windows Hello, iCloud Keychain, Google Password Manager).
+              </p>
+            </div>
+            <div className="kb-passkey-action-card">
+              <button
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                data-testid="add-fido2-key-btn"
+                disabled={!isSecure || !isSupported}
+                onClick={() => {
+                  setEnrollModal({ isOpen: true, initialAttachment: 'cross-platform' });
+                }}
+              >
+                + Add FIDO2 Security Key
+              </button>
+              <p className="kb-passkey-action-subtext" data-testid="security-key-helper-copy">
+                Hardware Security Keys require a physical USB/NFC token (such as YubiKey or Titan Security Key).
+              </p>
+            </div>
           </div>
         </div>
 

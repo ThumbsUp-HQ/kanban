@@ -488,8 +488,32 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .kb-table-scroll-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .kb-personal-settings-th,
+  .kb-personal-settings-td {
+    padding: 8px 6px;
+  }
+
+  .kb-passkey-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-start;
+  }
+
+  .kb-passkey-actions .kb-personal-settings-btn {
+    padding: 0 8px;
+    font-size: var(--text-xs);
+    height: 30px;
+  }
 }
 
 .kb-personal-settings-modal-backdrop--stepup {
@@ -1006,3 +1030,41 @@
   padding: 2px 4px;
   border-radius: 4px;
 }
+
+/* Timezone Search and Auto-Detect */
+.kb-timezone-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kb-timezone-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.kb-timezone-filter-input {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.kb-timezone-auto-btn {
+  white-space: nowrap;
+}
+
+/* Passkey vs Security Key Guidance */
+.kb-passkey-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kb-passkey-action-subtext {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--kb-color-text-secondary, #64748b);
+  max-width: 280px;
+  line-height: 1.3;
+}
+

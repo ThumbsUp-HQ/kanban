@@ -1,0 +1,102 @@
+================================================================================
+KAN-427 MANDATORY UNIT TEST RESULTS
+Slice-5 Governance Simplify: Workspace/Project Settings, Custom Fields & Workflows
+================================================================================
+
+1. BACKEND PYTEST SUITE (93 tests passed):
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan427-3a52f19e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 93 items
+
+kanban/tests/api/test_workspace_settings.py .............                [ 13%]
+kanban/tests/api/test_project_config.py ..................               [ 33%]
+kanban/tests/api/test_admin_trash_api.py ......                          [ 39%]
+kanban/tests/api/test_user_personal_settings.py ..........               [ 50%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 58%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 66%]
+kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 75%]
+kanban/tests/workflows/test_workflow_hooks_api.py ................       [ 92%]
+kanban/tests/workflows/test_dry_run.py .......                           [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                        Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------
+kanban/api/v1/admin/destructive.py            133      7     26      4    93%   149, 175-185, 284, 330, 333, 335
+kanban/api/v1/admin/workspace_settings.py     187     12     68     13    90%   238, 244->277, 260, 301->308, 304->308, 317->334, 366->369, 390-391, 397-398, 404-405, 411-412, 418-419, 421->488
+kanban/api/v1/custom_field_approvals.py        24      0      0      0   100%
+kanban/api/v1/custom_fields.py                 30      0      0      0   100%
+kanban/api/v1/project_config.py                74      0      0      0   100%
+kanban/api/v1/user_settings.py                408    105    118     23    71%   136-137, 162-163, 190-191, 194-195, 201-202, 208->225, 222-223, 236->238, 254-257, 263-264, 274-275, 290-316, 370-371, 401->413, 403->413, 404->413, 406, 408->404, 429, 464, 471, 480-483, 512-513, 555-556, 588-589, 609->612, 663-664, 758-766, 791-792, 809-832, 927-950, 962-1001, 1024-1076
+kanban/api/v1/workflow_hooks.py                52      0      0      0   100%
+kanban/workflows/dry_run.py                   208      7     48      5    95%   261, 383, 432, 513->280, 516, 557-559
+---------------------------------------------------------------------------------------
+TOTAL                                        1116    131    260     45    85%
+======================== 93 passed in 85.09s (0:01:25) =========================
+
+2. FRONTEND VITEST SUITE (280 tests passed, >=95% branch coverage):
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan427-3a52f19e/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 72ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 692ms
+   ✓ DryRunDrawer (KB-P5-24) (6)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 329ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 709ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1125ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (13 tests) 1668ms
+   ✓ AttachHookDialog (KB-P5-24) (13)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 513ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 1490ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (14)
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 316ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (42 tests) 3761ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (42)
+     ✓ renders workspace settings page and updates workspace name and slug 573ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (47 tests) 3736ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 5102ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 475ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 334ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 310ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (71 tests) 15057ms
+   ✓ PersonalSettingsPage (71)
+     ✓ renders personal settings sections with loaded profile data 379ms
+     ✓ regenerates recovery codes and displays modal 2358ms
+     ✓ toggles password visibility and handles successful password update 455ms
+     ✓ cancels passkey rename modal when clicking cancel 602ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 402ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 617ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 429ms
+     ✓ handles Test Key cancellation and error conditions 356ms
+     ✓ External Identity Linking (KAN-27) (16)
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 491ms
+
+ Test Files  10 passed (10)
+      Tests  280 passed (280)
+   Start at  17:16:10
+   Duration  15.86s (tests 67%, environment 21%, import 9%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.68 |    96.05 |   99.24 |   99.95 |                   
+ custom-fields     |   99.72 |    96.61 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    97.01 |     100 |     100 | ...,642,1168-1182 
+  ...ovalPanel.tsx |   98.82 |    95.74 |     100 |     100 | 111-123,139,153   
+ settings          |   99.68 |    95.73 |   98.88 |     100 |                   
+  ...tingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...69,391,484,580 
+  ...tingsPage.tsx |   99.57 |    95.05 |     100 |     100 | ...1095,1770,2870 
+  ...tingsPage.tsx |     100 |    96.03 |    96.9 |     100 | ...7,685,714,1679 
+ workflows         |   99.64 |    97.01 |     100 |   99.63 |                   
+  ...ookDialog.tsx |     100 |    98.24 |     100 |     100 | 50                
+  DryRunDrawer.tsx |   98.78 |    96.77 |     100 |   98.75 | 93                
+  ...gsSection.tsx |     100 |    95.65 |     100 |     100 | 76,158,246        
+-------------------|---------|----------|---------|---------|-------------------

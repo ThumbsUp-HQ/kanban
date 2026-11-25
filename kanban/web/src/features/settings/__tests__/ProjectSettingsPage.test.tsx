@@ -339,11 +339,17 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(dangerTab);
 
     // Stage 1: Request Deletion
+    expect(screen.getByTestId('danger-card-trash')).toBeDefined();
     const requestBtn = await screen.findByTestId('request-delete-btn');
     fireEvent.click(requestBtn);
 
-    // Verify blast radius and confirm phrase prompt
+    // Verify blast radius, styling class, and confirm phrase prompt
     expect(await screen.findByText('Stage 2: Confirm Project Deletion')).toBeDefined();
+    expect(screen.getByTestId('danger-confirm-card').className).toContain('kb-danger-card-trash');
+    expect(screen.getByTestId('blast-radius-counters')).toBeDefined();
+    expect(screen.getByTestId('blast-count-issues').textContent).toContain('Work Items: 42');
+    expect(screen.getByTestId('blast-count-docs').textContent).toContain('Docs / Pages: 5');
+    expect(screen.getByTestId('blast-count-stickies').textContent).toContain('Stickies: 12');
     expect(screen.getByText('Work Items: 42')).toBeDefined();
     expect(screen.getByText('Docs / Pages: 5')).toBeDefined();
     expect(screen.getByText('Stickies: 12')).toBeDefined();
@@ -848,6 +854,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(dangerTab);
 
     // Verify permanent purge button visible for server admin
+    expect(screen.getByTestId('danger-card-purge')).toBeDefined();
     const purgeBtn = await screen.findByTestId('request-purge-btn');
     expect(purgeBtn).toBeDefined();
 
@@ -857,6 +864,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     expect(
       await screen.findByText('Stage 2: Confirm PERMANENT Project Purge (IRREVERSIBLE)'),
     ).toBeDefined();
+    expect(screen.getByTestId('danger-confirm-card').className).toContain('kb-danger-card-purge');
     expect(
       screen.getByText('All 50 records in project KAN will be irrevocably destroyed'),
     ).toBeDefined();
@@ -1099,7 +1107,14 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     fireEvent.click(prioritiesTab);
 
     expect(await screen.findByText('High Priority')).toBeDefined();
-    expect(screen.getByText('🔥')).toBeDefined();
+    expect(screen.getAllByText('🔥').length).toBeGreaterThan(0);
+
+    // Verify quick-select emoji palette and click
+    const emojiPalette = screen.getByTestId('priority-emoji-palette');
+    expect(emojiPalette).toBeDefined();
+    const fireEmojiBtn = screen.getByTestId('priority-emoji-btn-🔥');
+    fireEvent.click(fireEmojiBtn);
+    expect(screen.getByTestId<HTMLInputElement>('priority-emoji-input').value).toBe('🔥');
 
     // Empty fields guard
     const submitBtn = screen.getByTestId('create-priority-btn');
@@ -3701,6 +3716,114 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       await waitFor(() => {
         expect(screen.queryByRole('alert')).toBeNull();
       });
+    });
+
+    it('supports string blast_summary and pages_count fallback in destructive token (KAN-427)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url: string = path;
+        const m = method.toUpperCase();
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+          return {
+            confirmation_token: 'token-str-1',
+            confirm_phrase: 'DELETE KAN',
+            blast_hash: 'hash-1',
+            blast_summary: 'All issues and stickies will be moved to trash',
+          };
+        }
+        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/states')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        if (url.includes('/api/v1/projects/KAN/members')) return [];
+        if (url.includes('/api/v1/projects/KAN')) {
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      fireEvent.click(await screen.findByTestId('tab-danger'));
+      const deleteBtn = await screen.findByTestId('request-delete-btn');
+      fireEvent.click(deleteBtn);
+      expect(await screen.findByTestId('blast-summary-text')).toBeDefined();
+      expect(screen.getByTestId('blast-summary-text').textContent).toContain('All issues and stickies will be moved to trash');
+    });
+
+    it('supports pages_count fallback in blast_summary object (KAN-427)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url: string = path;
+        const m = method.toUpperCase();
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/admin/destructive:request') && m === 'POST') {
+          return {
+            confirmation_token: 'token-pages-1',
+            confirm_phrase: 'DELETE KAN',
+            blast_hash: 'hash-2',
+            blast_summary: {
+              issues_count: 5,
+              pages_count: 3,
+              stickies_count: 2,
+              modules_count: 1,
+            },
+          };
+        }
+        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/states')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        if (url.includes('/api/v1/projects/KAN/members')) return [];
+        if (url.includes('/api/v1/projects/KAN')) {
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      fireEvent.click(await screen.findByTestId('tab-danger'));
+      const deleteBtn = await screen.findByTestId('request-delete-btn');
+      fireEvent.click(deleteBtn);
+      expect(await screen.findByTestId('blast-count-docs')).toBeDefined();
+      expect(screen.getByTestId('blast-count-docs').textContent).toContain('Docs / Pages: 3');
+    });
+
+    it('supports setting sort order and WIP limits on new state (KAN-427)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url = path;
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN/states')) {
+          return [{ id: 'st-1', name: 'Backlog', key: 'backlog', category: 'BACKLOG', sort_order: 10 }];
+        }
+        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        if (url.includes('/api/v1/projects/KAN/members')) return [];
+        if (url.includes('/api/v1/projects/KAN')) {
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      fireEvent.click(await screen.findByTestId('tab-states'));
+      const advToggle = await screen.findByTestId('state-advanced-section');
+      fireEvent.click(advToggle);
+      const sortInput = screen.getByLabelText('Sort order');
+      fireEvent.change(sortInput, { target: { value: '25' } });
+      const wipSoftInput = screen.getByLabelText('Soft WIP limit');
+      fireEvent.change(wipSoftInput, { target: { value: '5' } });
+      const wipHardInput = screen.getByLabelText('Hard WIP limit');
+      fireEvent.change(wipHardInput, { target: { value: '10' } });
+      expect((sortInput as HTMLInputElement).value).toBe('25');
     });
   });
 });

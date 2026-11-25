@@ -42,6 +42,7 @@ export function GitRepoBindingsSection({
   const [defaultRef, setDefaultRef] = useState('main');
   const [accessMode, setAccessMode] = useState<'ro_vfs_mount' | 'bare_git_tools'>('ro_vfs_mount');
   const [credential, setCredential] = useState('');
+  const [patToken, setPatToken] = useState('');
   const [urlValidation, setUrlValidation] = useState<{ valid: boolean; error?: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,6 +61,7 @@ export function GitRepoBindingsSection({
     setDefaultRef('main');
     setAccessMode('ro_vfs_mount');
     setCredential('');
+    setPatToken('');
     setUrlValidation(null);
     setFormError(null);
     setIsSubmitting(false);
@@ -157,12 +159,20 @@ export function GitRepoBindingsSection({
       return;
     }
 
+    if (credential === 'workspace-pat') {
+      const trimmedPat = patToken.trim();
+      if (!trimmedPat) {
+        setFormError('Personal Access Token (PAT) is required when workspace-pat credential is selected.');
+        return;
+      }
+    }
+
     const payload: CreateRepoBindingPayload = {
       slug: trimmedSlug,
       remote_url: remoteUrl.trim(),
       default_ref: defaultRef.trim() || 'main',
       access_mode: accessMode,
-      ...(credential ? { credential } : {}),
+      ...(credential ? { credential: credential === 'workspace-pat' ? patToken.trim() : credential } : {}),
     };
 
     setIsSubmitting(true);
@@ -373,8 +383,8 @@ export function GitRepoBindingsSection({
                         : urlValidation.error}
                     </div>
                   )}
-                  <span className="workflow-notice">
-                    Only HTTPS and SSH remote URLs are permitted. Local filesystem and private loopback/SSRF ranges are strictly blocked.
+                  <span className="workflow-notice" data-testid="repo-url-ssrf-callout">
+                    <strong>SSRF Restrictions:</strong> Only public HTTPS and SSH remote URLs are permitted. Private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), loopback addresses (127.0.0.1, localhost), and cloud metadata endpoints (169.254.169.254) are strictly blocked to protect internal infrastructure.
                   </span>
                 </div>
 
@@ -427,6 +437,31 @@ export function GitRepoBindingsSection({
                     <option value="ssh-key">Workspace Deploy SSH Key</option>
                   </select>
                 </div>
+
+                {credential === 'workspace-pat' && (
+                  <div className="workflow-form-group" data-testid="repo-pat-group">
+                    <label htmlFor="repo-pat-input" className="workflow-form-label">
+                      Personal Access Token (PAT)
+                    </label>
+                    <input
+                      id="repo-pat-input"
+                      type="text"
+                      className="workflow-form-control kb-masked-api-key"
+                      data-testid="repo-pat-input"
+                      placeholder="ghp_... or glpat-..."
+                      value={patToken}
+                      onChange={(e) => { setPatToken(e.target.value); }}
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
+                    />
+                    <span className="workflow-notice">
+                      Token is securely encrypted at rest. Never stored in shell history or logs.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Actions - Sticky Footer */}

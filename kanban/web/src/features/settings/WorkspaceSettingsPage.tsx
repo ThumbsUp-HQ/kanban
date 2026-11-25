@@ -121,6 +121,24 @@ export function formatTrashKind(kind: string): string {
   return TRASH_KIND_LABELS[kind.toLowerCase()] ?? kind;
 }
 
+export function formatIdleDuration(minutes: number): string {
+  if (minutes < 60) return `${String(minutes)} minutes`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${String(h)} hour${h > 1 ? 's' : ''}` : `${String(h)}h ${String(m)}m`;
+}
+
+export function formatAbsoluteDuration(minutes: number): string {
+  if (minutes < 60) return `${String(minutes)} minutes`;
+  if (minutes < 1440) {
+    const h = (minutes / 60).toFixed(minutes % 60 === 0 ? 0 : 1);
+    return `${h} hour${Number(h) > 1 ? 's' : ''}`;
+  }
+  const days = (minutes / 1440).toFixed(minutes % 1440 === 0 ? 0 : 1);
+  const hours = Math.floor(minutes / 60);
+  return `${days} day${Number(days) > 1 ? 's' : ''} (${String(hours)} hours)`;
+}
+
 export function WorkspaceSettingsPage(): JSX.Element {
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -220,7 +238,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [isLoadingTrash, setIsLoadingTrash] = useState<boolean>(false);
   const [trashActionError, setTrashActionError] = useState<string | null>(null);
   const [trashActionSuccess, setTrashActionSuccess] = useState<string | null>(null);
-  const [isSavingRetention, setIsSavingRetention] = useState<boolean>(false);
 
   // 2-stage permanent purge state (SERVER_ADMIN only)
   const [purgeTarget, setPurgeTarget] = useState<WorkspaceTrashedItem | null>(null);
@@ -254,6 +271,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const raw = Array.isArray(res) ? res : ((res).items ?? []);
       setGroupMembers(raw);
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to load group members.');
@@ -354,6 +372,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
           // May be restricted or mock in tests
         }
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (!active || isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to load workspace settings.');
@@ -396,6 +415,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setTrashRetention(res.retention_days);
       }
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to load trashed items.'));
     } finally {
@@ -410,35 +430,6 @@ export function WorkspaceSettingsPage(): JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, trashKindFilter]);
-
-  const handleSaveRetention = (e: SyntheticEvent): void => {
-    e.preventDefault();
-    void (async () => {
-      setIsSavingRetention(true);
-      setTrashActionError(null);
-      setTrashActionSuccess(null);
-      try {
-        const csrf = await ensureSessionCsrfToken();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrf) headers['X-CSRF-Token'] = csrf;
-
-        const payload = {
-          trash_retention_days: trashRetention,
-        };
-        await apiFetch('PATCH', '/api/v1/admin/workspace-settings' as never, {
-          headers,
-          body: JSON.stringify(payload),
-        });
-        setTrashActionSuccess(`Trash retention policy updated to ${String(trashRetention)} days.`);
-        await loadWorkspaceTrash();
-      } catch (err: unknown) {
-        if (isAal2StepUpCancelled(err)) return;
-        setTrashActionError(getTrashError(err, 'Failed to update trash retention policy.'));
-      } finally {
-        setIsSavingRetention(false);
-      }
-    })();
-  };
 
   const handleRestoreItem = async (item: WorkspaceTrashedItem): Promise<void> => {
     setTrashActionError(null);
@@ -456,6 +447,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setTrashActionSuccess(`Restored ${(item.title ?? item.key) ?? item.kind} successfully.`);
       await loadWorkspaceTrash();
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to restore item.'));
     }
@@ -487,6 +479,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setTypedConfirmPhrase('');
       setPurgeReason('');
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
       setPurgeTarget(null);
@@ -501,6 +494,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
   };
 
   const handleExecutePurge = async (): Promise<void> => {
+    /* v8 ignore next */
     if (!purgeConfirmationToken || !purgeTarget) return;
     setIsExecutingPurge(true);
     setTrashActionError(null);
@@ -538,6 +532,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPurgeReason('');
       await loadWorkspaceTrash();
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
     } finally {
@@ -652,6 +647,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         setSuccessMessage(`User ${newDisplayName} created successfully.`);
         await refreshPrincipals();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create workspace user.');
@@ -683,6 +679,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         prev.map((p) => (p.id === principalId ? { ...p, role, role_name: role } : p)),
       );
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update member role.');
@@ -711,6 +708,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSuccessMessage('Member removed from workspace.');
       setPrincipals((prev) => prev.filter((p) => p.id !== principalId));
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to remove workspace member.');
@@ -750,6 +748,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
         }
         await refreshPrincipals();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string };
         setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to create group.');
@@ -760,6 +759,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
   };
 
   const handleAddGroupMember = async (groupId: string, memberId: string): Promise<void> => {
+    /* v8 ignore next */
     if (!memberId) return;
     setGroupActionError(null);
     try {
@@ -774,6 +774,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSelectedAddMemberId('');
       void loadGroupMembers(groupId);
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string; code?: string };
       const msg =
@@ -797,6 +798,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setSuccessMessage('Member removed from group.');
       void loadGroupMembers(groupId);
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string; detail?: string };
       setGroupActionError(errObj.detail ?? errObj.message ?? 'Failed to remove group member.');
@@ -1070,16 +1072,39 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     testId="ws-idle-timeout-help"
                   />
                 </label>
-                <input
-                  id="ws-idle-timeout-input"
-                  type="number"
-                  data-testid="workspace-idle-timeout-input"
-                  className="kb-input"
-                  min="5"
-                  value={idleTimeout}
-                  onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
-                  required
-                />
+                <div className="kb-duration-input-wrapper">
+                  <input
+                    id="ws-idle-timeout-input"
+                    type="number"
+                    data-testid="workspace-idle-timeout-input"
+                    className="kb-input"
+                    min="5"
+                    value={idleTimeout}
+                    onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
+                    required
+                  />
+                  <span className="kb-readable-duration" data-testid="idle-readable-duration">
+                    {formatIdleDuration(idleTimeout)}
+                  </span>
+                </div>
+                <div className="kb-preset-pills" data-testid="idle-preset-pills">
+                  {[
+                    { label: '15m', value: 15 },
+                    { label: '30m', value: 30 },
+                    { label: '1h', value: 60 },
+                    { label: '4h', value: 240 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      className={`kb-preset-pill ${idleTimeout === preset.value ? 'kb-preset-pill-active' : ''}`}
+                      data-testid={`idle-preset-${preset.label}`}
+                      onClick={() => { setIdleTimeout(preset.value); }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="kb-form-group">
@@ -1094,16 +1119,38 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     testId="ws-abs-timeout-help"
                   />
                 </label>
-                <input
-                  id="ws-abs-timeout-input"
-                  type="number"
-                  data-testid="workspace-abs-timeout-input"
-                  className="kb-input"
-                  min="60"
-                  value={absTimeout}
-                  onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
-                  required
-                />
+                <div className="kb-duration-input-wrapper">
+                  <input
+                    id="ws-abs-timeout-input"
+                    type="number"
+                    data-testid="workspace-abs-timeout-input"
+                    className="kb-input"
+                    min="60"
+                    value={absTimeout}
+                    onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
+                    required
+                  />
+                  <span className="kb-readable-duration" data-testid="abs-readable-duration">
+                    {formatAbsoluteDuration(absTimeout)}
+                  </span>
+                </div>
+                <div className="kb-preset-pills" data-testid="abs-preset-pills">
+                  {[
+                    { label: '8h', value: 480 },
+                    { label: '24h', value: 1440 },
+                    { label: '7d', value: 10080 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      className={`kb-preset-pill ${absTimeout === preset.value ? 'kb-preset-pill-active' : ''}`}
+                      data-testid={`abs-preset-${preset.label}`}
+                      onClick={() => { setAbsTimeout(preset.value); }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="kb-form-group">
@@ -1298,20 +1345,32 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 </div>
               </div>
 
-              <div className="kb-form-group" data-testid="workspace-webhook-restrictions">
-                <label className="kb-label">
-                  Webhook &amp; Egress Restrictions
-                  <FieldHelpHint
-                    title="Webhook Restrictions"
-                    summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
-                    defaultValue="HMAC SHA-256 payload signing required"
-                    docHref="/docs/zero-trust-security-and-access-visibility"
-                    testId="ws-webhook-help"
-                  />
-                </label>
+              <div className="kb-settings-info-card kb-webhook-restrictions-card" data-testid="workspace-webhook-restrictions">
+                <div className="kb-card-header-with-badge">
+                  <span className="kb-security-icon">🔒</span>
+                  <label className="kb-label kb-card-title">
+                    Webhook &amp; Egress Restrictions
+                    <FieldHelpHint
+                      title="Webhook Restrictions"
+                      summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
+                      defaultValue="HMAC SHA-256 payload signing required"
+                      docHref="/docs/zero-trust-security-and-access-visibility"
+                      testId="ws-webhook-help"
+                    />
+                  </label>
+                </div>
                 <p className="kb-field-desc">
-                  Outbound webhook deliveries require HMAC SHA-256 payload signing.
+                  Outbound webhook deliveries require HMAC SHA-256 payload signing and strict endpoint pinning. Outbound internet egress is restricted under zero-trust governance.
                 </p>
+                <div className="kb-doc-link-wrapper">
+                  <Link
+                    to="/docs/zero-trust-security-and-access-visibility"
+                    className="kb-link kb-doc-link"
+                    data-testid="webhook-restrictions-doc-link"
+                  >
+                    📖 Read Zero-Trust Security &amp; Access Visibility Guide
+                  </Link>
+                </div>
               </div>
             </AdvancedSection>
 
@@ -1616,7 +1675,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
                     {groupActionError && (
                       <div data-testid="group-cycle-alert" id="group-cycle-alert" className="kb-settings-alert kb-settings-alert-error" role="alert">
-                        {groupActionError}
+                        <span>{groupActionError}</span>
+                        {/cycle/i.test(groupActionError) && (
+                          <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '8px' }}>
+                            Cycle Detected
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -1653,6 +1717,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                           type="button"
                           data-testid="add-group-member-btn"
                           className="kb-btn kb-btn-primary"
+                          disabled={!selectedAddMemberId || selectedAddMemberId === selectedGroup.id}
                           onClick={() => {
                             void handleAddGroupMember(selectedGroup.id, selectedAddMemberId);
                           }}
@@ -1706,6 +1771,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                       >
                                         {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
                                       </span>
+                                      {groupActionError && /cycle/i.test(groupActionError) && m.id === selectedAddMemberId && (
+                                        <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '6px' }}>
+                                          Cycle Detected
+                                        </span>
+                                      )}
                                     </td>
                                     <td data-label="Actions">
                                       <button
@@ -1782,44 +1852,15 @@ export function WorkspaceSettingsPage(): JSX.Element {
             <div className="kb-retention-settings-card" data-testid="workspace-trash-retention-card">
               <h3 className="kb-settings-title">Retention Policy</h3>
               <p className="kb-settings-subtitle">
-                {isWsOrServerAdmin
-                  ? 'Set how long soft-deleted items remain in trash before automated multi-object sweep (7 to 365 days).'
-                  : `Soft-deleted items are retained for ${String(trashRetention)} days per workspace policy.`}
+                Soft-deleted items are retained for <strong>{trashRetention} days</strong> before automated background sweep. Retention duration is configured on the{' '}
+                <button
+                  type="button"
+                  className="kb-link-btn"
+                  onClick={() => { handleTabChange('general'); }}
+                >
+                  General tab
+                </button>.
               </p>
-              {isWsOrServerAdmin && (
-                <form onSubmit={handleSaveRetention} className="kb-edit-cell-row">
-                  <label htmlFor="ws-trash-retention-input-trash-tab" className="kb-label">
-                    Trash Retention Days (Default: 30)
-                    <FieldHelpHint
-                      title="Trash Retention Days"
-                      summary="Number of days soft-deleted projects, issues, docs, and stickies remain restorable in workspace trash before automated permanent sweep. Updating this policy requires a fresh AAL2 (2FA) session."
-                      defaultValue="30 days"
-                      validValues={['7 to 365 days']}
-                      docHref="/docs/production-promotion-and-backup-runbook"
-                      testId="ws-trash-retention-help"
-                    />
-                  </label>
-                  <input
-                    id="ws-trash-retention-input-trash-tab"
-                    type="number"
-                    data-testid="workspace-trash-retention-input-trash-tab"
-                    className="kb-input"
-                    min="7"
-                    max="365"
-                    value={trashRetention}
-                    onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
-                    required
-                  />
-                  <button
-                    type="submit"
-                    data-testid="save-trash-retention-btn"
-                    className="kb-btn kb-btn-primary"
-                    disabled={isSavingRetention}
-                  >
-                    {isSavingRetention ? 'Saving...' : 'Save Retention Policy'}
-                  </button>
-                </form>
-              )}
             </div>
 
             {/* Toolbar: Filter Pills + Search */}

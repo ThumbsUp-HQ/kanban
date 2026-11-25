@@ -146,6 +146,11 @@ describe('DryRunDrawer (KB-P5-24)', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
     expect(screen.getByLabelText(/Issue Key/i)).toBeDefined();
 
+    // Switch back to sample
+    fireEvent.click(screen.getByRole('tab', { name: 'Sample ticket' }));
+    expect(screen.getByLabelText(/Summary/i)).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
+
     // Trigger run with issue key
     fireEvent.change(screen.getByLabelText(/Issue Key/i), { target: { value: 'KAN-99' } });
     fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
@@ -185,7 +190,7 @@ describe('DryRunDrawer (KB-P5-24)', () => {
     expect(screen.getByRole('alert').textContent).toContain('Issue key is required');
   });
 
-  it('handles runner failure gracefully', async () => {
+  it('renders prominent simulation top banner and handles runner failure gracefully', async () => {
     const mockRunner = vi.fn().mockRejectedValue(new Error('Network timeout during dry-run'));
 
     render(
@@ -198,10 +203,105 @@ describe('DryRunDrawer (KB-P5-24)', () => {
       />,
     );
 
+    // Check prominent simulation banner
+    const simBanner = screen.getByTestId('dry-run-simulation-banner');
+    expect(simBanner).toBeDefined();
+    expect(simBanner.textContent).toContain('DRY-RUN SIMULATION: No database changes were committed.');
+
     fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('Network timeout during dry-run');
     });
+  });
+
+  it('renders diff table for sample mode field updates and handles error and allowed steps with sub-millisecond durations', async () => {
+    const mockRunner = vi
+      .fn<(projectKey: string, payload: DryRunPayload) => Promise<DryRunResponse>>()
+      .mockResolvedValue({
+        would_commit: true,
+      steps: [
+        {
+          order: 1,
+          name: 'fast-wasm-validator',
+          hook_kind: 'sync_validator',
+          result: 'allowed',
+          duration_us: 400,
+        },
+        {
+          order: 2,
+          name: 'faulty-validator',
+          hook_kind: 'sync_validator',
+          result: 'error',
+          reason: 'Wasm execution faulted with SIGSEGV',
+          duration_us: 800,
+        },
+        {
+          order: 3,
+          name: 'metadata-mutator',
+          hook_kind: 'sync_mutator',
+          result: 'mutated',
+          field_updates: {
+            priority: 'HIGH',
+            summary: 'Updated Summary Title',
+          },
+          duration_us: 1500,
+        },
+      ],
+    });
+
+    const handleClose = vi.fn();
+    render(
+      <DryRunDrawer
+        isOpen={true}
+        projectKey="KAN"
+        transition={{ from_state: 'In Review', to_state: 'Done' }}
+        onClose={handleClose}
+        dryRunRunner={mockRunner}
+      />,
+    );
+
+    // Edit sample inputs
+    fireEvent.change(screen.getByLabelText(/Summary/i), { target: { value: 'Original Summary' } });
+    fireEvent.change(screen.getByLabelText(/Description Markdown/i), { target: { value: 'New markdown body' } });
+    fireEvent.change(screen.getByLabelText(/Priority/i), { target: { value: 'NORMAL' } });
+    fireEvent.change(screen.getByLabelText(/Labels/i), { target: { value: 'frontend, security' } });
+
+    // Click Run
+    fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
+
+    await waitFor(() => {
+      expect(mockRunner).toHaveBeenCalled();
+    });
+    const lastCall = mockRunner.mock.calls[0];
+    expect(lastCall?.[0]).toBe('KAN');
+    expect(lastCall?.[1]?.sample_ticket?.summary).toBe('Original Summary');
+    expect(lastCall?.[1]?.sample_ticket?.description_markdown).toBe('New markdown body');
+    expect(lastCall?.[1]?.sample_ticket?.priority).toBe('NORMAL');
+    expect(lastCall?.[1]?.sample_ticket?.labels).toEqual(['frontend', 'security']);
+
+    // Check fast validator duration (<1ms)
+    expect(screen.getByTestId('dry-run-step-1').textContent).toContain('<1ms');
+    expect(screen.getByTestId('dry-run-step-1').textContent).toContain('Allowed');
+
+    // Check faulty validator (error)
+    expect(screen.getByTestId('dry-run-step-2').textContent).toContain('Error');
+    expect(screen.getByTestId('dry-run-reason-2').textContent).toContain('SIGSEGV');
+
+    // Check diff table for field updates in sample mode
+    expect(screen.getByTestId('dry-run-diff-3')).toBeDefined();
+    expect(screen.getByTestId('dry-run-diff-3').textContent).toContain('"Original Summary"');
+    expect(screen.getByTestId('dry-run-diff-3').textContent).toContain('"Updated Summary Title"');
+
+    // Test backdrop close and aside stopPropagation
+    const drawerAside = screen.getByRole('dialog');
+    fireEvent.click(drawerAside);
+    expect(handleClose).not.toHaveBeenCalled();
+
+    const backdrop = document.querySelector('.workflow-modal-backdrop');
+    if (backdrop instanceof HTMLElement) {
+      fireEvent.click(backdrop);
+      expect(handleClose).toHaveBeenCalled();
+    }
   });
 });

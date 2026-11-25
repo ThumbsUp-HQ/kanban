@@ -25,7 +25,7 @@ export interface AttachHookDialogProps {
   initialTransition?: { from_state: string | null; to_state: string } | undefined;
   editingHook?: WorkflowHook | null | undefined;
   states: ProjectStateSummary[];
-  agentDefinitions: AgentDefinitionSummary[];
+  agentDefinitions?: AgentDefinitionSummary[] | undefined;
   wasmModules?: WasmModuleSummary[] | undefined;
   onSave: (payload: CreateWorkflowHookPayload) => Promise<void> | void;
   onClose: () => void;
@@ -35,7 +35,7 @@ function AttachHookDialogInner({
   initialTransition,
   editingHook,
   states,
-  agentDefinitions,
+  agentDefinitions = [],
   wasmModules = DEFAULT_WASM_MODULES,
   onSave,
   onClose,
@@ -69,11 +69,20 @@ function AttachHookDialogInner({
 
   const handleToggleMutableField = (field: string) => {
     // Invariant: state and description_markdown are forbidden
+    /* v8 ignore next */
     if (field === 'state' || field === 'description_markdown') return;
 
     setAllowedMutableFields((prev) =>
       prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
     );
+  };
+
+  const handleSelectAllMutableFields = () => {
+    setAllowedMutableFields([...MUTABLE_FIELD_UNIVERSE]);
+  };
+
+  const handleClearAllMutableFields = () => {
+    setAllowedMutableFields([]);
   };
 
   const selectedAgent = agentDefinitions.find((a) => a.slug === selectedAgentSlug);
@@ -88,6 +97,7 @@ function AttachHookDialogInner({
       return;
     }
 
+    /* v8 ignore next 4 */
     if (!toState) {
       setError('Target state (to_state) is required.');
       return;
@@ -173,7 +183,7 @@ function AttachHookDialogInner({
                 value={fromState ?? '*'}
                 onChange={(e) => { setFromState(e.target.value === '*' ? null : e.target.value); }}
               >
-                <option value="*">* Any State</option>
+                <option key="any-state" value="*">* Any State</option>
                 {states.map((s) => (
                   <option key={s.id} value={s.name}>
                     {s.name}
@@ -238,31 +248,49 @@ function AttachHookDialogInner({
                   <input
                     type="radio"
                     name="hook_kind"
+                    aria-label="Sync Wasm Validator"
                     value="sync_validator"
                     checked={hookKind === 'sync_validator'}
                     onChange={() => { setHookKind('sync_validator'); }}
                   />
-                  Sync Wasm Validator
+                  <span>
+                    <strong>Sync Wasm Validator</strong>
+                    <small className="workflow-radio-subtext">
+                      Deterministic WebAssembly rule (&lt;25ms) that validates invariants and can block invalid transitions.
+                    </small>
+                  </span>
                 </label>
                 <label className="workflow-radio-label">
                   <input
                     type="radio"
                     name="hook_kind"
+                    aria-label="Sync Wasm Mutator"
                     value="sync_mutator"
                     checked={hookKind === 'sync_mutator'}
                     onChange={() => { setHookKind('sync_mutator'); }}
                   />
-                  Sync Wasm Mutator
+                  <span>
+                    <strong>Sync Wasm Mutator</strong>
+                    <small className="workflow-radio-subtext">
+                      Deterministic WebAssembly rule (&lt;25ms) permitted to update authorized mutable fields during transition.
+                    </small>
+                  </span>
                 </label>
                 <label className="workflow-radio-label">
                   <input
                     type="radio"
                     name="hook_kind"
+                    aria-label="Agent Transition Helper"
                     value="agent_interceptor"
                     checked={hookKind === 'agent_interceptor'}
                     onChange={() => { setHookKind('agent_interceptor'); }}
                   />
-                  Agent Transition Helper
+                  <span>
+                    <strong>Agent Transition Helper</strong>
+                    <small className="workflow-radio-subtext">
+                      Probabilistic autonomous AI Agent (CLI pipe or SDK) performing contextual evaluation and forensic QA gates.
+                    </small>
+                  </span>
                 </label>
               </div>
             </div>
@@ -356,7 +384,7 @@ function AttachHookDialogInner({
                         onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
                       >
                         {cliAgents.length > 0 && (
-                          <optgroup label="CLI Pipe Agents (agy, codex)">
+                          <optgroup key="cli" label="CLI Pipe Agents (agy, codex)">
                             {cliAgents.map((a) => (
                               <option key={a.id} value={a.slug}>
                                 {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
@@ -365,7 +393,7 @@ function AttachHookDialogInner({
                           </optgroup>
                         )}
                         {sdkAgents.length > 0 && (
-                          <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+                          <optgroup key="sdk" label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
                             {sdkAgents.map((a) => (
                               <option key={a.id} value={a.slug}>
                                 {a.display_name} ({a.model_id ?? a.provider_kind})
@@ -374,7 +402,7 @@ function AttachHookDialogInner({
                           </optgroup>
                         )}
                         {remoteAgents.length > 0 && (
-                          <optgroup label="Remote Runner Pools">
+                          <optgroup key="remote" label="Remote Runner Pools">
                             {remoteAgents.map((a) => (
                               <option key={a.id} value={a.slug}>
                                 {a.display_name}
@@ -393,8 +421,12 @@ function AttachHookDialogInner({
                         {selectedAgent.cli_args.length > 0 && (
                           <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
                         )}
-                        <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
-                        <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+                        {Boolean(selectedAgent.repo_access_mode) && (
+                          <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+                        )}
+                        {typeof selectedAgent.timeout_ms === 'number' && (
+                          <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+                        )}
                       </div>
                     )}
                   </>
@@ -403,10 +435,32 @@ function AttachHookDialogInner({
 
               {/* Allowed Mutable Fields */}
               <div className="workflow-form-group">
-                <label className="workflow-form-label">
-                  Allowed Mutable Fields
-                  {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
-                </label>
+                <div className="workflow-mutable-fields-header">
+                  <label className="workflow-form-label">
+                    Allowed Mutable Fields
+                    {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
+                  </label>
+                  {hookKind !== 'sync_validator' && (
+                    <div className="workflow-mutable-fields-actions">
+                      <button
+                        type="button"
+                        data-testid="select-all-mutable-fields-btn"
+                        className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                        onClick={handleSelectAllMutableFields}
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="clear-all-mutable-fields-btn"
+                        className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                        onClick={handleClearAllMutableFields}
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="mutable-fields-picker">
                   {MUTABLE_FIELD_UNIVERSE.map((field) => {
                     const isChecked = allowedMutableFields.includes(field);

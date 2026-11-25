@@ -261,13 +261,22 @@ describe('GitRepoBindingsSection', () => {
 
     expect(await screen.findAllByText(/Insecure URL scheme rejected/i)).toHaveLength(2);
 
-    // Test valid inputs
+    // Test valid inputs with workspace-pat credential
     fireEvent.change(urlInput, { target: { value: 'https://github.com/myorg/myrepo.git' } });
     fireEvent.change(refInput, { target: { value: 'release/v1.0' } });
     fireEvent.change(accessSelect, { target: { value: 'bare_git_tools' } });
     fireEvent.change(credSelect, { target: { value: 'workspace-pat' } });
 
     expect(screen.getByText('Valid remote git URL (HTTPS / SSH).')).toBeDefined();
+
+    // Verify blank PAT rejection
+    fireEvent.click(screen.getByText('Bind Repository'));
+    expect(await screen.findByText(/Personal Access Token \(PAT\) is required/i)).toBeDefined();
+    expect(createSpy).not.toHaveBeenCalled();
+
+    // Type PAT token and submit
+    const patInput = screen.getByTestId('repo-pat-input');
+    fireEvent.change(patInput, { target: { value: 'ghp_test_secret_token_123' } });
 
     fireEvent.click(screen.getByText('Bind Repository'));
 
@@ -277,7 +286,7 @@ describe('GitRepoBindingsSection', () => {
         remote_url: 'https://github.com/myorg/myrepo.git',
         default_ref: 'release/v1.0',
         access_mode: 'bare_git_tools',
-        credential: 'workspace-pat',
+        credential: 'ghp_test_secret_token_123',
       });
     });
 
@@ -377,6 +386,33 @@ describe('GitRepoBindingsSection', () => {
     });
   });
 
+  it('submits with non-pat credential without requiring patToken', async () => {
+    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue([]);
+    const createSpy = vi.spyOn(api, 'createRepoBinding').mockResolvedValue({
+      id: 'r-non-pat',
+      slug: 'non-pat-mirror',
+      remote_url: 'https://github.com/org/repo.git',
+      default_ref: 'main',
+      access_mode: 'ro_vfs_mount',
+    });
+
+    renderSection();
+    fireEvent.click(await screen.findByText('+ Bind Git Repository'));
+
+    fireEvent.change(screen.getByLabelText(/Repository Identifier \/ Slug/i), { target: { value: 'non-pat-slug' } });
+    fireEvent.change(screen.getByLabelText(/Remote Git URL/i), { target: { value: 'https://github.com/org/repo.git' } });
+    fireEvent.change(screen.getByLabelText(/Authentication Credential/i), { target: { value: 'ssh-key' } });
+
+    fireEvent.click(screen.getByText('Bind Repository'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({
+        slug: 'non-pat-slug',
+        credential: 'ssh-key',
+      }));
+    });
+  });
+
   it('handles non-Error string rejection in refresh, delete, and create', async () => {
     vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
     vi.spyOn(api, 'refreshRepoBinding').mockRejectedValue('string-refresh-error');
@@ -404,5 +440,34 @@ describe('GitRepoBindingsSection', () => {
     fireEvent.change(urlInput, { target: { value: 'https://github.com/org/repo.git' } });
     fireEvent.click(screen.getByText('Bind Repository'));
     expect(await screen.findByText('Failed to bind git repository.')).toBeDefined();
+  });
+
+  it('renders SSRF restriction callout and masked PAT input with data-1p-ignore and zero password inputs', () => {
+    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
+
+    renderSection();
+
+    fireEvent.click(screen.getByText('+ Bind Git Repository'));
+
+    // Verify SSRF callout
+    const ssrfCallout = screen.getByTestId('repo-url-ssrf-callout');
+    expect(ssrfCallout).toBeDefined();
+    expect(ssrfCallout.textContent).toContain('SSRF Restrictions');
+
+    // Switch credential to workspace-pat
+    const credSelect = screen.getByLabelText(/Authentication Credential \/ Secret/i);
+    fireEvent.change(credSelect, { target: { value: 'workspace-pat' } });
+
+    // Verify PAT input
+    const patInput = screen.getByTestId('repo-pat-input');
+    expect(patInput).toBeDefined();
+    expect(patInput.getAttribute('type')).toBe('text');
+    expect(patInput.className).toContain('kb-masked-api-key');
+    expect(patInput.getAttribute('data-1p-ignore')).toBe('true');
+    expect(patInput.getAttribute('autoComplete')).toBe('off');
+
+    // Verify ZERO password inputs
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    expect(passwordInputs.length).toBe(0);
   });
 });

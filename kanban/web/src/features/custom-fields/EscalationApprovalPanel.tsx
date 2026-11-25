@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAal2StepUpCode } from '../../api/problem';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   approveFieldEscalation,
   fetchFieldApprovals,
@@ -77,6 +78,13 @@ export function EscalationApprovalPanel({
   const [manifestMismatchError, setManifestMismatchError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [aal2OtpCode, setAal2OtpCode] = useState('');
+
+  const isDirty =
+    isRequestModalOpen ||
+    isAal2ModalOpen ||
+    justification.trim() !== '' ||
+    aal2OtpCode.trim() !== '';
+  useAal2DirtyKeepalive(isDirty);
 
   // Fetch approvals for this field
   const { data: approvals = [], refetch: refetchApprovals } = useQuery({
