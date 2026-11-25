@@ -289,10 +289,12 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(screen.getByTestId('topbar-workspace-settings-link')).toBeDefined();
       expect(screen.getByTestId('topbar-link-auditor-link')).toBeDefined();
 
+      // Workspace admin has access to workspace-level AI providers & agents (KAN-402)
+      expect(screen.getByTestId('topbar-admin-ai-link')).toBeDefined();
+      expect(screen.getByTestId('topbar-admin-agents-link')).toBeDefined();
+
       // Server admin links must be strictly hidden
       expect(screen.queryByTestId('topbar-admin-auth-link')).toBeNull();
-      expect(screen.queryByTestId('topbar-admin-ai-link')).toBeNull();
-      expect(screen.queryByTestId('topbar-admin-agents-link')).toBeNull();
       expect(screen.queryByTestId('topbar-admin-runners-link')).toBeNull();
       expect(screen.queryByTestId('topbar-admin-oauth-link')).toBeNull();
       expect(screen.queryByTestId('topbar-admin-imports-link')).toBeNull();
@@ -364,8 +366,8 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
     it.each([
       { testId: 'topbar-admin-imports-link', label: 'Migration Import Studio', path: '/admin/imports' },
       { testId: 'topbar-admin-auth-link', label: 'Admin Auth Studio', path: '/admin/auth' },
-      { testId: 'topbar-admin-ai-link', label: 'AI Providers & Token Caps', path: '/admin/ai' },
-      { testId: 'topbar-admin-agents-link', label: 'Autonomous Agents', path: '/admin/agents' },
+      { testId: 'topbar-admin-ai-link', label: 'AI Providers & Token Caps', path: '/workspaces/settings/ai' },
+      { testId: 'topbar-admin-agents-link', label: 'Autonomous Agents', path: '/workspaces/settings/agents' },
       { testId: 'topbar-admin-runners-link', label: 'Remote mTLS Runners', path: '/admin/agent-runners' },
       { testId: 'topbar-admin-oauth-link', label: 'OAuth 2.1 Clients', path: '/admin/oauth' },
       { testId: 'topbar-admin-standalone-link', label: 'System Storage, Backups & Deployment', path: '/admin/standalone' },

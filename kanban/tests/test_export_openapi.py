@@ -245,9 +245,15 @@ def test_export_openapi_no_duplicate_operation_ids() -> None:
     colon_id = paths["/api/v1/admin/agent-definitions/{agent}:validate"]["post"]["operationId"]
     slash_id = paths["/api/v1/admin/agent-definitions/{agent}/validate"]["post"]["operationId"]
 
-    assert colon_id == "validate_agent_definition_colon"
-    assert slash_id == "validate_agent_definition_slash"
+    assert colon_id == "admin_validate_agent_definition_colon"
+    assert slash_id == "admin_validate_agent_definition_slash"
     assert colon_id != slash_id
+
+    ws_colon_id = paths["/api/v1/agent-definitions/{agent}:validate"]["post"]["operationId"]
+    ws_slash_id = paths["/api/v1/agent-definitions/{agent}/validate"]["post"]["operationId"]
+    assert ws_colon_id == "validate_agent_definition_colon"
+    assert ws_slash_id == "validate_agent_definition_slash"
+    assert ws_colon_id != ws_slash_id
 
 
 def test_openapi_builder_enrich_paths_defensive_types() -> None:
