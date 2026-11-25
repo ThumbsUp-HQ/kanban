@@ -4,20 +4,25 @@
 **Tracking Ticket:** `KAN-426` (`[SLICE-5-P1][KB-GOVERNANCE-AUDIT] Phase 1: Workspace/Project Settings, Custom Scripted Fields & Workflows Setting Inventory & Audit`)  
 **Parent Epic:** `KAN-425` (`[EPIC][SLICE-5-WORKSPACE-PROJECT-WORKFLOWS] Phased Validation, Simplification, Live Workout & Wiki for Workspace/Project, Custom Fields & Workflows`)  
 **Phase Hand-Off Target:** `KAN-427` (`Phase 2 Simplification & Wiring`)  
-**Authoritative Specifications:** [docs/ARCHITECTURE_AND_PRODUCT_SPEC.md](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-s5-p1-df68908c/docs/ARCHITECTURE_AND_PRODUCT_SPEC.md) Section 3, Section 13 (Admin-Only Custom Scripted Fields), Section 14 (Scripted Workflows), and [docs/PROMOTION_AND_BACKUP.md](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-s5-p1-df68908c/docs/PROMOTION_AND_BACKUP.md).
+**Authoritative Specifications:** [docs/ARCHITECTURE_AND_PRODUCT_SPEC.md](../../../docs/ARCHITECTURE_AND_PRODUCT_SPEC.md) Section 3, Section 13 (Admin-Only Custom Scripted Fields), Section 14 (Scripted Workflows), and [docs/PROMOTION_AND_BACKUP.md](../../../docs/PROMOTION_AND_BACKUP.md).
 
 ---
 
 ## 1. Executive Summary & Audit Methodology
 
 Slice 5 encompasses the administrative governance, security policy, workflow automation, and customization surfaces of the platform:
-- **Workspace Administration:** Organization identity, session timeouts, air-gap egress controls, principal and nested group hierarchy with cycle detection, export/import policies, and the 2-stage Trash & Retention Studio.
-- **Project Configuration:** Lifecycle states, Work-In-Progress (WIP) soft/hard bounds, custom priorities, hierarchical and mutex-exclusive labels, member role assignments, and 2-stage irreversible destructive danger zones.
-- **Custom Scripted Fields:** Dual-tier sandboxed calculated fields (Tier A WebAssembly vs Tier B nsjail container isolation), output formatters, test execution harness, and dual-control cryptographic escalation gates for workspace/server scopes.
-- **Scripted Workflows & Transition Helpers:** State transition hooks (Wasm and AI Agent providers), failure policies (block vs warn-and-continue), field mutation whitelists, pre-flight dry-run execution drawer, and read-only bare mirror Git repository bindings with SSRF protection.
-- **Personal Settings:** User profile, avatar management, password rotation, WebAuthn Passkeys / FIDO2 security keys, TOTP 2FA, recovery codes, and external identity linking (OIDC and LDAP).
+- **Workspace Administration:** Organization identity, session timeouts (defaults 120m idle, 1440m absolute), air-gap egress controls, principal and nested group hierarchy with cycle detection (`POST /api/v1/admin/groups/${groupId}/members/${memberId}` with `type: 'GROUP'`), export/import policies (including report export governance), custom roles, and the 2-stage Trash & Retention Studio.
+- **Project Configuration:** Lifecycle states, Work-In-Progress (WIP) soft/hard bounds (`wip_soft_limit <= wip_hard_limit`), state reordering controls, custom priorities with color presets, hierarchical and mutex-exclusive labels, member role assignments (`POST /api/v1/projects/${projectKey}/members`), and 2-stage irreversible destructive danger zones (`mode="trash"` and permanent purge).
+- **Custom Scripted Fields:** Calculated fields spanning scalar, formula, Wasm, and nsjail container isolation, output formatters (`text, number, badge, markdown_snippet, url, json_table, severity_pill`), execution tiers (`wasm, nsjail`), target scopes (`PROJECT, WORKSPACE, SERVER`), credential modes (`INVOKING_USER, PROJECT_ADMIN_SP, SERVER_ADMIN_SP`), decision matrix, preset gallery, test execution harness, and dual-control cryptographic escalation gates for workspace/server scopes.
+- **Scripted Workflows & Transition Helpers:** Transition hooks (`sync_validator, sync_mutator, agent_interceptor`), failure policies (`fail_closed, fail_open_warn`), transition payloads (`from_state`, `to_state`, `agent`), pre-flight dry-run execution drawer (sample and issue modes), and read-only bare mirror Git repository bindings (`ro_vfs_mount, bare_git_tools` access modes, `"", workspace-pat, ssh-key` credentials) with SSRF protection.
+- **Personal Settings:** User profile, 15 canonical timezones, avatar management with client-side 2 MiB and SVG validation, interactive avatar crop and lightbox modals, password rotation (min 12 chars, min 14 for Server Admins), WebAuthn Passkeys / FIDO2 security keys with live testing and advanced diagnostics, TOTP 2FA, recovery codes, and external identity linking.
 
 This Phase 1 audit completed a 100% inspection across all 19 assigned frontend and backend source files without introducing any source code mutations. Every UI control, option, default value, validation constraint, and backend API binding was extracted and evaluated against security invariants and user experience friction.
+
+A total of **184** discrete settings, controls, and governance surfaces were audited across the 10 frontend React files and 9 backend API modules:
+- **`KEEP` (175):** Essential controls functioning with complete backend and security parity.
+- **`SIMPLIFY` (7):** Functional controls that require clearer labels, duration presets, emoji palettes, or diff views.
+- **`MERGE` (2):** Duplicate retention controls consolidated into canonical general settings.
 
 ---
 
@@ -36,118 +41,186 @@ Dispositions:
 | **Workspace Settings** | Workspace Slug (`workspace-slug-input`) | Text (2-63 chars, lowercase alphanumeric, dashes) | Sets the URL-safe slug used in path routing and MCP endpoints. | Wired: `PATCH /api/v1/admin/workspace-settings` (`slug`) | `KEEP` |
 | **Workspace Settings** | Display Name (`workspace-display-name-input`) | Text (1-80 chars) | Sets the localized display label shown on user invitation cards. | Wired: `PATCH /api/v1/admin/workspace-settings` (`display_name`) | `KEEP` |
 | **Workspace Settings** | Default Project Visibility (`workspace-visibility-select`) | Select: `private`, `workspace` | Sets whether newly created projects default to workspace-wide access or invite-only. | Wired: `PATCH /api/v1/admin/workspace-settings` (`default_project_visibility`) | `KEEP` |
-| **Workspace Settings** | Granular Field-Level Overrides (`workspace-field-level-overrides`) | Toggle / Checkbox | Controls whether projects may override workspace-level default field schemas. | Wired: Read from settings schema | `MOVE_TO_ADVANCED` |
-| **Workspace Settings** | Session Idle Timeout (`workspace-idle-timeout-input`) | Number (5-720 minutes, default: 30) | Automatically terminates inactive user browser sessions after the specified minutes. | Wired: `PATCH /api/v1/admin/workspace-settings` (`session_idle_timeout_min`) | `SIMPLIFY` (Add 15m, 30m, 1h, 4h quick presets) |
-| **Workspace Settings** | Session Absolute Timeout (`workspace-abs-timeout-input`) | Number (60-10080 minutes, default: 480) | Forces re-authentication after the absolute elapsed session duration regardless of activity. | Wired: `PATCH /api/v1/admin/workspace-settings` (`session_absolute_timeout_min`) | `SIMPLIFY` (Display hours equivalent alongside raw minutes) |
+| **Workspace Settings** | Session Idle Timeout (`workspace-idle-timeout-input`) | Number (5-720 minutes, default: 120) | Automatically terminates inactive user browser sessions after the specified minutes. | Wired: `PATCH /api/v1/admin/workspace-settings` (`session_idle_timeout_min`) | `SIMPLIFY` |
+| **Workspace Settings** | Session Absolute Timeout (`workspace-abs-timeout-input`) | Number (60-10080 minutes, default: 1440) | Forces re-authentication after the absolute elapsed session duration regardless of activity. | Wired: `PATCH /api/v1/admin/workspace-settings` (`session_absolute_timeout_min`) | `SIMPLIFY` |
 | **Workspace Settings** | Trash Retention Days (`workspace-trash-retention-input`) | Number (7-365 days, default: 30) | Sets how many days deleted items stay in trash before permanent background purge. | Wired: `PATCH /api/v1/admin/workspace-settings` (`trash_retention_days`) | `KEEP` |
 | **Workspace Settings** | MCP Key Max TTL (`workspace-mcp-key-max-ttl-input`) | Number (1-365 days, default: 90) | Enforces the maximum validity lifetime allowed when minting agent MCP access tokens. | Wired: `PATCH /api/v1/admin/workspace-settings` (`mcp_key_max_ttl_days`) | `KEEP` |
 | **Workspace Settings** | Air-Gap Mode (`workspace-air-gap-toggle`) | Boolean Toggle (default: false) | Disables all outbound internet calls, telemetry, and non-local external AI providers. | Wired: `PATCH /api/v1/admin/workspace-settings` (`air_gap_mode`) | `KEEP` |
-| **Workspace Settings** | Agent-Safe Sequence Numbering (`workspace-default-skip-loaded-seq-checkbox`) | Boolean Toggle (default: false) | Automatically skips culturally ambiguous or error-prone issue numbers like 404 and 666. | Wired: `PATCH /api/v1/admin/workspace-settings` (`default_skip_loaded_sequence_numbers`) | `MOVE_TO_ADVANCED` |
 | **Workspace Settings** | Enable Issue Export (`workspace-setting-issue-export-toggle`) | Boolean Toggle (default: true) | Controls whether work items may be exported to CSV or password-protected ZIP bundles. | Wired: `PATCH /api/v1/admin/workspace-settings` (`issue_export_enabled`) | `KEEP` |
 | **Workspace Settings** | Enable Issue Import (`workspace-setting-issue-import-toggle`) | Boolean Toggle (default: true) | Controls whether users can upload and restore issue packages into this workspace. | Wired: `PATCH /api/v1/admin/workspace-settings` (`issue_import_enabled`) | `KEEP` |
-| **Workspace Settings** | Allowed Issue Export Roles (`workspace-setting-export-roles`) | Checkbox group: `workspace_admin`, `project_admin`, `member`, `guest` | Restricts bulk issue export execution to specific workspace role tiers. | Wired: `PATCH /api/v1/admin/workspace-settings` (`issue_export_allowed_roles`) | `KEEP` |
-| **Workspace Settings** | Webhook & Egress Restrictions (`workspace-webhook-restrictions`) | Static text info block | Informs administrators that outbound webhook notifications require HMAC SHA-256 signatures. | Backend enforces in webhook runner; UI is static callout | `SIMPLIFY` (Convert static callout into an actionable documentation link) |
-| **Workspace Settings** | Workspace MCP Studio Link (`link-workspace-mcp`) | Navigation Button / Link | Directs administrators to the dedicated MCP Key and OAuth Studio scoped to workspace. | Frontend route navigation to `/settings/mcp?scope=workspace` | `KEEP` |
-| **Workspace Settings** | Add User: Handle (`new-user-handle`) | Text (alphanumeric + @ prefix) | Sets the unique handle for a newly provisioned local user account. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
-| **Workspace Settings** | Add User: Display Name (`new-user-name`) | Text (1-80 chars) | Sets the full display name for the new user account. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
-| **Workspace Settings** | Add User: Email (`new-user-email`) | Email address | Sets the notification and identity email for the new user. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
-| **Workspace Settings** | Add User: Password (`new-user-password`) | Password (8+ chars) | Sets the initial local credentials for the new user account. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
-| **Workspace Settings** | Add User: Role (`new-user-role-select`) | Select: `WORKSPACE_ADMIN`, `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER` | Sets the workspace-level role binding for the new user. | Wired: `POST /api/v1/admin/role-bindings` | `KEEP` |
-| **Workspace Settings** | Create Group: Name (`new-group-name`) | Text (1-80 chars) | Sets the human-readable group name for team permission bundling. | Wired: `POST /api/v1/admin/principals` (kind: `group`) | `KEEP` |
-| **Workspace Settings** | Create Group: Handle (`new-group-handle`) | Text (alphanumeric + @ prefix) | Sets the unique identifier for tagging the group in permissions and mentions. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
-| **Workspace Settings** | Add Group Member (`add-group-member-select`) | Select: Users, agents, or nested groups | Adds an individual principal or nested subgroup into the selected group. | Wired: `POST /api/v1/admin/groups/{group_id}/members` | `KEEP` |
-| **Workspace Settings** | Group Cycle Detection Alert (`group-cycle-alert`) | Alert Banner | Warns administrators when attempting to nest groups into a circular dependency hierarchy. | Frontend graph cycle validation + backend 409 Conflict | `KEEP` |
-| **Workspace Settings** | Trash Search (`trash-search-input`) | Text search | Filters deleted items by key, title, or object kind in the trash table. | Wired: Client-side filter over `GET /api/v1/admin/trash` | `KEEP` |
-| **Workspace Settings** | Trash Item Restore (`restore-btn`) | Button per item | Restores a soft-deleted item back to its original project and active status. | Wired: `POST /api/v1/admin/trash/{id}:restore` | `KEEP` |
-| **Workspace Settings** | Permanent Purge Stage 1 (`purge-btn`) | Destructive button per item | Requests a cryptographically signed confirmation token to permanently destroy the item. | Wired: `POST /api/v1/admin/destructive:request` (`mode=permanent_purge`) | `KEEP` |
-| **Workspace Settings** | Purge Confirmation Phrase (`permanent-purge-confirm-phrase-input`) | Text confirmation input | Requires typing the exact confirmation phrase (e.g. `PURGE ITEM <KEY>`) to proceed. | Wired: `POST /api/v1/admin/destructive:execute` (`confirmation_token`) | `KEEP` |
-| **Workspace Settings** | Purge Audit Reason (`permanent-purge-reason-input`) | Text justification | Records a mandatory compliance reason in the PostgreSQL immutable activity ledger. | Wired: `POST /api/v1/admin/destructive:execute` (`reason`) | `KEEP` |
+| **Workspace Settings** | Allowed Issue Export Roles (`workspace-setting-export-roles`) | Checkbox group: `workspace_admin`, `project_admin`, `member` | Restricts bulk issue export execution to specific workspace role tiers. | Wired: `PATCH /api/v1/admin/workspace-settings` (`issue_export_allowed_roles`) | `KEEP` |
+| **Workspace Settings** | Report Export Governance (`report_export_enabled` / `report_export_allowed_roles`) | Boolean Toggle & Checkbox group (default: true, roles: `ADMIN`, `MEMBER`) | Controls report generation export capability and restricts execution to authorized role tiers. | Wired: `PATCH /api/v1/admin/workspace-settings` (`report_export_enabled`, `report_export_allowed_roles`) | `KEEP` |
+| **Workspace Settings** | Save Workspace Settings (`save-workspace-btn`) | Button | Persists updated workspace settings to the PostgreSQL database. | Wired: `PATCH /api/v1/admin/workspace-settings` | `KEEP` |
+| **Workspace Settings** | Advanced Security Section (`workspace-advanced-security-section`) | Collapsible Section | Collapsible progressive disclosure container for security and numbering policies. | Frontend component: `<AdvancedSection>` (already implemented) | `KEEP` |
+| **Workspace Settings** | Granular Field-Level Overrides (`workspace-field-level-overrides`) | Static Text Callout | Informational callout in advanced section describing workspace-wide field inheritance. | Wired: Informational static `<p>` inside `workspace-advanced-security-section` | `KEEP` |
+| **Workspace Settings** | Agent-Safe Sequence Numbering (`workspace-default-skip-loaded-seq-checkbox`) | Boolean Checkbox (default: false) | Automatically skips culturally ambiguous or error-prone issue numbers like 404 and 666. | Wired: `PATCH /api/v1/admin/workspace-settings` (`default_skip_loaded_sequence_numbers`) | `KEEP` |
+| **Workspace Settings** | Webhook Restrictions Notice (`workspace-webhook-restrictions`) | Static Info Callout | Informs administrators that outbound webhook notifications require HMAC SHA-256 signatures. | Wired: Informational security callout | `SIMPLIFY` |
+| **Workspace Settings** | Workspace MCP Studio Link (`link-workspace-mcp`) | Navigation Link | Directs administrators to dedicated MCP Key and OAuth Studio scoped to workspace. | Frontend route navigation: `/settings/mcp?scope=workspace` | `KEEP` |
+| **Workspace Settings** | Add User Handle (`new-user-handle`) | Text (alphanumeric + @ prefix) | Sets the unique handle for a newly provisioned local user account. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Add User Display Name (`new-user-name`) | Text (1-80 chars) | Sets the full display name for the new user account. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Add User Email (`new-user-email`) | Email address | Sets the notification and identity email for the new user. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Add User Password (`new-user-password`) | Password (8+ chars) | Sets the initial local credentials for the new user account. | Wired: `POST /api/v1/admin/principals` (`password`) | `KEEP` |
+| **Workspace Settings** | Add User Role (`new-user-role-select`) | Select: `WORKSPACE_MEMBER`, `WORKSPACE_GUEST`, `WORKSPACE_ADMIN` | Sets the initial workspace-level role binding for the new user account. | Wired: `POST /api/v1/admin/role-bindings` | `KEEP` |
+| **Workspace Settings** | Create User Submit (`create-user-submit-btn`) | Button | Provisions the local user account and assigns initial workspace role. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Workspace Users Table (`workspace-users-table`) | Table | Lists provisioned workspace users, active roles, and management actions. | Wired: `GET /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Create Group Name (`new-group-name`) | Text (1-80 chars) | Sets the human-readable group name for team permission bundling. | Wired: `POST /api/v1/admin/principals` (`type="GROUP"`) | `KEEP` |
+| **Workspace Settings** | Create Group Handle (`new-group-handle`) | Text (alphanumeric + @ prefix) | Sets the unique identifier for tagging the group in permissions and mentions. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Create Group Submit (`create-group-btn`) | Button | Provisions a new group principal for role assignment and team scoping. | Wired: `POST /api/v1/admin/principals` | `KEEP` |
+| **Workspace Settings** | Add Group Member (`add-group-member-select`) | Select: Users or groups | Selects an individual principal or nested subgroup to add to the group. | Wired: `POST /api/v1/admin/groups/${groupId}/members/${memberId}` | `KEEP` |
+| **Workspace Settings** | Add Group Member Submit (`add-group-member-btn`) | Button | Executes membership addition to the active group. | Wired: `POST /api/v1/admin/groups/${groupId}/members/${memberId}` | `KEEP` |
+| **Workspace Settings** | Group Cycle Detection Alert (`group-cycle-alert`) | Alert Banner | Warns administrators when attempting to nest groups into a circular dependency hierarchy. | Frontend cycle check + backend 409 Conflict | `KEEP` |
+| **Workspace Settings** | Workspace Roles Section (`workspace-roles-section` / `tab-roles`) | Roles Management Surface | Displays workspace custom RBAC roles and permissions via `RoleLabelPicker`. | Wired: `GET /api/v1/admin/rbac/roles` | `KEEP` |
+| **Workspace Settings** | Trash Management Tab (`tab-trash` / `workspace-trash-studio`) | Studio Surface | Container surface providing 2-stage soft deletion review and permanent purge. | Wired: `GET /api/v1/admin/trash` | `KEEP` |
+| **Workspace Settings** | Trash Search & Filter (`trash-search-input` / `trash-filter-*`) | Text Search & Type Filter | Filters soft-deleted items by key, title, or object kind in the trash table. | Wired: Client-side filter over `GET /api/v1/admin/trash` | `KEEP` |
+| **Workspace Settings** | Trash Retention Days (Trash Tab) (`workspace-trash-retention-input-trash-tab`) | Number (7-365 days) | Duplicate retention policy setting displayed on the trash management tab. | Wired: `PATCH /api/v1/admin/workspace-settings` | `MERGE` |
+| **Workspace Settings** | Save Trash Retention (`save-trash-retention-btn`) | Button | Saves updated retention days from the dedicated trash tab. | Wired: `PATCH /api/v1/admin/workspace-settings` | `MERGE` |
+| **Workspace Settings** | Trash Item Restore (`restore-btn`) | Button per item | Restores a soft-deleted item back to active status in its project. | Wired: `POST /api/v1/admin/trash/{id}:restore` | `KEEP` |
+| **Workspace Settings** | Permanent Purge Stage 1 (`purge-btn`) | Destructive button per item | Requests a signed confirmation token to permanently destroy a trashed item. | Wired: `POST /api/v1/admin/destructive:request` (`mode="permanent_purge"`) | `KEEP` |
+| **Workspace Settings** | Purge Confirm Phrase (`permanent-purge-confirm-phrase-input`) | Text confirmation input | Requires typing exact confirmation phrase (e.g. `PURGE ITEM <KEY>`) to proceed. | Wired: `POST /api/v1/admin/destructive:execute` | `KEEP` |
+| **Workspace Settings** | Purge Audit Reason (`permanent-purge-reason-input`) | Text justification (min 10 chars) | Records mandatory compliance reason in immutable activity ledger before purge. | Wired: `POST /api/v1/admin/destructive:execute` (`reason`) | `KEEP` |
+| **Workspace Settings** | Confirm Permanent Purge (`confirm-permanent-purge-btn`) | Button | Executes irreversible deletion of item and all child database records. | Wired: `POST /api/v1/admin/destructive:execute` | `KEEP` |
+| **Workspace Settings** | Cancel Permanent Purge (`cancel-permanent-purge-btn`) | Button | Dismisses the permanent purge modal without mutating database state. | Client-side state reset | `KEEP` |
 | **Project Settings** | Project Name (`project-name-input`) | Text (1-80 chars) | Sets the title of the project shown across boards, menus, and ticket pills. | Wired: `PATCH /api/v1/projects/{key}` (`name`) | `KEEP` |
-| **Project Settings** | Project Description (`project-desc-input`) | Markdown Textarea | Sets the project mission statement and documentation displayed on the overview page. | Wired: `PATCH /api/v1/projects/{key}` (`description_markdown`) | `KEEP` |
-| **Project Settings** | Enable Modules (`project-modules-checkbox`) | Boolean Toggle | Activates sub-project grouping modules for breaking work into distinct deliverables. | Wired: `PATCH /api/v1/projects/{key}` (`modules_enabled`) | `KEEP` |
+| **Project Settings** | Project Description (`project-desc-input`) | Markdown Textarea | Sets the project mission statement and documentation displayed on overview page. | Wired: `PATCH /api/v1/projects/{key}` (`description_markdown`) | `KEEP` |
+| **Project Settings** | Enable Modules (`project-modules-checkbox`) | Boolean Checkbox | Activates sub-project grouping modules for breaking work into distinct deliverables. | Wired: `PATCH /api/v1/projects/{key}` (`modules_enabled`) | `KEEP` |
 | **Project Settings** | Default Project Modules (`default-modules-select`) | Multi-Select | Automatically attaches selected active modules to newly created issues. | Wired: `PUT /api/v1/projects/{key}/module-defaults` | `KEEP` |
-| **Project Settings** | Project Sequence Numbering (`project-skip-loaded-seq-checkbox`) | Boolean Toggle | Controls whether this specific project skips culturally loaded ticket numbers. | Wired: `PATCH /api/v1/projects/{key}` (`skip_loaded_sequence_numbers`) | `MOVE_TO_ADVANCED` |
-| **Project Settings** | Auto-Archive Threshold (`project-auto-archive-input`) | Number (days, optional) | Automatically archives closed issues after the designated number of inactive days. | Wired: `PATCH /api/v1/projects/{key}` (`auto_archive_days`) | `KEEP` |
+| **Project Settings** | Project Advanced Section (`project-general-advanced-section`) | Collapsible Section | Collapsible container for agent sequence numbering and auto-archive thresholds. | Frontend component: `<AdvancedSection>` (already implemented) | `KEEP` |
+| **Project Settings** | Project Sequence Numbering (`project-skip-loaded-seq-checkbox`) | Boolean Checkbox | Controls whether this specific project skips culturally loaded ticket numbers. | Wired: `PATCH /api/v1/projects/{key}` (`skip_loaded_sequence_numbers`) | `KEEP` |
+| **Project Settings** | Auto-Archive Threshold (`project-auto-archive-input`) | Number (days, optional) | Automatically archives closed issues after designated number of inactive days. | Wired: `PATCH /api/v1/projects/{key}` (`auto_archive_days`) | `KEEP` |
+| **Project Settings** | Save General Settings (`save-general-btn`) | Button | Persists project general configuration changes to the database. | Wired: `PATCH /api/v1/projects/{key}` | `KEEP` |
 | **Project Settings** | State Name (`state-name-input`) | Text (1-50 chars) | Sets the display name for a lifecycle workflow state (e.g., In Progress, Review). | Wired: `POST /api/v1/projects/{key}/states` (`name`) | `KEEP` |
 | **Project Settings** | State Group (`state-group-select`) | Select: `backlog`, `unstarted`, `started`, `completed`, `cancelled` | Maps the state into an authoritative system state group for Kanban column ordering. | Wired: `POST /api/v1/projects/{key}/states` (`group`) | `KEEP` |
 | **Project Settings** | State Default Toggle (`state-default-checkbox`) | Boolean Checkbox | Designates which state newly created issues enter by default. | Wired: `POST /api/v1/projects/{key}/states` (`is_default`) | `KEEP` |
-| **Project Settings** | State Sort Order (`state-sort-order-input`) | Number (0-1000) | Determines left-to-right Kanban board column position. | Wired: `POST /api/v1/projects/{key}/states` (`sort_order`) | `SIMPLIFY` (Support drag-and-drop column reordering) |
-| **Project Settings** | State WIP Soft Limit (`state-wip-soft-input`) | Number (0 for unlimited) | Triggers a visual warning on the Kanban column when issue count exceeds this limit. | Wired: `PATCH /api/v1/projects/{key}/states/{id}` (`wip_soft_limit`) | `KEEP` |
+| **Project Settings** | State Sort Order (`state-sort-order-input`) | Number (0-1000) | Determines left-to-right Kanban board column position. | Wired: `POST /api/v1/projects/{key}/states` (`sort_order`) | `KEEP` |
+| **Project Settings** | State WIP Soft Limit (`state-wip-soft-input`) | Number (0 for unlimited) | Triggers visual warning on Kanban column when issue count exceeds this limit. | Wired: `PATCH /api/v1/projects/{key}/states/{id}` (`wip_soft_limit`) | `KEEP` |
 | **Project Settings** | State WIP Hard Limit (`state-wip-hard-input`) | Number (0 for unlimited) | Strictly blocks dragging additional issues into this state when capacity is full. | Wired: `PATCH /api/v1/projects/{key}/states/{id}` (`wip_hard_limit`) | `KEEP` |
-| **Project Settings** | Delete State with Migration (`delete-state-btn`) | Dialog with replacement select | Deletes a state after reassigning existing issues and workflow hooks to another state. | Wired: `DELETE /api/v1/projects/{key}/states/{id}` (`migrate_to_state_id`) | `KEEP` |
+| **Project Settings** | WIP Limit Validation Alert (`wip-limit-error`) | Inline Alert | Provides immediate feedback enforcing `wip_soft_limit <= wip_hard_limit` (already implemented). | Frontend validation component | `KEEP` |
+| **Project Settings** | Create State Button (`create-state-btn`) | Button | Adds a new lifecycle state to the project workflow. | Wired: `POST /api/v1/projects/{key}/states` | `KEEP` |
+| **Project Settings** | State Move Up (`state-up-${st.id}`) | Button per state | Moves state one position up in sorting order (already implemented). | Wired: Reorders state sort order | `KEEP` |
+| **Project Settings** | State Move Down (`state-down-${st.id}`) | Button per state | Moves state one position down in sorting order (already implemented). | Wired: Reorders state sort order | `KEEP` |
+| **Project Settings** | State Inline Edit Controls | Button group per state | Opens inline editor to modify state name, group, and WIP limits. | Wired: `PATCH /api/v1/projects/{key}/states/{id}` | `KEEP` |
+| **Project Settings** | Delete State with Replacement (`delete-state-btn-${st.id}`) | Dialog with replacement select | Deletes a state after reassigning existing issues and hooks to replacement state. | Wired: `DELETE /api/v1/projects/{key}/states/{id}?replacement_state_id=...&migrate_hooks=true` | `KEEP` |
 | **Project Settings** | Priority Slug (`priority-slug-input`) | Text (lowercase alphanumeric) | Unique system key for issue urgency levels (e.g. urgent, high, medium, low). | Wired: `POST /api/v1/projects/{key}/priorities` (`slug`) | `KEEP` |
 | **Project Settings** | Priority Label (`priority-label-input`) | Text (1-50 chars) | Human-readable label displayed in issue filters and badges. | Wired: `POST /api/v1/projects/{key}/priorities` (`label`) | `KEEP` |
-| **Project Settings** | Priority Emoji (`priority-emoji-input`) | Text / Single Emoji | Visual emoji icon rendered beside the priority label across all board cards. | Wired: `POST /api/v1/projects/{key}/priorities` (`emoji`) | `SIMPLIFY` (Provide quick emoji picker palette) |
+| **Project Settings** | Priority Emoji (`priority-emoji-input`) | Text / Single Emoji | Visual emoji icon rendered beside priority label across all board cards. | Wired: `POST /api/v1/projects/{key}/priorities` (`emoji`) | `SIMPLIFY` |
+| **Project Settings** | Priority Color (`ColorPresetPicker`) | Color Palette Component | Selects visual badge accent color from accessible design system palette (already implemented). | Wired: `POST /api/v1/projects/{key}/priorities` (`color`) | `KEEP` |
 | **Project Settings** | Priority Sort Order (`priority-sort-order-input`) | Number (0-100) | Controls sorting precedence in issue lists. | Wired: `POST /api/v1/projects/{key}/priorities` (`sort_order`) | `KEEP` |
-| **Project Settings** | Priority Default Toggle (`priority-default-checkbox`) | Boolean Checkbox | Sets the fallback priority applied when an issue is created without specifying one. | Wired: `POST /api/v1/projects/{key}/priorities` (`is_default`) | `KEEP` |
+| **Project Settings** | Priority Default Toggle (`priority-default-checkbox`) | Boolean Checkbox | Sets fallback priority applied when an issue is created without specifying one. | Wired: `POST /api/v1/projects/{key}/priorities` (`is_default`) | `KEEP` |
+| **Project Settings** | Create Priority Button (`create-priority-btn`) | Button | Adds a new custom priority level to the project. | Wired: `POST /api/v1/projects/{key}/priorities` | `KEEP` |
+| **Project Settings** | Priority Inline Edit Controls | Button group per priority | Allows modifying priority label, emoji, color, and default status inline. | Wired: `PATCH /api/v1/projects/{key}/priorities/{id}` | `KEEP` |
+| **Project Settings** | Delete Priority Button | Button per priority | Removes a custom priority level after verifying no active tickets depend on it. | Wired: `DELETE /api/v1/projects/{key}/priorities/{id}` | `KEEP` |
 | **Project Settings** | Label Name (`label-name-input`) | Text (1-50 chars) | Name of the categorization tag attached to issues. | Wired: `POST /api/v1/projects/{key}/labels` (`name`) | `KEEP` |
+| **Project Settings** | Label Color (`ColorPresetPicker`) | Color Palette Component | Selects visual accent color for issue tag from design system palette. | Wired: `POST /api/v1/projects/{key}/labels` (`color`) | `KEEP` |
 | **Project Settings** | Label Exclusive Group (`label-exclusive-group-input`) | Text (optional group slug) | Groups labels so an issue can have only one label from this set (e.g. `env:prod`). | Wired: `POST /api/v1/projects/{key}/labels` (`exclusive_group`) | `KEEP` |
-| **Project Settings** | Add Project Member (`member-principal-id-input`) | Select / Principal Picker | Adds a user, agent, or group to the project access control list. | Wired: `POST /api/v1/admin/role-bindings` | `KEEP` |
-| **Project Settings** | Project Member Role (`member-role-select`) | Select: `PROJECT_ADMIN`, `MEMBER`, `VIEWER` | Sets the role and capability grant for the assigned member inside this project. | Wired: `POST /api/v1/admin/role-bindings` (`role`) | `KEEP` |
-| **Project Settings** | Inspect Access Transparency (`inspect-access-btn`) | Inspection Modal | Renders the exact capability manifest and principal inheritance chain for this project. | Wired: Client-side evaluation over object sharing metadata | `KEEP` |
-| **Project Settings** | Stage 1 Move to Trash (`request-delete-btn`) | Destructive Action Button | Initiates 2-stage project soft deletion, moving all project entities into trash. | Wired: `POST /api/v1/admin/destructive:request` (`mode=soft_delete`) | `KEEP` |
-| **Project Settings** | Stage 1 Permanent Purge (`request-purge-btn`) | Destructive Action Button | Initiates irreversible destruction of the project and all attached database records. | Wired: `POST /api/v1/admin/destructive:request` (`mode=permanent_purge`) | `KEEP` |
-| **Project Settings** | Danger Confirm Phrase (`confirm-phrase-input`) | Text Input | Requires typing the dynamic phrase (e.g. `DELETE PROJECT KAN`) to unlock execution. | Wired: `POST /api/v1/admin/destructive:execute` | `KEEP` |
-| **Project Settings** | Danger Reason Input (`danger-reason-input`) | Text Input | Mandatory justification recorded in the immutable audit ledger before deletion executes. | Wired: `POST /api/v1/admin/destructive:execute` (`reason`) | `KEEP` |
-| **Personal Settings** | Profile Display Name (`display-name-input`) | Text (1-80 chars) | Sets how your name appears to colleagues and on activity ledger entries. | Wired: `PATCH /api/v1/auth/me` (`display_name`) | `KEEP` |
-| **Personal Settings** | Profile Timezone (`timezone-select`) | Select (IANA timezones) | Localizes timestamp formatting across activity feeds and ticket history. | Wired: `PATCH /api/v1/auth/me` (`timezone`) | `SIMPLIFY` (Add searchable filter and auto-detect button) |
-| **Personal Settings** | Profile Avatar Upload (`avatar-file-input`) | File Upload (PNG, JPEG, WebP <= 2 MiB) | Uploads a custom user avatar photo. | Wired: `PUT /api/v1/auth/me/avatar` | `KEEP` |
-| **Personal Settings** | Remove Avatar (`remove-avatar-btn`) | Button | Deletes the custom avatar and reverts to initial-letter placeholder icon. | Wired: `DELETE /api/v1/auth/me/avatar` | `KEEP` |
-| **Personal Settings** | Current Password (`current-password-input`) | Password | Verifies your existing password before allowing an update. | Wired: `POST /api/v1/auth/me/password` (`current_password`) | `KEEP` |
-| **Personal Settings** | New Password (`new-password-input`) | Password (8+ chars) | Enforces minimum length and entropy checks for your updated password. | Wired: `POST /api/v1/auth/me/password` (`new_password`) | `KEEP` |
-| **Personal Settings** | Add Passkey (`add-passkey-btn`) | WebAuthn Platform Prompt | Enrolls a built-in device biometric (Touch ID, Windows Hello, Android Screen Lock). | Wired: `POST /api/v1/auth/webauthn/register:start` and `:finish` | `KEEP` |
-| **Personal Settings** | Add Security Key (`add-fido2-key-btn`) | WebAuthn Cross-Platform Prompt | Enrolls a hardware FIDO2 key (YubiKey) for physical 2-factor authentication. | Wired: `POST /api/v1/auth/webauthn/register:start` and `:finish` | `KEEP` |
-| **Personal Settings** | Passkey Nickname (`passkey-nickname-input`) | Text (1-50 chars) | Assigns a memorable label to a registered security key for identification. | Wired: `PATCH /api/v1/auth/webauthn/credentials/{id}` (`nickname`) | `KEEP` |
-| **Personal Settings** | Delete Passkey (`delete-passkey-btn`) | Button per credential | Revokes and removes an enrolled WebAuthn credential from your account. | Wired: `DELETE /api/v1/auth/webauthn/credentials/{id}` | `KEEP` |
-| **Personal Settings** | Enable TOTP 2FA (`enable-totp-btn`) | Modal Wizard | Begins enrollment of time-based one-time password authenticator apps (Aegis, Google Authenticator). | Wired: `POST /api/v1/auth/mfa/totp:enroll-start` | `KEEP` |
-| **Personal Settings** | Verify TOTP Token (`totp-verification-input`) | 6-Digit Code | Validates authenticator app synchronization before activating two-factor protection. | Wired: `POST /api/v1/auth/mfa/totp:enroll-finish` | `KEEP` |
-| **Personal Settings** | Disable TOTP 2FA (`disable-totp-btn`) | Button | Deactivates TOTP after completing mandatory AAL2 step-up verification. | Wired: `POST /api/v1/auth/mfa/totp:disable` | `KEEP` |
-| **Personal Settings** | Copy Recovery Codes (`copy-recovery-codes-btn`) | Button | Copies one-time account recovery backup codes into the system clipboard. | Wired: Client-side clipboard API | `KEEP` |
-| **Personal Settings** | Regenerate Recovery Codes (`regenerate-recovery-codes-btn`) | Button | Invalidates old recovery codes and mints a fresh batch of single-use emergency keys. | Wired: `POST /api/v1/auth/mfa/recovery-codes:regenerate` | `KEEP` |
-| **Personal Settings** | Unlink Identity (`unlink-identity-btn`) | Button per linked identity | Disconnects an external OIDC or LDAP login provider from your local account. | Wired: `DELETE /api/v1/auth/me/identities/{id}` | `KEEP` |
-| **Personal Settings** | Connect LDAP Account (`submit-ldap-link-btn`) | Modal with username/password | Links an enterprise Active Directory or LDAP account to your current profile. | Wired: `POST /api/v1/auth/me/identities/ldap:link` | `KEEP` |
+| **Project Settings** | Create Label Button (`create-label-btn`) | Button | Provisions a new categorization tag in the project. | Wired: `POST /api/v1/projects/{key}/labels` | `KEEP` |
+| **Project Settings** | Label Inline Edit Controls | Button group per label | Allows updating label name, color, and exclusive group association inline. | Wired: `PATCH /api/v1/projects/{key}/labels/{id}` | `KEEP` |
+| **Project Settings** | Delete Label Button | Button per label | Deletes a label tag and detaches it from all existing project issues. | Wired: `DELETE /api/v1/projects/{key}/labels/{id}` | `KEEP` |
+| **Project Settings** | Add Project Member (`member-principal-id-input`) | Select / Principal Picker | Adds a user, agent, or group to the project access control list. | Wired: `POST /api/v1/projects/${projectKey}/members` | `KEEP` |
+| **Project Settings** | Project Member Role (`member-role-select`) | Select: `PROJECT_ADMIN`, `MEMBER`, `VIEWER` | Sets the role and capability grant for assigned member inside this project. | Wired: `POST /api/v1/projects/${projectKey}/members` (`role`) | `KEEP` |
+| **Project Settings** | Add Member Submit (`add-member-submit-btn`) | Button | Executes membership binding to the project access list. | Wired: `POST /api/v1/projects/${projectKey}/members` | `KEEP` |
+| **Project Settings** | Remove Member Button | Button per member | Revokes project access for the specified user or agent. | Wired: `DELETE /api/v1/projects/${projectKey}/members/${principalId}` | `KEEP` |
+| **Project Settings** | Inspect Access Transparency (`inspect-access-btn`) | Modal | Renders exact capability manifest and principal inheritance chain for this project. | Wired: Client-side evaluation over object sharing metadata | `KEEP` |
+| **Project Settings** | Project Roles Section (`project-roles-section` / `tab-roles`) | Roles Management Surface | Displays project-level role overrides and permissions via `RoleLabelPicker`. | Wired: Project-scoped RBAC query | `KEEP` |
+| **Project Settings** | Integrations Section (`integrations-section` / `tab-integrations`) | Navigation Cards | Hub providing direct access to Custom Fields, Workflows, and MCP integrations. | Frontend tab routing: custom-fields, workflows, mcp | `KEEP` |
+| **Project Settings** | Project Trash Section (`trash-section` / `tab-trash`) | Trash Table | Displays soft-deleted issues and child items belonging to this project. | Wired: `GET /api/v1/admin/trash?project_key=...` | `KEEP` |
+| **Project Settings** | Stage 1 Move to Trash (`request-delete-btn`) | Destructive Button | Initiates 2-stage project soft deletion, moving all project entities into trash. | Wired: `POST /api/v1/admin/destructive:request` (`mode="trash"`) | `KEEP` |
+| **Project Settings** | Stage 1 Permanent Purge (`request-purge-btn`) | Destructive Button | Initiates irreversible destruction of project and all attached database records. | Wired: `POST /api/v1/admin/destructive:request` (`mode="permanent_purge"`) | `KEEP` |
+| **Project Settings** | Danger Blast Radius (`blast-summary-text`) | Dynamic Summary | Renders dynamic count of child issues, stickies, docs, and modules affected. | Wired: Returned by `POST /api/v1/admin/destructive:request` | `KEEP` |
+| **Project Settings** | Danger Confirm Phrase (`confirm-phrase-input`) | Text confirmation | Requires typing dynamic phrase (e.g. `DELETE PROJECT KAN`) to unlock execution. | Wired: `POST /api/v1/admin/destructive:execute` (`confirm_phrase`) | `KEEP` |
+| **Project Settings** | Danger Reason Input (`danger-reason-input`) | Text justification (min 10 chars) | Mandatory justification recorded in immutable audit ledger before deletion executes. | Wired: `POST /api/v1/admin/destructive:execute` (`reason`) | `KEEP` |
+| **Project Settings** | Execute Delete Button (`execute-delete-btn`) | Button | Executes confirmed destructive project deletion. | Wired: `POST /api/v1/admin/destructive:execute` | `KEEP` |
+| **Project Settings** | Cancel Delete Button (`cancel-delete-btn`) | Button | Cancels destructive operation and resets confirmation dialog. | Client-side state reset | `KEEP` |
 | **Custom Fields** | Field Name (`field-name-input`) | Text (1-80 chars) | Sets the label displayed in issue detail panels and table columns. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`name`) | `KEEP` |
-| **Custom Fields** | Field Slug (`field-slug-input`) | Text (lowercase alphanumeric, underscores) | Unique programmatic key used when referencing the field in scripts and MCP tools. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`slug`) | `KEEP` |
-| **Custom Fields** | Field Flavor (`field-flavor-select`) | Select: `python`, `javascript`, `wasm` | Selects the programming language or compiled binary format for calculated fields. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`flavor`) | `KEEP` |
-| **Custom Fields** | Output Format (`output-format-select`) | Select: `text`, `number`, `badge`, `progress`, `markdown`, `json` | Controls how the calculated script return value is rendered on the UI. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`output_format`) | `KEEP` |
-| **Custom Fields** | Format Metadata (`format-metadata-textarea`) | JSON Textarea | Configures format options like currency prefixes, decimal precision, or badge colors. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`format_metadata`) | `SIMPLIFY` (Provide interactive schema form with raw JSON toggle) |
-| **Custom Fields** | Script Source Code (`script-source-textarea`) | Code Textarea / Editor | Contains the executable algorithm executed to compute the custom field value. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`script_source`) | `KEEP` |
-| **Custom Fields** | Test Issue Key (`test-issue-key-input`) | Text (e.g. `KAN-14`) | Selects an existing issue to serve as dynamic input context during dry-run testing. | Wired: `POST /api/v1/projects/{key}/custom-fields/test-execute` (`issue_key`) | `KEEP` |
-| **Custom Fields** | Run Test Execution (`test-execute-btn`) | Button | Runs the script inside the local sandbox and displays latency, output pill, and logs. | Wired: `POST /api/v1/projects/{key}/custom-fields/test-execute` | `KEEP` |
-| **Custom Fields** | Execution Sandbox Tier (`execution-tier-select`) | Select: `tier_a`, `tier_b` | Selects between lightweight WebAssembly runtime (Tier A) and container nsjail isolation (Tier B). | Wired: `POST /api/v1/projects/{key}/custom-fields` (`execution_tier`) | `SIMPLIFY` (Auto-select Tier A and explain nsjail requirements) |
-| **Custom Fields** | Target Scope (`target-scope-select`) | Select: `project`, `workspace`, `server` | Determines whether the script runs with project-only tokens or requires dual-control escalation. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`target_scope`) | `KEEP` |
-| **Custom Fields** | Credential Mode (`credential-mode-select`) | Select: `none`, `ephemeral_project_token`, `escalated_user_token` | Controls what API token credentials are injected into the executing script environment. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`credential_mode`) | `KEEP` |
-| **Custom Fields** | Egress Allowlist (`egress-allowlist-textarea`) | Textarea (CIDR / hostnames) | Whitelist of permitted network destinations when the script executes outbound HTTP requests. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`egress_allowlist`) | `MOVE_TO_ADVANCED` |
-| **Custom Fields** | Tamper Warning Confirm (`confirm-tamper-save-btn`) | Dialog Button | Confirms code modifications that will change the manifest hash and invalidate prior approvals. | Wired: Frontend hash comparison before saving modified definition | `KEEP` |
-| **Escalation Approvals** | Request Escalation (`request-approval-btn`) | Button | Submits a dual-control escalation request to workspace or server administrators. | Wired: `POST /api/v1/custom-fields/{id}/approval-requests` | `KEEP` |
-| **Escalation Approvals** | Dual-Control Ack (`sp-ack-checkbox`) | Checkbox | Acknowledges security responsibility before an independent administrator signs off. | Wired: Form requirement before submitting approval | `KEEP` |
-| **Escalation Approvals** | Approval Justification (`approval-justification-input`) | Text (10-500 chars) | Mandatory audit explanation explaining why higher privilege scope was granted. | Wired: `POST /api/v1/custom-field-approvals/{id}/approve` (`justification`) | `KEEP` |
-| **Escalation Approvals** | Approve Escalation (`approve-escalation-btn`) | Button | Grants the requested scope elevation (strictly disabled for the author who requested it). | Wired: `POST /api/v1/custom-field-approvals/{id}/approve` | `KEEP` |
-| **Escalation Approvals** | AAL2 Step-Up OTP (`aal2-otp-input`) | 6-Digit Code | Verifies second-factor identity of the approving administrator before signing. | Wired: Authenticator header verification on approval route | `KEEP` |
-| **Workflow Studio** | Hook Name (`hook-name-input`) | Text (1-80 chars) | Identifies the automation hook attached to an issue lifecycle transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`name`) | `KEEP` |
-| **Workflow Studio** | Transition From State (`from-state-select`) | Select: Project states | Selects the originating lifecycle state that triggers the automation hook. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`from_state_id`) | `KEEP` |
-| **Workflow Studio** | Transition To State (`to-state-select`) | Select: Project states | Selects the target destination state that triggers the automation hook. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`to_state_id`) | `KEEP` |
-| **Workflow Studio** | Hook Kind (`hook-kind-select`) | Select: `wasm`, `agent` | Chooses between deterministic compiled WebAssembly rule and autonomous AI Agent helper. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`hook_kind`) | `KEEP` |
-| **Workflow Studio** | Approved Wasm Module (`wasm-module-select`) | Select: Verified Wasm hashes | Selects a cryptographically approved WebAssembly binary previously uploaded by an admin. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`wasm_module_sha256`) | `KEEP` |
-| **Workflow Studio** | Agent Definition (`agent-slug-select`) | Select: Configured agents | Selects which autonomous AI agent executes transition verification and summarization. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`agent_slug`) | `KEEP` |
-| **Workflow Studio** | Failure Policy (`failure-policy-select`) | Select: `block`, `warn_and_continue` | Sets whether a failed hook halts the state change or permits it with an audit warning. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`failure_policy`) | `KEEP` |
-| **Workflow Studio** | Allowed Mutable Fields (`mutable-fields-checkboxes`) | Checkbox group: `summary`, `description`, `priority`, `labels`, `custom_fields` | Whitelist of issue attributes the transition hook is authorized to modify during execution. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`allowed_mutable_fields`) | `KEEP` |
-| **Workflow Studio** | Hook Enable Toggle (`hook-toggle-btn`) | Toggle per hook | Quickly activates or deactivates an attached hook without deleting its configuration. | Wired: `POST /api/v1/workflow-hooks/{id}/enable` and `/disable` | `KEEP` |
-| **Workflow Studio** | Detach Hook (`detach-hook-btn`) | Button per hook | Removes an automation hook from the transition path. | Wired: `DELETE /api/v1/workflow-hooks/{id}` | `KEEP` |
-| **Workflow Studio** | Dry-Run Mode (`dry-run-mode-select`) | Select: `existing_issue`, `synthetic_payload` | Toggles between testing with a live ticket key and testing with custom mock data. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`mode`) | `KEEP` |
-| **Workflow Studio** | Dry-Run Issue Key (`dry-run-issue-key-input`) | Text (e.g. `KAN-25`) | Specifies the issue key whose live database attributes are fetched for simulation. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`issue_key`) | `KEEP` |
-| **Workflow Studio** | Dry-Run Synthetic Summary (`dry-run-summary-input`) | Text | Mock summary string supplied when evaluating a simulated issue transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`synthetic_issue.summary`) | `KEEP` |
-| **Workflow Studio** | Dry-Run Synthetic Description (`dry-run-description-input`) | Markdown Textarea | Mock description body supplied when evaluating a simulated transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`synthetic_issue.description`) | `KEEP` |
-| **Workflow Studio** | Dry-Run Synthetic Priority (`dry-run-priority-select`) | Select: Project priorities | Mock priority value supplied for transition rule evaluation. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`synthetic_issue.priority`) | `KEEP` |
-| **Workflow Studio** | Dry-Run Execute (`dry-run-execute-btn`) | Button | Executes the transition hooks in simulated mode and renders execution logs and diff. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` | `KEEP` |
-| **Workflow Studio** | Copy Dry-Run CLI (`copy-cli-command-btn`) | Button | Copies the exact command-line invocation to reproduce the dry-run offline. | Wired: Client-side clipboard API | `KEEP` |
-| **Git Bindings** | Repository Slug (`repo-slug-input`) | Text (1-50 chars, alphanumeric + dashes) | Local handle identifying the linked repository within the project workspace. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`slug`) | `KEEP` |
-| **Git Bindings** | Remote Repository URL (`repo-url-input`) | Git URL (HTTPS or SSH) | Upstream git remote URL cloned as a strict read-only bare mirror. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`remote_url`) | `KEEP` |
-| **Git Bindings** | Default Branch / Ref (`repo-ref-input`) | Text (e.g. `main`, `master`) | Default git reference tracked by automation hooks and diff comparisons. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`default_ref`) | `KEEP` |
-| **Git Bindings** | Access Mode (`repo-access-mode-select`) | Select: `bare_mirror_ro` | Fixed read-only bare mirror access mode enforcing zero push capability. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`access_mode`) | `KEEP` |
-| **Git Bindings** | Authentication Credential (`repo-credential-input`) | Password / Private Key Textarea | Encrypted Personal Access Token or SSH private key used to pull the remote mirror. | Wired: Encrypted via server KEK before PostgreSQL insertion | `KEEP` |
-| **Git Bindings** | Sync Mirror Now (`refresh-repo-btn`) | Button per repository | Triggers immediate git fetch to update the bare mirror to the latest remote commit. | Wired: `POST /api/v1/repo-bindings/{id}/refresh` | `KEEP` |
-| **Git Bindings** | Delete Repository Binding (`delete-repo-btn`) | Button per repository | Safely removes the repository mirror and associated encryption keys. | Wired: `DELETE /api/v1/repo-bindings/{id}` | `KEEP` |
+| **Custom Fields** | Field Slug (`field-slug-input`) | Text (lowercase alphanumeric, underscores) | Unique programmatic key used when referencing field in scripts and MCP tools. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`slug`) | `KEEP` |
+| **Custom Fields** | Field Flavor (`field-flavor-select`) | Select: `scalar`, `formula`, `wasm`, `nsjail` | Selects field calculation engine (with `flavor-nsjail-disabled-badge` when standalone). | Wired: Evaluates runtime flavor mode | `KEEP` |
+| **Custom Fields** | Preset Gallery (`PresetGallery`) | Template Gallery Component | Interactive gallery offering pre-built calculated field algorithms and templates. | Frontend component: `PresetGallery.tsx` | `KEEP` |
+| **Custom Fields** | Flavor Decision Matrix (`FlavorDecisionMatrix`) | Guidance Component | Comparison matrix guiding administrators on when to choose scalar, formula, wasm, or nsjail. | Frontend component: `FlavorDecisionMatrix.tsx` | `KEEP` |
+| **Custom Fields** | Output Format (`output-format-select`) | Select: `text`, `number`, `badge`, `markdown_snippet`, `url`, `json_table`, `severity_pill` | Controls how the calculated script return value is rendered on the UI. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`output_format`) | `KEEP` |
+| **Custom Fields** | Format Metadata (`format-metadata-textarea`) | JSON Textarea | Configures format options like currency prefixes, decimal precision, or badge colors. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`output_format_metadata`) | `SIMPLIFY` |
+| **Custom Fields** | Script Source Code (`script-source-textarea`) | Code Textarea / Editor | Contains executable algorithm executed to compute the custom field value. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`script_source`) | `KEEP` |
+| **Custom Fields** | Is Enabled Checkbox (`is-enabled-checkbox`) | Boolean Checkbox | Toggles whether this custom field is actively computed and rendered on tickets. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`is_enabled`) | `KEEP` |
+| **Custom Fields** | Custom Fields Advanced Panel (`custom-fields-advanced-panel`) | Collapsible Section / Tab | Container panel housing sandbox tier, target scopes, and credential modes (already implemented). | Frontend component: `CustomFieldDefinitionEditor.tsx` | `KEEP` |
+| **Custom Fields** | Execution Sandbox Tier (`execution-tier-select`) | Select: `wasm`, `nsjail` | Selects between WebAssembly runtime and nsjail container isolation (with disabled badge when standalone). | Wired: `POST /api/v1/projects/{key}/custom-fields` (`tier`) | `KEEP` |
+| **Custom Fields** | Target Scope (`target-scope-select`) | Select: `PROJECT`, `WORKSPACE`, `SERVER` | Determines whether script runs with project token or requires dual-control escalation. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`target_scope`) | `KEEP` |
+| **Custom Fields** | Credential Mode (`credential-mode-select`) | Select: `INVOKING_USER`, `PROJECT_ADMIN_SP`, `SERVER_ADMIN_SP` | Controls what API token credentials are injected into the executing script environment. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`credential_mode`) | `KEEP` |
+| **Custom Fields** | Egress Allowlist (`egress-allowlist-textarea`) | Textarea (CIDR / hostnames) | Whitelist of permitted network destinations when script executes outbound HTTP requests. | Wired: `POST /api/v1/projects/{key}/custom-fields` (`egress_allowlist`) | `KEEP` |
+| **Custom Fields** | Manifest SHA256 Chip (`manifest-sha256-chip`) | Cryptographic Hash Badge | Displays authoritative SHA-256 manifest hash of field definition and source code. | Wired: Computed from definition AST | `KEEP` |
+| **Custom Fields** | Copy Manifest SHA (`copy-manifest-sha-btn`) | Button | Copies the manifest SHA-256 digest to system clipboard. | Client-side clipboard API | `KEEP` |
+| **Custom Fields** | Tamper Warning Dialog (`tamper-confirm-dialog`) | Confirmation Dialog | Confirms code modifications that will change manifest hash and invalidate prior approvals. | Frontend hash comparison before save | `KEEP` |
+| **Custom Fields** | Save Definition Button (`save-definition-btn`) | Button | Persists custom field definition changes to the database. | Wired: `POST` / `PATCH /api/v1/projects/{key}/custom-fields` | `KEEP` |
+| **Custom Fields** | Delete Field Button (`delete-field-btn`) | Button | Permanently deletes the custom field definition and clears computed values. | Wired: `DELETE /api/v1/projects/{key}/custom-fields/{id}` | `KEEP` |
+| **Custom Fields** | Create New Field Button (`create-new-field-btn`) | Button | Resets editor state to draft a new custom field definition. | Client-side state reset | `KEEP` |
+| **Custom Fields** | Test Issue Key (`test-issue-key-input`) | Text (e.g. `KAN-14`) | Selects existing issue to serve as dynamic input context during dry-run testing. | Wired: `POST /api/v1/projects/{key}/custom-fields/test-execute` (`issue_key`) | `KEEP` |
+| **Custom Fields** | Run Test Execution (`test-execute-btn`) | Button | Runs script inside local sandbox and displays latency, output pill, and execution logs. | Wired: `POST /api/v1/projects/{key}/custom-fields/test-execute` | `KEEP` |
+| **Custom Fields** | Test Execution Results Panels | Result Displays | Renders test output pill, execution latency in milliseconds, and stdout/stderr logs. | Wired: `POST /api/v1/projects/{key}/custom-fields/test-execute` response | `KEEP` |
+| **Escalation Approvals** | Escalation Panel Container (`escalation-approval-panel`) | Governance Panel | Hosts dual-control escalation workflow when target scope extends beyond project. | Frontend component: `EscalationApprovalPanel.tsx` | `KEEP` |
+| **Escalation Approvals** | Dual-Control Policy Notice (`dual-control-explanation-banner`) | Compliance Banner | Explains that author cannot approve own escalation and distinct admin must sign off (already implemented). | Frontend banner component | `KEEP` |
+| **Escalation Approvals** | Request Escalation (`request-approval-btn`) | Button | Opens modal to submit dual-control escalation request to workspace/server admins. | Wired: Opens approval request form | `KEEP` |
+| **Escalation Approvals** | Dual-Control Acknowledgment (`sp-ack-checkbox`) | Checkbox | Acknowledges security responsibility before an independent administrator signs off. | Form validation requirement | `KEEP` |
+| **Escalation Approvals** | Approval Justification (`approval-justification-input`) | Text (10-500 chars) | Mandatory audit explanation explaining why higher privilege scope was granted. | Wired: `POST /api/v1/custom-fields/{id}/approval-requests` (`justification`) | `KEEP` |
+| **Escalation Approvals** | Submit Approval Request (`submit-approval-request-btn`) | Button | Submits escalation request into pending review queue. | Wired: `POST /api/v1/custom-fields/{id}/approval-requests` | `KEEP` |
+| **Escalation Approvals** | Cancel Approval Request (`cancel-request-btn`) | Button | Closes the escalation request modal without submitting. | Client-side state reset | `KEEP` |
+| **Escalation Approvals** | Approval Status Chip (`approval-status-chip`) | Status Pill | Renders current approval state: PENDING, APPROVED, or REVOKED. | Wired: `GET /api/v1/custom-fields/{id}/approvals` | `KEEP` |
+| **Escalation Approvals** | Approve Escalation Button (`approve-escalation-btn`) | Button | Grants requested scope elevation (disabled for author; requires AAL2 step-up for other admins). | Wired: `POST /api/v1/custom-field-approvals/{id}/approve` | `KEEP` |
+| **Escalation Approvals** | AAL2 Step-Up Modal (`aal2-stepup-modal`) | Modal | Requests second-factor re-authentication before signing escalation approval. | Wired: Step-up authentication flow | `KEEP` |
+| **Escalation Approvals** | AAL2 Step-Up OTP Input (`aal2-otp-input`) | 6-Digit Code | Accepts time-based one-time password to fulfill WebSudo freshness requirements. | Header: `X-AAL2-Token` or OTP verification | `KEEP` |
+| **Escalation Approvals** | AAL2 Verify Submit (`aal2-verify-btn`) | Button | Verifies OTP and signs escalation approval in single atomic transaction. | Wired: `POST /api/v1/custom-field-approvals/{id}/approve` | `KEEP` |
+| **Escalation Approvals** | Cancel AAL2 Modal (`cancel-aal2-btn`) | Button | Dismisses step-up modal without signing approval. | Client-side state reset | `KEEP` |
+| **Workflow Studio** | Hook Name (`hook-name-input`) | Text (1-120 chars) | Identifies automation hook attached to an issue lifecycle transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`name`) | `KEEP` |
+| **Workflow Studio** | Transition From State (`from-state-select`) | Select: Project states or `*` | Selects originating lifecycle state triggering automation hook (payload: `from_state`). | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`from_state`) | `KEEP` |
+| **Workflow Studio** | Transition To State (`to-state-select`) | Select: Project states | Selects target destination state triggering automation hook (payload: `to_state`). | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`to_state`) | `KEEP` |
+| **Workflow Studio** | Hook Kind Radiogroup (`name="hook_kind"`) | Radiogroup: `sync_validator`, `sync_mutator`, `agent_interceptor` | Chooses between synchronous Wasm validation/mutation and autonomous AI Agent interceptor. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`hook_kind`) | `KEEP` |
+| **Workflow Studio** | Approved Wasm Module (`wasm-module-select`) | Select: Approved Wasm SHA-256 | Selects verified WebAssembly binary previously uploaded by an admin. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`wasm_module_sha256`) | `KEEP` |
+| **Workflow Studio** | Agent Definition (`agent-def-select`) | Select: Configured agent slugs | Selects autonomous AI agent executing transition verification and summarization. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`agent`) | `KEEP` |
+| **Workflow Studio** | Failure Policy (`failure-policy-select`) | Select: `fail_closed`, `fail_open_warn` | Sets whether failed hook halts transition or permits it with audit warning. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`failure_policy`) | `KEEP` |
+| **Workflow Studio** | Allowed Mutable Fields | Checkbox group: `summary`, `description_markdown`, `priority`, `labels`, `custom_fields` | Whitelist of issue attributes the mutator hook is authorized to modify during execution. | Wired: `POST /api/v1/projects/{key}/workflow-hooks` (`allowed_mutable_fields`) | `KEEP` |
+| **Workflow Studio** | Hook Execution Logs Section | Collapsible Log Viewer | Displays real-time logs and output from test hook executions. | Frontend component: `AttachHookDialog.tsx` | `KEEP` |
+| **Workflow Studio** | Hook Enable Toggle | Toggle per hook | Quickly activates or deactivates an attached hook without deleting its configuration. | Wired: `POST /api/v1/workflow-hooks/{id}/enable` and `/disable` | `KEEP` |
+| **Workflow Studio** | Detach Hook Button | Button per hook | Removes an automation hook from the transition path. | Wired: `DELETE /api/v1/workflow-hooks/{id}` | `KEEP` |
+| **Workflow Studio** | Dry-Run Source Mode Tabs | Role Tabs: `Sample ticket` vs `Existing issue key` | Toggles between testing with live ticket attributes and testing with synthetic payload. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` | `KEEP` |
+| **Workflow Studio** | Dry-Run Issue Key (`id="dry-run-issue-key"`) | Text (e.g. `KAN-25`) | Specifies issue key whose database attributes are fetched for simulation. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`issue_key`) | `KEEP` |
+| **Workflow Studio** | Dry-Run Sample Summary (`id="dry-run-summary"`) | Text | Synthetic summary string supplied when evaluating simulated issue transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`sample_ticket.summary`) | `KEEP` |
+| **Workflow Studio** | Dry-Run Sample Description (`id="dry-run-desc"`) | Markdown Textarea | Synthetic description body supplied when evaluating simulated transition. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`sample_ticket.description_markdown`) | `KEEP` |
+| **Workflow Studio** | Dry-Run Sample Priority (`id="dry-run-priority"`) | Select: Project priorities | Synthetic priority value supplied for transition rule evaluation. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`sample_ticket.priority`) | `KEEP` |
+| **Workflow Studio** | Dry-Run Sample Labels (`id="dry-run-labels"`) | Text (comma-separated) | Synthetic labels supplied for transition rule evaluation. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` (`sample_ticket.labels`) | `KEEP` |
+| **Workflow Studio** | Dry-Run Execute Button | Button | Executes transition hooks in simulated dry-run mode and renders pipeline results. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` | `KEEP` |
+| **Workflow Studio** | Dry-Run Results Container (`data-testid="dry-run-results"`) | Results Viewer | Displays status, execution duration, and field updates for each hook in pipeline. | Wired: `POST /api/v1/projects/{key}/workflow-hooks/dry-run` response | `KEEP` |
+| **Workflow Studio** | Dry-Run Simulation Top Banner & Visual Diff | Simulation Banner & Diff View | Prominent top banner asserting simulation isolation and before/after visual field diff. | Wired: Proposed Phase 2 enhancement in `DryRunDrawer.tsx` | `SIMPLIFY` |
+| **Workflow Studio** | Copy Dry-Run CLI (`data-testid="dry-run-cli-${order}"`) | Button | Copies exact command-line invocation to reproduce dry-run offline. | Client-side clipboard API | `KEEP` |
+| **Git Bindings** | Repository Slug (`id="repo-slug-input"`) | Text (`^[a-z0-9][a-z0-9-]{1,62}$`) | Local URL-safe handle identifying linked repository within project workspace. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`slug`) | `KEEP` |
+| **Git Bindings** | Remote Repository URL (`id="repo-url-input"`) | Git URL (HTTPS or SSH, max 2048 chars) | Upstream git remote URL cloned as strict read-only bare mirror with SSRF protection. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`remote_url`) | `KEEP` |
+| **Git Bindings** | Default Branch / Ref (`id="repo-ref-input"`) | Text (default `main`) | Default git reference tracked by automation hooks and diff comparisons. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`default_ref`) | `KEEP` |
+| **Git Bindings** | Repository Access Mode (`id="repo-access-select"`) | Select: `ro_vfs_mount`, `bare_git_tools` | Selects agent repository mount mode: Read-Only VFS Mount or Bare Git Tools Only. | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`access_mode`) | `KEEP` |
+| **Git Bindings** | Authentication Credential (`id="repo-cred-select"`) | Select: `""` (Public), `workspace-pat`, `ssh-key` | Selects credential used to pull mirror (encrypted with server KEK before storage). | Wired: `POST /api/v1/projects/{key}/repo-bindings` (`credential`) | `KEEP` |
+| **Git Bindings** | Bind Repository Submit | Button | Validates remote URL and clones read-only bare mirror into project storage. | Wired: `POST /api/v1/projects/{key}/repo-bindings` | `KEEP` |
+| **Git Bindings** | Sync Mirror Now (`refresh-repo-btn-${b.id}`) | Button per repository | Triggers immediate background git fetch to update bare mirror to latest commit. | Wired: `POST /api/v1/repo-bindings/{id}/refresh` | `KEEP` |
+| **Git Bindings** | Delete Repository Binding (`delete-repo-btn-${b.id}`) | Button per repository | Safely removes repository mirror, vfs mounts, and associated encryption keys. | Wired: `DELETE /api/v1/repo-bindings/{id}` | `KEEP` |
+| **Personal Settings** | Profile Display Name (`display-name-input`) | Text (1-120 chars) | Sets how your name appears to colleagues and on activity ledger entries. | Wired: `PATCH /api/v1/auth/me` (`display_name`) | `KEEP` |
+| **Personal Settings** | Profile Timezone (`timezone-select`) | Select (15 hardcoded canonical timezones) | Localizes timestamp formatting across activity feeds and ticket history. | Wired: `PATCH /api/v1/auth/me` (`timezone`) | `SIMPLIFY` |
+| **Personal Settings** | Profile Avatar Upload (`avatar-file-input`) | File Upload (PNG, JPEG, WebP <= 2 MiB) | Uploads custom avatar photo with client-side 2 MiB & SVG rejection validation (already implemented). | Wired: `PUT /api/v1/auth/me/avatar` | `KEEP` |
+| **Personal Settings** | Remove Avatar (`remove-avatar-btn`) | Button | Deletes custom avatar and reverts to initial-letter placeholder icon. | Wired: `DELETE /api/v1/auth/me/avatar` | `KEEP` |
+| **Personal Settings** | Avatar Crop Modal (`AvatarCropModal`) | Modal Component | Provides interactive cropping grid for uploaded image before server submission. | Frontend component: `AvatarCropModal.tsx` | `KEEP` |
+| **Personal Settings** | Avatar Lightbox Modal (`AvatarLightboxModal`) | Modal Component | Renders high-resolution lightbox preview when avatar thumbnail is clicked. | Frontend component: `AvatarLightboxModal.tsx` | `KEEP` |
+| **Personal Settings** | Save Profile Button (`save-profile-btn`) | Button | Persists updated display name and timezone preferences. | Wired: `PATCH /api/v1/auth/me` | `KEEP` |
+| **Personal Settings** | Current Password (`current-password-input`) | Password | Verifies existing password before allowing update to local credentials. | Wired: `POST /api/v1/auth/me/password` (`current_password`) | `KEEP` |
+| **Personal Settings** | New Password (`new-password-input`) | Password (min 12 chars; min 14 for Server Admins) | Enforces strict length and entropy checks for your updated password. | Wired: `POST /api/v1/auth/me/password` (`new_password`) | `KEEP` |
+| **Personal Settings** | Confirm Password (`confirm-password-input`) | Password | Confirms new password matches exactly before submission. | Frontend password match validation | `KEEP` |
+| **Personal Settings** | Change Password Button (`change-password-btn`) | Button | Submits password change request to the authentication server. | Wired: `POST /api/v1/auth/me/password` | `KEEP` |
+| **Personal Settings** | Add Passkey (`add-passkey-btn`) | WebAuthn Platform Prompt | Enrolls built-in device biometric (Touch ID, Windows Hello, Android Screen Lock). | Wired: `POST /api/v1/auth/webauthn/register:start` and `:finish` | `KEEP` |
+| **Personal Settings** | Add Security Key (`add-fido2-key-btn`) | WebAuthn Cross-Platform Prompt | Enrolls hardware FIDO2 key (YubiKey) for physical 2-factor authentication. | Wired: `POST /api/v1/auth/webauthn/register:start` and `:finish` | `KEEP` |
+| **Personal Settings** | Passkey Nickname (`passkey-nickname-input`) | Text (1-50 chars) | Assigns memorable label to registered security key for identification. | Wired: `PATCH /api/v1/auth/webauthn/credentials/{id}` (`nickname`) | `KEEP` |
+| **Personal Settings** | Test Passkey (`test-passkey-${pk.id}`) | Button per credential | Performs non-intrusive authentication challenge to verify enrolled passkey. | Wired: `POST /api/v1/auth/webauthn/authenticate:start` and `:finish` | `KEEP` |
+| **Personal Settings** | Passkey Advanced Details (`passkey-advanced-${pk.id}`) | Collapsible Section per credential | Inspects cryptographic credential ID, AAGUID, transports, and signature counter. | Frontend inspection component | `KEEP` |
+| **Personal Settings** | Delete Passkey (`delete-passkey-btn`) | Button per credential | Revokes and removes enrolled WebAuthn credential from your account. | Wired: `DELETE /api/v1/auth/webauthn/credentials/{id}` | `KEEP` |
+| **Personal Settings** | Enable TOTP 2FA (`enable-totp-btn`) | Modal Wizard | Begins enrollment of time-based one-time password authenticator apps (Aegis, Google Auth). | Wired: `POST /api/v1/auth/mfa/totp:enroll-start` | `KEEP` |
+| **Personal Settings** | Verify TOTP Token (`totp-verification-input`) | 6-Digit Code | Validates authenticator app synchronization before activating two-factor protection. | Wired: `POST /api/v1/auth/mfa/totp:enroll-finish` | `KEEP` |
+| **Personal Settings** | Disable TOTP 2FA (`disable-totp-btn`) | Button | Deactivates TOTP after completing mandatory AAL2 step-up verification. | Wired: `DELETE /api/v1/auth/mfa/totp` | `KEEP` |
+| **Personal Settings** | Copy Recovery Codes (`copy-recovery-codes-btn`) | Button | Copies one-time account recovery backup codes into the system clipboard. | Wired: Client-side clipboard API | `KEEP` |
+| **Personal Settings** | Regenerate Recovery Codes (`regenerate-recovery-codes-btn`) | Button | Invalidates old recovery codes and mints fresh batch of single-use emergency keys. | Wired: `POST /api/v1/auth/mfa/recovery-codes:regenerate` | `KEEP` |
+| **Personal Settings** | Connect External Identity (`connect-provider-${card.slug}`) | Button per provider card | Initiates account linking flow with configured enterprise OIDC or OAuth2 provider. | Wired: `POST /api/v1/auth/identities/link/start` | `KEEP` |
+| **Personal Settings** | Unlink Identity (`unlink-identity-btn`) | Button per linked identity | Disconnects external OIDC or LDAP login provider from your local account. | Wired: `DELETE /api/v1/auth/me/identities/{id}` | `KEEP` |
+| **Personal Settings** | Connect LDAP Account (`submit-ldap-link-btn`) | Modal with username/password | Links an enterprise Active Directory or LDAP account to your current profile. | Wired: `POST /api/v1/auth/me/identities/ldap:link` | `KEEP` |
+| **Personal Settings** | About & Version Link (`personal-settings-about-link`) | Navigation Link | Links to application about and release metadata page. | Frontend route navigation: `/about` | `KEEP` |
 
 ---
 
@@ -155,121 +228,109 @@ Dispositions:
 
 ### 3.1 Workspace Governance: Timeouts, Air-Gap, and 2-Stage Trash
 1. **Session Timeout Ergonomics (`WorkspaceSettingsPage.tsx`):**
-   - *Problem:* Session Idle Timeout and Session Absolute Timeout accept raw minutes (e.g. 120 and 1440). Administrators frequently miscalculate minute-to-hour conversions.
-   - *Proposal (`SIMPLIFY`):* Add interactive quick-preset pills (e.g. `15m`, `30m`, `1h`, `4h` for idle; `8h`, `24h`, `7d` for absolute) alongside the numeric input, displaying live human-readable text (e.g., `2 hours` or `1 day`).
-2. **Agent-Safe Sequence Numbering Progressive Disclosure (`WorkspaceSettingsPage.tsx`):**
-   - *Problem:* The checkbox for skipping sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) clutters the general workspace settings screen.
-   - *Proposal (`MOVE_TO_ADVANCED`):* Move this setting into the collapsible `<AdvancedSection>` and clarify in the help hint that it prevents LLM token collision and ambiguity during automated ticketing workflows.
-3. **Webhook Restrictions Static Callout Cleanup (`WorkspaceSettingsPage.tsx`):**
+   - *Problem:* Session Idle Timeout and Session Absolute Timeout accept raw minutes (defaulting to 120 minutes idle and 1440 minutes absolute). Administrators frequently miscalculate minute-to-hour conversions.
+   - *Proposal (`SIMPLIFY`):* Add interactive quick-preset pills (`15m`, `30m`, `1h`, `4h` for idle; `8h`, `24h`, `7d` for absolute) alongside the numeric input, displaying live human-readable text (e.g., `2 hours` or `1 day`).
+2. **Webhook Restrictions Static Callout Cleanup (`WorkspaceSettingsPage.tsx`):**
    - *Problem:* `data-testid="workspace-webhook-restrictions"` renders static text without any configurable fields, creating the false impression that settings can be changed there.
    - *Proposal (`SIMPLIFY`):* Replace the non-functional form group styling with an informational security callout banner that includes a direct link to `/docs/zero-trust-security-and-access-visibility`.
-4. **Administrative Groups & Cycle Detection (`WorkspaceSettingsPage.tsx`):**
-   - *Problem:* Group hierarchy supports nesting, but when a cycle is detected, the warning banner is easily missed if the group tree is expanded.
+3. **Administrative Groups & Cycle Detection (`WorkspaceSettingsPage.tsx`):**
+   - *Problem:* Group hierarchy supports nesting via `POST /api/v1/admin/groups/${groupId}/members/${memberId}`, but when a circular dependency is detected, the warning banner is easily missed if the group tree is expanded.
    - *Proposal (`SIMPLIFY`):* Disable the "Add Member" button and render an inline error pill next to the offending group row whenever an invalid parent-child edge is selected.
-5. **2-Stage Trash & Retention Studio Parity (`WorkspaceSettingsPage.tsx`):**
+4. **2-Stage Trash & Retention Policy Consolidation (`WorkspaceSettingsPage.tsx`):**
    - *Problem:* Trash retention input is duplicated between the general tab (`workspace-trash-retention-input`) and the dedicated trash tab (`workspace-trash-retention-input-trash-tab`).
-   - *Proposal (`MERGE`):* Remove the duplicate retention input from the trash list tab and provide a clean "Configure Retention Policy" link that opens the General Settings tab directly.
+   - *Proposal (`MERGE`):* Remove the duplicate retention input and button (`save-trash-retention-btn`) from the trash list tab, maintaining the single canonical control on the General tab.
+5. **Existing Workspace Implementations Noted (Zero Phase 2 Work Required):**
+   - Note: The collapsible `<AdvancedSection testId="workspace-advanced-security-section">` is already fully implemented on `WorkspaceSettingsPage.tsx`, encapsulating `workspace-field-level-overrides` (static `<p>` description) and `workspace-default-skip-loaded-seq-checkbox`.
 
 ### 3.2 Project Settings: States, WIP Limits, Priorities, and Danger Zone
-1. **Kanban State Sort Ordering & Ergonomics (`ProjectSettingsPage.tsx`):**
-   - *Problem:* Reordering workflow states requires manually editing numeric sort orders (0, 10, 20), which is tedious and prone to collisions.
-   - *Proposal (`SIMPLIFY`):* Add interactive `Move Up` and `Move Down` arrow buttons in the states table to adjust sort order incrementally without typing numbers.
-2. **WIP Limits Validation Clarity (`ProjectSettingsPage.tsx`):**
-   - *Problem:* Setting WIP soft limit greater than WIP hard limit displays an error only after save attempts.
-   - *Proposal (`SIMPLIFY`):* Provide immediate client-side input validation enforcing `wip_soft_limit <= wip_hard_limit` before form submission.
-3. **Priority Emoji Palette (`ProjectSettingsPage.tsx`):**
-   - *Problem:* The priority emoji input requires users to copy and paste Unicode characters from external tools.
+1. **Priority Emoji Palette (`ProjectSettingsPage.tsx`):**
+   - *Problem:* The priority emoji input (`priority-emoji-input`) requires users to copy and paste Unicode characters from external tools.
    - *Proposal (`SIMPLIFY`):* Add a quick-pick emoji palette containing standard status glyphs (red circle, orange diamond, yellow circle, blue circle, checkmark).
-4. **2-Stage Irreversible Project Danger Zone (`ProjectSettingsPage.tsx`):**
-   - *Problem:* Stage 1 and Stage 2 destructive cards can be confusing if the administrator does not realize soft-delete moves to trash while permanent-purge cannot be undone.
-   - *Proposal (`SIMPLIFY`):* Distinctly color-code Stage 1 Soft Delete (warning amber) versus Stage 2 Permanent Purge (critical crimson), clearly displaying the blast radius summary showing the exact count of child issues, stickies, docs, modules, and attachments that will be destroyed.
+2. **2-Stage Irreversible Project Danger Zone (`ProjectSettingsPage.tsx`):**
+   - *Problem:* Stage 1 Soft Delete (`mode="trash"`) and Stage 2 Permanent Purge (`mode="permanent_purge"`) require clear visual distinction so administrators do not confuse reversible trash with permanent destruction.
+   - *Proposal (`SIMPLIFY`):* Distinctly color-code Stage 1 Soft Delete (warning amber) versus Stage 2 Permanent Purge (critical crimson), clearly formatting the blast radius summary showing the exact count of child issues, stickies, docs, modules, and attachments that will be destroyed.
+3. **Existing Project Implementations Noted (Zero Phase 2 Work Required):**
+   - Note: State reordering controls (`state-up-${st.id}` and `state-down-${st.id}`) are already fully implemented on `ProjectSettingsPage.tsx`.
+   - Note: Immediate client-side validation asserting `wip_soft_limit <= wip_hard_limit` with error alert `wip-limit-error` is already fully implemented.
+   - Note: The collapsible `<AdvancedSection testId="project-general-advanced-section">` is already implemented, cleanly housing `project-skip-loaded-seq-checkbox` and `project-auto-archive-input`.
+   - Note: State deletion correctly invokes `DELETE /api/v1/projects/${key}/states/${id}?replacement_state_id=...&migrate_hooks=true`.
 
-### 3.3 Custom Scripted Fields: Tier A Wasm vs Tier B nsjail & Dual-Control Escalation
-1. **Execution Sandbox Transparency (`CustomFieldDefinitionEditor.tsx`):**
-   - *Problem:* In standalone container deployments (e.g. standard Docker without unprivileged user namespaces), Tier B nsjail execution is unavailable. Selecting it leads to execution errors.
-   - *Proposal (`SIMPLIFY`):* Inspect system capabilities dynamically. When nsjail is unavailable, disable the Tier B option with a badge: `Tier B (nsjail) requires multi-container deployment with Linux user namespaces. Defaulting to Tier A (WebAssembly).`
-2. **Format Metadata Schema Helper (`CustomFieldDefinitionEditor.tsx`):**
-   - *Problem:* Format metadata requires raw JSON input (e.g. `{"unit": "USD", "precision": 2}`), causing schema syntax errors.
+### 3.3 Custom Scripted Fields: Sandboxing & Format Metadata
+1. **Format Metadata Schema Form (`CustomFieldDefinitionEditor.tsx`):**
+   - *Problem:* Format metadata currently requires raw JSON input in `format-metadata-textarea` (e.g. `{"unit": "USD", "precision": 2}`), causing schema syntax errors.
    - *Proposal (`SIMPLIFY`):* Provide structured form inputs for common formats (currency symbol, decimal places, min/max range) that generate the JSON payload automatically, while retaining an "Edit Raw JSON" toggle for power users.
-3. **Dual-Control Escalation Ergonomics (`EscalationApprovalPanel.tsx`):**
-   - *Problem:* When an author requests escalation to Workspace or Server scope, the approval button is disabled with little visual explanation if the logged-in administrator is the author.
-   - *Proposal (`SIMPLIFY`):* Render an explicit dual-control compliance notice: `Dual-Control Policy: You authored this script definition. An independent Workspace or Server Administrator must review and approve this escalation.`
-4. **Script Modification Tamper Detection Notice (`CustomFieldDefinitionEditor.tsx`):**
+2. **Script Modification Tamper Detection Notice (`CustomFieldDefinitionEditor.tsx`):**
    - *Problem:* When modifying script source code of an already-approved custom field, users may not realize that altering code invalidates existing approvals.
-   - *Proposal (`KEEP` / `SIMPLIFY`):* Make the tamper warning banner prominent before saving, detailing the new manifest SHA256 digest and explicitly noting that scope will revert to `project` until re-approved.
+   - *Proposal (`SIMPLIFY`):* Make the tamper warning banner prominent before saving, detailing the new manifest SHA256 digest and explicitly noting that scope will revert to `PROJECT` until re-approved.
+3. **Existing Custom Field Implementations Noted (Zero Phase 2 Work Required):**
+   - Note: The collapsible `<div data-testid="custom-fields-advanced-panel">` is already fully implemented, containing `execution-tier-select` (`wasm, nsjail`), `target-scope-select` (`PROJECT, WORKSPACE, SERVER`), `credential-mode-select` (`INVOKING_USER, PROJECT_ADMIN_SP, SERVER_ADMIN_SP`), and `egress-allowlist-textarea`.
+   - Note: Dynamic detection disabling Tier B nsjail in standalone containers with badges `flavor-nsjail-disabled-badge` and `tier-nsjail-disabled-badge` is already fully implemented.
+   - Note: Explanatory compliance notice `dual-control-explanation-banner` in `EscalationApprovalPanel.tsx` is already fully implemented, explicitly stating self-approval is blocked and an independent administrator must sign off.
 
 ### 3.4 Workflows & Transition Helpers: Hooks, Dry-Run Drawer, and Git Bindings
 1. **Transition Hook Kind Clarity (`AttachHookDialog.tsx`):**
-   - *Problem:* The distinction between WebAssembly hooks (deterministic, synchronous, fast) and AI Agent hooks (autonomous, probabilistic, asynchronous) is not immediately obvious to new project admins.
+   - *Problem:* The distinction between `sync_validator`, `sync_mutator`, and `agent_interceptor` is not immediately obvious to new project admins.
    - *Proposal (`SIMPLIFY`):* Provide clear sub-headings in the kind selector explaining:
-     - `WebAssembly Hook`: Best for strict validation rules, calculated checklists, and blocking state gates.
-     - `AI Agent Hook`: Best for automatic summarization, acceptance criteria verification, and ticket enrichment.
-2. **Dry-Run Drawer Simulated Commit Banner (`DryRunDrawer.tsx`):**
-   - *Problem:* Users worry that dry-run testing might accidentally update real ticket data.
-   - *Proposal (`KEEP`):* Keep the prominent top banner `DRY-RUN SIMULATION: No database changes were committed.` in place, showing proposed field mutations in a clear unified before-and-after diff format.
-3. **Git Repository Bare Mirror SSRF Protection (`GitRepoBindingsSection.tsx`):**
-   - *Problem:* Users attempting to bind internal LAN git servers (e.g. `http://192.168.1.50/repo.git`) receive generic validation errors.
+     - `Sync Validator`: WebAssembly rule that validates invariants and can block invalid transitions (`fail_closed`).
+     - `Sync Mutator`: WebAssembly rule permitted to update authorized mutable fields.
+     - `Agent Interceptor`: Autonomous AI Agent that performs contextual evaluation, verification proof inspection, and summary generation.
+2. **Dry-Run Drawer Top Simulation Banner & Before/After Diff (`DryRunDrawer.tsx`):**
+   - *Problem:* The current `DryRunDrawer.tsx` renders results in `dry-run-results` and a bottom summary banner, but lacks a persistent top warning banner explicitly guaranteeing simulation safety. Users worry that dry-run testing might accidentally update real ticket data.
+   - *Proposal (`SIMPLIFY`):* Add a prominent top banner: `DRY-RUN SIMULATION: No database changes were committed.` in `DryRunDrawer.tsx`, alongside a unified visual before-and-after field diff display for proposed mutations.
+3. **Git Repository Bare Mirror SSRF Protection Hints (`GitRepoBindingsSection.tsx`):**
+   - *Problem:* Users attempting to bind internal LAN git servers receive validation errors from `validate_remote_url` in `kanban/repos/url_policy.py`.
    - *Proposal (`SIMPLIFY`):* Provide helpful validation hints indicating that private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.1`) and cloud metadata endpoints are strictly blocked to protect internal infrastructure.
 
 ### 3.5 Personal Settings: Timezone, Avatars, Passkeys, and MFA
-1. **Timezone Auto-Detection (`PersonalSettingsPage.tsx`):**
-   - *Problem:* Scrolling through a list of over 400 IANA timezones to find local time is cumbersome.
+1. **Timezone Auto-Detection & Search (`PersonalSettingsPage.tsx`):**
+   - *Problem:* `PersonalSettingsPage.tsx` currently offers 15 canonical timezones in a standard select list.
    - *Proposal (`SIMPLIFY`):* Add an "Auto-Detect My Timezone" button using `Intl.DateTimeFormat().resolvedOptions().timeZone` and a quick-filter search box above the select list.
-2. **Avatar Cropping & Preview Feedback (`PersonalSettingsPage.tsx`):**
-   - *Problem:* Uploading an avatar over 2 MiB fails on the backend without immediate client-side feedback.
-   - *Proposal (`SIMPLIFY`):* Add client-side file size and MIME-type checks before upload, warning immediately if the file exceeds 2 MiB.
-3. **Passkey vs Security Key Enrollment Terminology (`PersonalSettingsPage.tsx`):**
+2. **Passkey vs Security Key Enrollment Terminology (`PersonalSettingsPage.tsx`):**
    - *Problem:* Users confuse "Add Passkey" (platform biometric like Touch ID / Windows Hello) with "Add Security Key" (FIDO2 YubiKey).
    - *Proposal (`SIMPLIFY`):* Add clarifying subtext under each button explaining that Passkeys sync across your device ecosystem, while Security Keys require physical USB/NFC hardware.
+3. **Existing Personal Settings Implementations Noted (Zero Phase 2 Work Required):**
+   - Note: Client-side 2 MiB file size and SVG rejection validation is already fully implemented on `PersonalSettingsPage.tsx`.
+   - Note: Password complexity validation (min 12 characters, min 14 characters for Server Admins) with `confirm-password-input` is already fully implemented.
+   - Note: Dedicated `AvatarCropModal` and `AvatarLightboxModal` components are already fully implemented.
 
 ---
 
 ## 4. Phase 2 (KAN-427) File-Scoped Action Checklist
 
-This checklist outlines the implementation actions for Phase 2 (`KAN-427`), strictly deduplicated against `KAN-404` (Gate 0 WebSudo Step-Up), `KAN-402` (Slice 2 AI/Agents), and `KAN-403` (Slice 3 MCP/OAuth):
+This checklist outlines the genuine remaining implementation actions for Phase 2 (`KAN-427`), strictly deduplicated against `KAN-404` (Gate 0 WebSudo Step-Up), `KAN-402` (Slice 2 AI/Agents), and `KAN-403` (Slice 3 MCP/OAuth), with all already-implemented features removed:
 
 - [ ] **`kanban/web/src/features/settings/WorkspaceSettingsPage.tsx`**
   - [ ] Add preset duration pills (`15m`, `30m`, `1h`, `4h`) for `workspace-idle-timeout-input` and display human hours next to `workspace-abs-timeout-input`.
-  - [ ] Move `workspace-default-skip-loaded-seq-checkbox` into collapsible `<AdvancedSection>` with clarified help text.
   - [ ] Convert `workspace-webhook-restrictions` static form group into an informational security banner linking to documentation.
-  - [ ] Remove duplicate trash retention input from Trash tab, keeping the single canonical control on the General tab.
+  - [ ] Remove duplicate trash retention input (`workspace-trash-retention-input-trash-tab`) and save button (`save-trash-retention-btn`) from Trash tab, keeping the single canonical control on the General tab.
   - [ ] Disable group member add button and highlight invalid rows when circular hierarchy is detected.
 - [ ] **`kanban/web/src/features/settings/ProjectSettingsPage.tsx`**
-  - [ ] Add incremental `Move Up` and `Move Down` state ordering controls in the workflow states table.
-  - [ ] Implement client-side validation asserting `wip_soft_limit <= wip_hard_limit`.
   - [ ] Add quick-select emoji palette for `priority-emoji-input`.
-  - [ ] Move `project-skip-loaded-seq-checkbox` into an advanced project settings section.
-  - [ ] Apply distinct color styling and blast radius counter to Stage 1 soft-delete vs Stage 2 permanent purge cards.
+  - [ ] Apply distinct color styling and blast radius counter formatting to Stage 1 soft-delete (`mode="trash"`) vs Stage 2 permanent purge cards.
 - [ ] **`kanban/web/src/features/settings/PersonalSettingsPage.tsx`**
   - [ ] Add "Auto-Detect Timezone" button and searchable filter for `timezone-select`.
-  - [ ] Add client-side 2 MiB file size and image type validation before triggering avatar upload.
   - [ ] Update descriptive helper copy for Passkeys (biometric) vs Security Keys (hardware token).
-- [ ] **`kanban/web/src/features/custom-fields/CustomFieldsStudio.tsx`** & **`kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx`**
-  - [ ] Add runtime environment check: when nsjail is unavailable, disable Tier B and display informative badge.
+- [ ] **`kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx`**
   - [ ] Add structured format metadata inputs for text, number, and badge formats with raw JSON fallback.
   - [ ] Enhance tamper warning alert to display old vs new manifest SHA256 hashes before saving modified definitions.
-- [ ] **`kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx`**
-  - [ ] Render explicit self-approval prohibition banner when author views their own escalation request.
-  - [ ] Ensure AAL2 OTP step-up modal interfaces cleanly with standard WebSudo auth flows.
-- [ ] **`kanban/web/src/features/workflows/WorkflowStudioPage.tsx`** & **`kanban/web/src/features/workflows/AttachHookDialog.tsx`**
-  - [ ] Add explanatory descriptions differentiating deterministic Wasm hooks from probabilistic Agent hooks.
+- [ ] **`kanban/web/src/features/workflows/AttachHookDialog.tsx`**
+  - [ ] Add explanatory descriptions differentiating `sync_validator`, `sync_mutator`, and `agent_interceptor` hooks.
   - [ ] Add quick "Select All" / "Clear All" toggles for the allowed mutable fields checklist.
 - [ ] **`kanban/web/src/features/workflows/DryRunDrawer.tsx`**
-  - [ ] Verify dry-run drawer renders clean field-level diffs and guarantees zero database side-effects.
-  - [ ] Add JSON syntax highlighting for synthetic payload inputs.
+  - [ ] Add prominent top simulation banner (`DRY-RUN SIMULATION: No database changes were committed.`) in `DryRunDrawer.tsx`.
+  - [ ] Add unified visual before-and-after field diff display for proposed mutations in dry-run execution steps.
 - [ ] **`kanban/web/src/features/workflows/GitRepoBindingsSection.tsx`**
   - [ ] Add informative error callout explaining SSRF restrictions when users attempt to enter private IP addresses.
-  - [ ] Ensure sync status and last fetch timestamp update reactively after refresh triggers.
 - [ ] **Backend Validation Verification (`kanban/api/v1/`):**
   - [ ] Verify `kanban/api/v1/admin/workspace_settings.py` enforces timeout limits (idle: 5-720 min, absolute: 60-10080 min).
-  - [ ] Verify `kanban/api/v1/admin/destructive.py` validates confirmation tokens and mode parameters.
+  - [ ] Verify `kanban/api/v1/admin/destructive.py` validates confirmation tokens and mode parameters (`mode="trash"`, `mode="permanent_purge"`).
   - [ ] Verify `kanban/api/v1/project_config.py` rejects state updates where `wip_soft_limit > wip_hard_limit`.
-  - [ ] Verify `kanban/api/v1/custom_fields.py` validates field definitions and target scopes.
+  - [ ] Verify `kanban/api/v1/custom_fields.py` validates field definitions and target scopes (`PROJECT`, `WORKSPACE`, `SERVER`).
   - [ ] Verify `kanban/api/v1/custom_field_approvals.py` rejects self-approval for scope escalation.
   - [ ] Verify `kanban/api/v1/custom_field_execution.py` enforces rate limits and sandbox boundaries.
-  - [ ] Verify `kanban/api/v1/workflow_hooks.py` validates hook transition bindings and approved Wasm hashes.
+  - [ ] Verify `kanban/api/v1/workflow_hooks.py` validates hook transition bindings (`from_state`, `to_state`, `agent`) and approved Wasm hashes.
   - [ ] Verify `kanban/api/v1/repo_bindings.py` strictly blocks private/internal IP ranges and cloud metadata IPs.
-  - [ ] Verify `kanban/api/v1/user_settings.py` enforces avatar size/mime restrictions and password complexity.
+  - [ ] Verify `kanban/api/v1/user_settings.py` enforces avatar size/mime restrictions and password complexity (>=12, >=14 for admins).
 
 ---
 
@@ -294,7 +355,7 @@ The following prerequisites, environment configurations, and test fixtures are r
    - Handle: `@security-admin` (distinct from script author)
    - Credentials: Test password + enrolled TOTP secret for AAL2 signing of escalation requests.
 3. **Standard Project Member:**
-   - Handle: `@developer` (role: `MEMBER`)
+   - Handle: `@developer` (role: `WORKSPACE_MEMBER` / `MEMBER`)
    - Credentials: Standard credentials to verify access restrictions on admin-only settings.
 
 ### 5.3 Test Fixtures & External Assets
@@ -305,10 +366,13 @@ The following prerequisites, environment configurations, and test fixtures are r
 3. **AI Provider Fixture:**
    - Local Ollama instance (`http://localhost:11434`) or Gemini test API key configured to test Agent-based workflow transition hooks without incurring third-party network costs.
 
+### 5.4 Safety Guard on Protected Pre-Production Instance
+- **Strict Non-Destructive Guard:** Do NOT alter configuration, mutate projects, or execute destructive testing on `https://k.hackedyour.info` / `192.168.1.101`. All workouts run in isolated local containers.
+
 ---
 
 ## 6. Verification and Compliance
 
 - **No Unicode Dashes:** Validated with `python3 scripts/check_no_dashes.py --all docs/workouts/slice-5-workspace-project-workflows/01-audit-and-cuts.md` (0 em/en-dashes).
-- **Cited Path Verification:** 100% of cited frontend and backend source files verified to exist in the repository tree.
+- **Cited Path Verification:** 100% of cited frontend and backend source files verified to exist in the repository tree (22/22 paths).
 - **Source Code Invariant:** Phase 1 completed with zero source code mutations.
