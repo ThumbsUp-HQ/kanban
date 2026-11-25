@@ -1,7 +1,11 @@
 $ python3 scripts/check_no_dashes.py docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md
-
 EXIT: 0
 
 $ python3 scripts/check_no_dashes.py --all
-
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-p1-finalizer-cd6a0236/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 EXIT: 0
+
+BUILD / DASH CHECK VERIFICATION:
+Command 1: python3 scripts/check_no_dashes.py docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md -> EXIT 0
+Command 2: python3 scripts/check_no_dashes.py --all -> EXIT 0
+Zero forbidden Unicode em-dashes (U+2014) or en-dashes (U+2013) found.

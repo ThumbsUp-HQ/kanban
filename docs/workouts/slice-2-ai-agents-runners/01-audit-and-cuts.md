@@ -55,6 +55,7 @@ Dispositions are categorized as:
 | `AiStudioPage` | Residency Tier Badge (`residency-badge`) | Semantic badge (`🏠 Local` / `☁️ Cloud`) | Indicates whether provider operates on loopback/LAN or external cloud. | Inferred via `isLocalEndpoint(provider_kind, base_url)`. | KEEP |
 | `AiStudioPage` | Enable / Disable Toggle (`toggle-enable-btn`) | State Toggle Button | Enables or suspends completions through this specific provider. | Wired to `POST ...:disable` and `PATCH ...`. | KEEP |
 | `AiStudioPage` | Provider Display Name | Plain text header (`h3`) | Friendly name of the configured AI provider. | Bound to `p.display_name`. | KEEP |
+| `AiStudioPage` | Priority Rank Badge (`provider-rank-${p.id}`) | Status Chip (`#1`, `#2`, etc.) | Displays numeric failover execution priority rank. | Bound to `p.priority` (`aiStudio.css:819`). | KEEP |
 | `AiStudioPage` | Priority & Tier Metadata | Metadata chips | Displays priority rank and configured data residency tier. | Bound to `p.priority` and `p.residency_tier`. | KEEP |
 | `AiStudioPage` | HTTP Base URL Metadata | Inline monospace URL | Displays upstream provider gateway endpoint. | Bound to `p.base_url`. | KEEP |
 | `AiStudioPage` | API Key Status Indicator (`key-status`) | Status chip | Shows whether write-only envelope encryption key is installed. | Bound to `p.api_key_set`. | KEEP |
@@ -63,14 +64,18 @@ Dispositions are categorized as:
 | `AiStudioPage` | Manage Token Budget Action (`manage-budget-btn`) | Card Action Button | Opens the budget and consumption modal for this provider. | Wired to `selectedBudgetProvider` modal state. | KEEP |
 | `AiStudioPage` | Edit Provider Action (`edit-provider-btn`) | Card Action Button | Opens the editor drawer with populated provider settings. | Wired to `editingProvider` drawer state. | KEEP |
 | `AiStudioPage` | Delete Provider Action (`delete-provider-btn`) | Danger Action Button | Prompts for confirmation and deletes provider configuration. | Wired to `DELETE /api/v1/admin/ai/providers/{id}`. | KEEP |
+| `AiStudioPage` | Delete Provider Modal (`delete-provider-modal`, `cancel-delete-provider-btn`, `confirm-delete-provider-btn`) | Modal Dialog & Action Buttons | Confirmation dialog requiring explicit verification before deleting a provider. | Wired to `providerToDelete` state in `AiStudioPage.tsx`. | KEEP |
+| `AiProviderEditorDrawer` | Close Provider Drawer Action (`close-provider-drawer-btn`) | Header Action Button | Dismisses provider editor drawer without saving changes. | Wired to `onClose` callback in `AiProviderEditorDrawer.tsx:431`. | KEEP |
+| `AiProviderEditorDrawer` | Drawer Air-Gap Alert Banner (`drawer-air-gap-alert`) | Informational Alert | Alerts administrator inside drawer that enterprise air-gap mode blocks cloud providers. | Mounted when `airGapMode=true` (`AiProviderEditorDrawer.tsx:438`). | KEEP |
 | `AiProviderEditorDrawer` | Protocol & Provider Engine (`provider-kind-select`) | Select: `ollama`, `openai`, `gemini` | Selects underlying client protocol and API format. | Bound to `body.provider_kind` on `POST /admin/ai/providers`. | KEEP |
 | `AiProviderEditorDrawer` | Display Name (`provider-name-input`) | Text Input (Required) | Administrator label for the provider instance. | Bound to `body.display_name`. | KEEP |
-| `AiProviderEditorDrawer` | API Secret Key (`provider-key-input`) | Text Input (Masked) | Bearer secret or API key stored in write-only envelope custody. | Bound to `body.api_key`. | SIMPLIFY |
+| `AiProviderEditorDrawer` | API Secret Key (`provider-key-input`) | Text Input (Masked) | Bearer secret or API key stored in write-only envelope custody. | Bound to `body.api_key` (Already Implemented on main via KAN-400: zero password inputs, `.kb-masked-api-key`). | KEEP |
 | `AiProviderEditorDrawer` | Show/Hide API Key Toggle (`toggle-show-key-btn`) | Button Toggle | Toggles masking for manual inspection before saving. | Local component state `showApiKey`. | KEEP |
-| `AiProviderEditorDrawer` | Clear Existing Key (`clear-key-checkbox`) | Checkbox | Instructs backend to erase stored wrapped DEK and envelope key. | Bound to `clear_api_key` in `PATCH /admin/ai/providers/{id}`. | KEEP |
+| `AiProviderEditorDrawer` | Clear Existing Key (`clear-key-checkbox`) | Checkbox | Instructs backend to erase stored wrapped DEK and envelope key. | Sends `api_key: null` in payload on `PATCH /api/v1/admin/ai/providers/{id}`. | KEEP |
 | `AiProviderEditorDrawer` | Cutoff Timeout (`provider-timeout-ms-input`) | Number Input (1000..300000 ms) | Inference deadline before aborting or triggering failover. | Bound to `settings_json.timeout_ms`. | KEEP |
 | `AiProviderEditorDrawer` | Probe Models Action (`probe-models-btn`) | Secondary Button | Connects to endpoint and discovers available model IDs automatically. | Wired to `POST /admin/ai/providers/probe-models`. | KEEP |
 | `AiProviderEditorDrawer` | Probed Models Picker (`probed-models-picker`) | Container Component | Multi-model selection container displayed after successful model probe. | Bound to `probedModels` state populated via `POST /api/v1/admin/ai/providers/probe-models`. | KEEP |
+| `AiProviderEditorDrawer` | Probed Model Chip (`probe-chip-${m}`) | Chip Action Button | Toggles or selects individual discovered model ID into allowlist. | Bound to `probe-chip-${m}` (`AiProviderEditorDrawer.tsx:694`). | KEEP |
 | `AiProviderEditorDrawer` | Filter Probed Models (`probe-model-search-input`) | Text Search Input | Filters the list of probed model chips by substring. | Bound to `probedFilter` local state. | KEEP |
 | `AiProviderEditorDrawer` | Select All Probed (`probe-select-all-btn`) | Secondary Action Button | Adds all discovered probed models into the comma-separated allowlist. | Updates `modelAllowlist` state with all probed model IDs. | KEEP |
 | `AiProviderEditorDrawer` | Clear Models (`probe-clear-all-btn`) | Secondary Action Button | Clears the entire model allowlist input. | Resets `modelAllowlist` state to empty string. | KEEP |
@@ -85,9 +90,11 @@ Dispositions are categorized as:
 | `AiProviderEditorDrawer` | Drawer Test Connection (`drawer-test-connection-btn`) | Action Button | Tests connection latency and model count for draft or configured provider. | Wired to `POST /api/v1/admin/ai/providers/test-connection` or `/{id}/test-connection`. | KEEP |
 | `AiProviderEditorDrawer` | Save Provider Action (`save-provider-btn`) | Primary Submit Button | Submits provider configuration form for creation or update. | Wired to `POST /api/v1/admin/ai/providers` or `PATCH /api/v1/admin/ai/providers/{id}`. | KEEP |
 | `AiProviderEditorDrawer` | Cancel Drawer Action (`cancel-provider-drawer-btn`) | Secondary Button | Closes drawer and dismisses uncommitted provider configuration edits. | Wired to `onClose` drawer callback. | KEEP |
+| `AiBudgetModal` | Close Budget Modal Action (`close-budget-modal-btn`) | Header Close Button | Closes token budget modal without saving changes. | Wired to `onClose` callback in `AiBudgetModal.tsx:111`. | KEEP |
 | `AiBudgetModal` | Accounting Period (`budget-period-select`) | Select: `monthly`, `daily` | Window duration for token consumption tracking and quotas. | Bound to `period_kind` in `PUT /admin/ai/budgets`. | KEEP |
-| `AiBudgetModal` | Maximum Token Cap (`budget-token-cap-input`) | Number Input (0..10,000,000,000) | Hard quota ceiling; 0 freezes provider completions (Note: bug on line 140 displays Unlimited when capNum===0). | Bound to `token_cap` in `PUT /admin/ai/budgets`. | SIMPLIFY |
+| `AiBudgetModal` | Maximum Token Cap (`budget-token-cap-input`) | Number Input (0..10,000,000,000) | Hard quota ceiling; 0 freezes provider completions (Note: line 140 displays 'Unlimited' when capNum===0 and line 167 displays 'No cap enforced'). | Bound to `token_cap` in `PUT /admin/ai/budgets`. | SIMPLIFY |
 | `AiBudgetModal` | Consumption Progress (`budget-progress-bar`) | HTML `<progress>` indicator | Visual depiction of tokens consumed plus reserved against quota. | Computed from `tokens_used` and `tokens_reserved`. | KEEP |
+| `AiBudgetModal` | Budget Cancel & Save Actions (`budget-cancel-btn`, `save-budget-btn`) | Action Buttons | Cancels modal or persists updated token budget allocation to backend. | Wired to `handleSaveBudget` in `AiBudgetModal.tsx:222-230`. | KEEP |
 | `AgentStudioPage` | Studio Navigation Subnav | Missing Component | Unified navigation bar for administrative studios. | Currently missing from component; must be added. | SIMPLIFY |
 | `AgentStudioPage` | Documentation Link (`agent-studio-doc-link`) | Hyperlink button (`StudioDocLink`) | Opens documentation for autonomous agent runtime. | Wired to `/docs/multi-provider-ai-engine-and-runners`. | KEEP |
 | `AgentStudioPage` | Register Agent Action (`register-agent-btn`) | Primary Action Button | Opens the agent definition registration drawer in create mode. | Wired to `isDrawerOpen=true`. | KEEP |
@@ -100,18 +107,23 @@ Dispositions are categorized as:
 | `AgentStudioPage` | Test Validation Action (`validate-agent-btn`) | Primary Green Action Button | Runs `validate-echo` test to verify schema, policy, and tool permissions. | Wired to `POST /api/v1/admin/agent-definitions/{id}:validate`. | KEEP |
 | `AgentStudioPage` | Edit Agent Action (`edit-agent-btn`) | Secondary Action Button | Opens the editor drawer with populated agent definition. | Wired to `editingAgent` drawer state. | KEEP |
 | `AgentStudioPage` | Delete Agent Action (`delete-agent-btn`) | Danger Action Button | Prompts for confirmation and removes agent definition. | Wired to `DELETE /api/v1/admin/agent-definitions/{agent}` (`agentDefinitionsApi.ts:102`). | KEEP |
+| `AgentStudioPage` | Delete Agent Modal (`delete-agent-modal`, `cancel-delete-agent-btn`, `confirm-delete-agent-btn`) | Modal Dialog & Action Buttons | Confirmation dialog requiring explicit verification before deleting an agent. | Wired to `agentToDelete` state in `AgentStudioPage.tsx:256-278`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Close Agent Drawer Action (`close-agent-drawer-btn`) | Header Close Button | Closes agent definition drawer without saving changes. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:261`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Agent Slug (`agent-slug-input`) | Text Input (`^[a-z0-9][a-z0-9-]{1,62}$`) | Permanent handle identifier (disabled when editing). | Bound to `body.slug`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Display Name (`agent-name-input`) | Text Input (Required) | Human-readable name for the autonomous agent. | Bound to `body.display_name`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Autonomous Harness (`agent-harness-select`) | Select: `in_app_sdk`, `cli_pipe`, `remote_runner` | Selects execution harness architecture (disabled when editing). | Bound to `body.harness_kind`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Provider Kind (`agent-provider-select`) | Select: `gemini`, `openai`, `ollama`, `fixture` | Selects AI provider kind when using In-App SDK harness. | Bound to `body.provider_kind`. | KEEP |
-| `AgentDefinitionEditorDrawer` | Model Identifier (`agent-model-input`) | Text Input with Datalist | Target model ID with quickpick chips from active providers. | Bound to `body.model_id`. | KEEP |
-| `AgentDefinitionEditorDrawer` | Allowlisted CLI Binary (`agent-cli-binary-select`) | Select: `agy`, `codex` | Allowlisted system binary when using CLI Pipe harness. | Bound to `body.cli_binary_allowlist_id`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Model Identifier & Datalist (`agent-model-input`, `agent-model-datalist`, `quickpick-model-${m}`) | Text Input with Datalist & Quickpick Chips | Target model ID with quickpick chips from active providers. | Bound to `body.model_id` (`quickpick-model-${m}`). | KEEP |
+| `AgentDefinitionEditorDrawer` | Allowlisted CLI Binary (`agent-cli-binary-select`) | Select: `agy`, `codex`, `gemini-cli`, `claude-code` | Allowlisted system binary when using CLI Pipe harness. | Bound to `body.cli_binary_allowlist_id` (`cliPolicy.ts:12-17`). | KEEP |
 | `AgentDefinitionEditorDrawer` | Remote Runner Pool (`agent-runner-pool-input`) | Text Input (Slug) | Target runner pool slug when using Remote Runner harness. | Bound to `body.remote_runner_pool_slug`. | KEEP |
 | `AgentDefinitionEditorDrawer` | CLI Arguments (`agent-cli-args-input`) | Text Input | Command arguments enforcing pinned prefix (`exec -s read-only -`). | Bound to `body.cli_args` (list of strings). | KEEP |
 | `AgentDefinitionEditorDrawer` | Execution Timeout (`agent-timeout-input`) | Number Input (1000..300000 ms) | Execution deadline before aborting agent execution. | Bound to `body.timeout_ms`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Repo Access Mode (`agent-repo-mode-select`) | Select: `none`, `bare_git_tools`, `ro_vfs_mount` | Filesystem access policy for this agent. | Bound to `body.repo_access_mode`. | KEEP |
 | `AgentDefinitionEditorDrawer` | Allowed MCP Tools (`tool-checkbox-${tool}`) | Checkbox Grid | Fine-grained tool permission filters for this agent principal. | Bound to `body.mcp_allowed_tools`. | KEEP |
 | `AgentDefinitionEditorDrawer` | System Instructions (`agent-instructions-textarea`) | Markdown Textarea | Prompt instructions and behavioural rules for the agent. | Bound to `body.system_instructions_md`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Cancel Agent Drawer Action (`cancel-agent-drawer-btn`) | Secondary Button | Dismisses agent definition edits without saving. | Wired to `onClose` callback in `AgentDefinitionEditorDrawer.tsx:268`. | KEEP |
+| `AgentDefinitionEditorDrawer` | Save Agent Action (`save-agent-btn`) | Primary Submit Button | Submits agent definition for creation or update. | Wired to submit handler in `AgentDefinitionEditorDrawer.tsx:363`. | KEEP |
+| `AgentValidationModal` | Close Validation Modal Action (`close-validation-modal-btn`) | Header Close Button | Closes test validation modal. | Wired to `onClose` callback in `AgentValidationModal.tsx:321`. | KEEP |
 | `AgentValidationModal` | Validation Verdict Badge (`validation-verdict-badge`) | Status Badge | Indicates pass or fail verdict from local forensic verification test. | Bound to `AgentValidationResponse.valid` and `exit_code`. | KEEP |
 | `AgentValidationModal` | Validation Summary Card (`validation-summary`) | Metadata Summary Box | Displays validation status, execution latency, and token consumption counts. | Bound to `AgentValidationResponse.status`, `latency_ms`, `tokens_in`, `tokens_out`. | KEEP |
 | `AgentValidationModal` | Validation Report Output (`validation-report-output`) | Monospace `<pre>` Display | Displays structured 4-section verification report (`validate-echo`). | Populated from `AgentValidationResponse.report_text`. | KEEP |
@@ -119,7 +131,7 @@ Dispositions are categorized as:
 | `RunnerStudioPage` | Studio Navigation (`activeTab="runners"`) | Tab item in `AdminStudioSubnav` | Navigates between administrative studio surfaces. | Wired to React Router `/admin/agent-runners`. | KEEP |
 | `RunnerStudioPage` | Documentation Link (`runner-studio-doc-link`) | Hyperlink button (`StudioDocLink`) | Opens remote runner mTLS architecture guide. | Wired to `/docs/multi-provider-ai-engine-and-runners#remote-runners`. | KEEP |
 | `RunnerStudioPage` | Mint Enrollment Token Action (`open-mint-modal-btn`) | Primary Action Button | Opens the token minting modal for daemon onboarding. | Wired to `isMintModalOpen=true`. | KEEP |
-| `RunnerStudioPage` | Rotation Guidance Panel (`runner-rotation-guidance`) | Informational Advisory Box | Documents certificate lifecycle and non-destructive rotation steps (Note: line 158 emits broken `--url` command). | Static UX guidance component. | SIMPLIFY |
+| `RunnerStudioPage` | Rotation Guidance Panel (`runner-rotation-guidance`) | Informational Advisory Box | Documents certificate lifecycle and non-destructive rotation steps. | Static UX guidance (Already Implemented on main via KAN-399: emits canonical `--server-url` at line 158). | KEEP |
 | `RunnerStudioPage` | Status Filter Pills (`runner-status-filters`) | Filter Button Group | Filters displayed runners by `all`, `active`, `revoked`, or `offline`. | Bound to `statusFilter` query parameter state. | KEEP |
 | `RunnerStudioPage` | Runner Status Badge (`runner-status-${id}`) | Status Badge | Indicates online, offline, or revoked operational state. | Bound to `r.status`. | KEEP |
 | `RunnerStudioPage` | Runner Pool Badge (`r.pool_slug`) | Monospace Badge | Displays the target runner pool slug assigned to the runner daemon. | Bound to `r.pool_slug` on `RemoteRunnerResponse`. | KEEP |
@@ -132,22 +144,25 @@ Dispositions are categorized as:
 | `RunnerStudioPage` | Revocation Confirmation Modal (`revoke-runner-modal`) | Modal Dialog | Confirmation dialog requiring explicit verification before revoking runner daemon. | Wired to `runnerToRevoke` state in `RunnerStudioPage.tsx`. | KEEP |
 | `RunnerStudioPage` | Confirm Revoke Action (`confirm-revoke-btn`) | Danger Action Button | Executes immediate daemon revocation, terminating WebSocket session and invalidating certificate. | Wired to `POST /api/v1/admin/agent-runners/{id}:revoke`. | KEEP |
 | `RunnerStudioPage` | Cancel Revoke Action (`cancel-revoke-btn`) | Secondary Button | Dismisses runner revocation dialog without revoking daemon. | Wired to `setRunnerToRevoke(null)` state callback. | KEEP |
-| `RunnerStudioPage` | Inline AAL2 Step-Up Card (`aal2-modal-card`) | Security Step-Up Modal | Mounts second-factor challenge step when admin AAL2 session token is required or stale. | Wired to `aal2Challenge` state triggered on `AAL2_REQUIRED` or `AAL2_STALE`. | KEEP |
+| `RunnerStudioPage` | Inline AAL2 Step-Up Card (`aal2-modal-card`, `close-aal2-modal-btn`) | Security Step-Up Modal | Mounts second-factor challenge step when admin AAL2 session token is required or stale. | Wired to `aal2Challenge` state (`close-aal2-modal-btn` in `RunnerStudioPage.tsx:382`). | KEEP |
 | `RunnerStudioPage` | Second Factor Step Component (`SecondFactorStep`) | Interactive Auth Component | Handles WebAuthn passkey or TOTP second-factor verification to escalate session to AAL2. | Wired to `/api/v1/auth/mfa/challenge` verification handlers. | KEEP |
+| `MintEnrollmentTokenModal` | Close Mint Modal Action (`close-mint-modal-btn`) | Header Close Button | Closes enrollment token mint modal without generating token. | Wired to `handleClose` in `MintEnrollmentTokenModal.tsx:103`. | KEEP |
 | `MintEnrollmentTokenModal` | Target Runner Pool Slug (`token-pool-slug-input`) | Text Input (`^[a-z0-9][a-z0-9-]{1,62}$`) | Pool identifier where daemon will register (default: `default`). | Bound to `body.pool_slug`. | KEEP |
 | `MintEnrollmentTokenModal` | Token Expiration TTL (`token-ttl-select`) | Select: `300`, `600`, `900` seconds | Lifetime before single-use token expires (max 15 minutes). | Bound to `body.ttl_seconds`. | KEEP |
 | `MintEnrollmentTokenModal` | Generate Token Action (`submit-mint-token-btn`) | Primary Submit Button | Submits pool slug and TTL to mint a single-use cryptographically signed enrollment token. | Wired to `POST /api/v1/admin/agent-runners/enrollment-tokens`. | KEEP |
+| `MintEnrollmentTokenModal` | Cancel Mint Action (`cancel-mint-token-btn`) | Secondary Button | Dismisses mint token dialog before generation. | Wired to `handleClose` in `MintEnrollmentTokenModal.tsx:174`. | KEEP |
 | `MintEnrollmentTokenModal` | Single-Reveal Plaintext Token (`token-plaintext`) | Monospace Display Box | Displays raw cryptographically signed enrollment token once. | Populated from `EnrollmentTokenResponse.enrollment_token`. | KEEP |
 | `MintEnrollmentTokenModal` | Copy Token Action (`copy-token-btn`) | Action Button | Copies plaintext enrollment token to system clipboard. | Wired to `navigator.clipboard.writeText`. | KEEP |
-| `MintEnrollmentTokenModal` | Example CLI Ingestion Command (`runner-cli-command`) | Monospace `<pre>` Block | Shell command example to enroll runner daemon via stdin (Note: line 196 emits broken `--url` command). | Formatted template string. | SIMPLIFY |
-| `MintEnrollmentTokenModal` | Dismiss Mint Modal Action (`dismiss-mint-modal-btn`) | Primary Action Button | Closes single-reveal view and purges token from React state. | Local modal state `handleClose`. | SIMPLIFY |
+| `MintEnrollmentTokenModal` | Example CLI Ingestion Command (`runner-cli-command`) | Monospace `<pre>` Block | Shell command example to enroll runner daemon via stdin. | Formatted template string (Already Implemented on main via KAN-399: emits `--server-url`). | KEEP |
+| `MintEnrollmentTokenModal` | Copy Runner CLI Action (`copy-runner-cli-btn`) | Secondary Button | Copies full CLI enrollment command to clipboard with '✓ Copied!' feedback. | Already Implemented on main via KAN-399 (`MintEnrollmentTokenModal.tsx:234`). | KEEP |
+| `MintEnrollmentTokenModal` | Dismiss Mint Modal Action (`dismiss-mint-modal-btn`) | Primary Action Button | Closes single-reveal view and purges token from React state. | Local modal state `handleClose` (Already Implemented on main via KAN-399: labeled 'Done'). | KEEP |
 | `agent/remote_runner/cli.py` | Server Base URL (`--server-url`) | CLI Option (Required string) | Base HTTPS URL of kanban server for daemon enrollment. | Mapped to `server_url` parameter in `enroll_runner()` (`cli.py:234`). | KEEP |
 | `agent/remote_runner/cli.py` | Token Stdin Flag (`--token-stdin`) | CLI Flag (store_true, required) | Enforces reading enrollment token from stdin to protect `/proc/<pid>/cmdline` from token leakage. | Mapped to `sys.stdin.read().strip()` in enroll handler (`cli.py:238`). | KEEP |
 | `agent/remote_runner/cli.py` | Runner Pool Slug (`--pool`) | CLI Option (Required string) | Pool identifier where daemon registers. | Mapped to `dest="pool_slug"` parameter in `enroll_runner()` (`cli.py:243`). | KEEP |
-| `agent/remote_runner/cli.py` | State Directory (`--state-dir`) | CLI Option (Path, default: `/var/lib/kanban-runner`) | Filesystem directory to store certificates, keys, and runner config. | Mapped to `state_dir` parameter in `enroll_runner()` (`cli.py:245`). | SIMPLIFY |
+| `agent/remote_runner/cli.py` | State Directory (`--state-dir`) | CLI Option (Path) | Filesystem directory to store certificates, keys, and runner config. | Mapped to `default_runner_state_dir()` (Already Implemented on main via KAN-399: enforces `0o700`). | KEEP |
 | `agent/remote_runner/cli.py` | Node Hostname (`--hostname`) | CLI Option (String, optional) | Hostname used as Common Name in certificate signing request. | Mapped to `hostname` parameter in `enroll_runner()` (`cli.py:250`). | KEEP |
 | `agent/remote_runner/cli.py` | Server CA Bundle Path (`--ca-cert`) | CLI Option (Path, optional) | Path to server CA certificate bundle for custom TLS validation. | Mapped to `dest="ca_cert_path"` in `enroll_runner()` (`cli.py:251`). | KEEP |
-| `agent/remote_runner/cli.py` | Config File (`run --config`) | CLI Option (Path, default: `/etc/kanban-runner/config.yaml`) | Path to configuration YAML/TOML file for starting runner daemon. | Mapped to `config_path` in `run_daemon()` (`cli.py:258`). | SIMPLIFY |
+| `agent/remote_runner/cli.py` | Config File (`run --config`) | CLI Option (Path) | Path to configuration YAML/TOML file for starting runner daemon. | Mapped to `default_runner_config_path()` (Already Implemented on main via KAN-399). | KEEP |
 | `agent/remote_runner/cli.py` | CLI Token Rejection Guard (`--token` flag rejection) | Security Invariant Guard | Immediately aborts with exit code 2 if `--token` is passed on CLI to prevent `/proc/<pid>/cmdline` exposure. | Pre-parsing argument loop check in `main()` (`cli.py:218-224`). | KEEP |
 | `kanban/ops/llms_txt.py` | Onboarding Prompt Template (`ONBOARDING_PROMPT_TEMPLATE`) | Formatted String Template | Canonical 1-click prompt instructing AI coding agents to read /llms.txt and conduct setup interview. | Served in `LlmsSkillsCatalogResponse` via `/api/v1/system/skills` (`llms_txt.py:51`). | KEEP |
 | `kanban/ops/llms_txt.py` | Compact llms.txt Template (`_LLMS_TXT_TEMPLATE`) | Markdown Document Template | Compact map providing platform overview, 3 MCP surfaces, and kanban-ticket rules. | Served at `/llms.txt` with ETag and byte budget enforcement (`llms_txt.py:269`). | KEEP |
@@ -155,9 +170,18 @@ Dispositions are categorized as:
 | `kanban/ops/llms_txt.py` | Compact Map Byte Limit (`MAX_LLMS_TXT_BYTES`) | Constant Integer (`12 * 1024` = 12,288 bytes) | Maximum byte ceiling for /llms.txt to ensure fast context ingestion across all models. | Invariant checked in test suite and content generation (`llms_txt.py:38`). | KEEP |
 | `kanban/ops/llms_txt.py` | Skill Asset Byte Limit (`MAX_SKILL_BYTES`) | Constant Integer (`24 * 1024` = 24,576 bytes) | Maximum byte ceiling for individual skill assets to prevent bloat. | Invariant checked on all `SkillAsset` instances (`llms_txt.py:39`). | KEEP |
 | `kanban/ops/llms_txt.py` | Full Bundle Byte Limit (`MAX_LLMS_FULL_BYTES`) | Constant Integer (`64 * 1024` = 65,536 bytes) | Maximum byte ceiling for bundled /llms-full.txt archive. | Invariant checked in full bundle generator (`llms_txt.py:40`). | KEEP |
-| `kanban/api/v1/admin/ai_providers.py` | AI Providers Project Scope (`project_id`) | Query Parameter (UUID, optional) | Filters AI provider configurations by target project ID. | Validated in `_assert_admin_for_scope` and passed to `list_configs` (`ai_providers.py:186`). | KEEP |
-| `kanban/api/v1/agent_definitions.py` | Agent Definition Project Scope (`project_id`) | Model / Query Property (UUID, optional) | Restricts agent definition visibility and execution scope to a specific project. | Supported in `AgentDefinitionCreate`, `AgentDefinitionResponse`, and DB schema (`agent_definitions.py:13,32`). | KEEP |
+| `kanban/api/v1/admin/ai_providers.py` | AI Providers Project Scope (`project_id`) | Query Parameter (UUID, optional) | Filters AI provider configurations by target project ID. | Validated in `_assert_admin_for_scope` and passed to `list_configs` (`ai_providers.py:186`). Air gap enforcement returns 409 AIR_GAP_EGRESS_DENIED on create/update vs 200 ProviderProbeResult(ok=False) on probe. | KEEP |
+| `kanban/api/v1/agent_definitions.py` | Agent Definition Project Scope (`project_id`) | Model / Query Property (UUID, optional) | Restricts agent definition visibility and execution scope to a specific project. | Supported in `AgentDefinitionCreate`, `AgentDefinitionResponse`, and DB schema (`kanban/agents/schemas.py:33,274`). | KEEP |
 | `kanban/api/v1/remote_runners.py` | Runner Pool Filter (`pool_slug`) | Query Parameter (String, optional) | Filters registered remote runners by pool slug. | Filter applied in `list_remote_runners` (`remote_runners.py:188`). | KEEP |
+
+### 2.1 Inventory Disposition Summary
+
+- **Total Settings Cataloged:** 127
+- **KEEP:** 119 (93.7%)
+- **SIMPLIFY:** 4 (3.1%)
+- **MOVE_TO_ADVANCED:** 4 (3.1%)
+- **MERGE:** 0 (0.0%)
+- **CUT:** 0 (0.0%)
 
 ---
 
@@ -173,7 +197,7 @@ Dispositions are categorized as:
   - Move the **HTTP Base URL** field out of the Advanced Section into the primary connection settings group directly below Protocol & Provider Engine, so users configuring custom endpoints (e.g. LAN Ollama at `http://192.168.1.50:11434` or vLLM at `http://127.0.0.1:8000/v1`) can view and edit the URL without expanding Advanced Settings.
 
 ### 3.2 Token Budget UX & Quota Clarity
-- **Current State:** `AiBudgetModal.tsx` allows setting daily and monthly caps. However, `AiBudgetModal.tsx:140` contains a display bug: `{capNum > 0 ? `${capNum.toLocaleString()} tokens` : 'Unlimited'}` renders `'Unlimited'` when `capNum === 0`. This directly contradicts the backend zero-allowance freeze semantic documented in line 82 where `token_cap=0` freezes provider completions. Furthermore, there is no explicit visual indicator or radio toggle distinguishing between unconstrained quota and zero-allowance freeze.
+- **Current State:** `AiBudgetModal.tsx` allows setting daily and monthly caps. However, `AiBudgetModal.tsx:140` contains a display bug: `{capNum > 0 ? `${capNum.toLocaleString()} tokens` : 'Unlimited'}` renders `'Unlimited'` when `capNum === 0`. Furthermore, line 167 renders `'No cap enforced'` for unconstrained quota, causing confusion when `capNum === 0` freezes completions.
 - **Proposed Simplification:**
   - Fix the display ternary in `AiBudgetModal.tsx:140` so that `capNum === 0` explicitly displays `'Zero-Allowance Freeze (0 tokens)'` instead of misleadingly claiming `'Unlimited'`.
   - Add explicit toggle pills: `Enforce Token Cap` vs `Unlimited Quota (No Cap)`.
@@ -186,19 +210,13 @@ Dispositions are categorized as:
   - Add `{ id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖' }` to `ADMIN_TABS` in `AdminStudioSubnav.tsx`.
   - Mount `<AdminStudioSubnav activeTab="agents" />` at the top of `AgentStudioPage.tsx`.
 
-### 3.4 CLI Pipe vs Remote mTLS Runner Clarity & CLI Flag Parity
-- **Current State:** `AgentDefinitionEditorDrawer.tsx` presents `cli_pipe` and `remote_runner` without clarifying that CLI Pipe executes a sandboxed local process via stdin/stdout pipe (`agy` or `codex`), whereas Remote Runner connects outbound via mutual TLS over WebSocket. In addition, both `RunnerStudioPage.tsx:158` (`runner-rotation-guidance`) and `MintEnrollmentTokenModal.tsx:196` (`runner-cli-command`) emit broken CLI commands specifying `--url` instead of the canonical `--server-url` flag required by `agent/remote_runner/cli.py:234`.
-- **Proposed Simplification:**
-  - In `AgentDefinitionEditorDrawer.tsx`, add concise inline helper callouts under `agent-harness-select`:
-    - **In-App SDK:** Direct API calls from server to configured AI provider.
-    - **CLI Pipe:** Local sandboxed CLI process on server (`agy -p` or `codex exec -s read-only -`).
-    - **Remote Runner:** Distributed worker node connecting via outbound mTLS.
-  - In `RunnerStudioPage.tsx:158` (`runner-rotation-guidance`):
-    - Fix the CLI rotation snippet to use `--server-url` (canonical) instead of `--url`.
-  - In `MintEnrollmentTokenModal.tsx:196`:
-    - Fix the CLI ingestion snippet to use `--server-url` (canonical) instead of `--url`.
-    - Add a dedicated `Copy CLI Command` button (`data-testid="copy-runner-cli-btn"`) with `"✓ Copied!"` feedback.
-    - Change dismiss button label from `"I have safely stored the token"` to plain `"Done"` (`data-testid="dismiss-mint-modal-btn"`).
+### 3.4 CLI Pipe vs Remote mTLS Runner Clarity & CLI Flag Parity (Already Implemented on Main)
+- **Status:** **Already Implemented on Main via KAN-399**.
+- **Implementation Parity:**
+  - In `RunnerStudioPage.tsx:158`, the rotation guidance already outputs canonical `--server-url`.
+  - In `MintEnrollmentTokenModal.tsx:78,226-255`, the CLI command outputs canonical `--server-url`, provides dedicated `data-testid="copy-runner-cli-btn"` with `'✓ Copied!'` feedback, and uses primary dismiss button labeled `"Done"`.
+  - In `agent/remote_runner/cli.py:93-129,262-310`, `default_runner_state_dir()` enforces `0o700`, `default_runner_config_path()` detects config files, and `--server-url` is accepted with `--url` alias.
+- **Phase 2 Scope:** Retain existing implementations on `main`.
 
 ### 3.5 Air-Gap Mode Enforcement & Indicators
 - **Current State:** Both `AiStudioPage.tsx` and `AiProviderEditorDrawer.tsx` display air-gap warning banners, but in the drawer dropdown, OpenAI and Gemini remain clickable before triggering an error message on submit.
@@ -206,25 +224,27 @@ Dispositions are categorized as:
   - In `AiProviderEditorDrawer.tsx`, visually disable (`disabled={airGapMode}`) the cloud provider options (`openai`, `gemini`) in `provider-kind-select` when `airGapMode` is active, appending `"(Blocked by Air-Gap Policy)"` to the option labels.
   - Default selection strictly to `ollama` when `airGapMode` is true.
 
-### 3.6 Password Manager Auto-Save Prevention (Alignment with KAN-400)
-- **Current State:** `AiProviderEditorDrawer.tsx:447` mounts `<input id="provider-key-input" type={showApiKey ? 'text' : 'password'} ... />`. Chromium and password managers (1Password, Bitwarden, LastPass) treat any form containing `type="text"` followed by `type="password"` as a site login credential, prompting users to overwrite their `k.hackedyour.info` account password with the API key.
-- **Proposed Simplification:**
-  - Ensure `AiProviderEditorDrawer.tsx` renders zero `input[type="password"]` elements.
-  - Implement masked text representation with `-webkit-text-security: disc;` and browser ignore attributes (`data-1p-ignore="true"`, `data-lpignore="true"`, `data-bwignore="true"`, `autoComplete="off"`).
+### 3.6 Password Manager Auto-Save Prevention (Already Implemented on Main)
+- **Status:** **Already Implemented on Main via KAN-400**.
+- **Implementation Parity:**
+  - `AiProviderEditorDrawer.tsx:527-551` mounts zero `input[type="password"]` elements.
+  - Form and inputs declare `autoComplete="off"`, `data-1p-ignore="true"`, `data-lpignore="true"`, `data-bwignore="true"`, `data-form-type="other"`.
+  - Secret is visually obscured via `.kb-masked-api-key` in WebKit/Blink with state-driven bullet masking in Firefox/Gecko.
+- **Phase 2 Scope:** Retain existing implementation on `main`.
 
 ### 3.7 WebSudo (AAL2) Session Keepalive in Drawers
-- **Current State:** While drafting provider or agent configurations in drawers, the administrator AAL2 session token may expire, causing save actions to fail with `403 AAL2_REQUIRED` and losing uncommitted form changes.
+- **Integration Traceability:** Derived from `KAN-404` (WebSudo sliding-window replay).
 - **Proposed Simplification:**
-  - Mount `useAal2DirtyKeepalive()` in both `AiProviderEditorDrawer` and `AgentDefinitionEditorDrawer` so active typing keeps the admin session fresh.
+  - Mount `useAal2DirtyKeepalive()` from `KAN-404` in both `AiProviderEditorDrawer` and `AgentDefinitionEditorDrawer` so active typing keeps the admin session fresh.
 
 ---
 
 ## 4. Phase 2 (KAN-412) File-Scoped Action Checklist
 
 This checklist defines the exact implementation tasks for Phase 2 (`KAN-412`), deduplicated against existing tickets:
-- **KAN-404:** WebSudo sliding window and replay.
-- **KAN-399:** Runner enroll UX and CLI defaults.
-- **KAN-400:** Password manager auto-save prevention in AI provider editor drawer.
+- **KAN-404:** WebSudo sliding window and replay (`useAal2DirtyKeepalive`).
+- **KAN-399:** *(Merged on main)* Runner enroll UX and CLI defaults.
+- **KAN-400:** *(Merged on main)* Password manager auto-save prevention in AI provider editor drawer.
 - **KAN-401 / KAN-402:** Promoting AI providers and agents to workspace and project scopes.
 - **KAN-403:** Restricting `/llms.txt` onboarding prompt strictly to local project folder.
 
@@ -237,24 +257,26 @@ This checklist defines the exact implementation tasks for Phase 2 (`KAN-412`), d
   - Promote **HTTP Base URL** (`provider-base-url-input`) out of the Advanced Section into the primary connection settings group.
   - Add 1-click Preset Buttons for Gemini, OpenAI, and Ollama.
   - In air-gap mode, disable cloud options in `provider-kind-select` with visual indicators.
-  - Mount `useAal2DirtyKeepalive()` to protect in-flight drawer edits.
+  - Mount `useAal2DirtyKeepalive()` from `KAN-404` to protect in-flight drawer edits.
 - [ ] **`kanban/web/src/features/admin-ai/AiBudgetModal.tsx`:**
-  - Fix `capNum === 0` displaying `'Unlimited'` bug on line 140; render `'Zero-Allowance Freeze (0 tokens)'` instead.
+  - Fix `capNum === 0` displaying `'Unlimited'` bug on line 140; render `'Zero-Allowance Freeze (0 tokens)'` instead (reconciling with line 167 `'No cap enforced'`).
   - Add explicit toggle pills: `Enforce Token Cap` vs `Unlimited Quota (No Cap)`.
   - Add token budget presets (`1M`, `5M`, `25M`, `100M tokens`) and zero-cap freeze alert.
 - [ ] **`kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx`:**
   - Add inline helper descriptions for each execution harness (`in_app_sdk`, `cli_pipe`, `remote_runner`).
-  - Mount `useAal2DirtyKeepalive()` during form editing.
-- [ ] **`kanban/web/src/features/admin-runners/RunnerStudioPage.tsx`:**
-  - Fix `runner-rotation-guidance` (`RunnerStudioPage.tsx:158`) to use `--server-url` instead of `--url`.
-- [ ] **`kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx`:**
-  - In accordance with KAN-399: emit `--server-url` instead of `--url` (`MintEnrollmentTokenModal.tsx:196`), add Copy CLI Command button (`data-testid="copy-runner-cli-btn"`), and change dismiss button label to `"Done"`.
+  - Mount `useAal2DirtyKeepalive()` from `KAN-404` during form editing.
+- [x] *(Already Implemented via KAN-399)* **`kanban/web/src/features/admin-runners/RunnerStudioPage.tsx`:**
+  - `runner-rotation-guidance` (`RunnerStudioPage.tsx:158`) emits canonical `--server-url`.
+- [x] *(Already Implemented via KAN-399)* **`kanban/web/src/features/admin-runners/MintEnrollmentTokenModal.tsx`:**
+  - Emits `--server-url`, provides `copy-runner-cli-btn`, and labels dismiss button `"Done"`.
+- [x] *(Already Implemented via KAN-400)* **`kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx`:**
+  - Zero `input[type="password"]` and `.kb-masked-api-key` suppression attributes.
 
 ### 4.2 Backend & CLI Tasks
-- [ ] **`agent/remote_runner/cli.py`:**
-  - In accordance with KAN-399: add `default_runner_state_dir() -> Path` (`0o700`), `default_runner_config_path() -> Path`, and accept `--server-url` as canonical with `--url` backward-compatible alias.
+- [x] *(Already Implemented via KAN-399)* **`agent/remote_runner/cli.py`:**
+  - Includes `default_runner_state_dir()` (`0o700`), `default_runner_config_path()`, and accepts `--server-url` with `--url` alias.
 - [ ] **`kanban/api/v1/admin/ai_providers.py`:**
-  - Ensure all endpoints validate air-gap enforcement cleanly and reject cloud URLs with `409 AIR_GAP_EGRESS_DENIED`.
+  - Ensure all endpoints validate air-gap enforcement cleanly: reject cloud URLs with `409 AIR_GAP_EGRESS_DENIED` on create/update vs returning `200 ProviderProbeResult(ok=False)` on probe.
 - [ ] **`kanban/ops/llms_txt.py`:**
   - In accordance with KAN-403: update `ONBOARDING_PROMPT_TEMPLATE` and skills catalog to mandate local project folder persistence by default.
 

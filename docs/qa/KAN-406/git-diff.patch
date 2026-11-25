@@ -1,6 +1,6 @@
 diff --git a/docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md b/docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md
 new file mode 100644
-index 00000000..519f3436
+index 00000000..f73ef567
 --- /dev/null
 +++ b/docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md
 @@ -0,0 +1,290 @@
@@ -78,7 +78,7 @@ index 00000000..519f3436
 +| `AuthCardEditorDrawer.tsx` | Slug Identifier (`card-slug`) | Text Input | URL-safe slug used in redirect endpoints such as `/api/v1/auth/oidc/{slug}/callback`. | Wired to `slug` on `POST/PATCH /api/v1/admin/auth-cards`. | SIMPLIFY |
 +| `AuthCardEditorDrawer.tsx` | Button Subtext (`card-subtext`) | Text Input | Secondary explanatory text displayed under the provider button on login page. | Wired to `button_subtext` on `POST/PATCH /api/v1/admin/auth-cards`. | KEEP |
 +| `AuthCardEditorDrawer.tsx` | Icon Preset (`card-icon-preset`) | Select: shield, key, lock, globe, google, github, active-directory, ldap, local-admin | Visual icon preset including Lock, Globe, and Local Administrator. | Wired to `icon_preset` on `POST/PATCH /api/v1/admin/auth-cards`. | SIMPLIFY |
-+| `AuthCardEditorDrawer.tsx` | Enable Card (`card-is-enabled`) | Checkbox | Determines whether this authentication card is active and visible to users. | Wired to `is_enabled` on `POST/PATCH /api/v1/admin/auth-cards`. | KEEP |
++| `AuthCardEditorDrawer.tsx` | Enable Card (`card-is-enabled`) | Checkbox | Determines whether this authentication card is active and visible to users. | Present in `constructPayload()` but omitted from `handleSubmit` on `POST/PATCH /api/v1/admin/auth-cards`. | KEEP |
 +| `AuthCardEditorDrawer.tsx` | Auto-provision Users (`card-auto-provision`) | Checkbox | Automatically creates a new user account upon successful first-time directory sign-in. | Wired to `auto_provision_users` on `POST/PATCH /api/v1/admin/auth-cards`. | KEEP |
 +| `AuthCardEditorDrawer.tsx` | Allowed Email Domains (`card-email-domains`) | Text Input (CSV) | Restricts sign-in to users whose verified email matches these corporate domains. | Wired to `allowed_email_domains` on `POST/PATCH /api/v1/admin/auth-cards`. | KEEP |
 +| `AuthCardEditorDrawer.tsx` | Access Policy Mode (`card-access-policy`) | Select: any_user, restricted | Governs whether access is open to all directory users or restricted to allowlists/groups. | Wired to `public_config.access_mode` (`any_user` vs `group_restricted`). | KEEP |
@@ -120,7 +120,7 @@ index 00000000..519f3436
 +| `RbacPolicyBuilder.tsx` | New Role Slug (`rbac-new-role-slug`) | Text Input | System identifier slug for programmatic authorization checks. | Wired to `POST /api/v1/admin/rbac/roles` (`slug`). | SIMPLIFY |
 +| `RbacPolicyBuilder.tsx` | New Role Color (`rbac-color-picker`) | Color Picker / Swatches | Visual badge color used in user pills and table rows. | Wired to `POST /api/v1/admin/rbac/roles` (`color_hex`). | KEEP |
 +| `RbacPolicyBuilder.tsx` | Clone Permissions From (`rbac-clone-role-select`) | Select (Role List) | Copies permission baseline from an existing role into the new role upon creation. | Copies permission set in client before batch submission. | KEEP |
-+| `PersonalSettingsPage.tsx` | Avatar Upload and Remove (`avatar-file-input`, `upload-avatar-btn`, `remove-avatar-btn`) | File Input / Buttons | Uploads or deletes personal profile avatar image. | Wired to `POST /api/v1/auth/me/avatar` and `DELETE /api/v1/auth/me/avatar`. | KEEP |
++| `PersonalSettingsPage.tsx` | Avatar Upload and Remove (`avatar-file-input`, `upload-avatar-btn`, `remove-avatar-btn`) | File Input / Buttons | Uploads or deletes personal profile avatar image. | Wired to `PUT /api/v1/auth/me/avatar` and `DELETE /api/v1/auth/me/avatar`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Display Name (`display-name-input`) | Text Input | Personal display name shown to team members across tickets and activity feeds. | Wired to `PATCH /api/v1/auth/me`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Timezone (`timezone-select`) | Select (IANA Timezones) | Timezone used to render human-readable timestamps and cycle deadlines. | Wired to `PATCH /api/v1/auth/me`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Save Profile Changes (`save-profile-btn`) | Button | Submits display name and timezone changes to profile endpoint. | Wired to `PATCH /api/v1/auth/me`. | KEEP |
@@ -130,7 +130,7 @@ index 00000000..519f3436
 +| `PersonalSettingsPage.tsx` | Change Password Submit (`change-password-btn`) | Button | Executes password change submission with current and new passwords. | Wired to `POST /api/v1/auth/me/password` (`personalSettingsApi.ts:109`). | KEEP |
 +| `PersonalSettingsPage.tsx` | Add Passkey / FIDO2 Key (`add-passkey-btn`, `add-fido2-key-btn`) | Button | Initiates WebAuthn ceremony to register biometric passkey or hardware security key. | Wired to `POST /api/v1/auth/webauthn/register/options` and `verify`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Passkey Table Actions (`test-passkey`, `rename-passkey`, `delete-passkey`) | Action Buttons | Tests passkey assertion ceremony, edits user-friendly nickname, or removes credential. | Wired to `POST .../authenticate/options`, `PATCH .../credentials/{id}`, and `DELETE`. | KEEP |
-+| `PersonalSettingsPage.tsx` | Passkey Advanced Cryptographic Details (`passkey-advanced-${pk.id}`) | Collapsible Details (`<AdvancedSection>`) | Displays AAGUID, Credential ID, Counter, Algorithm, Public Key Fingerprint, and Created At. | Client-side disclosure section. | MOVE_TO_ADVANCED |
++| `PersonalSettingsPage.tsx` | Passkey Advanced Cryptographic Details (`passkey-advanced-${pk.id}`) | Collapsible Details (`<AdvancedSection>`) | Displays Credential ID, AAGUID, Sign Count, Transport Flags, Session Metadata, Algorithm, Public Key Fingerprint, and Created At. | Client-side disclosure section. | MOVE_TO_ADVANCED |
 +| `PersonalSettingsPage.tsx` | Enable TOTP (`enable-totp-btn`) | Button | Starts time-based one-time password registration ceremony. | Wired to `POST /api/v1/auth/mfa/totp/enroll`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Disable TOTP (`disable-totp-btn`) | Button | Disables active time-based one-time password authentication on user account. | Wired to `DELETE /api/v1/auth/mfa/totp`. | KEEP |
 +| `PersonalSettingsPage.tsx` | TOTP Verification Code (`totp-verification-input`) | Text / Number Input | 6-digit numeric verification code confirming authenticator app synchronization. | Wired to `POST /api/v1/auth/mfa/totp/confirm`. | KEEP |
@@ -140,7 +140,7 @@ index 00000000..519f3436
 +| `PersonalSettingsPage.tsx` | Connect Directory Identity (`ldap-credentials-modal`) | Modal (Username/Password) | Authenticates against an active LDAP card to link directory identity to local profile. | Wired to `POST /api/v1/auth/identities/link/ldap`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Connect External Identity Provider (`connect-provider-${card.slug}`) | Button | Initiates external OAuth/OIDC identity linking flow for the selected authentication card. | Wired to `POST /api/v1/auth/identities/link/start`. | KEEP |
 +| `PersonalSettingsPage.tsx` | Unlink Identity (`unlink-identity`) | Button | Detaches an external OIDC or LDAP identity from the user account. | Wired to `DELETE /api/v1/auth/identities/{identity_id}`. | KEEP |
-+| `PersonalSettingsPage.tsx` | Personal Settings Documentation Link (`personal-settings-about-link`) | Link Button | Navigates to user profile and security documentation center. | Client-side link navigating to `/docs/user-profile-and-personal-settings`. | KEEP |
++| `PersonalSettingsPage.tsx` | Personal Settings Documentation Link (`personal-settings-about-link`) | Link Button | Navigates to user profile and security documentation center. | Client-side link navigating to `/about`. | KEEP |
 +
 +### 2.2 Inventory Disposition Summary
 +
@@ -158,7 +158,7 @@ index 00000000..519f3436
 +### 3.1 Active Directory vs OpenLDAP 1-Click Presets (Already Implemented)
 +- **Status:** **Already Implemented** in `AuthCardEditorDrawer.tsx` (lines 746-755).
 +- **Implementation Parity:** The 1-Click Presets bar already includes dedicated buttons for **Active Directory** (`data-testid="preset-active-directory"`) and **OpenLDAP** (`data-testid="preset-openldap"`). When selected, `applyPreset()` automatically populates:
-+  - Standard schemes and ports: `ldaps://ldap.example.com:636`, `transport_mode="ldaps"`.
++  - Standard schemes and ports: `ldaps://ad.corp.local:636` (Active Directory) and `ldaps://ldap.corp.local:636` (OpenLDAP), `transport_mode="ldaps"`.
 +  - Canonical filters:
 +    - Active Directory: `(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))`
 +    - OpenLDAP: `(&(objectClass=person)(uid={username}))`
@@ -202,8 +202,8 @@ index 00000000..519f3436
 +
 +### 3.7 Component Mount Isolation and RBAC View Routing
 +- **Current UX Friction & Defect:**
-+  - In `AuthStudioPage.tsx`, `<div id="panel-roles"><RbacPolicyBuilder /></div>` is mounted twice (lines 763-767 and lines 983-987).
-+  - When `activeTab === roles`, the ternary check around line 870 mounts `panel-users` concurrently with `panel-roles`.
++  - In `AuthStudioPage.tsx`, `<div id="panel-roles"><RbacPolicyBuilder isServerAdmin={true} /></div>` is mounted twice (lines 799-803 and lines 1019-1023).
++  - When `activeTab === roles`, the tab panels and ternary checks in lines 865-907 mount `panel-users` concurrently with `panel-roles`.
 +  - The header action button renders `+ Add Local User` when `activeTab === roles` instead of hiding or rendering RBAC actions.
 +- **Phase 2 Scope:**
 +  - Remove duplicate `<div id="panel-roles">` mount block.
@@ -219,7 +219,7 @@ index 00000000..519f3436
 +
 +### 4.1 Frontend Tasks (`kanban/web/src/features/`)
 +- **`kanban/web/src/features/admin-auth/AuthStudioPage.tsx`:**
-+  - [ ] Fix duplicate `<div id="panel-roles"><RbacPolicyBuilder /></div>` mount (lines 763-767 and lines 983-987).
++  - [ ] Fix duplicate `<div id="panel-roles"><RbacPolicyBuilder isServerAdmin={true} /></div>` mount (lines 799-803 and lines 1019-1023, with tab routing in lines 865-907).
 +  - [ ] Fix tab routing so `panel-users` does not mount when `activeTab === roles`.
 +  - [ ] Fix header button display so `+ Add Local User` does not show when `activeTab === roles`.
 +  - [ ] Add explicit break-glass confirmation dialog before calling `disable` or `delete` on an auth card if it is the sole active administrative provider.

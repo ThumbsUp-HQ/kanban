@@ -97,7 +97,7 @@ Below is the complete inventory of all UI controls, labels, options, defaults, v
 | `McpUnifiedStudio.tsx` | Workload Policy: Allowed CIDRs (`policy-cidrs-input`) | Text Input (comma-separated CIDRs) | Ingress IP restriction for token exchange and subsequent MCP calls. | Wired to `allowed_cidrs` in `POST /api/v1/admin/workload-identities`. | MOVE_TO_ADVANCED |
 | `McpUnifiedStudio.tsx` | Workload Policy: Max TTL (`policy-ttl-input`) | Number Input (seconds, 60-86400) | Maximum lifetime of ephemeral tokens issued via workload exchange. | Wired to `max_ttl_seconds` in `POST /api/v1/admin/workload-identities`. | MOVE_TO_ADVANCED |
 | `McpUnifiedStudio.tsx` | Workload Policy Table: Status Toggle (`toggle-policy-btn-*`) | Button | Enables or disables an active workload federation policy. | Wired to `PATCH /api/v1/admin/workload-identities/{id}` (`is_enabled`). | KEEP |
-| `McpUnifiedStudio.tsx` | Workload Policy Table: Edit Policy (`edit-policy-btn-*`) | Button | Opens policy modal pre-populated with policy attributes for editing. | Wired to `PUT /api/v1/admin/workload-identities/{id}`. | KEEP |
+| `McpUnifiedStudio.tsx` | Workload Policy Table: Edit Policy (`edit-policy-btn-*`) | Button | Opens policy modal pre-populated with policy attributes for editing. | Wired to `PATCH /api/v1/admin/workload-identities/{id}`. | KEEP |
 | `McpUnifiedStudio.tsx` | Workload Policy Table: Delete (`delete-policy-btn-*`) | Button | Deletes a workload federation policy permanently. | Wired to `DELETE /api/v1/admin/workload-identities/{id}`. | KEEP |
 | `OAuthClientGovernanceStudio.tsx` | Refresh Clients Button (`refresh-clients-btn`) | Button | Re-fetches all registered dynamic and administrative OAuth 2.1 clients. | Wired to `GET /api/v1/admin/oauth-clients` (AAL2). | KEEP |
 | `OAuthClientGovernanceStudio.tsx` | Register OAuth Client Button (`register-client-btn`) | Button | Opens modal to manually register a new confidential or public OAuth 2.1 client. | Triggers `showRegisterModal=true`. | KEEP |
@@ -197,7 +197,7 @@ In `OAuthClientGovernanceStudio.tsx`:
   - Secret reveal view: `register-success-view` rendering `registered-client-id`, `registered-client-secret`, `copy-client-id-btn`, `copy-client-secret-btn`, `secret-warning`, and `done-register-btn`.
   - Client table actions: `approve-btn-*`, `suspend-btn-*`, `revoke-btn-*` (with 2-stage confirm bar `confirm-revoke-bar-*`), `inspect-btn-*` (displaying `inspect-client-secret-prefix`), and `edit-uris-btn-*` (opening edit URIs modal with `input-edit-redirect-uris` and `submit-edit-uris-btn`).
 - **Critical Architectural Finding on Advanced Controls:**
-  `toggle-pkce-s256`, `input-access-token-ttl`, and `input-grant-types` are ALREADY located inside `<AdvancedSection data-testid="advanced-oauth-parameters">`. However, they are currently dead and unwired UI controls: `handleRegisterSubmit` does not serialize them into the registration payload, and `AdminOAuthClientCreateRequest` in `kanban/api/v1/oauth.py` configures `model_config = ConfigDict(extra="forbid")` with only `client_name`, `redirect_uris`, `client_type`, and `token_endpoint_auth_method`. Submitting extra fields would fail validation with HTTP 422.
+  `toggle-pkce-s256`, `input-access-token-ttl`, and `input-grant-types` are ALREADY located inside `<AdvancedSection data-testid="advanced-oauth-parameters">`. However, they are currently dead and unwired UI controls: `AdminOAuthClientCreateRequest` (`oauth.py:241-275`) declares `client_name, redirect_uris, client_type, token_endpoint_auth_method, grant_types, response_types` with `ConfigDict(extra="forbid")` (though `admin_register_oauth_client` ignores `grant_types`/`response_types`, `handleRegisterSubmit` omits `grant_types`, `pkce_enforce`, and `access_token_ttl`, and `pkce_enforce`/`access_token_ttl` fail 422 `extra="forbid"`).
 - **Already-Implemented Features:**
   - Auto-selecting `'none'` for client authentication when `client_type === 'public'` is ALREADY implemented in `select-client-type` `onChange`.
   - Secure one-time secret display drawer (`register-success-view`) is ALREADY implemented with copy buttons and one-time display warning.
@@ -267,7 +267,7 @@ This checklist defines the exact implementation boundaries for Phase 2 (`KAN-417
 - [ ] **`kanban/api/v1/oauth.py`:**
   - Extend `AdminOAuthClientCreateRequest` to accept `pkce_enforce: bool`, `access_token_ttl: int`, and `grant_types: list[str]`.
   - Verify DCR client auto-activation behavior for verified redirect URI patterns.
-  - Ensure `GET /oauth/device/info` returns rich client metadata and surface scope for `/activate` screen rendering.
+  - Ensure `GET /api/v1/oauth/device/info` returns rich client metadata and surface scope for `/activate` screen rendering.
   - Verify `MAX_STATE_LEN = 4096` boundary enforcement and RFC 8707 workspace binding on token issuance.
 - [ ] **`kanban/api/v1/mcp_keys.py` & `kanban/api/v1/admin/mcp_keys.py`:**
   - Validate CIDR block parsing with strict IPv4/IPv6 validation.

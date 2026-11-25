@@ -4,7 +4,7 @@
 - **Ticket ID:** `KAN-421` (`[SLICE-4-P1][KB-OPS-AUDIT] Phase 1: Migration Import, Backups/Promotion, Diagnostics & Link Auditor Setting Inventory & Audit`)
 - **Parent Epic:** `KAN-420` (`[EPIC][SLICE-4-OPS-BACKUPS-IMPORTS]`)
 - **Downstream Ticket:** `KAN-422` (`[SLICE-4-P2][KB-OPS-SIMPLIFY]`)
-- **Git Branch:** `fix/KAN-421-rc1` (created from `main`)
+- **Git Branch:** `fix/p1-audits-rc2` (consolidated Round 2 on `main` at `71b847ba`, base branch `fix/KAN-421-rc1`)
 - **Reality Checker Gate Status:** Pending Clean-Room Reality-Checker re-audit
 
 ---
@@ -36,4 +36,4 @@
    - `N/A - Read-Only Audit & Specification Handoff Ticket (UI screenshots captured in KAN-422 and KAN-423)`.
 
 4. **Handoff Packet Comments:**
-   - Posted updated `## Phase 1 Handoff Packet (Rev 2)` via `kanban` MCP `add_comment` to both `KAN-420` and `KAN-422`.
+   - Posted updated `## Phase 1 Handoff Packet (Rev 2)` via `kanban` MCP `add_comment` to both `KAN-420` (comment ID `KAN-420#c-01a2115c`) and `KAN-422` (comment ID `KAN-422#c-01a2115c`).

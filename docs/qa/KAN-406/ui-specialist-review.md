@@ -3,6 +3,7 @@
 - **Ticket ID:** KAN-406 (`[SLICE-1-P1][KB-AUTH-AUDIT]` Phase 1: Multi-Card Auth, AD/LDAP, OIDC, MFA & RBAC Setting Inventory & Simplification Audit)
 - **Reviewer Persona:** Senior UI Designer & UX Architect (`@ui-spec`)
 - **Target Surfaces:** Slice 1 UI Inventory & Simplification Audit (`docs/workouts/slice-1-auth-rbac/01-audit-and-cuts.md`)
+- **Branch:** `fix/p1-audits-rc2` (consolidated Round 2 on `main` at `71b847ba`)
 - **Audit Date:** 2026-11-25
 - **Verdict:** APPROVED (Grade-A Conformance to Ergonomic Hierarchy, Whitespace Invariants, and Simplification Cuts)
 
@@ -14,7 +15,7 @@ A rigorous line-by-line verification of the updated setting inventory and UX sim
 - `AuthStudioPage.tsx`:
   - **Cards Tab**: Clear multi-card status, enabled badges, drag handles, and test handshake triggers. Encapsulating raw fractional indexing `sort_rank` behind accessible Up/Down buttons and drag handles eliminates developer cognitive burden.
   - **Principals Tab**: Clean account-type filter pills (`ALL`, `USER`, `GROUP`, `AGENT` - accurately removing phantom `Service Account` and adding `GROUP`) with structured role badges (`WORKSPACE_MEMBER`, `WORKSPACE_ADMIN`, `SERVER_ADMIN`, `WORKSPACE_GUEST`) and anti-lockout protection indicators.
-  - **Roles Tab**: Direct integration with the RBAC matrix builder. Accurately identified genuine Phase 2 bugs: duplicate `<div id="panel-roles"><RbacPolicyBuilder /></div>` mounting, `panel-users` mounting on the roles tab, and the `+ Add Local User` button incorrectly appearing on the roles tab.
+  - **Roles Tab**: Direct integration with the RBAC matrix builder. Accurately identified genuine Phase 2 bugs: duplicate `<div id="panel-roles"><RbacPolicyBuilder isServerAdmin={true} /></div>` mounting (lines 799-803 and lines 1019-1023), `panel-users` mounting on the roles tab in lines 865-907, and the `+ Add Local User` button incorrectly appearing on the roles tab.
 - `AuthCardEditorDrawer.tsx`:
   - **Simplification Cuts & Options Verified**:
     - Directory presets (`active-directory` vs `openldap`) accurately documented as already implemented in `<AdvancedSection testId="auth-advanced-section">`.
