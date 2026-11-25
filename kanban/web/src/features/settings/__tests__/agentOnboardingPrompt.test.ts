@@ -61,4 +61,39 @@ describe('buildAgentOnboardingPrompt helper', () => {
       globalThis.window = originalWindow;
     }
   });
+
+  it('reflects selected executionMode, modelStrategy, and qaRigor in prompt text', () => {
+    const prompt = buildAgentOnboardingPrompt({
+      origin: 'https://kanban.example.com',
+      executionMode: 'swarm',
+      modelStrategy: 'quota_sipping_flash',
+      qaRigor: 'strict_forensic',
+    });
+    expect(prompt).toContain('Execution Mode (default: Swarm)');
+    expect(prompt).toContain('Model/Quota Strategy (default: Quota-Sipping Flash 3.8)');
+    expect(prompt).toContain('QA Rigor (default: Strict Forensic reality-checker)');
+  });
+
+  it('supports single option overrides cleanly', () => {
+    const p1 = buildAgentOnboardingPrompt({ executionMode: 'single_thread' });
+    expect(p1).toContain('Execution Mode (default: Single-Thread)');
+    expect(p1).toContain(
+      'Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra)',
+    );
+    expect(p1).toContain('QA Rigor (Standard or Strict Forensic)');
+
+    const p2 = buildAgentOnboardingPrompt({
+      executionMode: 'teamwork',
+      modelStrategy: 'hybrid',
+      qaRigor: 'standard',
+    });
+    expect(p2).toContain('Execution Mode (default: Teamwork)');
+    expect(p2).toContain('Model/Quota Strategy (default: Hybrid)');
+    expect(p2).toContain('QA Rigor (default: Standard)');
+
+    const p3 = buildAgentOnboardingPrompt({ modelStrategy: 'unconstrained_max' });
+    expect(p3).toContain(
+      'Model/Quota Strategy (default: Unconstrained Sol MAX / Claude Ultra)',
+    );
+  });
 });

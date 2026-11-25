@@ -130,21 +130,27 @@ describe('AgentOnboardingPromptCard component', () => {
     // Project key context is included in prompt
     const preview = screen.getByTestId('agent-onboarding-prompt-preview');
     expect(preview.textContent).toContain('for project KAN-403');
+    expect(preview.textContent).toContain('Execution Mode (default: Swarm)');
+    expect(preview.textContent).toContain('Model/Quota Strategy (default: Quota-Sipping Flash 3.8)');
+    expect(preview.textContent).toContain('QA Rigor (default: Strict Forensic reality-checker)');
 
     // Change Execution Mode
     const execSelect = screen.getByTestId<HTMLSelectElement>('pref-exec-mode-select');
     fireEvent.change(execSelect, { target: { value: 'teamwork' } });
     expect(execSelect.value).toBe('teamwork');
+    expect(preview.textContent).toContain('Execution Mode (default: Teamwork)');
 
     // Change Model Strategy
     const modelSelect = screen.getByTestId<HTMLSelectElement>('pref-model-strat-select');
     fireEvent.change(modelSelect, { target: { value: 'hybrid' } });
     expect(modelSelect.value).toBe('hybrid');
+    expect(preview.textContent).toContain('Model/Quota Strategy (default: Hybrid)');
 
     // Change QA Rigor
     const qaSelect = screen.getByTestId<HTMLSelectElement>('pref-qa-rigor-select');
     fireEvent.change(qaSelect, { target: { value: 'standard' } });
     expect(qaSelect.value).toBe('standard');
+    expect(preview.textContent).toContain('QA Rigor (default: Standard)');
 
     // Change Custom Notes
     const notesInput = screen.getByTestId<HTMLTextAreaElement>('pref-custom-notes-input');

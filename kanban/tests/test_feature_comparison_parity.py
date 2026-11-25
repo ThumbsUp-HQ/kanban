@@ -180,14 +180,14 @@ def test_codebase_metrics_parity() -> None:
 
     assert paths_count == 292
     assert ops_count == 388
-    assert schemas_count == 390
+    assert schemas_count == 391
 
     readme_text = README_PATH.read_text(encoding="utf-8")
     assert "92 SQLAlchemy 2.0 models" in readme_text
     assert "76 Alembic single-head migrations" in readme_text
     assert "292" in readme_text
     assert "388" in readme_text
-    assert "390" in readme_text
+    assert "391" in readme_text
 
 
 def test_wiki_manifest_synchronization() -> None:

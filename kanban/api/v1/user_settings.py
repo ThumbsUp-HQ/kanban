@@ -860,6 +860,34 @@ class AgentOnboardingPrefs(BaseModel):
     )
 
 
+class AgentOnboardingPrefsPatch(BaseModel):
+    """Partial update payload for per-user agent onboarding preferences."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scope: Literal["local_only", "global_allowed"] | None = Field(
+        default=None,
+        description="Persistence scope boundary (defaults strictly to local project folder)",
+    )
+    execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = Field(
+        default=None,
+        description="Preferred execution topology",
+    )
+    model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = Field(
+        default=None,
+        description="Model tier and token allocation strategy",
+    )
+    qa_rigor: Literal["standard", "strict_forensic"] | None = Field(
+        default=None,
+        description="QA verification and coverage gate rigor",
+    )
+    custom_notes: str | None = Field(
+        default=None,
+        max_length=4096,
+        description="Custom onboarding instructions or constraints (max 4096 bytes)",
+    )
+
+
 class UserPreferencesResponse(BaseModel):
     """Response containing user preferences."""
 
@@ -875,7 +903,7 @@ class UpdateUserPreferencesRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    agent_onboarding_prefs: AgentOnboardingPrefs | None = None
+    agent_onboarding_prefs: AgentOnboardingPrefsPatch | None = None
     scope: Literal["local_only", "global_allowed"] | None = None
     execution_mode: Literal["single_thread", "teamwork", "swarm"] | None = None
     model_strategy: Literal["quota_sipping_flash", "hybrid", "unconstrained_max"] | None = None
@@ -928,6 +956,59 @@ async def get_user_preferences(
     )
 
 
+def _merge_agent_onboarding_prefs(
+    active: AgentOnboardingPrefs,
+    body: UpdateUserPreferencesRequest,
+) -> AgentOnboardingPrefs:
+    """Merge active preferences with partial nested and top-level patch fields."""
+    nested = body.agent_onboarding_prefs
+    scope = (
+        body.scope
+        if body.scope is not None
+        else (nested.scope if nested and nested.scope is not None else active.scope)
+    )
+    mode = (
+        body.execution_mode
+        if body.execution_mode is not None
+        else (
+            nested.execution_mode
+            if nested and nested.execution_mode is not None
+            else active.execution_mode
+        )
+    )
+    strat = (
+        body.model_strategy
+        if body.model_strategy is not None
+        else (
+            nested.model_strategy
+            if nested and nested.model_strategy is not None
+            else active.model_strategy
+        )
+    )
+    rigor = (
+        body.qa_rigor
+        if body.qa_rigor is not None
+        else (nested.qa_rigor if nested and nested.qa_rigor is not None else active.qa_rigor)
+    )
+    notes_raw = (
+        body.custom_notes
+        if body.custom_notes is not None
+        else (
+            nested.custom_notes
+            if nested and nested.custom_notes is not None
+            else active.custom_notes
+        )
+    )
+    sanitized_notes = _validate_custom_notes(notes_raw)
+    return AgentOnboardingPrefs(
+        scope=scope,
+        execution_mode=mode,
+        model_strategy=strat,
+        qa_rigor=rigor,
+        custom_notes=sanitized_notes,
+    )
+
+
 @router.patch(
     "/users/me/preferences",
     response_model=UserPreferencesResponse,
@@ -969,38 +1050,7 @@ async def update_user_preferences(
         if current_prefs_dict
         else AgentOnboardingPrefs()
     )
-    new_scope = active_prefs.scope
-    new_mode = active_prefs.execution_mode
-    new_strat = active_prefs.model_strategy
-    new_rigor = active_prefs.qa_rigor
-    new_notes = active_prefs.custom_notes
-
-    if body.agent_onboarding_prefs is not None:
-        new_scope = body.agent_onboarding_prefs.scope
-        new_mode = body.agent_onboarding_prefs.execution_mode
-        new_strat = body.agent_onboarding_prefs.model_strategy
-        new_rigor = body.agent_onboarding_prefs.qa_rigor
-        new_notes = body.agent_onboarding_prefs.custom_notes
-
-    if body.scope is not None:
-        new_scope = body.scope
-    if body.execution_mode is not None:
-        new_mode = body.execution_mode
-    if body.model_strategy is not None:
-        new_strat = body.model_strategy
-    if body.qa_rigor is not None:
-        new_rigor = body.qa_rigor
-    if body.custom_notes is not None:
-        new_notes = body.custom_notes
-
-    sanitized_notes = _validate_custom_notes(new_notes)
-    updated_prefs = AgentOnboardingPrefs(
-        scope=new_scope,
-        execution_mode=new_mode,
-        model_strategy=new_strat,
-        qa_rigor=new_rigor,
-        custom_notes=sanitized_notes,
-    )
+    updated_prefs = _merge_agent_onboarding_prefs(active_prefs, body)
 
     if session_factory is not None:
         rls_ctx = RLSContext(

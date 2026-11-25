@@ -24,7 +24,7 @@ import kanban.api.v1.user_settings as us
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
 from kanban.api.v1.user_settings import (
-    AgentOnboardingPrefs,
+    AgentOnboardingPrefsPatch,
     ChangePasswordRequest,
     UpdateUserPreferencesRequest,
     _parse_avatar_upload,
@@ -108,6 +108,83 @@ async def test_user_preferences_defaults_and_lifecycle(
     assert data_b["principal_id"] == str(user_b.id)
     assert data_b["agent_onboarding_prefs"]["execution_mode"] == "swarm"
     assert data_b["agent_onboarding_prefs"]["custom_notes"] == ""
+
+
+async def test_user_preferences_partial_nested_merge(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    api_env: ApiEnv,
+) -> None:
+    """Verify partial nested prefs merge without overwriting keys."""
+    user = await make_user("partial_user")
+    await api_env.seed.commit()
+    client = as_principal(user)
+
+    # 1. Set full initial preferences
+    init_res = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={
+            "agent_onboarding_prefs": {
+                "scope": "global_allowed",
+                "execution_mode": "swarm",
+                "model_strategy": "hybrid",
+                "qa_rigor": "standard",
+                "custom_notes": "Existing instructions.",
+            }
+        },
+    )
+    assert init_res.status_code == 200
+    init_data = init_res.json()
+    assert init_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
+    assert init_data["agent_onboarding_prefs"]["execution_mode"] == "swarm"
+    assert init_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
+    assert init_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
+    assert init_data["agent_onboarding_prefs"]["custom_notes"] == "Existing instructions."
+
+    # 2. Partial nested patch: only execution_mode
+    partial_res = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={"agent_onboarding_prefs": {"execution_mode": "teamwork"}},
+    )
+    assert partial_res.status_code == 200
+    partial_data = partial_res.json()
+    assert partial_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
+    assert partial_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
+    assert partial_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
+    assert partial_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
+    assert partial_data["agent_onboarding_prefs"]["custom_notes"] == "Existing instructions."
+
+    # 3. Partial nested patch: only custom_notes
+    notes_res = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={"agent_onboarding_prefs": {"custom_notes": "Updated note only."}},
+    )
+    assert notes_res.status_code == 200
+    notes_data = notes_res.json()
+    assert notes_data["agent_onboarding_prefs"]["custom_notes"] == "Updated note only."
+    assert notes_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
+    assert notes_data["agent_onboarding_prefs"]["scope"] == "global_allowed"
+    assert notes_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
+    assert notes_data["agent_onboarding_prefs"]["qa_rigor"] == "standard"
+
+    # 4. Partial nested patch: only scope and qa_rigor
+    scope_res = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={"agent_onboarding_prefs": {"scope": "local_only", "qa_rigor": "strict_forensic"}},
+    )
+    assert scope_res.status_code == 200
+    scope_data = scope_res.json()
+    assert scope_data["agent_onboarding_prefs"]["scope"] == "local_only"
+    assert scope_data["agent_onboarding_prefs"]["qa_rigor"] == "strict_forensic"
+    assert scope_data["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
+    assert scope_data["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
+    assert scope_data["agent_onboarding_prefs"]["custom_notes"] == "Updated note only."
+
+    # 5. GET confirms persisted state in database
+    get_res = await client.get("/api/v1/users/me/preferences")
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert get_data["agent_onboarding_prefs"] == scope_data["agent_onboarding_prefs"]
 
 
 async def test_user_preferences_validation_errors(
@@ -317,7 +394,7 @@ async def test_user_preferences_direct_invocation_without_session_factory() -> N
     assert get_res.agent_onboarding_prefs.execution_mode == "swarm"
 
     update_body = UpdateUserPreferencesRequest(
-        agent_onboarding_prefs=AgentOnboardingPrefs(
+        agent_onboarding_prefs=AgentOnboardingPrefsPatch(
             scope="global_allowed",
             execution_mode="single_thread",
             model_strategy="quota_sipping_flash",
