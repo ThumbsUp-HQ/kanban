@@ -42,19 +42,21 @@
   - Self-healing fallback `QueryClientProvider` to allow mounting safely anywhere.
   - Fully responsive, accessible semantic tokens with dark theme support (`theme.css`).
 - Mounted `<AgentOnboardingPromptCard>` in `PersonalSettingsPage.tsx` and `ProjectSettingsPage.tsx` (in General tab with `projectKey="KAN"` context).
-- Replaced prompt copy strings in `McpAccessStudio.tsx`, `McpConfigSnippetModal.tsx`, and `AboutPage.tsx` with `buildAgentOnboardingPrompt`. Zero changes made to `aal2Challenge` state/modal in `PersonalSettingsPage.tsx` or `McpAccessStudio.tsx` to prevent merge conflicts.
+- Replaced prompt copy strings in `McpAccessStudio.tsx`, `McpConfigSnippetModal.tsx`, `AboutPage.tsx`, and `DocsCenterPage.tsx` with `buildAgentOnboardingPrompt(...)`, including dedicated `docs-copy-agent-prompt-btn` in DocsCenterPage. Zero changes made to `aal2Challenge` state/modal in `PersonalSettingsPage.tsx` or `McpAccessStudio.tsx` to prevent merge conflicts with parallel branch `b-kan404-rc1`.
 
 ## Overwhelming Evidence & Artifacts
 
 1. **Unit Test & Coverage Report**:
    - `docs/qa/KAN-403/unit-test-results.txt`
-   - Backend Pytest: 71 passed in 44.84s.
+   - Backend Pytest: 43 passed in 31.59s.
      - `database/models/principals.py`: 100% coverage
      - `kanban/ops/llms_txt.py`: 100% coverage
-     - `kanban/api/v1/user_settings.py` (new preferences endpoints): 100% coverage
-   - Frontend Vitest: 19 passed in 1.69s.
+     - `kanban/api/v1/user_settings.py`: 95% coverage (100% on new preferences endpoints)
+     - Total Backend Coverage: 97% across changed modules
+   - Frontend Vitest: 19 passed in 1.55s.
      - `agentOnboardingPrompt.ts`: 100% statements, 100% branches, 100% funcs, 100% lines
      - `AgentOnboardingPromptCard.tsx`: 100% statements, 97.05% branches, 100% funcs, 100% lines
+     - All affected frontend test suites passing: 74/74 tests passed.
 2. **Build, Static Migrations & Dashes Verification**:
    - `docs/qa/KAN-403/build-check.txt`
    - `tsc -b && vite build`: Exit code 0, 765 modules transformed

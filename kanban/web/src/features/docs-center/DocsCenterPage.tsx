@@ -24,6 +24,8 @@ import {
 } from './docsService';
 import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import { useFocusTrap } from '../drawer/useFocusTrap';
+import { buildAgentOnboardingPrompt } from '../settings/agentOnboardingPrompt';
+import { copyToClipboard } from '../../utils/clipboard';
 import './DocsCenterPage.css';
 
 export type CategoryFilter = 'all' | WikiChapterCategory;
@@ -58,6 +60,7 @@ export function DocsCenterPage(): JSX.Element {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileChaptersOpen, setIsMobileChaptersOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [isCopiedPrompt, setIsCopiedPrompt] = useState(false);
 
   const activeAnchor = location.hash.replace(/^#+/, '') || null;
 
@@ -250,6 +253,17 @@ export function DocsCenterPage(): JSX.Element {
     }
   };
 
+  const handleCopyAgentPrompt = async (): Promise<void> => {
+    const prompt = buildAgentOnboardingPrompt();
+    const ok = await copyToClipboard(prompt);
+    if (ok) {
+      setIsCopiedPrompt(true);
+      window.setTimeout(() => {
+        setIsCopiedPrompt(false);
+      }, 2000);
+    }
+  };
+
   return (
     <div className="kb-docs-page" data-testid="docs-center-page">
       {/* Skip to Content Link (A11y) */}
@@ -280,8 +294,19 @@ export function DocsCenterPage(): JSX.Element {
               className="kb-docs-llms-txt-link"
               data-testid="docs-llms-txt-link"
             >
-              <span aria-hidden="true">🤖</span> /llms.txt
+              <span aria-hidden="true">&#129302;</span> /llms.txt
             </a>
+            <button
+              type="button"
+              className="kb-docs-copy-prompt-btn"
+              data-testid="docs-copy-agent-prompt-btn"
+              title="Copy Agent Onboarding Prompt"
+              onClick={() => {
+                void handleCopyAgentPrompt();
+              }}
+            >
+              <span aria-hidden="true">&#128203;</span> {isCopiedPrompt ? 'Copied!' : 'Copy Agent Prompt'}
+            </button>
           </div>
 
           <button

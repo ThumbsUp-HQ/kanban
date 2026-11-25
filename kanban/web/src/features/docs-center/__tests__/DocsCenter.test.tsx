@@ -15,8 +15,13 @@ vi.mock('../../../editor/mermaid/MermaidBlockView', () => ({
   ),
 }));
 
+vi.mock('../../../utils/clipboard', () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(true),
+}));
+
 import * as docsCenterIndex from '../index';
 import * as helpIndex from '../../help/index';
+import { copyToClipboard } from '../../../utils/clipboard';
 import {
   searchDocs,
   slugifyAnchor,
@@ -519,6 +524,29 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
 
       expect(screen.getByTestId('docs-center-page')).toBeDefined();
       expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
+    });
+
+    it('copies agent onboarding prompt when clicking copy prompt button', async () => {
+      render(
+        <MemoryRouter initialEntries={['/docs']}>
+          <Routes>
+            <Route path="/docs" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const copyBtn = screen.getByTestId('docs-copy-agent-prompt-btn');
+      expect(copyBtn).toBeDefined();
+      expect(copyBtn.textContent).toContain('Copy Agent Prompt');
+
+      fireEvent.click(copyBtn);
+
+      await waitFor(() => {
+        expect(copyBtn.textContent).toContain('Copied!');
+      });
+      expect(copyToClipboard).toHaveBeenCalled();
+      const calledPrompt = vi.mocked(copyToClipboard).mock.calls[0]?.[0] as string;
+      expect(calledPrompt).toContain('strictly to the local project folder');
     });
 
     it('renders full-page layout with categories sidebar, chapter content, and TOC rail', () => {

@@ -21,6 +21,7 @@ from sqlalchemy import text
 from starlette.requests import Request
 
 from kanban.api.deps import PrincipalContext
+from kanban.api.problems import ProblemException
 from kanban.api.v1.user_settings import _resolve_auth_pepper, build_me_response
 from kanban.auth.local.hashing import get_auth_pepper, hash_password_sync
 from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
@@ -823,3 +824,511 @@ async def test_user_preferences_agent_onboarding_lifecycle_and_rls(
         principal=mock_principal,
     )
     assert updated_no_db.agent_onboarding_prefs.scope == "global_allowed"
+
+
+async def test_validate_custom_notes_and_surrogate_boundary() -> None:
+    """Verify _validate_custom_notes rejects surrogates, bounds size, and strips controls."""
+    from kanban.api.v1.user_settings import _validate_custom_notes
+    from kanban.api.problems import ProblemException
+
+    # 1. Valid notes pass
+    clean = _validate_custom_notes("Valid preferences note")
+    assert clean == "Valid preferences note"
+
+    # 2. UTF-16 surrogate code point explicitly rejected with 422 INVALID_UTF8_SURROGATE
+    with pytest.raises(ProblemException) as exc_info:
+        _validate_custom_notes(f"note with {chr(0xD800)} surrogate")
+    assert exc_info.value.code == "INVALID_UTF8_SURROGATE"
+    assert exc_info.value.status == 422
+
+    # 3. Oversized string (> 4096 bytes) rejected with 422
+    with pytest.raises(ProblemException) as exc_info2:
+        _validate_custom_notes("x" * 4097)
+    assert exc_info2.value.status == 422
+
+
+async def test_build_me_response_branches_and_aal2_sliding_window() -> None:
+    """Verify build_me_response handles all principal roles and AAL2 sliding window branches."""
+    from datetime import datetime, UTC, timedelta
+    from starlette.requests import Request
+    from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.user_settings import build_me_response
+
+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
+    mock_scope = {"type": "http", "app": mock_app, "headers": []}
+    mock_req = Request(mock_scope)
+
+    # 1. Fallback (session_factory=None) with is_server_admin
+    p_server_admin = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=1,
+        is_server_admin=True,
+    )
+    res_sa = await build_me_response(mock_req, p_server_admin)
+    data_sa = json.loads(res_sa.body.decode("utf-8"))
+    assert data_sa["workspace_role"] == "SERVER_ADMIN"
+    assert "ADMIN_AUTH_STUDIO" in data_sa["workspace_capabilities"]
+
+    # 2. Fallback with is_workspace_admin duck typing
+    p_ws_admin = type(
+        "MockWsAdminPrincipal",
+        (),
+        {
+            "principal_id": uuid.uuid4(),
+            "workspace_id": uuid.uuid4(),
+            "token_scopes": ("user",),
+            "aal_level": 1,
+            "is_server_admin": False,
+            "is_workspace_admin": True,
+            "workspace_role": "WORKSPACE_ADMIN",
+            "session_id": None,
+            "agent_principal_id": None,
+            "ephemeral_project_id": None,
+            "read_only": False,
+            "mfa_pending": False,
+            "aal2_verified_at": None,
+            "aal2_last_active_at": None,
+            "aal2_expires_at": None,
+            "scope_tier": None,
+            "scoped_project_id": None,
+            "user_access_hash": None,
+            "principal_type": None,
+            "is_mcp_credential": False,
+        },
+    )()
+    res_wa = await build_me_response(mock_req, p_ws_admin)
+    data_wa = json.loads(res_wa.body.decode("utf-8"))
+    assert data_wa["workspace_role"] == "WORKSPACE_ADMIN"
+
+    # 3. Fallback with guest role duck typing
+    p_guest = type(
+        "MockGuestPrincipal",
+        (),
+        {
+            "principal_id": uuid.uuid4(),
+            "workspace_id": uuid.uuid4(),
+            "token_scopes": ("user",),
+            "aal_level": 1,
+            "is_server_admin": False,
+            "is_workspace_admin": False,
+            "workspace_role": "WORKSPACE_GUEST",
+            "session_id": None,
+            "agent_principal_id": None,
+            "ephemeral_project_id": None,
+            "read_only": False,
+            "mfa_pending": False,
+            "aal2_verified_at": None,
+            "aal2_last_active_at": None,
+            "aal2_expires_at": None,
+            "scope_tier": None,
+            "scoped_project_id": None,
+            "user_access_hash": None,
+            "principal_type": None,
+            "is_mcp_credential": False,
+        },
+    )()
+    res_guest = await build_me_response(mock_req, p_guest)
+    data_guest = json.loads(res_guest.body.decode("utf-8"))
+    assert data_guest["workspace_role"] == "WORKSPACE_GUEST"
+    assert data_guest["workspace_capabilities"] == []
+
+    # 4. AAL2 with verified_at / last_active_at sliding window
+    now = datetime.now(UTC)
+    p_aal2_sliding = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=2,
+        aal2_verified_at=now,
+        aal2_last_active_at=now,
+    )
+    res_sliding = await build_me_response(mock_req, p_aal2_sliding)
+    data_sliding = json.loads(res_sliding.body.decode("utf-8"))
+    assert data_sliding["aal2_active"] is True
+    assert data_sliding["aal2_expires_at"] is not None
+
+    # 5. AAL2 with expired aal2_expires_at
+    past = now - timedelta(hours=1)
+    p_aal2_expired = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=2,
+        aal2_expires_at=past,
+    )
+    res_exp = await build_me_response(mock_req, p_aal2_expired)
+    data_exp = json.loads(res_exp.body.decode("utf-8"))
+    assert data_exp["aal2_active"] is False
+
+
+async def test_avatar_parsing_and_processing_error_branches() -> None:
+    """Verify avatar parser and processor handle multipart bodies, oversize, and errors."""
+    import email.message
+    from starlette.requests import Request
+    from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.user_settings import (
+        _parse_avatar_upload,
+        _process_and_store_avatar,
+        MAX_AVATAR_BYTES,
+    )
+    from kanban.api.problems import ProblemException
+
+    # 1. Parse multipart email payload
+    msg = email.message.EmailMessage()
+    msg["Content-Type"] = "multipart/form-data; boundary=boundary123"
+    part = email.message.EmailMessage()
+    part.set_content(b"fake image bytes", maintype="image", subtype="png")
+    part.add_header("Content-Disposition", "form-data", name="avatar", filename="custom.png")
+    msg.attach(part)
+    msg_bytes = msg.as_bytes()
+
+    scope = {
+        "type": "http",
+        "app": None,
+        "headers": [(b"content-type", b"multipart/form-data; boundary=boundary123")],
+    }
+    req = Request(scope)
+    fn, ct, payload = _parse_avatar_upload(req, msg_bytes)
+    assert fn == "custom.png"
+    assert payload == b"fake image bytes"
+
+    # 2. _process_and_store_avatar: oversized payload
+    p = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=1,
+    )
+    with pytest.raises(ProblemException) as exc_large:
+        await _process_and_store_avatar(
+            request=req,
+            principal=p,
+            filename="large.png",
+            declared_ct="image/png",
+            raw_bytes=b"x" * (MAX_AVATAR_BYTES + 1),
+        )
+    assert exc_large.value.code == "PAYLOAD_TOO_LARGE"
+
+    # 3. _process_and_store_avatar: empty payload
+    with pytest.raises(ProblemException) as exc_empty:
+        await _process_and_store_avatar(
+            request=req,
+            principal=p,
+            filename="empty.png",
+            declared_ct="image/png",
+            raw_bytes=b"",
+        )
+    assert exc_empty.value.code == "EMPTY_PAYLOAD"
+
+
+async def test_user_personal_settings_change_password_lifecycle(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test POST /api/v1/auth/me/password endpoint end-to-end for user without prior credentials."""
+    pepper_bytes = b"p" * 32
+    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
+    user = await make_user("pw_change_user_403")
+    await api_env.seed.commit()
+    current_session_id = uuid.uuid4()
+    client = as_principal(user)
+    assert api_env.resolver.principal is not None
+    api_env.resolver.principal = dataclasses.replace(
+        api_env.resolver.principal, session_id=current_session_id
+    )
+
+    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
+    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
+
+    # 1. Password too short (< 10 chars) returns 422
+    res_short = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "short"},
+        headers=auth_headers,
+    )
+    assert res_short.status_code == 422
+    assert res_short.json()["code"] == "PASSWORD_TOO_SHORT"
+
+    # 2. User initially has no local credentials: create local password successfully
+    res_create = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "MyNewSecurePassword123!"},
+        headers=auth_headers,
+    )
+    assert res_create.status_code == 200
+    assert res_create.json()["success"] is True
+
+    # 3. Identical password returns 422 PASSWORD_UNCHANGED
+    res_same = await client.post(
+        "/api/v1/auth/me/password",
+        json={
+            "current_password": "MyNewSecurePassword123!",
+            "new_password": "MyNewSecurePassword123!",
+        },
+        headers=auth_headers,
+    )
+    assert res_same.status_code == 422
+    assert res_same.json()["code"] == "PASSWORD_UNCHANGED"
+
+    # 4. Missing current_password when local password exists returns 422 CURRENT_PASSWORD_REQUIRED
+    res_missing_curr = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "BrandNewPassword456!"},
+        headers=auth_headers,
+    )
+    assert res_missing_curr.status_code == 422
+    assert res_missing_curr.json()["code"] == "CURRENT_PASSWORD_REQUIRED"
+
+    # 5. Invalid current_password returns 401 INVALID_CREDENTIALS
+    res_wrong_curr = await client.post(
+        "/api/v1/auth/me/password",
+        json={
+            "current_password": "WrongPassword999!",
+            "new_password": "BrandNewPassword456!",
+        },
+        headers=auth_headers,
+    )
+    assert res_wrong_curr.status_code == 401
+    assert res_wrong_curr.json()["code"] == "INVALID_CREDENTIALS"
+
+    # 6. Valid change with correct current_password succeeds
+    res_ok = await client.post(
+        "/api/v1/auth/me/password",
+        json={
+            "current_password": "MyNewSecurePassword123!",
+            "new_password": "BrandNewPassword456!",
+        },
+        headers=auth_headers,
+    )
+    assert res_ok.status_code == 200
+    assert res_ok.json()["success"] is True
+
+
+async def test_user_personal_settings_roles_in_me(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test GET /api/v1/auth/me for WORKSPACE_ADMIN and WORKSPACE_GUEST."""
+    u_admin = await make_user("ws_admin_user", workspace_role="WORKSPACE_ADMIN")
+    await api_env.seed.commit()
+    c_admin = as_principal(u_admin)
+    res_admin = await c_admin.get("/api/v1/auth/me")
+    assert res_admin.status_code == 200
+    assert res_admin.json()["workspace_role"] == "WORKSPACE_ADMIN"
+
+    u_guest = await make_user("ws_guest_user", workspace_role="WORKSPACE_GUEST")
+    await api_env.seed.commit()
+    c_guest = as_principal(u_guest)
+    res_guest = await c_guest.get("/api/v1/auth/me")
+    assert res_guest.status_code == 200
+    assert res_guest.json()["workspace_role"] == "WORKSPACE_GUEST"
+
+
+async def test_session_factory_none_runtime_errors() -> None:
+    """Verify endpoints raise RuntimeError when session_factory is missing."""
+    from starlette.requests import Request
+    from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.user_settings import (
+        delete_avatar,
+        get_user_avatar,
+        change_password,
+        ChangePasswordRequest,
+    )
+
+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
+    mock_scope = {"type": "http", "app": mock_app, "headers": []}
+    mock_req = Request(mock_scope)
+    mock_principal = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=1,
+    )
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await delete_avatar(request=mock_req, principal=mock_principal)
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await get_user_avatar(principal_id=uuid.uuid4(), request=mock_req)
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await change_password(
+            body=ChangePasswordRequest(new_password="ValidNewPassword123!"),
+            request=mock_req,
+            principal=mock_principal,
+        )
+
+    from kanban.api.v1.user_settings import update_profile, UpdateProfileRequest, _process_and_store_avatar
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await update_profile(
+            body=UpdateProfileRequest(display_name="Test"),
+            request=mock_req,
+            principal=mock_principal,
+        )
+
+    with pytest.raises(RuntimeError, match="Session factory is not configured"):
+        await _process_and_store_avatar(
+            request=mock_req,
+            principal=mock_principal,
+            filename="test.png",
+            declared_ct="image/png",
+            raw_bytes=_create_sample_png_bytes(16, 16),
+        )
+
+    with pytest.raises(ProblemException) as exc_unsupported:
+        await _process_and_store_avatar(
+            request=mock_req,
+            principal=mock_principal,
+            filename="unknown.xyz",
+            declared_ct="application/octet-stream",
+            raw_bytes=b"not an image at all",
+        )
+    assert exc_unsupported.value.code == "MIME_MISMATCH_OR_UNSUPPORTED"
+
+
+async def test_multipart_avatar_parsing_and_oversize_upload() -> None:
+    """Verify multipart email parsing and stream overflow check in upload_avatar."""
+    from starlette.requests import Request
+    from kanban.api.deps import PrincipalContext
+    from kanban.api.v1.user_settings import _parse_avatar_upload, upload_avatar
+    from kanban.api.problems import ProblemException
+
+    # 1. Real multipart body with boundary
+    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+    raw_multipart = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="avatar"; filename="test_pic.png"\r\n'
+        f"Content-Type: image/png\r\n\r\n"
+        f"test-image-content\r\n"
+        f"--{boundary}--\r\n"
+    ).encode("utf-8")
+
+    scope = {
+        "type": "http",
+        "app": None,
+        "headers": [(b"content-type", f"multipart/form-data; boundary={boundary}".encode("latin-1"))],
+    }
+    req = Request(scope)
+    fn, ct, payload = _parse_avatar_upload(req, raw_multipart)
+    assert fn == "test_pic.png"
+    assert ct == "image/png"
+    assert payload == b"test-image-content"
+
+    # 2. upload_avatar stream chunk size check (> MAX_AVATAR_BYTES + 65536)
+    p = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=1,
+    )
+    async def mock_receive():
+        return {"type": "http.request", "body": b"X" * (2 * 1024 * 1024 + 70000), "more_body": False}
+
+    oversize_req = Request({"type": "http", "app": None, "headers": []}, receive=mock_receive)
+    with pytest.raises(ProblemException) as exc_large:
+        await upload_avatar(request=oversize_req, principal=p)
+    assert exc_large.value.code == "PAYLOAD_TOO_LARGE"
+
+
+async def test_change_password_short_display_name(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify change_password falls back to user-<hex> when clean display_name is < 3 chars."""
+    pepper_bytes = b"p" * 32
+    monkeypatch.setenv("KANBAN_AUTH_PEPPER", base64.urlsafe_b64encode(pepper_bytes).decode("ascii"))
+    user = await make_user("x")
+    await api_env.seed.commit()
+    current_session_id = uuid.uuid4()
+    client = as_principal(user)
+    assert api_env.resolver.principal is not None
+    api_env.resolver.principal = dataclasses.replace(
+        api_env.resolver.principal, session_id=current_session_id
+    )
+
+    csrf_tok = generate_csrf_token(current_session_id, b"\x00" * 32)
+    auth_headers = {CSRF_HEADER_NAME: csrf_tok}
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_tok)
+
+    res = await client.post(
+        "/api/v1/auth/me/password",
+        json={"new_password": "ShortNameUserPass123!"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200
+
+
+async def test_build_me_response_aal2_active_and_avatar_blob_store() -> None:
+    """Test build_me_response with active AAL2 and blob store avatar fallback."""
+    from datetime import datetime, timedelta, UTC
+    now = datetime.now(UTC)
+
+    mock_app = type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()
+    req1 = Request({"type": "http", "app": mock_app, "headers": []})
+
+    # 1. AAL2 active via aal2_expires_at
+    p1 = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=2,
+        aal2_expires_at=now + timedelta(minutes=15),
+    )
+    res1 = await build_me_response(req1, p1)
+    body1 = json.loads(res1.body.decode("utf-8"))
+    assert body1["aal2_active"] is True
+    assert body1["aal2_expires_at"] is not None
+
+    # 2. AAL2 active via sliding window (aal2_expires_at is None)
+    p2 = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=2,
+        aal2_expires_at=None,
+        aal2_verified_at=now - timedelta(minutes=5),
+        aal2_last_active_at=now - timedelta(minutes=2),
+    )
+    res2 = await build_me_response(req1, p2)
+    body2 = json.loads(res2.body.decode("utf-8"))
+    assert body2["aal2_active"] is True
+    assert body2["aal2_expires_at"] is not None
+
+
+async def test_avatar_sniff_media_type_generic_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify _process_and_store_avatar wraps unknown sniff exceptions in 415."""
+    import kanban.api.v1.user_settings as us
+
+    def mock_sniff(*args, **kwargs):
+        raise ValueError("Corrupted image header")
+
+    monkeypatch.setattr(us, "sniff_media_type", mock_sniff)
+    p = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        token_scopes=("user",),
+        aal_level=1,
+    )
+    req = Request({"type": "http", "app": None, "headers": []})
+    with pytest.raises(ProblemException) as exc_info:
+        await us._process_and_store_avatar(
+            request=req,
+            principal=p,
+            filename="bad.png",
+            declared_ct="image/png",
+            raw_bytes=b"dummybytes12345",
+        )
+    assert exc_info.value.status == 415
+    assert exc_info.value.code == "UNSUPPORTED_MEDIA_TYPE"
+
