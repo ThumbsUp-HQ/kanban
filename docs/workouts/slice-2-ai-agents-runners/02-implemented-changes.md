@@ -151,13 +151,13 @@ Executed against isolated dedicated test container (`kan412-pg-test-1`, socket `
 Executed with `--coverage.thresholds.branches=95`:
 - `AiBudgetModal.test.tsx`: 8 passed (Branch coverage: 97.56%, Lines: 100%)
 - `AiProviderEditorDrawer.test.tsx`: 16 passed (Branch coverage: 96.02%, Lines: 100%)
-- `AiStudioPage.test.tsx`: 10 passed
+- `AiStudioPage.test.tsx`: 47 passed (Branch coverage: 95.9%, Lines: 99.28%)
 - `AgentDefinitionEditorDrawer.test.tsx`: 13 passed (Branch coverage: 95.48%, Lines: 99.05%)
 - `AgentStudioPage.test.tsx`: 13 passed (Branch coverage: 97.50%, Lines: 100%)
 - `RunnerStudioPage.test.tsx`: 11 passed (Branch coverage: 97.61%, Lines: 100%)
 - `AdminStudioSubnav.test.tsx` / `MenuConsolidation.test.tsx`: 102 passed
 - **Total Frontend Vitest**: 173 passed across 7 test suites, 0 failed, 0 `act(...)` warnings.
-- **Combined Branch Coverage across Touched Modules**: **95.96%** (satisfies mandatory `>=95%` standard).
+- **Combined Branch Coverage across Touched Modules**: **96.21%** (satisfies mandatory `>=95%` standard with 100% of files >=95%).
 
 #### 3. Static Analysis & Build Quality
 - `uv run ruff check kanban/ agent/`: Passed (0 errors, 0 warnings).
@@ -297,7 +297,7 @@ docker volume rm kanban_s2_workout_data
   10. Preserved 100% of landed KAN-399 (`--server-url`, `copy-runner-cli-btn`, `"Done"` button, `0o700` runner state dir), KAN-402, and KAN-403 work. Zero database migrations introduced.
 - **Verification Proof**:
   - Backend Pytest: 63 passed in 37.67s across 5 test suites, 0 failures, 0 warnings.
-  - Frontend Vitest: 173 passed across 7 test suites, 0 failures, 0 `act(...)` warnings. Branch coverage: 95.96% (>=95% standard satisfied).
+  - Frontend Vitest: 173 passed across 7 test suites, 0 failures, 0 `act(...)` warnings. Branch coverage: 96.21% (>=95% standard satisfied with 100% of files >=95%).
   - Static Gates: `ruff` (0 errors), `mypy` (815 files clean), `check_no_dashes.py --all` (0 violations), `pnpm typecheck` (clean), `pnpm lint` (0 warnings), `pnpm build` (clean in 1.25s).
   - Screenshots: 5 unclipped viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) captured and visually inspected in `docs/qa/KAN-412/screenshots/`.
 

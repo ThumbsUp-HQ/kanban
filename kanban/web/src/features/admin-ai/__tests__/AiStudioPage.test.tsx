@@ -481,6 +481,14 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
           'Connection test failed',
         );
       });
+
+      // Exception during test connection (Aal2StepUpCancelledError)
+      testSpy.mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError());
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-openai-1'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('test-status-prov-openai-1')).toBeNull();
+      });
     });
 
     it('covers boundary branches for move, drag drop on same card, and unconfigured key cards', async () => {

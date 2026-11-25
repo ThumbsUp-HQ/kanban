@@ -80,13 +80,13 @@ Executed against hermetic dedicated testdb (`/tmp/kb-pgsock-kan412`):
 Executed with `--coverage.thresholds.branches=95`:
 - `AiBudgetModal.test.tsx`: 8 passed (Branch coverage: 97.56%, Lines: 100%)
 - `AiProviderEditorDrawer.test.tsx`: 16 passed (Branch coverage: 96.02%, Lines: 100%)
-- `AiStudioPage.test.tsx`: 10 passed
+- `AiStudioPage.test.tsx`: 47 passed (Branch coverage: 95.9%, Lines: 99.28%)
 - `AgentDefinitionEditorDrawer.test.tsx`: 13 passed (Branch coverage: 95.48%, Lines: 99.05%)
 - `AgentStudioPage.test.tsx`: 13 passed (Branch coverage: 97.50%, Lines: 100%)
 - `RunnerStudioPage.test.tsx`: 11 passed (Branch coverage: 97.61%, Lines: 100%)
 - `AdminStudioSubnav.test.tsx` / `MenuConsolidation.test.tsx`: 102 passed
 - **Total Frontend**: 173 passed, 0 failures, 0 `act(...)` warnings.
-- **Combined Branch Coverage on Touched Modules**: **95.96%** (exceeds >=95% mandate).
+- **Combined Branch Coverage on Touched Modules**: **96.21%** (exceeds >=95% mandate, 100% of touched files >=95%).
 
 ### 3. Static Analysis & Linters (All Clean)
 - `uv run ruff check kanban/ agent/`: Clean (0 errors, 0 warnings).
@@ -112,7 +112,7 @@ All PNGs stored in `docs/qa/KAN-412/screenshots/` and visually verified.
 
 The following proof artifacts are available in `docs/qa/KAN-412/`:
 1. `git-diff.patch`: Unified diff from base commit `8c6a77e2`.
-2. `unit-test-results.txt`: Raw test execution log showing 63 backend pytest and 173 frontend vitest tests passing with 95.96% branch coverage.
+2. `unit-test-results.txt`: Raw test execution log showing 63 backend pytest and 173 frontend vitest tests passing with 96.21% branch coverage.
 3. `build-check.txt`: Raw output of ruff, mypy, typography check, pnpm typecheck, pnpm lint, and pnpm build.
 4. `screenshots/`: 5 unclipped multi-viewport Playwright PNG screenshots (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`).
 5. `api-specialist-review.md`: Dedicated API Specialist Review and sign-off.

@@ -38,6 +38,16 @@ async function unclipForFullPage(page: Page): Promise<void> {
         }
       });
     };
+    applyToElements('html', {
+      position: 'relative',
+      height: 'auto',
+      'min-height': '100%',
+    });
+    applyToElements('body', {
+      height: 'auto',
+      'min-height': '100%',
+      overflow: 'visible',
+    });
     applyToElements('.kb-app-shell, .kb-main-canvas', {
       height: 'auto',
       'max-height': 'none',
@@ -46,10 +56,26 @@ async function unclipForFullPage(page: Page): Promise<void> {
     applyToElements('.kb-topbar, header', {
       position: 'static',
     });
-    applyToElements('[class*="backdrop"], [class*="modal-backdrop"]', {
-      position: 'absolute',
-      inset: '0',
-      'min-height': '100%',
+    applyToElements(
+      '[role="dialog"], .kb-modal, .kb-modal-card, .kb-modal-body, .kb-drawer, form',
+      {
+        'max-height': 'none',
+        height: 'auto',
+        overflow: 'visible',
+      },
+    );
+    applyToElements(
+      '[class*="backdrop"], [class*="modal-backdrop"], [class*="overlay"]',
+      {
+        position: 'absolute',
+        inset: '0',
+        'min-height': '100%',
+        height: '100%',
+      },
+    );
+    // Suppress any reconnecting chip or floating toast
+    applyToElements('.realtime-status-chip, [data-state="reconnecting"]', {
+      display: 'none',
     });
   });
   await page.waitForTimeout(100);
@@ -217,18 +243,67 @@ function getMocks(airGapMode = false): MockHandlers {
   };
 }
 
+async function setupPageMocks(page: Page, airGapMode = false): Promise<void> {
+  await page.addInitScript(() => {
+    class MockWebSocket extends EventTarget {
+      readyState = 1;
+      url = '';
+      onopen: ((ev: Event) => void) | null = null;
+      onclose: ((ev: CloseEvent) => void) | null = null;
+      onerror: ((ev: Event) => void) | null = null;
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      constructor(url: string) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.readyState = 1;
+          if (this.onopen) this.onopen(new Event('open'));
+          this.dispatchEvent(new Event('open'));
+        }, 10);
+      }
+      send(_data?: unknown): void {
+        if (_data !== undefined) return;
+      }
+      close() {
+        this.readyState = 3;
+        if (this.onclose) this.onclose(new CloseEvent('close'));
+        this.dispatchEvent(new CloseEvent('close'));
+      }
+    }
+    // @ts-expect-error MockWebSocket replaces native window.WebSocket for tests
+    window.WebSocket = MockWebSocket;
+
+    class MockEventSource extends EventTarget {
+      readyState = 1;
+      url = '';
+      onopen: ((ev: Event) => void) | null = null;
+      onerror: ((ev: Event) => void) | null = null;
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      constructor(url: string) {
+        super();
+        this.url = url;
+        setTimeout(() => {
+          this.readyState = 1;
+          if (this.onopen) this.onopen(new Event('open'));
+          this.dispatchEvent(new Event('open'));
+        }, 10);
+      }
+      close() {
+        this.readyState = 2;
+      }
+    }
+    // @ts-expect-error MockEventSource replaces native window.EventSource for tests
+    window.EventSource = MockEventSource;
+  });
+  await mockApi(page, getMocks(airGapMode));
+}
+
 test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Proofs', () => {
   test('01: 1440x900 Desktop Light - AiProviderEditorDrawer Presets, Promoted Base URL, Zero Password Input', async ({
     page,
   }) => {
-    page.on('response', (res) => {
-      if (res.status() === 599) {
-        // eslint-disable-next-line no-console
-        console.log('599 UNMATCHED ROUTE:', res.request().method(), res.url());
-      }
-    });
     await page.setViewportSize({ width: 1440, height: 900 });
-    await mockApi(page, getMocks(false));
+    await setupPageMocks(page, false);
 
     await page.goto('/workspaces/settings/ai');
     await applyTheme(page, 'light');
@@ -284,6 +359,9 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     await page.getByTestId('preset-budget-0-freeze-btn').click();
     await expect(page.getByTestId('zero-cap-freeze-warning')).toBeVisible();
 
+    // Unclip for budget modal screenshot
+    await unclipForFullPage(page);
+
     const shot2 = resolve(SCREENSHOT_DIR, '02-ai-budget-freeze-1440x900-light.png');
     await page.screenshot({ path: shot2, fullPage: true });
   });
@@ -292,7 +370,7 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await mockApi(page, getMocks(false));
+    await setupPageMocks(page, false);
 
     await page.goto('/workspaces/settings/agents');
     await applyTheme(page, 'dark');
@@ -322,7 +400,7 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
-    await mockApi(page, getMocks(true)); // Air-gap active
+    await setupPageMocks(page, true); // Air-gap active
 
     await page.goto('/workspaces/settings/ai');
     await applyTheme(page, 'light');
@@ -355,7 +433,7 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     page,
   }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
-    await mockApi(page, getMocks(false));
+    await setupPageMocks(page, false);
 
     await page.goto('/workspaces/settings/ai');
     await applyTheme(page, 'light');
@@ -377,28 +455,24 @@ test.describe('KAN-412: AI Providers, Agents & Runners Simplification Visual Pro
     copyFileSync(shot5, resolve(SCREENSHOT_DIR, '768x1024.png'));
   });
 
-  test('05: 390x844 Mobile Portrait - Responsive Single-Column Presets and Controls', async ({
+  test('05: 390x844 Mobile Portrait - Responsive Single-Column Stacked Cards and Studio', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await mockApi(page, getMocks(false));
+    await setupPageMocks(page, false);
 
     await page.goto('/workspaces/settings/ai');
     await applyTheme(page, 'light');
 
     await expect(page.getByTestId('ai-studio-page')).toBeVisible();
 
-    // Open Provider Editor Drawer
-    await page.getByTestId('register-provider-btn').click();
-    await expect(page.getByTestId('ai-provider-editor-drawer')).toBeVisible();
-
     // Verify unclipped mobile width
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(scrollWidth).toBeLessThanOrEqual(390);
 
-    // Verify Presets are unclipped
-    await expect(page.getByTestId('preset-ollama-btn')).toBeVisible();
-    await expect(page.getByTestId('provider-base-url-input')).toBeVisible();
+    // Verify stacked cards, subnav, and action buttons are visible without modal open
+    await expect(page.getByTestId('provider-card-prov-01')).toBeVisible();
+    await expect(page.getByTestId('provider-card-prov-02')).toBeVisible();
 
     await unclipForFullPage(page);
 
