@@ -1,0 +1,237 @@
+# Slice 4: Migration Import Studio, Standalone Backups/Promotion, Diagnostics & Link Auditor
+## Phase 1 Read-Only Inventory and Simplification Audit (`KAN-421`)
+
+- **Author:** `s4-p1` (Swarm Agent)
+- **Target Branch:** git branch `docs/KAN-421-slice4-audit` (branched from `main` at `2673a4c9`)
+- **Parent Epic:** `KAN-420` (`[EPIC][SLICE-4-OPS-BACKUPS-IMPORTS]`)
+- **Downstream Phase Tickets:** `KAN-422` (Phase 2 UI Simplification & Wiring), `KAN-423` (Phase 3 Live Workouts), `KAN-424` (Phase 4 Wiki Documentation)
+- **Requirement Traceability:**
+  - `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` Section 2 (System Topology & Multi-Container Architecture)
+  - `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` Section 12 (Universal Object Graph & Invalid Link Auditor)
+  - `docs/PROMOTION_AND_BACKUP.md` (Production Promotion & Encrypted Backup Runbook)
+- **Zero Source-Code Mutations:** Phase 1 is strictly read-only audit and markdown handoff.
+
+---
+
+### Executive Summary
+
+Slice 4 encapsulates all administrative day-2 operations across the platform:
+1. Multi-source migration importing from Plane, Jira, GitHub Issues, and Linear.
+2. Deterministic portable workspace bundle exporting (`.tar.gz`).
+3. Single-container standalone health, encrypted AES-256-GCM backups (`.kbbak`), automated backup schedules, and 2-stage destructive database restore.
+4. Production Docker Compose export and promotion runbooks.
+5. Unified administrative diagnostics across 7 core subsystems with live WebSocket and PostgreSQL pub/sub broker probes.
+6. Universal Object Graph Link Auditor and Purger enforcing relational integrity across 7 invalidity classes with mandatory justification and audit ledger recording.
+
+This audit establishes a complete setting-by-setting inventory across all 11 Slice-4 frontend and backend files, identifies orphan and unmapped controls, pinpoints terminology drift (`.kbkp` vs `.kbbak`), details the migration from raw `fetch` to `apiFetch`, and provides exact file-scoped action checklists for Phase 2 (`KAN-422`) and Phase 3 (`KAN-423`).
+
+---
+
+### Deduplication and Dependency Boundaries
+
+- **`KAN-404` (Global Sliding-Window WebSudo & Singleflight Replay):** Owns the global WebSudo session timer, idle refresh, and `apiFetch` in-place modal retry. Slice 4 Phase 2 will migrate raw `fetch` calls in `StandaloneStatusPanel.tsx` to `apiFetch` so that administrative actions automatically inherit `KAN-404` transparent replay.
+- **`KAN-397` (Migration Import Studio Rename):** Owns renaming page headings, Topbar menu links, and subnav tabs from "Plane Migration Import Studio" to "Migration Import Studio". Slice 4 Phase 1 and Phase 2 focus on controls, data mapping, and backend wiring.
+
+---
+
+### Complete Setting-by-Setting Inventory Table
+
+The following inventory audits every UI control, input, label, option, default value, validation rule, and backend binding across Slice 4.
+
+| Screen / Drawer | Setting Label & Key | Options / Type | 1-Sentence Plain-English Meaning | Backend Wiring Status | Disposition |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Source Selector (`source`) | Buttons: `plane`, `jira`, `github`, `linear` | Switches the active migration source parser and target schema mapping. | Fully Wired: routes to `/api/v1/admin/imports/{source}` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Input Mode (`inputMode`) | Buttons: `upload` vs `paste` | Toggles between uploading an export bundle file and pasting raw JSON/CSV text. | Fully Wired: client-side mode toggle | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | File Dropzone (`file-input`) | File Picker (`.json`, `.csv`) | Ingests export bundle file from disk into client memory. | Fully Wired: reads via FileReader to `bundle_data` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Paste Textarea (`paste-textarea`) | Textarea (JSON or CSV) | Ingests raw export text directly into client memory. | Fully Wired: parsed into `bundle_data` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Target Workspace Slug (`target-ws-slug-input`) | Text Input (Optional) | Specifies an alternative target workspace slug instead of the caller active workspace. | Fully Wired: maps to `req.workspace_slug` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Target Project Key (`target-project-key-input`) | Text Input (Optional, default JIRA/GH/LIN) | Specifies the project prefix key under which imported issues will be grouped. | Fully Wired: maps to `req.project_key` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Advanced Import Options (`advanced-import-options`) | Collapsible Accordion | Groups tuning parameters for batching, UUID preservation, conflicts, and user mapping. | Fully Wired: UI container component | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Import Batch Size (`import-batch-size-input`) | Number Input (10 to 1000, default 100) | Sets the number of database entities processed per transaction batch. | Orphan / Disconnected: NOT passed in payload to backend API | `SIMPLIFY` (Wire to API or mark as internal default) |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Conflict Resolution Strategy (`import-conflict-strategy-select`) | Dropdown: `skip`, `overwrite`, `rename` | Dictates behavior when an entity identifier matches an existing record. | Orphan / Disconnected: NOT passed in payload to backend API | `SIMPLIFY` (Wire to API or document backend idempotent default) |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Preserve Legacy UUIDs (`import-preserve-uuids-checkbox`) | Checkbox (default true) | Controls whether source UUIDs are preserved for deterministic migration idempotency. | Orphan / Disconnected: NOT passed in payload to backend API | `SIMPLIFY` (Document invariant: UUIDs preserved by default) |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Custom User Mapping JSON (`import-user-mapping-json`) | Textarea (JSON object) | Maps source user IDs and email handles to local workspace user handles. | Disconnected in UI: Backend supports `user_map`, but frontend never includes it in payload | `SIMPLIFY` (Wire `user_map` into payload in `handleRunDryRun` and `handleExecuteImport`) |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Preview Dry-Run Diff Button (`run-dry-run-btn`) | Action Button | Executes simulation without database mutations and renders diff metrics. | Fully Wired: `POST /api/v1/admin/imports/{source}` with `dry_run: true` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Execute Live Import Button (`execute-import-btn`) | Action Button | Commits the validated import transaction to the persistent universal object graph. | Fully Wired: `POST /api/v1/admin/imports/{source}` with `dry_run: false` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Back to Input Button (`back-to-input-btn`) | Action Button | Resets the preview stage back to the input selection screen. | Fully Wired: client-side stage reset | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Import Another Bundle Button (`import-another-btn`) | Action Button | Resets execution state to allow importing an additional bundle. | Fully Wired: client-side stage reset | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Return to MCP Button (`return-admin-btn`) | Navigation Link (`/admin/mcp`) | Navigates back to the MCP & Governance studio. | Fully Wired: React Router link | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Export Workspace Slug (`export-workspace-slug-input`) | Text Input (Optional) | Specifies workspace slug to extract into a portable deterministic archive. | Fully Wired: `POST /api/v1/admin/exports/portable` | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Scrub Secrets Checkbox (`export-scrub-checkbox`) | Checkbox (default false) | Scrubs API tokens, secrets, and sensitive credentials from exported markdown text. | Fully Wired: maps to `req.scrub` in export API | `KEEP` |
+| **Migration Import Studio** (`PlaneImportStudio.tsx`) | Download Portable Bundle Button (`export-download-btn`) | Action Button | Generates and downloads a deterministic `.tar.gz` archive with SHA-256 manifests. | Wired via raw `fetch`: streams binary blob | `SIMPLIFY` (Standardize error handling) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Ephemeral Storage Alert | Alert Banner | Warns operator when container runs on overlayfs without a mounted persistent volume. | Fully Wired: derived from `status.persistent_volume` | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Copy Docker Run Command | Button | Copies the canonical persistent container run command to system clipboard. | Fully Wired: clipboard utility | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Persistent Volume Badge | Status Badge | Confirms persistent volume is active with filesystem type and mount path. | Fully Wired: derived from `status.data_mount_point` | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Formula Sandbox Card (Wasm) | Capability Card | Displays Tier-A WebAssembly deterministic script sandbox status (always active). | Fully Wired: client static indicator | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Process Sandbox Card (nsjail) | Capability Card | Displays Tier-B Linux namespace sandbox status (active vs optional in standalone). | Fully Wired: derived from `status.tier_b_sandbox_available` | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 1) | Advanced Technical Details | Collapsible Accordion | Displays runtime database engine, PRAGMA dials, and storage parameters. | Fully Wired container, but contains outdated SQLite copy | `SIMPLIFY` (Update SQLite copy to PostgreSQL 16 embedded engine) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Backup Passphrase (`backup-passphrase`) | Password Input (min 16 chars) | Passphrase used to derive AES-256-GCM encryption key via Argon2id / PBKDF2. | Wired via raw `fetch`: `POST /api/v1/admin/standalone/backup` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`, unify `.kbbak` extension) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Download Encrypted Backup Button | Action Button | Triggers server-side `pg_dump`, encrypts archive, and downloads `.kbbak` file. | Wired via raw `fetch`: `POST /api/v1/admin/standalone/backup` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`, ensure `.kbbak` filename parity) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Enable Automated Backups Checkbox | Checkbox | Toggles background cron worker for periodic automated database snapshots. | Wired via raw `fetch`: `PUT /api/v1/admin/standalone/backup-schedule` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Backup Interval (`schedule-interval`) | Number Input (1 to 168 hours) | Configures periodicity in hours between automated backup passes. | Wired via raw `fetch`: `PUT /api/v1/admin/standalone/backup-schedule` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Keep Latest Snapshots (`schedule-retention`) | Number Input (1 to 90 snapshots) | Configures maximum number of historical snapshots retained before automatic pruning. | Wired via raw `fetch`: `PUT /api/v1/admin/standalone/backup-schedule` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Save Schedule Button | Action Button | Persists updated automated backup schedule and retention limits to disk. | Wired via raw `fetch`: `PUT /api/v1/admin/standalone/backup-schedule` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Run Backup Now Button | Action Button | Triggers an immediate automated backup snapshot pass asynchronously. | Wired via raw `fetch`: `POST /api/v1/admin/standalone/backups/run-now` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Existing Snapshots Table | Data Table & Download Links | Displays list of on-disk server snapshots with size, timestamp, and download link. | Wired via raw `fetch`: `GET /api/v1/admin/standalone/backups` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Select Server Snapshot (`select-snapshot`) | Dropdown | Selects an existing on-disk backup snapshot to restore. | Wired: mutually exclusive with upload input | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Upload Backup File (`upload-backup-file`) | File Picker (`.kbbak`, `.kbkp`, `.dump`) | Uploads an external backup bundle from operator computer to restore. | Wired: mutually exclusive with server snapshot select | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Restore Passphrase (`restore-passphrase`) | Password Input (Optional) | Passphrase required to decrypt user-passphrase encrypted backup archives. | Wired via raw `fetch`: passed in verify and restore requests | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Step 1: Verify Backup Archive Button | Action Button | Validates cryptographic framing, GCM tag, and manifest without database mutations. | Wired via raw `fetch`: `POST /api/v1/admin/standalone/backup/verify` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Destructive Confirmation (`restore-confirm`) | Text Input (Exact string "RESTORE") | Mandatory safety gate preventing accidental database overwrite. | Fully Wired: client and server validation check | `KEEP` |
+| **Standalone Status Panel** (`StandaloneStatusPanel.tsx` Tab 2) | Step 2: Restore Database Button | Action Button (Destructive) | Executes database restore, schema migration, and object link audit. | Wired via raw `fetch`: `POST /api/v1/admin/standalone/restore` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Compose Export Tab** (`ComposeExportTab.tsx` Tab 3) | Compose Mode Toggle (`composeMode`) | Buttons: `multi` vs `single` | Toggles between 5-network production stack and single-container standalone Compose spec. | Fully Wired: client mode toggle | `KEEP` |
+| **Compose Export Tab** (`ComposeExportTab.tsx` Tab 3) | Download Compose YAML Button | Action Button | Downloads the selected `docker-compose.yml` or `docker-compose.standalone.yml`. | Wired via raw `fetch`: `GET /api/v1/admin/standalone/compose-export` | `SIMPLIFY` (Migrate raw `fetch` to `apiFetch`) |
+| **Compose Export Tab** (`ComposeExportTab.tsx` Tab 3) | Copy .env.example Button | Action Button | Copies production environment variable template with generated secrets to clipboard. | Wired: uses clipboard utility | `KEEP` |
+| **Compose Export Tab** (`ComposeExportTab.tsx` Tab 3) | Promotion Runbook Checklist | Static Documentation Box | Outlines the 4-step promotion procedure from standalone to external PostgreSQL 16. | Static Markdown preview | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | WS Probe Badge (`ws-probe-badge`) | Status Badge | Displays live WebSocket connection status and roundtrip latency in milliseconds. | Fully Wired: client WebSocket probe state | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Run WS Ping Button (`run-ws-ping-btn`) | Action Button | Opens client WebSocket to `/ws`, sends ping frame, and calculates roundtrip latency. | Fully Wired: live browser WebSocket probe | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Refresh Diagnostics Button (`refresh-diagnostics-btn`) | Action Button | Refetches consolidated diagnostics across all 7 subsystems. | Fully Wired: `apiFetch('GET', '/api/v1/admin/diagnostics')` | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Summary Strip Cards (4 Cards) | Telemetry Strip | Displays at-a-glance status for Realtime, Docker, Configuration, and Object Links. | Fully Wired: derived from diagnostics query | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Diagnostics Tab Navigation | Tabs: `all`, `health`, `realtime`, `runtime`, `config`, `links` | Filters displayed diagnostics sections for focused administrative inspection. | Fully Wired: client tab state | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Test PG LISTEN/NOTIFY Broker (`run-pg-probe-btn`) | Action Button | Triggers backend self-test verifying PostgreSQL LISTEN/NOTIFY latency roundtrip. | Fully Wired: `POST /api/v1/admin/diagnostics/probes/realtime` via `apiFetch` | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | 7 Subsystems Health Cards | Status Grid | Displays health, descriptions, and operational metrics for 7 core subsystems. | Fully Wired: maps to `diag.subsystems` | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Storage Volumes Table | Data Table | Reports existence, writability, free space, and capacity for persistent mount points. | Fully Wired: maps to `diag.storage.directories` | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Config Search Filter (`config-search-input`) | Text Input | Filters active configuration parameters by key, subsystem, or value string. | Fully Wired: client filter state | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Config Subsystem Filter (`config-subsystem-select`) | Dropdown | Filters active configuration parameters by target subsystem domain. | Fully Wired: client filter state | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Copy Safe JSON Summary Button (`copy-config-btn`) | Action Button | Copies sanitized configuration dump with zero secret leakage to system clipboard. | Fully Wired: clipboard utility | `KEEP` |
+| **Admin Diagnostics Studio** (`AdminDiagnosticsStudio.tsx`) | Raw Config Dump Accordion | Collapsible Accordion | Provides complete raw JSON configuration dump for debugging. | Fully Wired: `AdvancedSection` wrapper | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Run Integrity Scan Button (`run-scan-btn`) | Action Button | Scans all workspace object links and tallies flagged invalid links across 7 classes. | Fully Wired: `POST /api/v1/admin/object-links:audit` via `apiFetch` | `KEEP` |
+| **LinkAuditorStudio** (`LinkAuditorStudio.tsx`) | Documentation Link (`link-auditor-doc-link`) | Help Link | Links operator to authoritative Universal Object Graph and Link Auditor spec. | Fully Wired: `StudioDocLink` component | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Reason Metrics Cards (7 Cards) | Metric Cards & Quick Filters | Summarizes flagged links per reason code; clicking toggles table filter. | Fully Wired: maps to `REASON_DESCRIPTIONS` and scan results | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Audit Status Filter (`status-filter-{st}`) | Pill Buttons: `unpurged`, `purged`, `resolved`, `all` | Filters flagged link records by remediation lifecycle status. | Fully Wired: query parameter in `list_link_audits` | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Reason Filter Dropdown (`reason-select`) | Dropdown | Filters flagged link records by specific invalidity reason code. | Fully Wired: query parameter in `list_link_audits` | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Select All Checkbox (`select-all-checkbox`) | Checkbox | Selects or deselects all currently visible flagged link records for bulk purge. | Fully Wired: client selection Set | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Row Selection Checkbox (`checkbox-{id}`) | Checkbox | Selects individual flagged link record for purge. | Fully Wired: client selection Set | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Purge Selected Links Button (`purge-selected-btn`) | Action Button (Destructive) | Opens the audited purge confirmation modal for selected link IDs. | Fully Wired: modal trigger | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Row Inspect Button (`inspect-btn-{id}`) | Action Button | Opens the inspection drawer to examine frozen source, target, and link snapshots. | Fully Wired: drawer state | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Row Single Purge Button (`purge-single-btn-{id}`) | Action Button (Destructive) | Opens the audited purge confirmation modal scoped to a single link record. | Fully Wired: modal trigger | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Inspect Drawer (`inspect-drawer`) | Slide-over Drawer | Displays full JSON payloads of source, target, and link snapshots with entity keys. | Fully Wired: slide-over inspection view | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Purge Modal Justification (`purge-reason-input`) | Textarea (min 10 chars, max 500) | Enforces mandatory administrative justification before permitting destructive link purge. | Fully Wired: client validation rule (len >= 10) | `KEEP` |
+| **Link Auditor Studio** (`LinkAuditorStudio.tsx`) | Confirm Purge Button (`confirm-purge-btn`) | Action Button (Destructive) | Executes audited purge, removes links from object graph, and logs immutable ledger. | Fully Wired: `POST /api/v1/admin/object-links:purge` via `apiFetch` | `KEEP` |
+
+---
+
+### Simplification Proposals and Focus Areas
+
+#### 1. Migration Import Studio (`PlaneImportStudio.tsx`)
+- **Fix Disconnected Controls:**
+  - `userMappingJson`: The frontend currently maintains `userMappingJson` state inside `AdvancedSection`, but lines 220-224 and lines 252-256 completely omit `user_map` from the payload object. In Phase 2, parse `userMappingJson` (defaulting to `{}`) and pass `user_map: parsedUserMap` in both dry-run and live execution payloads.
+  - `batchSize`, `conflictStrategy`, and `preserveLegacyUuids`: These three controls in `AdvancedSection` are currently disconnected from backend requests. Either wire them into `AdminPlaneImportRequest` / `AdminGenericImportRequest` schemas or simplify the UI by removing non-functional controls and documenting the platform's deterministic default invariants (e.g., UUID preservation is always active; existing keys are updated idempotently).
+- **Multi-Source Usability:**
+  - Dynamic hint text for source formats (Plane JSON bundles, Jira JSON, GitHub Issues JSON, Linear JSON/CSV).
+  - Explicit warning callout when unmapped user IDs are detected in dry-run diff reports with a 1-click pre-population helper for `userMappingJson`.
+
+#### 2. Standalone vs Multi-Container Mode & Encrypted Backup Parity
+- **Terminology & Extension Parity (`.kbbak` vs `.kbkp`):**
+  - In `docs/PROMOTION_AND_BACKUP.md` and `kanban-ctl`, the canonical encrypted backup format is `.kbbak` using magic header `KBBAK1` with AES-256-GCM.
+  - In `kanban/api/v1/system_status.py` line 341, the manual backup download filename defaults to `.kbkp`:
+    `filename = f"kanban-backup-{timestamp}.kbkp"`
+  - In Phase 2, align on canonical `.kbbak` for all newly generated backups (`kanban-backup-{timestamp}.kbbak`), while maintaining full backward-compatible acceptance of legacy `.kbkp` files during verification and restore.
+- **Outdated SQLite Copy Cleanup:**
+  - In `StandaloneStatusPanel.tsx` lines 778-784, the "Advanced Technical Details" section hardcodes:
+    `Database Storage Engine: SQLite 3.45 (WAL Mode)` and `PRAGMA journal_mode = WAL`.
+  - As defined in `GEMINI.md` and `docs/PROMOTION_AND_BACKUP.md`, `👍kanban` standalone mode runs embedded PostgreSQL 16 on a Unix domain socket, never SQLite.
+  - In Phase 2, update this copy to reflect the genuine embedded PostgreSQL 16 engine, socket path (`/var/run/postgresql`), and `FORCE RLS` status.
+
+#### 3. Raw `fetch` to `apiFetch` Migration in `StandaloneStatusPanel.tsx`
+- Currently, `StandaloneStatusPanel.tsx` makes 9 separate raw `window.fetch()` calls with manual CSRF token resolution (`getCsrfToken()`) and custom error parsing.
+- In Phase 2, migrate all 9 endpoints to `apiFetch`:
+  1. `GET /api/v1/admin/standalone/backup-schedule`
+  2. `GET /api/v1/admin/standalone/backups`
+  3. `POST /api/v1/admin/standalone/backup`
+  4. `PUT /api/v1/admin/standalone/backup-schedule`
+  5. `POST /api/v1/admin/standalone/backups/run-now`
+  6. `POST /api/v1/admin/standalone/backup/verify`
+  7. `POST /api/v1/admin/standalone/restore`
+  8. `GET /api/v1/admin/standalone/backups/{filename}`
+  9. `GET /api/v1/admin/standalone/compose-export` (in `ComposeExportTab.tsx`)
+- **Benefits:**
+  - Automatic CSRF header injection.
+  - Structured `ApiProblem` error parsing.
+  - Instant compatibility with `KAN-404` sliding-window WebSudo and transparent request replay without losing modal state.
+
+#### 4. 5-Network Compose Export & Promotion Runbook
+- Ensure Compose export cleanly supports both:
+  - Multi-Container Production Stack (5 isolated networks: `edge_net`, `app_net`, `data_net`, `sandbox_net`, `egress_llm_net`).
+  - Single-Container Standalone (`docker compose -f docker-compose.standalone.yml up -d`).
+- Keep `.env.example` copy button with zero plaintext secrets.
+
+#### 5. Admin Diagnostics Telemetry & Probes
+- Realtime WS probe ping (`/ws`) provides immediate visual confirmation of proxy WebSocket upgrade health.
+- PostgreSQL LISTEN/NOTIFY probe verifies pub/sub broker latency and outbox relay liveliness.
+- Redacted configuration viewer guarantees zero secret leakage to client browsers while exposing necessary debugging flags.
+
+#### 6. Universal Object Graph Link Auditor & Purger
+- 7 Invalidity classes audited:
+  - `DANGLING_SOURCE` (Source missing from graph)
+  - `DANGLING_TARGET` (Target missing from graph)
+  - `SOFT_DELETED_ENDPOINT` (Endpoint soft-deleted)
+  - `ARCHIVED_POLICY_VIOLATION` (Archived endpoint linkage)
+  - `TYPE_MATRIX_VIOLATION` (Forbidden entity pairing)
+  - `CROSS_WORKSPACE_LEAK` (Cross-tenant leak)
+  - `PERMISSION_SEVERED` (Severed capability boundary)
+- Bulk and individual purge flows enforce mandatory 10-character justification.
+- Purge actions emit immutable cryptographic Activity Ledger records for forensic accountability.
+
+---
+
+### Phase 2 (`KAN-422`) File-Scoped Action Checklist
+
+The following tasks are assigned to Phase 2 (`KAN-422`):
+
+- [ ] **1. `kanban/web/src/features/admin-imports/PlaneImportStudio.tsx`:**
+  - Wire `userMappingJson` to `user_map` in `handleRunDryRun` and `handleExecuteImport` payloads.
+  - Simplify disconnected `batchSize`, `conflictStrategy`, and `preserveLegacyUuids` controls or document them as platform invariants.
+  - Add inline JSON validation and error display for `userMappingJson`.
+- [ ] **2. `kanban/web/src/features/standalone/StandaloneStatusPanel.tsx`:**
+  - Replace all 8 raw `fetch` calls with `apiFetch` from `kanban/web/src/api/client.ts`.
+  - Fix outdated SQLite copy in Advanced Technical Details to reflect embedded PostgreSQL 16.
+  - Standardize backup download filename and copy to `.kbbak` (while accepting `.kbkp` on restore).
+  - Unify error handling using `dispatchAal2StepUpIfRequired` for seamless `KAN-404` WebSudo modal integration.
+- [ ] **3. `kanban/web/src/features/standalone/ComposeExportTab.tsx`:**
+  - Replace raw `fetch` with `apiFetch`.
+  - Ensure `.env.example` copying uses `safeCopyToClipboard` with accessible visual feedback.
+- [ ] **4. `kanban/api/v1/system_status.py`:**
+  - Update `create_standalone_backup` line 341 to emit `kanban-backup-{timestamp}.kbbak` as canonical filename.
+  - Ensure Content-Disposition headers and documentation reference `.kbbak`.
+- [ ] **5. `kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx`:**
+  - Maintain existing clean `apiFetch` integration for diagnostics and realtime probe.
+  - Ensure mobile and tablet viewport responsiveness on 7-subsystem cards.
+- [ ] **6. `kanban/web/src/features/admin/LinkAuditorStudio.tsx`:**
+  - Ensure table pagination and filtering remain responsive.
+  - Verify mandatory justification input prevents whitespace-only bypasses (`trim().length >= 10`).
+
+---
+
+### Phase 3 (`KAN-423`) Credential & Container Checklist
+
+Prerequisites and safety invariants for the Phase 3 live workout (`KAN-423`):
+
+1. **Zero-Mutation Guard for Protected Instances:**
+   - **STRICT INVARIANT:** Zero mutating, destructive, or administrative actions permitted against `192.168.1.101` or `k.hackedyour.info`.
+   - All Phase 3 workouts must run against an isolated local container stack (`docker run` or `make testdb-up`).
+2. **Local Staging Environment Setup:**
+   - Standalone Container: Launch isolated `thumbs-up-kanban:latest` container on port `18080` with named volume `kanban_workout_data`.
+   - Admin Credentials: Local Server Admin user with AAL2 (Passkey or TOTP) provisioned in the workout container.
+3. **Test Datasets and Export Bundles:**
+   - Plane test bundle: JSON bundle with 2 projects, 4 states, 10 issues, and 2 cycles.
+   - Jira test bundle: JSON export with standard issue hierarchy and attachments.
+   - GitHub Issues test bundle: JSON export with labels and milestone associations.
+   - Linear test bundle: JSON/CSV export with issue states and user mappings.
+4. **Encrypted Backup & Restore Test Key Material:**
+   - Test backup passphrase: `WorkoutBackupPassphrase2026!` (>= 16 characters).
+   - Test master KEK: local 32-byte test key.
+5. **Universal Object Graph Link Auditor Test Fixtures:**
+   - Seeded dangling links: 1 source missing, 1 target missing, 1 soft-deleted endpoint.
+   - Verified purge execution with mandatory audit justification logged to Activity Ledger.
+6. **Realtime Telemetry Probe Verification:**
+   - Live WebSocket ping roundtrip to `/ws` verified under 25ms.
+   - PostgreSQL LISTEN/NOTIFY roundtrip latency verified under 25ms.
+
+---
+
+### Verification and Compliance
+
+- **No Unicode Dashes:** Checked via `scripts/check_no_dashes.py` (0 violations).
+- **Cited Path Validity:** 100% of referenced files verified on disk.
+- **License Invariant:** Apache-2.0 clean.
