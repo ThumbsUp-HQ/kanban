@@ -29,6 +29,7 @@
 .auth-studio-title-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -596,7 +597,8 @@
   border-color: var(--accent-primary);
 }
 
-.auth-preset-btn--active {
+.auth-preset-btn.auth-preset-btn--active,
+.auth-preset-btn.auth-preset-btn--active:hover {
   background: var(--accent-primary);
   color: var(--accent-primary-fg);
   border-color: var(--accent-primary);
@@ -1176,3 +1178,37 @@
     min-height: 44px;
   }
 }
+
+/* KB-AUTH-SIMPLIFY masked secret, localhost warning, & break-glass modal */
+.kb-masked-api-key {
+  -webkit-text-security: disc;
+}
+
+.auth-localhost-warning {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  background-color: var(--bg-surface-raised, #fffbeb);
+  color: var(--text-warning, #b45309);
+  border: 1px solid var(--border-warning, #fde68a);
+}
+
+.auth-modal-btn-danger {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg-danger, #dc2626);
+  color: #ffffff;
+  border: 1px solid var(--bg-danger, #dc2626);
+  transition: all 0.15s ease-in-out;
+}
+
+.auth-modal-btn-danger:hover {
+  background: var(--bg-danger-hover, #b91c1c);
+  border-color: var(--bg-danger-hover, #b91c1c);
+}
+

@@ -547,6 +547,10 @@ export function AuthCardEditorDrawer({
       if (spkiPin.trim() && !SPKI_REGEX.test(spkiPin.trim())) {
         errors.spkiPin = 'SPKI pin must be exactly 64 hexadecimal characters.';
       }
+
+      if (caPem.trim() && !caPem.includes('-----BEGIN CERTIFICATE-----')) {
+        errors.caPem = 'CA certificate must begin with -----BEGIN CERTIFICATE-----';
+      }
     }
 
     setFieldErrors(errors);
@@ -673,6 +677,7 @@ export function AuthCardEditorDrawer({
           display_name: displayName.trim(),
           button_subtext: buttonSubtext.trim() || null,
           icon_preset: iconPreset,
+          is_enabled: isEnabled,
           auto_provision_users: autoProvisionUsers,
           allowed_email_domains: domains,
           public_config: publicConfig,
@@ -690,6 +695,7 @@ export function AuthCardEditorDrawer({
           display_name: displayName.trim(),
           button_subtext: buttonSubtext.trim() || null,
           icon_preset: iconPreset,
+          is_enabled: isEnabled,
           auto_provision_users: autoProvisionUsers,
           allowed_email_domains: domains,
           public_config: publicConfig,
@@ -754,6 +760,7 @@ export function AuthCardEditorDrawer({
     (fieldErrors.slug ??
       fieldErrors.buttonSubtext ??
       fieldErrors.spkiPin ??
+      fieldErrors.caPem ??
       googleJsonError),
   );
 
@@ -796,6 +803,7 @@ export function AuthCardEditorDrawer({
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'google' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('google'); }} aria-pressed={activePreset === 'google'}
+                data-testid="preset-google"
               >
                 <Google size={14} className="auth-preset-icon" />
                 <span>Google (OAuth 2.0)</span>
@@ -804,6 +812,7 @@ export function AuthCardEditorDrawer({
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'github' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('github'); }} aria-pressed={activePreset === 'github'}
+                data-testid="preset-github"
               >
                 <GitHub size={14} className="auth-preset-icon" />
                 <span>GitHub (OAuth 2.0)</span>
@@ -812,6 +821,7 @@ export function AuthCardEditorDrawer({
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'active-directory' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('active-directory'); }} aria-pressed={activePreset === 'active-directory'}
+                data-testid="preset-active-directory"
               >
                 <ActiveDirectory size={14} className="auth-preset-icon" />
                 <span>Active Directory (sAMAccountName)</span>
@@ -820,6 +830,7 @@ export function AuthCardEditorDrawer({
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'openldap' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('openldap'); }} aria-pressed={activePreset === 'openldap'}
+                data-testid="preset-openldap"
               >
                 <Ldap size={14} className="auth-preset-icon" />
                 <span>Standard LDAP (OpenLDAP)</span>
@@ -828,6 +839,7 @@ export function AuthCardEditorDrawer({
                 type="button"
                 className={`auth-preset-btn ${activePreset === 'custom-oauth' ? 'auth-preset-btn--active' : ''}`}
                 onClick={() => { applyPreset('custom-oauth'); }} aria-pressed={activePreset === 'custom-oauth'}
+                data-testid="preset-custom-oauth"
               >
                 <Key size={14} className="auth-preset-icon" />
                 <span>Custom OAuth 2.0 / OIDC</span>
@@ -991,6 +1003,15 @@ export function AuthCardEditorDrawer({
                   <div className="auth-field-helper">
                     Add this URL to your Identity Provider authorized redirect URIs.
                   </div>
+                  {typeof window !== 'undefined' &&
+                    (window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.origin.includes('localhost') ||
+                      window.location.origin.includes('127.0.0.1')) && (
+                    <div className="auth-localhost-warning" data-testid="oidc-localhost-warning" role="note">
+                      <span>Notice: You are running on a local origin ({window.location.origin}). Most production Identity Providers require HTTPS or exact port registration for redirect URIs.</span>
+                    </div>
+                  )}
 
                   <div className="auth-editor-prop-row">
                     <span className="auth-editor-label">Authorized JavaScript Origin</span>
@@ -1028,8 +1049,13 @@ export function AuthCardEditorDrawer({
                     </label>
                     <input
                       id="card-secret"
-                      type="password"
-                      className="auth-editor-input"
+                      type="text"
+                      className="auth-editor-input kb-masked-api-key"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
                       value={secretInput}
                       onChange={(e) => {
                         setSecretInput(e.target.value);
@@ -1111,8 +1137,13 @@ export function AuthCardEditorDrawer({
                     </label>
                     <input
                       id="card-secret"
-                      type="password"
-                      className="auth-editor-input"
+                      type="text"
+                      className="auth-editor-input kb-masked-api-key"
+                      autoComplete="off"
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
                       value={secretInput}
                       onChange={(e) => {
                         setSecretInput(e.target.value);
@@ -1720,6 +1751,8 @@ export function AuthCardEditorDrawer({
                       <textarea
                         id="card-ca-pem"
                         className="auth-editor-textarea"
+                        aria-invalid={Boolean(fieldErrors.caPem)}
+                        aria-describedby={fieldErrors.caPem ? 'card-ca-pem-error' : undefined}
                         value={caPem}
                         onChange={(e) => {
                           setCaPem(e.target.value);
@@ -1729,6 +1762,9 @@ export function AuthCardEditorDrawer({
                         rows={3}
                       />
                     </div>
+                    {fieldErrors.caPem ? (
+                      <div className="auth-editor-error" id="card-ca-pem-error" role="alert">{fieldErrors.caPem}</div>
+                    ) : null}
                   </div>
                 ) : null}
               </AdvancedSection>
@@ -1773,6 +1809,7 @@ export function AuthCardEditorDrawer({
               type="submit"
               className="auth-studio-add-btn"
               disabled={isSubmitting}
+              data-testid="drawer-save-btn"
             >
               {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
             </button>
