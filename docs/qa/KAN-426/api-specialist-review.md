@@ -2,8 +2,8 @@
 
 **Ticket:** `KAN-426` (`[SLICE-5-P1][KB-GOVERNANCE-AUDIT] Phase 1: Workspace/Project Settings, Custom Scripted Fields & Workflows Setting Inventory & Audit`)  
 **Reviewer:** `@api-spec` (Backend Architect & API Security Specialist)  
-**Branch:** `docs/KAN-426-slice5-audit`  
-**Base Commit:** `2673a4c96cb1bd2e5bd94e7e53be28d8ec2d3460`  
+**Branch:** `fix/KAN-426-rc1`  
+**Base Commit:** `620f66cd`  
 **Status:** `APPROVED`  
 **Date:** 2026-11-25  
 
