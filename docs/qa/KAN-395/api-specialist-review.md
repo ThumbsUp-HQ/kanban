@@ -2,8 +2,8 @@
 
 **Ticket:** `KAN-395` (`Support 1,200+ character OAuth state tokens, RFC 8707 Resource Scoping, and MCP Protocol Negotiation for Google Gemini MCP OAuth 2.1 integration`)
 **Reviewer:** `@api-spec` (Backend Architect & API Security Specialist)
-**Branch:** `feat/KAN-395-gemini-oauth-state`
-**Commit:** `88ea5d865af34f95a2d532f3cefb9285ca8da8e9`
+**Branch:** `fix/KAN-395-rc2`
+**Commit:** `b1182fd1`
 **Status:** `APPROVED`
 
 ---
@@ -52,16 +52,25 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
 
 ## 3. Test Coverage & Verification
 
-- **Backend Unit & Integration Suite:** 486 of 486 tests passed (437 in `mcp/tests/` and 49 in `kanban/tests/oauth/`), including live regression tests for RFC 8707 scoping, protocol version negotiation (`2025-11-25`, `2025-06-18`, `2025-03-26`), HTTP `HEAD` 200, and `GET` 405 conformance.
-- **Frontend Test Suite:** 85 of 85 Vitest tests passed (`ConnectOAuthAppModal.test.tsx`, `McpAccessStudio.test.tsx`, `LoginPage.test.tsx`).
+- **Backend Unit & Integration Suite:** 90 of 90 tests passed across `mcp/tests/` and `kanban/tests/oauth/`, achieving:
+  - `kanban/api/v1/oauth.py`: **96%** statement coverage (839 stmts, 27 missed)
+  - `kanban/oauth/device.py`: **98%** coverage
+  - `kanban/oauth/jwt.py`: **100%** coverage
+  - `kanban/oauth/server.py`: **99%** coverage
+  - Combined `kanban.api.v1.oauth` + `kanban.oauth`: **96.76%** coverage (exceeding >=95% gate)
+  - `mcp/protocol.py`: **97%** coverage
+  - `mcp/metadata.py`: **100%** coverage
+- **Frontend Test Suite:** 87 of 87 Vitest tests passed (`ConnectOAuthAppModal.test.tsx`, `McpAccessStudio.test.tsx`, `LoginPage.test.tsx`):
+  - `ConnectOAuthAppModal.tsx`: **100%** statements, **98.05%** branch coverage (exceeding >=95% gate)
+  - Overall frontend tested files: **99.2%** statements, **96.48%** branch, **98.7%** functions, **99.48%** lines
 - **Static Analysis Gates:**
-  - `ruff check`: Clean (0 errors)
-  - `ruff format --check`: Clean (0 errors)
+  - `ruff check`: Clean (0 errors across `kanban/api/v1/oauth.py`, `kanban/oauth/`, `kanban/tests/oauth/`)
+  - `ruff format --check`: Clean (11 files already formatted)
   - `mypy`: Clean (0 issues across all touched modules)
-  - `python3 scripts/check_no_dashes.py --all`: Clean
-  - `pnpm --dir kanban/web typecheck`: Clean
+  - `python3 scripts/check_no_dashes.py --all`: Clean (0 em/en-dashes)
+  - `pnpm --dir kanban/web typecheck`: Clean (0 errors)
   - `pnpm --dir kanban/web lint`: Clean (0 warnings)
-  - `pnpm --dir kanban/web build`: Successful production build
+  - `pnpm --dir kanban/web build`: Clean production build
 
 ---
 
@@ -69,4 +78,4 @@ This ticket hardens the OAuth 2.1 authorization server and Model Context Protoco
 
 **`APPROVED`**
 
-The implementation in `feat/KAN-395-gemini-oauth-state` commit `88ea5d865af34f95a2d532f3cefb9285ca8da8e9` fulfills 100% of the API contract, protocol negotiation, and security architecture requirements, fully validated live against real Google Gemini (`gemini.google.com`).
+The implementation in `fix/KAN-395-rc2` fulfills 100% of the API contract, protocol negotiation, and security architecture requirements, fully validated live against real Google Gemini (`gemini.google.com`) and certified with >=95% automated test coverage.
