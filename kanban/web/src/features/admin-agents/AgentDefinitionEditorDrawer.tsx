@@ -5,6 +5,7 @@ import React, { useState, useEffect, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   createAgentDefinition,
   updateAgentDefinition,
@@ -101,6 +102,45 @@ function AgentDefinitionEditorContent({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isDirty = React.useMemo(() => {
+    if (!agent) {
+      return Boolean(
+        displayName.trim() ||
+        slug.trim() ||
+        harnessKind !== 'in_app_sdk' ||
+        providerKind !== 'gemini' ||
+        modelId !== 'gemini-2.5-flash' ||
+        systemInstructions.trim() !== 'You are an autonomous Kanban specialist agent.'
+      );
+    }
+    return (
+      displayName !== agent.display_name ||
+      slug !== agent.slug ||
+      harnessKind !== agent.harness_kind ||
+      providerKind !== agent.provider_kind ||
+      modelId !== agent.model_id ||
+      systemInstructions !== agent.system_instructions_md ||
+      timeoutMs !== agent.timeout_ms ||
+      repoAccessMode !== agent.repo_access_mode ||
+      runnerPool !== (agent.remote_runner_pool_slug ?? 'default') ||
+      cliBinary !== (agent.cli_binary_allowlist_id ?? 'agy')
+    );
+  }, [
+    agent,
+    displayName,
+    slug,
+    harnessKind,
+    providerKind,
+    modelId,
+    systemInstructions,
+    timeoutMs,
+    repoAccessMode,
+    runnerPool,
+    cliBinary,
+  ]);
+
+  useAal2DirtyKeepalive(isDirty);
+
   const handleCliBinaryChange = (binary: string): void => {
     setCliBinary(binary);
     if (binary === 'codex') {
@@ -192,6 +232,9 @@ function AgentDefinitionEditorContent({
       onClose();
     } catch (err: unknown) {
       setIsSaving(false);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to save agent definition');
     }
   };
@@ -540,7 +583,6 @@ export function AgentDefinitionEditorDrawer({
   projectId,
   workspaceSlug,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
-  useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
 
   return (

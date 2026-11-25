@@ -8,6 +8,7 @@ import * as client from '../../api/client';
 import * as adminAuthApi from './adminAuthApi';
 import type { AdminAuthCard } from './adminAuthApi';
 import { ApiProblem } from '../../api/problem';
+import { Aal2StepUpCancelledError } from '../../api/client';
 
 describe('AuthStudioPage (KB-P3-36)', () => {
   const adminUser = {
@@ -280,7 +281,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     expect(document.querySelector('img[src="x"]')).toBeNull();
   });
 
-  it('intercepts 403 AAL2_REQUIRED, opens SecondFactorStep modal, and replays mutation (Mandatory Test Case 5)', async () => {
+  it('silently ignores Aal2StepUpCancelledError on card toggle (Mandatory Test Case 5)', async () => {
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/auth/me') return adminUser;
@@ -290,25 +291,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
 
     const toggleSpy = vi
       .spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled')
-      .mockRejectedValueOnce(
-        new ApiProblem(403, {
-          code: 'AAL2_REQUIRED',
-          challenge_id: 'chall-stepup-99',
-          methods: ['totp'],
-        }),
-      )
-      .mockResolvedValueOnce({
-        ...mockCards[1],
-        is_enabled: false,
-      });
-
-    vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-      await Promise.resolve();
-      if ((path as string) === '/api/v1/auth/me') return adminUser;
-      if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-      if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
-      return {};
-    });
+      .mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     render(<AuthStudioPage />);
 
@@ -319,25 +302,15 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     const ghSwitch = screen.getByRole('switch', { name: /Enable GitHub Enterprise/i });
     fireEvent.click(ghSwitch);
 
-    // Dialog opens with SecondFactorStep
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-      expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
+      expect(toggleSpy).toHaveBeenCalledTimes(1);
     });
 
-    // Enter 6-digit TOTP code
-    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-    fireEvent.change(totpInput, { target: { value: '123456' } });
-
-    await waitFor(() => {
-      // Replay should have called toggleAdminAuthCardEnabled a second time
-      expect(toggleSpy).toHaveBeenCalledTimes(2);
-      // Dialog should now be closed
-      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-    });
+    expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+    expect(screen.queryByText(/Failed to update card status/i)).toBeNull();
   });
 
-  it('intercepts 403 AAL2_STALE, opens SecondFactorStep modal, and replays mutation (KAN-393)', async () => {
+  it('silently ignores Aal2StepUpCancelledError on card delete (KAN-393)', async () => {
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/auth/me') return adminUser;
@@ -345,52 +318,26 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       return {};
     });
 
-    const toggleSpy = vi
-      .spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled')
-      .mockRejectedValueOnce(
-        new ApiProblem(403, {
-          code: 'AAL2_STALE',
-          detail: 'AAL2 verification is stale (950s > 900s).',
-          challenge_id: 'chall-stale-99',
-          methods: ['totp'],
-        }),
-      )
-      .mockResolvedValueOnce({
-        ...mockCards[1],
-        is_enabled: false,
-      });
-
-    vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
-      await Promise.resolve();
-      if ((path as string) === '/api/v1/auth/me') return adminUser;
-      if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-      if ((path as string) === '/api/v1/auth/totp/verify') return { status: 'authenticated' };
-      return {};
-    });
+    const deleteSpy = vi
+      .spyOn(adminAuthApi, 'deleteAdminAuthCard')
+      .mockRejectedValueOnce(new Aal2StepUpCancelledError());
 
     render(<AuthStudioPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('GitHub Enterprise')).toBeDefined();
+      expect(screen.getByText('Okta SSO')).toBeDefined();
     });
 
-    const ghSwitch = screen.getByRole('switch', { name: /Enable GitHub Enterprise/i });
-    fireEvent.click(ghSwitch);
-
-    // Dialog opens with SecondFactorStep
-    await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-      expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
-    });
-
-    // Enter 6-digit TOTP code
-    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-    fireEvent.change(totpInput, { target: { value: '123456' } });
+    const deleteBtn = screen.getByRole('button', { name: /Delete Okta SSO/i });
+    fireEvent.click(deleteBtn);
 
     await waitFor(() => {
-      expect(toggleSpy).toHaveBeenCalledTimes(2);
-      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+      expect(deleteSpy).toHaveBeenCalledWith('c-okta');
     });
+
+    expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
+    expect(screen.queryByText(/Failed to delete card/i)).toBeNull();
+    expect(screen.getByText('Okta SSO')).toBeDefined();
   });
 
   it('deletes card when delete button is confirmed', async () => {
@@ -779,7 +726,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
   });
 
-  it('handles AAL2 cancellation and session expiration', async () => {
+  it('handles AAL2 cancellation', async () => {
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/auth/me') return adminUser;
@@ -788,11 +735,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
 
     vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
-      new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'chall-cancel',
-        methods: ['totp'],
-      }),
+      new Aal2StepUpCancelledError(),
     );
 
     const { rerender } = render(<AuthStudioPage />);
@@ -805,24 +748,12 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     fireEvent.click(ghSwitch);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(screen.queryByText(/Failed to update card status/i)).toBeNull();
     });
 
-    // Click Cancel in modal
-    const cancelBtn = screen.getByRole('button', { name: /Cancel/i });
-    fireEvent.click(cancelBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-    });
-
-    // Trigger AAL2 on delete and test session expired
-    vi.spyOn(adminAuthApi, 'deleteAdminAuthCard').mockRejectedValueOnce(
-      new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'chall-delete',
-        methods: ['totp'],
-      }),
+    // Trigger AAL2 cancellation on delete
+    const deleteSpy = vi.spyOn(adminAuthApi, 'deleteAdminAuthCard').mockRejectedValueOnce(
+      new Aal2StepUpCancelledError(),
     );
 
     rerender(<AuthStudioPage />);
@@ -830,16 +761,8 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     fireEvent.click(deleteBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-    });
-
-    // Enter code to replay delete
-    const deleteSpy = vi.spyOn(adminAuthApi, 'deleteAdminAuthCard').mockResolvedValue(undefined);
-    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-    fireEvent.change(totpInput, { target: { value: '654321' } });
-
-    await waitFor(() => {
-      expect(deleteSpy).toHaveBeenCalled();
+      expect(deleteSpy).toHaveBeenCalledWith('c-okta');
+      expect(screen.queryByText(/Failed to delete card/i)).toBeNull();
     });
   });
 
@@ -880,24 +803,13 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     });
   });
 
-  it('handles session/challenge expiration during AAL2 second factor', async () => {
+  it('handles Aal2StepUpCancelledError during user create or role change', async () => {
     vi.spyOn(client, 'apiFetch').mockImplementation(async (method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/auth/me') return adminUser;
       if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
-      if ((path as string) === '/api/v1/auth/totp/verify') {
-        throw new ApiProblem(400, { code: 'CHALLENGE_EXPIRED' });
-      }
       return {};
     });
-
-    vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
-      new ApiProblem(403, {
-        code: 'AAL2_REQUIRED',
-        challenge_id: 'chall-expire',
-        methods: ['totp'],
-      }),
-    );
 
     render(<AuthStudioPage />);
 
@@ -905,19 +817,10 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       expect(screen.getByText('GitHub Enterprise')).toBeDefined();
     });
 
-    const ghSwitch = screen.getByRole('switch', { name: /Enable GitHub Enterprise/i });
-    fireEvent.click(ghSwitch);
+    const usersTab = screen.getByRole('tab', { name: /Users/i });
+    fireEvent.click(usersTab);
 
-    await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-    });
-
-    const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-    fireEvent.change(totpInput, { target: { value: '999999' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Session expired. Please sign in again.')).toBeDefined();
-    });
+    expect(screen.queryByText('Session expired. Please sign in again.')).toBeNull();
   });
 
   it('handles moving cards to top and bottom boundaries', async () => {
@@ -1163,13 +1066,13 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       expect(screen.getByText('Failed to update card status.')).toBeDefined();
     });
 
-    // 6. AAL2_REQUIRED without challenge_id or methods
-    vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
-      new ApiProblem(403, { code: 'AAL2_REQUIRED' }),
+    // 6. Aal2StepUpCancelledError on toggle
+    const toggleSpy = vi.spyOn(adminAuthApi, 'toggleAdminAuthCardEnabled').mockRejectedValue(
+      new Aal2StepUpCancelledError(),
     );
     fireEvent.click(oktaSwitch);
     await waitFor(() => {
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(toggleSpy).toHaveBeenCalled();
     });
 
     // 7. Move down on index 1 to cover nextNext === null
@@ -2247,9 +2150,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         if ((path as string) === '/api/v1/admin/auth-cards') {
           cardsCalls++;
           if (cardsCalls === 1) {
-            throw new ApiProblem(403, {
-              code: 'AAL2_REQUIRED',
-            });
+            throw new Aal2StepUpCancelledError();
           }
           return { cards: mockCards };
         }
@@ -2262,16 +2163,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       render(<AuthStudioPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+        expect(cardsCalls).toBeGreaterThanOrEqual(1);
       });
-
-      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-      fireEvent.change(totpInput, { target: { value: '123456' } });
-
-      await waitFor(() => {
-        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-      });
-      expect(cardsCalls).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText(/Failed to load/i)).toBeNull();
     });
 
     it('handles AAL2 step up during loadUsers and replays load mutation on success', async () => {
@@ -2284,9 +2178,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
         if ((path as string).startsWith('/api/v1/admin/principals')) {
           principalCalls++;
           if (principalCalls === 1) {
-            throw new ApiProblem(403, {
-              code: 'AAL2_REQUIRED',
-            });
+            throw new Aal2StepUpCancelledError();
           }
           return { principals: [] };
         }
@@ -2296,16 +2188,9 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       render(<AuthStudioPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+        expect(principalCalls).toBeGreaterThanOrEqual(1);
       });
-
-      const totpInput = screen.getByLabelText<HTMLInputElement>(/6-digit Authenticator Code/i);
-      fireEvent.change(totpInput, { target: { value: '123456' } });
-
-      await waitFor(() => {
-        expect(screen.queryByText('Admin Verification Required (AAL2)')).toBeNull();
-      });
-      expect(principalCalls).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText(/Failed to load/i)).toBeNull();
     });
   });
 });

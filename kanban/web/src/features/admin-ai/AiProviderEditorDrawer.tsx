@@ -5,6 +5,7 @@ import React, { useState, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   createAiProvider,
   updateAiProvider,
@@ -193,6 +194,27 @@ function AiProviderEditorContent({
   const isCloudKind = providerKind === 'openai' || providerKind === 'gemini';
   const isLocal = isLocalEndpoint(providerKind, baseUrl);
 
+  const isDirty = React.useMemo(() => {
+    if (!provider) {
+      return Boolean(
+        displayName.trim() ||
+        apiKey.trim() ||
+        baseUrl.trim() ||
+        providerKind !== 'gemini'
+      );
+    }
+    return (
+      displayName !== provider.display_name ||
+      apiKey.trim() !== '' ||
+      baseUrl !== (provider.base_url ?? '') ||
+      clearExistingKey ||
+      residencyTier !== initialResidency ||
+      providerKind !== provider.provider_kind
+    );
+  }, [provider, displayName, apiKey, baseUrl, clearExistingKey, residencyTier, initialResidency, providerKind]);
+
+  useAal2DirtyKeepalive(isDirty);
+
   const handleKindChange = (newKind: string): void => {
     setProviderKind(newKind);
     if (airGapMode && (newKind === 'openai' || newKind === 'gemini')) {
@@ -337,6 +359,9 @@ function AiProviderEditorContent({
         });
       }
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setTestStatus({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Connection test failed',
@@ -432,6 +457,9 @@ function AiProviderEditorContent({
       onClose();
     } catch (err: unknown) {
       setIsSaving(false);
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to save provider configuration');
     }
   };
@@ -975,7 +1003,6 @@ export function AiProviderEditorDrawer({
   projectId,
   workspaceSlug,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
-  useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
 
   return (

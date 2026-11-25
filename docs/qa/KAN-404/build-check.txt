@@ -1,27 +1,30 @@
-=== STATIC MIGRATION CHECK ===
-OK: All 80 migrations valid. Single head: p6_18_websudo_sliding_aal2
+=== 1. CHECK MIGRATIONS (STATIC ONLY) ===
+OK: All 82 migrations valid. Single head: p6_20_oauth_clients_status_check
 
-=== RUFF CHECK ===
+=== 2. RUFF CHECK ===
 All checks passed!
 
-=== NO DASHES CHECK ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== 3. MYPY CHECK ===
+Success: no issues found in 679 source files
 
-=== WEB TYPECHECK ===
+=== 4. NO UNICODE DASHES CHECK ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/kanban/web
+=== 5. WEB TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > tsc -b --noEmit
 
 
-=== WEB LINT ===
+=== 6. WEB LINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > eslint . --max-warnings 0
 
 
-=== WEB BUILD ===
+=== 7. WEB BUILD ===
 
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/kanban/web
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
@@ -31,12 +34,12 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-RbNVTnmd.css            596.96 kB │ gzip:  83.83 kB
-dist/assets/index-Bcpi-RHh.js           2,876.19 kB │ gzip: 795.95 kB
+dist/assets/index-BLX1a42e.css            605.28 kB │ gzip:  85.23 kB
+dist/assets/index-B8yScG9n.js           2,878.26 kB │ gzip: 797.30 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.22s
+✓ built in 1.33s

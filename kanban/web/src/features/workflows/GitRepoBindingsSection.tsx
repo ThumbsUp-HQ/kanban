@@ -3,6 +3,7 @@
 
 import React, { useState, type JSX } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   fetchRepoBindings,
   createRepoBinding,
@@ -100,7 +101,8 @@ export function GitRepoBindingsSection({
     try {
       await action();
     } catch (err: unknown) {
-      if (onAal2Intercept?.(err, { type: 'refresh_repo', execute: action })) {
+      if (isAal2StepUpCancelled(err) || onAal2Intercept?.(err, { type: 'refresh_repo', execute: action })) {
+        setSyncingId(null);
         return;
       }
       const msg = err instanceof Error ? err.message : 'Failed to refresh repository mirror.';
@@ -128,7 +130,8 @@ export function GitRepoBindingsSection({
     try {
       await action();
     } catch (err: unknown) {
-      if (onAal2Intercept?.(err, { type: 'delete_repo', execute: action })) {
+      if (isAal2StepUpCancelled(err) || onAal2Intercept?.(err, { type: 'delete_repo', execute: action })) {
+        setDeletingId(null);
         return;
       }
       const msg = err instanceof Error ? err.message : 'Failed to delete repository mirror.';
@@ -177,7 +180,8 @@ export function GitRepoBindingsSection({
     try {
       await action();
     } catch (err: unknown) {
-      if (onAal2Intercept?.(err, { type: 'create_repo', execute: action })) {
+      if (isAal2StepUpCancelled(err) || onAal2Intercept?.(err, { type: 'create_repo', execute: action })) {
+        setIsSubmitting(false);
         return;
       }
       const msg = err instanceof Error ? err.message : 'Failed to bind git repository.';

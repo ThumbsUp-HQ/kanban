@@ -9,7 +9,6 @@ import { McpAccessStudio } from '../McpAccessStudio';
 import { WorkloadFederationSection, type WorkloadIdentityPolicyItem } from '../McpUnifiedStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
-import { ApiProblem } from '../../../api/problem';
 import { ProjectMcpRedirect, WorkspaceMcpRedirect, AdminMcpRedirect } from '../../../app/routes';
 
 vi.mock('../../../app/useSystemStatus', () => ({
@@ -270,15 +269,9 @@ describe('Unified MCP Studio (KAN-31)', () => {
     });
   });
 
-  it('handles inline AAL2 challenge step-up modal on 403 AAL2_REQUIRED in governance view', async () => {
-    const aal2Error = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'test-aal2-challenge',
-      methods: ['totp', 'webauthn'],
-    });
-
+  it('handles AAL2 cancellation on loadData in governance view without error banners', async () => {
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
-      .mockRejectedValueOnce(aal2Error)
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce(mockKeys);
 
     render(
@@ -288,28 +281,16 @@ describe('Unified MCP Studio (KAN-31)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+      expect(settingsApi.fetchUnifiedMcpKeys).toHaveBeenCalled();
     });
-
-    // Close button cancels modal
-    const closeBtn = screen.getByRole('button', { name: 'x' });
-    fireEvent.click(closeBtn);
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-    });
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
   });
 
-  it('completes MFA challenge on loadData retry and handles session expired and cancel', async () => {
-    const aal2Error = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'test-challenge',
-      methods: ['totp'],
-    });
-
+  it('handles AAL2 cancellation silently on loadData retry', async () => {
     const fetchSpy = vi
       .spyOn(settingsApi, 'fetchUnifiedMcpKeys')
-      .mockRejectedValueOnce(aal2Error)
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce(mockKeys);
 
     render(
@@ -319,27 +300,15 @@ describe('Unified MCP Studio (KAN-31)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('second-factor-step-mock')).toBeDefined();
+      expect(fetchSpy).toHaveBeenCalled();
     });
-
-    // Trigger MFA success
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
-    await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-    });
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
   });
 
-  it('handles AAL2 step-up challenge on minting and retries on MFA success, error, and cancel', async () => {
-    const aal2MintError = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'mint-challenge',
-      methods: ['webauthn'],
-    });
-
+  it('handles AAL2 cancellation on minting and retries without error banners', async () => {
     const mintSpy = vi
       .spyOn(settingsApi, 'mintUnifiedMcpKey')
-      .mockRejectedValueOnce(aal2MintError)
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce({
         id: 'new-key-1',
         token: 'kb_mcp_sec_secret123',
@@ -384,33 +353,25 @@ describe('Unified MCP Studio (KAN-31)', () => {
     const projInput = screen.getByTestId<HTMLInputElement>('mint-project-input');
     fireEvent.change(projInput, { target: { value: 'KANBA' } });
 
-    // Submit
+    // Submit -> hits cancellation
     const submitBtn = screen.getByRole('button', { name: 'Mint Key' });
     fireEvent.click(submitBtn);
 
-    // Expect AAL2 modal
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(mintSpy).toHaveBeenCalledTimes(1);
     });
+    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
 
-    // Test error callback (handled inside SecondFactorStep)
-    fireEvent.click(screen.getByTestId('mfa-error-btn'));
-
-    // Trigger MFA success to finish minting
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+    // Re-submit -> succeeds
+    fireEvent.click(submitBtn);
     await waitFor(() => {
       expect(mintSpy).toHaveBeenCalledTimes(2);
       expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
     });
   });
 
-  it('handles MFA challenge cancel and session expired', async () => {
-    const aal2MintError = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'mint-cancel-challenge',
-      methods: ['totp'],
-    });
-    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValue(aal2MintError);
+  it('handles MFA cancellation on minting without error banners', async () => {
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
 
     render(
       <MemoryRouter initialEntries={['/settings/mcp']}>
@@ -430,21 +391,9 @@ describe('Unified MCP Studio (KAN-31)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByTestId('mfa-expired-btn'));
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
-    await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mfa-cancel-btn'));
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-    });
+    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
   });
 
   it('handles mint error reporting on generic failure', async () => {
@@ -478,16 +427,10 @@ describe('Unified MCP Studio (KAN-31)', () => {
     });
   });
 
-  it('handles AAL2 step-up challenge on revoking keys and retries on MFA success', async () => {
-    const aal2RevokeError = new ApiProblem(403, {
-      code: 'AAL2_REQUIRED',
-      challenge_id: 'revoke-challenge',
-      methods: ['totp'],
-    });
-
+  it('handles AAL2 cancellation on revoking keys without error banners', async () => {
     const revokeSpy = vi
       .spyOn(settingsApi, 'revokeUnifiedMcpKey')
-      .mockRejectedValueOnce(aal2RevokeError)
+      .mockRejectedValueOnce(new clientModule.Aal2StepUpCancelledError())
       .mockResolvedValueOnce(undefined);
 
     render(
@@ -508,20 +451,22 @@ describe('Unified MCP Studio (KAN-31)', () => {
       expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
     });
 
-    // Confirm revocation inline
+    // Confirm revocation inline -> cancelled
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
-    // Expect AAL2 modal
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(revokeSpy).toHaveBeenCalledTimes(1);
     });
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
 
-    // Click MFA success
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
-
+    // Second try succeeds
+    fireEvent.click(screen.getByTestId('revoke-btn-key-project-kanba'));
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
     await waitFor(() => {
       expect(revokeSpy).toHaveBeenCalledTimes(2);
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
     });
   });
 
@@ -651,12 +596,9 @@ describe('Unified MCP Studio (KAN-31)', () => {
       },
     ];
 
-    const staleError = new ApiProblem(403, {
-      code: 'AAL2_STALE',
-    });
+    const staleError = new clientModule.Aal2StepUpCancelledError();
 
     vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
-      .mockRejectedValueOnce(staleError)
       .mockResolvedValueOnce(keysWithEdgeCases);
 
     const mintSpy = vi
@@ -689,20 +631,14 @@ describe('Unified MCP Studio (KAN-31)', () => {
       </MemoryRouter>,
     );
 
-    // 1. Initial load hits AAL2_STALE without challengeId or methods
-    await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-    });
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
-
-    // 2. Project select should include custom option 'CUSTOM' and key-edge-proj is visible
+    // 1. Project select should include custom option 'CUSTOM' and key-edge-proj is visible
     await waitFor(() => {
       expect(screen.getByTestId('key-row-key-edge-proj')).toBeDefined();
       const projSelect = screen.getByTestId<HTMLSelectElement>('scope-project-select');
       expect(projSelect.value).toBe('CUSTOM');
     });
 
-    // 3. Open mint modal in project scope, test project input onChange and minting
+    // 2. Open mint modal in project scope, test project input onChange and minting
     fireEvent.click(screen.getByTestId('mint-key-button'));
     await waitFor(() => {
       expect(screen.getByTestId('mint-project-input')).toBeDefined();
@@ -712,26 +648,33 @@ describe('Unified MCP Studio (KAN-31)', () => {
     const labelInput = screen.getByTestId<HTMLInputElement>('mint-label-input');
     fireEvent.change(labelInput, { target: { value: 'Custom Key' } });
 
-    // Submit minting -> hits AAL2_STALE
+    // Submit minting -> hits cancellation
     fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(mintSpy).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+    expect(screen.queryByTestId('mint-error-banner')).toBeNull();
+
+    // Re-submit succeeds
+    fireEvent.click(screen.getByRole('button', { name: 'Mint Key' }));
     await waitFor(() => {
       expect(mintSpy).toHaveBeenCalledTimes(2);
     });
 
-    // 4. Revoke key-edge-proj -> hits AAL2_STALE
+    // 3. Revoke key-edge-proj -> hits cancellation
     fireEvent.click(screen.getByTestId('revoke-btn-key-edge-proj'));
     await waitFor(() => {
       expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
     });
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(revokeSpy).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+    expect(screen.queryByTestId('studio-error-banner')).toBeNull();
+
+    // Re-revoke succeeds
+    fireEvent.click(screen.getByTestId('revoke-btn-key-edge-proj'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
     await waitFor(() => {
       expect(revokeSpy).toHaveBeenCalledTimes(2);
     });
@@ -933,18 +876,14 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     });
   });
 
-  it('triggers AAL2 step-up when API requires second factor', async () => {
+  it('handles AAL2 cancellation when fetching workload identities without error banners', async () => {
     let callCount = 0;
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
       await Promise.resolve();
       if ((path as string) === '/api/v1/admin/workload-identities') {
         callCount++;
         if (callCount === 1) {
-          throw new ApiProblem(403, {
-            code: 'AAL2_REQUIRED',
-            challenge_id: 'challenge-123',
-            methods: ['totp'],
-          });
+          throw new clientModule.Aal2StepUpCancelledError();
         }
         return [samplePolicy];
       }
@@ -954,18 +893,12 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     render(<WorkloadFederationSection isAdmin={true} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(callCount).toBeGreaterThanOrEqual(1);
     });
-
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-      expect(screen.getByText('GitHub Actions Main CI')).toBeDefined();
-    });
+    expect(screen.queryByTestId('workload-error-banner')).toBeNull();
   });
 
-  it('covers policy editing, disabled/empty-CIDR rendering, modal cancel/close, error banners, and AAL2 step-up replay across mutations', async () => {
+  it('covers policy editing, disabled/empty-CIDR rendering, modal cancel/close, error banners, and AAL2 cancellation across mutations', async () => {
     const disabledPolicy: WorkloadIdentityPolicyItem = {
       ...samplePolicy,
       id: 'pol-disabled',
@@ -980,7 +913,7 @@ describe('WorkloadFederationSection (KAN-74)', () => {
       await Promise.resolve();
       if (mode === 'aal2' && method !== 'GET') {
         mode = 'normal';
-        throw new ApiProblem(403, { code: 'AAL2_STALE' });
+        throw new clientModule.Aal2StepUpCancelledError();
       }
       if (mode === 'err' && method !== 'GET') {
         throw new Error('Mutation failed');
@@ -1017,20 +950,13 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     expect(screen.getByText('Edit Workload Policy')).toBeDefined();
     fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: 'Updated desc' } });
 
-    // Submit with AAL2_STALE challenge, then complete step-up
+    // Submit with AAL2 cancellation
     mode = 'aal2';
     fireEvent.click(screen.getByTestId('policy-submit-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(apiSpy).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
-    await waitFor(() => {
-      expect(apiSpy).toHaveBeenCalledWith(
-        'PATCH',
-        '/api/v1/admin/workload-identities/pol-disabled',
-        expect.any(Object),
-      );
-    });
+    expect(screen.queryByTestId('workload-error-banner')).toBeNull();
 
     // Submit error & non-Error branches
     fireEvent.click(screen.getByTestId('edit-policy-btn-pol-1'));
@@ -1051,9 +977,9 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     mode = 'aal2';
     fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(apiSpy).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+    expect(screen.queryByTestId('workload-error-banner')).toBeNull();
 
     mode = 'err';
     fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
@@ -1070,11 +996,9 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     mode = 'aal2';
     fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
     await waitFor(() => {
-      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      expect(apiSpy).toHaveBeenCalled();
     });
-    // Close AAL2 modal via 'x' button
-    fireEvent.click(within(screen.getByTestId('aal2-modal-card')).getByText('x'));
-    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    expect(screen.queryByTestId('workload-error-banner')).toBeNull();
 
     mode = 'err';
     fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));

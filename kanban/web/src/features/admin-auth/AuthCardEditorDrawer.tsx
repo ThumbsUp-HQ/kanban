@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   Google,
   GitHub,
@@ -52,7 +53,6 @@ export function AuthCardEditorDrawer({
   onSave,
   onTestHandshake,
 }: AuthCardEditorDrawerProps): JSX.Element | null {
-  useAal2DirtyKeepalive(isOpen);
   const isEdit = Boolean(card);
   const drawerRef = useRef<HTMLDivElement | null>(null);
 
@@ -223,6 +223,65 @@ export function AuthCardEditorDrawer({
     setFormError(null);
     setFieldErrors({});
   }
+
+  const isDirty = React.useMemo(() => {
+    if (!isOpen) return false;
+    if (!card) {
+      return Boolean(
+        displayName.trim() ||
+        slug.trim() ||
+        buttonSubtext.trim() ||
+        secretInput.trim() ||
+        allowedEmailDomains.trim() ||
+        activePreset !== null ||
+        slugCustomized ||
+        clientId.trim() ||
+        issuerUrl.trim() ||
+        serverUrl.trim() ||
+        bindDn.trim() ||
+        baseDn.trim()
+      );
+    }
+    const cardDomains = Array.isArray(card.allowed_email_domains)
+      ? card.allowed_email_domains.join(', ')
+      : '';
+    const cardPub = card.public_config;
+    return (
+      displayName !== card.display_name ||
+      slug !== card.slug ||
+      buttonSubtext !== (card.button_subtext ?? '') ||
+      secretInput.trim() !== '' ||
+      isEnabled !== card.is_enabled ||
+      autoProvisionUsers !== card.auto_provision_users ||
+      allowedEmailDomains !== cardDomains ||
+      iconPreset !== card.icon_preset ||
+      clientId !== (typeof cardPub.client_id === 'string' ? cardPub.client_id : '') ||
+      issuerUrl !== (typeof cardPub.issuer_url === 'string' ? cardPub.issuer_url : '') ||
+      serverUrl !== (typeof cardPub.server_url === 'string' ? cardPub.server_url : '') ||
+      bindDn !== (typeof cardPub.bind_dn === 'string' ? cardPub.bind_dn : '') ||
+      baseDn !== (typeof cardPub.base_dn === 'string' ? cardPub.base_dn : '')
+    );
+  }, [
+    isOpen,
+    card,
+    displayName,
+    slug,
+    buttonSubtext,
+    secretInput,
+    isEnabled,
+    autoProvisionUsers,
+    allowedEmailDomains,
+    iconPreset,
+    activePreset,
+    slugCustomized,
+    clientId,
+    issuerUrl,
+    serverUrl,
+    bindDn,
+    baseDn,
+  ]);
+
+  useAal2DirtyKeepalive(isDirty);
 
 
   // Accessibility: focus trap & initial focus (KB-AUTH-JSON)
@@ -581,6 +640,9 @@ export function AuthCardEditorDrawer({
         message: res.check_summary ?? (isHealthy ? 'Handshake healthy' : 'Handshake probe failed'),
       });
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       setHandshakeResult({
         status: 'failed',
         message: err instanceof Error ? err.message : 'Handshake test failed',
@@ -637,15 +699,18 @@ export function AuthCardEditorDrawer({
         await onSave(payload, false);
       }
 
+      setSecretInput('');
       onClose();
     } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       if (err instanceof Error) {
         setFormError(err.message);
       } else {
         setFormError('Failed to save authentication card.');
       }
     } finally {
-      setSecretInput('');
       setIsSubmitting(false);
     }
   };

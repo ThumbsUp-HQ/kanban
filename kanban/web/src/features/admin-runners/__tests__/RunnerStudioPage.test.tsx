@@ -8,7 +8,6 @@ import { RunnerStudioPage } from '../RunnerStudioPage';
 import { MintEnrollmentTokenModal } from '../MintEnrollmentTokenModal';
 import * as runnersApi from '../runnersAdminApi';
 import * as clientModule from '../../../api/client';
-import { ApiProblem } from '../../../api/problem';
 
 vi.mock('../../auth/SecondFactorStep', () => ({
   SecondFactorStep: ({
@@ -296,15 +295,10 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       );
     });
 
-    it('handles AAL2_REQUIRED on runner revoke by opening inline SecondFactorStep modal (KAN-68 Negative)', async () => {
+    it('silently ignores Aal2StepUpCancelledError on runner revoke without error banner (KAN-68)', async () => {
       vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
-      vi.spyOn(runnersApi, 'revokeRemoteRunner').mockRejectedValue(
-        new ApiProblem(403, {
-          code: 'AAL2_REQUIRED',
-          title: 'AAL2 Required',
-          challenge_id: 'challenge-aal2-runner-revoke',
-          methods: ['totp', 'webauthn'],
-        }),
+      const revokeSpy = vi.spyOn(runnersApi, 'revokeRemoteRunner').mockRejectedValue(
+        new clientModule.Aal2StepUpCancelledError(),
       );
 
       render(<RunnerStudioPage />);
@@ -317,56 +311,19 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+        expect(revokeSpy).toHaveBeenCalledWith('runner-1');
       });
 
-      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
-
-      // Exercise error and cancel
-      fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
-      fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-
-      // Trigger again for expired
-      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
-      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
-      await waitFor(() => {
-        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-      });
-      fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-
-      // Trigger again for close button
-      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
-      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
-      await waitFor(() => {
-        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-      });
-      fireEvent.click(screen.getByTestId('close-aal2-modal-btn'));
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
-
-      // Trigger again for success
-      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
-      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
-      await waitFor(() => {
-        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
-      });
-      const revokeSpySuccess = vi.spyOn(runnersApi, 'revokeRemoteRunner').mockResolvedValue({
-        id: 'runner-1',
-        status: 'revoked',
-        revoked_at: new Date().toISOString(),
-      });
-      fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
-      await waitFor(() => {
-        expect(revokeSpySuccess).toHaveBeenCalledWith('runner-1');
-      });
+      expect(screen.queryByText(/Failed to revoke remote runner/i)).toBeNull();
       expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
     });
 
-    it('handles AAL2_STALE and generic object error with default challenge fallbacks', async () => {
+    it('handles successful revoke after transparent step-up replay', async () => {
       vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
-      vi.spyOn(runnersApi, 'revokeRemoteRunner').mockRejectedValue({
-        code: 'AAL2_STALE',
+      const revokeSpy = vi.spyOn(runnersApi, 'revokeRemoteRunner').mockResolvedValue({
+        id: 'runner-1',
+        status: 'revoked',
+        revoked_at: new Date().toISOString(),
       });
 
       render(<RunnerStudioPage />);
@@ -379,11 +336,9 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+        expect(revokeSpy).toHaveBeenCalledWith('runner-1');
       });
-
-      fireEvent.click(screen.getByTestId('close-aal2-modal-btn'));
-      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+      expect(screen.queryByText(/Failed to revoke remote runner/i)).toBeNull();
     });
   });
 

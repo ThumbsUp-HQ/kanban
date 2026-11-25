@@ -851,7 +851,11 @@
 
   .auth-card-right {
     width: 100%;
-    justify-content: space-between;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px 12px;
     margin-top: var(--space-2, 8px);
     padding-top: var(--space-2, 8px);
     border-top: 1px solid var(--border-subtle);

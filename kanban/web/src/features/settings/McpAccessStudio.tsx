@@ -20,12 +20,9 @@ import {
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
 import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
 import { WorkloadFederationSection } from './McpUnifiedStudio';
-import { SecondFactorStep } from '../auth/SecondFactorStep';
-import type { MfaMethod } from '../auth/authApi';
-import { ApiProblem } from '../../api/problem';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { useSystemStatus } from '../../app/useSystemStatus';
-import { apiFetch } from '../../api/client';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
@@ -422,13 +419,6 @@ export function McpAccessStudio({
   const [confirmRevokeKeyId, setConfirmRevokeKeyId] = useState<string | null>(null);
   const [confirmRevokeAppId, setConfirmRevokeAppId] = useState<string | null>(null);
 
-  // Inline AAL2 challenge state
-  const [aal2Challenge, setAal2Challenge] = useState<{
-    challengeId: string;
-    methods: MfaMethod[];
-  } | null>(null);
-  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
-
   const loadData = useCallback(async (): Promise<void> => {
     if (isDenied) {
       setLoading(false);
@@ -457,16 +447,8 @@ export function McpAccessStudio({
         setConnectedApps(fetchedApps);
       }
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-        const data = err.data;
-        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-        const methods = Array.isArray(data.methods)
-          ? (data.methods as MfaMethod[])
-          : (['webauthn', 'totp'] as MfaMethod[]);
-        setAal2Challenge({ challengeId, methods });
-        setPendingAction(() => async () => {
-          await loadData();
-        });
+      if (isAal2StepUpCancelled(err)) {
+        return;
       }
     } finally {
       setLoading(false);
@@ -474,6 +456,7 @@ export function McpAccessStudio({
   }, [activeView, activeScope, effectiveProjectKey, tier, isDenied]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
   }, [loadData]);
 
@@ -612,16 +595,7 @@ export function McpAccessStudio({
     try {
       await mintAction();
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-        const data = err.data;
-        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-        const methods = Array.isArray(data.methods)
-          ? (data.methods as MfaMethod[])
-          : (['webauthn', 'totp'] as MfaMethod[]);
-        setAal2Challenge({ challengeId, methods });
-        setPendingAction(() => async () => {
-          await mintAction();
-        });
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
       if (err instanceof Error) {
@@ -646,16 +620,7 @@ export function McpAccessStudio({
     try {
       await revokeAction();
     } catch (err: unknown) {
-      if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-        const data = err.data;
-        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-        const methods = Array.isArray(data.methods)
-          ? (data.methods as MfaMethod[])
-          : (['webauthn', 'totp'] as MfaMethod[]);
-        setAal2Challenge({ challengeId, methods });
-        setPendingAction(() => async () => {
-          await revokeAction();
-        });
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
       if (err instanceof Error) {
@@ -672,19 +637,13 @@ export function McpAccessStudio({
     try {
       await revokeConnectedApp(grantId);
       setConnectedApps((prev) => prev.filter((app) => app.id !== grantId));
-    } catch {
+    } catch (err: unknown) {
+      if (isAal2StepUpCancelled(err)) {
+        return;
+      }
       // Handle error
     } finally {
       setConfirmRevokeAppId(null);
-    }
-  };
-
-  const handleAal2Success = async (): Promise<void> => {
-    const action = pendingAction;
-    setAal2Challenge(null);
-    setPendingAction(null);
-    if (action) {
-      await action();
     }
   };
 
@@ -1641,54 +1600,6 @@ export function McpAccessStudio({
         />
       )}
 
-      {/* Inline AAL2 Step-Up Modal */}
-      {aal2Challenge && (
-        <div className="kb-snippet-modal-backdrop" data-testid="aal2-modal-backdrop">
-          <div
-            className="kb-snippet-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="aal2-modal-title"
-            data-testid="aal2-modal-card"
-          >
-            <div className="kb-snippet-modal-header">
-              <h2 id="aal2-modal-title" className="kb-snippet-modal-title">
-                Admin Verification Required (AAL2)
-              </h2>
-              <button
-                type="button"
-                className="kb-snippet-modal-close-btn"
-                onClick={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              >
-                x
-              </button>
-            </div>
-            <div className="kb-mcp-studio-section">
-              <SecondFactorStep
-                challengeId={aal2Challenge.challengeId}
-                methods={aal2Challenge.methods}
-                onSuccess={() => {
-                  void handleAal2Success();
-                }}
-                onError={() => {
-                  // Handled inside SecondFactorStep
-                }}
-                onSessionExpired={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-                onCancel={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
       {showConnectOAuthModal && (
         <ConnectOAuthAppModal
           user={propUser ?? fetchedUser}

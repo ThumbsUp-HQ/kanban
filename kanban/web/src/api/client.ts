@@ -27,6 +27,13 @@ export class Aal2StepUpCancelledError extends Error {
   }
 }
 
+export function isAal2StepUpCancelled(err: unknown): boolean {
+  return (
+    err instanceof Aal2StepUpCancelledError ||
+    (err instanceof Error && err.name === 'Aal2StepUpCancelledError')
+  );
+}
+
 export type Aal2StepUpHandler = (challenge: {
   challengeId?: string;
   methods?: string[];
@@ -254,6 +261,12 @@ async function executeRequest(
   }
 
   let response = await fetch(resolved, init);
+  const initialExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+  if (initialExpiresAt && typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: initialExpiresAt } })
+    );
+  }
   let contentType = response.headers.get('content-type') ?? '';
 
   if (!response.ok) {
@@ -308,6 +321,12 @@ async function executeRequest(
       init.signal = timeoutSignal(opts.signal);
 
       response = await fetch(resolved, init);
+      const replayExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+      if (replayExpiresAt && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: replayExpiresAt } })
+        );
+      }
       contentType = response.headers.get('content-type') ?? '';
 
       if (!response.ok) {

@@ -677,6 +677,18 @@ async function main() {
       const sudoPill = page.locator('[data-testid="admin-sudo-pill"]');
       await sudoPill.waitFor({ state: 'visible', timeout: 5000 });
 
+      await page.evaluate(() => {
+        document.querySelectorAll('.realtime-status-chip').forEach((el) => {
+          el.style.display = 'none';
+        });
+      });
+
+      // Scroll so both the sudo pill and the AuthCardRow are visible
+      const authCard = page.locator('.auth-card-row').first();
+      if (await authCard.count()) {
+        await authCard.scrollIntoViewIfNeeded();
+      }
+
       await page.waitForTimeout(300);
       await page.screenshot({
         path: path.join(OUT_DIR, '05-mobile-portrait-390x844-light-admin-sudo-pill-locked.png'),

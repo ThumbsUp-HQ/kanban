@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiProblem } from '../../api/problem';
 import { resolveErrorHelp } from './errorHelpCatalog';
 import { ErrorHelpHint, GlobalErrorAlertEnhancer } from './ErrorHelpHint';
+import { WebSudoModalHost } from './WebSudoModalHost';
 import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 
 vi.mock('../../features/auth/SecondFactorStep', () => ({
@@ -191,10 +192,15 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     document.body.innerHTML = '';
   });
 
-  it('opens global SecondFactorStep modal on kb:open-aal2-stepup event and closes on cancel', async () => {
-    render(<GlobalErrorAlertEnhancer />);
+  it('opens authoritative WebSudoModalHost modal on kb:open-aal2-stepup event and closes on cancel', async () => {
+    render(
+      <>
+        <GlobalErrorAlertEnhancer />
+        <WebSudoModalHost />
+      </>
+    );
 
-    expect(screen.queryByTestId('global-aal2-stepup-modal')).toBeNull();
+    expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
 
     act(() => {
       window.dispatchEvent(
@@ -205,7 +211,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('global-aal2-stepup-modal')).toBeDefined();
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
     });
 
     const cancelBtn = screen.getByTestId('mock-stepup-cancel');
@@ -214,7 +220,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId('global-aal2-stepup-modal')).toBeNull();
+      expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
     });
   });
 
@@ -222,7 +228,12 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     const successHandler = vi.fn();
     window.addEventListener('kb:aal2-stepup-success', successHandler);
 
-    render(<GlobalErrorAlertEnhancer />);
+    render(
+      <>
+        <GlobalErrorAlertEnhancer />
+        <WebSudoModalHost />
+      </>
+    );
 
     act(() => {
       window.dispatchEvent(
@@ -233,7 +244,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('global-aal2-stepup-modal')).toBeDefined();
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
     });
 
     const successBtn = screen.getByTestId('mock-stepup-success');
@@ -242,7 +253,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByTestId('global-aal2-stepup-modal')).toBeNull();
+      expect(screen.queryByTestId('websudo-stepup-modal')).toBeNull();
     });
 
     expect(successHandler).toHaveBeenCalledTimes(1);
@@ -265,6 +276,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     render(
       <QueryClientProvider client={qc}>
         <GlobalErrorAlertEnhancer />
+        <WebSudoModalHost />
       </QueryClientProvider>,
     );
 
@@ -282,7 +294,7 @@ describe('GlobalErrorAlertEnhancer (KAN-393)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('global-aal2-stepup-modal')).toBeDefined();
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
     });
 
     fireEvent.click(screen.getByTestId('mock-stepup-error'));

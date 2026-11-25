@@ -5,12 +5,9 @@ import React, { useState, useMemo, type JSX } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
-import { apiFetch } from '../../api/client';
-import { ApiProblem, isAal2StepUpCode } from '../../api/problem';
+import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
-import { SecondFactorStep } from '../auth/SecondFactorStep';
 import { useAuth } from '../auth/AuthContext';
-import type { MfaMethod } from '../auth/authApi';
 import { TransitionRuleCard } from './TransitionRuleCard';
 import { AttachHookDialog } from './AttachHookDialog';
 import { DryRunDrawer } from './DryRunDrawer';
@@ -38,11 +35,6 @@ export interface WorkflowStudioPageProps {
   projectKeyOverride?: string;
   workspaceSlugOverride?: string;
   isAdmin?: boolean;
-}
-
-interface PendingMutation {
-  type: string;
-  execute: () => Promise<void>;
 }
 
 export function WorkflowStudioPage({
@@ -120,12 +112,6 @@ export function WorkflowStudioPage({
     to_state: string;
   } | null>(null);
 
-  // AAL2 Step-Up state
-  const [aal2Challenge, setAal2Challenge] = useState<{
-    challengeId: string;
-    methods: MfaMethod[];
-  } | null>(null);
-  const [pendingMutation, setPendingMutation] = useState<PendingMutation | null>(null);
 
   // Auxiliary data queries
   const statesQuery = useQuery({
@@ -160,30 +146,6 @@ export function WorkflowStudioPage({
     return <NotFoundView />;
   }
 
-  // Handle AAL2 403 response intercept
-  const handleAal2Intercept = (err: unknown, mutation: PendingMutation): boolean => {
-    if (err instanceof ApiProblem && isAal2StepUpCode(err.code)) {
-      setPendingMutation(mutation);
-      const data = err.data;
-      const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-      const methods = Array.isArray(data.methods)
-        ? (data.methods as MfaMethod[])
-        : (['webauthn', 'totp'] as MfaMethod[]);
-      setAal2Challenge({ challengeId, methods });
-      return true;
-    }
-    return false;
-  };
-
-  const handleAal2Success = async () => {
-    const mutation = pendingMutation;
-    setAal2Challenge(null);
-    setPendingMutation(null);
-    if (mutation) {
-      await mutation.execute();
-    }
-  };
-
   // Reorder hooks handler
   const handleReorder = async (
     transition: { from_state: string | null; to_state: string },
@@ -202,7 +164,7 @@ export function WorkflowStudioPage({
     try {
       await action();
     } catch (err: unknown) {
-      if (handleAal2Intercept(err, { type: 'reorder', execute: action })) {
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
       throw err;
@@ -223,7 +185,7 @@ export function WorkflowStudioPage({
     try {
       await action();
     } catch (err: unknown) {
-      if (handleAal2Intercept(err, { type: isEnabled ? 'enable' : 'disable', execute: action })) {
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
     }
@@ -239,7 +201,7 @@ export function WorkflowStudioPage({
     try {
       await action();
     } catch (err: unknown) {
-      if (handleAal2Intercept(err, { type: 'delete', execute: action })) {
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
     }
@@ -266,7 +228,7 @@ export function WorkflowStudioPage({
     try {
       await action();
     } catch (err: unknown) {
-      if (handleAal2Intercept(err, { type: editingHook ? 'update' : 'create', execute: action })) {
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
       throw err;
@@ -350,7 +312,6 @@ export function WorkflowStudioPage({
       <GitRepoBindingsSection
         projectKey={projectKey}
         isUserAdmin={isUserAdmin}
-        onAal2Intercept={handleAal2Intercept}
       />
 
       {/* Attach / Edit Hook Dialog */}
@@ -382,43 +343,7 @@ export function WorkflowStudioPage({
         />
       )}
 
-      {/* AAL2 Step-Up Modal */}
-      {aal2Challenge && (
-        <div className="workflow-modal-backdrop" role="presentation">
-          <div
-            className="workflow-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="aal2-stepup-title"
-          >
-            <div className="workflow-dialog-header">
-              <h2 id="aal2-stepup-title" className="workflow-dialog-title">
-                Admin Verification Required (AAL2)
-              </h2>
-            </div>
-            <div className="workflow-dialog-body">
-              <SecondFactorStep
-                challengeId={aal2Challenge.challengeId}
-                methods={aal2Challenge.methods}
-                onSuccess={() => {
-                  void handleAal2Success();
-                }}
-                onError={() => {
-                  // Handled in SecondFactorStep
-                }}
-                onSessionExpired={() => {
-                  setAal2Challenge(null);
-                  setPendingMutation(null);
-                }}
-                onCancel={() => {
-                  setAal2Challenge(null);
-                  setPendingMutation(null);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

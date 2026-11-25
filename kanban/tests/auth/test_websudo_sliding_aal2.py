@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING, Annotated, Final
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -28,11 +29,13 @@ from kanban.api.deps import PrincipalContext  # noqa: TC001  # Required at runti
 from kanban.api.problems import ProblemException, problem_exception_handler
 from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1 import build_v1_router
+from kanban.api.v1.schemas.custom_fields import CustomFieldApprovalApproveRequest
 from kanban.auth.mfa.policy import require_aal2, require_admin_aal2
 from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
 from kanban.auth.sessions.csrf import CsrfMiddleware
 from kanban.auth.sessions.resolver import SessionCookieResolver
 from kanban.auth.sessions.service import IssuedSession, SessionService
+from kanban.custom_fields.approvals import CustomFieldApprovalService
 from kanban.security.keys import KeyMaterial
 from kanban.security.ratelimit.pg import PgRateLimiter
 
@@ -182,16 +185,16 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
                 workspace_id=ws_id,
             )
 
-        cookies = {
+        client.cookies.clear()
+        client.cookies.update({
             SESSION_COOKIE_NAME: sess_issued.cookie_val,
             "kb_csrf": sess_issued.csrf_token,
-        }
+        })
         csrf_headers = {"X-CSRF-Token": sess_issued.csrf_token}
 
         # 2. Touch while AAL1 -> returns 200 with aal2_active=False without throwing 403
         touch_resp = await client.post(
             "/api/v1/auth/aal2/touch",
-            cookies=cookies,
             headers=csrf_headers,
         )
         assert touch_resp.status_code == 200
@@ -200,7 +203,7 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         assert touch_data["aal2_expires_at"] is None
 
         # 3. Privileged route fails with 403 AAL2_REQUIRED
-        priv_resp = await client.get("/api/v1/admin/privileged/action", cookies=cookies)
+        priv_resp = await client.get("/api/v1/admin/privileged/action")
         assert priv_resp.status_code == 403
         assert priv_resp.json()["code"] == "AAL2_REQUIRED"
 
@@ -212,14 +215,15 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
             )
             assert elevated.aal_level == 2
 
-        cookies = {
+        client.cookies.clear()
+        client.cookies.update({
             SESSION_COOKIE_NAME: elevated.cookie_val,
             "kb_csrf": elevated.csrf_token,
-        }
+        })
         csrf_headers = {"X-CSRF-Token": elevated.csrf_token}
 
         # 5. Privileged route now succeeds and emits X-KB-AAL2-Expires-At header
-        priv_resp2 = await client.get("/api/v1/admin/privileged/action", cookies=cookies)
+        priv_resp2 = await client.get("/api/v1/admin/privileged/action")
         assert priv_resp2.status_code == 200
         assert priv_resp2.json()["status"] == "privileged_ok"
         assert "x-kb-aal2-expires-at" in priv_resp2.headers
@@ -227,7 +231,6 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         # 6. Touch while AAL2 -> returns 200 with aal2_active=True and aal2_expires_at string
         touch_resp2 = await client.post(
             "/api/v1/auth/aal2/touch",
-            cookies=cookies,
             headers=csrf_headers,
         )
         assert touch_resp2.status_code == 200
@@ -236,14 +239,14 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         assert touch_data2["aal2_expires_at"] is not None
 
         # 7. GET /api/v1/auth/session reports aal2_active and aal2_expires_at
-        sess_info = await client.get("/api/v1/auth/session", cookies=cookies)
+        sess_info = await client.get("/api/v1/auth/session")
         assert sess_info.status_code == 200
         info_data = sess_info.json()
         assert info_data["aal2_active"] is True
         assert info_data["aal2_expires_at"] is not None
 
         # 8. GET /api/v1/auth/me reports aal2_active and aal2_expires_at
-        me_info = await client.get("/api/v1/auth/me", cookies=cookies)
+        me_info = await client.get("/api/v1/auth/me")
         assert me_info.status_code == 200
         me_data = me_info.json()
         assert me_data["aal2_active"] is True
@@ -252,7 +255,6 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         # 9. Irreversible action succeeds within initial verification window
         irrev_resp = await client.delete(
             "/api/v1/admin/irreversible/action",
-            cookies=cookies,
             headers=csrf_headers,
         )
         assert irrev_resp.status_code == 200
@@ -260,7 +262,6 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         # 10. Drop AAL2 via POST /api/v1/auth/aal2/drop
         drop_resp = await client.post(
             "/api/v1/auth/aal2/drop",
-            cookies=cookies,
             headers=csrf_headers,
         )
         assert drop_resp.status_code == 200
@@ -269,13 +270,13 @@ async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
         assert drop_data["aal2_active"] is False
 
         # 11. Subsequent privileged call immediately fails with 403 AAL2_REQUIRED
-        priv_resp3 = await client.get("/api/v1/admin/privileged/action", cookies=cookies)
+        priv_resp3 = await client.get("/api/v1/admin/privileged/action")
         assert priv_resp3.status_code == 403
         assert priv_resp3.json()["code"] == "AAL2_REQUIRED"
 
 
 @pytest.mark.asyncio
-async def test_websudo_idle_expiry_and_absolute_cap(
+async def test_websudo_idle_expiry_and_absolute_cap(  # noqa: PLR0915
     pg_worker_db: AsyncEngine,
     key_material: KeyMaterial,
 ) -> None:
@@ -356,7 +357,9 @@ async def test_websudo_idle_expiry_and_absolute_cap(
                 {"id": sess_a.session_id},
             )
 
-        idle_resp = await client.get("/api/v1/admin/privileged/check", cookies=cookies_a)
+        client.cookies.clear()
+        client.cookies.update(cookies_a)
+        idle_resp = await client.get("/api/v1/admin/privileged/check")
         assert idle_resp.status_code == 403
         assert idle_resp.json()["code"] == "AAL2_STALE"
 
@@ -373,7 +376,9 @@ async def test_websudo_idle_expiry_and_absolute_cap(
                 {"id": sess_b.session_id},
             )
 
-        cap_resp = await client.get("/api/v1/admin/privileged/check", cookies=cookies_b)
+        client.cookies.clear()
+        client.cookies.update(cookies_b)
+        cap_resp = await client.get("/api/v1/admin/privileged/check")
         assert cap_resp.status_code == 403
         assert cap_resp.json()["code"] == "AAL2_STALE"
 
@@ -391,13 +396,209 @@ async def test_websudo_idle_expiry_and_absolute_cap(
                 {"id": sess_c.session_id},
             )
 
-        priv_ok = await client.get("/api/v1/admin/privileged/check", cookies=cookies_c)
+        client.cookies.clear()
+        client.cookies.update(cookies_c)
+        priv_ok = await client.get("/api/v1/admin/privileged/check")
         assert priv_ok.status_code == 200
 
         irrev_stale = await client.delete(
             "/api/v1/admin/irreversible/check",
-            cookies=cookies_c,
             headers=headers_c,
         )
         assert irrev_stale.status_code == 403
         assert irrev_stale.json()["code"] == "AAL2_STALE"
+
+
+@pytest.mark.asyncio
+async def test_websudo_session_and_me_do_not_advance_sliding_window(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Validate session and me endpoints do not advance aal2_last_active_at."""
+    factory = RLSSessionFactory(pg_worker_db)
+    session_service = SessionService(key_material.session_hmac_key)
+    rate_limiter = PgRateLimiter(pg_worker_db)
+
+    ws_id, admin_id = await _provision_admin_user(factory)
+
+    app = FastAPI()
+    app.state.session_service = session_service
+    app.state.session_factory = factory
+    app.state.key_material = key_material
+    app.state.rate_limiter = rate_limiter
+
+    resolver = SessionCookieResolver(session_service, factory)
+    app.state.principal_resolver = resolver
+    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
+
+    v1 = build_v1_router()
+    app.include_router(v1, prefix="/api/v1")
+    app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
+    app.add_middleware(RequestIdMiddleware)
+
+    anon_ctx = RLSContext(
+        principal_id=uuid.UUID(int=0),
+        workspace_id=uuid.UUID(int=0),
+        token_scopes=("auth",),
+        aal_level=1,
+    )
+
+    async with factory.session(anon_ctx) as session:
+        init_sess = await session_service.create_after_login(
+            session,
+            principal_id=admin_id,
+            workspace_id=ws_id,
+        )
+        elev = await session_service.elevate_aal(
+            session,
+            old_session_id=init_sess.session_id,
+        )
+        # Set aal2_last_active_at to 120s ago
+        await session.execute(
+            text(
+                "UPDATE sessions SET aal2_last_active_at = now() - interval '120 seconds' "
+                "WHERE id = :id"
+            ),
+            {"id": elev.session_id},
+        )
+        res = await session.execute(
+            text("SELECT aal2_last_active_at FROM sessions WHERE id = :id"),
+            {"id": elev.session_id},
+        )
+        initial_active_at = res.scalar_one()
+
+    cookies = {
+        SESSION_COOKIE_NAME: elev.cookie_val,
+        "kb_csrf": elev.csrf_token,
+    }
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        client.cookies.clear()
+        client.cookies.update(cookies)
+        # 1. GET /api/v1/auth/session
+        r1 = await client.get("/api/v1/auth/session")
+        assert r1.status_code == 200
+        assert r1.json()["aal2_active"] is True
+
+        # 2. GET /api/v1/auth/me
+        r2 = await client.get("/api/v1/auth/me")
+        assert r2.status_code == 200
+        assert r2.json()["aal2_active"] is True
+
+    # 3. Verify in DB that aal2_last_active_at did NOT change
+    async with factory.session(anon_ctx) as session:
+        res = await session.execute(
+            text("SELECT aal2_last_active_at FROM sessions WHERE id = :id"),
+            {"id": elev.session_id},
+        )
+        after_active_at = res.scalar_one()
+        assert after_active_at == initial_active_at
+
+
+@pytest.mark.asyncio
+async def test_websudo_db_write_throttling_30s(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Validate 30s write throttle (<= 1 write per 30s) in kb_auth.session_touch_aal2."""
+    factory = RLSSessionFactory(pg_worker_db)
+    session_service = SessionService(key_material.session_hmac_key)
+
+    ws_id, admin_id = await _provision_admin_user(factory)
+
+    anon_ctx = RLSContext(
+        principal_id=uuid.UUID(int=0),
+        workspace_id=uuid.UUID(int=0),
+        token_scopes=("auth",),
+        aal_level=1,
+    )
+
+    async with factory.session(anon_ctx) as session:
+        init_sess = await session_service.create_after_login(
+            session,
+            principal_id=admin_id,
+            workspace_id=ws_id,
+        )
+        elev = await session_service.elevate_aal(
+            session,
+            old_session_id=init_sess.session_id,
+        )
+
+        # Set aal2_last_active_at to 10 seconds ago (< 30s)
+        await session.execute(
+            text(
+                "UPDATE sessions SET aal2_last_active_at = now() - interval '10 seconds' "
+                "WHERE id = :id"
+            ),
+            {"id": elev.session_id},
+        )
+        res = await session.execute(
+            text("SELECT aal2_last_active_at FROM sessions WHERE id = :id"),
+            {"id": elev.session_id},
+        )
+        active_at_10s = res.scalar_one()
+
+        # Call session_touch_aal2 without force -> throttled, no write
+        t1 = await session.execute(
+            text("SELECT * FROM kb_auth.session_touch_aal2(:id, 900, 14400, FALSE)"),
+            {"id": elev.session_id},
+        )
+        row1 = t1.mappings().one()
+        assert row1["aal2_active"] is True
+
+        res2 = await session.execute(
+            text("SELECT aal2_last_active_at FROM sessions WHERE id = :id"),
+            {"id": elev.session_id},
+        )
+        assert res2.scalar_one() == active_at_10s
+
+        # Now set aal2_last_active_at to 35 seconds ago (> 30s)
+        await session.execute(
+            text(
+                "UPDATE sessions SET aal2_last_active_at = now() - interval '35 seconds' "
+                "WHERE id = :id"
+            ),
+            {"id": elev.session_id},
+        )
+
+        # Call session_touch_aal2 without force -> unthrottled, updates timestamp
+        t2 = await session.execute(
+            text("SELECT * FROM kb_auth.session_touch_aal2(:id, 900, 14400, FALSE)"),
+            {"id": elev.session_id},
+        )
+        row2 = t2.mappings().one()
+        assert row2["aal2_active"] is True
+
+        res3 = await session.execute(
+            text("SELECT aal2_last_active_at FROM sessions WHERE id = :id"),
+            {"id": elev.session_id},
+        )
+        assert res3.scalar_one() > active_at_10s
+
+
+@pytest.mark.asyncio
+async def test_approvals_strictly_rejects_none_aal2_verified_at() -> None:
+    """Validate approvals rejects none aal2_verified_at with 403."""
+    mock_session = AsyncMock()
+
+    caller = MagicMock()
+    caller.aal_level = 2
+    caller.aal2_verified_at = None
+
+    payload = CustomFieldApprovalApproveRequest(
+        manifest_sha256="00" * 32,
+        sp_warning_acknowledged=True,
+    )
+
+    with pytest.raises(ProblemException) as exc_info:
+        await CustomFieldApprovalService.approve(
+            session=mock_session,
+            caller=caller,
+            approval_id=uuid.uuid4(),
+            payload=payload,
+        )
+
+    assert exc_info.value.status == 403
+    assert exc_info.value.code == "AAL2_REQUIRED"
+    assert "AAL2 verification is required" in (exc_info.value.detail or "")

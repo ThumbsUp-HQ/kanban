@@ -671,14 +671,23 @@ async def test_08_approval_api_edge_cases_and_coverage(
     )
     assert resp_bad_appr.status_code == 404
 
-    # 4. Caller with aal2_verified_at=None succeeds (fresh AAL2 session without recorded timestamp)
+    # 4. Caller with aal2_verified_at=None is strictly rejected with 403 AAL2_REQUIRED
     client_no_time = _as_admin_aal2(api_env, admin, aal2_verified_at=None, set_timestamp=False)
     resp_appr = await client_no_time.post(
         f"/api/v1/custom-field-approvals/{appr_id}/approve",
         json={"manifest_sha256": m_sha, "sp_warning_acknowledged": True},
     )
-    assert resp_appr.status_code == 200
-    assert resp_appr.json()["status"] == "APPROVED"
+    assert resp_appr.status_code == 403
+    assert resp_appr.json()["code"] == "AAL2_REQUIRED"
+
+    # 5. Caller with fresh aal2_verified_at succeeds
+    client_fresh = _as_admin_aal2(api_env, admin, aal2_verified_at=datetime.now(UTC))
+    resp_appr_ok = await client_fresh.post(
+        f"/api/v1/custom-field-approvals/{appr_id}/approve",
+        json={"manifest_sha256": m_sha, "sp_warning_acknowledged": True},
+    )
+    assert resp_appr_ok.status_code == 200
+    assert resp_appr_ok.json()["status"] == "APPROVED"
 
     # 5. Attempting to approve an already approved approval -> 409 APPROVAL_ALREADY_RESOLVED
     resp_dup = await client.post(

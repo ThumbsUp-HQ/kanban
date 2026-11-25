@@ -8,8 +8,7 @@ import {
   type RemoteRunnerResponse,
 } from './runnersAdminApi';
 import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
-import { SecondFactorStep } from '../auth/SecondFactorStep';
-import type { MfaMethod } from '../auth/authApi';
+import { isAal2StepUpCancelled } from '../../api/client';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
@@ -25,13 +24,6 @@ export function RunnerStudioPage(): JSX.Element {
   const [isMintModalOpen, setIsMintModalOpen] = useState<boolean>(false);
   const [runnerToRevoke, setRunnerToRevoke] = useState<RemoteRunnerResponse | null>(null);
   const [isRevoking, setIsRevoking] = useState<boolean>(false);
-
-  // Inline AAL2 challenge state
-  const [aal2Challenge, setAal2Challenge] = useState<{
-    challengeId: string;
-    methods: MfaMethod[];
-  } | null>(null);
-  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
   const [reloadCounter, setReloadCounter] = useState<number>(0);
 
@@ -75,34 +67,11 @@ export function RunnerStudioPage(): JSX.Element {
       refreshRunners();
     } catch (err: unknown) {
       setIsRevoking(false);
-      if (
-        typeof err === 'object' &&
-        err !== null &&
-        'code' in err &&
-        (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')
-      ) {
-        const data = (err as { data?: { challenge_id?: string; methods?: MfaMethod[] } }).data ?? {};
-        const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
-        const methods = Array.isArray(data.methods)
-          ? data.methods
-          : (['webauthn', 'totp'] as MfaMethod[]);
-        setAal2Challenge({ challengeId, methods });
-        setPendingAction(() => async () => {
-          await revokeRemoteRunner(runnerId);
-          setRunnerToRevoke(null);
-          refreshRunners();
-        });
+      if (isAal2StepUpCancelled(err)) {
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to revoke remote runner');
     }
-  };
-
-  const handleAal2Success = async (): Promise<void> => {
-    const action = pendingAction;
-    setAal2Challenge(null);
-    setPendingAction(null);
-    await action?.();
   };
 
   return (
@@ -359,54 +328,7 @@ export function RunnerStudioPage(): JSX.Element {
         </div>
       )}
 
-      {/* Inline AAL2 Step-Up Modal */}
-      {aal2Challenge && (
-        <div className="kb-modal-backdrop" data-testid="aal2-modal-backdrop">
-          <div
-            className="kb-modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="runner-aal2-modal-title"
-            data-testid="aal2-modal-card"
-          >
-            <div className="kb-modal-header">
-              <h2 id="runner-aal2-modal-title">Admin Verification Required (AAL2)</h2>
-              <button
-                type="button"
-                className="kb-btn kb-btn-secondary"
-                onClick={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-                aria-label="Close dialog"
-                data-testid="close-aal2-modal-btn"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="kb-runner-studio-section" style={{ padding: '16px 0' }}>
-              <SecondFactorStep
-                challengeId={aal2Challenge.challengeId}
-                methods={aal2Challenge.methods}
-                onSuccess={() => {
-                  void handleAal2Success();
-                }}
-                onError={() => {
-                  // Handled inside SecondFactorStep
-                }}
-                onSessionExpired={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-                onCancel={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
     </section>
   );
 }

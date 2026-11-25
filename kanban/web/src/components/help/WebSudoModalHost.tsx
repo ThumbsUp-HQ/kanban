@@ -45,27 +45,39 @@ export function WebSudoModalHost(): JSX.Element | null {
   const [challengeId, setChallengeId] = useState('aal2-stepup');
   const [methods, setMethods] = useState<MfaMethod[]>(['webauthn', 'totp']);
   const resolverRef = React.useRef<((success: boolean) => void) | null>(null);
+  const modalRef = React.useRef<HTMLDivElement | null>(null);
 
   const queryClient = useContext(QueryClientContext) ?? null;
 
   useEffect(() => {
-    if (typeof registerAal2StepUpHandler === 'function') {
-      registerAal2StepUpHandler((challenge) => {
-        return new Promise<boolean>((resolve) => {
-          setChallengeId(challenge.challengeId ?? 'aal2-stepup');
-          if (challenge.methods && Array.isArray(challenge.methods)) {
-            setMethods(challenge.methods as MfaMethod[]);
-          }
-          resolverRef.current = resolve;
-          setIsOpen(true);
-        });
+    registerAal2StepUpHandler((challenge) => {
+      return new Promise<boolean>((resolve) => {
+        setChallengeId(challenge.challengeId ?? 'aal2-stepup');
+        setMethods(challenge.methods as MfaMethod[]);
+        resolverRef.current = resolve;
+        setIsOpen(true);
       });
-    }
+    });
+
+    const handleOpenEvent = (e: Event): void => {
+      const custom = e as CustomEvent<{ challengeId?: string; methods?: MfaMethod[] } | undefined>;
+      const detail = custom.detail;
+      if (detail) {
+        if (detail.challengeId) {
+          setChallengeId(detail.challengeId);
+        }
+        if (detail.methods) {
+          setMethods(detail.methods);
+        }
+      }
+      setIsOpen(true);
+    };
+
+    window.addEventListener('kb:open-aal2-stepup', handleOpenEvent);
 
     return () => {
-      if (typeof registerAal2StepUpHandler === 'function') {
-        registerAal2StepUpHandler(null);
-      }
+      registerAal2StepUpHandler(null);
+      window.removeEventListener('kb:open-aal2-stepup', handleOpenEvent);
     };
   }, []);
 
@@ -78,9 +90,7 @@ export function WebSudoModalHost(): JSX.Element | null {
     if (queryClient) {
       void queryClient.invalidateQueries();
     }
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
-    }
+    window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
   };
 
   const handleCancel = (): void => {
@@ -97,10 +107,55 @@ export function WebSudoModalHost(): JSX.Element | null {
       resolverRef.current(false);
       resolverRef.current = null;
     }
-    if (typeof window !== 'undefined') {
-      window.location.assign('/login');
-    }
+    window.location.assign('/login');
   };
+
+  // Keyboard navigation: Escape key dismissal and Tab focus trapping (KAN-404)
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    // Auto-focus first interactive element
+    modalRef.current
+      ?.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      ?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancel();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const root = modalRef.current!;
+        const focusables = Array.from(
+          root.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        );
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;
@@ -108,11 +163,13 @@ export function WebSudoModalHost(): JSX.Element | null {
 
   return (
     <div
+      ref={modalRef}
       className="kb-websudo-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="websudo-stepup-title"
       data-testid="websudo-stepup-modal"
+      tabIndex={-1}
     >
       <div className="kb-websudo-modal-container">
         <header className="kb-websudo-modal-header">
@@ -129,14 +186,13 @@ export function WebSudoModalHost(): JSX.Element | null {
           methods={methods}
           onSuccess={handleSuccess}
           onError={(err) => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(
-                new CustomEvent('kb:aal2-stepup-error', { detail: err }),
-              );
-            }
+            window.dispatchEvent(
+              new CustomEvent('kb:aal2-stepup-error', { detail: err }),
+            );
           }}
           onSessionExpired={handleSessionExpired}
           onCancel={handleCancel}
+          cancelButtonLabel="Cancel"
         />
       </div>
     </div>

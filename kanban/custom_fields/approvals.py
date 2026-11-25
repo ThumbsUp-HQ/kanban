@@ -307,15 +307,21 @@ class CustomFieldApprovalService:
                 title="AAL2 Authentication Required",
                 detail="Approving escalation requires AAL2 authentication",
             )
-        if caller.aal2_verified_at is not None:
-            elapsed = (datetime.now(UTC) - caller.aal2_verified_at).total_seconds()
-            if elapsed > AAL2_FRESHNESS_SECONDS:
-                raise ProblemException(
-                    code="AAL2_REQUIRED",
-                    status=403,
-                    title="AAL2 Authentication Required",
-                    detail="AAL2 verification has expired (>900s). Re-authentication required.",
-                )
+        if caller.aal2_verified_at is None:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Authentication Required",
+                detail="AAL2 verification is required.",
+            )
+        elapsed = (datetime.now(UTC) - caller.aal2_verified_at).total_seconds()
+        if elapsed > AAL2_FRESHNESS_SECONDS:
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Authentication Required",
+                detail="AAL2 verification has expired (>900s). Re-authentication required.",
+            )
 
         row = await session.get(CustomFieldApproval, approval_id)
         if row is None:

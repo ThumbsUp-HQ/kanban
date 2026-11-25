@@ -3,11 +3,12 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as clientModule from '../../../api/client';
 import { AdminStudioSubnav } from '../AdminStudioSubnav';
 import { LinkAuditorStudio } from '../LinkAuditorStudio';
 import { AdminDiagnosticsStudio } from '../AdminDiagnosticsStudio';
@@ -281,6 +282,56 @@ describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
       } finally {
         (window as unknown as { location: unknown }).location = origLocation;
       }
+    });
+
+    it('updates admin-sudo-pill live on kb:aal2-stepup-success and kb:aal2-expires-at events', async () => {
+      let sessionState = {
+        authenticated: true,
+        aal2_active: false,
+        aal2_expires_at: null as string | null,
+      };
+
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+        if ((path as string) === '/api/v1/auth/session') {
+          return Promise.resolve(sessionState);
+        }
+        return Promise.resolve(undefined);
+      });
+
+      render(<AdminStudioSubnav activeTab="auth" isServerAdmin={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-sudo-pill').textContent).toContain('Sudo Locked');
+      });
+
+      // Dispatch kb:aal2-expires-at event
+      const futureExpiry = new Date(Date.now() + 900_000).toISOString();
+      sessionState = {
+        authenticated: true,
+        aal2_active: true,
+        aal2_expires_at: futureExpiry,
+      };
+
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent('kb:aal2-expires-at', {
+            detail: { expiresAt: futureExpiry },
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-sudo-pill').textContent).toMatch(/Sudo (15:00|14:59)/);
+      });
+
+      // Dispatch kb:aal2-stepup-success event
+      act(() => {
+        window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-sudo-drop-btn')).toBeDefined();
+      });
     });
 
     it('enforces touch scrolling rules in AdminStudioSubnav.css and AdminDiagnosticsStudio.css', () => {

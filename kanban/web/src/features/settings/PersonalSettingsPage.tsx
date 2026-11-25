@@ -30,7 +30,7 @@ import {
   type ExternalIdentityItem,
 } from './personalSettingsApi';
 import { fetchAuthCards, type AuthCardsResponse, type AuthCard } from '../auth/authApi';
-import { SecondFactorStep } from '../auth/SecondFactorStep';
+import { isAal2StepUpCancelled } from '../../api/client';
 import {
   isWebAuthnSupported,
   prepareRequestOptions,
@@ -39,7 +39,6 @@ import {
 import { PasskeyEnrollModal } from './PasskeyEnrollModal';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ApiProblem } from '../../api/problem';
-import type { MfaMethod } from '../auth/authApi';
 import { copyToClipboard } from '../../utils/clipboard';
 import { qk } from '../../api/queryKeys';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
@@ -123,12 +122,6 @@ export function PersonalSettingsPage(): JSX.Element {
   const isSecure = typeof window !== 'undefined' && window.isSecureContext;
   const isSupported = isWebAuthnSupported();
 
-  // AAL2 Step-Up state
-  const [aal2Challenge, setAal2Challenge] = useState<{
-    challengeId: string;
-    methods: MfaMethod[];
-  } | null>(null);
-  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
   // Avatar crop modal and lightbox states
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -215,18 +208,12 @@ export function PersonalSettingsPage(): JSX.Element {
   const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
 
-  const handleInterceptAal2 = (err: unknown, retryAction: () => Promise<void>): boolean => {
-    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
-      const data = err.data as { challenge_id?: string; methods?: MfaMethod[] };
-      const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'stepup-challenge';
-      const methods = Array.isArray(data.methods) && data.methods.length > 0
-        ? data.methods
-        : (['webauthn', 'totp'] as MfaMethod[]);
-      setAal2Challenge({ challengeId, methods });
-      setPendingAction(() => retryAction);
-      return true;
+  const handleInterceptAal2 = (err: unknown, retryAction?: () => Promise<void>): boolean => {
+    const isCancelled = isAal2StepUpCancelled(err);
+    if (!isCancelled && typeof retryAction === 'undefined') {
+      return false;
     }
-    return false;
+    return isCancelled;
   };
 
   const handleTestKey = async (cred: WebauthnCredentialItem): Promise<void> => {
@@ -1405,60 +1392,7 @@ export function PersonalSettingsPage(): JSX.Element {
         </div>
       )}
 
-      {/* AAL2 Step-Up Dialog */}
-      {aal2Challenge && (
-        <div className="kb-personal-settings-modal-backdrop kb-personal-settings-modal-backdrop--stepup" role="presentation">
-          <div
-            className="kb-personal-settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="aal2-stepup-title"
-            data-testid="aal2-stepup-dialog"
-          >
-            <div className="kb-personal-settings-modal-header">
-              <h3 id="aal2-stepup-title" className="kb-personal-settings-modal-title">
-                Security Verification Required (AAL2)
-              </h3>
-              <button
-                type="button"
-                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
-                onClick={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-            <div className="kb-personal-settings-modal-body">
-              <p className="kb-personal-settings-modal-text">
-                This operation requires fresh second-factor verification. Please confirm with your passkey or TOTP authenticator.
-              </p>
-              <SecondFactorStep
-                challengeId={aal2Challenge.challengeId}
-                methods={aal2Challenge.methods}
-                onSuccess={() => {
-                  setAal2Challenge(null);
-                  const action = pendingAction;
-                  setPendingAction(null);
-                  void action?.();
-                }}
-                onError={() => {
-                  // handled inside SecondFactorStep
-                }}
-                onSessionExpired={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-                onCancel={() => {
-                  setAal2Challenge(null);
-                  setPendingAction(null);
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Passkey / FIDO2 Security Key Enrollment Modal */}
       <PasskeyEnrollModal

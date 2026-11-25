@@ -2,19 +2,14 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, {
-  useContext,
   useEffect,
   useRef,
-  useState,
   type JSX,
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { QueryClientContext } from '@tanstack/react-query';
 import { useOptionalShellPanels } from '../../app/shellPanels';
 import { FieldHelpHint } from './FieldHelpHint';
 import { resolveErrorHelp, type ErrorHelpEntry } from './errorHelpCatalog';
-import { SecondFactorStep } from '../../features/auth/SecondFactorStep';
-import type { MfaMethod } from '../../features/auth/authApi';
 import './ErrorHelpHint.css';
 
 export interface ErrorHelpHintProps {
@@ -104,45 +99,10 @@ export function ErrorHelpHint({
 /**
  * Global Error Alert Enhancer (KB-UX-ERROR-DOCS-AAL2, KAN-393).
  * Mounts in AppShell to automatically attach (?) and More info -> links to all
- * [role="alert"] error elements across the application, and hosts the global
- * SecondFactorStep modal for instant AAL2 step-up.
+ * [role="alert"] error elements across the application.
+ * Note: AAL2 step-up challenges are authoritatively hosted by WebSudoModalHost (KAN-404).
  */
-export function GlobalErrorAlertEnhancer(): JSX.Element {
-  const [isStepUpOpen, setIsStepUpOpen] = useState(false);
-  const [challengeId, setChallengeId] = useState('aal2-stepup');
-  const [methods, setMethods] = useState<MfaMethod[]>(['webauthn', 'totp']);
-
-  const queryClient = useContext(QueryClientContext) ?? null;
-
-  // Listen for global AAL2 step-up events
-  useEffect(() => {
-    const handleOpen = (e: Event): void => {
-      const detail = (
-        e as CustomEvent<{ challengeId?: string; methods?: MfaMethod[] } | undefined>
-      ).detail;
-      if (detail?.challengeId) {
-        setChallengeId(detail.challengeId);
-      }
-      if (detail?.methods && Array.isArray(detail.methods)) {
-        setMethods(detail.methods);
-      }
-      setIsStepUpOpen(true);
-    };
-
-    window.addEventListener('kb:open-aal2-stepup', handleOpen);
-    return () => {
-      window.removeEventListener('kb:open-aal2-stepup', handleOpen);
-    };
-  }, []);
-
-  const handleStepUpSuccess = (): void => {
-    setIsStepUpOpen(false);
-    if (queryClient) {
-      void queryClient.invalidateQueries();
-    }
-    window.dispatchEvent(new CustomEvent('kb:aal2-stepup-success'));
-  };
-
+export function GlobalErrorAlertEnhancer(): JSX.Element | null {
   const rootsRef = useRef<Map<HTMLElement, Root>>(new Map());
 
   // MutationObserver to scan and enhance [role="alert"] and known error banners
@@ -235,47 +195,5 @@ export function GlobalErrorAlertEnhancer(): JSX.Element {
     };
   }, []);
 
-  return (
-    <>
-      {isStepUpOpen && (
-        <div
-          className="kb-aal2-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="global-aal2-stepup-title"
-          data-testid="global-aal2-stepup-modal"
-        >
-          <div className="kb-aal2-modal-container">
-            <header className="kb-aal2-modal-header">
-              <h2 id="global-aal2-stepup-title" className="kb-aal2-modal-title">
-                2FA Verification Required
-              </h2>
-              <p className="kb-aal2-modal-desc">
-                Your 15-minute Admin 2FA verification window (AAL2) has expired or is required.
-                Verify with your Passkey or Authenticator app to continue.
-              </p>
-            </header>
-            <SecondFactorStep
-              challengeId={challengeId}
-              methods={methods}
-              onSuccess={handleStepUpSuccess}
-              onError={(err) => {
-                // Log or dispatch error event
-                window.dispatchEvent(
-                  new CustomEvent('kb:aal2-stepup-error', { detail: err }),
-                );
-              }}
-              onSessionExpired={() => {
-                setIsStepUpOpen(false);
-                window.location.assign('/login');
-              }}
-              onCancel={() => {
-                setIsStepUpOpen(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
+  return null;
 }

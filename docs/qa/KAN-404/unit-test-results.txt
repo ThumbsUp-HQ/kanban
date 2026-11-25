@@ -1,146 +1,847 @@
 === BACKEND PYTEST SUITE ===
-👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
-👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p4_14_mcp_scopable_keys, Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_14_mcp_scopable_keys -> p5_19b_project_repo_bindings, project_repo_bindings registry for hardened bare git mirrors (KB-P5-19b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_19b_project_repo_bindings -> p4_07_mcp_read_taint, mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_07_mcp_read_taint -> p5_17a_workflow_hooks, Workflow hook DDL, executions, and invocations (KB-P5-17a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_17a_workflow_hooks -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p4_18_oauth_mcp_scoping, OAuth & MCP scoping helpers, label column, and RLS-safe workspace functions.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_23_oidc_link_intent_fk -> p4_24_agent_safe_sequences, Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_24_agent_safe_sequences -> p6_02_pdf_attachments, Allow application/pdf attachments and page_count.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_02_pdf_attachments -> p6_03_multi_source_imports_and_aliases, Multi source imports and issue key aliases.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_03_multi_source_imports_and_aliases -> p6_04_enforce_credential_boundary_rls_gucs, Enforce credential boundary rls gucs.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_04_enforce_credential_boundary_rls_gucs -> p6_05_issue_leases_and_fencing, Issue leases and fencing.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_05_issue_leases_and_fencing -> p6_06_crypto_shredded_activity_ledger, Envelope-encrypted activity records payloads and AAL2 two-stage crypto-shredding.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_06_crypto_shredded_activity_ledger -> p6_07_content_provenance_and_taint, Content provenance trust tiers and untrusted content taint tracking.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_07_content_provenance_and_taint -> p6_08_workload_identity_policies, Workload identity policies and JTI replay prevention (KB-AUTH-OIDC-EXCHANGE-01, KAN-74).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_08_workload_identity_policies -> p6_09_scm_webhooks_and_outbound_bus, SCM webhooks, artifacts, and outbound webhook bus (KB-DEVSECOPS-BUS-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_09_scm_webhooks_and_outbound_bus -> p6_11_git_truststore_and_attestations, Git truststore and commit signature attestations (KB-DEVSECOPS-ATTEST-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_11_git_truststore_and_attestations -> p6_13_csv_import_export_governance, csv import export governance.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_13_csv_import_export_governance -> p6_14_jinja_report_templates, jinja report templates.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_14_jinja_report_templates -> p6_10_issue_workpads_and_rework_breaker, Issue workpads and rework breaker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_10_issue_workpads_and_rework_breaker -> p6_12_granular_rbac_roles, Granular rbac roles.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_12_granular_rbac_roles -> p6_15_hardened_workspace_switch_and_module_issues, Hardened workspace switch and module_issues security invoker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_15_hardened_workspace_switch_and_module_issues -> p6_16_oauth_confidential_clients, Support confidential OAuth 2.1 clients.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_16_oauth_confidential_clients -> p6_17_server_admin_role_access, Update app_principal_has_role for server admin scope.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_17_server_admin_role_access -> p6_18_websudo_sliding_aal2, WebSudo sliding window and request replay
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 17 items
+collected 14 items
 
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow PASSED [  5%]
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap PASSED [ 11%]
-kanban/tests/auth/test_aal2_policy.py::test_case_9_aal2_policy_enforcement PASSED [ 17%]
-kanban/tests/auth/test_aal2_policy.py::test_require_admin_aal2_missing_factory PASSED [ 23%]
-kanban/tests/auth/test_aal2_policy.py::test_case_10_assert_admin_routes_protected PASSED [ 29%]
-kanban/tests/auth/test_aal2_policy.py::test_aal2_stale_human_readable_and_problem_doc_links PASSED [ 35%]
-database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 41%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 47%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 52%]
-database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 58%]
-database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 64%]
-database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 70%]
-database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 76%]
-kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 82%]
-kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [ 88%]
-database/tests/migrations/test_p6_18_websudo_sliding_aal2_migration.py::test_p6_18_websudo_sliding_aal2_migration_lifecycle PASSED [ 94%]
-database/tests/migrations/test_p6_18_websudo_sliding_aal2_migration.py::test_p6_18_websudo_sliding_aal2_rpcs PASSED [100%]
+database/tests/test_p1_17_models.py .......                              [ 50%]
+kanban/tests/auth/test_websudo_sliding_aal2.py F....                     [ 85%]
+kanban/tests/security/test_admin_routes_protected.py ..                  [100%]
 
-=============================== warnings summary ===============================
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
-    return await self.request(
+=================================== FAILURES ===================================
+_______________ test_websudo_sliding_window_and_touch_drop_flow ________________
 
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
-    return await self.request(
+pg_worker_db = <sqlalchemy.ext.asyncio.engine.AsyncEngine object at 0x7e05bcde4dd0>
+key_material = KeyMaterial(<redacted>)
 
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
-kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_idle_expiry_and_absolute_cap
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/.venv/lib/python3.12/site-packages/httpx/_client.py:1966: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
-    return await self.request(
+    @pytest.mark.asyncio
+    async def test_websudo_sliding_window_and_touch_drop_flow(  # noqa: PLR0915
+        pg_worker_db: AsyncEngine,
+        key_material: KeyMaterial,
+    ) -> None:
+        """Validate full WebSudo sliding window lifecycle and touch/drop endpoints."""
+        factory = RLSSessionFactory(pg_worker_db)
+        session_service = SessionService(key_material.session_hmac_key)
+        rate_limiter = PgRateLimiter(pg_worker_db)
+    
+        ws_id, admin_id = await _provision_admin_user(factory)
+    
+        app = FastAPI()
+        app.state.session_service = session_service
+        app.state.session_factory = factory
+        app.state.key_material = key_material
+        app.state.rate_limiter = rate_limiter
+    
+        resolver = SessionCookieResolver(session_service, factory)
+        app.state.principal_resolver = resolver
+        app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
+    
+        v1 = build_v1_router()
+        app.include_router(v1, prefix="/api/v1")
+    
+        # Protected test endpoint
+        @app.get("/api/v1/admin/privileged/action")
+        async def privileged_action(
+            principal: Annotated[PrincipalContext, Depends(require_admin_aal2)],
+        ) -> JSONResponse:
+            return JSONResponse(
+                {"status": "privileged_ok", "principal_id": str(principal.principal_id)}
+            )
+    
+        # Irreversible action endpoint requiring recent verification
+        @app.delete("/api/v1/admin/irreversible/action")
+        async def irreversible_action(
+            _principal: Annotated[
+                PrincipalContext,
+                Depends(require_aal2(max_age_seconds=900, verification_only=True)),
+            ],
+        ) -> JSONResponse:
+            return JSONResponse({"status": "deleted_ok"})
+    
+        app.add_middleware(CsrfMiddleware, session_hmac_key=key_material.session_hmac_key)
+        app.add_middleware(RequestIdMiddleware)
+    
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            anon_ctx = RLSContext(
+                principal_id=uuid.UUID(int=0),
+                workspace_id=uuid.UUID(int=0),
+                token_scopes=("auth",),
+                aal_level=1,
+            )
+    
+            # 1. Create initial AAL1 session
+            async with factory.session(anon_ctx) as session:
+                sess_issued = await session_service.create_after_login(
+                    session,
+                    principal_id=admin_id,
+                    workspace_id=ws_id,
+                )
+    
+            client.cookies.clear()
+            client.cookies.update({
+                SESSION_COOKIE_NAME: sess_issued.cookie_val,
+                "kb_csrf": sess_issued.csrf_token,
+            })
+            csrf_headers = {"X-CSRF-Token": sess_issued.csrf_token}
+    
+            # 2. Touch while AAL1 -> returns 200 with aal2_active=False without throwing 403
+            touch_resp = await client.post(
+                "/api/v1/auth/aal2/touch",
+                headers=csrf_headers,
+            )
+            assert touch_resp.status_code == 200
+            touch_data = touch_resp.json()
+            assert touch_data["aal2_active"] is False
+            assert touch_data["aal2_expires_at"] is None
+    
+            # 3. Privileged route fails with 403 AAL2_REQUIRED
+            priv_resp = await client.get("/api/v1/admin/privileged/action")
+>           assert priv_resp.status_code == 403
+E           assert 401 == 403
+E            +  where 401 = <Response [401 Unauthorized]>.status_code
 
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 17 passed, 13 warnings in 4.61s ========================
+kanban/tests/auth/test_websudo_sliding_aal2.py:204: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  kanban.api.problems:problems.py:384 Client error [AUTHENTICATION_REQUIRED / 401] on GET /api/v1/admin/privileged/action [request_id=558690de42c74cff98fbc7c21d60e129]: Authentication Required
+=========================== short test summary info ============================
+FAILED kanban/tests/auth/test_websudo_sliding_aal2.py::test_websudo_sliding_window_and_touch_drop_flow
+========================= 1 failed, 13 passed in 5.28s =========================
+
+=== MIGRATION PYTEST ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 2 items
+
+database/tests/migrations/test_p6_18_websudo_sliding_aal2_migration.py . [ 50%]
+.                                                                        [100%]
+
+============================== 2 passed in 1.33s ===============================
 
 === FRONTEND VITEST SUITE ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-7d8a31af/kanban/web
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
+> vitest run src/api/__tests__/websudoReplay.test.tsx src/features/admin/__tests__/AdminMobileLayout.test.tsx src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx src/features/settings/__tests__/McpAccessStudio.test.tsx src/features/settings/__tests__/McpUnifiedStudio.test.tsx src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/workflows/__tests__/WorkflowStudioPage.test.tsx src/components/help/ErrorHelpHint.test.tsx
 
- ✓ src/api/__tests__/websudoReplay.test.tsx (16 tests) 331ms
 
- Test Files  1 passed (1)
-      Tests  16 passed (16)
-   Start at  02:35:00
-   Duration  1.39s (environment 53%, tests 28%, import 12%, transform 7%, worker 1%)
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
 
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/components/help/ErrorHelpHint.test.tsx (13 tests) 207ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 486ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (26 tests) 1027ms
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > formats remaining seconds under 1 minute as seconds and handles inactive session
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > AdminStudioSubnav responds to kb:aal2-stepup-success and kb:aal2-expires-at events
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/api/__tests__/websudoReplay.test.tsx (21 tests) 1705ms
+   ✓ AdminStudioSubnav Sudo Pill (KAN-404) (7)
+     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1122ms
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav outside router context with matching activeTab or path fallback
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin/__tests__/AdminMobileLayout.test.tsx (12 tests) 522ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (46 tests) 2228ms
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > closes mint modal via cancel button and backdrop click, handles empty label and load error
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > hides unlimited option when allow_unlimited_mcp_keys is false
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 1235ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (21 tests) 3052ms
+   ✓ RunnerStudioPage & Components (KANBA-219) (21)
+     ✓ RunnerStudioPage component (9)
+       ✓ renders runner cards, status filters, and handles revocation flow 355ms
+     ✓ MintEnrollmentTokenModal component (11)
+       ✓ resets copied state after 2 seconds 2131ms
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > validates CIDR input client-side, showing inline accessible error on malformed CIDR and disabling submit (KAN-68 Negative)
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (24 tests) 2545ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles AAL2 cancellation on minting and retries without error banners 547ms
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > supports granular capability bit toggles and switches preset to custom (KAN-68 Edge)
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > structures modal around the 4 plain-English questions and live summary
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > expands Advanced Capability & Network Restrictions revealing capability-preset-select, updating overrides and summary
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (46 tests) 3771ms
+stderr | src/features/admin-auth/AuthStudioPage.test.tsx > AuthStudioPage (KB-P3-36) > MFA Enrollment Required Banner (KAN-398) > switches to Roles tab when tab-roles is clicked
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (50 tests) 5780ms
+   ✓ AuthStudioPage (KB-P3-36) (50)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 466ms
+     ✓ opens drawer to add a new auth card and appends created card 548ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 427ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 503ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (55 tests) 6028ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (55)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 499ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 300ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (69 tests) 6378ms
+   ✓ PersonalSettingsPage (69)
+     ✓ regenerates recovery codes and displays modal 2147ms
+     ✓ cancels passkey rename modal when clicking cancel 306ms
+
+ Test Files  13 passed (13)
+      Tests  402 passed (402)
+   Start at  07:57:02
+   Duration  8.53s (tests 54%, environment 27%, import 12%, transform 7%, worker 1%)
+
+
+=== TARGETED VITEST COVERAGE (>=95% BRANCHES) ===
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
+> vitest run --coverage src/api/__tests__/websudoReplay.test.tsx src/features/admin/__tests__/AdminMobileLayout.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan404-rc1-0b60f260/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (5 tests) 326ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (26 tests) 820ms
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/admin/__tests__/AdminMobileLayout.test.tsx > Admin & Settings Studios Mobile Layout Ergonomics (KAN-344) > Case 1: Horizontal swipe tabs & touch scrolling navigation > renders AdminStudioSubnav outside router context with matching activeTab or path fallback
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > formats remaining seconds under 1 minute as seconds and handles inactive session
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > AdminStudioSubnav responds to kb:aal2-stepup-success and kb:aal2-expires-at events
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin/__tests__/AdminMobileLayout.test.tsx (12 tests) 414ms
+stderr | src/api/__tests__/websudoReplay.test.tsx > AdminStudioSubnav Sudo Pill (KAN-404) > AdminStudioSubnav falls back to cachedMe or false when isServerAdmin is omitted
+An update to AdminStudioSubnavInner inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/api/__tests__/websudoReplay.test.tsx (21 tests) 1635ms
+   ✓ AdminStudioSubnav Sudo Pill (KAN-404) (7)
+     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1120ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (46 tests) 1764ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (55 tests) 6774ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (55)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 427ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 415ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 316ms
+     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 423ms
+     ✓ Progressive Disclosure & AdvancedSection (KAN-319) (13)
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 370ms
+
+ Test Files  6 passed (6)
+      Tests  165 passed (165)
+   Start at  07:57:12
+   Duration  8.49s (tests 58%, environment 26%, import 11%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.6 |    95.67 |     100 |   99.68 |                   
+ components/help   |     100 |    97.05 |     100 |     100 |                   
+  ...ModalHost.tsx |     100 |    97.05 |     100 |     100 | 133               
+ features/admin    |     100 |    97.77 |     100 |     100 |                   
+  ...dioSubnav.tsx |     100 |    97.77 |     100 |     100 | 67                
+ ...s/admin-agents |   99.05 |    95.23 |     100 |   99.03 |                   
+  ...torDrawer.tsx |   99.05 |    95.23 |     100 |   99.03 | 236               
+ features/admin-ai |     100 |    95.54 |     100 |     100 |                   
+  ...torDrawer.tsx |     100 |    95.54 |     100 |     100 | ...03,317,336,367 
+ ...res/admin-auth |   99.41 |    95.61 |     100 |   99.56 |                   
+  ...torDrawer.tsx |   99.41 |    95.61 |     100 |   99.56 | 644,706           
+-------------------|---------|----------|---------|---------|-------------------

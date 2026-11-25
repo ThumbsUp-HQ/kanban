@@ -73,9 +73,32 @@ function AdminStudioSubnavInner({
     const interval = setInterval(() => {
       void load();
     }, 10_000);
+
+    const onStepupSuccess = (): void => {
+      void load();
+    };
+
+    const onExpiresAt = (e: Event): void => {
+      const custom = e as CustomEvent<{ expiresAt?: string } | undefined>;
+      const expiresAt = custom.detail?.expiresAt;
+      if (expiresAt && mounted) {
+        setSessionData(() => ({
+          authenticated: true,
+          aal2_active: true,
+          aal2_expires_at: expiresAt,
+        }));
+      }
+      void load();
+    };
+
+    window.addEventListener('kb:aal2-stepup-success', onStepupSuccess);
+    window.addEventListener('kb:aal2-expires-at', onExpiresAt);
+
     return () => {
       mounted = false;
       clearInterval(interval);
+      window.removeEventListener('kb:aal2-stepup-success', onStepupSuccess);
+      window.removeEventListener('kb:aal2-expires-at', onExpiresAt);
     };
   }, []);
 
@@ -112,9 +135,7 @@ function AdminStudioSubnavInner({
     } catch {
       // Ignore network errors on drop
     }
-    if (queryClient) {
-      void queryClient.invalidateQueries();
-    }
+    void queryClient?.invalidateQueries();
     try {
       const res = (await apiFetch('GET', '/api/v1/auth/session')) as {
         authenticated?: boolean;
