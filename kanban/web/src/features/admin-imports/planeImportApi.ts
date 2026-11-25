@@ -1,7 +1,8 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import { apiFetch } from '../../api/client';
+import { apiFetch, apiFetchBlob } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
 
 export type ImportSource = 'plane' | 'jira' | 'github' | 'linear';
 
@@ -70,27 +71,32 @@ export async function submitLinearImport(
 export async function downloadPortableExport(
   req: PortableExportRequest,
 ): Promise<Blob> {
-  const response = await fetch('/api/v1/admin/exports/portable', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/gzip, application/octet-stream, application/json',
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify({
-      workspace_slug: req.workspace_slug ?? undefined,
-      scrub: Boolean(req.scrub_text),
-    }),
-  });
-  if (!response.ok) {
-    let errMsg = `Export failed with HTTP ${String(response.status)}`;
-    try {
-      const errJson = (await response.json()) as { detail?: string };
-      if (errJson.detail) errMsg = errJson.detail;
-    } catch {
-      // fallback
+  try {
+    const res = await apiFetchBlob('POST', '/api/v1/admin/exports/portable', {
+      body: {
+        workspace_slug: req.workspace_slug ?? undefined,
+        scrub: Boolean(req.scrub_text),
+      },
+      headers: {
+        Accept: 'application/gzip, application/octet-stream, application/json',
+      },
+    });
+    return res.blob;
+  } catch (err: unknown) {
+    if (err instanceof ApiProblem) {
+      const data = err.data;
+      const detailStr = typeof data.detail === 'string' ? data.detail : undefined;
+      const messageStr = typeof data.message === 'string' ? data.message : undefined;
+      const errorStr = typeof data.error === 'string' ? data.error : undefined;
+      const msg =
+        detailStr ??
+        messageStr ??
+        errorStr ??
+        err.detail ??
+        err.title ??
+        `Export failed with HTTP ${String(err.status)}`;
+      throw new Error(msg);
     }
-    throw new Error(errMsg);
+    throw err;
   }
-  return await response.blob();
 }

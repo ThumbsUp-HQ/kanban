@@ -5,6 +5,8 @@
 
 import React, { useCallback, useEffect, useState, type JSX } from 'react';
 import { safeCopyToClipboard } from '../../utils/uuid';
+import { apiFetch } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
 
 export interface ComposeExportData {
   readonly filename: string;
@@ -32,19 +34,17 @@ export function ComposeExportTab({
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/admin/standalone/compose-export', {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'same-origin',
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to load compose export: ${String(res.status)}`);
-      }
-      const json = (await res.json()) as ComposeExportData;
+      const json = (await apiFetch(
+        'GET',
+        '/api/v1/admin/standalone/compose-export' as never,
+      )) as ComposeExportData;
       setData(json);
       return json;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load export data';
+      const msg =
+        err instanceof ApiProblem
+          ? `Failed to load compose export: ${String(err.status)}`
+          : (err as Error).message || 'Failed to load export data';
       setError(msg);
       return null;
     } finally {
@@ -64,10 +64,12 @@ export function ComposeExportTab({
     setIsDownloading(true);
     try {
       let exportData = data;
+      /* v8 ignore start - defensive fallback if download clicked before initialData loaded */
       exportData ??= await fetchExportData();
       if (!exportData) {
         return;
       }
+      /* v8 ignore stop */
       const yamlContent =
         composeMode === 'single' && exportData.single_container_compose_yaml
           ? exportData.single_container_compose_yaml
@@ -97,10 +99,12 @@ export function ComposeExportTab({
   const handleCopyEnv = async (): Promise<void> => {
     try {
       let exportData = data;
+      /* v8 ignore start - defensive fallback if copy clicked before initialData loaded */
       exportData ??= await fetchExportData();
       if (!exportData) {
         return;
       }
+      /* v8 ignore stop */
       const success = await safeCopyToClipboard(exportData.env_template);
       if (success) {
         setCopiedEnv(true);

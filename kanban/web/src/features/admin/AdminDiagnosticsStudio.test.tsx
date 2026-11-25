@@ -428,6 +428,14 @@ describe('AdminDiagnosticsStudio Component', () => {
     // Switch to Link Inspector tab
     fireEvent.click(screen.getByTestId('tab-links'));
     expect(screen.getByTestId('panel-links')).toBeDefined();
+
+    // Switch to All tab
+    fireEvent.click(screen.getByTestId('tab-all'));
+    expect(screen.getByTestId('panel-realtime')).toBeDefined();
+
+    // Switch back to Health tab
+    fireEvent.click(screen.getByTestId('tab-health'));
+    expect(screen.getByTestId('subsystem-card-postgresql_rls')).toBeDefined();
   });
 
   it('runs WS Ping probe when button is clicked', async () => {
@@ -442,6 +450,26 @@ describe('AdminDiagnosticsStudio Component', () => {
       return Promise.resolve({});
     });
 
+    class MockWebSocket {
+      static OPEN = 1;
+      readyState = 1;
+      onopen: (() => void) | null = null;
+      onmessage: ((evt: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      close = vi.fn();
+      constructor() {
+        setTimeout(() => {
+          this.onopen?.();
+        }, 10);
+      }
+      send() {
+        setTimeout(() => {
+          this.onmessage?.({ data: JSON.stringify({ type: 'pong' }) });
+        }, 10);
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket);
+
     renderStudio('/admin/diagnostics', 'health');
 
     await waitFor(() => {
@@ -452,6 +480,50 @@ describe('AdminDiagnosticsStudio Component', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Live');
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('reports genuine WS Disconnected / Error when WebSocket probe fails', async () => {
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(mockDiagnosticsData);
+      }
+      return Promise.resolve({});
+    });
+
+    class FailingWebSocket {
+      static OPEN = 1;
+      readyState = 3;
+      onopen: (() => void) | null = null;
+      onmessage: ((evt: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      close = vi.fn();
+      constructor() {
+        setTimeout(() => {
+          this.onerror?.();
+        }, 10);
+      }
+      send() {
+        void 0;
+      }
+    }
+    vi.stubGlobal('WebSocket', FailingWebSocket);
+
+    renderStudio('/admin/diagnostics', 'health');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-ws-ping-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
+    });
+    vi.unstubAllGlobals();
   });
 
   it('defaults to links tab when navigated via /admin/link-auditor', async () => {
@@ -475,5 +547,329 @@ describe('AdminDiagnosticsStudio Component', () => {
       expect(screen.getByTestId('tab-links').className).toContain('admin-diag-tab--active');
       expect(screen.getByTestId('panel-links')).toBeDefined();
     });
+  });
+
+  it('handles refresh diagnostics and PG LISTEN/NOTIFY probe success and failure', async () => {
+    let probeSuccess = true;
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics/probes/realtime')) {
+        if (probeSuccess) {
+          return Promise.resolve({ success: true, db_latency_ms: 1.5, notify_rtt_ms: 3.2, message: 'PG NOTIFY OK' });
+        }
+        return Promise.reject(new Error('Broker disconnected'));
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(mockDiagnosticsData);
+      }
+      return Promise.resolve({});
+    });
+
+    renderStudio('/admin/diagnostics', 'realtime');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-pg-probe-btn')).toBeDefined();
+    });
+
+    // Test PG Probe Success
+    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('probe-alert').textContent).toContain('PG NOTIFY OK');
+    });
+
+    // Test PG Probe Failure
+    probeSuccess = false;
+    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('probe-alert').textContent).toContain('Broker disconnected');
+    });
+
+    // Test Refresh diagnostics button
+    fireEvent.click(screen.getByTestId('refresh-diagnostics-btn'));
+  });
+
+  it('handles config searching, subsystem filtering, and safe JSON copying', async () => {
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(mockDiagnosticsData);
+      }
+      return Promise.resolve({});
+    });
+
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    renderStudio('/admin/diagnostics', 'config');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('panel-config')).toBeDefined();
+    });
+
+    // Search filter
+    const searchInput = screen.getByTestId('config-search-input');
+    fireEvent.change(searchInput, { target: { value: 'pepper' } });
+    expect(screen.getByText('auth_pepper')).toBeDefined();
+
+    // Subsystem filter
+    const select = screen.getByTestId('config-subsystem-select');
+    fireEvent.change(select, { target: { value: 'Auth & AAL2' } });
+
+    // Copy Safe JSON Summary
+    const copyBtn = screen.getByTestId('copy-config-btn');
+    fireEvent.click(copyBtn);
+    expect(writeTextMock).toHaveBeenCalled();
+  });
+
+  it('renders all sections when defaultTab is "all"', async () => {
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(mockDiagnosticsData);
+      }
+      return Promise.resolve({});
+    });
+
+    renderStudio('/admin/diagnostics', 'all');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
+      expect(screen.getByTestId('panel-realtime')).toBeDefined();
+      expect(screen.getByTestId('panel-runtime')).toBeDefined();
+      expect(screen.getByTestId('panel-config')).toBeDefined();
+      expect(screen.getByTestId('panel-links')).toBeDefined();
+    });
+  });
+
+  it('renders loading state when diagnostics is loading', async () => {
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return new Promise<unknown>(() => {
+          void 0;
+        }); // never resolves
+      }
+      return Promise.resolve({});
+    });
+
+    renderStudio('/admin/diagnostics', 'health');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Loading system diagnostics/i)).toBeDefined();
+    });
+  });
+
+  it('renders root process, bare metal/podman, and degraded/unhealthy subsystem cards', async () => {
+    const customDiagnostics = {
+      ...mockDiagnosticsData,
+      runtime_and_container: {
+        ...mockDiagnosticsData.runtime_and_container,
+        is_non_root: false,
+        container_runtime: 'podman',
+      },
+      subsystems: {
+        ...mockDiagnosticsData.subsystems,
+        postgresql_rls: {
+          subsystem: 'postgresql_rls',
+          name: 'PostgreSQL & RLS Enforcement',
+          status: 'degraded',
+          description: 'High latency',
+          details: { latency_ms: 120 },
+        },
+        realtime_hub_outbox: {
+          subsystem: 'realtime_hub_outbox',
+          name: 'Realtime Hub & Outbox Relay',
+          status: 'unhealthy',
+          description: 'Outbox backlog',
+          details: { dead_letters: 5 },
+        },
+      },
+    };
+
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(customDiagnostics);
+      }
+      return Promise.resolve({});
+    });
+
+    renderStudio('/admin/diagnostics', 'health');
+
+    await waitFor(() => {
+      expect(screen.getByText('Podman Container')).toBeDefined();
+      expect(screen.getByText('Root Process')).toBeDefined();
+      expect(screen.getByText('DEGRADED')).toBeDefined();
+      expect(screen.getByText('UNHEALTHY')).toBeDefined();
+    });
+  });
+
+  it('handles WebSocket probe timeout and non-pong or invalid message payload', async () => {
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(mockDiagnosticsData);
+      }
+      return Promise.resolve({});
+    });
+
+    class TimeoutWebSocket {
+      static OPEN = 1;
+      static CONNECTING = 0;
+      readyState = 0;
+      onopen: (() => void) | null = null;
+      onmessage: ((evt: { data: unknown }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      close = vi.fn(() => {
+        this.readyState = 3;
+      });
+      constructor() {
+        setTimeout(() => {
+          this.readyState = 1;
+          this.onopen?.();
+          // send invalid non-string, invalid json, and non-pong
+          this.onmessage?.({ data: 12345 });
+          this.onmessage?.({ data: 'not-valid-json' });
+          this.onmessage?.({ data: JSON.stringify({ type: 'hello' }) });
+        }, 10);
+      }
+      send() {
+        void 0;
+      }
+    }
+    vi.stubGlobal('WebSocket', TimeoutWebSocket);
+
+    renderStudio('/admin/diagnostics', 'health');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-ws-ping-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
+
+    // Wait for the 1500ms timeout
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
+      },
+      { timeout: 3000 },
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('handles probe success=false, empty err message, https wss scheme, bare metal runtime, and ws throws', async () => {
+    const customDiagnostics = {
+      ...mockDiagnosticsData,
+      realtime: {
+        ...mockDiagnosticsData.realtime,
+        active_connections_total: undefined as unknown as number,
+        heartbeat_interval_s: undefined as unknown as number,
+        broker_kind: undefined as unknown as string,
+        outbox_pending_count: undefined as unknown as number,
+        outbox_dead_letter_count: undefined as unknown as number,
+      },
+      storage: {
+        ...mockDiagnosticsData.storage,
+        directories: undefined as unknown as typeof mockDiagnosticsData.storage.directories,
+      },
+      runtime_and_container: {
+        ...mockDiagnosticsData.runtime_and_container,
+        container_runtime: 'bare_metal',
+      },
+    };
+
+    let probeMode = 'pending_then_success_false';
+    let resolveProbe: (v: unknown) => void = () => {
+      void 0;
+    };
+    vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+      const path = extractPath(args);
+      if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
+        return Promise.resolve(mockAdminUser);
+      }
+      if (path.includes('/api/v1/admin/diagnostics/probes/realtime')) {
+        if (probeMode === 'pending_then_success_false') {
+          return new Promise((res) => {
+            resolveProbe = () => {
+              res({ success: false, db_latency_ms: 0, message: 'Notify failed' });
+            };
+          });
+        }
+        return Promise.reject(new Error(''));
+      }
+      if (path.includes('/api/v1/admin/diagnostics')) {
+        return Promise.resolve(customDiagnostics);
+      }
+      return Promise.resolve({});
+    });
+
+    // Test https protocol for wss:
+    const origLocation = window.location;
+    delete (window as unknown as { location?: unknown }).location;
+    const mockLoc = Object.create(origLocation) as Location;
+    Object.defineProperty(mockLoc, 'protocol', { value: 'https:', configurable: true });
+    (window as unknown as { location: unknown }).location = mockLoc;
+
+    // Make WebSocket constructor throw
+    vi.stubGlobal('WebSocket', function MockThrowingWS() {
+      throw new Error('WebSocket blocked');
+    });
+
+    renderStudio('/admin/diagnostics', 'all');
+
+    await waitFor(() => {
+      expect(screen.getByText('Bare Metal Host')).toBeDefined();
+    });
+
+    // Click WS probe which throws
+    fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Disconnected / Error');
+    });
+
+    // Trigger realtime probe and observe "Testing..." pending state
+    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
+    await waitFor(() => {
+      expect(screen.getByText('Testing...')).toBeDefined();
+    });
+    resolveProbe(null);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('probe-alert').textContent).toContain('Notify failed');
+    });
+
+    // Trigger realtime probe with empty err.message
+    probeMode = 'empty_error';
+    fireEvent.click(screen.getByTestId('run-pg-probe-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('probe-alert').textContent).toContain('Realtime probe execution failed');
+    });
+
+    vi.unstubAllGlobals();
+    delete (window as unknown as { location?: unknown }).location;
+    (window as unknown as { location: unknown }).location = origLocation;
   });
 });

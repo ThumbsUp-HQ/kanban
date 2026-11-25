@@ -206,13 +206,13 @@ async function readProblemBody(response: Response, contentType: string): Promise
   }
 }
 
-/** Dispatches a typed request. Throws `ApiClientError` (client rules) or `ApiProblem` (non-2xx). */
-export async function apiFetch<P extends keyof paths, M extends Method>(
-  method: M,
-  path: P,
+async function executeRequest(
+  method: Method,
+  path: string,
   opts: ApiFetchOptions = {},
+  defaultAccept = 'application/json',
   isReplay = false,
-): Promise<ResponseBody<P, M>> {
+): Promise<{ response: Response; resolved: string }> {
   let resolved: string = path;
   assertRelative(resolved);
   for (const [key, value] of Object.entries(opts.params ?? {})) {
@@ -226,7 +226,7 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
     }
   }
 
-  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
+  const headers: Record<string, string> = { Accept: defaultAccept, ...opts.headers };
   if (UNSAFE_METHODS.has(method)) {
     const csrf = getCsrfToken() ?? (await bootstrapCsrfToken(opts.signal));
     if (csrf === null) {
@@ -315,32 +315,29 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
         throw new ApiProblem(response.status, problemBody);
       }
     } else {
+      const isCsrfRejected =
+        typeof problemBody === 'object' &&
+        problemBody !== null &&
+        (('code' in problemBody && (problemBody as { code?: unknown }).code === 'CSRF_REJECTED') ||
+          ('error' in problemBody && (problemBody as { error?: unknown }).error === 'CSRF_REJECTED') ||
+          ('detail' in problemBody && String((problemBody as { detail?: unknown }).detail).toLowerCase().includes('csrf')) ||
+          ('title' in problemBody && String((problemBody as { title?: unknown }).title).includes('CSRF')));
+
       const isCsrfRetryable =
         response.status === 403 &&
+        !isReplay &&
         UNSAFE_METHODS.has(method) &&
-        (resolved.startsWith('/api/v1/auth/local/login') ||
-          resolved.startsWith('/api/v1/setup/claim'));
+        isCsrfRejected;
 
       if (isCsrfRetryable) {
-        const isCsrfRejected =
-          typeof problemBody === 'object' &&
-          problemBody !== null &&
-          (('code' in problemBody && (problemBody as { code?: unknown }).code === 'CSRF_REJECTED') ||
-            ('error' in problemBody && (problemBody as { error?: unknown }).error === 'CSRF_REJECTED') ||
-            ('title' in problemBody && String((problemBody as { title?: unknown }).title).includes('CSRF')));
-
-        if (isCsrfRejected) {
-          const freshCsrf = await bootstrapCsrfToken(opts.signal, true);
-          if (freshCsrf) {
-            headers['X-CSRF-Token'] = freshCsrf;
-            init.headers = headers;
-            response = await fetch(resolved, init);
-            contentType = response.headers.get('content-type') ?? '';
-            if (!response.ok) {
-              problemBody = await readProblemBody(response, contentType);
-              throw new ApiProblem(response.status, problemBody);
-            }
-          } else {
+        const freshCsrf = await bootstrapCsrfToken(opts.signal, true);
+        if (freshCsrf) {
+          headers['X-CSRF-Token'] = freshCsrf;
+          init.headers = headers;
+          response = await fetch(resolved, init);
+          contentType = response.headers.get('content-type') ?? '';
+          if (!response.ok) {
+            problemBody = await readProblemBody(response, contentType);
             throw new ApiProblem(response.status, problemBody);
           }
         } else {
@@ -351,9 +348,28 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
       }
     }
   }
+
+  return { response, resolved };
+}
+
+/** Dispatches a typed request. Throws `ApiClientError` (client rules) or `ApiProblem` (non-2xx). */
+export async function apiFetch<P extends keyof paths, M extends Method>(
+  method: M,
+  path: P,
+  opts: ApiFetchOptions = {},
+  isReplay = false,
+): Promise<ResponseBody<P, M>> {
+  const { response, resolved } = await executeRequest(
+    method,
+    path,
+    opts,
+    'application/json',
+    isReplay,
+  );
   if (response.status === 204) {
     return undefined as ResponseBody<P, M>;
   }
+  const contentType = response.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json') && !contentType.includes('application/problem+json')) {
     throw new ApiClientError(
       'UNEXPECTED_CONTENT_TYPE',
@@ -375,10 +391,56 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
   return parsed;
 }
 
+export interface ApiBlobResponse {
+  blob: Blob;
+  filename?: string | undefined;
+  contentType: string;
+  headers: Headers;
+}
+
+export function parseContentDispositionFilename(disposition: string | null): string | undefined {
+  if (!disposition) return undefined;
+  const rfc5987Match = /filename\*=UTF-8''([^";\r\n]+)/i.exec(disposition);
+  if (rfc5987Match?.[1]) {
+    try {
+      return decodeURIComponent(rfc5987Match[1]);
+    } catch {
+      return rfc5987Match[1];
+    }
+  }
+  const standardMatch = /filename=["']?([^"';\r\n]+)["']?/i.exec(disposition);
+  if (standardMatch?.[1]) {
+    return standardMatch[1].trim();
+  }
+  return undefined;
+}
+
+/** Dispatches a request for binary data (blob). Throws `ApiClientError` (client rules) or `ApiProblem` (non-2xx). */
+export async function apiFetchBlob(
+  method: Method,
+  path: string,
+  opts: ApiFetchOptions = {},
+  isReplay = false,
+): Promise<ApiBlobResponse> {
+  const defaultAccept = opts.headers?.Accept ?? 'application/octet-stream, application/gzip, application/json';
+  const { response } = await executeRequest(method, path, opts, defaultAccept, isReplay);
+  const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
+  const disposition = response.headers.get('content-disposition');
+  const filename = parseContentDispositionFilename(disposition);
+  const blob = await response.blob();
+  return {
+    blob,
+    filename,
+    contentType,
+    headers: response.headers,
+  };
+}
+
 export const apiClient = {
   get: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('GET', path, opts),
   post: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('POST', path, opts),
   put: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('PUT', path, opts),
   patch: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('PATCH', path, opts),
   delete: <P extends keyof paths>(path: P, opts?: ApiFetchOptions) => apiFetch('DELETE', path, opts),
+  blob: (method: Method, path: string, opts?: ApiFetchOptions) => apiFetchBlob(method, path, opts),
 };

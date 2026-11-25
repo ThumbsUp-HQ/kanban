@@ -436,22 +436,22 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     fireEvent.change(projInput, { target: { value: 'MIGPROJ' } });
     expect((projInput as HTMLInputElement).value).toBe('MIGPROJ');
 
-    // Advanced options controls
-    const batchInput = screen.getByTestId('import-batch-size-input');
-    fireEvent.change(batchInput, { target: { value: '250' } });
-    expect((batchInput as HTMLInputElement).value).toBe('250');
-
-    const conflictSelect = screen.getByTestId('import-conflict-strategy-select');
-    fireEvent.change(conflictSelect, { target: { value: 'overwrite' } });
-    expect((conflictSelect as HTMLSelectElement).value).toBe('overwrite');
-
-    const uuidCheckbox = screen.getByTestId('import-preserve-uuids-checkbox');
-    fireEvent.click(uuidCheckbox);
-    expect((uuidCheckbox as HTMLInputElement).checked).toBe(false);
+    // CUT orphan options controls must not be rendered
+    expect(screen.queryByTestId('import-batch-size-input')).toBeNull();
+    expect(screen.queryByTestId('import-conflict-strategy-select')).toBeNull();
+    expect(screen.queryByTestId('import-preserve-uuids-checkbox')).toBeNull();
 
     const userMapping = screen.getByTestId('import-user-mapping-json');
     fireEvent.change(userMapping, { target: { value: '{"old-uuid": "@admin"}' } });
     expect((userMapping as HTMLTextAreaElement).value).toBe('{"old-uuid": "@admin"}');
+
+    // Test invalid JSON validation
+    fireEvent.change(userMapping, { target: { value: '{invalid-json' } });
+    expect(screen.getByTestId('import-user-mapping-error')).toBeDefined();
+
+    // Reset to valid JSON
+    fireEvent.change(userMapping, { target: { value: '{"old-uuid": "@admin"}' } });
+    expect(screen.queryByTestId('import-user-mapping-error')).toBeNull();
 
     // Dropzone drag over and drag leave
     const dropzone = screen.getByTestId('dropzone-area');
@@ -505,5 +505,28 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       );
       expect(screen.getByTestId('import-done-section')).toBeDefined();
     });
+  });
+
+  it('displays error and halts when dry-run is triggered with invalid userMappingJson', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId('mode-paste-btn'));
+    const textarea = screen.getByTestId('paste-textarea');
+    fireEvent.change(textarea, { target: { value: JSON.stringify({ issues: [{ id: '1' }] }) } });
+
+    const userMapping = screen.getByTestId('import-user-mapping-json');
+    // Test array non-object JSON
+    fireEvent.change(userMapping, { target: { value: '[1, 2, 3]' } });
+    expect(screen.getByText(/User mapping must be a JSON object/i)).toBeDefined();
+
+    // Test malformed JSON
+    fireEvent.change(userMapping, { target: { value: '{invalid-json' } });
+
+    const dryRunBtn = screen.getByTestId('run-dry-run-btn');
+    fireEvent.click(dryRunBtn);
+    expect(screen.getAllByText(/Invalid User Mapping JSON/i).length).toBeGreaterThan(0);
   });
 });

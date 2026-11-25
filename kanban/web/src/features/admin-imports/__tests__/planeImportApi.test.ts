@@ -109,47 +109,60 @@ describe('planeImportApi', () => {
     });
   });
 
-  it('downloadPortableExport sends request to /api/v1/admin/exports/portable and returns blob', async () => {
+  it('downloadPortableExport sends request to /api/v1/admin/exports/portable via apiFetchBlob and returns blob', async () => {
     const mockBlob = new Blob(['tar.gz payload'], { type: 'application/gzip' });
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      blob: async () => {
-        await Promise.resolve();
-        return mockBlob;
-      },
-    } as unknown as Response);
+    const spy = vi.spyOn(clientModule, 'apiFetchBlob').mockResolvedValueOnce({
+      blob: mockBlob,
+      filename: 'kanban-test-ws-portable.tar.gz',
+      contentType: 'application/gzip',
+      headers: new Headers(),
+    });
 
     const blob = await downloadPortableExport({
       workspace_slug: 'test-ws',
       scrub_text: true,
     });
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/admin/exports/portable', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/gzip, application/octet-stream, application/json',
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/exports/portable', {
+      body: {
         workspace_slug: 'test-ws',
         scrub: true,
-      }),
+      },
+      headers: {
+        Accept: 'application/gzip, application/octet-stream, application/json',
+      },
     });
     expect(blob).toBe(mockBlob);
   });
 
-  it('downloadPortableExport throws error on non-ok status', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: async () => {
-        await Promise.resolve();
-        return { detail: 'Disk full' };
-      },
-    } as unknown as Response);
+  it('downloadPortableExport handles ApiProblem error responses and extracts message', async () => {
+    const { ApiProblem } = await import('../../../api/problem');
 
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(500, { detail: 'Disk full' }),
+    );
     await expect(downloadPortableExport({})).rejects.toThrow('Disk full');
+
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(400, { message: 'Invalid workspace slug' }),
+    );
+    await expect(downloadPortableExport({})).rejects.toThrow('Invalid workspace slug');
+
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(400, { error: 'Bad request format' }),
+    );
+    await expect(downloadPortableExport({})).rejects.toThrow('Bad request format');
+
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(502, {}),
+    );
+    await expect(downloadPortableExport({})).rejects.toThrow('Export failed with HTTP 502');
+  });
+
+  it('downloadPortableExport rethrows non-ApiProblem errors', async () => {
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new Error('Custom network failure'),
+    );
+    await expect(downloadPortableExport({})).rejects.toThrow('Custom network failure');
   });
 });

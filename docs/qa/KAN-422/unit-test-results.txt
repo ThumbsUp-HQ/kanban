@@ -1,0 +1,81 @@
+=== Backend Pytest Suite & Coverage ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 47 items
+
+kanban/tests/api/test_admin_imports.py ..                                [  4%]
+kanban/tests/api/test_admin_diagnostics.py ...........                   [ 27%]
+kanban/tests/api/test_admin_link_auditor.py ....                         [ 36%]
+kanban/tests/api/test_system_status.py ...........                       [ 59%]
+kanban/tests/importer/test_multi_source_importers.py ..................  [ 97%]
+kanban/tests/resolve/test_legacy_key_aliases.py .                        [100%]
+
+============================= 47 passed in 41.19s ==============================
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+kanban/api/v1/admin/link_auditor.py      32      0      2      0   100%
+kanban/api/v1/system_status.py          310      3     78     10    97%   179->188, 186-187, 204->206, 520->523, 567->572, 637->640, 642, 644->646, 647->656, 694->697, 709->714
+---------------------------------------------------------------------------------
+TOTAL                                   342      3     80     10    97%
+
+=== Frontend Vitest Suite & Coverage ===
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8/kanban/web
+> vitest run src/features/admin-imports/ src/features/standalone/ src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/api/client.test.ts --coverage --no-watch
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan422-483a20a8/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (8 tests) 26ms
+ ✓ src/api/client.test.ts (31 tests) 72ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/ComposeExportTab.test.tsx (8 tests) 346ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (13 tests) 989ms
+Not implemented: navigation to another Document
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (13 tests) 1501ms
+   ✓ LinkAuditorStudio (13)
+     ✓ handles inspect drawer view with JSON snapshots 326ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 441ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (13 tests) 2365ms
+   ✓ AdminDiagnosticsStudio Component (13)
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1532ms
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (40 tests) 4051ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 362ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 571ms
+
+ Test Files  7 passed (7)
+      Tests  126 passed (126)
+   Start at  05:52:40
+   Duration  5.72s (tests 49%, environment 31%, import 13%, transform 6%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.7 |    95.85 |   99.37 |   99.84 |                   
+ admin             |     100 |    94.53 |     100 |     100 |                   
+  ...icsStudio.tsx |     100 |       93 |     100 |     100 | ...20,478,729-736 
+  ...torStudio.tsx |     100 |    96.84 |     100 |     100 | 123,355,838       
+ admin-imports     |     100 |    95.73 |     100 |     100 |                   
+  ...ortStudio.tsx |     100 |    95.36 |     100 |     100 | ...44,325-331,879 
+  ...eImportApi.ts |     100 |      100 |     100 |     100 |                   
+ standalone        |   99.33 |    97.18 |   98.21 |   99.65 |                   
+  ...ExportTab.tsx |     100 |      100 |     100 |     100 |                   
+  ...atusPanel.tsx |   99.18 |    96.66 |   97.77 |   99.57 | 65                
+-------------------|---------|----------|---------|---------|-------------------
