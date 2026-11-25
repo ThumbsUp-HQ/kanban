@@ -24,6 +24,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
 from kanban.api.v1.admin.ai_schemas import (
+    AISettingsPublic,
     BudgetRecord,
     BudgetSetRequest,
     ProviderConfigCreate,
@@ -184,6 +185,8 @@ async def list_providers(
     session: Session,
     request: Request,
     project_id: Annotated[uuid.UUID | None, Query()] = None,
+    *,
+    include_projects: Annotated[bool, Query()] = True,
 ) -> list[ProviderConfigPublic]:
     """List AI provider configurations for workspace or project with API keys omitted."""
     async with timing_floor(floor_ms=25.0):
@@ -192,6 +195,7 @@ async def list_providers(
         configs = await service.list_configs(
             workspace_id=caller.workspace_id,
             project_id=project_id,
+            include_projects=include_projects if project_id is None else True,
         )
         return [_to_public_config(c) for c in configs]
 
@@ -699,8 +703,18 @@ async def set_budget(
         if config is None:
             not_found()
 
-        target_project_id = body.project_id or config.project_id
-        await _assert_admin_for_scope(session, caller, target_project_id)
+        if (
+            config.project_id is not None
+            and body.project_id is not None
+            and body.project_id != config.project_id
+        ):
+            raise ProblemException(
+                code="SCOPE_MISMATCH",
+                status=422,
+                title="Validation Error",
+                detail="Request project_id does not match provider project scope.",
+            )
+        await _assert_admin_for_scope(session, caller, config.project_id)
 
         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         try:
@@ -709,7 +723,7 @@ async def set_budget(
                 provider_config_id=body.provider_config_id,
                 period_kind=body.period_kind,
                 token_cap=body.token_cap,
-                project_id=body.project_id,
+                project_id=body.project_id if config.project_id is None else config.project_id,
             )
         except AIConfigValidationError as exc:
             raise ProblemException(
@@ -791,6 +805,7 @@ async def workspace_list_providers(
         configs = await service.list_configs(
             workspace_id=caller.workspace_id,
             project_id=project_id,
+            include_projects=project_id is not None,
         )
         return [_to_public_config(c) for c in configs]
 
@@ -1058,8 +1073,14 @@ async def workspace_set_budget(
         if config is None:
             not_found()
 
-        target_project_id = body.project_id if body.project_id is not None else config.project_id
-        await _assert_admin_for_scope(session, caller, target_project_id)
+        if body.project_id is not None and body.project_id != config.project_id:
+            raise ProblemException(
+                code="SCOPE_MISMATCH",
+                status=422,
+                title="Validation Error",
+                detail="Request project_id does not match provider project scope.",
+            )
+        await _assert_admin_for_scope(session, caller, config.project_id)
 
         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
         try:
@@ -1068,7 +1089,7 @@ async def workspace_set_budget(
                 provider_config_id=body.provider_config_id,
                 period_kind=body.period_kind,
                 token_cap=body.token_cap,
-                project_id=body.project_id,
+                project_id=body.project_id if config.project_id is None else config.project_id,
             )
         except AIConfigValidationError as exc:
             raise ProblemException(
@@ -1097,6 +1118,23 @@ async def workspace_set_budget(
             tokens_used=ledger.tokens_used,
             tokens_reserved=ledger.tokens_reserved,
         )
+
+
+@workspace_router.get(
+    "/settings",
+    response_model=AISettingsPublic,
+    summary="Get AI workspace runtime settings",
+)
+async def workspace_get_ai_settings(
+    workspace: str,
+    caller: WorkspaceCaller,
+    session: Session,
+) -> AISettingsPublic:
+    """Retrieve workspace AI runtime settings such as air-gap status."""
+    async with timing_floor(floor_ms=25.0):
+        await _verify_workspace(session, caller, workspace)
+        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
+        return AISettingsPublic(air_gap_mode=is_air_gap)
 
 
 @workspace_router.get(

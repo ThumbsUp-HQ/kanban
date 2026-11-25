@@ -253,6 +253,7 @@ export function AgentStudioPage({
         agent={editingAgent}
         onSaved={refreshAgents}
         projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Delete Confirmation Modal */}

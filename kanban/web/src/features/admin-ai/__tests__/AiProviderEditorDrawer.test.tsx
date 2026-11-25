@@ -1549,5 +1549,107 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
       fireEvent.click(screen.getByTestId('probe-clear-all-btn'));
       expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
     });
+
+    it('supports workspaceSlug routing for create and update provider', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+        id: 'new-prov-id',
+        provider_kind: 'openai',
+        display_name: 'Custom OpenAi',
+        base_url: 'https://api.openai.com/v1',
+        model_allowlist: ['gpt-4o'],
+        residency_tier: 'cloud_standard',
+        priority: 10,
+        settings: {},
+        api_key_set: true,
+        is_enabled: true,
+        project_id: null,
+      });
+
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      const { rerender } = render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          provider={null}
+          airGapMode={false}
+          onSaved={onSaved}
+          workspaceSlug="engineering"
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId('provider-name-input'), {
+        target: { value: 'Custom OpenAi' },
+      });
+      fireEvent.change(screen.getByTestId('provider-key-input'), {
+        target: { value: 'sk-proj-test123456789' },
+      });
+      fireEvent.change(screen.getByTestId('provider-models-input'), {
+        target: { value: 'gpt-4o' },
+      });
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ display_name: 'Custom OpenAi' }),
+          'engineering',
+        );
+      });
+
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({
+        id: 'existing-prov-id',
+        provider_kind: 'openai',
+        display_name: 'Updated OpenAi',
+        base_url: 'https://api.openai.com/v1',
+        model_allowlist: ['gpt-4o'],
+        residency_tier: 'cloud_standard',
+        priority: 10,
+        settings: {},
+        api_key_set: true,
+        is_enabled: true,
+        project_id: null,
+      });
+
+      const existingProvider: ProviderConfigPublic = {
+        id: 'existing-prov-id',
+        provider_kind: 'openai',
+        display_name: 'Existing OpenAi',
+        base_url: 'https://api.openai.com/v1',
+        model_allowlist: ['gpt-4o'],
+        residency_tier: 'cloud_standard',
+        priority: 10,
+        settings: {},
+        api_key_set: true,
+        is_enabled: true,
+        project_id: null,
+      };
+
+      rerender(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          provider={existingProvider}
+          airGapMode={false}
+          onSaved={onSaved}
+          workspaceSlug="engineering"
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId('provider-name-input'), {
+        target: { value: 'Updated OpenAi' },
+      });
+
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'existing-prov-id',
+          expect.objectContaining({ display_name: 'Updated OpenAi' }),
+          'engineering',
+        );
+      });
+    });
   });
 });

@@ -27,6 +27,26 @@ index 17c217e2..5a0ab835 100644
          results = (await session.execute(stmt)).scalars().all()
          return [_serialize(agent) for agent in results]
  
+diff --git a/kanban/ai_config/service.py b/kanban/ai_config/service.py
+index 1a5172ba..7528644d 100644
+--- a/kanban/ai_config/service.py
++++ b/kanban/ai_config/service.py
+@@ -495,11 +495,15 @@ class AIProviderConfigService:
+         self,
+         workspace_id: uuid.UUID,
+         project_id: uuid.UUID | None = None,
++        *,
++        include_projects: bool = True,
+     ) -> list[AIProviderConfig]:
+         """List provider configurations for workspace, optionally filtered by project."""
+         stmt = select(AIProviderConfig).where(AIProviderConfig.workspace_id == workspace_id)
+         if project_id is not None:
+             stmt = stmt.where(AIProviderConfig.project_id == project_id)
++        elif not include_projects:
++            stmt = stmt.where(AIProviderConfig.project_id.is_(None))
+         stmt = stmt.order_by(AIProviderConfig.priority.asc(), AIProviderConfig.created_at.asc())
+         result = await self._session.execute(stmt)
+         return list(result.scalars().all())
 diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
 index 234e4201..4b1b02b0 100644
 --- a/kanban/api/v1/__init__.py
@@ -54,7 +74,7 @@ index 234e4201..4b1b02b0 100644
      v1.include_router(admin_exports_router)
      v1.include_router(admin_imports_router)
 diff --git a/kanban/api/v1/admin/ai_providers.py b/kanban/api/v1/admin/ai_providers.py
-index e0e7c152..32668f58 100644
+index e0e7c152..ab4c66a8 100644
 --- a/kanban/api/v1/admin/ai_providers.py
 +++ b/kanban/api/v1/admin/ai_providers.py
 @@ -6,7 +6,7 @@ from __future__ import annotations
@@ -66,7 +86,7 @@ index e0e7c152..32668f58 100644
  from typing import Annotated, Literal, cast
  
  from fastapi import APIRouter, Depends, Query, Request, Response, status
-@@ -20,7 +20,7 @@ from kanban.ai_config.service import (
+@@ -20,10 +20,11 @@ from kanban.ai_config.service import (
      AIProviderConfigService,
      AirGapViolation,
  )
@@ -75,7 +95,28 @@ index e0e7c152..32668f58 100644
  from kanban.api.problems import ProblemException, not_found
  from kanban.api.timing import timing_floor
  from kanban.api.v1.admin.ai_schemas import (
-@@ -208,7 +208,7 @@ async def reorder_providers(
++    AISettingsPublic,
+     BudgetRecord,
+     BudgetSetRequest,
+     ProviderConfigCreate,
+@@ -184,6 +185,8 @@ async def list_providers(
+     session: Session,
+     request: Request,
+     project_id: Annotated[uuid.UUID | None, Query()] = None,
++    *,
++    include_projects: Annotated[bool, Query()] = True,
+ ) -> list[ProviderConfigPublic]:
+     """List AI provider configurations for workspace or project with API keys omitted."""
+     async with timing_floor(floor_ms=25.0):
+@@ -192,6 +195,7 @@ async def list_providers(
+         configs = await service.list_configs(
+             workspace_id=caller.workspace_id,
+             project_id=project_id,
++            include_projects=include_projects if project_id is None else True,
+         )
+         return [_to_public_config(c) for c in configs]
+ 
+@@ -208,7 +212,7 @@ async def reorder_providers(
  ) -> list[ProviderConfigPublic]:
      """Atomically reorder all AI provider configurations in workspace."""
      async with timing_floor(floor_ms=25.0):
@@ -84,7 +125,7 @@ index e0e7c152..32668f58 100644
  
          if len(body.ordered_ids) != len(set(body.ordered_ids)):
              raise ProblemException(
-@@ -218,11 +218,12 @@ async def reorder_providers(
+@@ -218,11 +222,12 @@ async def reorder_providers(
                  detail="ordered_ids list contains duplicate IDs",
              )
  
@@ -102,7 +143,7 @@ index e0e7c152..32668f58 100644
          res = await session.execute(stmt)
          configs = list(res.scalars().all())
          config_map = {c.id: c for c in configs}
-@@ -279,7 +280,7 @@ async def probe_provider_models(
+@@ -279,7 +284,7 @@ async def probe_provider_models(
  ) -> ProviderProbeResult:
      """Probe models for an unsaved AI provider draft configuration."""
      async with timing_floor(floor_ms=25.0):
@@ -111,7 +152,7 @@ index e0e7c152..32668f58 100644
          service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
          is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
          api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
-@@ -305,7 +306,7 @@ async def check_provider_connection(
+@@ -305,7 +310,7 @@ async def check_provider_connection(
  ) -> ProviderProbeResult:
      """Test connectivity, auth, and model listing for an unsaved AI provider configuration."""
      async with timing_floor(floor_ms=25.0):
@@ -120,7 +161,37 @@ index e0e7c152..32668f58 100644
          service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
          is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
          api_key_str = body.api_key.get_secret_value() if body.api_key is not None else None
-@@ -737,3 +738,633 @@ async def set_budget(
+@@ -698,8 +703,18 @@ async def set_budget(
+         if config is None:
+             not_found()
+ 
+-        target_project_id = body.project_id or config.project_id
+-        await _assert_admin_for_scope(session, caller, target_project_id)
++        if (
++            config.project_id is not None
++            and body.project_id is not None
++            and body.project_id != config.project_id
++        ):
++            raise ProblemException(
++                code="SCOPE_MISMATCH",
++                status=422,
++                title="Validation Error",
++                detail="Request project_id does not match provider project scope.",
++            )
++        await _assert_admin_for_scope(session, caller, config.project_id)
+ 
+         service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
+         try:
+@@ -708,7 +723,7 @@ async def set_budget(
+                 provider_config_id=body.provider_config_id,
+                 period_kind=body.period_kind,
+                 token_cap=body.token_cap,
+-                project_id=body.project_id,
++                project_id=body.project_id if config.project_id is None else config.project_id,
+             )
+         except AIConfigValidationError as exc:
+             raise ProblemException(
+@@ -737,3 +752,657 @@ async def set_budget(
              tokens_used=ledger.tokens_used,
              tokens_reserved=ledger.tokens_reserved,
          )
@@ -177,6 +248,7 @@ index e0e7c152..32668f58 100644
 +        configs = await service.list_configs(
 +            workspace_id=caller.workspace_id,
 +            project_id=project_id,
++            include_projects=project_id is not None,
 +        )
 +        return [_to_public_config(c) for c in configs]
 +
@@ -444,8 +516,14 @@ index e0e7c152..32668f58 100644
 +        if config is None:
 +            not_found()
 +
-+        target_project_id = body.project_id if body.project_id is not None else config.project_id
-+        await _assert_admin_for_scope(session, caller, target_project_id)
++        if body.project_id is not None and body.project_id != config.project_id:
++            raise ProblemException(
++                code="SCOPE_MISMATCH",
++                status=422,
++                title="Validation Error",
++                detail="Request project_id does not match provider project scope.",
++            )
++        await _assert_admin_for_scope(session, caller, config.project_id)
 +
 +        service = AIProviderConfigService(session, kek_provider=_get_kek_provider(request))
 +        try:
@@ -454,7 +532,7 @@ index e0e7c152..32668f58 100644
 +                provider_config_id=body.provider_config_id,
 +                period_kind=body.period_kind,
 +                token_cap=body.token_cap,
-+                project_id=body.project_id,
++                project_id=body.project_id if config.project_id is None else config.project_id,
 +            )
 +        except AIConfigValidationError as exc:
 +            raise ProblemException(
@@ -483,6 +561,23 @@ index e0e7c152..32668f58 100644
 +            tokens_used=ledger.tokens_used,
 +            tokens_reserved=ledger.tokens_reserved,
 +        )
++
++
++@workspace_router.get(
++    "/settings",
++    response_model=AISettingsPublic,
++    summary="Get AI workspace runtime settings",
++)
++async def workspace_get_ai_settings(
++    workspace: str,
++    caller: WorkspaceCaller,
++    session: Session,
++) -> AISettingsPublic:
++    """Retrieve workspace AI runtime settings such as air-gap status."""
++    async with timing_floor(floor_ms=25.0):
++        await _verify_workspace(session, caller, workspace)
++        is_air_gap = await _is_air_gap_active(session, caller.workspace_id)
++        return AISettingsPublic(air_gap_mode=is_air_gap)
 +
 +
 +@workspace_router.get(
@@ -755,7 +850,7 @@ index e0e7c152..32668f58 100644
 +        return ProviderProbeResult.model_validate(probe_res)
 +
 diff --git a/kanban/api/v1/admin/ai_schemas.py b/kanban/api/v1/admin/ai_schemas.py
-index a049adb3..ba1d909f 100644
+index a049adb3..0c4ec44f 100644
 --- a/kanban/api/v1/admin/ai_schemas.py
 +++ b/kanban/api/v1/admin/ai_schemas.py
 @@ -165,6 +165,9 @@ class ProviderReorderRequest(BaseModel):
@@ -778,6 +873,19 @@ index a049adb3..ba1d909f 100644
  
      @field_validator("api_key")
      @classmethod
+@@ -221,3 +227,12 @@ class ProviderProbeResult(BaseModel):
+     model_count: int = Field(ge=0, description="Count of discovered models")
+     error_code: str | None = Field(default=None, description="Diagnostic error code if failed")
+     message: str | None = Field(default=None, description="Human-readable status or error message")
++
++
++class AISettingsPublic(BaseModel):
++    """Workspace AI runtime settings including air gap policy."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    air_gap_mode: bool = Field(description="Whether air-gap zero-egress mode is enforced")
++
 diff --git a/kanban/api/v1/agent_definitions.py b/kanban/api/v1/agent_definitions.py
 index b33089f9..19203c11 100644
 --- a/kanban/api/v1/agent_definitions.py
@@ -1004,10 +1112,10 @@ index b33089f9..19203c11 100644
  router.include_router(admin_router)
 diff --git a/kanban/tests/api/test_workspace_project_ai_agents.py b/kanban/tests/api/test_workspace_project_ai_agents.py
 new file mode 100644
-index 00000000..7f024276
+index 00000000..f466efeb
 --- /dev/null
 +++ b/kanban/tests/api/test_workspace_project_ai_agents.py
-@@ -0,0 +1,362 @@
+@@ -0,0 +1,974 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +# ruff: noqa: E501, PLR0915, TC002
@@ -1022,6 +1130,9 @@ index 00000000..7f024276
 +
 +import httpx
 +import pytest
++from sqlalchemy import text
++
++from kanban.api.deps import PrincipalContext
 +
 +if TYPE_CHECKING:
 +    from collections.abc import Awaitable, Callable
@@ -1043,6 +1154,37 @@ index 00000000..7f024276
 +    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
 +    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
 +    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def _enroll_totp_and_set_aal2(
++    api_env: ApiEnv,
++    user: SeededUser,
++) -> None:
++    """Enroll and confirm TOTP factor to permit AAL2 evaluation for user."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        aal_level=2,
++    )
 +
 +
 +@pytest.mark.asyncio
@@ -1081,6 +1223,61 @@ index 00000000..7f024276
 +    providers = resp.json()
 +    assert any(p["id"] == prov_id for p in providers)
 +
++    # 2b. Fetch workspace settings: GET /api/v1/workspaces/{wid}/ai-providers/settings
++    resp_settings = await client.get(f"/api/v1/workspaces/{wid}/ai-providers/settings")
++    assert resp_settings.status_code == 200
++    assert resp_settings.json()["air_gap_mode"] is False
++
++    # 2c. Get provider by ID: GET /api/v1/workspaces/{wid}/ai-providers/{prov_id}
++    resp_get = await client.get(f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}")
++    assert resp_get.status_code == 200
++    assert resp_get.json()["id"] == prov_id
++    assert resp_get.json()["display_name"] == "Workspace Ollama"
++
++    # 2d. Negative: Get non-existent provider -> 404
++    fake_prov_id = str(uuid.uuid4())
++    resp_fake_get = await client.get(f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}")
++    assert resp_fake_get.status_code == 404
++
++    # 2e. Update provider: PATCH /api/v1/workspaces/{wid}/ai-providers/{prov_id}
++    resp_patch = await client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}",
++        json={"display_name": "Workspace Ollama Renamed", "priority": 15},
++    )
++    assert resp_patch.status_code == 200
++    assert resp_patch.json()["display_name"] == "Workspace Ollama Renamed"
++    assert resp_patch.json()["priority"] == 15
++
++    # 2f. Update provider with api_key
++    resp_patch_key = await client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}",
++        json={"api_key": "test-ws-secret-key-1234"},
++    )
++    assert resp_patch_key.status_code == 200
++    assert resp_patch_key.json()["api_key_set"] is True
++
++    # 2g. Clear api_key with null
++    resp_clear_key = await client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}",
++        json={"api_key": None},
++    )
++    assert resp_clear_key.status_code == 200
++    assert resp_clear_key.json()["api_key_set"] is False
++
++    # 2h. Negative: Update with invalid base_url -> 422
++    resp_bad_url = await client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}",
++        json={"base_url": "http://169.254.169.254"},
++    )
++    assert resp_bad_url.status_code == 422
++
++    # 2i. Negative: Update non-existent provider -> 404
++    resp_patch_404 = await client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}",
++        json={"display_name": "Ghost"},
++    )
++    assert resp_patch_404.status_code == 404
++
 +    # 3. Create second provider for reordering
 +    create_payload2 = {
 +        "provider_kind": "ollama",
@@ -1106,7 +1303,7 @@ index 00000000..7f024276
 +    assert reordered[1]["id"] == prov_id
 +    assert reordered[1]["priority"] == 20
 +
-+    # 5. Probe models (mocking Ollama response)
++    # 5. Probe models (mocking Ollama response) on body-based endpoint
 +    with mock.patch("httpx.AsyncClient.get") as mock_get:
 +        mock_resp = mock.MagicMock()
 +        mock_resp.status_code = 200
@@ -1121,6 +1318,27 @@ index 00000000..7f024276
 +        probe_res = resp.json()
 +        assert probe_res["ok"] is True
 +        assert "llama3:8b" in probe_res["models"]
++
++    # 5b. Probe models on saved provider: POST /api/v1/workspaces/{wid}/ai-providers/{prov_id}/probe-models
++    with mock.patch("httpx.AsyncClient.get") as mock_get:
++        mock_resp = mock.MagicMock()
++        mock_resp.status_code = 200
++        mock_resp.json.return_value = {"models": [{"name": "llama3:8b"}]}
++        mock_get.return_value = mock_resp
++
++        resp_probe_saved = await client.post(
++            f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}/probe-models",
++            json={},
++        )
++        assert resp_probe_saved.status_code == 200
++        assert resp_probe_saved.json()["ok"] is True
++
++    # 5c. Negative: Probe models on non-existent provider -> 404
++    resp_probe_404 = await client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}/probe-models",
++        json={},
++    )
++    assert resp_probe_404.status_code == 404
 +
 +    # 6. Test connection on saved provider
 +    with mock.patch("httpx.AsyncClient.get") as mock_get:
@@ -1137,10 +1355,25 @@ index 00000000..7f024276
 +        test_res = resp.json()
 +        assert test_res["ok"] is True
 +
-+    # 7. Disable provider
++    # 6b. Negative: Test connection on non-existent provider -> 404
++    resp_test_404 = await client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}/test-connection",
++        json={},
++    )
++    assert resp_test_404.status_code == 404
++
++    # 7. Disable provider (colon endpoint and slash endpoint)
 +    resp = await client.post(f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}:disable")
 +    assert resp.status_code == 200
 +    assert resp.json()["is_enabled"] is False
++
++    resp_slash_dis = await client.post(f"/api/v1/workspaces/{wid}/ai-providers/{prov_id}/disable")
++    assert resp_slash_dis.status_code == 200
++    assert resp_slash_dis.json()["is_enabled"] is False
++
++    # 7b. Negative: Disable non-existent provider -> 404
++    resp_dis_404 = await client.post(f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}:disable")
++    assert resp_dis_404.status_code == 404
 +
 +    # 8. Set and fetch budget
 +    budget_payload = {
@@ -1159,9 +1392,86 @@ index 00000000..7f024276
 +    assert resp.status_code == 200
 +    assert len(resp.json()) >= 1
 +
++    # 8b. Negative: Set budget on non-existent provider -> 404
++    resp_b_404 = await client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={"provider_config_id": fake_prov_id, "period_kind": "daily", "token_cap": 1000},
++    )
++    assert resp_b_404.status_code == 404
++
++    # 8c. Negative: Set budget with invalid token cap -> 422
++    resp_b_bad = await client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={"provider_config_id": prov_id, "period_kind": "daily", "token_cap": -100},
++    )
++    assert resp_b_bad.status_code == 422
++
++    resp_b_overflow = await client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={"provider_config_id": prov_id, "period_kind": "daily", "token_cap": 20_000_000_000},
++    )
++    assert resp_b_overflow.status_code == 422
++
++    # 8d. Negative: Get budgets on non-existent provider -> 404
++    resp_b_missing = await client.get(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        params={"provider_config_id": fake_prov_id},
++    )
++    assert resp_b_missing.status_code == 404
++
++    # 8e. Air gap mode validations
++    await api_env.seed.execute(
++        text("UPDATE workspace_settings SET air_gap_mode = true WHERE workspace_id = :wid"),
++        {"wid": api_env.workspace_id},
++    )
++    await api_env.seed.commit()
++
++    resp_settings_air = await client.get(f"/api/v1/workspaces/{wid}/ai-providers/settings")
++    assert resp_settings_air.status_code == 200
++    assert resp_settings_air.json()["air_gap_mode"] is True
++
++    resp_air_create = await client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers",
++        json={
++            "provider_kind": "gemini",
++            "display_name": "Cloud Gemini",
++            "model_allowlist": ["gemini-2.5-flash"],
++        },
++    )
++    assert resp_air_create.status_code == 409
++    assert resp_air_create.json()["code"] == "AIR_GAP_EGRESS_DENIED"
++
++    resp_air_probe = await client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers/probe-models",
++        json={"provider_kind": "gemini"},
++    )
++    assert resp_air_probe.status_code == 200
++    assert resp_air_probe.json()["ok"] is False
++    assert resp_air_probe.json()["error_code"] == "AIR_GAP_EGRESS_DENIED"
++
++    await api_env.seed.execute(
++        text("UPDATE workspace_settings SET air_gap_mode = false WHERE workspace_id = :wid"),
++        {"wid": api_env.workspace_id},
++    )
++    await api_env.seed.commit()
++
 +    # 9. Delete provider
 +    resp = await client.delete(f"/api/v1/workspaces/{wid}/ai-providers/{prov_id2}")
 +    assert resp.status_code == 204
++
++    # 9b. Negative: Delete non-existent provider -> 404
++    resp_del_404 = await client.delete(f"/api/v1/workspaces/{wid}/ai-providers/{fake_prov_id}")
++    assert resp_del_404.status_code == 404
++
++    # 10. Workspace ref checks
++    resp_curr = await client.get("/api/v1/workspaces/current/ai-providers")
++    assert resp_curr.status_code == 200
++
++    resp_bad_ws = await client.get(f"/api/v1/workspaces/{uuid.uuid4()}/ai-providers")
++    assert resp_bad_ws.status_code == 404
++
++    resp_bad_slug = await client.get("/api/v1/workspaces/nonexistent-workspace-slug/ai-providers")
++    assert resp_bad_slug.status_code == 404
 +
 +
 +@pytest.mark.asyncio
@@ -1174,6 +1484,7 @@ index 00000000..7f024276
 +    """PROJECT_ADMIN can manage their project-scoped AI providers, but cannot touch workspace or other project scopes."""
 +    admin_a = await make_user("admin_proj_a", workspace_role="WORKSPACE_MEMBER")
 +    admin_b = await make_user("admin_proj_b", workspace_role="WORKSPACE_MEMBER")
++    ws_admin = await make_user("ws_admin_scope", workspace_role="WORKSPACE_ADMIN")
 +    viewer_user = await make_user("viewer_user", workspace_role="WORKSPACE_MEMBER")
 +
 +    proj_a_id = await make_project("PRJA", created_by=admin_a, roles={admin_a: "PROJECT_ADMIN", viewer_user: "VIEWER"})
@@ -1182,6 +1493,21 @@ index 00000000..7f024276
 +    wid = str(api_env.workspace_id)
 +    p_a_str = str(proj_a_id)
 +    p_b_str = str(proj_b_id)
++
++    # Provision workspace-level provider as ws_admin
++    as_principal(ws_admin)
++    resp_ws_prov = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers",
++        json={
++            "provider_kind": "ollama",
++            "display_name": "Shared WS Ollama",
++            "base_url": "http://127.0.0.1:11434",
++            "model_allowlist": ["llama3:8b"],
++            "priority": 10,
++        },
++    )
++    assert resp_ws_prov.status_code == 201
++    prov_ws_id = resp_ws_prov.json()["id"]
 +
 +    # 1. Admin A creates project-scoped provider on Project A -> 201
 +    as_principal(admin_a)
@@ -1199,6 +1525,38 @@ index 00000000..7f024276
 +    assert resp.status_code == 201, resp.text
 +    prov_a_id = resp.json()["id"]
 +    assert resp.json()["project_id"] == p_a_str
++
++    # 1b. Admin A fetches their project provider -> 200
++    resp_get_a = await api_env.client.get(f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}")
++    assert resp_get_a.status_code == 200
++    assert resp_get_a.json()["id"] == prov_a_id
++
++    # 1c. Admin A probes and tests their project provider
++    with mock.patch("httpx.AsyncClient.get") as mock_get:
++        mock_resp = mock.MagicMock()
++        mock_resp.status_code = 200
++        mock_resp.json.return_value = {"models": [{"name": "qwen2.5-coder:7b"}]}
++        mock_get.return_value = mock_resp
++
++        resp_probe = await api_env.client.post(
++            f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}/probe-models",
++            json={},
++        )
++        assert resp_probe.status_code == 200
++
++        resp_test = await api_env.client.post(
++            f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}/test-connection",
++            json={},
++        )
++        assert resp_test.status_code == 200
++
++    # 1d. Admin A patches their project provider -> 200
++    resp_patch_a = await api_env.client.patch(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}",
++        json={"display_name": "Project A Ollama Updated"},
++    )
++    assert resp_patch_a.status_code == 200
++    assert resp_patch_a.json()["display_name"] == "Project A Ollama Updated"
 +
 +    # 2. Admin A lists providers filtered by project_id -> returns provider A
 +    resp = await api_env.client.get(f"/api/v1/workspaces/{wid}/ai-providers", params={"project_id": p_a_str})
@@ -1221,13 +1579,31 @@ index 00000000..7f024276
 +    )
 +    assert resp.status_code == 403, resp.text
 +
-+    # 5. Negative: Admin B attempts to mutate provider A -> 403/404
++    # 5. Negative: Admin B attempts to get, mutate, probe, test, delete provider A -> 403/404
 +    as_principal(admin_b)
++    resp = await api_env.client.get(f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}")
++    assert resp.status_code in (403, 404)
++
 +    resp = await api_env.client.patch(
 +        f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}",
 +        json={"display_name": "Hacked Name"},
 +    )
 +    assert resp.status_code in (403, 404), resp.text
++
++    resp = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}/probe-models",
++        json={},
++    )
++    assert resp.status_code in (403, 404)
++
++    resp = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}/test-connection",
++        json={},
++    )
++    assert resp.status_code in (403, 404)
++
++    resp = await api_env.client.delete(f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_id}")
++    assert resp.status_code in (403, 404)
 +
 +    # 6. Negative: Viewer attempts to mutate or create provider -> 403
 +    as_principal(viewer_user)
@@ -1276,6 +1652,177 @@ index 00000000..7f024276
 +        json={"ordered_ids": [prov_a_2_id, prov_a_id]},
 +    )
 +    assert resp.status_code == 403
++
++    # 8. Budget Scope Isolation & Bypass Prevention (KAN-402 Finding 2):
++    # Positive: Admin A can set budget on their own project provider
++    resp_budget_ok = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={
++            "provider_config_id": prov_a_id,
++            "period_kind": "daily",
++            "token_cap": 250000,
++            "project_id": p_a_str,
++        },
++    )
++    assert resp_budget_ok.status_code == 200
++    assert resp_budget_ok.json()["token_cap"] == 250000
++
++    # Negative: Admin A attempts to set budget on Project A provider with project_id=Project B -> 422 SCOPE_MISMATCH
++    resp_b_mismatch = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={
++            "provider_config_id": prov_a_id,
++            "period_kind": "daily",
++            "token_cap": 300000,
++            "project_id": p_b_str,
++        },
++    )
++    assert resp_b_mismatch.status_code == 422
++    assert resp_b_mismatch.json()["code"] == "SCOPE_MISMATCH"
++
++    # Negative: Admin A attempts to set budget on workspace provider with project_id=Project A -> 403/404/422
++    resp_ws_bypass = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={
++            "provider_config_id": prov_ws_id,
++            "period_kind": "daily",
++            "token_cap": 500000,
++            "project_id": p_a_str,
++        },
++    )
++    assert resp_ws_bypass.status_code in (403, 404, 422)
++
++    # Negative: Admin A attempts to set budget on workspace provider with project_id=None -> 403/404
++    resp_ws_no_proj = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={
++            "provider_config_id": prov_ws_id,
++            "period_kind": "daily",
++            "token_cap": 500000,
++        },
++    )
++    assert resp_ws_no_proj.status_code in (403, 404)
++
++    # Negative: Admin B attempts to set budget on Project A provider -> 403/404
++    as_principal(admin_b)
++    resp_b_hijack = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/budgets",
++        json={
++            "provider_config_id": prov_a_id,
++            "period_kind": "daily",
++            "token_cap": 100000,
++            "project_id": p_a_str,
++        },
++    )
++    assert resp_b_hijack.status_code in (403, 404)
++
++    # Delete second project provider
++    as_principal(admin_a)
++    resp_del_a2 = await api_env.client.delete(f"/api/v1/workspaces/{wid}/ai-providers/{prov_a_2_id}")
++    assert resp_del_a2.status_code == 204
++
++
++@pytest.mark.asyncio
++async def test_workspace_reorder_with_project_providers_isolation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Workspace provider reordering succeeds even when project-scoped providers exist in the workspace (KAN-402 Finding 1)."""
++    ws_admin = await make_user("ws_admin_reorder", workspace_role="WORKSPACE_ADMIN")
++    proj_admin = await make_user("proj_admin_reorder", workspace_role="WORKSPACE_MEMBER")
++    proj_id = await make_project("ROPRJ", created_by=ws_admin, roles={proj_admin: "PROJECT_ADMIN"})
++
++    wid = str(api_env.workspace_id)
++    pid_str = str(proj_id)
++
++    # 1. WS Admin creates two workspace-level providers
++    as_principal(ws_admin)
++    resp_w1 = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers",
++        json={
++            "provider_kind": "ollama",
++            "display_name": "WS Prov 1",
++            "base_url": "http://127.0.0.1:11434",
++            "model_allowlist": ["llama3:8b"],
++            "priority": 10,
++        },
++    )
++    assert resp_w1.status_code == 201
++    w1_id = resp_w1.json()["id"]
++
++    resp_w2 = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers",
++        json={
++            "provider_kind": "ollama",
++            "display_name": "WS Prov 2",
++            "base_url": "http://127.0.0.1:11435",
++            "model_allowlist": ["llama3:8b"],
++            "priority": 20,
++        },
++    )
++    assert resp_w2.status_code == 201
++    w2_id = resp_w2.json()["id"]
++
++    # 2. Project Admin creates a project-scoped provider
++    as_principal(proj_admin)
++    resp_p = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/ai-providers",
++        json={
++            "provider_kind": "ollama",
++            "display_name": "Project Prov",
++            "base_url": "http://127.0.0.1:11434",
++            "model_allowlist": ["qwen2.5-coder:7b"],
++            "priority": 10,
++            "project_id": pid_str,
++        },
++    )
++    assert resp_p.status_code == 201
++    p_id = resp_p.json()["id"]
++
++    # 3. WS Admin lists workspace providers without project_id -> returns ONLY workspace providers
++    as_principal(ws_admin)
++    resp_list = await api_env.client.get(f"/api/v1/workspaces/{wid}/ai-providers")
++    assert resp_list.status_code == 200
++    listed_ids = [p["id"] for p in resp_list.json()]
++    assert w1_id in listed_ids
++    assert w2_id in listed_ids
++    assert p_id not in listed_ids
++
++    # 4. WS Admin reorders workspace providers -> MUST SUCCEED (not fail with 422 INVALID_REORDER_MEMBERSHIP)
++    resp_reorder = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/order",
++        json={"ordered_ids": [w2_id, w1_id], "project_id": None},
++    )
++    assert resp_reorder.status_code == 200
++    reordered = resp_reorder.json()
++    assert reordered[0]["id"] == w2_id
++    assert reordered[1]["id"] == w1_id
++
++    # 5. Negative: Including project provider in workspace reorder fails with 422
++    resp_bad_reorder = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/order",
++        json={"ordered_ids": [w2_id, w1_id, p_id], "project_id": None},
++    )
++    assert resp_bad_reorder.status_code == 422
++    assert resp_bad_reorder.json()["code"] == "INVALID_REORDER_MEMBERSHIP"
++
++    # 5b. Negative: Duplicate IDs in reorder fails with 422
++    resp_dup = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/order",
++        json={"ordered_ids": [w2_id, w2_id], "project_id": None},
++    )
++    assert resp_dup.status_code == 422
++    assert resp_dup.json()["code"] == "INVALID_REORDER_REQUEST"
++
++    # 5c. Negative: Missing provider ID in reorder fails with 422
++    resp_missing = await api_env.client.put(
++        f"/api/v1/workspaces/{wid}/ai-providers/order",
++        json={"ordered_ids": [w2_id], "project_id": None},
++    )
++    assert resp_missing.status_code == 422
++    assert resp_missing.json()["code"] == "INVALID_REORDER_MEMBERSHIP"
 +
 +
 +@pytest.mark.asyncio
@@ -1350,6 +1897,52 @@ index 00000000..7f024276
 +    assert resp.status_code == 200
 +    assert resp.json()["valid"] is True
 +
++    # 4b. Create remote_runner agent and validate
++    as_principal(ws_admin)
++    resp_rr = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/agent-definitions",
++        json={
++            "slug": "ws-remote-runner",
++            "display_name": "Workspace Remote Runner",
++            "harness_kind": "remote_runner",
++            "remote_runner_pool_slug": "test-pool",
++            "timeout_ms": 30000,
++        },
++    )
++    assert resp_rr.status_code == 201
++    rr_id = resp_rr.json()["id"]
++
++    resp_rr_val = await api_env.client.post(f"/api/v1/agent-definitions/{rr_id}:validate")
++    assert resp_rr_val.status_code == 200
++    assert resp_rr_val.json()["valid"] is True
++
++    # 4c. Create cli_pipe agent and tamper with banned arg to test policy violation validation
++    resp_cli_viol = await api_env.client.post(
++        f"/api/v1/workspaces/{wid}/agent-definitions",
++        json={
++            "slug": "ws-cli-violator",
++            "display_name": "Workspace CLI Violator",
++            "harness_kind": "cli_pipe",
++            "cli_binary_allowlist_id": "codex",
++            "cli_args": ["exec", "-s", "read-only", "-"],
++            "timeout_ms": 30000,
++        },
++    )
++    assert resp_cli_viol.status_code == 201
++    cli_viol_id = resp_cli_viol.json()["id"]
++
++    # Directly tamper the row via SQL to inject a banned argument
++    await api_env.seed.execute(
++        text("UPDATE agent_definitions SET cli_args_json = '[\"--yolo\"]'::jsonb WHERE id = :id"),
++        {"id": uuid.UUID(cli_viol_id)},
++    )
++    await api_env.seed.commit()
++
++    resp_cli_val = await api_env.client.post(f"/api/v1/agent-definitions/{cli_viol_id}:validate")
++    assert resp_cli_val.status_code == 200
++    assert resp_cli_val.json()["valid"] is False
++    assert resp_cli_val.json()["status"] == "policy_violation"
++
 +    # Negative: Standard member without project admin cannot validate agent -> 403
 +    as_principal(member_user)
 +    resp = await api_env.client.post(f"/api/v1/agent-definitions/{proj_agent_id}:validate")
@@ -1370,6 +1963,133 @@ index 00000000..7f024276
 +    missing_id = str(uuid.uuid4())
 +    resp = await api_env.client.post(f"/api/v1/agent-definitions/{missing_id}:validate")
 +    assert resp.status_code == 404
++
++    # 5b. GET agent definition by UUID and by slug
++    resp_get_uuid = await api_env.client.get(f"/api/v1/agent-definitions/{ws_agent_id}")
++    assert resp_get_uuid.status_code == 200
++    assert resp_get_uuid.json()["slug"] == "ws-reality-checker"
++
++    resp_get_slug = await api_env.client.get("/api/v1/agent-definitions/ws-reality-checker")
++    assert resp_get_slug.status_code == 200
++    assert resp_get_slug.json()["id"] == ws_agent_id
++
++    resp_get_missing = await api_env.client.get(f"/api/v1/agent-definitions/{missing_id}")
++    assert resp_get_missing.status_code == 404
++
++    # 5c. List agent definitions by workspace slug
++    resp_list_slug = await api_env.client.get("/api/v1/workspaces/current/agent-definitions")
++    assert resp_list_slug.status_code == 200
++    assert any(a["id"] == ws_agent_id for a in resp_list_slug.json())
++
++    # 6. Update agent definition: PATCH /api/v1/agent-definitions/{agent}
++    as_principal(proj_admin)
++    resp_patch_proj = await api_env.client.patch(
++        f"/api/v1/agent-definitions/{proj_agent_id}",
++        json={"display_name": "Patched Project Reviewer", "timeout_ms": 75000},
++    )
++    assert resp_patch_proj.status_code == 200
++    assert resp_patch_proj.json()["display_name"] == "Patched Project Reviewer"
++    assert resp_patch_proj.json()["timeout_ms"] == 75000
++
++    # Negative: Project Admin attempts to patch workspace agent -> 403
++    resp_patch_ws = await api_env.client.patch(
++        f"/api/v1/agent-definitions/{ws_agent_id}",
++        json={"display_name": "Hacked WS Agent"},
++    )
++    assert resp_patch_ws.status_code == 403
++
++    # Negative: Member attempts to patch project agent -> 403
++    as_principal(member_user)
++    resp_patch_mem = await api_env.client.patch(
++        f"/api/v1/agent-definitions/{proj_agent_id}",
++        json={"display_name": "Member Hack"},
++    )
++    assert resp_patch_mem.status_code == 403
++
++    # Negative: Patch non-existent agent -> 404
++    as_principal(ws_admin)
++    resp_patch_404 = await api_env.client.patch(
++        f"/api/v1/agent-definitions/{missing_id}",
++        json={"display_name": "Ghost"},
++    )
++    assert resp_patch_404.status_code == 404
++
++    # 7. Delete agent definition: DELETE /api/v1/agent-definitions/{agent}
++    # Negative: Project Admin attempts to delete workspace agent -> 403
++    as_principal(proj_admin)
++    resp_del_ws = await api_env.client.delete(f"/api/v1/agent-definitions/{ws_agent_id}")
++    assert resp_del_ws.status_code == 403
++
++    # Negative: Member attempts to delete project agent -> 403
++    as_principal(member_user)
++    resp_del_mem = await api_env.client.delete(f"/api/v1/agent-definitions/{proj_agent_id}")
++    assert resp_del_mem.status_code == 403
++
++    # Project Admin deletes project agent -> 204
++    as_principal(proj_admin)
++    resp_del_ok = await api_env.client.delete(f"/api/v1/agent-definitions/{proj_agent_id}")
++    assert resp_del_ok.status_code == 204
++
++    # WS Admin deletes workspace agent -> 204
++    as_principal(ws_admin)
++    resp_del_ws_ok = await api_env.client.delete(f"/api/v1/agent-definitions/{ws_agent_id}")
++    assert resp_del_ws_ok.status_code == 204
++
++    # Negative: Delete non-existent agent -> 404
++    resp_del_404 = await api_env.client.delete(f"/api/v1/agent-definitions/{missing_id}")
++    assert resp_del_404.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_server_admin_agent_definitions_lifecycle(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """SERVER_ADMIN with AAL2 can manage agent definitions via admin routes."""
++    admin_user = await make_user("server_admin_agnt", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_totp_and_set_aal2(api_env, admin_user)
++    client = api_env.client
++
++    # 1. Create agent via admin route
++    create_payload = {
++        "slug": "admin-reality-checker",
++        "display_name": "Admin Reality Checker",
++        "harness_kind": "in_app_sdk",
++        "provider_kind": "gemini",
++        "model_id": "gemini-2.5-flash",
++        "timeout_ms": 40000,
++    }
++    resp = await client.post("/api/v1/admin/agent-definitions", json=create_payload)
++    assert resp.status_code == 201
++    ag_id = resp.json()["id"]
++
++    # 2. List agents via admin route
++    resp_list = await client.get("/api/v1/admin/agent-definitions")
++    assert resp_list.status_code == 200
++    assert any(a["id"] == ag_id for a in resp_list.json())
++
++    # 3. Get agent via admin route
++    resp_get = await client.get(f"/api/v1/admin/agent-definitions/{ag_id}")
++    assert resp_get.status_code == 200
++    assert resp_get.json()["id"] == ag_id
++
++    # 4. Patch agent via admin route
++    resp_patch = await client.patch(
++        f"/api/v1/admin/agent-definitions/{ag_id}",
++        json={"display_name": "Admin Reality Checker Renamed"},
++    )
++    assert resp_patch.status_code == 200
++    assert resp_patch.json()["display_name"] == "Admin Reality Checker Renamed"
++
++    # 5. Validate agent via admin route
++    resp_val = await client.post(f"/api/v1/admin/agent-definitions/{ag_id}:validate")
++    assert resp_val.status_code == 200
++    assert resp_val.json()["valid"] is True
++
++    # 6. Delete agent via admin route
++    resp_del = await client.delete(f"/api/v1/admin/agent-definitions/{ag_id}")
++    assert resp_del.status_code == 204
++
 diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
 index e74f4515..39d62883 100644
 --- a/kanban/web/src/app/Topbar.tsx
@@ -1552,7 +2272,7 @@ index 21ea09cc..c3b0e442 100644
  
      it('preserves clean About 👍kanban links across Topbar, Sidebar, and Personal Settings', async () => {
 diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
-index ec5bd530..952eead2 100644
+index ec5bd530..a9e1c86b 100644
 --- a/kanban/web/src/app/routes.tsx
 +++ b/kanban/web/src/app/routes.tsx
 @@ -2004,11 +2004,25 @@ export function AdminMcpRedirect(): JSX.Element {
@@ -1589,7 +2309,7 @@ index ec5bd530..952eead2 100644
 -            element: <WorkspaceAiRedirect />,
 +            element: (
 +              <AdminRouteGuard>
-+                <AiStudioPage />
++                <AiStudioPage showSubnav={false} />
 +              </AdminRouteGuard>
 +            ),
 +          },
@@ -1618,50 +2338,56 @@ index ec5bd530..952eead2 100644
                {
                  path: 'agent-runners',
 diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-index 2b78bfc9..59915123 100644
+index 2b78bfc9..0aa5797e 100644
 --- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-@@ -28,6 +28,7 @@ interface AgentDefinitionEditorDrawerProps {
+@@ -28,6 +28,8 @@ interface AgentDefinitionEditorDrawerProps {
    agent: AgentDefinitionResponse | null;
    onSaved: () => void;
    aiProviders?: ProviderConfigPublic[] | undefined;
 +  projectId?: string | null | undefined;
++  workspaceSlug?: string | undefined;
  }
  
  const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
-@@ -37,11 +38,13 @@ function AgentDefinitionEditorContent({
+@@ -37,11 +39,15 @@ function AgentDefinitionEditorContent({
    agent,
    onSaved,
    aiProviders,
 +  projectId,
++  workspaceSlug,
  }: {
    onClose: () => void;
    agent: AgentDefinitionResponse | null;
    onSaved: () => void;
    aiProviders?: ProviderConfigPublic[] | undefined;
 +  projectId?: string | null | undefined;
++  workspaceSlug?: string | undefined;
  }): JSX.Element {
    const isEditing = agent !== null;
  
-@@ -57,7 +60,7 @@ function AgentDefinitionEditorContent({
+@@ -57,7 +63,10 @@ function AgentDefinitionEditorContent({
        return;
      }
      let isMounted = true;
 -    fetchAiProviders()
-+    fetchAiProviders(projectId ?? undefined)
++    const fetchCall = workspaceSlug
++      ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
++      : fetchAiProviders(projectId ?? undefined);
++    fetchCall
        .then((data) => {
          if (isMounted) {
            setFetchedProviders(data);
-@@ -69,7 +72,7 @@ function AgentDefinitionEditorContent({
+@@ -69,7 +78,7 @@ function AgentDefinitionEditorContent({
      return () => {
        isMounted = false;
      };
 -  }, [aiProviders]);
-+  }, [aiProviders, projectId]);
++  }, [aiProviders, projectId, workspaceSlug]);
  
    const providers = aiProviders ?? fetchedProviders;
    const matchingProviders = providers.filter(
-@@ -158,6 +161,7 @@ function AgentDefinitionEditorContent({
+@@ -158,6 +167,7 @@ function AgentDefinitionEditorContent({
          const payload: AgentDefinitionCreate = {
            slug: slug.trim(),
            display_name: displayName.trim(),
@@ -1669,24 +2395,39 @@ index 2b78bfc9..59915123 100644
            harness_kind: harnessKind,
            provider_kind: harnessKind === 'in_app_sdk' ? providerKind : null,
            model_id: harnessKind === 'in_app_sdk' ? modelId.trim() : null,
-@@ -523,6 +527,7 @@ export function AgentDefinitionEditorDrawer({
+@@ -170,7 +180,11 @@ function AgentDefinitionEditorContent({
+           timeout_ms: timeoutMs,
+         };
+ 
+-        await createAgentDefinition(payload);
++        if (workspaceSlug) {
++          await createAgentDefinition(payload, workspaceSlug);
++        } else {
++          await createAgentDefinition(payload);
++        }
+       }
+ 
+       setIsSaving(false);
+@@ -523,6 +537,8 @@ export function AgentDefinitionEditorDrawer({
    agent,
    onSaved,
    aiProviders,
 +  projectId,
++  workspaceSlug,
  }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
    useAal2DirtyKeepalive(isOpen);
    if (!isOpen) return null;
-@@ -541,6 +546,7 @@ export function AgentDefinitionEditorDrawer({
+@@ -541,6 +557,8 @@ export function AgentDefinitionEditorDrawer({
          agent={agent}
          onSaved={onSaved}
          aiProviders={aiProviders}
 +        projectId={projectId}
++        workspaceSlug={workspaceSlug}
        />
      </div>
    );
 diff --git a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
-index c45f5cae..e0520f9a 100644
+index c45f5cae..99830256 100644
 --- a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
 +++ b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
 @@ -14,7 +14,15 @@ import { dispatchAal2StepUpIfRequired } from '../../api/problem';
@@ -1724,14 +2465,78 @@ index c45f5cae..e0520f9a 100644
  
    const refreshAgents = useCallback((): void => {
      setReloadCounter((c) => c + 1);
-@@ -244,6 +252,7 @@ export function AgentStudioPage(): JSX.Element {
+@@ -244,6 +252,8 @@ export function AgentStudioPage(): JSX.Element {
          }}
          agent={editingAgent}
          onSaved={refreshAgents}
 +        projectId={projectId}
++        workspaceSlug={workspaceSlug}
        />
  
        {/* Delete Confirmation Modal */}
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+index 6cbed2a9..7b763de9 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -181,4 +181,58 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       expect(onClose).toHaveBeenCalled();
+     });
+   });
++
++  it('saves agent with workspaceSlug routing successfully', async () => {
++    const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
++      id: 'agent-created-2',
++      workspace_id: 'ws-1',
++      principal_id: 'prin-1',
++      slug: 'workspace-qa-agent',
++      display_name: 'Workspace QA Agent',
++      harness_kind: 'in_app_sdk',
++      provider_kind: 'gemini',
++      model_id: 'gemini-2.5-flash-lite',
++      cli_binary_allowlist_id: null,
++      cli_args: [],
++      remote_runner_pool_slug: null,
++      repo_access_mode: 'none',
++      mcp_allowed_tools: [],
++      system_instructions_md: 'Workspace prompt instructions.',
++      timeout_ms: 60000,
++    });
++    const onSaved = vi.fn();
++    const onClose = vi.fn();
++
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={onClose}
++        agent={null}
++        onSaved={onSaved}
++        aiProviders={mockAiProviders}
++        workspaceSlug="qa-team"
++      />,
++    );
++
++    fireEvent.change(screen.getByTestId('agent-slug-input'), {
++      target: { value: 'workspace-qa-agent' },
++    });
++    fireEvent.change(screen.getByTestId('agent-name-input'), {
++      target: { value: 'Workspace QA Agent' },
++    });
++    fireEvent.click(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite'));
++    fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          slug: 'workspace-qa-agent',
++          display_name: 'Workspace QA Agent',
++        }),
++        'qa-team',
++      );
++      expect(onSaved).toHaveBeenCalled();
++      expect(onClose).toHaveBeenCalled();
++    });
++  });
+ });
 diff --git a/kanban/web/src/features/admin-agents/agentDefinitionsApi.ts b/kanban/web/src/features/admin-agents/agentDefinitionsApi.ts
 index 671ba19e..3b60aa54 100644
 --- a/kanban/web/src/features/admin-agents/agentDefinitionsApi.ts
@@ -1803,23 +2608,120 @@ index 671ba19e..3b60aa54 100644
 +    `/api/v1/agent-definitions/${encodeURIComponent(agent)}:validate` as never,
    )) as AgentValidationResponse;
  }
+diff --git a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+index 23425991..22ee06cd 100644
+--- a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
++++ b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+@@ -15,16 +15,19 @@ interface AiBudgetModalProps {
+   onClose: () => void;
+   provider: ProviderConfigPublic | null;
+   onBudgetUpdated?: (() => void) | undefined;
++  workspaceSlug?: string | undefined;
+ }
+ 
+ function AiBudgetModalContent({
+   onClose,
+   provider,
+   onBudgetUpdated,
++  workspaceSlug,
+ }: {
+   onClose: () => void;
+   provider: ProviderConfigPublic;
+   onBudgetUpdated?: (() => void) | undefined;
++  workspaceSlug?: string | undefined;
+ }): JSX.Element {
+   const [budgets, setBudgets] = useState<BudgetRecord[]>([]);
+   const [isLoading, setIsLoading] = useState<boolean>(true);
+@@ -38,7 +41,9 @@ function AiBudgetModalContent({
+ 
+     async function load() {
+       try {
+-        const records = await fetchBudgets(provider.id);
++        const records = workspaceSlug
++          ? await fetchBudgets(provider.id, workspaceSlug)
++          : await fetchBudgets(provider.id);
+         if (!active) return;
+         setBudgets(records);
+         const monthly = records.find((b) => b.period_kind === 'monthly');
+@@ -64,7 +69,7 @@ function AiBudgetModalContent({
+     return () => {
+       active = false;
+     };
+-  }, [provider.id]);
++  }, [provider.id, workspaceSlug]);
+ 
+   const currentBudget = budgets.find((b) => b.period_kind === periodKind) ?? budgets[0];
+   const capNum = currentBudget?.token_cap ?? 0;
+@@ -83,13 +88,27 @@ function AiBudgetModalContent({
+     try {
+       setIsSaving(true);
+       setError(null);
+-      await setBudget({
+-        provider_config_id: provider.id,
+-        project_id: provider.project_id ?? undefined,
+-        period_kind: periodKind,
+-        token_cap: cap,
+-      });
+-      const updated = await fetchBudgets(provider.id);
++      if (workspaceSlug) {
++        await setBudget(
++          {
++            provider_config_id: provider.id,
++            project_id: provider.project_id ?? undefined,
++            period_kind: periodKind,
++            token_cap: cap,
++          },
++          workspaceSlug,
++        );
++      } else {
++        await setBudget({
++          provider_config_id: provider.id,
++          project_id: provider.project_id ?? undefined,
++          period_kind: periodKind,
++          token_cap: cap,
++        });
++      }
++      const updated = workspaceSlug
++        ? await fetchBudgets(provider.id, workspaceSlug)
++        : await fetchBudgets(provider.id);
+       setBudgets(updated);
+       setIsSaving(false);
+       onBudgetUpdated?.();
+@@ -244,6 +263,7 @@ export function AiBudgetModal({
+   onClose,
+   provider,
+   onBudgetUpdated,
++  workspaceSlug,
+ }: AiBudgetModalProps): JSX.Element | null {
+   if (!isOpen || !provider) return null;
+ 
+@@ -260,6 +280,7 @@ export function AiBudgetModal({
+         onClose={onClose}
+         provider={provider}
+         onBudgetUpdated={onBudgetUpdated}
++        workspaceSlug={workspaceSlug}
+       />
+     </div>
+   );
 diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-index 309700b3..a2b37701 100644
+index 309700b3..6a30f96e 100644
 --- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-@@ -25,6 +25,7 @@ interface AiProviderEditorDrawerProps {
+@@ -25,6 +25,8 @@ interface AiProviderEditorDrawerProps {
    airGapMode: boolean;
    onSaved: () => void;
    providersCount?: number | undefined;
 +  projectId?: string | null | undefined;
++  workspaceSlug?: string | undefined;
  }
  
  interface TestStatusState {
-@@ -91,12 +92,14 @@ function AiProviderEditorContent({
+@@ -91,12 +93,16 @@ function AiProviderEditorContent({
    airGapMode,
    onSaved,
    providersCount,
 +  projectId,
++  workspaceSlug,
  }: {
    onClose: () => void;
    provider: ProviderConfigPublic | null;
@@ -1827,10 +2729,11 @@ index 309700b3..a2b37701 100644
    onSaved: () => void;
    providersCount?: number | undefined;
 +  projectId?: string | null | undefined;
++  workspaceSlug?: string | undefined;
  }): JSX.Element {
    const isEditing = provider !== null;
  
-@@ -264,10 +267,12 @@ function AiProviderEditorContent({
+@@ -264,13 +270,17 @@ function AiProviderEditorContent({
              base_url: baseUrl.trim() || null,
              api_key: apiKey.trim() || null,
              settings_json: { timeout_ms: timeoutMs },
@@ -1842,8 +2745,14 @@ index 309700b3..a2b37701 100644
 +            ...(projectId ? { project_id: projectId } : {}),
            };
        const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-       const res = await probeAiModels(payload, targetProviderId);
-@@ -304,10 +309,12 @@ function AiProviderEditorContent({
+-      const res = await probeAiModels(payload, targetProviderId);
++      const res = workspaceSlug
++        ? await probeAiModels(payload, targetProviderId, workspaceSlug)
++        : await probeAiModels(payload, targetProviderId);
+       if (res.ok) {
+         setProbedModels(res.models);
+         if (res.models.length === 0) {
+@@ -304,13 +314,17 @@ function AiProviderEditorContent({
              base_url: baseUrl.trim() || null,
              api_key: apiKey.trim() || null,
              settings_json: { timeout_ms: timeoutMs },
@@ -1855,33 +2764,62 @@ index 309700b3..a2b37701 100644
 +            ...(projectId ? { project_id: projectId } : {}),
            };
        const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-       const res = await testAiConnection(payload, targetProviderId);
-@@ -399,6 +406,7 @@ function AiProviderEditorContent({
+-      const res = await testAiConnection(payload, targetProviderId);
++      const res = workspaceSlug
++        ? await testAiConnection(payload, targetProviderId, workspaceSlug)
++        : await testAiConnection(payload, targetProviderId);
+       if (res.ok) {
+         setTestStatus({
+           kind: 'success',
+@@ -386,7 +400,11 @@ function AiProviderEditorContent({
+           payload.api_key = apiKey.trim();
+         }
+ 
+-        await updateAiProvider(provider.id, payload);
++        if (workspaceSlug) {
++          await updateAiProvider(provider.id, payload, workspaceSlug);
++        } else {
++          await updateAiProvider(provider.id, payload);
++        }
+       } else {
+         const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
+         const payload: ProviderConfigCreate = {
+@@ -399,9 +417,14 @@ function AiProviderEditorContent({
            api_key: apiKey.trim() ? apiKey.trim() : null,
            is_enabled: true,
            settings: computeSettings(),
 +          ...(projectId ? { project_id: projectId } : {}),
          };
  
-         await createAiProvider(payload);
-@@ -949,6 +957,7 @@ export function AiProviderEditorDrawer({
+-        await createAiProvider(payload);
++        if (workspaceSlug) {
++          await createAiProvider(payload, workspaceSlug);
++        } else {
++          await createAiProvider(payload);
++        }
+       }
+ 
+       setIsSaving(false);
+@@ -949,6 +972,8 @@ export function AiProviderEditorDrawer({
    airGapMode,
    onSaved,
    providersCount,
 +  projectId,
++  workspaceSlug,
  }: AiProviderEditorDrawerProps): JSX.Element | null {
    useAal2DirtyKeepalive(isOpen);
    if (!isOpen) return null;
-@@ -968,6 +977,7 @@ export function AiProviderEditorDrawer({
+@@ -968,6 +993,8 @@ export function AiProviderEditorDrawer({
          airGapMode={airGapMode}
          onSaved={onSaved}
          providersCount={providersCount}
 +        projectId={projectId}
++        workspaceSlug={workspaceSlug}
        />
      </div>
    );
 diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
-index bbece436..a5c1128c 100644
+index bbece436..e6b2774d 100644
 --- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
 +++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
 @@ -26,7 +26,17 @@ interface CardTestStatus {
@@ -1903,16 +2841,24 @@ index bbece436..a5c1128c 100644
    const [providers, setProviders] = useState<ProviderConfigPublic[]>([]);
    const [airGapMode, setAirGapMode] = useState<boolean>(false);
    const [isLoading, setIsLoading] = useState<boolean>(true);
-@@ -53,7 +63,7 @@ export function AiStudioPage(): JSX.Element {
+@@ -53,8 +63,14 @@ export function AiStudioPage(): JSX.Element {
      async function load() {
        try {
          const [provList, isAirGap] = await Promise.all([
 -          fetchAiProviders(),
-+          fetchAiProviders(projectId ?? undefined, workspaceSlug ?? 'current'),
-           fetchAirGapMode(),
+-          fetchAirGapMode(),
++          workspaceSlug
++            ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
++            : projectId
++              ? fetchAiProviders(projectId)
++              : fetchAiProviders(),
++          workspaceSlug
++            ? fetchAirGapMode(workspaceSlug)
++            : fetchAirGapMode(),
          ]);
          if (!active) return;
-@@ -76,7 +86,7 @@ export function AiStudioPage(): JSX.Element {
+         const sorted = [...provList].sort((a, b) => a.priority - b.priority);
+@@ -76,7 +92,7 @@ export function AiStudioPage(): JSX.Element {
      return () => {
        active = false;
      };
@@ -1921,18 +2867,64 @@ index bbece436..a5c1128c 100644
  
    const refreshData = useCallback((): void => {
      setReloadCounter((c) => c + 1);
-@@ -111,7 +121,9 @@ export function AiStudioPage(): JSX.Element {
+@@ -85,9 +101,17 @@ export function AiStudioPage(): JSX.Element {
+   const handleToggleEnable = async (provider: ProviderConfigPublic): Promise<void> => {
+     try {
+       if (provider.is_enabled) {
+-        await disableAiProvider(provider.id);
++        if (workspaceSlug) {
++          await disableAiProvider(provider.id, workspaceSlug);
++        } else {
++          await disableAiProvider(provider.id);
++        }
+       } else {
+-        await updateAiProvider(provider.id, { is_enabled: true });
++        if (workspaceSlug) {
++          await updateAiProvider(provider.id, { is_enabled: true }, workspaceSlug);
++        } else {
++          await updateAiProvider(provider.id, { is_enabled: true });
++        }
+       }
+       refreshData();
+     } catch (err: unknown) {
+@@ -98,7 +122,11 @@ export function AiStudioPage(): JSX.Element {
+   const handleConfirmDelete = async (): Promise<void> => {
+     if (!providerToDelete) return;
+     try {
+-      await deleteAiProvider(providerToDelete.id);
++      if (workspaceSlug) {
++        await deleteAiProvider(providerToDelete.id, workspaceSlug);
++      } else {
++        await deleteAiProvider(providerToDelete.id);
++      }
+       setProviderToDelete(null);
+       refreshData();
+     } catch (err: unknown) {
+@@ -111,7 +139,11 @@ export function AiStudioPage(): JSX.Element {
      setProviders(newOrder);
      try {
        const orderedIds = newOrder.map((p) => p.id);
 -      const updated = await reorderAiProviders(orderedIds);
-+      const updated = (projectId || (workspaceSlug && workspaceSlug !== 'current'))
-+        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug ?? 'current')
-+        : await reorderAiProviders(orderedIds);
++      const updated = workspaceSlug
++        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug)
++        : projectId
++          ? await reorderAiProviders(orderedIds, projectId)
++          : await reorderAiProviders(orderedIds);
        const sorted = [...updated].sort((a, b) => a.priority - b.priority);
        setProviders(sorted);
      } catch (err: unknown) {
-@@ -208,7 +220,7 @@ export function AiStudioPage(): JSX.Element {
+@@ -177,7 +209,9 @@ export function AiStudioPage(): JSX.Element {
+     }));
+ 
+     try {
+-      const res = await testAiConnection({}, provider.id);
++      const res = workspaceSlug
++        ? await testAiConnection({}, provider.id, workspaceSlug)
++        : await testAiConnection({}, provider.id);
+       if (res.ok) {
+         setCardTestStatuses((prev) => ({
+           ...prev,
+@@ -208,14 +242,16 @@ export function AiStudioPage(): JSX.Element {
  
    return (
      <section className="kb-ai-studio" data-testid="ai-studio-page">
@@ -1941,16 +2933,147 @@ index bbece436..a5c1128c 100644
        <div className="kb-ai-studio-header">
          <div className="kb-ai-studio-title-group">
            <h1>
-@@ -480,6 +492,7 @@ export function AiStudioPage(): JSX.Element {
+             <span aria-hidden="true">🧠</span> AI Providers & Token Caps Studio
+           </h1>
+           <p className="kb-ai-studio-subtitle">
+-            Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.
++            {projectId
++              ? 'Configure project LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'
++              : 'Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'}
+           </p>
+         </div>
+ 
+@@ -467,6 +503,7 @@ export function AiStudioPage(): JSX.Element {
+         onClose={() => { setSelectedBudgetProvider(null); }}
+         provider={selectedBudgetProvider}
+         onBudgetUpdated={refreshData}
++        workspaceSlug={workspaceSlug}
+       />
+ 
+       {/* Editor Drawer */}
+@@ -480,6 +517,8 @@ export function AiStudioPage(): JSX.Element {
          airGapMode={airGapMode}
          onSaved={refreshData}
          providersCount={providers.length}
 +        projectId={projectId}
++        workspaceSlug={workspaceSlug}
        />
  
        {/* Delete Confirmation Modal */}
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+index 03f02de7..93a10b3f 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -1549,5 +1549,107 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+       fireEvent.click(screen.getByTestId('probe-clear-all-btn'));
+       expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+     });
++
++    it('supports workspaceSlug routing for create and update provider', async () => {
++      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
++        id: 'new-prov-id',
++        provider_kind: 'openai',
++        display_name: 'Custom OpenAi',
++        base_url: 'https://api.openai.com/v1',
++        model_allowlist: ['gpt-4o'],
++        residency_tier: 'cloud_standard',
++        priority: 10,
++        settings: {},
++        api_key_set: true,
++        is_enabled: true,
++        project_id: null,
++      });
++
++      const onSaved = vi.fn();
++      const onClose = vi.fn();
++
++      const { rerender } = render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={onClose}
++          provider={null}
++          airGapMode={false}
++          onSaved={onSaved}
++          workspaceSlug="engineering"
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('provider-name-input'), {
++        target: { value: 'Custom OpenAi' },
++      });
++      fireEvent.change(screen.getByTestId('provider-key-input'), {
++        target: { value: 'sk-proj-test123456789' },
++      });
++      fireEvent.change(screen.getByTestId('provider-models-input'), {
++        target: { value: 'gpt-4o' },
++      });
++
++      fireEvent.click(screen.getByTestId('save-provider-btn'));
++
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalledWith(
++          expect.objectContaining({ display_name: 'Custom OpenAi' }),
++          'engineering',
++        );
++      });
++
++      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({
++        id: 'existing-prov-id',
++        provider_kind: 'openai',
++        display_name: 'Updated OpenAi',
++        base_url: 'https://api.openai.com/v1',
++        model_allowlist: ['gpt-4o'],
++        residency_tier: 'cloud_standard',
++        priority: 10,
++        settings: {},
++        api_key_set: true,
++        is_enabled: true,
++        project_id: null,
++      });
++
++      const existingProvider: ProviderConfigPublic = {
++        id: 'existing-prov-id',
++        provider_kind: 'openai',
++        display_name: 'Existing OpenAi',
++        base_url: 'https://api.openai.com/v1',
++        model_allowlist: ['gpt-4o'],
++        residency_tier: 'cloud_standard',
++        priority: 10,
++        settings: {},
++        api_key_set: true,
++        is_enabled: true,
++        project_id: null,
++      };
++
++      rerender(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={onClose}
++          provider={existingProvider}
++          airGapMode={false}
++          onSaved={onSaved}
++          workspaceSlug="engineering"
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('provider-name-input'), {
++        target: { value: 'Updated OpenAi' },
++      });
++
++      fireEvent.click(screen.getByTestId('save-provider-btn'));
++
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalledWith(
++          'existing-prov-id',
++          expect.objectContaining({ display_name: 'Updated OpenAi' }),
++          'engineering',
++        );
++      });
++    });
+   });
+ });
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
-index 900d8b6c..7330e38c 100644
+index 900d8b6c..0db5d4ba 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 @@ -96,13 +96,13 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
@@ -1969,11 +3092,169 @@ index 900d8b6c..7330e38c 100644
  
        // fetchAiProvider
        fetchSpy.mockResolvedValueOnce(mockProvider);
+@@ -1841,5 +1841,137 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+       expect(normalBar.className).not.toContain('kb-budget-progress--danger');
+       expect(normalBar.className).not.toContain('kb-budget-progress--warning');
+     });
++
++    it('supports workspaceSlug routing for toggle, reorder, delete, and connection testing', async () => {
++      const mockWs1: ProviderConfigPublic = {
++        id: 'prov-ws-1',
++        provider_kind: 'gemini',
++        display_name: 'Workspace Gemini',
++        base_url: 'https://generativelanguage.googleapis.com',
++        model_allowlist: ['gemini-2.5-flash'],
++        residency_tier: 'cloud_standard',
++        priority: 10,
++        settings: {},
++        api_key_set: true,
++        is_enabled: true,
++        project_id: null,
++      };
++      const mockWs2: ProviderConfigPublic = {
++        id: 'prov-ws-2',
++        provider_kind: 'ollama',
++        display_name: 'Workspace Ollama',
++        base_url: 'http://localhost:11434',
++        model_allowlist: ['gemma3:4b'],
++        residency_tier: 'local_only',
++        priority: 20,
++        settings: {},
++        api_key_set: false,
++        is_enabled: false,
++        project_id: null,
++      };
++
++      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockWs1, mockWs2]);
++      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
++      const disableSpy = vi.spyOn(aiApi, 'disableAiProvider').mockResolvedValue({
++        ...mockWs1,
++        is_enabled: false,
++      });
++      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({
++        ...mockWs2,
++        is_enabled: true,
++      });
++      const deleteSpy = vi.spyOn(aiApi, 'deleteAiProvider').mockResolvedValue();
++      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
++        { ...mockWs2, priority: 10 },
++        { ...mockWs1, priority: 20 },
++      ]);
++      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++        ok: true,
++        latency_ms: 45,
++        models: ['gemini-2.5-flash'],
++        model_count: 1,
++      });
++
++      render(<AiStudioPage workspaceSlug="custom-team" />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('provider-card-prov-ws-1')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('test-connection-btn-prov-ws-1'));
++      await waitFor(() => {
++        expect(testSpy).toHaveBeenCalledWith({}, 'prov-ws-1', 'custom-team');
++      });
++
++      fireEvent.click(screen.getByTestId('move-down-btn-prov-ws-1'));
++      await waitFor(() => {
++        expect(reorderSpy).toHaveBeenCalledWith(['prov-ws-2', 'prov-ws-1'], undefined, 'custom-team');
++      });
++
++      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-ws-1'));
++      await waitFor(() => {
++        expect(disableSpy).toHaveBeenCalledWith('prov-ws-1', 'custom-team');
++      });
++
++      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-ws-2'));
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalledWith('prov-ws-2', { is_enabled: true }, 'custom-team');
++      });
++
++      fireEvent.click(screen.getByTestId('delete-provider-btn-prov-ws-1'));
++      await waitFor(() => {
++        expect(screen.getByTestId('confirm-delete-provider-btn')).toBeDefined();
++      });
++      fireEvent.click(screen.getByTestId('confirm-delete-provider-btn'));
++      await waitFor(() => {
++        expect(deleteSpy).toHaveBeenCalledWith('prov-ws-1', 'custom-team');
++      });
++    });
++
++    it('handles AiBudgetModal save with workspaceSlug', async () => {
++      const fetchBudgetSpy = vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue([
++        {
++          period_kind: 'monthly',
++          period_start: '2026-11-01',
++          token_cap: 500000,
++          tokens_used: 10000,
++          tokens_reserved: 0,
++        },
++      ]);
++      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue({
++        period_kind: 'monthly',
++        period_start: '2026-11-01',
++        token_cap: 800000,
++        tokens_used: 10000,
++        tokens_reserved: 0,
++      });
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++          workspaceSlug="finance-team"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(fetchBudgetSpy).toHaveBeenCalledWith('prov-openai-1', 'finance-team');
++      });
++
++      const capInput = screen.getByTestId<HTMLInputElement>('budget-token-cap-input');
++      fireEvent.change(capInput, { target: { value: '800000' } });
++      fireEvent.click(screen.getByTestId('save-budget-btn'));
++
++      await waitFor(() => {
++        expect(setBudgetSpy).toHaveBeenCalledWith(
++          expect.objectContaining({
++            provider_config_id: 'prov-openai-1',
++            token_cap: 800000,
++          }),
++          'finance-team',
++        );
++      });
++    });
+   });
+ });
 diff --git a/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts b/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
-index b1d87c79..f563532d 100644
+index b1d87c79..58e39322 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
 +++ b/kanban/web/src/features/admin-ai/__tests__/aiAdminApi.test.ts
-@@ -41,7 +41,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -25,23 +25,24 @@ describe('aiAdminApi tests (KAN-21)', () => {
+     vi.restoreAllMocks();
+   });
+ 
+-  it('fetchAirGapMode calls /api/v1/admin/workspace-settings and returns air_gap_mode boolean', async () => {
++  it('fetchAirGapMode calls /api/v1/workspaces/{workspace}/ai-providers/settings and returns air_gap_mode boolean', async () => {
+     const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+       air_gap_mode: true,
+     });
+ 
+     const result = await fetchAirGapMode();
+     expect(result).toBe(true);
+-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/workspace-settings');
++    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers/settings');
+ 
+     fetchSpy.mockResolvedValueOnce({ air_gap_mode: false });
+-    expect(await fetchAirGapMode()).toBe(false);
++    expect(await fetchAirGapMode('my-team')).toBe(false);
++    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/my-team/ai-providers/settings');
+ 
+     fetchSpy.mockRejectedValueOnce(new Error('Network error'));
      expect(await fetchAirGapMode()).toBe(false);
    });
  
@@ -1982,7 +3263,7 @@ index b1d87c79..f563532d 100644
      const mockReturnedProviders = [
        { id: 'id-1', priority: 10, display_name: 'Provider 1' },
        { id: 'id-2', priority: 20, display_name: 'Provider 2' },
-@@ -51,8 +51,8 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -51,8 +52,8 @@ describe('aiAdminApi tests (KAN-21)', () => {
      const orderedIds = ['id-1', 'id-2'];
      const res = await reorderAiProviders(orderedIds);
      expect(res).toEqual(mockReturnedProviders);
@@ -1993,7 +3274,7 @@ index b1d87c79..f563532d 100644
      });
    });
  
-@@ -73,7 +73,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -73,7 +74,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
        base_url: 'http://127.0.0.1:11434',
      });
      expect(resDraft).toEqual(mockProbeResult);
@@ -2002,7 +3283,7 @@ index b1d87c79..f563532d 100644
        body: {
          provider_kind: 'ollama',
          base_url: 'http://127.0.0.1:11434',
-@@ -88,7 +88,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -88,7 +89,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
      expect(resSaved).toEqual(mockProbeResult);
      expect(fetchSpy).toHaveBeenCalledWith(
        'POST',
@@ -2011,7 +3292,7 @@ index b1d87c79..f563532d 100644
        {
          body: { provider_kind: 'openai' },
        },
-@@ -113,7 +113,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -113,7 +114,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
        api_key: 'sk-test',
      });
      expect(resDraft).toEqual(mockTestResult);
@@ -2020,7 +3301,7 @@ index b1d87c79..f563532d 100644
        body: {
          provider_kind: 'openai',
          base_url: 'https://api.openai.com/v1',
-@@ -129,7 +129,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -129,7 +130,7 @@ describe('aiAdminApi tests (KAN-21)', () => {
      expect(resSaved).toEqual(mockTestResult);
      expect(fetchSpy).toHaveBeenCalledWith(
        'POST',
@@ -2029,7 +3310,7 @@ index b1d87c79..f563532d 100644
        {
          body: { provider_kind: 'gemini' },
        },
-@@ -153,41 +153,41 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -153,41 +154,41 @@ describe('aiAdminApi tests (KAN-21)', () => {
      // fetchAiProviders
      fetchSpy.mockResolvedValueOnce([mockProvider]);
      expect(await fetchAiProviders()).toEqual([mockProvider]);
@@ -2078,7 +3359,7 @@ index b1d87c79..f563532d 100644
  
      // fetchBudgets
      const mockBudget = {
-@@ -199,12 +199,12 @@ describe('aiAdminApi tests (KAN-21)', () => {
+@@ -199,12 +200,12 @@ describe('aiAdminApi tests (KAN-21)', () => {
      };
      fetchSpy.mockResolvedValueOnce([mockBudget]);
      expect(await fetchBudgets('prov-1')).toEqual([mockBudget]);
@@ -2094,7 +3375,7 @@ index b1d87c79..f563532d 100644
      });
    });
 diff --git a/kanban/web/src/features/admin-ai/aiAdminApi.ts b/kanban/web/src/features/admin-ai/aiAdminApi.ts
-index b19b6af2..1e4a9037 100644
+index b19b6af2..611e8b88 100644
 --- a/kanban/web/src/features/admin-ai/aiAdminApi.ts
 +++ b/kanban/web/src/features/admin-ai/aiAdminApi.ts
 @@ -56,55 +56,91 @@ export interface BudgetSetRequest {
@@ -2214,7 +3495,24 @@ index b19b6af2..1e4a9037 100644
  }
  
  export function isLocalEndpoint(providerKind: string, baseUrl?: string | null): boolean {
-@@ -175,28 +212,38 @@ export async function fetchAirGapMode(): Promise<boolean> {
+@@ -164,39 +201,50 @@ export interface ProviderProbeResult {
+   message?: string | null;
+ }
+ 
+-export async function fetchAirGapMode(): Promise<boolean> {
++export async function fetchAirGapMode(workspace = 'current'): Promise<boolean> {
+   try {
+-    const settings = (await apiFetch('GET', '/api/v1/admin/workspace-settings' as never)) as {
+-      air_gap_mode?: boolean;
+-    };
+-    return Boolean(settings.air_gap_mode);
++    const res = (await apiFetch(
++      'GET',
++      `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/settings` as never,
++    )) as { air_gap_mode?: boolean };
++    return Boolean(res.air_gap_mode);
+   } catch {
+     return false;
    }
  }
  
@@ -2401,3 +3699,525 @@ index 440d36ee..f04c56f1 100644
          {activeTab === 'trash' && (
            <div className="kb-members-section" data-testid="workspace-trash-studio">
              <div className="kb-settings-header">
+diff --git a/scripts/capture_kan402_screenshots.mjs b/scripts/capture_kan402_screenshots.mjs
+new file mode 100644
+index 00000000..a89dcab6
+--- /dev/null
++++ b/scripts/capture_kan402_screenshots.mjs
+@@ -0,0 +1,516 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { spawn } from 'node:child_process';
++
++let chromium;
++try {
++  ({ chromium } = await import('/home/adamoutler/.npm/_npx/81bbc6515d992ace/node_modules/playwright/index.mjs'));
++} catch {
++  try {
++    ({ chromium } = await import('playwright'));
++  } catch {
++    ({ chromium } = await import('@playwright/test'));
++  }
++}
++
++const PORT = 18402;
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const OUT_DIR = path.resolve('docs/qa/KAN-402/screenshots');
++
++const VIEWPORTS = [
++  {
++    name: '01-desktop-1440x900',
++    width: 1440,
++    height: 900,
++  },
++  {
++    name: '02-desktop-1440x900-dark',
++    width: 1440,
++    height: 900,
++  },
++  {
++    name: '03-tablet-landscape-1024x768',
++    width: 1024,
++    height: 768,
++  },
++  {
++    name: '04-tablet-portrait-768x1024',
++    width: 768,
++    height: 1024,
++  },
++  {
++    name: '05-mobile-portrait-390x844',
++    width: 390,
++    height: 844,
++  },
++];
++
++async function waitForServer(url, timeoutMs = 30000) {
++  const start = Date.now();
++  while (Date.now() - start < timeoutMs) {
++    try {
++      const res = await fetch(url);
++      if (res.ok || res.status === 200 || res.status === 404) {
++        return;
++      }
++    } catch {
++      // Retry
++    }
++    await new Promise((r) => setTimeout(r, 400));
++  }
++  throw new Error(`Timeout waiting for preview server at ${url}`);
++}
++
++async function setupInterceptions(page, userRole = 'WORKSPACE_ADMIN') {
++  await page.route('**/*', async (route) => {
++    const url = route.request().url();
++    const method = route.request().method();
++
++    // Do NOT intercept HTML/JS/CSS assets or page navigation
++    if (!url.includes('/api/')) {
++      return route.continue();
++    }
++
++    if (url.includes('/api/v1/setup/status')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({ initialized: true, is_initialized: true, requires_setup: false }),
++      });
++    }
++
++    if (url.includes('/api/v1/notifications')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({ items: [], total: 0, unread_count: 0 }),
++      });
++    }
++
++    if (url.includes('/api/v1/auth/session')) {
++      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({
++          authenticated: true,
++          mfa_pending: false,
++          csrf_token: 'mock-csrf-token-12345',
++          principal_id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
++          workspace_id: 'ws_default',
++          aal_level: isWorkspaceAdmin ? 2 : 1,
++          aal2_active: isWorkspaceAdmin,
++          aal2_expires_at: isWorkspaceAdmin ? new Date(Date.now() + 890_000).toISOString() : null,
++        }),
++      });
++    }
++
++    if (url.includes('/api/v1/users/me') || url.includes('/api/v1/auth/me')) {
++      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({
++          id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
++          email: isWorkspaceAdmin ? 'wsadmin@kanban.local' : 'projadmin@kanban.local',
++          username: isWorkspaceAdmin ? 'wsadmin' : 'projadmin',
++          display_name: isWorkspaceAdmin ? 'Workspace Administrator' : 'Project Administrator',
++          is_server_admin: false,
++          is_workspace_admin: isWorkspaceAdmin,
++          workspace_role: isWorkspaceAdmin ? 'WORKSPACE_ADMIN' : 'MEMBER',
++          aal_level: isWorkspaceAdmin ? 2 : 1,
++          auth_aal: isWorkspaceAdmin ? 'aal2' : 'aal1',
++          aal2_active: isWorkspaceAdmin,
++        }),
++      });
++    }
++
++    // AI Providers (Workspace & Project)
++    if (url.includes('/ai-providers')) {
++      if (url.includes('project_id=')) {
++        return route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            {
++              id: 'b1b1b1b1-1111-4000-8000-000000000001',
++              slug: 'project-openai-dedicated',
++              name: 'Project Dedicated OpenAI',
++              provider_kind: 'openai',
++              model_allowlist: ['gpt-4o', 'o3-mini'],
++              enabled: true,
++              priority: 1,
++              project_id: 'proj-kan-uuid',
++              api_key_set: true,
++              created_at: '2026-11-15T10:00:00Z',
++              updated_at: '2026-11-24T12:00:00Z',
++            },
++          ]),
++        });
++      }
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify([
++          {
++            id: 'a1a1a1a1-1111-4000-8000-000000000001',
++            slug: 'anthropic-workspace',
++            name: 'Anthropic Claude Workspace',
++            provider_kind: 'anthropic',
++            model_allowlist: ['claude-3-7-sonnet', 'claude-3-5-haiku'],
++            enabled: true,
++            priority: 1,
++            project_id: null,
++            api_key_set: true,
++            created_at: '2026-11-01T10:00:00Z',
++            updated_at: '2026-11-20T12:00:00Z',
++          },
++          {
++            id: 'a2a2a2a2-2222-4000-8000-000000000002',
++            slug: 'ollama-local-cluster',
++            name: 'Ollama Air-Gapped Local',
++            provider_kind: 'ollama',
++            model_allowlist: ['deepseek-coder:6.7b', 'llama3.1:8b'],
++            enabled: true,
++            priority: 2,
++            project_id: null,
++            api_key_set: false,
++            created_at: '2026-11-05T10:00:00Z',
++            updated_at: '2026-11-22T12:00:00Z',
++          },
++        ]),
++      });
++    }
++
++    // Agent Definitions (Workspace & Project)
++    if (url.includes('/agent-definitions')) {
++      if (url.includes('project_id=')) {
++        return route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            {
++              id: 'd1d1d1d1-1111-4000-8000-000000000001',
++              workspace_id: 'ws_default',
++              project_id: 'proj-kan-uuid',
++              principal_id: 'usr_sprint_bot',
++              slug: 'project-sprint-bot',
++              display_name: 'Project Sprint Assistant',
++              harness_kind: 'in_app_sdk',
++              provider_kind: 'openai',
++              model_id: 'gpt-4o',
++              cli_args: [],
++              repo_access_mode: 'bare_git_tools',
++              mcp_allowed_tools: ['kanban_issues', 'git_log'],
++              system_instructions_md: 'Automated release notes and sprint burndown generator for Platform Core.',
++              timeout_ms: 45000,
++            },
++          ]),
++        });
++      }
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify([
++          {
++            id: 'c1c1c1c1-1111-4000-8000-000000000001',
++            workspace_id: 'ws_default',
++            project_id: null,
++            principal_id: 'usr_triage_bot',
++            slug: 'workspace-triage-bot',
++            display_name: 'Workspace Triage Agent',
++            harness_kind: 'in_app_sdk',
++            provider_kind: 'anthropic',
++            model_id: 'claude-3-5-haiku',
++            cli_args: [],
++            repo_access_mode: 'none',
++            mcp_allowed_tools: ['issues_list', 'issues_update'],
++            system_instructions_md: 'You are a workspace triage agent that categorizes incoming work items.',
++            timeout_ms: 30000,
++          },
++          {
++            id: 'c2c2c2c2-2222-4000-8000-000000000002',
++            workspace_id: 'ws_default',
++            project_id: null,
++            principal_id: 'usr_sec_agent',
++            slug: 'security-auditor-agent',
++            display_name: 'Security Auditor Agent',
++            harness_kind: 'cli_pipe',
++            provider_kind: 'gemini',
++            model_id: 'gemini-3.8-flash',
++            cli_args: ['-p', 'audit'],
++            repo_access_mode: 'ro_vfs_mount',
++            mcp_allowed_tools: ['git_diff', 'ast_grep'],
++            system_instructions_md: 'Autonomous security scanner performing forensic AST audits on pull requests.',
++            timeout_ms: 60000,
++          },
++        ]),
++      });
++    }
++
++    if (url.includes('/api/v1/workspaces/current/settings') || url.includes('/api/v1/admin/workspace-settings') || url.includes('/api/v1/workspaces/ws_default/settings')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({
++          workspace_id: 'ws_default',
++          air_gap_mode: false,
++        }),
++      });
++    }
++
++    if (url.endsWith('/workspaces/current') || url.includes('/workspaces/current?')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({
++          id: 'ws_default',
++          name: 'Platform Engineering',
++          slug: 'kanban',
++          is_current: true,
++        }),
++      });
++    }
++
++    if (url.includes('/api/v1/workspaces') && method === 'GET' && !url.includes('/ai-providers') && !url.includes('/agent-definitions') && !url.includes('/settings')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify([
++          { id: 'ws_default', slug: 'kanban', name: 'Platform Engineering' },
++        ]),
++      });
++    }
++
++    if (url.includes('/api/v1/projects') && !url.includes('/ai-providers') && !url.includes('/agent-definitions')) {
++      if (url.endsWith('/projects') || url.includes('/projects?')) {
++        return route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'proj-kan-uuid', key: 'KAN', name: 'Platform Core', workspace_id: 'ws_default' },
++          ]),
++        });
++      }
++      if (url.includes('/projects/KAN') || url.includes('/projects/proj-kan-uuid')) {
++        if (url.includes('/members')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/states')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/priorities')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/labels')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/custom-fields')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/integrations')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/modules')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        if (url.includes('/trash')) {
++          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
++        }
++        return route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'proj-kan-uuid',
++            key: 'KAN',
++            identifier: 'KAN',
++            name: 'Platform Core',
++            description_markdown: 'Platform Core Project with Dedicated Autonomous AI Agents',
++            workspace_id: 'ws_default',
++            modules_enabled: true,
++            skip_loaded_sequence_numbers: false,
++            default_module_ids: [],
++            auto_archive_days: 30,
++            capabilities: ['ADMIN', 'EDIT', 'READ'],
++            is_project_admin: true,
++          }),
++        });
++      }
++    }
++
++
++
++    if (url.includes('/api/')) {
++      return route.fulfill({
++        status: 200,
++        contentType: 'application/json',
++        body: JSON.stringify({}),
++      });
++    }
++
++    return route.continue();
++  });
++}
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++
++  console.log(`Starting preview server on port ${PORT}...`);
++  const previewProc = spawn(
++    'pnpm',
++    ['--dir', 'kanban/web', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
++    { stdio: 'inherit' }
++  );
++
++  try {
++    await waitForServer(BASE_URL);
++    console.log(`Preview server ready at ${BASE_URL}`);
++
++    const browser = await chromium.launch({
++      executablePath: '/usr/bin/google-chrome',
++      headless: true,
++      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
++    });
++
++    async function captureItem({ vp, colorScheme, url, selector, filename, role }) {
++      console.log(`Capturing ${filename} (${vp.width}x${vp.height} ${colorScheme})...`);
++      const context = await browser.newContext({
++        viewport: { width: vp.width, height: vp.height },
++        colorScheme,
++      });
++      const page = await context.newPage();
++      await setupInterceptions(page, role);
++      await page.goto(url, { waitUntil: 'networkidle' });
++      await page.evaluate((theme) => {
++        document.documentElement.dataset.theme = theme;
++        localStorage.setItem('theme', theme);
++      }, colorScheme);
++      await page.waitForSelector(selector, { timeout: 10000 });
++      await page.waitForTimeout(500);
++      await page.screenshot({
++        path: path.join(OUT_DIR, filename),
++        fullPage: false,
++      });
++      await context.close();
++    }
++
++    // 1. Viewport 1440x900 light
++    await captureItem({
++      vp: VIEWPORTS[0],
++      colorScheme: 'light',
++      url: `${BASE_URL}/workspaces/settings/ai`,
++      selector: '[data-testid="ai-studio-page"]',
++      filename: '01-workspace-ai-desktop-1440x900-light.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[0],
++      colorScheme: 'light',
++      url: `${BASE_URL}/workspaces/settings/agents`,
++      selector: '[data-testid="agent-studio-page"]',
++      filename: '01-workspace-agents-desktop-1440x900-light.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[0],
++      colorScheme: 'light',
++      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
++      selector: '[data-testid="project-ai-agents-section"]',
++      filename: '01-project-ai-agents-desktop-1440x900-light.png',
++      role: 'PROJECT_ADMIN',
++    });
++
++    // 2. Viewport 1440x900 dark
++    await captureItem({
++      vp: VIEWPORTS[1],
++      colorScheme: 'dark',
++      url: `${BASE_URL}/workspaces/settings/ai`,
++      selector: '[data-testid="ai-studio-page"]',
++      filename: '02-workspace-ai-desktop-1440x900-dark.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[1],
++      colorScheme: 'dark',
++      url: `${BASE_URL}/workspaces/settings/agents`,
++      selector: '[data-testid="agent-studio-page"]',
++      filename: '02-workspace-agents-desktop-1440x900-dark.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[1],
++      colorScheme: 'dark',
++      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
++      selector: '[data-testid="project-ai-agents-section"]',
++      filename: '02-project-ai-agents-desktop-1440x900-dark.png',
++      role: 'PROJECT_ADMIN',
++    });
++
++    // 3. Viewport 1024x768 Tablet Landscape
++    await captureItem({
++      vp: VIEWPORTS[2],
++      colorScheme: 'light',
++      url: `${BASE_URL}/workspaces/settings/ai`,
++      selector: '[data-testid="ai-studio-page"]',
++      filename: '03-workspace-ai-tablet-landscape-1024x768.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[2],
++      colorScheme: 'light',
++      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
++      selector: '[data-testid="project-ai-agents-section"]',
++      filename: '03-project-ai-agents-tablet-landscape-1024x768.png',
++      role: 'PROJECT_ADMIN',
++    });
++
++    // 4. Viewport 768x1024 Tablet Portrait
++    await captureItem({
++      vp: VIEWPORTS[3],
++      colorScheme: 'light',
++      url: `${BASE_URL}/workspaces/settings/ai`,
++      selector: '[data-testid="ai-studio-page"]',
++      filename: '04-workspace-ai-tablet-portrait-768x1024.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[3],
++      colorScheme: 'light',
++      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
++      selector: '[data-testid="project-ai-agents-section"]',
++      filename: '04-project-ai-agents-tablet-portrait-768x1024.png',
++      role: 'PROJECT_ADMIN',
++    });
++
++    // 5. Viewport 390x844 Mobile Portrait
++    await captureItem({
++      vp: VIEWPORTS[4],
++      colorScheme: 'light',
++      url: `${BASE_URL}/workspaces/settings/ai`,
++      selector: '[data-testid="ai-studio-page"]',
++      filename: '05-workspace-ai-mobile-390x844.png',
++      role: 'WORKSPACE_ADMIN',
++    });
++    await captureItem({
++      vp: VIEWPORTS[4],
++      colorScheme: 'light',
++      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
++      selector: '[data-testid="project-ai-agents-section"]',
++      filename: '05-project-ai-agents-mobile-390x844.png',
++      role: 'PROJECT_ADMIN',
++    });
++
++    await browser.close();
++    console.log('All 5 viewport screenshots captured successfully in docs/qa/KAN-402/screenshots/');
++  } finally {
++    previewProc.kill();
++  }
++}
++
++main().catch((err) => {
++  console.error('Screenshot capture failed:', err);
++  process.exit(1);
++});

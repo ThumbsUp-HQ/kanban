@@ -29,6 +29,7 @@ interface AgentDefinitionEditorDrawerProps {
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
   projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
@@ -39,12 +40,14 @@ function AgentDefinitionEditorContent({
   onSaved,
   aiProviders,
   projectId,
+  workspaceSlug,
 }: {
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
   projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }): JSX.Element {
   const isEditing = agent !== null;
 
@@ -60,7 +63,10 @@ function AgentDefinitionEditorContent({
       return;
     }
     let isMounted = true;
-    fetchAiProviders(projectId ?? undefined)
+    const fetchCall = workspaceSlug
+      ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
+      : fetchAiProviders(projectId ?? undefined);
+    fetchCall
       .then((data) => {
         if (isMounted) {
           setFetchedProviders(data);
@@ -72,7 +78,7 @@ function AgentDefinitionEditorContent({
     return () => {
       isMounted = false;
     };
-  }, [aiProviders, projectId]);
+  }, [aiProviders, projectId, workspaceSlug]);
 
   const providers = aiProviders ?? fetchedProviders;
   const matchingProviders = providers.filter(
@@ -174,7 +180,11 @@ function AgentDefinitionEditorContent({
           timeout_ms: timeoutMs,
         };
 
-        await createAgentDefinition(payload);
+        if (workspaceSlug) {
+          await createAgentDefinition(payload, workspaceSlug);
+        } else {
+          await createAgentDefinition(payload);
+        }
       }
 
       setIsSaving(false);
@@ -528,6 +538,7 @@ export function AgentDefinitionEditorDrawer({
   onSaved,
   aiProviders,
   projectId,
+  workspaceSlug,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -547,6 +558,7 @@ export function AgentDefinitionEditorDrawer({
         onSaved={onSaved}
         aiProviders={aiProviders}
         projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
     </div>
   );

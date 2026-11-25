@@ -201,12 +201,13 @@ export interface ProviderProbeResult {
   message?: string | null;
 }
 
-export async function fetchAirGapMode(): Promise<boolean> {
+export async function fetchAirGapMode(workspace = 'current'): Promise<boolean> {
   try {
-    const settings = (await apiFetch('GET', '/api/v1/admin/workspace-settings' as never)) as {
-      air_gap_mode?: boolean;
-    };
-    return Boolean(settings.air_gap_mode);
+    const res = (await apiFetch(
+      'GET',
+      `/api/v1/workspaces/${encodeURIComponent(workspace)}/ai-providers/settings` as never,
+    )) as { air_gap_mode?: boolean };
+    return Boolean(res.air_gap_mode);
   } catch {
     return false;
   }

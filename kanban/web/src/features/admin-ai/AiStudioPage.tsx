@@ -63,8 +63,14 @@ export function AiStudioPage({
     async function load() {
       try {
         const [provList, isAirGap] = await Promise.all([
-          fetchAiProviders(projectId ?? undefined, workspaceSlug ?? 'current'),
-          fetchAirGapMode(),
+          workspaceSlug
+            ? fetchAiProviders(projectId ?? undefined, workspaceSlug)
+            : projectId
+              ? fetchAiProviders(projectId)
+              : fetchAiProviders(),
+          workspaceSlug
+            ? fetchAirGapMode(workspaceSlug)
+            : fetchAirGapMode(),
         ]);
         if (!active) return;
         const sorted = [...provList].sort((a, b) => a.priority - b.priority);
@@ -95,9 +101,17 @@ export function AiStudioPage({
   const handleToggleEnable = async (provider: ProviderConfigPublic): Promise<void> => {
     try {
       if (provider.is_enabled) {
-        await disableAiProvider(provider.id);
+        if (workspaceSlug) {
+          await disableAiProvider(provider.id, workspaceSlug);
+        } else {
+          await disableAiProvider(provider.id);
+        }
       } else {
-        await updateAiProvider(provider.id, { is_enabled: true });
+        if (workspaceSlug) {
+          await updateAiProvider(provider.id, { is_enabled: true }, workspaceSlug);
+        } else {
+          await updateAiProvider(provider.id, { is_enabled: true });
+        }
       }
       refreshData();
     } catch (err: unknown) {
@@ -108,7 +122,11 @@ export function AiStudioPage({
   const handleConfirmDelete = async (): Promise<void> => {
     if (!providerToDelete) return;
     try {
-      await deleteAiProvider(providerToDelete.id);
+      if (workspaceSlug) {
+        await deleteAiProvider(providerToDelete.id, workspaceSlug);
+      } else {
+        await deleteAiProvider(providerToDelete.id);
+      }
       setProviderToDelete(null);
       refreshData();
     } catch (err: unknown) {
@@ -121,9 +139,11 @@ export function AiStudioPage({
     setProviders(newOrder);
     try {
       const orderedIds = newOrder.map((p) => p.id);
-      const updated = (projectId || (workspaceSlug && workspaceSlug !== 'current'))
-        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug ?? 'current')
-        : await reorderAiProviders(orderedIds);
+      const updated = workspaceSlug
+        ? await reorderAiProviders(orderedIds, projectId ?? undefined, workspaceSlug)
+        : projectId
+          ? await reorderAiProviders(orderedIds, projectId)
+          : await reorderAiProviders(orderedIds);
       const sorted = [...updated].sort((a, b) => a.priority - b.priority);
       setProviders(sorted);
     } catch (err: unknown) {
@@ -189,7 +209,9 @@ export function AiStudioPage({
     }));
 
     try {
-      const res = await testAiConnection({}, provider.id);
+      const res = workspaceSlug
+        ? await testAiConnection({}, provider.id, workspaceSlug)
+        : await testAiConnection({}, provider.id);
       if (res.ok) {
         setCardTestStatuses((prev) => ({
           ...prev,
@@ -227,7 +249,9 @@ export function AiStudioPage({
             <span aria-hidden="true">🧠</span> AI Providers & Token Caps Studio
           </h1>
           <p className="kb-ai-studio-subtitle">
-            Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.
+            {projectId
+              ? 'Configure project LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'
+              : 'Configure workspace LLM providers, failover priority stack, model allowlists, monthly token caps, and zero-egress policies.'}
           </p>
         </div>
 
@@ -479,6 +503,7 @@ export function AiStudioPage({
         onClose={() => { setSelectedBudgetProvider(null); }}
         provider={selectedBudgetProvider}
         onBudgetUpdated={refreshData}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Editor Drawer */}
@@ -493,6 +518,7 @@ export function AiStudioPage({
         onSaved={refreshData}
         providersCount={providers.length}
         projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Delete Confirmation Modal */}

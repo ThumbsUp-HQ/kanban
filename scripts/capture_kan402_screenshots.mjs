@@ -64,7 +64,7 @@ async function waitForServer(url, timeoutMs = 30000) {
   throw new Error(`Timeout waiting for preview server at ${url}`);
 }
 
-async function setupInterceptions(page) {
+async function setupInterceptions(page, userRole = 'WORKSPACE_ADMIN') {
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
@@ -91,6 +91,7 @@ async function setupInterceptions(page) {
     }
 
     if (url.includes('/api/v1/auth/session')) {
+      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -98,30 +99,31 @@ async function setupInterceptions(page) {
           authenticated: true,
           mfa_pending: false,
           csrf_token: 'mock-csrf-token-12345',
-          principal_id: 'usr_admin_test_1',
+          principal_id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
           workspace_id: 'ws_default',
-          aal_level: 2,
-          aal2_active: true,
-          aal2_expires_at: new Date(Date.now() + 890_000).toISOString(),
+          aal_level: isWorkspaceAdmin ? 2 : 1,
+          aal2_active: isWorkspaceAdmin,
+          aal2_expires_at: isWorkspaceAdmin ? new Date(Date.now() + 890_000).toISOString() : null,
         }),
       });
     }
 
     if (url.includes('/api/v1/users/me') || url.includes('/api/v1/auth/me')) {
+      const isWorkspaceAdmin = userRole === 'WORKSPACE_ADMIN';
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          id: 'usr_admin_test_1',
-          email: 'admin@kanban.local',
-          username: 'admin',
-          display_name: 'Platform Administrator',
-          is_server_admin: true,
-          is_workspace_admin: true,
-          workspace_role: 'WORKSPACE_ADMIN',
-          aal_level: 2,
-          auth_aal: 'aal2',
-          aal2_active: true,
+          id: isWorkspaceAdmin ? 'usr_ws_admin_1' : 'usr_proj_admin_1',
+          email: isWorkspaceAdmin ? 'wsadmin@kanban.local' : 'projadmin@kanban.local',
+          username: isWorkspaceAdmin ? 'wsadmin' : 'projadmin',
+          display_name: isWorkspaceAdmin ? 'Workspace Administrator' : 'Project Administrator',
+          is_server_admin: false,
+          is_workspace_admin: isWorkspaceAdmin,
+          workspace_role: isWorkspaceAdmin ? 'WORKSPACE_ADMIN' : 'MEMBER',
+          aal_level: isWorkspaceAdmin ? 2 : 1,
+          auth_aal: isWorkspaceAdmin ? 'aal2' : 'aal1',
+          aal2_active: isWorkspaceAdmin,
         }),
       });
     }
@@ -373,231 +375,133 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     });
 
-    // 1. Viewport 1440x900 light
-    {
-      const vp = VIEWPORTS[0];
-      console.log(`Capturing ${vp.name}...`);
+    async function captureItem({ vp, colorScheme, url, selector, filename, role }) {
+      console.log(`Capturing ${filename} (${vp.width}x${vp.height} ${colorScheme})...`);
       const context = await browser.newContext({
         viewport: { width: vp.width, height: vp.height },
-        colorScheme: 'light',
+        colorScheme,
       });
       const page = await context.newPage();
-      await setupInterceptions(page);
-
-      // Workspace AI Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/ai`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="ai-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
+      await setupInterceptions(page, role);
+      await page.goto(url, { waitUntil: 'networkidle' });
+      await page.evaluate((theme) => {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem('theme', theme);
+      }, colorScheme);
+      await page.waitForSelector(selector, { timeout: 10000 });
+      await page.waitForTimeout(500);
       await page.screenshot({
-        path: path.join(OUT_DIR, '01-workspace-ai-desktop-1440x900-light.png'),
+        path: path.join(OUT_DIR, filename),
         fullPage: false,
       });
-
-      // Workspace Agents Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="agent-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '01-workspace-agents-desktop-1440x900-light.png'),
-        fullPage: false,
-      });
-
-      // Project Settings AI & Agents Tab
-      await page.goto(`${BASE_URL}/projects/KAN/settings?tab=ai-agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="project-ai-agents-section"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '01-project-ai-agents-desktop-1440x900-light.png'),
-        fullPage: false,
-      });
-
       await context.close();
     }
+
+    // 1. Viewport 1440x900 light
+    await captureItem({
+      vp: VIEWPORTS[0],
+      colorScheme: 'light',
+      url: `${BASE_URL}/workspaces/settings/ai`,
+      selector: '[data-testid="ai-studio-page"]',
+      filename: '01-workspace-ai-desktop-1440x900-light.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[0],
+      colorScheme: 'light',
+      url: `${BASE_URL}/workspaces/settings/agents`,
+      selector: '[data-testid="agent-studio-page"]',
+      filename: '01-workspace-agents-desktop-1440x900-light.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[0],
+      colorScheme: 'light',
+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
+      selector: '[data-testid="project-ai-agents-section"]',
+      filename: '01-project-ai-agents-desktop-1440x900-light.png',
+      role: 'PROJECT_ADMIN',
+    });
 
     // 2. Viewport 1440x900 dark
-    {
-      const vp = VIEWPORTS[1];
-      console.log(`Capturing ${vp.name}...`);
-      const context = await browser.newContext({
-        viewport: { width: vp.width, height: vp.height },
-        colorScheme: 'dark',
-      });
-      const page = await context.newPage();
-      await setupInterceptions(page);
-
-      // Workspace AI Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/ai`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'dark';
-        localStorage.setItem('theme', 'dark');
-      });
-      await page.waitForSelector('[data-testid="ai-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '02-workspace-ai-desktop-1440x900-dark.png'),
-        fullPage: false,
-      });
-
-      // Workspace Agents Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'dark';
-        localStorage.setItem('theme', 'dark');
-      });
-      await page.waitForSelector('[data-testid="agent-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '02-workspace-agents-desktop-1440x900-dark.png'),
-        fullPage: false,
-      });
-
-      // Project Settings AI & Agents Tab
-      await page.goto(`${BASE_URL}/projects/KAN/settings?tab=ai-agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'dark';
-        localStorage.setItem('theme', 'dark');
-      });
-      await page.waitForSelector('[data-testid="project-ai-agents-section"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '02-project-ai-agents-desktop-1440x900-dark.png'),
-        fullPage: false,
-      });
-
-      await context.close();
-    }
+    await captureItem({
+      vp: VIEWPORTS[1],
+      colorScheme: 'dark',
+      url: `${BASE_URL}/workspaces/settings/ai`,
+      selector: '[data-testid="ai-studio-page"]',
+      filename: '02-workspace-ai-desktop-1440x900-dark.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[1],
+      colorScheme: 'dark',
+      url: `${BASE_URL}/workspaces/settings/agents`,
+      selector: '[data-testid="agent-studio-page"]',
+      filename: '02-workspace-agents-desktop-1440x900-dark.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[1],
+      colorScheme: 'dark',
+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
+      selector: '[data-testid="project-ai-agents-section"]',
+      filename: '02-project-ai-agents-desktop-1440x900-dark.png',
+      role: 'PROJECT_ADMIN',
+    });
 
     // 3. Viewport 1024x768 Tablet Landscape
-    {
-      const vp = VIEWPORTS[2];
-      console.log(`Capturing ${vp.name}...`);
-      const context = await browser.newContext({
-        viewport: { width: vp.width, height: vp.height },
-        colorScheme: 'light',
-      });
-      const page = await context.newPage();
-      await setupInterceptions(page);
-
-      // Workspace AI Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/ai`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="ai-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '03-workspace-ai-tablet-landscape-1024x768.png'),
-        fullPage: false,
-      });
-
-      // Project Settings AI & Agents
-      await page.goto(`${BASE_URL}/projects/KAN/settings?tab=ai-agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="project-ai-agents-section"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '03-project-ai-agents-tablet-landscape-1024x768.png'),
-        fullPage: false,
-      });
-
-      await context.close();
-    }
+    await captureItem({
+      vp: VIEWPORTS[2],
+      colorScheme: 'light',
+      url: `${BASE_URL}/workspaces/settings/ai`,
+      selector: '[data-testid="ai-studio-page"]',
+      filename: '03-workspace-ai-tablet-landscape-1024x768.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[2],
+      colorScheme: 'light',
+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
+      selector: '[data-testid="project-ai-agents-section"]',
+      filename: '03-project-ai-agents-tablet-landscape-1024x768.png',
+      role: 'PROJECT_ADMIN',
+    });
 
     // 4. Viewport 768x1024 Tablet Portrait
-    {
-      const vp = VIEWPORTS[3];
-      console.log(`Capturing ${vp.name}...`);
-      const context = await browser.newContext({
-        viewport: { width: vp.width, height: vp.height },
-        colorScheme: 'light',
-      });
-      const page = await context.newPage();
-      await setupInterceptions(page);
-
-      // Workspace AI Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/ai`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="ai-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '04-workspace-ai-tablet-portrait-768x1024.png'),
-        fullPage: false,
-      });
-
-      // Project Settings AI & Agents
-      await page.goto(`${BASE_URL}/projects/KAN/settings?tab=ai-agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="project-ai-agents-section"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '04-project-ai-agents-tablet-portrait-768x1024.png'),
-        fullPage: false,
-      });
-
-      await context.close();
-    }
+    await captureItem({
+      vp: VIEWPORTS[3],
+      colorScheme: 'light',
+      url: `${BASE_URL}/workspaces/settings/ai`,
+      selector: '[data-testid="ai-studio-page"]',
+      filename: '04-workspace-ai-tablet-portrait-768x1024.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[3],
+      colorScheme: 'light',
+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
+      selector: '[data-testid="project-ai-agents-section"]',
+      filename: '04-project-ai-agents-tablet-portrait-768x1024.png',
+      role: 'PROJECT_ADMIN',
+    });
 
     // 5. Viewport 390x844 Mobile Portrait
-    {
-      const vp = VIEWPORTS[4];
-      console.log(`Capturing ${vp.name}...`);
-      const context = await browser.newContext({
-        viewport: { width: vp.width, height: vp.height },
-        colorScheme: 'light',
-      });
-      const page = await context.newPage();
-      await setupInterceptions(page);
-
-      // Workspace AI Studio
-      await page.goto(`${BASE_URL}/workspaces/settings/ai`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="ai-studio-page"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '05-workspace-ai-mobile-390x844.png'),
-        fullPage: false,
-      });
-
-      // Project Settings AI & Agents
-      await page.goto(`${BASE_URL}/projects/KAN/settings?tab=ai-agents`, { waitUntil: 'networkidle' });
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'light';
-        localStorage.setItem('theme', 'light');
-      });
-      await page.waitForSelector('[data-testid="project-ai-agents-section"]', { timeout: 10000 });
-      await page.waitForTimeout(400);
-      await page.screenshot({
-        path: path.join(OUT_DIR, '05-project-ai-agents-mobile-390x844.png'),
-        fullPage: false,
-      });
-
-      await context.close();
-    }
+    await captureItem({
+      vp: VIEWPORTS[4],
+      colorScheme: 'light',
+      url: `${BASE_URL}/workspaces/settings/ai`,
+      selector: '[data-testid="ai-studio-page"]',
+      filename: '05-workspace-ai-mobile-390x844.png',
+      role: 'WORKSPACE_ADMIN',
+    });
+    await captureItem({
+      vp: VIEWPORTS[4],
+      colorScheme: 'light',
+      url: `${BASE_URL}/projects/KAN/settings?tab=ai-agents`,
+      selector: '[data-testid="project-ai-agents-section"]',
+      filename: '05-project-ai-agents-mobile-390x844.png',
+      role: 'PROJECT_ADMIN',
+    });
 
     await browser.close();
     console.log('All 5 viewport screenshots captured successfully in docs/qa/KAN-402/screenshots/');

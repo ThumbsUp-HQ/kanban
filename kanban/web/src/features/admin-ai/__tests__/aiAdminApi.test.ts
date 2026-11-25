@@ -25,17 +25,18 @@ describe('aiAdminApi tests (KAN-21)', () => {
     vi.restoreAllMocks();
   });
 
-  it('fetchAirGapMode calls /api/v1/admin/workspace-settings and returns air_gap_mode boolean', async () => {
+  it('fetchAirGapMode calls /api/v1/workspaces/{workspace}/ai-providers/settings and returns air_gap_mode boolean', async () => {
     const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
       air_gap_mode: true,
     });
 
     const result = await fetchAirGapMode();
     expect(result).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/workspace-settings');
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/current/ai-providers/settings');
 
     fetchSpy.mockResolvedValueOnce({ air_gap_mode: false });
-    expect(await fetchAirGapMode()).toBe(false);
+    expect(await fetchAirGapMode('my-team')).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledWith('GET', '/api/v1/workspaces/my-team/ai-providers/settings');
 
     fetchSpy.mockRejectedValueOnce(new Error('Network error'));
     expect(await fetchAirGapMode()).toBe(false);

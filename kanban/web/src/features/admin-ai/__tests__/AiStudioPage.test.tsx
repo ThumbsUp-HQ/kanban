@@ -1841,5 +1841,137 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       expect(normalBar.className).not.toContain('kb-budget-progress--danger');
       expect(normalBar.className).not.toContain('kb-budget-progress--warning');
     });
+
+    it('supports workspaceSlug routing for toggle, reorder, delete, and connection testing', async () => {
+      const mockWs1: ProviderConfigPublic = {
+        id: 'prov-ws-1',
+        provider_kind: 'gemini',
+        display_name: 'Workspace Gemini',
+        base_url: 'https://generativelanguage.googleapis.com',
+        model_allowlist: ['gemini-2.5-flash'],
+        residency_tier: 'cloud_standard',
+        priority: 10,
+        settings: {},
+        api_key_set: true,
+        is_enabled: true,
+        project_id: null,
+      };
+      const mockWs2: ProviderConfigPublic = {
+        id: 'prov-ws-2',
+        provider_kind: 'ollama',
+        display_name: 'Workspace Ollama',
+        base_url: 'http://localhost:11434',
+        model_allowlist: ['gemma3:4b'],
+        residency_tier: 'local_only',
+        priority: 20,
+        settings: {},
+        api_key_set: false,
+        is_enabled: false,
+        project_id: null,
+      };
+
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([mockWs1, mockWs2]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(false);
+      const disableSpy = vi.spyOn(aiApi, 'disableAiProvider').mockResolvedValue({
+        ...mockWs1,
+        is_enabled: false,
+      });
+      const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue({
+        ...mockWs2,
+        is_enabled: true,
+      });
+      const deleteSpy = vi.spyOn(aiApi, 'deleteAiProvider').mockResolvedValue();
+      const reorderSpy = vi.spyOn(aiApi, 'reorderAiProviders').mockResolvedValue([
+        { ...mockWs2, priority: 10 },
+        { ...mockWs1, priority: 20 },
+      ]);
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 45,
+        models: ['gemini-2.5-flash'],
+        model_count: 1,
+      });
+
+      render(<AiStudioPage workspaceSlug="custom-team" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('provider-card-prov-ws-1')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('test-connection-btn-prov-ws-1'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith({}, 'prov-ws-1', 'custom-team');
+      });
+
+      fireEvent.click(screen.getByTestId('move-down-btn-prov-ws-1'));
+      await waitFor(() => {
+        expect(reorderSpy).toHaveBeenCalledWith(['prov-ws-2', 'prov-ws-1'], undefined, 'custom-team');
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-ws-1'));
+      await waitFor(() => {
+        expect(disableSpy).toHaveBeenCalledWith('prov-ws-1', 'custom-team');
+      });
+
+      fireEvent.click(screen.getByTestId('toggle-enable-btn-prov-ws-2'));
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith('prov-ws-2', { is_enabled: true }, 'custom-team');
+      });
+
+      fireEvent.click(screen.getByTestId('delete-provider-btn-prov-ws-1'));
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-delete-provider-btn')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('confirm-delete-provider-btn'));
+      await waitFor(() => {
+        expect(deleteSpy).toHaveBeenCalledWith('prov-ws-1', 'custom-team');
+      });
+    });
+
+    it('handles AiBudgetModal save with workspaceSlug', async () => {
+      const fetchBudgetSpy = vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue([
+        {
+          period_kind: 'monthly',
+          period_start: '2026-11-01',
+          token_cap: 500000,
+          tokens_used: 10000,
+          tokens_reserved: 0,
+        },
+      ]);
+      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue({
+        period_kind: 'monthly',
+        period_start: '2026-11-01',
+        token_cap: 800000,
+        tokens_used: 10000,
+        tokens_reserved: 0,
+      });
+
+      render(
+        <AiBudgetModal
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+          workspaceSlug="finance-team"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(fetchBudgetSpy).toHaveBeenCalledWith('prov-openai-1', 'finance-team');
+      });
+
+      const capInput = screen.getByTestId<HTMLInputElement>('budget-token-cap-input');
+      fireEvent.change(capInput, { target: { value: '800000' } });
+      fireEvent.click(screen.getByTestId('save-budget-btn'));
+
+      await waitFor(() => {
+        expect(setBudgetSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider_config_id: 'prov-openai-1',
+            token_cap: 800000,
+          }),
+          'finance-team',
+        );
+      });
+    });
   });
 });

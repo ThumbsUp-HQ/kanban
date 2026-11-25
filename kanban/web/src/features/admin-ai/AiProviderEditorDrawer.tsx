@@ -26,6 +26,7 @@ interface AiProviderEditorDrawerProps {
   onSaved: () => void;
   providersCount?: number | undefined;
   projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 interface TestStatusState {
@@ -93,6 +94,7 @@ function AiProviderEditorContent({
   onSaved,
   providersCount,
   projectId,
+  workspaceSlug,
 }: {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
@@ -100,6 +102,7 @@ function AiProviderEditorContent({
   onSaved: () => void;
   providersCount?: number | undefined;
   projectId?: string | null | undefined;
+  workspaceSlug?: string | undefined;
 }): JSX.Element {
   const isEditing = provider !== null;
 
@@ -275,7 +278,9 @@ function AiProviderEditorContent({
             ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-      const res = await probeAiModels(payload, targetProviderId);
+      const res = workspaceSlug
+        ? await probeAiModels(payload, targetProviderId, workspaceSlug)
+        : await probeAiModels(payload, targetProviderId);
       if (res.ok) {
         setProbedModels(res.models);
         if (res.models.length === 0) {
@@ -317,7 +322,9 @@ function AiProviderEditorContent({
             ...(projectId ? { project_id: projectId } : {}),
           };
       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
-      const res = await testAiConnection(payload, targetProviderId);
+      const res = workspaceSlug
+        ? await testAiConnection(payload, targetProviderId, workspaceSlug)
+        : await testAiConnection(payload, targetProviderId);
       if (res.ok) {
         setTestStatus({
           kind: 'success',
@@ -393,7 +400,11 @@ function AiProviderEditorContent({
           payload.api_key = apiKey.trim();
         }
 
-        await updateAiProvider(provider.id, payload);
+        if (workspaceSlug) {
+          await updateAiProvider(provider.id, payload, workspaceSlug);
+        } else {
+          await updateAiProvider(provider.id, payload);
+        }
       } else {
         const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
         const payload: ProviderConfigCreate = {
@@ -409,7 +420,11 @@ function AiProviderEditorContent({
           ...(projectId ? { project_id: projectId } : {}),
         };
 
-        await createAiProvider(payload);
+        if (workspaceSlug) {
+          await createAiProvider(payload, workspaceSlug);
+        } else {
+          await createAiProvider(payload);
+        }
       }
 
       setIsSaving(false);
@@ -958,6 +973,7 @@ export function AiProviderEditorDrawer({
   onSaved,
   providersCount,
   projectId,
+  workspaceSlug,
 }: AiProviderEditorDrawerProps): JSX.Element | null {
   useAal2DirtyKeepalive(isOpen);
   if (!isOpen) return null;
@@ -978,6 +994,7 @@ export function AiProviderEditorDrawer({
         onSaved={onSaved}
         providersCount={providersCount}
         projectId={projectId}
+        workspaceSlug={workspaceSlug}
       />
     </div>
   );

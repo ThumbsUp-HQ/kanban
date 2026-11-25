@@ -227,3 +227,12 @@ class ProviderProbeResult(BaseModel):
     model_count: int = Field(ge=0, description="Count of discovered models")
     error_code: str | None = Field(default=None, description="Diagnostic error code if failed")
     message: str | None = Field(default=None, description="Human-readable status or error message")
+
+
+class AISettingsPublic(BaseModel):
+    """Workspace AI runtime settings including air gap policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    air_gap_mode: bool = Field(description="Whether air-gap zero-egress mode is enforced")
+

@@ -2186,7 +2186,7 @@ export const appRoutes: RouteObject[] = [
             path: 'workspaces/settings/ai',
             element: (
               <AdminRouteGuard>
-                <AiStudioPage />
+                <AiStudioPage showSubnav={false} />
               </AdminRouteGuard>
             ),
           },

@@ -495,11 +495,15 @@ class AIProviderConfigService:
         self,
         workspace_id: uuid.UUID,
         project_id: uuid.UUID | None = None,
+        *,
+        include_projects: bool = True,
     ) -> list[AIProviderConfig]:
         """List provider configurations for workspace, optionally filtered by project."""
         stmt = select(AIProviderConfig).where(AIProviderConfig.workspace_id == workspace_id)
         if project_id is not None:
             stmt = stmt.where(AIProviderConfig.project_id == project_id)
+        elif not include_projects:
+            stmt = stmt.where(AIProviderConfig.project_id.is_(None))
         stmt = stmt.order_by(AIProviderConfig.priority.asc(), AIProviderConfig.created_at.asc())
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
