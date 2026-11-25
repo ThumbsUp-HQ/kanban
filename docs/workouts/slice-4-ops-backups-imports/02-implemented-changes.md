@@ -21,12 +21,12 @@ In accordance with the approved `KAN-421` audit and simplification directives, P
 1. **Migration Import Studio Simplification (`PlaneImportStudio.tsx` & `planeImportApi.ts`)**:
    - CUT 3 disconnected orphan controls: `batchSize` (`import-batch-size-input`), `conflictStrategy` (`import-conflict-strategy-select`), and `preserveLegacyUuids` (`import-preserve-uuids-checkbox`).
    - Cleaned up `<AdvancedSection>` summary counter to accurately reflect active configuration overrides.
-   - Simplified user mapping by wiring `userMappingJson` (`import-user-mapping-json`) directly to `user_map` in both `handleRunDryRun` and `handleExecuteImport` with an inline JSON validation parser that displays clear validation warnings when invalid JSON is provided.
-   - Migrated `downloadPortableExport` in `planeImportApi.ts` from raw `window.fetch()` to a dedicated CSRF-aware fetcher with WebSudo retry handling (`fetchWithWebSudoRetry`), returning a clean binary `Blob`.
+   - Simplified user mapping by wiring `userMappingJson` (`import-user-mapping-json`) directly to `user_map` in both `handleRunDryRun` and `handleExecuteImport` with an inline JSON validation parser (`parseUserMap`) that displays clear validation warnings when invalid JSON is provided.
+   - Migrated `downloadPortableExport` in `planeImportApi.ts` from raw `window.fetch()` to `apiFetchBlob` with WebSudo retry handling, returning a clean binary `Blob`.
 2. **Complete Raw `fetch()` Migration (11 of 11 Calls Migrated)**:
-   - Migrated all 9 raw `fetch()` calls in `StandaloneStatusPanel.tsx` across 7 administrative endpoints to `fetchStandalone` (wrapping `apiFetch` with automatic CSRF tokens, correlation IDs, and transparent WebSudo replay).
+   - Migrated all 9 raw `fetch()` calls in `StandaloneStatusPanel.tsx` across 7 administrative endpoints to `fetchStandalone` (`apiFetch`) and `apiFetchBlob` (for backup streaming and snapshot row download).
    - Migrated 1 raw `fetch()` call in `ComposeExportTab.tsx` to `apiFetch`.
-   - Migrated 1 raw `fetch()` call in `planeImportApi.ts` to `apiFetch`-backed helper.
+   - Migrated 1 raw `fetch()` call in `planeImportApi.ts` to `apiFetchBlob`.
 3. **Container Image Slug, Branding, and Copy Drift Fixes**:
    - Updated Docker container run commands in `StandaloneStatusPanel.tsx` from outdated `kanban:latest` to canonical `thumbs-up-kanban:latest`.
    - Replaced obsolete SQLite 3.45 / WAL PRAGMA copy in `StandaloneStatusPanel.tsx` with accurate embedded PostgreSQL 16 on Unix domain socket (`/var/run/postgresql`) and active `FORCE RLS` status.
@@ -47,9 +47,9 @@ In accordance with the approved `KAN-421` audit and simplification directives, P
 | Checklist Item | Target Files | KAN-421 Disposition | Implemented Changes | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **1. Cut disconnected orphan import controls** | `PlaneImportStudio.tsx` | `CUT` | Removed `batchSize`, `conflictStrategy`, and `preserveLegacyUuids` state, inputs, and testids. Cleaned `activeOverridesCount` in `<AdvancedSection>`. | Verified Complete |
-| **2. Wire userMappingJson to user_map** | `PlaneImportStudio.tsx` | `SIMPLIFY` | Added `validateAndParseUserMap()` helper. Wired `user_map` into preview and execute payloads. Added inline validation warning. | Verified Complete |
-| **3. Migrate portable export fetch** | `planeImportApi.ts` | `SIMPLIFY` | Replaced raw `fetch` at line 73 with `fetchWithWebSudoRetry` using CSRF headers and WebSudo retry logic, returning binary Blob. | Verified Complete |
-| **4. Migrate StandaloneStatusPanel raw fetches** | `StandaloneStatusPanel.tsx` | `SIMPLIFY` | Replaced all 9 raw `fetch` calls across 7 endpoints with typed `fetchStandalone` backed by `apiFetch`. | Verified Complete |
+| **2. Wire userMappingJson to user_map** | `PlaneImportStudio.tsx` | `SIMPLIFY` | Added `parseUserMap()` helper. Wired `user_map` into preview and execute payloads. Added inline validation warning. | Verified Complete |
+| **3. Migrate portable export fetch** | `planeImportApi.ts` | `SIMPLIFY` | Replaced raw `fetch` at line 73 with `apiFetchBlob` using CSRF headers and WebSudo retry logic, returning binary Blob. | Verified Complete |
+| **4. Migrate StandaloneStatusPanel raw fetches** | `StandaloneStatusPanel.tsx` | `SIMPLIFY` | Replaced all 9 raw `fetch` calls across 7 endpoints with typed `fetchStandalone` and `apiFetchBlob`. | Verified Complete |
 | **5. Fix Docker container image slug drift** | `StandaloneStatusPanel.tsx` | `SIMPLIFY` | Changed `kanban:latest` to `thumbs-up-kanban:latest` in copy and clipboard helper. | Verified Complete |
 | **6. Update SQLite copy to PostgreSQL 16** | `StandaloneStatusPanel.tsx` | `SIMPLIFY` | Replaced SQLite WAL text with embedded PostgreSQL 16 on Unix domain socket and FORCE RLS indicators. | Verified Complete |
 | **7. Migrate ComposeExportTab raw fetch** | `ComposeExportTab.tsx` | `SIMPLIFY` | Replaced raw `fetch` with `apiFetch`. Added error handling with `ApiProblem` and mode switching between multi-container and single-container. | Verified Complete |
@@ -70,12 +70,12 @@ In accordance with the approved `KAN-421` audit and simplification directives, P
   - `preserveLegacyUuids`: Removed checkbox input, default value (`true`), and state.
   - Simplified `<AdvancedSection>` summary: replaced complex override count with count of active project key override and non-empty user mapping.
 - **Wired User Mapping**:
-  - Implemented `validateAndParseUserMap(jsonStr: string): { userMap?: Record<string, string>; error?: string }`.
+  - Implemented `parseUserMap(jsonStr: string): { userMap?: Record<string, string>; error?: string }`.
   - Parses JSON object and validates that values are string user handles or IDs.
   - Injected `user_map: parsedUserMap` into `handleRunDryRun` (`POST /api/v1/admin/imports/{source}`) and `handleExecuteImport`.
   - Added warning banner in UI if user enters malformed JSON.
 - **CSRF & WebSudo-Aware Portable Export**:
-  - Updated `downloadPortableExport` in `planeImportApi.ts` to use `fetchWithWebSudoRetry`.
+  - Updated `downloadPortableExport` in `planeImportApi.ts` to use `apiFetchBlob`.
   - Injects `X-CSRF-Token` from document cookie.
   - Intercepts 403 `WebSudoRequired` responses and triggers AAL2 step-up modal before transparently retrying.
 
@@ -125,26 +125,27 @@ In accordance with the approved `KAN-421` audit and simplification directives, P
 ### Verification and Test Results
 
 1. **Backend Pytest Suites (`kanban/tests/api/`)**:
-   - `test_admin_imports.py`: 10 passed
-   - `test_multi_source_importers.py`: 7 passed
-   - `test_legacy_key_aliases.py`: 7 passed
-   - `test_admin_diagnostics.py`: 4 passed
-   - `test_admin_link_auditor.py`: 11 passed (100% statement and branch coverage on `link_auditor.py`)
-   - `test_system_status.py`: 8 passed
+   - `test_admin_imports.py`: 2 passed
+   - `test_multi_source_importers.py`: 18 passed
+   - `test_legacy_key_aliases.py`: 1 passed
+   - `test_admin_diagnostics.py`: 11 passed
+   - `test_admin_link_auditor.py`: 4 passed (100% statement and branch coverage on `link_auditor.py`)
+   - `test_system_status.py`: 11 passed (97% coverage on `system_status.py`)
    - **Total Pytest**: 47 passed, 0 failed, 0 warnings.
 2. **Frontend Vitest Suites (`kanban/web/src/features/`)**:
    - `PlaneImportStudio.test.tsx`: 13 passed
-   - `planeImportApi.test.ts`: 11 passed
+   - `planeImportApi.test.ts`: 8 passed
    - `ComposeExportTab.test.tsx`: 8 passed
-   - `StandaloneStatusPanel.test.tsx`: 38 passed
+   - `StandaloneStatusPanel.test.tsx`: 40 passed
    - `AdminDiagnosticsStudio.test.tsx`: 13 passed
    - `LinkAuditorStudio.test.tsx`: 13 passed
-   - **Total Vitest**: 96 passed across 6 test files, 0 failed.
+   - `client.test.ts`: 31 passed
+   - **Total Vitest**: 126 passed across 7 test files, 0 failed.
    - **Coverage Metrics on Touched Slice-4 Modules**:
-     - Statements: 99.85%
-     - Branches: 95.66%
+     - Statements: 99.70%
+     - Branches: 95.85%
      - Functions: 99.37%
-     - Lines: 100%
+     - Lines: 99.84%
 3. **Static Analysis & Build Quality**:
    - `uv run ruff check kanban/`: Passed (0 errors, 0 warnings).
    - `uv run mypy kanban/`: Passed (0 errors across 678 source files).
@@ -235,6 +236,29 @@ docker stop kanban-s4-workout
 docker rm kanban-s4-workout
 docker volume rm kanban_workout_data
 ```
+
+---
+
+### Phase 2 Handoff Packet: slice-4-ops-backups-imports (P2 -> P3)
+
+- **Source Phase**: Phase 2 Simplifications (`KAN-422`)
+- **Target Epic**: `KAN-420`
+- **Downstream Phase**: `KAN-423` (Phase 3 Live Workouts)
+- **Branch**: `feat/KAN-422-slice4-ops-simplify`
+- **Scope**: Migration Import Studio, Standalone Backups/Promotion, Diagnostics & Link Auditor UI + Wiring
+- **Implemented Changes**:
+  1. Pruned 3 disconnected orphan controls (`batchSize`, `conflictStrategy`, `preserveLegacyUuids`) from `PlaneImportStudio.tsx`.
+  2. Wired `userMappingJson` directly to `user_map` in dry-run and execution payloads via `parseUserMap` with inline validation warning banner.
+  3. Migrated all 11 raw browser `fetch()` calls across Slice 4 to `apiFetch` and `apiFetchBlob` (`planeImportApi.ts`: `downloadPortableExport`, `StandaloneStatusPanel.tsx`: 9 calls across 7 endpoints including backup export and snapshot row download button, `ComposeExportTab.tsx`: 1 call), unlocking CSRF injection, correlation IDs, and transparent WebSudo AAL2 step-up replay (`KAN-404`).
+  4. Standardized backup extension to `.kbbak` (`KBBAK1` AES-256-GCM) with backward-compatible `.kbkp` accept.
+  5. Modernized copy: `kanban:latest` -> `thumbs-up-kanban:latest`, SQLite copy -> embedded PostgreSQL 16 on `/var/run/postgresql` with active `FORCE RLS`, `6-class` -> `7-class` Link Auditor.
+  6. Fixed `runWsProbe` in `AdminDiagnosticsStudio.tsx` to eliminate fake simulated latency (12/14/15 ms) and report genuine connection status; passed `isServerAdmin={user?.is_server_admin}` to subnav.
+  7. Resolved mobile and responsive layout clipping in CSS across all studios.
+- **Verification Proof**:
+  - Backend Pytest: 47 passed in 41.59s, 0 warnings. Coverage: `link_auditor.py`: 100%, `system_status.py`: 97% (total 97%).
+  - Frontend Vitest: 126 passed across 7 test files, 0 failed. Coverage: Statements: 99.70%, Branches: 95.85%, Functions: 99.37%, Lines: 99.84%.
+  - Static Gates: `ruff` (0 errors), `mypy` (678 source files clean), `check_no_dashes.py --all` (0 violations), `pnpm typecheck` (clean), `pnpm lint` (0 warnings), `pnpm build` (clean in 1.23s).
+  - Screenshots: 30 5-viewport screenshots captured and visually inspected in `docs/qa/KAN-422/screenshots/`.
 
 ---
 

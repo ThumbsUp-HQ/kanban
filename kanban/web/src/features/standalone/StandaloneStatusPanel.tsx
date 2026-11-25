@@ -15,7 +15,7 @@ import React, {
   type SyntheticEvent,
 } from 'react';
 import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
-import { apiFetch, bootstrapCsrfToken, getCsrfToken } from '../../api/client';
+import { apiFetch, apiFetchBlob } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
@@ -45,39 +45,6 @@ export interface ApiErrorInfo {
 
 function generateFallbackCorrelationId(): string {
   return `req-${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
-}
-
-async function extractApiError(
-  res: Response,
-  fallbackMessage: string,
-): Promise<ApiErrorInfo> {
-  const correlationId =
-    res.headers.get('x-request-id') ??
-    res.headers.get('x-correlation-id') ??
-    undefined;
-  try {
-    const data = (await res.json()) as {
-      detail?: string | { detail?: string };
-      title?: string;
-      request_id?: string;
-    };
-    const detail = data.detail;
-    const msg =
-      typeof detail === 'string'
-        ? detail
-        : typeof detail === 'object' && 'detail' in detail && typeof detail.detail === 'string'
-          ? detail.detail
-          : data.title ?? `${fallbackMessage} with status ${String(res.status)}`;
-    const corr = data.request_id ?? correlationId ?? generateFallbackCorrelationId();
-    return { message: msg, correlationId: corr };
-  /* v8 ignore start - defensive fallback if problem response body cannot be parsed */
-  } catch {
-    return {
-      message: `${fallbackMessage} with status ${String(res.status)}`,
-      correlationId: correlationId ?? generateFallbackCorrelationId(),
-    };
-  }
-  /* v8 ignore stop */
 }
 
 function extractErrorInfo(err: unknown, fallbackMessage: string): ApiErrorInfo {
@@ -304,6 +271,33 @@ export function StandaloneStatusPanel({
     }
   };
 
+  const [downloadingSnapshot, setDownloadingSnapshot] = useState<string | null>(null);
+
+  const handleDownloadSnapshot = async (filename: string): Promise<void> => {
+    setDownloadingSnapshot(filename);
+    try {
+      const res = await apiFetchBlob('GET', `/api/v1/admin/standalone/backups/${encodeURIComponent(filename)}`, {
+        headers: {
+          Accept: 'application/octet-stream, application/json',
+        },
+      });
+      const downloadName = res.filename ?? filename;
+      const url = URL.createObjectURL(res.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setApiError(null);
+    } catch (err) {
+      setApiError(extractErrorInfo(err, `Failed to download snapshot ${filename}`));
+    } finally {
+      setDownloadingSnapshot(null);
+    }
+  };
+
   const handleBackupSubmit = async (e: SyntheticEvent): Promise<void> => {
     e.preventDefault();
     if (passphrase.length < 16) {
@@ -315,52 +309,17 @@ export function StandaloneStatusPanel({
     setIsBackingUp(true);
 
     try {
-      const csrf = getCsrfToken();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/octet-stream, application/json',
-      };
-      if (csrf) {
-        headers['X-CSRF-Token'] = csrf;
-      }
-
-      let res = await fetch('/api/v1/admin/standalone/backup', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({ passphrase }),
+      const res = await apiFetchBlob('POST', '/api/v1/admin/standalone/backup', {
+        body: { passphrase },
+        headers: {
+          Accept: 'application/octet-stream, application/json',
+        },
       });
-
-      if (res.status === 403) {
-        const freshCsrf = await bootstrapCsrfToken(undefined, true);
-        if (freshCsrf) {
-          headers['X-CSRF-Token'] = freshCsrf;
-          res = await fetch('/api/v1/admin/standalone/backup', {
-            method: 'POST',
-            headers,
-            credentials: 'same-origin',
-            body: JSON.stringify({ passphrase }),
-          });
-        }
-      }
-
-      if (!res.ok) {
-        const err = await extractApiError(res, 'Backup failed');
-        setApiError(err);
-        return;
-      }
 
       setApiError(null);
 
-      const disposition = res.headers.get('content-disposition') ?? '';
-      let filename = 'kanban-backup.kbbak';
-      const match = /filename=["']?([^"';]+)["']?/.exec(disposition);
-      if (match?.[1]) {
-        filename = match[1];
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const filename = res.filename ?? 'kanban-backup.kbbak';
+      const url = URL.createObjectURL(res.blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
@@ -372,7 +331,11 @@ export function StandaloneStatusPanel({
       setPassphrase('');
       void loadScheduleAndSnapshots();
     } catch (err) {
-      setApiError(extractErrorInfo(err, 'Backup export failed'));
+      if (err instanceof ApiProblem) {
+        setApiError(extractErrorInfo(err, 'Backup failed'));
+      } else {
+        setApiError(extractErrorInfo(err, 'Backup export failed'));
+      }
     } finally {
       setIsBackingUp(false);
     }
@@ -905,13 +868,16 @@ export function StandaloneStatusPanel({
                               <td>{(s.size_bytes / 1024).toFixed(1)} KB</td>
                               <td>{new Date(s.created_at).toLocaleString()}</td>
                               <td>
-                                <a
-                                  href={`/api/v1/admin/standalone/backups/${s.filename}`}
-                                  download={s.filename}
-                                  className="standalone-panel__table-link"
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleDownloadSnapshot(s.filename);
+                                  }}
+                                  className="standalone-panel__table-link-btn"
+                                  disabled={downloadingSnapshot === s.filename}
                                 >
-                                  Download
-                                </a>
+                                  {downloadingSnapshot === s.filename ? 'Downloading...' : 'Download'}
+                                </button>
                               </td>
                             </tr>
                           ))}

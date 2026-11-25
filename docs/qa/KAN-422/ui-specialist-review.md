@@ -74,10 +74,11 @@ All screenshots visually inspected via `read_file` confirming zero text clipping
 ## 4. Test Verification Summary
 
 - **Frontend Vitest Suite**:
-  - 96 passing tests across `PlaneImportStudio`, `planeImportApi`, `ComposeExportTab`, `StandaloneStatusPanel`, `AdminDiagnosticsStudio`, and `LinkAuditorStudio`.
-  - Coverage on touched modules: 99.85% Statements, 95.66% Branches, 99.37% Functions, 100% Lines.
+  - 126 passing tests across `PlaneImportStudio`, `planeImportApi`, `ComposeExportTab`, `StandaloneStatusPanel`, `AdminDiagnosticsStudio`, `LinkAuditorStudio`, and `client.test.ts`.
+  - Coverage on touched modules: 99.70% Statements, 95.85% Branches, 99.37% Functions, 99.84% Lines.
 - **Python Backend Suite**:
   - 47 passing Pytest tests under clean-DB `SAVEPOINT` isolation with 0 warnings.
+  - Coverage on touched backend modules: `link_auditor.py` 100%, `system_status.py` 97% (total 97%).
 
 ---
 

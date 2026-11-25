@@ -456,6 +456,8 @@ test.describe('KAN-422 Slice-4 Simplified Studios Visual Verification', () => {
       await applyTheme(page, theme);
       await expect(page.getByTestId('admin-diagnostics-studio')).toBeVisible();
       await expect(page.getByTestId('summary-card-links')).toContainText('7-class Link Auditor');
+      await page.getByTestId('summary-card-links').scrollIntoViewIfNeeded();
+      await page.waitForTimeout(100);
 
       await page.screenshot({
         path: resolve(SCREENSHOT_DIR, `03-diagnostics-studio-${projectName}-${theme}.png`),

@@ -829,10 +829,9 @@ describe('AdminDiagnosticsStudio Component', () => {
     // Test https protocol for wss:
     const origLocation = window.location;
     delete (window as unknown as { location?: unknown }).location;
-    (window as unknown as { location: unknown }).location = Object.assign(
-      Object.create(origLocation),
-      { protocol: 'https:' },
-    );
+    const mockLoc = Object.create(origLocation) as Location;
+    Object.defineProperty(mockLoc, 'protocol', { value: 'https:', configurable: true });
+    (window as unknown as { location: unknown }).location = mockLoc;
 
     // Make WebSocket constructor throw
     vi.stubGlobal('WebSocket', function MockThrowingWS() {

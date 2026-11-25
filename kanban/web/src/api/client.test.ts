@@ -3,6 +3,10 @@ import {
   ApiClientError,
   REQUEST_TIMEOUT_MS,
   apiFetch,
+  apiFetchBlob,
+  parseContentDispositionFilename,
+  registerAal2StepUpHandler,
+  Aal2StepUpCancelledError,
   bootstrapCsrfToken,
   getCsrfToken,
   setCsrfToken,
@@ -228,10 +232,10 @@ describe('getCsrfToken', () => {
     expect(getCsrfToken()).toBeNull();
   });
 
-  it('prefers cachedCsrfToken over document.cookie', () => {
+  it('prefers document.cookie over cachedCsrfToken', () => {
     setCookie('cookie-token');
     setCsrfToken('cached-token');
-    expect(getCsrfToken()).toBe('cached-token');
+    expect(getCsrfToken()).toBe('cookie-token');
   });
 
   it('returns the raw value when it is not valid percent-encoding', () => {
@@ -379,6 +383,7 @@ describe('CSRF bootstrap and retry (KANBA-230)', () => {
     // 6. setCsrfToken when protocol is https: or empty
     const origLocation = window.location;
     try {
+      clearCookie();
       // @ts-expect-error test location mocking
       delete window.location;
       // @ts-expect-error test location mocking
@@ -425,5 +430,159 @@ describe('CSRF bootstrap and retry (KANBA-230)', () => {
     // When regex matches custom cookie
     const token = getCsrfToken();
     expect(token === null || typeof token === 'string').toBe(true);
+  });
+});
+
+describe('parseContentDispositionFilename', () => {
+  it('handles null, undefined, standard quotes, unquoted, and RFC 5987 UTF-8 filenames', () => {
+    expect(parseContentDispositionFilename(null)).toBeUndefined();
+    expect(parseContentDispositionFilename('')).toBeUndefined();
+    expect(
+      parseContentDispositionFilename('attachment; filename="backup-2026.kbbak"'),
+    ).toBe('backup-2026.kbbak');
+    expect(
+      parseContentDispositionFilename('attachment; filename=backup-simple.kbbak'),
+    ).toBe('backup-simple.kbbak');
+    expect(
+      parseContentDispositionFilename("attachment; filename*=UTF-8''kanban%20export.tar.gz"),
+    ).toBe('kanban export.tar.gz');
+    expect(
+      parseContentDispositionFilename('inline; foo=bar'),
+    ).toBeUndefined();
+  });
+});
+
+describe('apiFetchBlob', () => {
+  let fetchMock: Mock<typeof fetch>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(document, 'cookie', 'get').mockImplementation(() => cookieJar);
+    clearCookie();
+    registerAal2StepUpHandler(null);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    clearCookie();
+    registerAal2StepUpHandler(null);
+  });
+
+  it('downloads binary blob with custom Accept and extracts filename from header', async () => {
+    setCookie('test-token');
+    fetchMock.mockResolvedValueOnce(
+      new Response('binary octets', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': 'attachment; filename="archive.kbbak"',
+        },
+      }),
+    );
+
+    const res = await apiFetchBlob('POST', '/api/v1/admin/standalone/backup', {
+      body: { passphrase: 'secret-passphrase-16' },
+    });
+
+    expect(res.filename).toBe('archive.kbbak');
+    expect(res.contentType).toBe('application/octet-stream');
+    expect(await res.blob.text()).toBe('binary octets');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/admin/standalone/backup',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'X-CSRF-Token': 'test-token',
+        }) as unknown as Record<string, string>,
+      }),
+    );
+  });
+
+  it('dispatches via apiClient.blob convenience wrapper', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('blob data', {
+        status: 200,
+        headers: { 'Content-Type': 'application/gzip' },
+      }),
+    );
+
+    const res = await apiClient.blob('GET', '/api/v1/admin/exports/test');
+    expect(res.contentType).toBe('application/gzip');
+    expect(await res.blob.text()).toBe('blob data');
+  });
+
+  it('triggers AAL2 step-up challenge and transparently replays binary download upon 403', async () => {
+    setCookie('stepup-csrf');
+    const stepUpHandler = vi.fn().mockResolvedValue(true);
+    registerAal2StepUpHandler(stepUpHandler);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { code: 'AAL2_REQUIRED', challenge_id: 'c-1', methods: ['webauthn', 'totp'] },
+          { status: 403 },
+          'application/problem+json',
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response('elevated secret payload', {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': 'attachment; filename="elevated.kbbak"',
+          },
+        }),
+      );
+
+    const res = await apiFetchBlob('POST', '/api/v1/admin/standalone/backup', {
+      body: { passphrase: 'secret-passphrase-16' },
+    });
+
+    expect(stepUpHandler).toHaveBeenCalledWith({
+      challengeId: 'c-1',
+      methods: ['webauthn', 'totp'],
+    });
+    expect(res.filename).toBe('elevated.kbbak');
+    expect(await res.blob.text()).toBe('elevated secret payload');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws Aal2StepUpCancelledError when user cancels AAL2 step-up challenge', async () => {
+    setCookie('stepup-csrf');
+    const stepUpHandler = vi.fn().mockResolvedValue(false);
+    registerAal2StepUpHandler(stepUpHandler);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        { code: 'AAL2_REQUIRED', challenge_id: 'c-cancel' },
+        { status: 403 },
+        'application/problem+json',
+      ),
+    );
+
+    await expect(
+      apiFetchBlob('POST', '/api/v1/admin/standalone/backup', {
+        body: { passphrase: 'secret-passphrase-16' },
+      }),
+    ).rejects.toThrow(Aal2StepUpCancelledError);
+  });
+
+  it('throws ApiProblem on non-ok status for binary request', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        { detail: 'Internal failure' },
+        { status: 500 },
+        'application/problem+json',
+      ),
+    );
+
+    await expect(
+      apiFetchBlob('GET', '/api/v1/admin/standalone/backups/corrupt.kbbak'),
+    ).rejects.toMatchObject({
+      status: 500,
+      detail: 'Internal failure',
+    });
   });
 });

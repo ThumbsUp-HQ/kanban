@@ -109,134 +109,60 @@ describe('planeImportApi', () => {
     });
   });
 
-  it('downloadPortableExport sends request to /api/v1/admin/exports/portable and returns blob', async () => {
+  it('downloadPortableExport sends request to /api/v1/admin/exports/portable via apiFetchBlob and returns blob', async () => {
     const mockBlob = new Blob(['tar.gz payload'], { type: 'application/gzip' });
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      blob: async () => {
-        await Promise.resolve();
-        return mockBlob;
-      },
-    } as unknown as Response);
+    const spy = vi.spyOn(clientModule, 'apiFetchBlob').mockResolvedValueOnce({
+      blob: mockBlob,
+      filename: 'kanban-test-ws-portable.tar.gz',
+      contentType: 'application/gzip',
+      headers: new Headers(),
+    });
 
     const blob = await downloadPortableExport({
       workspace_slug: 'test-ws',
       scrub_text: true,
     });
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/admin/exports/portable', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/gzip, application/octet-stream, application/json',
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/admin/exports/portable', {
+      body: {
         workspace_slug: 'test-ws',
         scrub: true,
-      }),
+      },
+      headers: {
+        Accept: 'application/gzip, application/octet-stream, application/json',
+      },
     });
     expect(blob).toBe(mockBlob);
   });
 
-  it('downloadPortableExport throws error on non-ok status', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: async () => {
-        await Promise.resolve();
-        return { detail: 'Disk full' };
-      },
-    } as unknown as Response);
+  it('downloadPortableExport handles ApiProblem error responses and extracts message', async () => {
+    const { ApiProblem } = await import('../../../api/problem');
 
-    await expect(downloadPortableExport({})).rejects.toThrow('Disk full');
-  });
-
-  it('downloadPortableExport includes X-CSRF-Token if getCsrfToken returns a token', async () => {
-    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('existing-csrf-token');
-    const mockBlob = new Blob(['data'], { type: 'application/gzip' });
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      blob: () => Promise.resolve(mockBlob),
-    } as unknown as Response);
-
-    await downloadPortableExport({});
-    expect(fetchSpy).toHaveBeenCalledWith(
-      '/api/v1/admin/exports/portable',
-      expect.objectContaining({
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/gzip, application/octet-stream, application/json',
-          'X-CSRF-Token': 'existing-csrf-token',
-        },
-      }),
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(500, { detail: 'Disk full' }),
     );
-  });
+    await expect(downloadPortableExport({})).rejects.toThrow('Disk full');
 
-  it('downloadPortableExport handles 403 CSRF refresh and retries successfully', async () => {
-    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('stale-token');
-    const bootstrapSpy = vi.spyOn(clientModule, 'bootstrapCsrfToken').mockResolvedValueOnce('fresh-token');
-    const mockBlob = new Blob(['data'], { type: 'application/gzip' });
-
-    const fetchSpy = vi.spyOn(global, 'fetch')
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-      } as unknown as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        blob: () => Promise.resolve(mockBlob),
-      } as unknown as Response);
-
-    const blob = await downloadPortableExport({});
-    expect(bootstrapSpy).toHaveBeenCalledWith(undefined, true);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(blob).toBe(mockBlob);
-  });
-
-  it('downloadPortableExport handles 403 CSRF refresh returning undefined without retrying', async () => {
-    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValueOnce('stale-token');
-    vi.spyOn(clientModule, 'bootstrapCsrfToken').mockResolvedValueOnce(undefined as unknown as string);
-
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 403,
-      json: () => Promise.resolve({ detail: 'CSRF token missing' }),
-    } as unknown as Response);
-
-    await expect(downloadPortableExport({})).rejects.toThrow('CSRF token missing');
-  });
-
-  it('downloadPortableExport extracts error message from error or message fields or fallback', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      json: () => Promise.resolve({ message: 'Invalid workspace slug' }),
-    } as unknown as Response);
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(400, { message: 'Invalid workspace slug' }),
+    );
     await expect(downloadPortableExport({})).rejects.toThrow('Invalid workspace slug');
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      json: () => Promise.resolve({ error: 'Bad request format' }),
-    } as unknown as Response);
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(400, { error: 'Bad request format' }),
+    );
     await expect(downloadPortableExport({})).rejects.toThrow('Bad request format');
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      json: () => Promise.resolve({ unknown_prop: 'something' }),
-    } as unknown as Response);
-    await expect(downloadPortableExport({})).rejects.toThrow('Export failed with HTTP 400');
-
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 502,
-      json: () => Promise.reject(new Error('Non-JSON gateway error')),
-    } as unknown as Response);
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new ApiProblem(502, {}),
+    );
     await expect(downloadPortableExport({})).rejects.toThrow('Export failed with HTTP 502');
+  });
+
+  it('downloadPortableExport rethrows non-ApiProblem errors', async () => {
+    vi.spyOn(clientModule, 'apiFetchBlob').mockRejectedValueOnce(
+      new Error('Custom network failure'),
+    );
+    await expect(downloadPortableExport({})).rejects.toThrow('Custom network failure');
   });
 });

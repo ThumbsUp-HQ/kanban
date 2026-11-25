@@ -649,7 +649,15 @@ export function PlaneImportStudio(): JSX.Element {
                 <textarea
                   id="import-user-mapping"
                   className="kb-plane-textarea"
-                  style={{ minHeight: 70, height: 70, width: '100%', fontFamily: 'monospace', fontSize: '0.8rem' }}
+                  style={{
+                    minHeight: 70,
+                    height: 70,
+                    width: '100%',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    fontFamily: 'monospace',
+                    fontSize: '0.8rem',
+                  }}
                   placeholder={'{\n  "legacy-uuid-or-email": "@current_user"\n}'}
                   data-testid="import-user-mapping-json"
                   value={userMappingJson}

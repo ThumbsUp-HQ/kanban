@@ -2721,4 +2721,130 @@ describe('ComposeExportTab', () => {
     expect(screen.getByText(/FORCE ROW LEVEL SECURITY/i)).toBeDefined();
     expect(screen.getByText(/Tier-B nsjail strict cgroups/i)).toBeDefined();
   });
+
+  it('downloads snapshot via handleDownloadSnapshot using apiFetchBlob', async () => {
+    let downloadedUrl = '';
+    const mockFetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/admin/standalone/backups/my-snap.kbbak')) {
+        downloadedUrl = url;
+        return Promise.resolve(
+          new Response('snapshot-file-content', {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'Content-Disposition': 'attachment; filename="my-snap.kbbak"',
+            },
+          }),
+        );
+      }
+      if (url.includes('/api/v1/admin/standalone/backups')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                filename: 'my-snap.kbbak',
+                size_bytes: 2048,
+                created_at: '2026-11-20T10:00:00Z',
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    global.fetch = mockFetch;
+
+    const snapClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone',
+      is_server_admin: true,
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+    render(
+      <QueryClientProvider client={snapClient}>
+        <StandaloneStatusPanel
+          onClose={vi.fn()}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('my-snap.kbbak')).toBeDefined();
+    });
+
+    const downloadBtn = screen.getByRole('button', { name: 'Download' });
+    await act(async () => {
+      fireEvent.click(downloadBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(downloadedUrl).toContain('/api/v1/admin/standalone/backups/my-snap.kbbak');
+    });
+  });
+
+  it('handles snapshot download failure with API error', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/v1/admin/standalone/backups/err-snap.kbbak')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ detail: 'File corrupted' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/problem+json' },
+          }),
+        );
+      }
+      if (url.includes('/api/v1/admin/standalone/backups')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                filename: 'err-snap.kbbak',
+                size_bytes: 1024,
+                created_at: '2026-11-20T10:00:00Z',
+              },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const errClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const adminStatus: SystemStatus = {
+      deployment_mode: 'standalone',
+      is_server_admin: true,
+      persistent_volume: true,
+      air_gap_mode: false,
+      local_llm_endpoint_host: null,
+    };
+    render(
+      <QueryClientProvider client={errClient}>
+        <StandaloneStatusPanel
+          onClose={vi.fn()}
+          initialStatus={adminStatus}
+          initialTab="backup"
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('err-snap.kbbak')).toBeDefined();
+    });
+
+    const errDownloadBtn = screen.getByRole('button', { name: 'Download' });
+    await act(async () => {
+      fireEvent.click(errDownloadBtn);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('File corrupted')).toBeDefined();
+    });
+  });
 });

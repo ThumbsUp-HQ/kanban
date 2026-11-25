@@ -94,6 +94,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
+  flex-wrap: wrap;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
@@ -107,7 +108,8 @@
   color: var(--fg-muted, #525866);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
   flex-shrink: 0;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -238,10 +240,14 @@
   gap: var(--space-3, 12px);
   font-size: 0.9375rem;
   line-height: 1.5;
+  box-sizing: border-box;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .standalone-panel__warn-text {
   font-weight: 500;
+  word-break: break-word;
 }
 
 .standalone-panel__code-block {
@@ -253,6 +259,7 @@
   justify-content: space-between;
   gap: var(--space-3, 12px);
   overflow-x: auto;
+  flex-wrap: wrap;
 }
 
 .standalone-panel__code-block code {
@@ -467,14 +474,28 @@
   font-weight: 600;
 }
 
-.standalone-panel__table-link {
+.standalone-panel__table-link,
+.standalone-panel__table-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
   color: var(--accent-primary, #1d4ed8);
   text-decoration: none;
   font-weight: 500;
+  cursor: pointer;
 }
 
-.standalone-panel__table-link:hover {
+.standalone-panel__table-link:hover,
+.standalone-panel__table-link-btn:hover:not(:disabled) {
   text-decoration: underline;
+}
+
+.standalone-panel__table-link-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  text-decoration: none;
 }
 
 /* 2-Stage Verification Card */
@@ -503,6 +524,7 @@
 
 .standalone-panel__compose-mode-toggle {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
 }
@@ -518,6 +540,8 @@
   cursor: pointer;
   border: 1px solid transparent;
   transition: background-color 0.15s ease, border-color 0.15s ease;
+  white-space: normal;
+  text-align: center;
 }
 
 .standalone-panel__btn:disabled {
@@ -562,7 +586,9 @@
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
 }
 
 .standalone-panel__copy-btn:hover {

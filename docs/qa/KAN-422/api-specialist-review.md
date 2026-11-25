@@ -20,7 +20,7 @@ This review specifically audits:
 2. **WebSudo AAL2 Step-Up & CSRF Protection**: Verification that all Slice 4 endpoints (`/api/v1/admin/standalone/*`, `/api/v1/admin/exports/portable`, `/api/v1/admin/imports/*`) route through `apiFetch` / `fetchStandalone`, preserving automatic 403 step-up modal dispatch and singleflight request replay.
 3. **Diagnostics & Telemetry Integrity**: Verification of removal of fake 12/14/15 ms simulated ping latency in `AdminDiagnosticsStudio.tsx`, real WebSocket error states, and 7-class Link Auditor alignment.
 4. **Standalone Backup Encryption & Security Invariants**: Validation of canonical `.kbbak` filename extension and header validation (`KBKP` envelope format), `FORCE ROW LEVEL SECURITY` enforcement, zero shell execution in backup streaming, and admin route protection (`require_admin_aal2`).
-5. **Unit Test Coverage & Hygiene**: Achieving `>=95%` unit test coverage on all modified backend modules (`link_auditor.py`: 100%, `system_status.py`: 97%) with 0 warnings, and `>=95%` coverage on all modified web modules (99.56% statements, 95.11% branches) with 0 errors across 96 tests.
+5. **Unit Test Coverage & Hygiene**: Achieving `>=95%` unit test coverage on all modified backend modules (`link_auditor.py`: 100%, `system_status.py`: 97%) with 0 warnings across 47 tests, and `>=95%` coverage on all modified web modules (99.70% statements, 95.85% branches, 99.37% functions, 99.84% lines) with 0 errors across 126 tests.
 
 ---
 
@@ -37,11 +37,12 @@ This review specifically audits:
 
 ### B. WebSudo AAL2 Step-Up & CSRF Replay Architecture
 - **Elimination of Raw Browser `fetch`**:
-  - Migrated 9 endpoints in `StandaloneStatusPanel.tsx` (`/status`, `/backup/snapshots`, `/backup/now`, `/backup/verify`, `/backup/restore`, `/backup/schedule`, `/backup/history`, `/backup/download/{filename}`) to use `fetchStandalone` and `apiFetch`.
+  - Migrated 9 endpoints in `StandaloneStatusPanel.tsx` (`/status`, `/backup/snapshots`, `/backup/now`, `/backup/verify`, `/backup/restore`, `/backup/schedule`, `/backup/history`, `/backup/download/{filename}`) to use `fetchStandalone` (`apiFetch`) and `apiFetchBlob`.
+  - Replaced snapshot download anchor `<a href>` with an accessible button invoking `handleDownloadSnapshot` via `apiFetchBlob`, ensuring proper CSRF and WebSudo handling.
   - Migrated `/api/v1/admin/standalone/compose-export` in `ComposeExportTab.tsx` to `apiFetch`.
-  - Migrated `/api/v1/admin/exports/portable` in `planeImportApi.ts` to `apiFetch` with automatic CSRF bootstrap retry on 403.
+  - Migrated `/api/v1/admin/exports/portable` in `planeImportApi.ts` to `apiFetchBlob` with automatic CSRF bootstrap and WebSudo AAL2 step-up retry on 403.
 - **Security Invariant**:
-  - By routing through `apiFetch`, any 403 response with `code: "AAL2_REQUIRED"` triggers `dispatchAal2StepUpIfRequired`, prompting the user for step-up authentication and replaying the in-flight mutation transparently without losing form state or file uploads.
+  - By routing through `apiFetch` and `apiFetchBlob`, any 403 response with `code: "AAL2_REQUIRED"` triggers `dispatchAal2StepUpIfRequired`, prompting the user for step-up authentication and replaying the in-flight mutation transparently without losing form state or file uploads.
 
 ### C. Standalone Engine & Backup Standardization
 - **PostgreSQL 16 & Unix Socket Telemetry**:
@@ -79,15 +80,15 @@ pytest kanban/tests/api/test_admin_imports.py kanban/tests/importer/test_multi_s
 ### B. Frontend Vitest Suite
 Executed Vitest suite with v8 coverage:
 ```bash
-pnpm vitest run src/features/admin-imports/__tests__/planeImportApi.test.ts src/features/standalone/__tests__/ComposeExportTab.test.tsx src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx --coverage
+COVERAGE_INCLUDE="src/features/admin-imports/**,src/features/standalone/**,src/features/admin/AdminDiagnosticsStudio.tsx,src/features/admin/LinkAuditorStudio.tsx" pnpm vitest run src/features/admin-imports/ src/features/standalone/ src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/api/client.test.ts --coverage --no-watch
 ```
 **Results**:
-- 96/96 passed across all 6 test suites in 5.20s.
+- 126/126 passed across all 7 test suites in 5.72s.
 - Coverage on touched Slice 4 modules:
-  - Statements: **99.56%**
-  - Branches: **95.11%** (exceeds `>=95%` gate)
+  - Statements: **99.70%**
+  - Branches: **95.85%** (exceeds `>=95%` gate)
   - Functions: **99.37%**
-  - Lines: **99.70%**
+  - Lines: **99.84%**
 
 ### C. Build & Hygiene
 - `ruff check .`: All checks passed.

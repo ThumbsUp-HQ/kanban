@@ -19,12 +19,12 @@ In compliance with the approved `KAN-421` audit directives (`docs/workouts/slice
 1. **Migration Import Studio (`PlaneImportStudio.tsx` & `planeImportApi.ts`)**:
    - **CUT Disconnected Orphan Controls**: Removed `batchSize` (`import-batch-size-input`), `conflictStrategy` (`import-conflict-strategy-select`), and `preserveLegacyUuids` (`import-preserve-uuids-checkbox`). The backend automatically handles batching and idempotent entity upsert.
    - **Cleaned `<AdvancedSection>` Summary**: Summary counter accurately reflects active project key and custom user mapping overrides.
-   - **Wired User Mapping**: Added `validateAndParseUserMap` JSON parser helper; wired `user_map` into both dry-run preview (`handleRunDryRun`) and live execution (`handleExecuteImport`) payloads with inline JSON syntax validation feedback.
-   - **CSRF & WebSudo-Aware Portable Export**: Replaced raw `fetch()` at line 73 of `planeImportApi.ts` with `fetchWithWebSudoRetry`, returning a clean binary `Blob` with automatic CSRF token injection and `KAN-404` WebSudo step-up replay.
+   - **Wired User Mapping**: Added `parseUserMap` JSON parser helper; wired `user_map` into both dry-run preview (`handleRunDryRun`) and live execution (`handleExecuteImport`) payloads with inline JSON syntax validation feedback.
+   - **CSRF & WebSudo-Aware Portable Export**: Replaced raw `fetch()` at line 73 of `planeImportApi.ts` with `apiFetchBlob`, returning a clean binary `Blob` with automatic CSRF token injection and `KAN-404` WebSudo step-up replay.
 2. **Complete Raw `fetch()` Migration (11 of 11 Calls Across Slice 4)**:
-   - Migrated all 9 raw `fetch()` calls in `StandaloneStatusPanel.tsx` to `fetchStandalone` (wrapping `apiFetch` with typed models, CSRF tokens, and WebSudo handling).
+   - Migrated all 9 raw `fetch()` calls in `StandaloneStatusPanel.tsx` to `fetchStandalone` (`apiFetch`) and `apiFetchBlob` (for manual backup export and the snapshot download row button).
    - Migrated 1 raw `fetch()` call in `ComposeExportTab.tsx` line 35 to `apiFetch`.
-   - Migrated 1 raw `fetch()` call in `planeImportApi.ts` line 73 to `fetchWithWebSudoRetry`.
+   - Migrated 1 raw `fetch()` call in `planeImportApi.ts` line 73 to `apiFetchBlob`.
 3. **Container Image Slug, Branding & Copy Drift Fixes**:
    - Updated Docker container run commands in `StandaloneStatusPanel.tsx` (lines 294 and 662) from `kanban:latest` to canonical `thumbs-up-kanban:latest`.
    - Replaced obsolete SQLite 3.45 / WAL PRAGMA copy in `StandaloneStatusPanel.tsx` with accurate embedded PostgreSQL 16 on Unix domain socket (`/var/run/postgresql`) and active `FORCE RLS` status.
@@ -64,21 +64,22 @@ In compliance with the approved `KAN-421` audit directives (`docs/workouts/slice
 ### Vitest Frontend Test Suites & Coverage
 - **Command**:
   ```bash
-  COVERAGE_INCLUDE="src/features/admin/AdminDiagnosticsStudio.tsx,src/features/admin/LinkAuditorStudio.tsx,src/features/admin-imports/PlaneImportStudio.tsx,src/features/admin-imports/planeImportApi.ts,src/features/standalone/ComposeExportTab.tsx,src/features/standalone/StandaloneStatusPanel.tsx" pnpm --dir kanban/web exec vitest run src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx src/features/standalone/__tests__/ComposeExportTab.test.tsx src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/admin-imports/__tests__/planeImportApi.test.ts --coverage
+  COVERAGE_INCLUDE="src/features/admin-imports/**,src/features/standalone/**,src/features/admin/AdminDiagnosticsStudio.tsx,src/features/admin/LinkAuditorStudio.tsx" pnpm --dir kanban/web test src/features/admin-imports/ src/features/standalone/ src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/api/client.test.ts --coverage --no-watch
   ```
 - **Results**:
   - `PlaneImportStudio.test.tsx`: 13 passed
-  - `planeImportApi.test.ts`: 11 passed
+  - `planeImportApi.test.ts`: 8 passed
   - `ComposeExportTab.test.tsx`: 8 passed
-  - `StandaloneStatusPanel.test.tsx`: 38 passed
-  - `AdminDiagnosticsStudio.test.tsx`: 13 passed (jsdom `window.location` protocol test cleaned via `Object.assign(Object.create(origLocation), { protocol: 'https:' })`)
+  - `StandaloneStatusPanel.test.tsx`: 40 passed
+  - `AdminDiagnosticsStudio.test.tsx`: 13 passed (jsdom `window.location` protocol test cleaned via `Object.defineProperty(mockLoc, 'protocol', { value: 'https:', configurable: true })`)
   - `LinkAuditorStudio.test.tsx`: 13 passed
-  - **Summary**: 96 passed across 6 test files, 0 failed.
+  - `client.test.ts`: 31 passed (verifying `parseContentDispositionFilename`, `apiFetchBlob`, and WebSudo step-up elevation & replay)
+  - **Summary**: 126 passed across 7 test files, 0 failed.
   - **Coverage Metrics on Touched Slice-4 Modules**:
-    - Statements: 99.56%
-    - Branches: 95.11%
+    - Statements: 99.70%
+    - Branches: 95.85%
     - Functions: 99.37%
-    - Lines: 99.70%
+    - Lines: 99.84%
   - Raw coverage table preserved in `docs/qa/KAN-422/unit-test-results.txt`.
 
 ---
