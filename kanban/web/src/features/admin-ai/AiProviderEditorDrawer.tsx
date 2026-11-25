@@ -31,6 +31,59 @@ interface TestStatusState {
   message: string | null;
 }
 
+export const MASK_BULLET = '•';
+
+export function computeNextApiKey(
+  prevKey: string,
+  nextDisplay: string,
+  cursorPos?: number | null,
+): string {
+  if (!nextDisplay) {
+    return '';
+  }
+  if (!prevKey) {
+    return nextDisplay;
+  }
+  const oldMask = MASK_BULLET.repeat(prevKey.length);
+  if (nextDisplay === oldMask) {
+    return prevKey;
+  }
+
+  // If nextDisplay consists solely of mask bullets and is shorter than oldMask,
+  // one or more characters were deleted (e.g. Backspace or Delete).
+  const isAllBullets = Array.from(nextDisplay).every((ch) => ch === MASK_BULLET);
+  if (isAllBullets && nextDisplay.length < oldMask.length) {
+    const deletedCount = oldMask.length - nextDisplay.length;
+    if (cursorPos !== undefined && cursorPos !== null && cursorPos >= 0 && cursorPos <= prevKey.length) {
+      return prevKey.slice(0, cursorPos) + prevKey.slice(cursorPos + deletedCount);
+    }
+    return prevKey.slice(0, prevKey.length - deletedCount);
+  }
+
+  // General diffing: common prefix and suffix
+  let prefixLen = 0;
+  while (
+    prefixLen < oldMask.length &&
+    prefixLen < nextDisplay.length &&
+    oldMask[prefixLen] === nextDisplay[prefixLen]
+  ) {
+    prefixLen++;
+  }
+
+  let suffixLen = 0;
+  while (
+    suffixLen < oldMask.length - prefixLen &&
+    suffixLen < nextDisplay.length - prefixLen &&
+    oldMask[oldMask.length - 1 - suffixLen] === nextDisplay[nextDisplay.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+
+  const inserted = nextDisplay.slice(prefixLen, nextDisplay.length - suffixLen);
+  const delEnd = prevKey.length - suffixLen;
+  return prevKey.slice(0, prefixLen) + inserted + prevKey.slice(delEnd);
+}
+
 function AiProviderEditorContent({
   onClose,
   provider,
@@ -97,6 +150,26 @@ function AiProviderEditorContent({
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
   const [clearExistingKey, setClearExistingKey] = useState<boolean>(false);
+
+  const supportsWebkitTextSecurity =
+    typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports('-webkit-text-security', 'disc');
+
+  const displayKeyValue = !supportsWebkitTextSecurity && !showApiKey
+    ? MASK_BULLET.repeat(apiKey.length)
+    : apiKey;
+
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const nextRaw = e.target.value;
+    setClearExistingKey(false);
+    if (!supportsWebkitTextSecurity && !showApiKey) {
+      const nextKey = computeNextApiKey(apiKey, nextRaw, e.target.selectionStart);
+      setApiKey(nextKey);
+    } else {
+      setApiKey(nextRaw);
+    }
+  };
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,8 +240,7 @@ function AiProviderEditorContent({
   };
 
   const handleSelectAllProbed = (): void => {
-    if (!probedModels) return;
-    setModelAllowlist(probedModels.join(', '));
+    setModelAllowlist((probedModels ?? []).join(', '));
   };
 
   const handleClearModels = (): void => {
@@ -380,7 +452,12 @@ function AiProviderEditorContent({
         </div>
       )}
 
-      <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
+      <form
+        noValidate
+        autoComplete="off"
+        data-form-type="other"
+        onSubmit={(e) => { void handleSubmit(e); }}
+      >
         {/* 1. Protocol & Provider Engine */}
         <div className="kb-form-group">
           <label htmlFor="provider-kind-select" className="kb-form-label">
@@ -432,6 +509,11 @@ function AiProviderEditorContent({
             onChange={(e) => { setDisplayName(e.target.value); }}
             placeholder="e.g. OpenAI GPT-4o Production"
             required
+            autoComplete="off"
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
+            data-form-type="other"
             data-testid="provider-name-input"
           />
         </div>
@@ -444,13 +526,10 @@ function AiProviderEditorContent({
           <div className="kb-api-key-row">
             <input
               id="provider-key-input"
-              type={showApiKey ? 'text' : 'password'}
-              className="kb-form-input"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setClearExistingKey(false);
-              }}
+              type="text"
+              className={`kb-form-input${!showApiKey ? ' kb-masked-api-key' : ''}`}
+              value={displayKeyValue}
+              onChange={handleApiKeyChange}
               placeholder={
                 isEditing && provider.api_key_set
                   ? '********'
@@ -459,6 +538,15 @@ function AiProviderEditorContent({
                     : 'Enter API secret key'
               }
               disabled={clearExistingKey}
+              autoComplete="off"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
+              inputMode="text"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-bwignore="true"
+              data-form-type="other"
               data-testid="provider-key-input"
             />
             <button
