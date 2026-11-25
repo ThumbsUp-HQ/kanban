@@ -199,6 +199,14 @@
   margin-bottom: 6px;
 }
 
+.kb-token-label-row label,
+.kb-token-label-row .kb-form-label {
+  width: auto !important;
+  margin-bottom: 0 !important;
+  display: inline-flex;
+  align-items: center;
+}
+
 [data-testid="copy-runner-cli-btn"],
 .kb-copy-cli-btn {
   white-space: nowrap !important;
@@ -246,10 +254,10 @@
   border: 1px solid #bfdbfe;
   color: #1e40af;
   border-radius: var(--radius-md, 8px);
-  padding: 10px 14px;
-  margin-bottom: 10px;
-  font-size: 12.5px;
-  line-height: 1.45;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 [data-theme='dark'] .kb-single-reveal-alert {

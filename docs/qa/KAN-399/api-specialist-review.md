@@ -3,7 +3,7 @@
 ## Ticket Reference
 - **Ticket ID**: `KAN-399` (`[KB-RUNNER-ENROLL-UX-AND-CLI] Runner Enrollment UX and CLI Hardening`)
 - **Reviewer Persona**: Backend Architect & API Security Specialist (`.agents/agents/backend-architect.md` / `.agents/agents/api-tester.md`)
-- **Branch**: `fix/KAN-399-rc1` (Round-1 Remediation)
+- **Branch**: `fix/KAN-399-rc2` (Round-2 Polish)
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
