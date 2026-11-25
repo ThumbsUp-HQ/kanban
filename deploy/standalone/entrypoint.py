@@ -38,7 +38,7 @@ from deploy.standalone.storage_probe import (
     probe,
     write_standalone_status,
 )
-from kanban.ops.backup_crypto import PassphraseKeySource, RawKeySource
+from kanban.ops.backup_crypto import KeySource, PassphraseKeySource, RawKeySource
 from kanban.ops.backup_service import create_backup, restore_backup
 
 if TYPE_CHECKING:
@@ -422,6 +422,7 @@ def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
 
         passphrase = req.get("passphrase")
         raw_key_b64 = req.get("raw_key_b64")
+        key_source: KeySource
         if passphrase:
             key_source = PassphraseKeySource(passphrase)
         elif raw_key_b64:
@@ -434,7 +435,7 @@ def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
             key_source = RawKeySource(keyring.master_kek)
 
         target_db_url = f"postgresql+asyncpg://postgres@/kanban?host={run_dir}"
-        report = restore_backup(
+        restore_report = restore_backup(
             archive_path=archive_path,
             target_db_url=target_db_url,
             key_source=key_source,
@@ -443,9 +444,9 @@ def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "ok",
             "report": {
-                "workspaces_verified": report.workspaces_verified,
-                "links_audited": report.links_audited,
-                "duration_seconds": report.duration_seconds,
+                "workspaces_verified": restore_report.workspaces_verified,
+                "links_audited": restore_report.links_audited,
+                "duration_seconds": restore_report.duration_seconds,
             },
         }
 
@@ -455,20 +456,21 @@ def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
         ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         dest = backup_dir / f"kanban-backup-{ts}.kbbak"
         raw_key_b64 = req.get("raw_key_b64")
+        backup_key_source: KeySource
         if raw_key_b64:
-            key_source = RawKeySource(base64.b64decode(raw_key_b64))
+            backup_key_source = RawKeySource(base64.b64decode(raw_key_b64))
         else:
             keyring_path = Path(
                 req.get("keyring_path", "/var/lib/kanban/data/secrets/keyring.json")
             )
             keyring = load_or_create_keyring(keyring_path)
-            key_source = RawKeySource(keyring.master_kek)
+            backup_key_source = RawKeySource(keyring.master_kek)
         target_db_url = f"postgresql+asyncpg://postgres@/kanban?host={run_dir}"
 
-        report = create_backup(
+        backup_summary = create_backup(
             db_url=target_db_url,
             out_path=dest,
-            key_source=key_source,
+            key_source=backup_key_source,
             include_secrets=True,
         )
         with contextlib.suppress(OSError):
@@ -477,8 +479,8 @@ def _execute_op_inner(req: dict[str, Any]) -> dict[str, Any]:
         return {
             "status": "ok",
             "filename": dest.name,
-            "size_bytes": report.size_bytes,
-            "duration_seconds": report.duration_seconds,
+            "size_bytes": backup_summary.size_bytes,
+            "duration_seconds": backup_summary.duration_seconds,
         }
 
     msg = f"Unknown operation: {op}"
