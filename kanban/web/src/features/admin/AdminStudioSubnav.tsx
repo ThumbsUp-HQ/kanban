@@ -23,7 +23,7 @@ const ADMIN_TABS: AdminTabDefinition[] = [
   { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
   { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
   { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
-  { id: 'imports', testId: 'tab-admin-imports', label: 'Plane Migration', path: '/admin/imports', icon: '📥' },
+  { id: 'imports', testId: 'tab-admin-imports', label: 'Migration', path: '/admin/imports', icon: '📥' },
   { id: 'standalone', testId: 'tab-admin-standalone', label: 'System & Backups', path: '/admin/standalone', icon: '💾' },
   { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
 ];
