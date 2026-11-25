@@ -257,6 +257,8 @@ describe('CustomFieldDefinitionEditor', () => {
     expect(screen.getByTestId('tamper-warning-literal').textContent).toContain(
       'Saving changes manifest_sha256 and immediately revokes the current approval.',
     );
+    expect(screen.getByTestId('tamper-old-sha').textContent).toBe(def0.manifest_sha256);
+    expect(screen.getByTestId('tamper-new-sha')).toBeDefined();
 
     // Confirm save
     fireEvent.click(screen.getByTestId('confirm-tamper-save-btn'));
@@ -370,6 +372,39 @@ describe('CustomFieldDefinitionEditor', () => {
 
     expect(screen.queryByTestId('tamper-confirm-dialog')).toBeNull();
     expect(api.updateCustomField).not.toHaveBeenCalled();
+  });
+
+  it('supports structured format metadata for text, number, and badge with raw JSON toggle and flavor guidance', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+
+    renderEditor(true);
+
+    // Verify flavor guidance callout
+    expect(screen.getByTestId('flavor-guidance-callout')).toBeDefined();
+    expect(screen.getByTestId('flavor-guidance-callout').textContent).toContain('Tier A');
+
+    // Default output format is 'text'
+    expect(screen.getByTestId('structured-format-metadata')).toBeDefined();
+    expect(screen.getByTestId('meta-text-max-length')).toBeDefined();
+
+    // Toggle raw JSON
+    const toggleRawBtn = screen.getByTestId('toggle-raw-metadata-btn');
+    fireEvent.click(toggleRawBtn);
+    expect(toggleRawBtn.textContent).toContain('Hide Raw JSON');
+
+    // Change to number
+    fireEvent.change(screen.getByTestId('output-format-select'), {
+      target: { value: 'number' },
+    });
+    expect(screen.getByTestId('meta-number-precision')).toBeDefined();
+    expect(screen.getByTestId('meta-number-unit-suffix')).toBeDefined();
+
+    // Change to badge
+    fireEvent.change(screen.getByTestId('output-format-select'), {
+      target: { value: 'badge' },
+    });
+    expect(screen.getByTestId('meta-badge-color')).toBeDefined();
+    expect(screen.getByTestId('meta-badge-labels')).toBeDefined();
   });
 
   it('resets form when clicking New Custom Field button', async () => {
@@ -1106,5 +1141,116 @@ describe('CustomFieldDefinitionEditor', () => {
         }),
       );
     });
+  });
+
+  it('supports editing structured format metadata fields for text, number, and badge and toggling raw JSON (KAN-427)', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    // Open advanced section
+    const advToggle = await screen.findByTestId('custom-field-advanced-section-toggle');
+    fireEvent.click(advToggle);
+
+    expect(screen.getByTestId('structured-format-metadata')).toBeDefined();
+
+    // 1. Text format inputs
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'text' } });
+    expect(screen.getByTestId('structured-meta-text')).toBeDefined();
+
+    const maxLengthInput = screen.getByTestId('meta-text-max-length');
+    fireEvent.change(maxLengthInput, { target: { value: '500' } });
+
+    const prefixInput = screen.getByTestId('meta-text-prefix');
+    fireEvent.change(prefixInput, { target: { value: 'SEC-' } });
+
+    const monospaceCheckbox = screen.getByTestId('meta-text-monospace');
+    fireEvent.click(monospaceCheckbox);
+    expect((monospaceCheckbox as HTMLInputElement).checked).toBe(true);
+
+    // 2. Number format inputs
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'number' } });
+    expect(screen.getByTestId('structured-meta-number')).toBeDefined();
+
+    const precisionInput = screen.getByTestId('meta-number-precision');
+    fireEvent.change(precisionInput, { target: { value: '4' } });
+
+    const unitSuffixInput = screen.getByTestId('meta-number-unit-suffix');
+    fireEvent.change(unitSuffixInput, { target: { value: 'pts' } });
+
+    const currencyInput = screen.getByTestId('meta-number-currency');
+    fireEvent.change(currencyInput, { target: { value: '$' } });
+
+    // 3. Badge format inputs
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'badge' } });
+    expect(screen.getByTestId('structured-meta-badge')).toBeDefined();
+
+    const colorInput = screen.getByTestId('meta-badge-color');
+    fireEvent.change(colorInput, { target: { value: 'success' } });
+
+    const labelsInput = screen.getByTestId('meta-badge-labels');
+    fireEvent.change(labelsInput, { target: { value: 'PASS, WARN, FAIL' } });
+
+    // 4. Toggle raw JSON metadata view
+    const toggleRawBtn = screen.getByTestId('toggle-raw-metadata-btn');
+    fireEvent.click(toggleRawBtn);
+    expect(screen.getByTestId('format-metadata-textarea')).toBeDefined();
+
+    // Toggle back to structured
+    fireEvent.click(toggleRawBtn);
+    expect(screen.getByTestId('structured-meta-badge')).toBeDefined();
+  });
+
+  it('covers badge metadata fallbacks when color_token and allowed_labels are missing', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    const advToggle = await screen.findByTestId('custom-field-advanced-section-toggle');
+    fireEvent.click(advToggle);
+
+    // Switch to badge without existing metadata
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'badge' } });
+    expect(screen.getByTestId<HTMLInputElement>('meta-badge-color').value).toBe('info');
+    expect(screen.getByTestId<HTMLInputElement>('meta-badge-labels').value).toBe('Active, Verified');
+  });
+
+  it('covers number metadata fallbacks when precision and unit suffix are missing', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    const advToggle = await screen.findByTestId('custom-field-advanced-section-toggle');
+    fireEvent.click(advToggle);
+
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'number' } });
+    // Clear raw metadata to empty object
+    fireEvent.click(screen.getByTestId('toggle-raw-metadata-btn'));
+    fireEvent.change(screen.getByTestId('format-metadata-textarea'), { target: { value: '{}' } });
+    fireEvent.click(screen.getByTestId('toggle-raw-metadata-btn'));
+
+    expect(screen.getByTestId<HTMLInputElement>('meta-number-precision').value).toBe('2');
+    expect(screen.getByTestId<HTMLInputElement>('meta-number-unit-suffix').value).toBe('');
+  });
+
+  it('covers tamper warning display when selectedField has no manifest_sha256', async () => {
+    const fieldWithoutSha: api.CustomFieldDefinition[] = [
+      {
+        ...def0,
+        manifest_sha256: null,
+        approval_status: 'APPROVED',
+      },
+    ];
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(fieldWithoutSha);
+    renderEditor(true);
+
+    fireEvent.click(await screen.findByTestId('field-item-cvss-score'));
+
+    // Modify script source to trigger tamper warning
+    fireEvent.change(screen.getByTestId('script-source-textarea'), {
+      target: { value: 'return 100;' },
+    });
+    fireEvent.click(screen.getByTestId('save-definition-btn'));
+
+    // Tamper dialog should show 'unknown' for old SHA
+    expect(await screen.findByTestId('tamper-old-sha')).toBeDefined();
+    expect(screen.getByTestId('tamper-old-sha').textContent).toContain('unknown');
   });
 });

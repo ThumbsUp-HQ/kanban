@@ -1055,3 +1055,105 @@
   color: var(--danger-fg);
   border: 1px solid var(--danger-fg);
 }
+
+/* Workflow Transition Helper Radiogroup and Subtext */
+.workflow-radio-subtext {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: normal;
+  color: var(--text-secondary, #64748b);
+  margin-top: 2px;
+}
+
+/* Mutable Fields Header & Quick Actions */
+.workflow-mutable-fields-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.workflow-mutable-fields-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.workflow-btn-xs {
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}
+
+/* Dry-Run Top Simulation Banner */
+.dry-run-simulation-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-surface-raised, #f8fafc);
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-left: 4px solid var(--primary-color, #3b82f6);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--text-primary, #0f172a);
+  border-radius: 4px;
+}
+
+.dry-run-simulation-icon {
+  font-size: 1.1rem;
+}
+
+/* Dry-Run Before/After Diff Table */
+.dry-run-diff-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-canvas, #f1f5f9);
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.dry-run-diff-header {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  border-bottom: 1px solid var(--border-color, #cbd5e1);
+  padding-bottom: 2px;
+}
+
+.dry-run-diff-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 20px 1fr;
+  align-items: center;
+}
+
+.dry-run-diff-field {
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+}
+
+.dry-run-diff-before {
+  color: var(--danger-fg, #dc2626);
+  text-decoration: line-through;
+}
+
+.dry-run-diff-arrow {
+  color: var(--text-secondary, #94a3b8);
+  text-align: center;
+}
+
+.dry-run-diff-after {
+  color: var(--ok-fg, #16a34a);
+  font-weight: 600;
+}
+
+/* Masked API Key Input */
+.kb-masked-api-key {
+  -webkit-text-security: disc;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.1em;
+}
+

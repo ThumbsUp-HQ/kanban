@@ -108,3 +108,90 @@
     justify-content: center;
   }
 }
+
+/* Duration inputs, presets & callouts (KAN-427) */
+.kb-duration-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.kb-duration-input-wrapper .kb-input {
+  max-width: 160px;
+}
+
+.kb-readable-duration {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--kb-color-text-secondary, #64748b);
+  background: var(--kb-color-bg-subtle, #f1f5f9);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.kb-preset-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-top: 4px;
+}
+
+.kb-preset-pill {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--kb-color-border-subtle, #cbd5e1);
+  background: var(--kb-color-bg-surface, #ffffff);
+  color: var(--kb-color-text-primary, #0f172a);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.kb-preset-pill:hover {
+  background: var(--kb-color-bg-subtle, #f8fafc);
+  border-color: var(--kb-color-primary, #2563eb);
+}
+
+.kb-preset-pill-active {
+  background: var(--kb-color-primary, #2563eb);
+  color: #ffffff;
+  border-color: var(--kb-color-primary, #2563eb);
+}
+
+.kb-webhook-restrictions-card {
+  padding: var(--space-4, 16px);
+  border: 1px solid var(--kb-color-border-subtle, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  background: var(--kb-color-bg-subtle, #f8fafc);
+  margin-top: var(--space-3, 12px);
+}
+
+.kb-webhook-restrictions-card .kb-card-header-with-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.kb-webhook-restrictions-card .kb-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.kb-webhook-restrictions-card .kb-doc-link-wrapper {
+  margin-top: var(--space-2, 8px);
+}
+
+.kb-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--kb-color-primary, #2563eb);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+

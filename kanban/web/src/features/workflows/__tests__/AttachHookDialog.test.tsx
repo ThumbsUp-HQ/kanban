@@ -45,6 +45,16 @@ const mockAgents: AgentDefinitionSummary[] = [
     repo_access_mode: 'none',
     timeout_ms: 90000,
   },
+  {
+    id: 'agent-4',
+    slug: 'gemini-fallback',
+    display_name: 'Gemini Direct',
+    harness_kind: 'in_app_sdk',
+    provider_kind: 'gemini',
+    cli_args: [],
+    repo_access_mode: 'ro_vfs_mount',
+    timeout_ms: 30000,
+  },
 ];
 
 describe('AttachHookDialog (KB-P5-24)', () => {
@@ -95,6 +105,10 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(screen.getByLabelText(/Agent Definition/i)).toBeDefined();
     expect(screen.getByTestId('agent-details-summary')).toBeDefined();
     expect(screen.getByText(/Validated CLI Args:/i)).toBeDefined();
+
+    // Switch back to sync_validator
+    fireEvent.click(screen.getByLabelText('Sync Wasm Validator'));
+    expect(screen.getByLabelText(/Approved (WebAssembly|Wasm) Module/i)).toBeDefined();
 
     // Invariant: state and description_markdown cannot be selected
     expect(screen.queryByRole('checkbox', { name: /^state$/i })).toBeNull();
@@ -263,5 +277,188 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(screen.getByTestId('no-agents-warning')).toBeDefined();
     const configLink = screen.getByTestId<HTMLAnchorElement>('configure-agents-link');
     expect(configLink.getAttribute('href')).toBe('/admin/agents');
+  });
+
+  it('supports Select All and Clear All toggles for allowed_mutable_fields and displays kind subtext descriptions', () => {
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Verify subtext descriptions for hook kinds
+    expect(screen.getAllByText(/Deterministic WebAssembly rule/i).length).toBe(2);
+    expect(screen.getByText(/Probabilistic autonomous AI Agent/i)).toBeDefined();
+
+    // Switch to sync_mutator to enable mutable fields picker
+    fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
+
+    // Open Advanced Section
+    const advToggle = screen.getByTestId('attach-hook-advanced-section');
+    fireEvent.click(advToggle);
+
+    const selectAllBtn = screen.getByTestId('select-all-mutable-fields-btn');
+    const clearAllBtn = screen.getByTestId('clear-all-mutable-fields-btn');
+
+    fireEvent.click(selectAllBtn);
+    fireEvent.click(clearAllBtn);
+
+    // Toggle individual mutable field off and on
+    const priorityCheckbox = screen.getByRole('checkbox', { name: /priority/i });
+    fireEvent.click(priorityCheckbox);
+    expect((priorityCheckbox as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(priorityCheckbox);
+    expect((priorityCheckbox as HTMLInputElement).checked).toBe(false);
+
+    // Toggle failure policy select
+    const failureSelect = document.getElementById('failure-policy-select') as HTMLSelectElement;
+    fireEvent.change(failureSelect, { target: { value: 'fail_open_warn' } });
+    expect(failureSelect.value).toBe('fail_open_warn');
+    fireEvent.change(failureSelect, { target: { value: 'fail_closed' } });
+    expect(failureSelect.value).toBe('fail_closed');
+
+    // Change wasm module
+    const wasmSelect = document.getElementById('wasm-module-select') as HTMLSelectElement;
+    fireEvent.change(wasmSelect, { target: { value: DEFAULT_WASM_MODULES[1]?.sha256 } });
+  });
+
+  it('renders raw execution logs when editing a hook with prior run logs', () => {
+    const hookWithLogs: WorkflowHook = {
+      id: 'hook-log-1',
+      name: 'logged-validator',
+      from_state: 'In Progress',
+      to_state: 'In Review',
+      hook_kind: 'sync_validator',
+      sort_rank: '0001',
+      failure_policy: 'fail_closed',
+      manifest_sha256: 'abc123',
+      is_enabled: true,
+      last_execution_log: '2026-11-25 15:00:00 [PASS] All validation assertions satisfied.',
+    };
+
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        editingHook={hookWithLogs}
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={mockAgents}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Open advanced section
+    const advToggle = screen.getByTestId('attach-hook-advanced-section');
+    fireEvent.click(advToggle);
+
+    expect(screen.getByTestId('hook-execution-log-output')).toBeDefined();
+    expect(screen.getByTestId('hook-execution-log-output').textContent).toContain('[PASS] All validation assertions satisfied.');
+  });
+
+  it('covers agent definition selection across CLI, SDK, and Remote runner pools', () => {
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={mockAgents}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    const agentSelect = screen.getByLabelText(/Agent Definition/i);
+
+    // Select SDK agent (timeout 30000, empty cli_args)
+    fireEvent.change(agentSelect, { target: { value: 'sec-invariant-scan' } });
+    expect(screen.getByText(/Harness: in_app_sdk/i)).toBeDefined();
+
+    // Select Remote runner agent (timeout 90000)
+    fireEvent.change(agentSelect, { target: { value: 'remote-runner-pool' } });
+    expect(screen.getByText(/Harness: remote_runner/i)).toBeDefined();
+  });
+
+  it('covers saving agent hook when agent has no timeout_ms and non-Error save rejection', async () => {
+    const mockOnSave = vi.fn().mockRejectedValueOnce('raw string rejection');
+    const agentWithoutTimeout: AgentDefinitionSummary[] = [
+      {
+        id: 'agent-no-timeout',
+        slug: 'no-timeout-agent',
+        display_name: 'No Timeout Agent',
+        harness_kind: 'cli_pipe',
+        cli_args: [],
+        repo_access_mode: 'none',
+        timeout_ms: (undefined as unknown as number),
+      },
+    ];
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={agentWithoutTimeout}
+        onSave={mockOnSave}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'No Timeout Hook' } });
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    fireEvent.click(screen.getByRole('button', { name: /Attach Hook/i }));
+
+    expect(await screen.findByRole('alert')).toBeDefined();
+    expect(screen.getByRole('alert').textContent).toContain('Failed to attach workflow hook.');
+  });
+
+  it('supports selecting wildcard all states for from_state', () => {
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={mockAgents}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const fromSelect = document.getElementById('from-state-select') as HTMLSelectElement;
+    fireEvent.change(fromSelect, { target: { value: '*' } });
+    expect(fromSelect.value).toBe('*');
+  });
+
+  it('covers fallback wasm latency budget and provider_kind fallback when model_id is unset', () => {
+    const customWasm = [
+      {
+        sha256: 'custom-sha-1234567890abcdef',
+        name: 'custom-wasm',
+        description: 'custom description',
+        target_latency_budget: undefined,
+      },
+    ];
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={mockAgents}
+        wasmModules={customWasm}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/custom-wasm \(custom-s\.\.\. - <25ms\)/i)).toBeDefined();
+
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    const agentSelect = screen.getByLabelText(/Agent Definition/i);
+    fireEvent.change(agentSelect, { target: { value: 'gemini-fallback' } });
+    expect(screen.getByText(/Gemini Direct \(gemini\)/i)).toBeDefined();
   });
 });

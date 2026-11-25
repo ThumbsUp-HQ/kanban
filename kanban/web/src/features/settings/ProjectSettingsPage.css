@@ -974,4 +974,67 @@
   }
 }
 
+/* Priority Emoji Palette */
+.kb-priority-emoji-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.kb-priority-emoji-palette {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.kb-priority-emoji-btn {
+  background: var(--kb-color-bg-surface-raised, #f1f5f9);
+  border: 1px solid var(--kb-color-border-subtle, #cbd5e1);
+  border-radius: 4px;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.kb-priority-emoji-btn:hover {
+  background: var(--kb-color-bg-surface-hover, #e2e8f0);
+  transform: scale(1.15);
+}
+
+/* Danger Zone Cards and Blast Radius Styling */
+.kb-danger-card-trash {
+  border: 1px solid var(--border-warning, #f59e0b) !important;
+  background: var(--bg-warning-subtle, #fffbeb) !important;
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.kb-danger-card-purge {
+  border: 2px solid var(--border-danger, #dc2626) !important;
+  background: var(--bg-danger-subtle, #fef2f2) !important;
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.kb-blast-radius-counters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0;
+}
+
+.kb-blast-pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: var(--kb-color-bg-surface, #ffffff);
+  border: 1px solid var(--kb-color-border-subtle, #cbd5e1);
+  color: var(--kb-color-text-primary, #0f172a);
+}
+
 

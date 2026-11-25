@@ -6,7 +6,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { WorkspaceSettingsPage, formatHandle, parseTabFromHash } from '../WorkspaceSettingsPage';
+import {
+  WorkspaceSettingsPage,
+  formatHandle,
+  parseTabFromHash,
+  formatIdleDuration,
+  formatAbsoluteDuration,
+} from '../WorkspaceSettingsPage';
 import * as clientModule from '../../../api/client';
 import * as sessionGuardModule from '../../auth/useSessionGuard';
 
@@ -2053,16 +2059,10 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(screen.getByTestId('workspace-trash-retention-card')).toBeDefined();
     expect(screen.getByTestId('trash-items-table')).toBeDefined();
 
-    // Update retention policy
-    const retentionInput = screen.getByTestId('workspace-trash-retention-input-trash-tab');
-    fireEvent.change(retentionInput, { target: { value: '45' } });
-    const saveRetentionBtn = screen.getByTestId('save-trash-retention-btn');
-    fireEvent.click(saveRetentionBtn);
-
-    await waitFor(() => {
-      expect(patchedRetention).toBe(45);
-      expect(screen.getByText('Trash retention policy updated to 45 days.')).toBeDefined();
-    });
+    // Retention policy card is rendered with duplicate controls consolidated to General tab
+    expect(screen.getByTestId('workspace-trash-retention-card')).toBeDefined();
+    expect(screen.queryByTestId('workspace-trash-retention-input-trash-tab')).toBeNull();
+    expect(screen.queryByTestId('save-trash-retention-btn')).toBeNull();
 
     // Test filter pills
     expect(screen.getByTestId('trash-filter-sticky').textContent).toBe('Stickies');
@@ -2244,7 +2244,6 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
   });
 
   it('handles trash error states, empty search results, and purge cancellation (KAN-30)', async () => {
-    let shouldFailRetention = false;
     let shouldFailRestore = false;
     let shouldFailPurgeRequest = false;
     let shouldFailPurgeExecute = false;
@@ -2256,9 +2255,6 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
         return { is_server_admin: true, is_workspace_admin: true };
       }
       if (path.includes('/api/v1/admin/workspace-settings')) {
-        if (m === 'PATCH' && shouldFailRetention) {
-          throw Object.assign(new Error('Retention save failed.'), { detail: 'Retention save failed.' });
-        }
         return { name: 'WS', slug: 'ws', trash_retention_days: 30 };
       }
       if (path.includes('/api/v1/admin/trash') && path.includes(':restore') && m === 'POST') {
@@ -2309,13 +2305,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
 
     expect(await screen.findByTestId('trash-items-table')).toBeDefined();
 
-    // 1. Retention update error
-    shouldFailRetention = true;
-    const saveRetentionBtn = screen.getByTestId('save-trash-retention-btn');
-    fireEvent.click(saveRetentionBtn);
-    await waitFor(() => {
-      expect(screen.getByText('Retention save failed.')).toBeDefined();
-    });
+    // 1. Verify duplicate retention controls removed
+    expect(screen.queryByTestId('save-trash-retention-btn')).toBeNull();
+    expect(screen.queryByTestId('workspace-trash-retention-input-trash-tab')).toBeNull();
 
     // 2. Restore error
     shouldFailRestore = true;
@@ -2862,5 +2854,137 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.queryByRole('alert')).toBeNull();
       expect(screen.queryByTestId('workspace-settings-error')).toBeNull();
     });
+  });
+
+  it('provides interactive duration preset pills and readable durations for session timeouts (KAN-427)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, url: string) => {
+      if (url.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_workspace_admin: true, is_server_admin: true });
+      }
+      if (url.includes('/api/v1/workspaces/current')) {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve({
+          session_idle_timeout_min: 120,
+          session_absolute_timeout_min: 1440,
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderComponent();
+
+    // Verify initial readable durations
+    expect(await screen.findByTestId('idle-readable-duration')).toBeDefined();
+    expect(screen.getByTestId('idle-readable-duration').textContent).toBe('2 hours');
+    expect(screen.getByTestId('abs-readable-duration').textContent).toBe('1 day (24 hours)');
+
+    // Click idle 30m preset pill
+    fireEvent.click(screen.getByTestId('idle-preset-30m'));
+    expect(screen.getByTestId<HTMLInputElement>('workspace-idle-timeout-input').value).toBe('30');
+    expect(screen.getByTestId('idle-readable-duration').textContent).toBe('30 minutes');
+
+    // Click idle 4h preset pill
+    fireEvent.click(screen.getByTestId('idle-preset-4h'));
+    expect(screen.getByTestId<HTMLInputElement>('workspace-idle-timeout-input').value).toBe('240');
+    expect(screen.getByTestId('idle-readable-duration').textContent).toBe('4 hours');
+
+    // Click absolute 8h preset pill
+    fireEvent.click(screen.getByTestId('abs-preset-8h'));
+    expect(screen.getByTestId<HTMLInputElement>('workspace-abs-timeout-input').value).toBe('480');
+    expect(screen.getByTestId('abs-readable-duration').textContent).toBe('8 hours');
+
+    // Click absolute 7d preset pill
+    fireEvent.click(screen.getByTestId('abs-preset-7d'));
+    expect(screen.getByTestId<HTMLInputElement>('workspace-abs-timeout-input').value).toBe('10080');
+    expect(screen.getByTestId('abs-readable-duration').textContent).toBe('7 days (168 hours)');
+
+    // Test duration format helpers across all boundary branches
+    expect(formatIdleDuration(45)).toBe('45 minutes');
+    expect(formatIdleDuration(60)).toBe('1 hour');
+    expect(formatIdleDuration(90)).toBe('1h 30m');
+    expect(formatIdleDuration(120)).toBe('2 hours');
+
+    expect(formatAbsoluteDuration(30)).toBe('30 minutes');
+    expect(formatAbsoluteDuration(60)).toBe('1 hour');
+    expect(formatAbsoluteDuration(90)).toBe('1.5 hours');
+    expect(formatAbsoluteDuration(1440)).toBe('1 day (24 hours)');
+    expect(formatAbsoluteDuration(2160)).toBe('1.5 days (36 hours)');
+    expect(formatAbsoluteDuration(2880)).toBe('2 days (48 hours)');
+
+    // Verify webhook security callout card and documentation link
+    const webhookCard = screen.getByTestId('workspace-webhook-restrictions');
+    expect(webhookCard).toBeDefined();
+    const docLink = screen.getByTestId('webhook-restrictions-doc-link');
+    expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-security-and-access-visibility');
+  });
+
+  it('renders group-cycle-pill when an invalid group hierarchy cycle is encountered (KAN-427)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      if (path.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_workspace_admin: true, is_server_admin: true });
+      }
+      if (path.includes('/api/v1/workspaces/current')) {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (path.includes('/api/v1/admin/principals')) {
+        return Promise.resolve([
+          { id: 'grp-1', handle: 'eng', display_name: 'Engineering', type: 'GROUP' },
+          { id: 'grp-2', handle: 'core', display_name: 'Core', type: 'GROUP' },
+        ]);
+      }
+      if (path.includes('/api/v1/admin/groups/grp-1/members') && method === 'GET') {
+        return Promise.resolve([{ id: 'grp-2', handle: 'core', display_name: 'Core', type: 'GROUP' }]);
+      }
+      if (path.includes('/api/v1/admin/groups/grp-1/members/grp-2') && method === 'POST') {
+        throw Object.assign(new Error('Cannot nest group: would introduce a cyclic dependency.'), {
+          detail: 'Cannot nest group: would introduce a cyclic dependency.',
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderComponent();
+    fireEvent.click(await screen.findByTestId('tab-groups'));
+    const addSelect = await screen.findByTestId('add-group-member-select');
+    fireEvent.change(addSelect, { target: { value: 'grp-2' } });
+    fireEvent.click(screen.getByTestId('add-group-member-btn'));
+
+    expect(await screen.findByTestId('group-cycle-pill')).toBeDefined();
+    expect(screen.getByTestId('group-cycle-pill').textContent).toContain('Cycle Detected');
+  });
+
+  it('navigates to general tab when clicking retention policy General tab link on trash tab (KAN-427)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+      if (path.includes('/api/v1/auth/me')) {
+        return Promise.resolve({ is_workspace_admin: true, is_server_admin: true });
+      }
+      if (path.includes('/api/v1/workspaces/current')) {
+        return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve({
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+          trash_retention_days: 30,
+        });
+      }
+      if (path.includes('/api/v1/admin/trash')) {
+        return Promise.resolve({ items: [], total: 0 });
+      }
+      return Promise.resolve([]);
+    });
+
+    renderComponent();
+    fireEvent.click(await screen.findByTestId('tab-trash'));
+    const retCard = await screen.findByTestId('workspace-trash-retention-card');
+    const genLink = within(retCard).getByRole('button', { name: 'General tab' });
+    fireEvent.click(genLink);
+    expect(await screen.findByTestId('workspace-general-form')).toBeDefined();
   });
 });

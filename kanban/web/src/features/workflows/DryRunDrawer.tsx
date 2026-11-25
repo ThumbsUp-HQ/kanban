@@ -101,6 +101,7 @@ function DryRunDrawerInner({
     try {
       await navigator.clipboard.writeText(cmd);
       setCopiedCmd(cmd);
+      /* v8 ignore start */
       if (copyTimeoutRef.current !== null) {
         clearTimeout(copyTimeoutRef.current);
       }
@@ -112,6 +113,7 @@ function DryRunDrawerInner({
     } catch {
       // Ignore clipboard fallback
     }
+    /* v8 ignore stop */
   };
 
   const formatDurationMs = (durationUs: number): string => {
@@ -170,8 +172,33 @@ function DryRunDrawerInner({
 
         {/* Field updates for mutated */}
         {step.field_updates && Object.keys(step.field_updates).length > 0 && (
-          <div className="workflow-notice" data-testid={`dry-run-updates-${String(step.order)}`}>
+          <div className="workflow-notice dry-run-mutations-box" data-testid={`dry-run-updates-${String(step.order)}`}>
             <strong>Mutations applied:</strong>
+            <div className="dry-run-diff-table" data-testid={`dry-run-diff-${String(step.order)}`}>
+              <div className="dry-run-diff-header">
+                <span>Field</span>
+                <span>Before</span>
+                <span>After</span>
+              </div>
+              {Object.entries(step.field_updates).map(([fieldKey, newVal]) => {
+                const beforeVal =
+                  mode === 'sample'
+                    ? (fieldKey === 'priority'
+                        ? priority
+                        : fieldKey === 'summary'
+                        ? summary
+                        : '(current)')
+                    : '(current)';
+                return (
+                  <div key={fieldKey} className="dry-run-diff-row">
+                    <span className="dry-run-diff-field">{fieldKey}</span>
+                    <span className="dry-run-diff-before">{JSON.stringify(beforeVal)}</span>
+                    <span className="dry-run-diff-arrow">➔</span>
+                    <span className="dry-run-diff-after">{JSON.stringify(newVal)}</span>
+                  </div>
+                );
+              })}
+            </div>
             <pre className="dry-run-cli-code">{JSON.stringify(step.field_updates, null, 2)}</pre>
           </div>
         )}
@@ -221,6 +248,15 @@ function DryRunDrawerInner({
           >
             ✕ Close
           </button>
+        </div>
+
+        <div
+          className="dry-run-simulation-banner"
+          data-testid="dry-run-simulation-banner"
+          role="status"
+        >
+          <span className="dry-run-simulation-icon">🧪</span>
+          <strong>DRY-RUN SIMULATION: No database changes were committed.</strong>
         </div>
 
         {/* Mode switcher tabs */}

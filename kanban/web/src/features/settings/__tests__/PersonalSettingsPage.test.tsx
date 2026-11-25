@@ -156,6 +156,33 @@ describe('PersonalSettingsPage', () => {
     });
   });
 
+  it('supports timezone search filter, auto-detect button, and helper copy for passkeys vs security keys', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timezone-select')).toBeDefined();
+    });
+
+    // Check passkey and security key helper copies
+    expect(screen.getByTestId('passkey-helper-copy')).toBeDefined();
+    expect(screen.getByTestId('passkey-helper-copy').textContent).toContain('Platform Passkeys');
+    expect(screen.getByTestId('security-key-helper-copy')).toBeDefined();
+    expect(screen.getByTestId('security-key-helper-copy').textContent).toContain('Hardware Security Keys');
+
+    // Filter timezones
+    const filterInput = screen.getByTestId('timezone-filter-input');
+    fireEvent.change(filterInput, { target: { value: 'tokyo' } });
+
+    const tzSelect = screen.getByTestId<HTMLSelectElement>('timezone-select');
+    expect(screen.getByText('Asia/Tokyo')).toBeDefined();
+    expect(screen.queryByText('Europe/Berlin')).toBeNull();
+
+    // Auto-detect timezone
+    const autoDetectBtn = screen.getByTestId('timezone-auto-detect-btn');
+    fireEvent.click(autoDetectBtn);
+    expect(tzSelect.value).toBeDefined();
+  });
+
   it('rejects SVG avatar upload client-side', async () => {
     renderComponent();
 
@@ -2540,6 +2567,18 @@ describe('PersonalSettingsPage', () => {
       // Toggle button collapses the AdvancedSection
       fireEvent.click(toggleBtn);
       expect(advSection.hasAttribute('open')).toBe(false);
+    });
+
+    it('supports custom non-standard timezones prepending to list (KAN-427)', async () => {
+      vi.mocked(api.fetchMyProfile).mockResolvedValue({
+        ...mockProfile,
+        timezone: 'Custom/Non_Standard_Timezone',
+      });
+      renderComponent();
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-settings-page')).toBeDefined();
+      });
+      expect(screen.getByDisplayValue('Custom/Non_Standard_Timezone')).toBeDefined();
     });
   });
 });

@@ -1006,3 +1006,39 @@
   padding: 2px 4px;
   border-radius: 4px;
 }
+
+/* Timezone Search and Auto-Detect */
+.kb-timezone-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kb-timezone-search-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.kb-timezone-filter-input {
+  flex: 1;
+}
+
+.kb-timezone-auto-btn {
+  white-space: nowrap;
+}
+
+/* Passkey vs Security Key Guidance */
+.kb-passkey-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kb-passkey-action-subtext {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--kb-color-text-secondary, #64748b);
+  max-width: 280px;
+  line-height: 1.3;
+}
+

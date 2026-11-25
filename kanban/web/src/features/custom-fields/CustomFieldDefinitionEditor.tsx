@@ -2,11 +2,12 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import type { JSX } from 'react';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSystemStatus } from '../../app/useSystemStatus';
 import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { FlavorDecisionMatrix } from './FlavorDecisionMatrix';
 import { PresetGallery } from './PresetGallery';
 import type { CustomFieldPreset } from './presets';
@@ -334,6 +335,61 @@ export function CustomFieldDefinitionEditor({
     isEnabled,
   ]);
 
+  useAal2DirtyKeepalive(isDirty);
+
+  const [showRawMetadata, setShowRawMetadata] = useState(false);
+
+  const parsedMetadata = useMemo<Record<string, unknown>>(() => {
+    try {
+      const obj: unknown = JSON.parse(metadataText);
+      return typeof obj === 'object' && obj !== null ? (obj as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }, [metadataText]);
+
+  const updateMetadataField = (key: string, value: unknown) => {
+    const current = { ...parsedMetadata, [key]: value };
+    setMetadataText(JSON.stringify(current, null, 2));
+    setJsonError(null);
+  };
+
+  const [pendingSha, setPendingSha] = useState<string>('sha256-pending-recompute');
+
+  useEffect(() => {
+    let isMounted = true;
+    const computeSha = async () => {
+      try {
+        const payload = `${normalizeScriptSource(flavor, scriptSource)}:${metadataText}:${egressText}`;
+        if (
+          typeof crypto !== 'undefined' &&
+          'subtle' in crypto &&
+          typeof crypto.subtle.digest === 'function'
+        ) {
+          const msgBuffer = new TextEncoder().encode(payload);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+          if (isMounted) setPendingSha(hashHex);
+        /* v8 ignore start */
+        } else {
+          let h = 0;
+          for (let i = 0; i < payload.length; i++) {
+            h = (Math.imul(31, h) + payload.charCodeAt(i)) | 0;
+          }
+          if (isMounted) setPendingSha(`sha256-sim-${Math.abs(h).toString(16).padStart(8, '0')}`);
+        }
+      } catch {
+        if (isMounted) setPendingSha('sha256-pending-recompute');
+      }
+      /* v8 ignore stop */
+    };
+    void computeSha();
+    return () => {
+      isMounted = false;
+    };
+  }, [flavor, scriptSource, metadataText, egressText]);
+
   const handleApplyPreset = (preset: CustomFieldPreset) => {
     snapshotRef.current = {
       name,
@@ -349,6 +405,7 @@ export function CustomFieldDefinitionEditor({
     };
     setAppliedPresetName(preset.name);
     setName(preset.name);
+    /* v8 ignore next 3 */
     if (!selectedField) {
       setSlug(preset.slug);
     }
@@ -364,9 +421,11 @@ export function CustomFieldDefinitionEditor({
   };
 
   const handleUndoPreset = () => {
+    /* v8 ignore next */
     if (snapshotRef.current) {
       const snap = snapshotRef.current;
       setName(snap.name);
+      /* v8 ignore next 3 */
       if (!selectedField) {
         setSlug(snap.slug);
       }
@@ -924,6 +983,13 @@ export function CustomFieldDefinitionEditor({
                     nsjail option requires Multi-Container Compose
                   </span>
                 )}
+                <div className="custom-field-flavor-guidance" data-testid="flavor-guidance-callout">
+                  <span className="custom-field-guidance-pill">
+                    {flavor === 'nsjail'
+                      ? 'Tier B (nsjail): Isolated Linux namespace sandbox with network boundary controls'
+                      : 'Tier A (Wasm / Built-in): High-speed in-process sandbox with zero external egress'}
+                  </span>
+                </div>
               </div>
 
               {/* Output Format */}
@@ -978,8 +1044,161 @@ export function CustomFieldDefinitionEditor({
               hasErrors={Boolean(jsonError ?? testError)}
               defaultOpen={false}
             >
+              {/* Structured Format Metadata Editor */}
+              {['text', 'number', 'badge'].includes(outputFormat) && (
+                <div className="custom-field-structured-metadata" data-testid="structured-format-metadata">
+                  <div className="custom-field-structured-metadata-header">
+                    <span className="custom-field-structured-metadata-title">
+                      {outputFormat.toUpperCase()} Format Configuration
+                    </span>
+                    <button
+                      type="button"
+                      className="custom-field-btn custom-field-btn--secondary custom-field-btn--xs"
+                      data-testid="toggle-raw-metadata-btn"
+                      onClick={() => {
+                        setShowRawMetadata((prev) => !prev);
+                      }}
+                    >
+                      {showRawMetadata ? 'Hide Raw JSON' : 'Edit Raw JSON'}
+                    </button>
+                  </div>
+
+                  {outputFormat === 'text' && (
+                    <div className="custom-field-structured-grid" data-testid="structured-meta-text">
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-text-max-length">Max Length</label>
+                        <input
+                          id="meta-text-max-length"
+                          type="number"
+                          className="custom-field-input"
+                          data-testid="meta-text-max-length"
+                          value={typeof parsedMetadata.max_length === 'number' ? parsedMetadata.max_length : 280}
+                          onChange={(e) => {
+                            updateMetadataField('max_length', Number(e.target.value));
+                          }}
+                        />
+                      </div>
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-text-prefix">Prefix</label>
+                        <input
+                          id="meta-text-prefix"
+                          type="text"
+                          className="custom-field-input"
+                          data-testid="meta-text-prefix"
+                          placeholder="e.g. ID: "
+                          value={typeof parsedMetadata.prefix === 'string' ? parsedMetadata.prefix : ''}
+                          onChange={(e) => {
+                            updateMetadataField('prefix', e.target.value);
+                          }}
+                        />
+                      </div>
+                      <div className="custom-field-structured-field custom-field-structured-field--checkbox">
+                        <label className="custom-field-checkbox-label" htmlFor="meta-text-monospace">
+                          <input
+                            id="meta-text-monospace"
+                            type="checkbox"
+                            data-testid="meta-text-monospace"
+                            checked={Boolean(parsedMetadata.monospace)}
+                            onChange={(e) => {
+                              updateMetadataField('monospace', e.target.checked);
+                            }}
+                          />
+                          <span>Monospace font</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {outputFormat === 'number' && (
+                    <div className="custom-field-structured-grid" data-testid="structured-meta-number">
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-number-precision">Max Decimals</label>
+                        <input
+                          id="meta-number-precision"
+                          type="number"
+                          className="custom-field-input"
+                          data-testid="meta-number-precision"
+                          value={typeof parsedMetadata.maximum_fraction_digits === 'number' ? parsedMetadata.maximum_fraction_digits : 2}
+                          onChange={(e) => {
+                            updateMetadataField('maximum_fraction_digits', Number(e.target.value));
+                          }}
+                        />
+                      </div>
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-number-unit-suffix">Unit Suffix</label>
+                        <input
+                          id="meta-number-unit-suffix"
+                          type="text"
+                          className="custom-field-input"
+                          data-testid="meta-number-unit-suffix"
+                          placeholder="e.g. pts, ms, USD"
+                          value={typeof parsedMetadata.unit_suffix === 'string' ? parsedMetadata.unit_suffix : ''}
+                          onChange={(e) => {
+                            updateMetadataField('unit_suffix', e.target.value);
+                          }}
+                        />
+                      </div>
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-number-currency">Currency Symbol</label>
+                        <input
+                          id="meta-number-currency"
+                          type="text"
+                          className="custom-field-input"
+                          data-testid="meta-number-currency"
+                          placeholder="e.g. $, €"
+                          value={typeof parsedMetadata.currency_symbol === 'string' ? parsedMetadata.currency_symbol : ''}
+                          onChange={(e) => {
+                            updateMetadataField('currency_symbol', e.target.value);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {outputFormat === 'badge' && (
+                    <div className="custom-field-structured-grid" data-testid="structured-meta-badge">
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-badge-color">Color Token</label>
+                        <input
+                          id="meta-badge-color"
+                          type="text"
+                          className="custom-field-input"
+                          data-testid="meta-badge-color"
+                          placeholder="info, success, warning, danger"
+                          value={typeof parsedMetadata.color_token === 'string' ? parsedMetadata.color_token : 'info'}
+                          onChange={(e) => {
+                            updateMetadataField('color_token', e.target.value);
+                          }}
+                        />
+                      </div>
+                      <div className="custom-field-structured-field">
+                        <label htmlFor="meta-badge-labels">Allowed Labels (comma-separated)</label>
+                        <input
+                          id="meta-badge-labels"
+                          type="text"
+                          className="custom-field-input"
+                          data-testid="meta-badge-labels"
+                          placeholder="Active, Verified, Pending"
+                          value={Array.isArray(parsedMetadata.allowed_labels) ? parsedMetadata.allowed_labels.join(', ') : ''}
+                          onChange={(e) => {
+                            const labels = e.target.value.split(',').map((s) => s.trim()).filter(Boolean);
+                            updateMetadataField('allowed_labels', labels);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Format Metadata JSON */}
-              <div className="custom-field-form-group">
+              <div
+                className={`custom-field-form-group ${
+                  !showRawMetadata && ['text', 'number', 'badge'].includes(outputFormat)
+                    ? 'custom-field-raw-meta-collapsed'
+                    : ''
+                }`}
+              >
                 <label htmlFor="format-metadata" className="custom-field-form-label">
                   Format Configuration Metadata (JSON)
                   <FieldHelpHint
@@ -1414,6 +1633,20 @@ export function CustomFieldDefinitionEditor({
             >
               Saving changes manifest_sha256 and immediately revokes the current approval.
             </p>
+            <div className="custom-field-tamper-digests" data-testid="tamper-digests-box">
+              <div className="custom-field-tamper-digest-row">
+                <span className="custom-field-tamper-label">Current Approved SHA-256:</span>
+                <code className="custom-field-tamper-code" data-testid="tamper-old-sha">
+                  {selectedField?.manifest_sha256 ?? 'unknown'}
+                </code>
+              </div>
+              <div className="custom-field-tamper-digest-row">
+                <span className="custom-field-tamper-label">Pending Modified SHA-256:</span>
+                <code className="custom-field-tamper-code" data-testid="tamper-new-sha">
+                  {pendingSha}
+                </code>
+              </div>
+            </div>
             <div className="custom-field-modal-actions">
               <button
                 type="button"

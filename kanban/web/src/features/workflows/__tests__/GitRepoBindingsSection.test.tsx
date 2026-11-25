@@ -405,4 +405,33 @@ describe('GitRepoBindingsSection', () => {
     fireEvent.click(screen.getByText('Bind Repository'));
     expect(await screen.findByText('Failed to bind git repository.')).toBeDefined();
   });
+
+  it('renders SSRF restriction callout and masked PAT input with data-1p-ignore and zero password inputs', () => {
+    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
+
+    renderSection();
+
+    fireEvent.click(screen.getByText('+ Bind Git Repository'));
+
+    // Verify SSRF callout
+    const ssrfCallout = screen.getByTestId('repo-url-ssrf-callout');
+    expect(ssrfCallout).toBeDefined();
+    expect(ssrfCallout.textContent).toContain('SSRF Restrictions');
+
+    // Switch credential to workspace-pat
+    const credSelect = screen.getByLabelText(/Authentication Credential \/ Secret/i);
+    fireEvent.change(credSelect, { target: { value: 'workspace-pat' } });
+
+    // Verify PAT input
+    const patInput = screen.getByTestId('repo-pat-input');
+    expect(patInput).toBeDefined();
+    expect(patInput.getAttribute('type')).toBe('text');
+    expect(patInput.className).toContain('kb-masked-api-key');
+    expect(patInput.getAttribute('data-1p-ignore')).toBe('true');
+    expect(patInput.getAttribute('autoComplete')).toBe('off');
+
+    // Verify ZERO password inputs
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    expect(passwordInputs.length).toBe(0);
+  });
 });

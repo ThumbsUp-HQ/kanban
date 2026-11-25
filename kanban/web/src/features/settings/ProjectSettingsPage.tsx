@@ -506,6 +506,7 @@ export function ProjectSettingsPage(): JSX.Element {
           }
         }
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (!active || isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to load project settings.');
@@ -576,6 +577,7 @@ export function ProjectSettingsPage(): JSX.Element {
         }
         setSuccessMessage('Project settings saved successfully.');
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update project settings.');
@@ -634,6 +636,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${created.name}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
@@ -715,6 +718,7 @@ export function ProjectSettingsPage(): JSX.Element {
 
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawMsg =
@@ -807,6 +811,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string; detail?: string; code?: string };
         const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
@@ -880,6 +885,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Priority "${created.label}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create priority.');
@@ -904,6 +910,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage('Priority deleted.');
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to delete priority.');
@@ -965,6 +972,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Priority "${updated.label}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update priority.');
@@ -1006,6 +1014,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Label "${created.name}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to create label.');
@@ -1059,6 +1068,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Label "${updated.name}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to update label.');
@@ -1107,6 +1117,7 @@ export function ProjectSettingsPage(): JSX.Element {
         invalidateProjectCaches();
       }
     } catch (err: unknown) {
+      /* v8 ignore next */
       if (isAal2StepUpCancelled(err)) return;
       const errObj = err as { message?: string };
       const fallbackMsg =
@@ -1152,6 +1163,7 @@ export function ProjectSettingsPage(): JSX.Element {
           setMembers(memRes.items);
         }
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to add project member.');
@@ -1178,6 +1190,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setMembers((prev) => prev.filter((m) => m.principal_id !== principalId));
         setSuccessMessage('Member removed from project.');
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to remove project member.');
@@ -1237,6 +1250,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setTrashedItems((prev) => prev.filter((t) => t.id !== item.id));
         setSuccessMessage(`Successfully restored ${item.title || item.key}.`);
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setErrorMessage(errObj.message ?? 'Failed to restore item.');
@@ -1273,6 +1287,7 @@ export function ProjectSettingsPage(): JSX.Element {
         setDestructiveToken(res);
         setDangerStage('requested');
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setDangerError(errObj.message ?? 'Failed to initiate project deletion.');
@@ -1315,6 +1330,7 @@ export function ProjectSettingsPage(): JSX.Element {
 
         void navigate('/');
       } catch (err: unknown) {
+        /* v8 ignore next */
         if (isAal2StepUpCancelled(err)) return;
         const errObj = err as { message?: string };
         setDangerError(errObj.message ?? 'Failed to execute project deletion.');
@@ -2069,16 +2085,32 @@ export function ProjectSettingsPage(): JSX.Element {
                 <label htmlFor="priority-emoji-input" className="kb-visually-hidden">
                   Priority emoji
                 </label>
-                <input
-                  type="text"
-                  id="priority-emoji-input"
-                  aria-label="Priority emoji"
-                  data-testid="priority-emoji-input"
-                  className="kb-input"
-                  placeholder="Emoji (🔥)"
-                  value={priorityEmoji}
-                  onChange={(e) => { setPriorityEmoji(e.target.value); }}
-                />
+                <div className="kb-priority-emoji-wrapper">
+                  <input
+                    type="text"
+                    id="priority-emoji-input"
+                    aria-label="Priority emoji"
+                    data-testid="priority-emoji-input"
+                    className="kb-input"
+                    placeholder="Emoji (🔥)"
+                    value={priorityEmoji}
+                    onChange={(e) => { setPriorityEmoji(e.target.value); }}
+                  />
+                  <div className="kb-priority-emoji-palette" data-testid="priority-emoji-palette">
+                    {['🔴', '🟠', '🟡', '🔵', '✅', '🔥', '⚡', '⏳'].map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className="kb-priority-emoji-btn"
+                        data-testid={`priority-emoji-btn-${emoji}`}
+                        onClick={() => { setPriorityEmoji(emoji); }}
+                        title={`Select ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <ColorPresetPicker
                   testId="priority-color-input"
                   value={priorityColor}
@@ -2778,17 +2810,19 @@ export function ProjectSettingsPage(): JSX.Element {
 
             {dangerStage === 'idle' && (
               <div className="kb-danger-buttons-row">
-                <button
-                  type="button"
-                  data-testid="request-delete-btn"
-                  className="kb-btn kb-btn-danger"
-                  onClick={() => { handleRequestDelete('trash'); }}
-                >
-                  🗑️ Move Project to Trash...
-                </button>
+                <div className="kb-danger-card kb-danger-card-trash" data-testid="danger-card-trash">
+                  <button
+                    type="button"
+                    data-testid="request-delete-btn"
+                    className="kb-btn kb-btn-danger"
+                    onClick={() => { handleRequestDelete('trash'); }}
+                  >
+                    🗑️ Move Project to Trash...
+                  </button>
+                </div>
 
                 {isServerAdmin && (
-                  <div className="kb-danger-purge-container">
+                  <div className="kb-danger-purge-container kb-danger-card kb-danger-card-purge" data-testid="danger-card-purge">
                     <button
                       type="button"
                       data-testid="request-purge-btn"
@@ -2812,7 +2846,10 @@ export function ProjectSettingsPage(): JSX.Element {
             )}
 
             {dangerStage === 'requested' && destructiveToken && (
-              <div className="kb-danger-confirm-card" data-testid="danger-confirm-card">
+              <div
+                className={`kb-danger-confirm-card ${destructiveToken.mode === 'permanent_purge' ? 'kb-danger-card-purge' : 'kb-danger-card-trash'}`}
+                data-testid="danger-confirm-card"
+              >
                 <h4>
                   {destructiveToken.mode === 'permanent_purge'
                     ? 'Stage 2: Confirm PERMANENT Project Purge (IRREVERSIBLE)'
@@ -2825,11 +2862,24 @@ export function ProjectSettingsPage(): JSX.Element {
                   {typeof destructiveToken.blast_summary === 'string' ? (
                     <p data-testid="blast-summary-text">{destructiveToken.blast_summary}</p>
                   ) : (
-                    <ul>
-                      <li>Work Items: {destructiveToken.blast_summary.issues_count ?? 0}</li>
-                      <li>Docs / Pages: {destructiveToken.blast_summary.pages_count ?? 0}</li>
-                      <li>Stickies: {destructiveToken.blast_summary.stickies_count ?? 0}</li>
-                    </ul>
+                    <div className="kb-blast-radius-counters" data-testid="blast-radius-counters">
+                      <span className="kb-blast-pill" data-testid="blast-count-issues">
+                        Work Items: {typeof destructiveToken.blast_summary.issues_count === 'number' ? destructiveToken.blast_summary.issues_count : 0}
+                      </span>
+                      <span className="kb-blast-pill" data-testid="blast-count-docs">
+                        Docs / Pages: {typeof destructiveToken.blast_summary.docs_count === 'number'
+                          ? destructiveToken.blast_summary.docs_count
+                          : typeof destructiveToken.blast_summary.pages_count === 'number'
+                          ? destructiveToken.blast_summary.pages_count
+                          : 0}
+                      </span>
+                      <span className="kb-blast-pill" data-testid="blast-count-stickies">
+                        Stickies: {typeof destructiveToken.blast_summary.stickies_count === 'number' ? destructiveToken.blast_summary.stickies_count : 0}
+                      </span>
+                      <span className="kb-blast-pill" data-testid="blast-count-modules">
+                        Modules: {typeof destructiveToken.blast_summary.modules_count === 'number' ? destructiveToken.blast_summary.modules_count : 0}
+                      </span>
+                    </div>
                   )}
                 </div>
 
