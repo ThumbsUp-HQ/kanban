@@ -1,6 +1,6 @@
 diff --git a/docs/qa/KAN-407/api-specialist-review.md b/docs/qa/KAN-407/api-specialist-review.md
 new file mode 100644
-index 00000000..1d9fc2f4
+index 00000000..fb5def93
 --- /dev/null
 +++ b/docs/qa/KAN-407/api-specialist-review.md
 @@ -0,0 +1,89 @@
@@ -61,11 +61,11 @@ index 00000000..1d9fc2f4
 +## 3. Automated Test Verification & Quality Gates
 +
 +1. **Backend Test Suite (Pytest)**:
-+   - 69 tests passed across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, and `test_oidc_flow.py`.
-+   - 0 failures, 0 errors, 31.65s runtime.
++   - 69 tests passed across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, `test_oidc_flow.py`, `test_identity_linking_real_pg_e2e.py`, and `test_granular_rbac_api.py`.
++   - 0 failures, 0 errors, 36.56s runtime.
 +
 +2. **Frontend Test Suite (Vitest)**:
-+   - 122 tests passed across `AuthStudioPage.test.tsx` (55 tests), `AuthCardEditorDrawer.test.tsx` (59 tests), and `RbacPolicyBuilder.test.tsx` (8 tests).
++   - 122 tests passed in 10.13s across `AuthStudioPage.test.tsx` (55 tests), `AuthCardEditorDrawer.test.tsx` (59 tests), and `RbacPolicyBuilder.test.tsx` (8 tests).
 +   - 0 `act(...)` stderr warnings.
 +   - Branch coverage: **95.76%** across touched files (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%).
 +
@@ -74,7 +74,7 @@ index 00000000..1d9fc2f4
 +   - `mypy`: 0 issues in 680 source files.
 +   - `tsc -b --noEmit`: 0 errors.
 +   - `eslint`: 0 warnings, 0 errors.
-+   - `vite build`: Succeeded in 1.24s.
++   - `vite build`: Succeeded in 1.39s.
 +   - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 +
 +---
@@ -95,11 +95,13 @@ index 00000000..1d9fc2f4
 +The API interactions and security architecture for KAN-407 are robust, verified, and approved for integration.
 diff --git a/docs/qa/KAN-407/build-check.txt b/docs/qa/KAN-407/build-check.txt
 new file mode 100644
-index 00000000..d9dae443
+index 00000000..2227cfae
 --- /dev/null
 +++ b/docs/qa/KAN-407/build-check.txt
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,44 @@
 +=== RUFF CHECK ===
++Uninstalled 4 packages in 0.82ms
++Installed 4 packages in 1ms
 +All checks passed!
 +
 +=== MYPY CHECK ===
@@ -132,18 +134,18 @@ index 00000000..d9dae443
 +computing gzip size...
 +dist/index.html                             0.50 kB │ gzip:   0.31 kB
 +dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-+dist/assets/index-DQlnpfhY.css            611.26 kB │ gzip:  86.20 kB
-+dist/assets/index-Bk_TJZOe.js           2,895.07 kB │ gzip: 801.06 kB
++dist/assets/index-DYJVVU6y.css            611.40 kB │ gzip:  86.21 kB
++dist/assets/index-CAwBYPyh.js           2,895.08 kB │ gzip: 801.06 kB
 +
 +[plugin builtin:vite-reporter] 
 +(!) Some chunks are larger than 500 kB after minification. Consider:
 +- Using dynamic import() to code-split the application
 +- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 +- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-+✓ built in 1.28s
++✓ built in 1.39s
 diff --git a/docs/qa/KAN-407/message-to-reality-checker.md b/docs/qa/KAN-407/message-to-reality-checker.md
 new file mode 100644
-index 00000000..a9a58bc6
+index 00000000..7fb9eb49
 --- /dev/null
 +++ b/docs/qa/KAN-407/message-to-reality-checker.md
 @@ -0,0 +1,127 @@
@@ -207,7 +209,7 @@ index 00000000..a9a58bc6
 +  --cov=kanban/api/v1/admin/principals \
 +  --cov-report=term-missing -v
 +```
-+- **Results:** 69 passed in 31.65s (0 failures, 0 errors, 0 warnings).
++- **Results:** 69 passed in 36.56s (0 failures, 0 errors, 0 warnings).
 +- **Coverage:** Full term-missing coverage tables recorded in `unit-test-results.txt`.
 +
 +### B. Frontend Vitest Suites
@@ -220,7 +222,7 @@ index 00000000..a9a58bc6
 +  RbacPolicyBuilder.test.tsx \
 +  --coverage --run
 +```
-+- **Results:** 122 passed across 3 test suites (0 failed). Zero `act(...)` stderr warnings.
++- **Results:** 122 passed in 10.13s across 3 test suites (0 failed). Zero `act(...)` stderr warnings.
 +- **Coverage Breakdown (all >=95% branch threshold):**
 +  - `AuthCardEditorDrawer.tsx`: Statements: 99.41% | Branch: 95.57% | Functions: 100% | Lines: 99.56%
 +  - `AuthStudioPage.tsx`: Statements: 98.14% | Branch: 95.68% | Functions: 100% | Lines: 100%
@@ -237,7 +239,7 @@ index 00000000..a9a58bc6
 +3. `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode em/en-dashes).
 +4. `pnpm --dir kanban/web typecheck`: Passed (tsc -b --noEmit exit 0).
 +5. `pnpm --dir kanban/web lint`: Passed (eslint . --max-warnings 0 exit 0).
-+6. `pnpm --dir kanban/web build`: Passed (built in 1.24s).
++6. `pnpm --dir kanban/web build`: Passed (built in 1.39s).
 +
 +---
 +
@@ -245,9 +247,9 @@ index 00000000..a9a58bc6
 +
 +All 5 viewports were captured unclipped with Playwright, applying the mandated layout check and unclipped style overrides before fullPage screenshot:
 +- `01-desktop-1440x900-light.png`:
-+  - Auth Studio layout with LDAP Active Directory preset open in drawer. Masked bind password with `.kb-masked-api-key` bullets, clean server URL, and advanced parameters drawer.
++  - Auth Studio layout with LDAP Active Directory preset open in drawer. Active Directory active preset button uses high-specificity styling (`.auth-preset-btn.auth-preset-btn--active, .auth-preset-btn.auth-preset-btn--active:hover`) preserving royal blue background and crisp white text (4.9:1 contrast). Masked bind password with `.kb-masked-api-key` bullets, clean server URL, and advanced parameters drawer.
 +- `02-desktop-1440x900-dark.png`:
-+  - Dark mode Break-Glass Anti-Lockout Warning modal (`[data-testid="break-glass-warning-dialog"]`) displaying three-layer safeguard rules before disabling sole admin card.
++  - Dark mode Break-Glass Anti-Lockout Warning modal (`[data-testid="break-glass-warning-dialog"]`) displaying three-layer safeguard rules before disabling sole admin card, with dedicated `.auth-modal-btn-danger` Confirm & Disable CTA in solid crimson red (`#dc2626`) and white text (4.8:1 contrast). Background card-row Delete buttons retain clean secondary outlined styling without solid background collision.
 +- `03-desktop-1024x768.png`:
 +  - Roles & Permissions tab with single RbacPolicyBuilder mounted, no duplicate panels, no `+ Add Local User` button. Shows full unobstructed category bulk selectors (`Select All`, `Clear All`, `Read-Only`) across Workspace, Issue, and Field categories with zero backdrop cutoff.
 +- `04-tablet-portrait-768x1024.png`:
@@ -276,11 +278,11 @@ index 00000000..a9a58bc6
 +- `changed-files-manifest.txt` & `SHA256SUMS.txt` (verified with `sha256sum -c`)
 diff --git a/docs/qa/KAN-407/screenshots/01-desktop-1440x900-light.png b/docs/qa/KAN-407/screenshots/01-desktop-1440x900-light.png
 new file mode 100644
-index 00000000..1e881f97
+index 00000000..719b5b0b
 Binary files /dev/null and b/docs/qa/KAN-407/screenshots/01-desktop-1440x900-light.png differ
 diff --git a/docs/qa/KAN-407/screenshots/02-desktop-1440x900-dark.png b/docs/qa/KAN-407/screenshots/02-desktop-1440x900-dark.png
 new file mode 100644
-index 00000000..303bfd81
+index 00000000..1c766a39
 Binary files /dev/null and b/docs/qa/KAN-407/screenshots/02-desktop-1440x900-dark.png differ
 diff --git a/docs/qa/KAN-407/screenshots/03-desktop-1024x768.png b/docs/qa/KAN-407/screenshots/03-desktop-1024x768.png
 new file mode 100644
@@ -288,18 +290,18 @@ index 00000000..413423ae
 Binary files /dev/null and b/docs/qa/KAN-407/screenshots/03-desktop-1024x768.png differ
 diff --git a/docs/qa/KAN-407/screenshots/04-tablet-portrait-768x1024.png b/docs/qa/KAN-407/screenshots/04-tablet-portrait-768x1024.png
 new file mode 100644
-index 00000000..21ea9977
+index 00000000..a1dac427
 Binary files /dev/null and b/docs/qa/KAN-407/screenshots/04-tablet-portrait-768x1024.png differ
 diff --git a/docs/qa/KAN-407/screenshots/05-mobile-portrait-390x844.png b/docs/qa/KAN-407/screenshots/05-mobile-portrait-390x844.png
 new file mode 100644
-index 00000000..3e0d8a17
+index 00000000..2016bf98
 Binary files /dev/null and b/docs/qa/KAN-407/screenshots/05-mobile-portrait-390x844.png differ
 diff --git a/docs/qa/KAN-407/ui-specialist-review.md b/docs/qa/KAN-407/ui-specialist-review.md
 new file mode 100644
-index 00000000..d31069d7
+index 00000000..584b1d5f
 --- /dev/null
 +++ b/docs/qa/KAN-407/ui-specialist-review.md
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +# UI Specialist Review: KAN-407 (Slice 1 Phase 2 Auth & RBAC Simplification)
 +
 +**Ticket:** KAN-407 (`[SLICE-1-P2][KB-AUTH-SIMPLIFY]`)  
@@ -332,19 +334,20 @@ index 00000000..d31069d7
 +
 +| Viewport | Screenshot File | Surface Audited | Layout & Visual Findings | Verdict |
 +| :--- | :--- | :--- | :--- | :---: |
-+| `1440x900` Desktop (Light) | `01-desktop-1440x900-light.png` | `AuthCardEditorDrawer.tsx` (Add LDAP Card) | 1-Click provider presets render cleanly. Form fields exhibit consistent vertical rhythm and crisp typography. Secret input uses disc-masked text security. Drawer action footer aligns buttons with standard primary/secondary hierarchy. | PASS |
-+| `1440x900` Desktop (Dark) | `02-desktop-1440x900-dark.png` | `AuthStudioPage.tsx` (Break-Glass Dialog) | High-contrast modal overlay with warning icon, 3-layer anti-lockout safeguard bullets, and clear `Confirm & Disable` danger button. Sudo elevation status pill is clearly visible in subnav. | PASS |
++| `1440x900` Desktop (Light) | `01-desktop-1440x900-light.png` | `AuthCardEditorDrawer.tsx` (Add LDAP Card) | 1-Click provider presets render cleanly. Active Directory active preset button uses high-specificity styling (`.auth-preset-btn.auth-preset-btn--active, .auth-preset-btn.auth-preset-btn--active:hover`) preserving royal blue background and crisp white text (4.9:1 contrast). Secret input uses disc-masked text security. | PASS |
++| `1440x900` Desktop (Dark) | `02-desktop-1440x900-dark.png` | `AuthStudioPage.tsx` (Break-Glass Dialog) | High-contrast modal overlay with warning icon, 3-layer anti-lockout safeguard bullets, and clear `Confirm & Disable` danger button (`.auth-modal-btn-danger` with solid red `#dc2626` background and white text, 4.8:1 contrast). Card-row `Delete` buttons retain clean secondary outlined styling. | PASS |
 +| `1024x768` Desktop / Tablet (Light) | `03-desktop-1024x768.png` | `RbacPolicyBuilder.tsx` (Bulk Permissions Matrix) | Full unobstructed role matrix with responsive bulk action toolbars (`Select All`, `Clear All`, `Read-Only`) across Workspace, Issue, and Field categories. Zero backdrop clipping or horizontal overflow. | PASS |
 +| `768x1024` Tablet Portrait (Light) | `04-tablet-portrait-768x1024.png` | `AuthCardEditorDrawer.tsx` (Edit OIDC Card) | Localhost callback URI warning banner renders with clear notice styling. Stored secret encryption note and replace toggle render cleanly within drawer width. | PASS |
-+| `390x844` Mobile Portrait (Light) | `05-mobile-portrait-390x844.png` | `AuthStudioPage.tsx` (Auth Provider Cards) | Cards, drag handles, rank arrows, provider icons, and status badges stack vertically without horizontal overflow (`document.documentElement.scrollWidth <= 390`). Title row wraps cleanly (`flex-wrap: wrap`) ensuring `Documentation ->` button sits with ample margin. Touch targets meet standard height requirements. | PASS |
++| `390x844` Mobile Portrait (Light) | `05-mobile-portrait-390x844.png` | `AuthStudioPage.tsx` (Auth Provider Cards) | Cards, drag handles, rank arrows, provider icons, and status badges stack vertically without horizontal overflow (`document.documentElement.scrollWidth <= 390`). Title row wraps cleanly (`flex-wrap: wrap`) ensuring `Documentation ->` button sits with ample margin. Card-row Delete buttons display clean outlined secondary styling. | PASS |
 +
 +---
 +
 +## 3. Interaction & Accessibility Verification (WCAG 2.2 AA)
 +
 +1. **Color Contrast & Readability**:
-+   - Primary action buttons (`Create Card`, `Save Changes`, `Create Role`): Contrast ratio exceeds `4.9:1` against light surfaces and `7.1:1` in dark mode.
-+   - Danger button (`Confirm & Disable`): Crisp white text on dark red (`#b91c1c` / `#f87171` text), meeting `>= 4.5:1` contrast.
++   - Primary action buttons (`Create Card`, `Save Changes`, `Create Role`) and active provider presets: Contrast ratio exceeds `4.9:1` against light surfaces and `7.1:1` in dark mode.
++   - Break-Glass danger button (`Confirm & Disable`): Crisp white text on crimson red (`#dc2626`), meeting `>= 4.5:1` contrast (4.8:1).
++   - Card-row Delete buttons: Outlined secondary danger buttons (`color: var(--danger-fg, #b91c1c)`), meeting `>= 4.5:1` contrast without solid background collision.
 +   - Status indicators (`HEALTHY`, `PRIMARY`, `LOCAL_ADMIN`): High-contrast pill badges with dark text on pastel badge backgrounds exceeding `5.0:1`.
 +
 +2. **Focus Management & Keyboard Accessibility**:
@@ -362,16 +365,17 @@ index 00000000..d31069d7
 +
 +- Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across code and documentation.
 +- Visual inspection completed directly via `read_file` on all 5 rendered PNG artifacts in `docs/qa/KAN-407/screenshots/`.
-+- Frontend Vitest test suites (122 tests across touched auth components) verified passing with **95.76%** branch coverage and zero `act(...)` warnings.
-+- Build checks (`tsc`, `eslint`, `vite build`, `ruff`, `mypy`) verified clean.
++- Frontend Vitest test suites (122 tests across touched auth components) verified passing in 10.13s with **95.76%** branch coverage and zero `act(...)` warnings.
++- Backend Pytest test suites (69 tests across auth/rbac modules) verified passing in 36.56s with zero warnings and clean coverage tables.
++- Build checks (`tsc`, `eslint`, `vite build` built in 1.39s, `ruff`, `mypy`) verified clean.
 +
 +The UI/UX implementation of KAN-407 is thoroughly verified and approved for promotion.
 diff --git a/docs/qa/KAN-407/unit-test-results.txt b/docs/qa/KAN-407/unit-test-results.txt
 new file mode 100644
-index 00000000..8d0cc354
+index 00000000..2ce987fe
 --- /dev/null
 +++ b/docs/qa/KAN-407/unit-test-results.txt
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,411 @@
 +=== PYTEST UNIT TEST RESULTS WITH COVERAGE ===
 +============================= test session starts ==============================
 +platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
@@ -467,34 +471,310 @@ index 00000000..8d0cc354
 +
 + ✓ src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx (8 tests) 1327ms
 +   ✓ RbacPolicyBuilder Component (KAN-83) (8)
-+     ✓ renders narrative sentence header, fetches per-role permissions fallback, and selects/deselects roles 309ms
-+     ✓ supports category bulk permission quick-selectors (Select All, Clear All, Read-Only preset) 460ms
-+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (59 tests) 7080ms
++
++=== VITEST UNIT TEST RESULTS WITH COVERAGE ===
++
++> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan407-1e894da6/kanban/web
++> vitest run AuthStudioPage.test.tsx AuthCardEditorDrawer.test.tsx RbacPolicyBuilder.test.tsx --coverage --run
++
++
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan407-1e894da6/kanban/web
++      Coverage enabled with v8
++
++
++      Tests 0 passed (0)
++   Start at 15:38:24
++   Duration 902ms
++
++
++      Tests 0 passed (8)
++   Start at 15:38:24
++   Duration 1.34s
++
++
++      Tests 0 passed (122)
++   Start at 15:38:24
++   Duration 1.44s
++
++
++      Tests 1 passed (122)
++   Start at 15:38:24
++   Duration 1.64s
++
++
++      Tests 3 passed (122)
++   Start at 15:38:24
++   Duration 1.94s
++
++
++      Tests 7 passed (122)
++   Start at 15:38:24
++   Duration 2.04s
++
++
++      Tests 10 passed (122)
++   Start at 15:38:24
++   Duration 2.14s
++
++
++      Tests 13 passed (122)
++   Start at 15:38:24
++   Duration 2.34s
++
++
++      Tests 14 passed (122)
++   Start at 15:38:24
++   Duration 2.44s
++
++
++      Tests 17 passed (122)
++   Start at 15:38:24
++   Duration 2.54s
++
++
++      Tests 19 passed (122)
++   Start at 15:38:24
++   Duration 2.74s
++ ✓ src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx (8 tests) 1427ms
++   ✓ RbacPolicyBuilder Component (KAN-83) (8)
++     ✓ supports category bulk permission quick-selectors (Select All, Clear All, Read-Only preset) 566ms
++
++
++      Tests 22 passed (122)
++   Start at 15:38:24
++   Duration 2.94s
++
++
++      Tests 23 passed (122)
++   Start at 15:38:24
++   Duration 3.04s
++
++
++      Tests 25 passed (122)
++   Start at 15:38:24
++   Duration 3.34s
++
++
++      Tests 26 passed (122)
++   Start at 15:38:24
++   Duration 3.44s
++
++
++      Tests 28 passed (122)
++   Start at 15:38:24
++   Duration 3.64s
++
++
++      Tests 30 passed (122)
++   Start at 15:38:24
++   Duration 3.84s
++
++
++      Tests 31 passed (122)
++   Start at 15:38:24
++   Duration 3.94s
++
++
++      Tests 34 passed (122)
++   Start at 15:38:24
++   Duration 4.24s
++
++
++      Tests 39 passed (122)
++   Start at 15:38:24
++   Duration 4.54s
++
++
++      Tests 41 passed (122)
++   Start at 15:38:24
++   Duration 4.74s
++
++
++      Tests 44 passed (122)
++   Start at 15:38:24
++   Duration 4.84s
++
++
++      Tests 46 passed (122)
++   Start at 15:38:24
++   Duration 5.04s
++
++
++      Tests 49 passed (122)
++   Start at 15:38:24
++   Duration 5.14s
++
++
++      Tests 54 passed (122)
++   Start at 15:38:24
++   Duration 5.34s
++
++
++      Tests 56 passed (122)
++   Start at 15:38:24
++   Duration 5.44s
++
++
++      Tests 59 passed (122)
++   Start at 15:38:24
++   Duration 5.54s
++
++
++      Tests 60 passed (122)
++   Start at 15:38:24
++   Duration 5.74s
++
++
++      Tests 61 passed (122)
++   Start at 15:38:24
++   Duration 5.94s
++
++
++      Tests 62 passed (122)
++   Start at 15:38:24
++   Duration 6.14s
++
++
++      Tests 67 passed (122)
++   Start at 15:38:24
++   Duration 6.24s
++
++
++      Tests 70 passed (122)
++   Start at 15:38:24
++   Duration 6.44s
++
++
++      Tests 73 passed (122)
++   Start at 15:38:24
++   Duration 6.55s
++
++
++      Tests 74 passed (122)
++   Start at 15:38:24
++   Duration 6.65s
++
++
++      Tests 77 passed (122)
++   Start at 15:38:24
++   Duration 6.75s
++
++
++      Tests 78 passed (122)
++   Start at 15:38:24
++   Duration 6.95s
++
++
++      Tests 80 passed (122)
++   Start at 15:38:24
++   Duration 7.05s
++
++
++      Tests 82 passed (122)
++   Start at 15:38:24
++   Duration 7.15s
++
++
++      Tests 83 passed (122)
++   Start at 15:38:24
++   Duration 7.35s
++
++
++      Tests 84 passed (122)
++   Start at 15:38:24
++   Duration 7.45s
++
++
++      Tests 88 passed (122)
++   Start at 15:38:24
++   Duration 7.65s
++
++
++      Tests 90 passed (122)
++   Start at 15:38:24
++   Duration 7.75s
++
++
++      Tests 94 passed (122)
++   Start at 15:38:24
++   Duration 7.95s
++
++
++      Tests 96 passed (122)
++   Start at 15:38:24
++   Duration 8.15s
++
++
++      Tests 98 passed (122)
++   Start at 15:38:24
++   Duration 8.35s
++
++
++      Tests 101 passed (122)
++   Start at 15:38:24
++   Duration 8.45s
++
++
++      Tests 104 passed (122)
++   Start at 15:38:24
++   Duration 8.55s
++
++
++      Tests 105 passed (122)
++   Start at 15:38:24
++   Duration 8.75s
++
++
++      Tests 107 passed (122)
++   Start at 15:38:24
++   Duration 8.95s
++ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (59 tests) 7590ms
 +   ✓ AuthCardEditorDrawer (KB-P3-36) (59)
-+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 452ms
-+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 334ms
-+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 389ms
++     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 430ms
++     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 391ms
++     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 369ms
++     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 302ms
 +     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
-+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 397ms
++       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 421ms
 +     ✓ Progressive Disclosure & AdvancedSection (KAN-319) (17)
-+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 379ms
-+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (55 tests) 7836ms
++       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 402ms
++
++
++      Tests 110 passed (122)
++   Start at 15:38:24
++   Duration 9.45s
++
++
++      Tests 118 passed (122)
++   Start at 15:38:24
++   Duration 9.65s
++
++
++      Tests 120 passed (122)
++   Start at 15:38:24
++   Duration 9.75s
++ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (55 tests) 8415ms
 +   ✓ AuthStudioPage (KB-P3-36) (55)
-+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 428ms
-+     ✓ opens drawer to add a new auth card and appends created card 744ms
-+     ✓ opens drawer to edit an existing card and updates it 336ms
-+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 380ms
-+     ✓ handles Aal2StepUpCancelledError during user create or role change 344ms
-+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 574ms
++     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 409ms
++     ✓ opens drawer to add a new auth card and appends created card 820ms
++     ✓ opens drawer to edit an existing card and updates it 313ms
++     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 372ms
++     ✓ handles Aal2StepUpCancelledError during user create or role change 346ms
++     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 634ms
 +     ✓ Users & Permissions Tab (KANBA-176) (16)
-+       ✓ opens Reset Password modal and resets user password 373ms
-+       ✓ covers role change in add user modal and cancelling reset password modal 450ms
-+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 862ms
++       ✓ opens Reset Password modal and resets user password 509ms
++       ✓ covers role change in add user modal and cancelling reset password modal 432ms
++       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 899ms
++
++ Test Files 3 passed (3)
++      Tests 122 passed (122)
++   Start at 15:38:24
++   Duration 9.98s
 +
 + Test Files  3 passed (3)
 +      Tests  122 passed (122)
-+   Start at  15:23:49
-+   Duration  9.45s (tests 83%, environment 13%, import 3%, worker 1%, transform 1%)
++   Start at  15:38:24
++   Duration  10.13s (tests 83%, environment 12%, import 3%, transform 2%, worker 1%)
 +
 + % Coverage report from v8
 +-------------------|---------|----------|---------|---------|-------------------
@@ -509,7 +789,7 @@ index 00000000..8d0cc354
 +-------------------|---------|----------|---------|---------|-------------------
 diff --git a/docs/workouts/slice-1-auth-rbac/02-implemented-changes.md b/docs/workouts/slice-1-auth-rbac/02-implemented-changes.md
 new file mode 100644
-index 00000000..8a7196c4
+index 00000000..8c2c27be
 --- /dev/null
 +++ b/docs/workouts/slice-1-auth-rbac/02-implemented-changes.md
 @@ -0,0 +1,240 @@
@@ -622,7 +902,7 @@ index 00000000..8a7196c4
 +
 +### 3.1 Frontend Unit Tests and Coverage
 +- **Command:** `COVERAGE_INCLUDE="src/features/admin-auth/AuthCardEditorDrawer.tsx,src/features/admin-auth/AuthStudioPage.tsx,src/features/rbac/RbacPolicyBuilder.tsx" pnpm --dir kanban/web test AuthStudioPage.test.tsx AuthCardEditorDrawer.test.tsx RbacPolicyBuilder.test.tsx --coverage --run`
-+- **Output:** 122 tests passed (0 failed). Zero `act(...)` warnings.
++- **Output:** 122 tests passed in 10.13s (0 failed). Zero `act(...)` warnings.
 +- **Coverage Metrics:**
 +  - `AuthCardEditorDrawer.tsx`: Statements: 99.41% | Branches: 95.57% | Functions: 100.0% | Lines: 99.56%
 +  - `AuthStudioPage.tsx`: Statements: 98.14% | Branches: 95.68% | Functions: 100.0% | Lines: 100.0%
@@ -630,15 +910,15 @@ index 00000000..8a7196c4
 +  - **All Touched Modules Combined:** Statements: 99.02% | Branches: 95.76% | Functions: 100.0% | Lines: 99.80% (All exceed 95% threshold).
 +
 +### 3.2 Backend Unit Tests
-+- **Command:** `uv run pytest kanban/tests/auth/test_auth_cards_admin_api.py kanban/tests/auth/test_ldap_tls_and_bind.py kanban/tests/auth/test_ldap_group_sync.py kanban/tests/auth/test_oidc_flow.py kanban/tests/auth/test_identity_linking_real_pg_e2e.py kanban/tests/api/test_granular_rbac_api.py`
-+- **Output:** 69 passed in 16.49s. Zero warnings.
++- **Command:** `PYTHONPATH=. uv run pytest kanban/tests/auth/test_auth_cards_admin_api.py kanban/tests/auth/test_ldap_tls_and_bind.py kanban/tests/auth/test_ldap_group_sync.py kanban/tests/auth/test_oidc_flow.py kanban/tests/auth/test_identity_linking_real_pg_e2e.py kanban/tests/api/test_granular_rbac_api.py --cov=kanban/api/v1/admin --cov=kanban/auth --cov-report=term-missing`
++- **Output:** 69 passed in 36.56s. Zero warnings.
 +
 +### 3.3 Code Quality and Typecheck Checks
 +- `uv run ruff check kanban/`: Passed (0 errors).
 +- `python3 scripts/check_no_dashes.py --all`: Passed (0 em/en-dashes).
 +- `pnpm --dir kanban/web typecheck`: Passed (`tsc -b --noEmit` exit 0).
 +- `pnpm --dir kanban/web lint`: Passed (`eslint . --max-warnings 0` exit 0).
-+- `pnpm --dir kanban/web build`: Passed (`vite build` exit 0).
++- `pnpm --dir kanban/web build`: Passed (`vite build` built in 1.39s, exit 0).
 +- `uv run mypy kanban/`: Passed (Success: no issues found in 680 source files).
 +
 +---
@@ -1310,7 +1590,7 @@ index bdc527f6..8b80fcc5 100644
    });
  });
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-index 0325e3e4..d61741cc 100644
+index 0325e3e4..33912375 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
 @@ -21,6 +21,7 @@ import {
@@ -1573,7 +1853,7 @@ index 0325e3e4..d61741cc 100644
 +              </button>
 +              <button
 +                type="button"
-+                className="auth-btn-danger"
++                className="auth-modal-btn-danger"
 +                data-testid="confirm-break-glass-action"
 +                onClick={() => {
 +                  const target = breakGlassTarget;
@@ -1596,7 +1876,7 @@ index 0325e3e4..d61741cc 100644
        {isAddUserOpen ? (
          <div className="auth-modal-backdrop" role="presentation">
 diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
-index 48bf90ae..7da2c615 100644
+index 48bf90ae..11ee6121 100644
 --- a/kanban/web/src/features/admin-auth/adminAuth.css
 +++ b/kanban/web/src/features/admin-auth/adminAuth.css
 @@ -29,6 +29,7 @@
@@ -1607,7 +1887,17 @@ index 48bf90ae..7da2c615 100644
    gap: 12px;
  }
  
-@@ -1176,3 +1177,36 @@
+@@ -596,7 +597,8 @@
+   border-color: var(--accent-primary);
+ }
+ 
+-.auth-preset-btn--active {
++.auth-preset-btn.auth-preset-btn--active,
++.auth-preset-btn.auth-preset-btn--active:hover {
+   background: var(--accent-primary);
+   color: var(--accent-primary-fg);
+   border-color: var(--accent-primary);
+@@ -1176,3 +1178,37 @@
      min-height: 44px;
    }
  }
@@ -1628,20 +1918,21 @@ index 48bf90ae..7da2c615 100644
 +  border: 1px solid var(--border-warning, #fde68a);
 +}
 +
-+.auth-btn-danger {
++.auth-modal-btn-danger {
 +  padding: 6px 14px;
 +  border-radius: 6px;
 +  font-size: 13px;
 +  font-weight: 600;
 +  cursor: pointer;
-+  background: var(--text-danger, #ef4444);
++  background: var(--bg-danger, #dc2626);
 +  color: #ffffff;
-+  border: 1px solid var(--text-danger, #dc2626);
++  border: 1px solid var(--bg-danger, #dc2626);
 +  transition: all 0.15s ease-in-out;
 +}
 +
-+.auth-btn-danger:hover {
-+  background: #dc2626;
++.auth-modal-btn-danger:hover {
++  background: var(--bg-danger-hover, #b91c1c);
++  border-color: var(--bg-danger-hover, #b91c1c);
 +}
 +
 diff --git a/kanban/web/src/features/admin-auth/adminAuthApi.ts b/kanban/web/src/features/admin-auth/adminAuthApi.ts

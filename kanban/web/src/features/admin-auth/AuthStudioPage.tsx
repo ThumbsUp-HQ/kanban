@@ -1127,7 +1127,7 @@ export function AuthStudioPage(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="auth-btn-danger"
+                className="auth-modal-btn-danger"
                 data-testid="confirm-break-glass-action"
                 onClick={() => {
                   const target = breakGlassTarget;

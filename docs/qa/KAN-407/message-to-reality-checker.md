@@ -58,7 +58,7 @@ uv run pytest \
   --cov=kanban/api/v1/admin/principals \
   --cov-report=term-missing -v
 ```
-- **Results:** 69 passed in 31.65s (0 failures, 0 errors, 0 warnings).
+- **Results:** 69 passed in 36.56s (0 failures, 0 errors, 0 warnings).
 - **Coverage:** Full term-missing coverage tables recorded in `unit-test-results.txt`.
 
 ### B. Frontend Vitest Suites
@@ -71,7 +71,7 @@ pnpm --dir kanban/web test \
   RbacPolicyBuilder.test.tsx \
   --coverage --run
 ```
-- **Results:** 122 passed across 3 test suites (0 failed). Zero `act(...)` stderr warnings.
+- **Results:** 122 passed in 10.13s across 3 test suites (0 failed). Zero `act(...)` stderr warnings.
 - **Coverage Breakdown (all >=95% branch threshold):**
   - `AuthCardEditorDrawer.tsx`: Statements: 99.41% | Branch: 95.57% | Functions: 100% | Lines: 99.56%
   - `AuthStudioPage.tsx`: Statements: 98.14% | Branch: 95.68% | Functions: 100% | Lines: 100%
@@ -88,7 +88,7 @@ All 6 project quality gates passed with zero errors:
 3. `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode em/en-dashes).
 4. `pnpm --dir kanban/web typecheck`: Passed (tsc -b --noEmit exit 0).
 5. `pnpm --dir kanban/web lint`: Passed (eslint . --max-warnings 0 exit 0).
-6. `pnpm --dir kanban/web build`: Passed (built in 1.24s).
+6. `pnpm --dir kanban/web build`: Passed (built in 1.39s).
 
 ---
 
@@ -96,9 +96,9 @@ All 6 project quality gates passed with zero errors:
 
 All 5 viewports were captured unclipped with Playwright, applying the mandated layout check and unclipped style overrides before fullPage screenshot:
 - `01-desktop-1440x900-light.png`:
-  - Auth Studio layout with LDAP Active Directory preset open in drawer. Masked bind password with `.kb-masked-api-key` bullets, clean server URL, and advanced parameters drawer.
+  - Auth Studio layout with LDAP Active Directory preset open in drawer. Active Directory active preset button uses high-specificity styling (`.auth-preset-btn.auth-preset-btn--active, .auth-preset-btn.auth-preset-btn--active:hover`) preserving royal blue background and crisp white text (4.9:1 contrast). Masked bind password with `.kb-masked-api-key` bullets, clean server URL, and advanced parameters drawer.
 - `02-desktop-1440x900-dark.png`:
-  - Dark mode Break-Glass Anti-Lockout Warning modal (`[data-testid="break-glass-warning-dialog"]`) displaying three-layer safeguard rules before disabling sole admin card.
+  - Dark mode Break-Glass Anti-Lockout Warning modal (`[data-testid="break-glass-warning-dialog"]`) displaying three-layer safeguard rules before disabling sole admin card, with dedicated `.auth-modal-btn-danger` Confirm & Disable CTA in solid crimson red (`#dc2626`) and white text (4.8:1 contrast). Background card-row Delete buttons retain clean secondary outlined styling without solid background collision.
 - `03-desktop-1024x768.png`:
   - Roles & Permissions tab with single RbacPolicyBuilder mounted, no duplicate panels, no `+ Add Local User` button. Shows full unobstructed category bulk selectors (`Select All`, `Clear All`, `Read-Only`) across Workspace, Issue, and Field categories with zero backdrop cutoff.
 - `04-tablet-portrait-768x1024.png`:

@@ -107,7 +107,7 @@ Phase 2 (`KAN-407`) executes all UI simplifications, layout refactorings, creden
 
 ### 3.1 Frontend Unit Tests and Coverage
 - **Command:** `COVERAGE_INCLUDE="src/features/admin-auth/AuthCardEditorDrawer.tsx,src/features/admin-auth/AuthStudioPage.tsx,src/features/rbac/RbacPolicyBuilder.tsx" pnpm --dir kanban/web test AuthStudioPage.test.tsx AuthCardEditorDrawer.test.tsx RbacPolicyBuilder.test.tsx --coverage --run`
-- **Output:** 122 tests passed (0 failed). Zero `act(...)` warnings.
+- **Output:** 122 tests passed in 10.13s (0 failed). Zero `act(...)` warnings.
 - **Coverage Metrics:**
   - `AuthCardEditorDrawer.tsx`: Statements: 99.41% | Branches: 95.57% | Functions: 100.0% | Lines: 99.56%
   - `AuthStudioPage.tsx`: Statements: 98.14% | Branches: 95.68% | Functions: 100.0% | Lines: 100.0%
@@ -115,15 +115,15 @@ Phase 2 (`KAN-407`) executes all UI simplifications, layout refactorings, creden
   - **All Touched Modules Combined:** Statements: 99.02% | Branches: 95.76% | Functions: 100.0% | Lines: 99.80% (All exceed 95% threshold).
 
 ### 3.2 Backend Unit Tests
-- **Command:** `uv run pytest kanban/tests/auth/test_auth_cards_admin_api.py kanban/tests/auth/test_ldap_tls_and_bind.py kanban/tests/auth/test_ldap_group_sync.py kanban/tests/auth/test_oidc_flow.py kanban/tests/auth/test_identity_linking_real_pg_e2e.py kanban/tests/api/test_granular_rbac_api.py`
-- **Output:** 69 passed in 16.49s. Zero warnings.
+- **Command:** `PYTHONPATH=. uv run pytest kanban/tests/auth/test_auth_cards_admin_api.py kanban/tests/auth/test_ldap_tls_and_bind.py kanban/tests/auth/test_ldap_group_sync.py kanban/tests/auth/test_oidc_flow.py kanban/tests/auth/test_identity_linking_real_pg_e2e.py kanban/tests/api/test_granular_rbac_api.py --cov=kanban/api/v1/admin --cov=kanban/auth --cov-report=term-missing`
+- **Output:** 69 passed in 36.56s. Zero warnings.
 
 ### 3.3 Code Quality and Typecheck Checks
 - `uv run ruff check kanban/`: Passed (0 errors).
 - `python3 scripts/check_no_dashes.py --all`: Passed (0 em/en-dashes).
 - `pnpm --dir kanban/web typecheck`: Passed (`tsc -b --noEmit` exit 0).
 - `pnpm --dir kanban/web lint`: Passed (`eslint . --max-warnings 0` exit 0).
-- `pnpm --dir kanban/web build`: Passed (`vite build` exit 0).
+- `pnpm --dir kanban/web build`: Passed (`vite build` built in 1.39s, exit 0).
 - `uv run mypy kanban/`: Passed (Success: no issues found in 680 source files).
 
 ---

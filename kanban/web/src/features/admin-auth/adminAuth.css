@@ -597,7 +597,8 @@
   border-color: var(--accent-primary);
 }
 
-.auth-preset-btn--active {
+.auth-preset-btn.auth-preset-btn--active,
+.auth-preset-btn.auth-preset-btn--active:hover {
   background: var(--accent-primary);
   color: var(--accent-primary-fg);
   border-color: var(--accent-primary);
@@ -1194,19 +1195,20 @@
   border: 1px solid var(--border-warning, #fde68a);
 }
 
-.auth-btn-danger {
+.auth-modal-btn-danger {
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  background: var(--text-danger, #ef4444);
+  background: var(--bg-danger, #dc2626);
   color: #ffffff;
-  border: 1px solid var(--text-danger, #dc2626);
+  border: 1px solid var(--bg-danger, #dc2626);
   transition: all 0.15s ease-in-out;
 }
 
-.auth-btn-danger:hover {
-  background: #dc2626;
+.auth-modal-btn-danger:hover {
+  background: var(--bg-danger-hover, #b91c1c);
+  border-color: var(--bg-danger-hover, #b91c1c);
 }
 

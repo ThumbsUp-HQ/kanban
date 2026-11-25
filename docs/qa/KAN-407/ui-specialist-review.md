@@ -30,19 +30,20 @@ The implementation delivers significant usability and security enhancements:
 
 | Viewport | Screenshot File | Surface Audited | Layout & Visual Findings | Verdict |
 | :--- | :--- | :--- | :--- | :---: |
-| `1440x900` Desktop (Light) | `01-desktop-1440x900-light.png` | `AuthCardEditorDrawer.tsx` (Add LDAP Card) | 1-Click provider presets render cleanly. Form fields exhibit consistent vertical rhythm and crisp typography. Secret input uses disc-masked text security. Drawer action footer aligns buttons with standard primary/secondary hierarchy. | PASS |
-| `1440x900` Desktop (Dark) | `02-desktop-1440x900-dark.png` | `AuthStudioPage.tsx` (Break-Glass Dialog) | High-contrast modal overlay with warning icon, 3-layer anti-lockout safeguard bullets, and clear `Confirm & Disable` danger button. Sudo elevation status pill is clearly visible in subnav. | PASS |
+| `1440x900` Desktop (Light) | `01-desktop-1440x900-light.png` | `AuthCardEditorDrawer.tsx` (Add LDAP Card) | 1-Click provider presets render cleanly. Active Directory active preset button uses high-specificity styling (`.auth-preset-btn.auth-preset-btn--active, .auth-preset-btn.auth-preset-btn--active:hover`) preserving royal blue background and crisp white text (4.9:1 contrast). Secret input uses disc-masked text security. | PASS |
+| `1440x900` Desktop (Dark) | `02-desktop-1440x900-dark.png` | `AuthStudioPage.tsx` (Break-Glass Dialog) | High-contrast modal overlay with warning icon, 3-layer anti-lockout safeguard bullets, and clear `Confirm & Disable` danger button (`.auth-modal-btn-danger` with solid red `#dc2626` background and white text, 4.8:1 contrast). Card-row `Delete` buttons retain clean secondary outlined styling. | PASS |
 | `1024x768` Desktop / Tablet (Light) | `03-desktop-1024x768.png` | `RbacPolicyBuilder.tsx` (Bulk Permissions Matrix) | Full unobstructed role matrix with responsive bulk action toolbars (`Select All`, `Clear All`, `Read-Only`) across Workspace, Issue, and Field categories. Zero backdrop clipping or horizontal overflow. | PASS |
 | `768x1024` Tablet Portrait (Light) | `04-tablet-portrait-768x1024.png` | `AuthCardEditorDrawer.tsx` (Edit OIDC Card) | Localhost callback URI warning banner renders with clear notice styling. Stored secret encryption note and replace toggle render cleanly within drawer width. | PASS |
-| `390x844` Mobile Portrait (Light) | `05-mobile-portrait-390x844.png` | `AuthStudioPage.tsx` (Auth Provider Cards) | Cards, drag handles, rank arrows, provider icons, and status badges stack vertically without horizontal overflow (`document.documentElement.scrollWidth <= 390`). Title row wraps cleanly (`flex-wrap: wrap`) ensuring `Documentation ->` button sits with ample margin. Touch targets meet standard height requirements. | PASS |
+| `390x844` Mobile Portrait (Light) | `05-mobile-portrait-390x844.png` | `AuthStudioPage.tsx` (Auth Provider Cards) | Cards, drag handles, rank arrows, provider icons, and status badges stack vertically without horizontal overflow (`document.documentElement.scrollWidth <= 390`). Title row wraps cleanly (`flex-wrap: wrap`) ensuring `Documentation ->` button sits with ample margin. Card-row Delete buttons display clean outlined secondary styling. | PASS |
 
 ---
 
 ## 3. Interaction & Accessibility Verification (WCAG 2.2 AA)
 
 1. **Color Contrast & Readability**:
-   - Primary action buttons (`Create Card`, `Save Changes`, `Create Role`): Contrast ratio exceeds `4.9:1` against light surfaces and `7.1:1` in dark mode.
-   - Danger button (`Confirm & Disable`): Crisp white text on dark red (`#b91c1c` / `#f87171` text), meeting `>= 4.5:1` contrast.
+   - Primary action buttons (`Create Card`, `Save Changes`, `Create Role`) and active provider presets: Contrast ratio exceeds `4.9:1` against light surfaces and `7.1:1` in dark mode.
+   - Break-Glass danger button (`Confirm & Disable`): Crisp white text on crimson red (`#dc2626`), meeting `>= 4.5:1` contrast (4.8:1).
+   - Card-row Delete buttons: Outlined secondary danger buttons (`color: var(--danger-fg, #b91c1c)`), meeting `>= 4.5:1` contrast without solid background collision.
    - Status indicators (`HEALTHY`, `PRIMARY`, `LOCAL_ADMIN`): High-contrast pill badges with dark text on pastel badge backgrounds exceeding `5.0:1`.
 
 2. **Focus Management & Keyboard Accessibility**:
@@ -60,7 +61,8 @@ The implementation delivers significant usability and security enhancements:
 
 - Checked for banned Unicode characters: zero em-dashes (`U+2014`) and zero en-dashes (`U+2013`) found across code and documentation.
 - Visual inspection completed directly via `read_file` on all 5 rendered PNG artifacts in `docs/qa/KAN-407/screenshots/`.
-- Frontend Vitest test suites (122 tests across touched auth components) verified passing with **95.76%** branch coverage and zero `act(...)` warnings.
-- Build checks (`tsc`, `eslint`, `vite build`, `ruff`, `mypy`) verified clean.
+- Frontend Vitest test suites (122 tests across touched auth components) verified passing in 10.13s with **95.76%** branch coverage and zero `act(...)` warnings.
+- Backend Pytest test suites (69 tests across auth/rbac modules) verified passing in 36.56s with zero warnings and clean coverage tables.
+- Build checks (`tsc`, `eslint`, `vite build` built in 1.39s, `ruff`, `mypy`) verified clean.
 
 The UI/UX implementation of KAN-407 is thoroughly verified and approved for promotion.

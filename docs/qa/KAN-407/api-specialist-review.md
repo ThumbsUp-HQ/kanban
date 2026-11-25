@@ -55,11 +55,11 @@ The implementation in `feat/KAN-407-slice1-auth-simplify` strictly preserves and
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 69 tests passed across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, and `test_oidc_flow.py`.
-   - 0 failures, 0 errors, 31.65s runtime.
+   - 69 tests passed across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, `test_oidc_flow.py`, `test_identity_linking_real_pg_e2e.py`, and `test_granular_rbac_api.py`.
+   - 0 failures, 0 errors, 36.56s runtime.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 122 tests passed across `AuthStudioPage.test.tsx` (55 tests), `AuthCardEditorDrawer.test.tsx` (59 tests), and `RbacPolicyBuilder.test.tsx` (8 tests).
+   - 122 tests passed in 10.13s across `AuthStudioPage.test.tsx` (55 tests), `AuthCardEditorDrawer.test.tsx` (59 tests), and `RbacPolicyBuilder.test.tsx` (8 tests).
    - 0 `act(...)` stderr warnings.
    - Branch coverage: **95.76%** across touched files (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%).
 
@@ -68,7 +68,7 @@ The implementation in `feat/KAN-407-slice1-auth-simplify` strictly preserves and
    - `mypy`: 0 issues in 680 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.24s.
+   - `vite build`: Succeeded in 1.39s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
