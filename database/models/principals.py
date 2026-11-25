@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import (
@@ -235,6 +237,9 @@ class UserPreference(Base):
     avatar_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)
     avatar_content_type: Mapped[str | None] = mapped_column(String, nullable=True)
     avatar_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    agent_onboarding_prefs_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )

@@ -681,3 +681,145 @@ async def test_user_settings_raw_binary_upload_and_delete_empty(
     data = upload_res.json()
     assert data["avatar_url"] is not None
     assert "?v=" in data["avatar_url"]
+
+
+async def test_user_preferences_agent_onboarding_lifecycle_and_rls(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    api_env: ApiEnv,
+) -> None:
+    """Test GET/PATCH /api/v1/users/me/preferences, defaults, persistence, validation, and RLS isolation."""
+    user_a = await make_user("user_a")
+    user_b = await make_user("user_b")
+
+    # 1. User A initial GET returns defaults
+    client = as_principal(user_a)
+    res_a_init = await client.get("/api/v1/users/me/preferences")
+    assert res_a_init.status_code == 200
+    data_a_init = res_a_init.json()
+    assert data_a_init["principal_id"] == str(user_a.id)
+    assert data_a_init["agent_onboarding_prefs"]["scope"] == "local_only"
+    assert data_a_init["agent_onboarding_prefs"]["execution_mode"] == "swarm"
+    assert data_a_init["agent_onboarding_prefs"]["model_strategy"] == "quota_sipping_flash"
+    assert data_a_init["agent_onboarding_prefs"]["qa_rigor"] == "strict_forensic"
+    assert data_a_init["agent_onboarding_prefs"]["custom_notes"] == ""
+
+    # 2. User A PATCH updates preferences
+    patch_payload = {
+        "scope": "global_allowed",
+        "execution_mode": "teamwork",
+        "model_strategy": "hybrid",
+        "qa_rigor": "standard",
+        "custom_notes": "Always run local unit tests with 95% coverage.",
+    }
+    res_a_patch = await client.patch("/api/v1/users/me/preferences", json=patch_payload)
+    assert res_a_patch.status_code == 200
+    data_a_patch = res_a_patch.json()
+    assert data_a_patch["agent_onboarding_prefs"]["scope"] == "global_allowed"
+    assert data_a_patch["agent_onboarding_prefs"]["execution_mode"] == "teamwork"
+    assert data_a_patch["agent_onboarding_prefs"]["model_strategy"] == "hybrid"
+    assert data_a_patch["agent_onboarding_prefs"]["qa_rigor"] == "standard"
+    assert data_a_patch["agent_onboarding_prefs"]["custom_notes"] == "Always run local unit tests with 95% coverage."
+
+    # 3. User A GET confirms persistence
+    res_a_get2 = await client.get("/api/v1/users/me/preferences")
+    assert res_a_get2.status_code == 200
+    assert res_a_get2.json()["agent_onboarding_prefs"] == data_a_patch["agent_onboarding_prefs"]
+
+    # 4. User B GET still has their own default preferences (RLS isolation)
+    as_principal(user_b)
+    res_b_get = await client.get("/api/v1/users/me/preferences")
+    assert res_b_get.status_code == 200
+    data_b = res_b_get.json()
+    assert data_b["principal_id"] == str(user_b.id)
+    assert data_b["agent_onboarding_prefs"]["scope"] == "local_only"
+    assert data_b["agent_onboarding_prefs"]["custom_notes"] == ""
+
+    # 5. User A PATCH with nested agent_onboarding_prefs object
+    as_principal(user_a)
+    res_nested = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={
+            "agent_onboarding_prefs": {
+                "scope": "local_only",
+                "execution_mode": "single_thread",
+                "model_strategy": "unconstrained_max",
+                "qa_rigor": "strict_forensic",
+                "custom_notes": "Use Sol MAX for architecture.",
+            }
+        },
+    )
+    assert res_nested.status_code == 200
+    assert res_nested.json()["agent_onboarding_prefs"]["execution_mode"] == "single_thread"
+    assert res_nested.json()["agent_onboarding_prefs"]["model_strategy"] == "unconstrained_max"
+
+    # 6. Negative: Invalid enum returns 422
+    res_invalid_enum = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={"scope": "invalid_scope"},
+    )
+    assert res_invalid_enum.status_code == 422
+
+    # 7. Negative: UTF-16 lone surrogate character rejected with 422 INVALID_UTF8_SURROGATE
+    res_surr = await client.patch(
+        "/api/v1/users/me/preferences",
+        content=b'{"custom_notes": "bad \\ud800 surrogate"}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert res_surr.status_code == 422
+    assert res_surr.json()["code"] == "INVALID_UTF8_SURROGATE"
+
+    # 8. Negative: Oversized custom_notes (> 4096 bytes) returns 422
+    oversized = "a" * 5000
+    res_too_large = await client.patch(
+        "/api/v1/users/me/preferences",
+        json={"custom_notes": oversized},
+    )
+    assert res_too_large.status_code == 422
+
+    # 9. Negative/Boundary: User A executing direct SQL under RLS cannot mutate User B's row
+    from database.session import RLSContext
+    transport = getattr(api_env.client, "_transport", None)
+    app = getattr(transport, "app", None)
+    session_factory = getattr(getattr(app, "state", None), "session_factory", None)
+    if session_factory is not None:
+        rls_ctx_a = RLSContext(
+            principal_id=user_a.id,
+            workspace_id=user_a.workspace_id,
+            token_scopes=frozenset({"user"}),
+            aal_level=1,
+        )
+        async with session_factory.session(rls_ctx_a) as session:
+            res_update = await session.execute(
+                text(
+                    "UPDATE public.user_preferences "
+                    "SET agent_onboarding_prefs_json = '{\"custom_notes\": \"hacked\"}'::jsonb "
+                    "WHERE principal_id = :target_id"
+                ),
+                {"target_id": user_b.id},
+            )
+            assert res_update.rowcount == 0
+
+    # 10. Direct invocation when session_factory is None (fallback handling)
+    from kanban.api.v1.user_settings import get_user_preferences, update_user_preferences, UpdateUserPreferencesRequest
+    from starlette.requests import Request
+    from kanban.api.deps import PrincipalContext
+
+    mock_scope = {"type": "http", "app": type("MockApp", (), {"state": type("MockState", (), {"session_factory": None})()})()}
+    mock_req = Request(mock_scope)
+    mock_principal = PrincipalContext(
+        principal_id=user_a.id,
+        workspace_id=user_a.workspace_id,
+        token_scopes=("user",),
+        aal_level=1,
+    )
+
+    prefs_no_db = await get_user_preferences(request=mock_req, principal=mock_principal)
+    assert prefs_no_db.agent_onboarding_prefs.scope == "local_only"
+
+    updated_no_db = await update_user_preferences(
+        body=UpdateUserPreferencesRequest(scope="global_allowed"),
+        request=mock_req,
+        principal=mock_principal,
+    )
+    assert updated_no_db.agent_onboarding_prefs.scope == "global_allowed"

@@ -13,6 +13,7 @@ import {
   type SystemAboutData,
 } from './aboutApi';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { buildAgentOnboardingPrompt } from '../settings/agentOnboardingPrompt';
 import './AboutPage.css';
 
 export function AboutPage(): JSX.Element {
@@ -93,7 +94,7 @@ export function AboutPage(): JSX.Element {
 
   const handleCopyOnboardingPrompt = async (): Promise<void> => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
-    const textToCopy = `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`;
+    const textToCopy = buildAgentOnboardingPrompt({ origin });
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopiedPrompt(true);

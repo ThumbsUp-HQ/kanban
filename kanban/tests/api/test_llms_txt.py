@@ -124,7 +124,8 @@ async def test_llms_txt_positive_get_and_head(app: FastAPI) -> None:  # noqa: PL
         assert "reality-checker" in body_text
 
         assert "Axis 4 (Persistence Scope)" in body_text
-        assert "[4A] Project" in body_text
+        assert "[4A] Local Project Folder Only" in body_text
+        assert "[Default / Recommended]" in body_text
         assert "[4B] Global" in body_text
         assert "[4C] Both" in body_text
 
@@ -253,6 +254,8 @@ async def test_system_skills_catalog_endpoint(app: FastAPI) -> None:
         assert data["llms_full_url"] == "/llms-full.txt"
         assert "onboarding_prompt" in data
         assert "interview me on Execution Mode" in data["onboarding_prompt"]
+        assert "strictly to the local project folder" in data["onboarding_prompt"]
+        assert "do NOT modify global home/system directories" in data["onboarding_prompt"]
 
         skills = data["skills"]
         assert len(skills) == len(ALLOWED_SKILL_SLUGS)

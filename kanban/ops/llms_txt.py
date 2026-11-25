@@ -52,7 +52,9 @@ ONBOARDING_PROMPT_TEMPLATE: Final[str] = (
     "Read {origin}/llms.txt, learn 👍kanban's ticket workflow, "
     "interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), "
     "Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), "
-    "and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md."
+    "and QA Rigor, and save my preferences strictly to the local project folder (.agents/skills/ and AGENTS.md) - "
+    "do NOT modify global home/system directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents) "
+    "unless I explicitly request global installation."
 )
 
 
@@ -126,10 +128,10 @@ This skill guides any AI coding harness (Claude Code, OpenAI Codex / ChatGPT, or
 NEVER apply configurations, modify dot-directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents), install Git hooks, or create skills without completing Phases 1 and 2 first.
 
 ### Phase 1: Read-Only Discovery
-Inspect current workstation state:
-1. Check which AI harnesses are present (~/.claude, ~/.codex, ~/.gemini, ~/.agents).
-2. Check existing workspace rules and skills (AGENTS.md, CLAUDE.md, .agents/skills/).
-3. Check available MCP endpoints (/mcp/agent, /mcp/docs, /mcp/admin).
+Inspect current local repository state:
+1. Check existing workspace rules and skills (AGENTS.md, CLAUDE.md, .agents/skills/).
+2. Check available MCP endpoints (/mcp/agent, /mcp/docs, /mcp/admin).
+Do NOT inspect or modify global home/system directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents) unless the user explicitly requests global workstation inspection.
 
 ### Phase 2: Interactive 4-Axis Preference Interview
 Present the 4 preference axes to the user with explicit Pros, Cons, Speed, and Token-Cost tradeoffs:
@@ -149,16 +151,16 @@ Present the 4 preference axes to the user with explicit Pros, Cons, Speed, and T
 - [3B] Clean-Room Forensic reality-checker + Specialist Gates + >=95% Coverage [Recommended]: Mandatory UI Specialist Gate (ui-specialist-review.md), Dual API+UI Specialist Gate (api-specialist-review.md + ui-specialist-review.md), passive Clean-Room reality-checker Grade-A READY certification posted verbatim in complete_work, >=95% per-module unit coverage, zero-mock local container verification, and green Dash CI/CD verification.
 
 #### Axis 4 - Persistence Scope
-- [4A] Project Workspace Only (.agents/skills/ + AGENTS.md + CLAUDE.md -> AGENTS.md + .claude/skills -> ../.agents/skills)
-- [4B] Global User Workstation (~/.agents/skills/ linked into ~/.claude/skills/, ~/.codex/skills/, ~/.gemini/skills/, ~/.gemini/config/skills/)
-- [4C] Both Project & Global [Recommended]
+- [4A] Local Project Folder Only (.agents/skills/ and AGENTS.md) [Default / Recommended]: Restrict skills and workspace configuration strictly to the local repository (.agents/skills/ and AGENTS.md with local symlinks like CLAUDE.md -> AGENTS.md). Zero global home/system dot-directory modification.
+- [4B] Global User Workstation (~/.agents/skills/ linked into ~/.claude/skills/, ~/.codex/skills/, ~/.gemini/skills/, ~/.gemini/config/skills/): Only if explicitly requested by the user.
+- [4C] Both Project & Global: Dual persistence, only if explicitly requested by the user.
 
 ### Phase 3: Persistence After Confirmation
 Once the user confirms choices:
 1. Write chosen settings into AGENTS.md and .agents/skills/.
-2. Create cross-harness symlinks:
+2. Create cross-harness symlinks in local project:
    - Project: CLAUDE.md -> AGENTS.md, .claude/skills -> ../.agents/skills
-   - Global: ~/.agents/skills linked to active harness skill dirs.
+   - Global: Only if user explicitly selected [4B] or [4C], link ~/.agents/skills to active harness skill dirs.
 3. Verify with scripts.check_no_dashes (zero em-dashes or en-dashes).
 """
 
@@ -302,12 +304,12 @@ When authoring or executing tickets:
 ### 3. Mandatory Interactive Onboarding Directive ("Interview Before Writing Skills")
 
 Before writing any agent skills or changing project configs, you MUST complete:
-- Phase 1: Read-only inspection of ~/.claude, ~/.codex, ~/.gemini, ~/.agents, AGENTS.md, and .agents/skills/.
+- Phase 1: Read-only inspection of the local repository (AGENTS.md and .agents/skills/) unless the user explicitly requests global workstation inspection.
 - Phase 2: Interactive user interview across the 4 core preference axes:
   - Axis 1 (Execution Topology): [1A] Single-Threaded Agent (Solo Execution), [1B] Teamwork (Coordinator + Sub-Agents) [Recommended], [1C] Multi-Agent Swarm (Parallel Worktree Builders).
   - Axis 2 (Token Budget & Model Tier): [2A] Quota-Sipping Flash 3.8 / Haiku [Recommended], [2B] Balanced Hybrid (Sonnet / Argon + Flash / Haiku), [2C] Unconstrained Sol MAX / Claude Ultra / Gemini Carbon.
   - Axis 3 (QA, Coverage & CI Rigor): [3A] Pragmatic Baseline (>=80%), [3B] Clean-Room Forensic reality-checker + >=95% Coverage [Recommended].
-  - Axis 4 (Persistence Scope): [4A] Project Workspace Only, [4B] Global User Workstation, [4C] Both Project & Global [Recommended].
+  - Axis 4 (Persistence Scope): [4A] Local Project Folder Only (.agents/skills/ and AGENTS.md) [Default / Recommended], [4B] Global User Workstation, [4C] Both Project & Global.
 - Phase 3: Persist confirmed selections to .agents/skills/ and AGENTS.md with cross-harness symlinks.
 
 ### 4. Recommended Skills Catalog

@@ -259,3 +259,52 @@ export async function unlinkIdentity(identityId: string): Promise<void> {
     params: { identity_id: identityId },
   });
 }
+
+export interface AgentOnboardingPrefs {
+  scope: 'local_only' | 'global_allowed';
+  execution_mode: 'single_thread' | 'teamwork' | 'swarm';
+  model_strategy: 'quota_sipping_flash' | 'hybrid' | 'unconstrained_max';
+  qa_rigor: 'standard' | 'strict_forensic';
+  custom_notes: string;
+}
+
+export interface UserPreferencesResponse {
+  principal_id: string;
+  workspace_id: string;
+  agent_onboarding_prefs: AgentOnboardingPrefs;
+}
+
+export interface UpdateUserPreferencesRequest {
+  agent_onboarding_prefs?: Partial<AgentOnboardingPrefs>;
+  scope?: 'local_only' | 'global_allowed';
+  execution_mode?: 'single_thread' | 'teamwork' | 'swarm';
+  model_strategy?: 'quota_sipping_flash' | 'hybrid' | 'unconstrained_max';
+  qa_rigor?: 'standard' | 'strict_forensic';
+  custom_notes?: string;
+}
+
+export async function fetchUserPreferences(): Promise<UserPreferencesResponse> {
+  const result = (await apiFetch('GET', '/api/v1/users/me/preferences' as never)) as UserPreferencesResponse;
+  return (
+    result ?? {
+      principal_id: '',
+      workspace_id: '',
+      agent_onboarding_prefs: {
+        scope: 'local_only',
+        execution_mode: 'swarm',
+        model_strategy: 'quota_sipping_flash',
+        qa_rigor: 'strict_forensic',
+        custom_notes: '',
+      },
+    }
+  );
+}
+
+export async function updateUserPreferences(
+  payload: UpdateUserPreferencesRequest,
+): Promise<UserPreferencesResponse> {
+  return (await apiFetch('PATCH', '/api/v1/users/me/preferences' as never, {
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })) as UserPreferencesResponse;
+}

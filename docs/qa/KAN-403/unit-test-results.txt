@@ -1,0 +1,57 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan403-834486a0
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 33 items
+
+database/tests/migrations/test_p6_21_agent_onboarding_preferences_migration.py::test_p6_21_agent_onboarding_preferences_migration_lifecycle PASSED [  3%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  6%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  9%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 12%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 15%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 18%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 21%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 24%]
+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [ 27%]
+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [ 30%]
+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 33%]
+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 36%]
+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 39%]
+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 42%]
+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 45%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_profile_and_avatar_lifecycle PASSED [ 48%]
+kanban/tests/api/test_user_personal_settings.py::test_password_change_policy_and_session_revocation PASSED [ 51%]
+kanban/tests/api/test_user_personal_settings.py::test_passkey_rename_and_mfa_status PASSED [ 54%]
+kanban/tests/api/test_user_personal_settings.py::test_admin_totp_last_factor_guard PASSED [ 57%]
+kanban/tests/api/test_user_personal_settings.py::test_user_personal_settings_validation_errors PASSED [ 60%]
+kanban/tests/api/test_user_personal_settings.py::test_build_me_response_fallbacks PASSED [ 63%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_avatar_etag_and_blob_error PASSED [ 66%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_password_change_branches PASSED [ 69%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_pepper_and_svg_rejection PASSED [ 72%]
+kanban/tests/api/test_user_personal_settings.py::test_user_settings_raw_binary_upload_and_delete_empty PASSED [ 75%]
+kanban/tests/api/test_user_personal_settings.py::test_user_preferences_agent_onboarding_lifecycle_and_rls PASSED [ 78%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_markdown_parity PASSED [ 81%]
+kanban/tests/test_feature_comparison_parity.py::test_feature_comparison_tables_and_shipped_status PASSED [ 84%]
+kanban/tests/test_feature_comparison_parity.py::test_shipped_tickets_documented PASSED [ 87%]
+kanban/tests/test_feature_comparison_parity.py::test_mcp_tool_counts_and_architecture_delta_parity PASSED [ 90%]
+kanban/tests/test_feature_comparison_parity.py::test_codebase_metrics_parity PASSED [ 93%]
+kanban/tests/test_feature_comparison_parity.py::test_wiki_manifest_synchronization PASSED [ 96%]
+kanban/tests/test_feature_comparison_parity.py::test_no_unicode_dashes PASSED [100%]
+
+============================= 33 passed in 27.99s ==============================
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+database/models/principals.py      121      0      0      0   100%
+kanban/api/v1/user_settings.py     420     70    134     26    81%   136-137, 162-163, 190-191, 194-195, 201-202, 208->225, 222-223, 236->238, 254-257, 263-264, 274-275, 290-316, 370-371, 401->413, 403->413, 404->413, 406, 408->404, 429, 464, 471, 480-483, 512-513, 555-556, 588-589, 609->612, 663-664, 758-766, 791-792, 807, 909-912, 955-958
+kanban/ops/llms_txt.py             126      0     20      0   100%
+----------------------------------------------------------------------------
+TOTAL                              667     70    154     26    87%
+Name                             Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------------
+database/models/principals.py      121      0      0      0   100%
+kanban/api/v1/user_settings.py     410     62    130     24    82%   136-137, 162-163, 190-191, 194-195, 201-202, 208->225, 222-223, 236->238, 254-257, 263-264, 274-275, 290-316, 370-371, 401->413, 403->413, 404->413, 406, 408->404, 429, 464, 471, 480-483, 512-513, 555-556, 588-589, 609->612, 663-664, 758-766, 791-792, 807
+kanban/ops/llms_txt.py             126      0     20      0   100%
+----------------------------------------------------------------------------
+TOTAL                              657     62    150     24    88%

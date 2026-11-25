@@ -32,6 +32,7 @@ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { copyToClipboard } from '../../utils/clipboard';
+import { buildAgentOnboardingPrompt } from './agentOnboardingPrompt';
 import './McpConfigSnippetModal.css';
 import './McpAccessStudio.css';
 
@@ -852,9 +853,7 @@ export function McpAccessStudio({
           data-testid="mcp-copy-llms-prompt-btn"
           onClick={() => {
             const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
-            void copyToClipboard(
-              `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`
-            );
+            void copyToClipboard(buildAgentOnboardingPrompt({ origin }));
           }}
         >
           Copy Agent Skill Prompt
