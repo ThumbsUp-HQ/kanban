@@ -318,13 +318,6 @@ export function PlaneImportStudio(): JSX.Element {
       <header className="kb-plane-import-header">
         <div>
           <h1 className="kb-plane-import-title" data-testid="studio-title">
-            {source === 'plane'
-              ? 'Plane'
-              : source === 'jira'
-                ? 'Jira'
-                : source === 'github'
-                  ? 'GitHub'
-                  : 'Linear'}{' '}
             Migration Import Studio
           </h1>
           <p className="kb-plane-import-subtitle">

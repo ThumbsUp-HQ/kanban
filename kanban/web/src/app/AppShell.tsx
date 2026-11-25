@@ -59,6 +59,24 @@ export interface AppShellProps {
 }
 
 export function computeCurrentSection(pathname: string, fallback = 'Work Items'): string {
+  if (pathname.includes('/admin/imports')) {
+    return 'Migration Import Studio';
+  }
+  if (pathname.includes('/admin/auth')) {
+    return 'Auth Cards';
+  }
+  if (pathname.includes('/admin/oauth')) {
+    return 'OAuth Clients';
+  }
+  if (pathname.includes('/admin/agent-runners')) {
+    return 'Agent Runners';
+  }
+  if (pathname.includes('/admin/ai')) {
+    return 'AI Providers';
+  }
+  if (pathname.includes('/admin/agents')) {
+    return 'Autonomous Agents';
+  }
   if (pathname.includes('/admin/diagnostics') || pathname.includes('/admin/link-auditor')) {
     return 'Diagnostics';
   }

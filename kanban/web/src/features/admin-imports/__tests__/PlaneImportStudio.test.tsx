@@ -39,6 +39,9 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
 
   it('extractEntityCounts returns null for empty/null bundle, and counts arrays correctly', () => {
     expect(extractEntityCounts(null)).toBeNull();
+    expect(extractEntityCounts(12345)).toBeNull();
+    const arrCounts = extractEntityCounts([{ id: '1' }, { id: '2' }]);
+    expect(arrCounts?.issues).toBe(2);
     expect(extractEntityCounts({})).toEqual({
       projects: 0,
       states: 0,
@@ -68,7 +71,7 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     );
 
     expect(screen.getByTestId('studio-title').textContent).toContain(
-      'Plane Migration Import Studio',
+      'Migration Import Studio',
     );
     expect(screen.getByTestId('dropzone-area')).toBeDefined();
 
@@ -286,6 +289,12 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       type: 'application/json',
     });
 
+    // File input with valid file triggers handleFileChange
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(screen.getByText(/export\.json/)).toBeDefined();
+    });
+
     fireEvent.drop(dropzone, {
       dataTransfer: {
         files: [file],
@@ -304,24 +313,24 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId('studio-title').textContent).toContain('Plane Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).toBe('Migration Import Studio');
 
     // Click Jira
     fireEvent.click(screen.getByTestId('source-jira-btn'));
-    expect(screen.getByTestId('studio-title').textContent).toContain('Jira Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).toBe('Migration Import Studio');
     expect(screen.getByTestId('target-project-key-input')).toBeDefined();
 
     // Click GitHub
     fireEvent.click(screen.getByTestId('source-github-btn'));
-    expect(screen.getByTestId('studio-title').textContent).toContain('GitHub Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).toBe('Migration Import Studio');
 
     // Click Linear
     fireEvent.click(screen.getByTestId('source-linear-btn'));
-    expect(screen.getByTestId('studio-title').textContent).toContain('Linear Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).toBe('Migration Import Studio');
 
     // Click back to Plane
     fireEvent.click(screen.getByTestId('source-plane-btn'));
-    expect(screen.getByTestId('studio-title').textContent).toContain('Plane Migration Import Studio');
+    expect(screen.getByTestId('studio-title').textContent).toBe('Migration Import Studio');
     expect(screen.queryByTestId('target-project-key-input')).toBeNull();
   });
 
@@ -389,6 +398,90 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       expect(screen.getByTestId('export-success-alert').textContent).toContain(
         'Successfully downloaded kanban-acme-corp-portable.tar.gz',
       );
+    });
+  });
+
+  it('updates advanced import options and handles dropzone events', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    // Switch to Jira to display target project key input
+    fireEvent.click(screen.getByTestId('source-jira-btn'));
+    const projInput = screen.getByTestId('target-project-key-input');
+    fireEvent.change(projInput, { target: { value: 'MIGPROJ' } });
+    expect((projInput as HTMLInputElement).value).toBe('MIGPROJ');
+
+    // Advanced options controls
+    const batchInput = screen.getByTestId('import-batch-size-input');
+    fireEvent.change(batchInput, { target: { value: '250' } });
+    expect((batchInput as HTMLInputElement).value).toBe('250');
+
+    const conflictSelect = screen.getByTestId('import-conflict-strategy-select');
+    fireEvent.change(conflictSelect, { target: { value: 'overwrite' } });
+    expect((conflictSelect as HTMLSelectElement).value).toBe('overwrite');
+
+    const uuidCheckbox = screen.getByTestId('import-preserve-uuids-checkbox');
+    fireEvent.click(uuidCheckbox);
+    expect((uuidCheckbox as HTMLInputElement).checked).toBe(false);
+
+    const userMapping = screen.getByTestId('import-user-mapping-json');
+    fireEvent.change(userMapping, { target: { value: '{"old-uuid": "@admin"}' } });
+    expect((userMapping as HTMLTextAreaElement).value).toBe('{"old-uuid": "@admin"}');
+
+    // Dropzone drag over and drag leave
+    const dropzone = screen.getByTestId('dropzone-area');
+    fireEvent.dragOver(dropzone);
+    expect(dropzone.classList.contains('kb-plane-dropzone-active')).toBe(true);
+
+    fireEvent.dragLeave(dropzone);
+    expect(dropzone.classList.contains('kb-plane-dropzone-active')).toBe(false);
+
+    // Dropzone click triggers file input click
+    const fileInput = screen.getByTestId('file-input');
+    const clickSpy = vi.spyOn(fileInput, 'click');
+    fireEvent.click(dropzone);
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it('executes dry-run preview and live import for Jira source via submitImport', async () => {
+    const submitImportSpy = vi
+      .spyOn(planeImportApi, 'submitImport')
+      .mockResolvedValue(sampleReport);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    // Switch to Jira
+    fireEvent.click(screen.getByTestId('source-jira-btn'));
+    fireEvent.click(screen.getByTestId('mode-paste-btn'));
+    fireEvent.change(screen.getByTestId('paste-textarea'), {
+      target: { value: JSON.stringify({ issues: [{ key: 'JIRA-1' }] }) },
+    });
+
+    // Run dry-run
+    fireEvent.click(screen.getByTestId('run-dry-run-btn'));
+    await waitFor(() => {
+      expect(submitImportSpy).toHaveBeenCalledWith(
+        'jira',
+        expect.objectContaining({ dry_run: true }),
+      );
+      expect(screen.getByTestId('dry-run-preview-section')).toBeDefined();
+    });
+
+    // Run live import
+    fireEvent.click(screen.getByTestId('execute-import-btn'));
+    await waitFor(() => {
+      expect(submitImportSpy).toHaveBeenCalledWith(
+        'jira',
+        expect.objectContaining({ dry_run: false }),
+      );
+      expect(screen.getByTestId('import-done-section')).toBeDefined();
     });
   });
 });

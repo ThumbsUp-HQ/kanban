@@ -597,7 +597,7 @@ export function Topbar({
                         <span aria-hidden="true" className="kb-avatar-menu-icon">
                           📥
                         </span>
-                        Plane Migration Studio
+                        Migration Import Studio
                       </span>
                     </Link>
 

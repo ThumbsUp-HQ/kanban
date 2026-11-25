@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminStudioSubnav } from '../../features/admin/AdminStudioSubnav';
 import { AdminMcpRedirect } from '../routes';
 import { Topbar } from '../Topbar';
+import { computeCurrentSection } from '../AppShell';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { ShellPanelsProvider } from '../shellPanels';
 import { McpAccessStudio } from '../../features/settings/McpAccessStudio';
@@ -49,7 +50,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
       { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
       { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
-      { id: 'imports', testId: 'tab-admin-imports', label: 'Plane Migration', path: '/admin/imports', icon: '📥' },
+      { id: 'imports', testId: 'tab-admin-imports', label: 'Migration', path: '/admin/imports', icon: '📥' },
       { id: 'standalone', testId: 'tab-admin-standalone', label: 'System & Backups', path: '/admin/standalone', icon: '💾' },
       { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
     ] as const;
@@ -214,6 +215,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(screen.getByTestId('topbar-admin-runners-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-oauth-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-imports-link')).toBeDefined();
+      expect(screen.getByTestId('topbar-admin-imports-link').textContent).toContain('Migration Import Studio');
       expect(screen.getByTestId('topbar-admin-standalone-link')).toBeDefined();
 
       // Documentation & About
@@ -239,6 +241,7 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       expect(screen.getByTestId('topbar-admin-ai-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-oauth-link')).toBeDefined();
       expect(screen.getByTestId('topbar-admin-imports-link')).toBeDefined();
+      expect(screen.getByTestId('topbar-admin-imports-link').textContent).toContain('Migration Import Studio');
 
       // Should NOT have workspace-level settings link
       expect(screen.queryByTestId('topbar-workspace-settings-link')).toBeNull();
@@ -396,6 +399,24 @@ describe('Topbar Avatar Menu Consolidation & Unified Admin Studio Hub Subnav (KA
       await waitFor(() => {
         expect(screen.queryByTestId('tab-admin-mcp')).toBeNull();
       });
+    });
+  });
+
+  describe('5. AppShell computeCurrentSection Mappings (KAN-397)', () => {
+    it('correctly maps server admin routes to descriptive section labels', () => {
+      expect(computeCurrentSection('/admin/imports')).toBe('Migration Import Studio');
+      expect(computeCurrentSection('/admin/auth')).toBe('Auth Cards');
+      expect(computeCurrentSection('/admin/oauth')).toBe('OAuth Clients');
+      expect(computeCurrentSection('/admin/agent-runners')).toBe('Agent Runners');
+      expect(computeCurrentSection('/admin/ai')).toBe('AI Providers');
+      expect(computeCurrentSection('/admin/agents')).toBe('Autonomous Agents');
+      expect(computeCurrentSection('/admin/diagnostics')).toBe('Diagnostics');
+      expect(computeCurrentSection('/admin/link-auditor')).toBe('Diagnostics');
+    });
+
+    it('falls back to provided fallback or Work Items', () => {
+      expect(computeCurrentSection('/other/path', 'Custom Fallback')).toBe('Custom Fallback');
+      expect(computeCurrentSection('/other/path')).toBe('Work Items');
     });
   });
 });
