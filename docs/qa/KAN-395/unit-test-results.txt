@@ -1,119 +1,545 @@
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc1-10e741e1/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc1-10e741e1
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 65 items
+collecting ... collected 90 items
 
 mcp/tests/test_protocol.py::test_case_1_positive_initialize_and_tools_list PASSED [  1%]
-mcp/tests/test_protocol.py::test_case_3_protocol_negatives PASSED        [  3%]
-mcp/tests/test_protocol.py::test_disallowed_origin_rejection PASSED      [  4%]
-mcp/tests/test_protocol.py::test_case_4_session_store_capacity_and_idle_ttl PASSED [  6%]
-mcp/tests/test_protocol.py::test_case_6_transcript_redaction_unit PASSED [  7%]
-mcp/tests/test_protocol.py::test_protocol_additional_edge_cases PASSED   [  9%]
-mcp/tests/test_protocol.py::test_method_not_allowed_and_tool_result_types PASSED [ 10%]
-mcp/tests/test_protocol.py::test_protocol_helper_branches PASSED         [ 12%]
-mcp/tests/test_protocol.py::test_protocol_advanced_dispatch_branches PASSED [ 13%]
-mcp/tests/test_protocol.py::test_protocol_schema_validation_special_branches PASSED [ 15%]
-mcp/tests/test_protocol.py::test_protocol_initialize_and_admin_scope_branches PASSED [ 16%]
-mcp/tests/test_protocol.py::test_case_13_protocol_coverage_exhaustion PASSED [ 18%]
-mcp/tests/test_protocol.py::test_mcp_protocol_version_negotiation_and_http_methods PASSED [ 20%]
-mcp/tests/test_metadata.py::test_protected_resource_metadata_surfaces PASSED [ 21%]
-mcp/tests/test_metadata.py::test_build_protected_resource_metadata_helper PASSED [ 23%]
-mcp/tests/test_metadata.py::test_protected_resource_metadata_endpoint_scoped_paths PASSED [ 24%]
-mcp/tests/test_metadata.py::test_resolve_public_base_url_variations PASSED [ 26%]
-kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [ 27%]
-kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [ 29%]
-kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [ 30%]
-kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [ 32%]
-kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [ 33%]
-kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [ 35%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [ 36%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [ 38%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [ 40%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [ 41%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [ 43%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [ 44%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [ 46%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_8_rfc7591_dynamic_registration_metadata_and_validation PASSED [ 47%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api PASSED [ 49%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_10_scoped_resource_indicators_and_bare_mcp PASSED [ 50%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_11_mcp_api_key_label_and_project_scoping PASSED [ 52%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_12_decision_csrf_and_policy_hardening PASSED [ 53%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_13_admin_register_oauth_client PASSED [ 55%]
-kanban/tests/oauth/test_oauth_flow.py::test_oauth_authorize_decision_origin_null_referrer_policy_security PASSED [ 56%]
-kanban/tests/oauth/test_oauth_flow.py::test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr PASSED [ 58%]
-kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect PASSED [ 60%]
-kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_cross_workspace_scoping_and_mcp_gates PASSED [ 61%]
-kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 63%]
-kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 64%]
-kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 66%]
-kanban/tests/oauth/test_oauth_unit.py::test_client_secret_generation_hashing_and_verification PASSED [ 67%]
-kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 69%]
-kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 70%]
-kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 72%]
-kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 73%]
-kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 75%]
-kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 76%]
-kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 78%]
-kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 80%]
-kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 81%]
-kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 83%]
-kanban/tests/oauth/test_oauth_unit.py::test_consent_csrf_token_lifecycle PASSED [ 84%]
-kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_security_headers_and_admin_surface PASSED [ 86%]
-kanban/tests/oauth/test_oauth_unit.py::test_oauth_server_helpers_coverage PASSED [ 87%]
-kanban/tests/oauth/test_oauth_unit.py::test_verify_same_origin_request_scenarios PASSED [ 89%]
-kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_and_parse_target PASSED [ 90%]
-kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_fail_closed_missing_key_material PASSED [ 92%]
-kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_rejects_inactive_client_statuses PASSED [ 93%]
-kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_state_length_boundaries_4096_accepted_4097_rejected PASSED [ 95%]
-kanban/tests/oauth/test_oauth_unit.py::test_redirect_with_params_handles_existing_query_params PASSED [ 96%]
-kanban/tests/oauth/test_oauth_unit.py::test_gemini_long_state_csrf_hmac_and_tamper_detection PASSED [ 98%]
-kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_reverse_proxy_comma_separated PASSED [100%]
+mcp/tests/test_protocol.py::test_case_3_protocol_negatives PASSED        [  2%]
+mcp/tests/test_protocol.py::test_disallowed_origin_rejection PASSED      [  3%]
+mcp/tests/test_protocol.py::test_case_4_session_store_capacity_and_idle_ttl PASSED [  4%]
+mcp/tests/test_protocol.py::test_case_6_transcript_redaction_unit PASSED [  5%]
+mcp/tests/test_protocol.py::test_protocol_additional_edge_cases PASSED   [  6%]
+mcp/tests/test_protocol.py::test_method_not_allowed_and_tool_result_types PASSED [  7%]
+mcp/tests/test_protocol.py::test_protocol_helper_branches PASSED         [  8%]
+mcp/tests/test_protocol.py::test_protocol_advanced_dispatch_branches PASSED [ 10%]
+mcp/tests/test_protocol.py::test_protocol_schema_validation_special_branches PASSED [ 11%]
+mcp/tests/test_protocol.py::test_protocol_initialize_and_admin_scope_branches PASSED [ 12%]
+mcp/tests/test_protocol.py::test_case_13_protocol_coverage_exhaustion PASSED [ 13%]
+mcp/tests/test_protocol.py::test_mcp_protocol_version_negotiation_and_http_methods PASSED [ 14%]
+mcp/tests/test_metadata.py::test_protected_resource_metadata_surfaces PASSED [ 15%]
+mcp/tests/test_metadata.py::test_build_protected_resource_metadata_helper PASSED [ 16%]
+mcp/tests/test_metadata.py::test_protected_resource_metadata_endpoint_scoped_paths PASSED [ 17%]
+mcp/tests/test_metadata.py::test_resolve_public_base_url_variations PASSED [ 18%]
+kanban/tests/oauth/test_device_flow.py::test_user_code_generator_and_normalizer PASSED [ 20%]
+kanban/tests/oauth/test_device_flow.py::test_rate_limiting_helpers PASSED [ 21%]
+kanban/tests/oauth/test_device_flow.py::test_case_1_positive_device_flow PASSED [ 22%]
+kanban/tests/oauth/test_device_flow.py::test_case_2_device_flow_abuse_and_security PASSED [ 23%]
+kanban/tests/oauth/test_device_flow.py::test_case_3_personal_mcp_keys_lifecycle PASSED [ 24%]
+kanban/tests/oauth/test_device_flow.py::test_device_flow_edge_cases PASSED [ 25%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_1_positive_oauth_flow PASSED [ 26%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_2_pkce_security PASSED  [ 27%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_3_audience_binding_and_alg_confusion PASSED [ 28%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_4_boundary_conditions PASSED [ 30%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_5_admin_aal_and_approval_gate PASSED [ 31%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_6_consent_narrowing_and_deauthorization PASSED [ 32%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_7_metadata_and_security_invariants PASSED [ 33%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_8_rfc7591_dynamic_registration_metadata_and_validation PASSED [ 34%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_9_unauthenticated_authorize_browser_redirect_vs_json_api PASSED [ 35%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_10_scoped_resource_indicators_and_bare_mcp PASSED [ 36%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_11_mcp_api_key_label_and_project_scoping PASSED [ 37%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_12_decision_csrf_and_policy_hardening PASSED [ 38%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_13_admin_register_oauth_client PASSED [ 40%]
+kanban/tests/oauth/test_oauth_flow.py::test_oauth_authorize_decision_origin_null_referrer_policy_security PASSED [ 41%]
+kanban/tests/oauth/test_oauth_flow.py::test_case_15_confidential_client_full_lifecycle_and_gemini_16_dcr PASSED [ 42%]
+kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_handshake_flow_with_long_state_and_query_redirect PASSED [ 43%]
+kanban/tests/oauth/test_oauth_flow.py::test_gemini_oauth_cross_workspace_scoping_and_mcp_gates PASSED [ 44%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_pkce_s256_boundaries PASSED [ 45%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_redirect_uri PASSED [ 46%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_errors PASSED [ 47%]
+kanban/tests/oauth/test_oauth_unit.py::test_client_secret_generation_hashing_and_verification PASSED [ 48%]
+kanban/tests/oauth/test_oauth_unit.py::test_registration_rate_limiter PASSED [ 50%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_surface_from_resource PASSED [ 51%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_projects PASSED [ 52%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_access_token_branches PASSED [ 53%]
+kanban/tests/oauth/test_oauth_unit.py::test_get_jwks_cache PASSED        [ 54%]
+kanban/tests/oauth/test_oauth_unit.py::test_validate_registration_redirect_uris_fragments_and_userinfo PASSED [ 55%]
+kanban/tests/oauth/test_oauth_unit.py::test_parse_resource_target_scenarios PASSED [ 56%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_with_descriptions_and_principal PASSED [ 57%]
+kanban/tests/oauth/test_oauth_unit.py::test_auth_card_config_normalizers PASSED [ 58%]
+kanban/tests/oauth/test_oauth_unit.py::test_format_validation_error PASSED [ 60%]
+kanban/tests/oauth/test_oauth_unit.py::test_consent_csrf_token_lifecycle PASSED [ 61%]
+kanban/tests/oauth/test_oauth_unit.py::test_render_consent_screen_security_headers_and_admin_surface PASSED [ 62%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_server_helpers_coverage PASSED [ 63%]
+kanban/tests/oauth/test_oauth_unit.py::test_verify_same_origin_request_scenarios PASSED [ 64%]
+kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_and_parse_target PASSED [ 65%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_fail_closed_missing_key_material PASSED [ 66%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_rejects_inactive_client_statuses PASSED [ 67%]
+kanban/tests/oauth/test_oauth_unit.py::test_oauth_authorize_state_length_boundaries_4096_accepted_4097_rejected PASSED [ 68%]
+kanban/tests/oauth/test_oauth_unit.py::test_redirect_with_params_handles_existing_query_params PASSED [ 70%]
+kanban/tests/oauth/test_oauth_unit.py::test_gemini_long_state_csrf_hmac_and_tamper_detection PASSED [ 71%]
+kanban/tests/oauth/test_oauth_unit.py::test_resolve_public_base_url_reverse_proxy_comma_separated PASSED [ 72%]
+kanban/tests/oauth/test_oauth_coverage.py::test_check_no_token_in_query_scenarios PASSED [ 73%]
+kanban/tests/oauth/test_oauth_coverage.py::test_get_db_session_unconfigured_factory PASSED [ 74%]
+kanban/tests/oauth/test_oauth_coverage.py::test_parse_request_payload_scenarios PASSED [ 75%]
+kanban/tests/oauth/test_oauth_coverage.py::test_require_admin_aal2_scenarios PASSED [ 76%]
+kanban/tests/oauth/test_oauth_coverage.py::test_resolve_target_scope_scenarios PASSED [ 77%]
+kanban/tests/oauth/test_oauth_coverage.py::test_register_oauth_client_grant_types_validation PASSED [ 78%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_unsupported_grant_type PASSED [ 80%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_exchange_invalid_requests PASSED [ 81%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_exchange_policy_and_cidr_restrictions PASSED [ 82%]
+kanban/tests/oauth/test_oauth_coverage.py::test_user_oauth_grants_endpoints PASSED [ 83%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_oauth_grant_revocation PASSED [ 84%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_patch_oauth_client PASSED [ 85%]
+kanban/tests/oauth/test_oauth_coverage.py::test_admin_delete_oauth_client PASSED [ 86%]
+kanban/tests/oauth/test_oauth_coverage.py::test_device_flow_poll_and_activate_errors PASSED [ 87%]
+kanban/tests/oauth/test_oauth_coverage.py::test_hash_client_secret_pepper_fallback PASSED [ 88%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_basic_auth_errors PASSED [ 90%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_missing_and_expired PASSED [ 91%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_client_inactive_and_redirect_uri PASSED [ 92%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_authorization_code_pkce_and_resource_mismatch PASSED [ 93%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_missing_and_expired PASSED [ 94%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_client_mismatch_and_revoked_parent PASSED [ 95%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_confidential_client_error PASSED [ 96%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_success PASSED [ 97%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_revoke_endpoint_scenarios PASSED [ 98%]
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_device_and_authorize_endpoints PASSED [100%]
 
+=============================== warnings summary ===============================
+kanban/tests/oauth/test_oauth_coverage.py::test_oauth_token_refresh_token_success
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8/kanban/api/v1/oauth.py:1350: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    session.add(new_rt_record)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                       Stmts   Miss Branch BrPart  Cover
 ------------------------------------------------------------
-kanban/api/v1/oauth.py       839    203    234     43    73%
+kanban/api/v1/oauth.py       839     27    234     19    96%
 kanban/oauth/__init__.py       0      0      0      0   100%
-kanban/oauth/device.py       237      8     70      6    95%
+kanban/oauth/device.py       237      3     70      4    98%
 kanban/oauth/jwt.py           71      0     14      0   100%
-kanban/oauth/server.py       223      5     70      4    96%
-mcp/metadata.py               68      3     38      5    91%
+kanban/oauth/server.py       223      1     70      3    99%
+mcp/metadata.py               79      5     40      5    90%
 mcp/protocol.py              603     64    322     40    87%
 ------------------------------------------------------------
-TOTAL                       2041    283    748     98    84%
-============================= 65 passed in 31.25s ==============================
+TOTAL                       2052    100    750     71    93%
+======================== 90 passed, 1 warning in 29.22s ========================
 
-> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc1-10e741e1/kanban/web
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8/kanban/web
 > vitest run src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx src/features/settings/__tests__/McpAccessStudio.test.tsx src/features/auth/LoginPage.test.tsx --coverage
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc1-10e741e1/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan395-rc2-f29afae8/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (13 tests) 427ms
- ✓ src/features/auth/LoginPage.test.tsx (26 tests) 1748ms
-   ✓ LoginPage (KB-P3-35) (26)
-     ✓ renders 3 top buttons in API order, Primary badge only on first, and Local Admin only in disclosure (Mandatory Test Case 1) 303ms
- ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (46 tests) 3384ms
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > supports toggling scope checkboxes
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > closes on Escape key press and backdrop click
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx > ConnectOAuthAppModal (KAN-28) > allows dynamically changing Target Scope between Workspace, Single Project, and Server (KAN-395)
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ConnectOAuthAppModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (15 tests) 466ms
+stderr | src/features/auth/LoginPage.test.tsx > LoginPage (KB-P3-35) > copies emergency unlock command to clipboard
+An update to LoginPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/LoginPage.test.tsx (26 tests) 1517ms
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > closes mint modal via cancel button and backdrop click, handles empty label and load error
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > hides unlimited option when allow_unlimited_mcp_keys is false
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > validates CIDR input client-side, showing inline accessible error on malformed CIDR and disabling submit (KAN-68 Negative)
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > supports granular capability bit toggles and switches preset to custom (KAN-68 Edge)
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > covers scope filter pills, project selector change, and view toggling
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > structures modal around the 4 plain-English questions and live summary
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > Simplified Mint Modal 4-Question Form (KAN-390) > expands Advanced Capability & Network Restrictions revealing capability-preset-select, updating overrides and summary
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (46 tests) 3176ms
 
  Test Files  3 passed (3)
-      Tests  85 passed (85)
-   Start at  00:42:09
-   Duration  5.74s (tests 60%, environment 21%, import 12%, transform 6%, worker 1%)
+      Tests  87 passed (87)
+   Start at  02:32:16
+   Duration  5.28s (tests 60%, environment 23%, import 11%, transform 5%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.05 |    95.64 |    98.7 |   99.48 |                   
+All files          |    99.2 |    96.48 |    98.7 |   99.48 |                   
  auth              |   98.87 |    95.16 |   96.42 |   98.79 |                   
   LoginPage.tsx    |   98.87 |    95.16 |   96.42 |   98.79 | 143               
- settings          |   99.07 |     95.7 |    99.2 |   99.59 |                   
-  ...hAppModal.tsx |   99.02 |     93.2 |     100 |     100 | ...09,202,336,449 
+ settings          |   99.26 |    96.63 |    99.2 |   99.59 |                   
+  ...hAppModal.tsx |     100 |    98.05 |     100 |     100 | 79-82             
   ...essStudio.tsx |   99.09 |    96.29 |   98.94 |    99.5 | 854-855           
 -------------------|---------|----------|---------|---------|-------------------

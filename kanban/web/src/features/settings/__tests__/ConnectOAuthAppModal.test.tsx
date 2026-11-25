@@ -248,6 +248,10 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     fireEvent.click(screen.getByTestId('connect-oauth-modal-backdrop'));
     expect(handleClose).toHaveBeenCalledTimes(1);
 
+    // Non-Escape key press (no-op)
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
     // Escape key press
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(handleClose).toHaveBeenCalledTimes(2);
@@ -543,5 +547,74 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
     // Check Gemini snippet reflects single scope
     fireEvent.click(screen.getByTestId('tab-gemini-app'));
     expect(screen.getByTestId('command-snippet').textContent).toContain('Requested Scopes: agent:read');
+
+    // Uncheck agent:read as well (empty scopes fallback branches)
+    const readCheck = screen.getByTestId<HTMLInputElement>('scope-check-agent:read');
+    fireEvent.click(readCheck);
+    expect(screen.getByTestId('scope-hint').textContent).toBe('Selected scopes: None');
+    expect(screen.getByTestId('command-snippet').textContent).toContain('Requested Scopes: agent:read, agent:write');
+    expect(screen.getByTestId('gemini-app-instructions').textContent).toContain('agent:read, agent:write');
+  });
+
+  it('covers server scope tier initialization and project without scopeTier', () => {
+    // 1. scopeTier="server" initial state
+    const { unmount: u1 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          scopeTier="server"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId<HTMLSelectElement>('scope-tier-select').value).toBe('server');
+    expect(screen.getByTestId('mcp-resource-url').textContent).toBe('http://localhost:3000/mcp/agent');
+    u1();
+
+    // 2. !scopeTier and projectKey="CUSTOM"
+    const { unmount: u2 } = render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          projectKey="CUSTOM"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId<HTMLSelectElement>('scope-tier-select').value).toBe('project');
+    u2();
+  });
+
+  it('renders project options where name equals key or name is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { key: 'SAME', name: 'SAME' },
+            { key: 'NONAME' },
+          ]),
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <ConnectOAuthAppModal
+          workspaceSlug="test-ws"
+          scopeTier="project"
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const projectSelect = screen.getByTestId<HTMLSelectElement>('project-select');
+    expect(projectSelect.options.length).toBe(2);
+    expect(projectSelect.options[0]?.text).toBe('SAME');
+    expect(projectSelect.options[1]?.text).toBe('NONAME');
+
+    vi.unstubAllGlobals();
   });
 });

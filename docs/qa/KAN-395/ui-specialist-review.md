@@ -1,26 +1,36 @@
-# UI Specialist Review: KAN-395 (Round 1 Remediation)
+# UI Specialist Review: KAN-395 (Round 2 Remediation)
 
 ## Ticket Reference
 - **Ticket ID**: `KAN-395` (`Support 1,200+ character OAuth state tokens for Google Gemini MCP OAuth 2.1 integration`)
 - **Reviewer Persona**: UI/UX Design Specialist (`ui-designer.md` / `ux-architect.md`)
-- **Branch**: `fix/KAN-395-rc1`
+- **Branch**: `fix/KAN-395-rc2`
 - **Commit**: `b1182fd1`
 - **Status**: `APPROVED`
 - **Date**: 2026-11-25
 
 ---
 
-## 1. Visual & Interaction Architecture Audit (Round 1 Remediation)
+## 1. Visual & Interaction Architecture Audit (Round 2 Remediation)
 
-### A. Mobile URL Wrapping & Modal Height Allowance (`ConnectOAuthAppModal.css`)
-- **URL Wrapping on Mobile**:
-  - In `ConnectOAuthAppModal.css`, `.kb-connect-oauth-url` was updated with:
-    `white-space: normal; word-break: break-all; overflow-wrap: anywhere; min-width: 0;`
-  - On `390x844` mobile viewport, the long resource URLs and RFC 8414 URLs wrap cleanly onto multiple lines without truncating horizontally or squishing the adjacent `Copy` button (`flex-shrink: 0`).
-- **Modal Vertical Breathing Room & Layout**:
-  - Modal height allowance expanded to `max-height: min(94vh, 860px)` with tightened padding across header (`12px 20px`), body (`12px 20px`), and field gaps (`10px`).
-  - On `1440x900` desktop, the entire Gemini instructional callout and snippet box fit visibly above the fold with zero mid-line slicing of `agent:write.` (even when the dynamic Target Project selector is open).
-  - On `390x844` mobile, the 5 tool tabs wrap onto two accessible rows without vertical or horizontal clipping at scroll edges.
+### A. Above-the-Fold Fit on 1440x900 Across All Scopes (`ConnectOAuthAppModal.css`)
+- **Root Cause from Round 1**:
+  - In Round 1 screenshots (`connect-oauth-modal-gemini-workspace-1440x900-light.png`, `project-1440x900-light.png`, `server-1440x900-light.png`), the dark code snippet box was sliced horizontally mid-line at the bottom edge of `.kb-connect-oauth-body`.
+- **Remediation in `ConnectOAuthAppModal.css`**:
+  - Compacted `.kb-connect-oauth-card` height to `max-height: min(96vh, 880px)`.
+  - Streamlined container and inner padding:
+    - Header padding: `10px 18px` (from `12px 20px`)
+    - Body padding: `10px 18px`, `gap: 8px` (from `12px 20px`, `gap: 10px`)
+    - Endpoints grid: `padding: 8px 10px`, `gap: 6px`
+    - Connector tabs: `gap: 4px`, tab height `30px`, tab padding `3px 8px`, font size `12px`
+    - Gemini instructional hint: `padding: 6px 10px`, `gap: 2px`, `margin-bottom: 4px`
+    - Code snippet container: `padding: 6px 10px`, font size `11.5px`, line-height `1.35`
+    - Footer padding: `10px 18px`
+- **Zero Mid-Line Slicing Result**:
+  - On `1440x900` desktop, across **all three scopes** (`workspace`, `project`, AND `server`), the entire modal fits comfortably inside the viewport with generous top and bottom margins.
+  - The Gemini instructional hint, code snippet box, Copy Command button, Device Code instruction, and Close footer button are 100% visible above the fold with zero horizontal mid-line slicing.
+- **Responsive Proof across 1024x768, 768x1024, and 390x844**:
+  - On `1024x768` (laptop) and `768x1024` (tablet), the modal body scrolls cleanly within its boundaries without layout overflow.
+  - On `390x844` (mobile portrait), long URLs wrap cleanly with `word-break: break-all; overflow-wrap: anywhere;` without squishing action buttons, and tabs wrap naturally across two rows.
 
 ### B. Genuine WCAG AA Light Theme Support (`CONSENT_STYLE_CSS`)
 - **Light Theme Palette in Server-Rendered CSS**:
@@ -39,10 +49,10 @@ Audited all 14 fresh Playwright screenshots in `docs/qa/KAN-395/screenshots/`:
 
 | Viewport | Artifact | Theme | Verification Findings |
 | :--- | :--- | :--- | :--- |
-| **1440x900** | `connect-oauth-modal-gemini-workspace-1440x900-light.png` | Light | Snippet box and Gemini hint fit cleanly above fold; zero text clipping. |
-| **1440x900** | `connect-oauth-modal-gemini-workspace-1440x900-dark.png` | Dark | Dark theme contrast compliant; crisp border lines; copy button visible. |
-| **1440x900** | `connect-oauth-modal-gemini-project-1440x900-light.png` | Light | Project dropdown displays cleanly; resource URL updates dynamically. |
-| **1440x900** | `connect-oauth-modal-gemini-server-1440x900-light.png` | Light | Server-tier root MCP URL cleanly displayed; project selector absent as intended. |
+| **1440x900** | `connect-oauth-modal-gemini-workspace-1440x900-light.png` | Light | Modal fits cleanly in viewport; code snippet box and Copy Command 100% above fold; zero mid-line slicing. |
+| **1440x900** | `connect-oauth-modal-gemini-workspace-1440x900-dark.png` | Dark | Dark theme contrast compliant; crisp border lines; full code box above fold. |
+| **1440x900** | `connect-oauth-modal-gemini-project-1440x900-light.png` | Light | Dynamic Project dropdown visible; entire snippet and copy button above fold with zero mid-line slicing. |
+| **1440x900** | `connect-oauth-modal-gemini-server-1440x900-light.png` | Light | Server-tier root MCP URL cleanly displayed; entire snippet and copy button above fold with zero mid-line slicing. |
 | **1024x768** | `connect-oauth-modal-gemini-workspace-1024x768.png` | Light | Laptop viewport; clean scroll bounds; zero horizontal overflow. |
 | **768x1024** | `connect-oauth-modal-gemini-workspace-768x1024.png` | Light | Tablet portrait; tabs wrap comfortably; action buttons fully reachable. |
 | **390x844** | `connect-oauth-modal-gemini-workspace-390x844.png` | Light | Mobile portrait; URLs wrap with `break-all`; copy buttons retain >=44px touch targets. |
@@ -72,4 +82,4 @@ Audited all 14 fresh Playwright screenshots in `docs/qa/KAN-395/screenshots/`:
 
 **`APPROVED`**
 
-The Round-1 remediation resolves all reality-checker findings with genuine light theme support, responsive mobile URL wrapping, and unclipped multi-viewport layouts.
+The Round-2 remediation completely resolves the above-the-fold fit on 1440x900 across workspace, project, and server scopes with zero mid-line slicing, verified via visual inspection of all 14 fresh Playwright screenshots.
