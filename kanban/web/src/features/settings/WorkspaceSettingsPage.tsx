@@ -1676,8 +1676,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     {groupActionError && (
                       <div data-testid="group-cycle-alert" id="group-cycle-alert" className="kb-settings-alert kb-settings-alert-error" role="alert">
                         <span>{groupActionError}</span>
-                        {/cycle/i.test(groupActionError) && (
-                          <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '8px' }}>
+                        {/(cycle|cyclic)/i.test(groupActionError) && (
+                          <span className="kb-badge kb-badge-error" data-testid="group-cycle-alert-badge" style={{ marginLeft: '8px' }}>
                             Cycle Detected
                           </span>
                         )}
@@ -1771,7 +1771,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                       >
                                         {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
                                       </span>
-                                      {groupActionError && /cycle/i.test(groupActionError) && m.id === selectedAddMemberId && (
+                                      {groupActionError && /(cycle|cyclic)/i.test(groupActionError) && m.id === selectedAddMemberId && (
                                         <span className="kb-badge kb-badge-error" data-testid="group-cycle-pill" style={{ marginLeft: '6px' }}>
                                           Cycle Detected
                                         </span>
