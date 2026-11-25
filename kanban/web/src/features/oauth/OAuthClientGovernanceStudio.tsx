@@ -19,7 +19,11 @@ import { dispatchAal2StepUpIfRequired } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
 import './OAuthClientGovernanceStudio.css';
 
-export function OAuthClientGovernanceStudio(): JSX.Element {
+export interface OAuthClientGovernanceStudioProps {
+  isServerAdmin?: boolean;
+}
+
+export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClientGovernanceStudioProps = {}): JSX.Element {
   const [clients, setClients] = useState<OAuthClientItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +313,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
         </div>
       </header>
 
-      <AdminStudioSubnav activeTab="oauth" />
+      <AdminStudioSubnav activeTab="oauth" isServerAdmin={isServerAdmin} />
 
       {error !== null && (
         <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">

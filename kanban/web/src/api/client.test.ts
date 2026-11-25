@@ -228,10 +228,10 @@ describe('getCsrfToken', () => {
     expect(getCsrfToken()).toBeNull();
   });
 
-  it('prefers cachedCsrfToken over document.cookie', () => {
+  it('prefers document.cookie over cachedCsrfToken (KAN-404)', () => {
     setCookie('cookie-token');
     setCsrfToken('cached-token');
-    expect(getCsrfToken()).toBe('cached-token');
+    expect(getCsrfToken()).toBe('cookie-token');
   });
 
   it('returns the raw value when it is not valid percent-encoding', () => {
@@ -377,6 +377,7 @@ describe('CSRF bootstrap and retry (KANBA-230)', () => {
     ).rejects.toMatchObject({ status: 500 });
 
     // 6. setCsrfToken when protocol is https: or empty
+    clearCookie();
     const origLocation = window.location;
     try {
       // @ts-expect-error test location mocking
