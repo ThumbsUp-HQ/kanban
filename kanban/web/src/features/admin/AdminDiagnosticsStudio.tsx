@@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './AdminDiagnosticsStudio.css';
 
@@ -588,6 +589,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
           <h2 id="health-heading" className="admin-diag-panel-title">
             <span aria-hidden="true">🏥</span>
             Subsystem Operational Health (7 Subsystems)
+            <FieldHelpHint
+              title="Subsystem Operational Health"
+              summary="Real-time operational health telemetry across core subsystems (Database, Realtime Hub, Job Worker, Sandbox, Agents, Runners, Rate Limiter) with automated failover and RLS enforcement."
+              docHref="/docs/admin-diagnostics-and-link-inspector-studio"
+              testId="subsystem-health-help"
+            />
           </h2>
           <div className="admin-diag-subsystems-grid">
             {subsystemsList.map((sub) => (
