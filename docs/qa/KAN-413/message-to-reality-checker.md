@@ -22,7 +22,7 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
 | **Failover Stack Reordering** | Atomic priority stack reordering (`PUT .../order`). | Reordered stack to `[OpenAI (10), Ollama (20), Gemini (30)]` via `PUT /api/v1/workspaces/{ws}/ai-providers/order` (HTTP 200 OK). | **PASS** |
 | **Monthly Token Budgets** | Verify 0 allowance (Hard AI Freeze) and unlimited quota (10B tokens). | `token_cap = 0` triggers `Hard AI Freeze` warning banner and blocks completions; `token_cap = 10_000_000_000` persists round-trip cleanly (HTTP 200 OK). | **PASS** |
 | **Air-Gap Egress Wall** | Configure `air_gap_mode = True`; prove cloud providers blocked while local Ollama permitted. | Cloud provider creation rejected with HTTP 409 `AIR_GAP_EGRESS_DENIED`; cloud probe returns `AIR_GAP_EGRESS_DENIED`; local Ollama probe returns HTTP 200 OK. | **PASS** |
-| **Multi-Harness :validate** | Test `:validate` endpoint across `in_app_sdk`, `cli_pipe`, and `remote_runner`. | `POST /api/v1/projects/{proj}/agent-definitions/{id}/validate` returns HTTP 200 OK `valid: true` with complete 4-section reports. | **PASS** |
+| **Multi-Harness :validate** | Test `:validate` endpoint across `in_app_sdk`, `cli_pipe`, and `remote_runner`. | `POST /api/v1/admin/agent-definitions/{id}:validate` returns HTTP 200 OK `valid: true` with complete 4-section reports. | **PASS** |
 | **Sparkle & Sticky Synthesis** | Test Sparkle FIM completion and Sticky-to-Doc promotion preview. | Sparkle FIM streams SSE chunks cleanly (HTTP 200 OK); Sticky promote preview returns structured markdown document proposal (`Incident Response Spec`, HTTP 200 OK). | **PASS** |
 | **Cross-Project FORCE RLS** | Verify tenant isolation under PostgreSQL `FORCE ROW LEVEL SECURITY`. | Project Alpha admin attempting to modify Project Beta agent definition returns HTTP 404 `NOT_FOUND`. | **PASS** |
 | **Onboarding & /llms.txt** | Verify `/llms.txt` retrieval and preference persistence. | `GET /llms.txt` returns 3,941 bytes; `PATCH /api/v1/users/me/preferences` persists `qa_rigor: strict_forensic` (HTTP 200 OK). | **PASS** |
@@ -30,7 +30,7 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
 | **Token Replay Rejection** | Replay consumed single-use enrollment token. | Replayed token rejected with HTTP 401 `ENROLLMENT_TOKEN_INVALID`. | **PASS** |
 | **In-Flight CLI Bug Fix** | Fix premature key serialization in `agent/remote_runner/cli.py`. | Key write deferred until server responds HTTP 201 Created, preventing private key clobbering on replay failures. | **PASS** |
 | **mTLS PoP WebSocket Handshake** | Live challenge-response handshake over WebSocket. | Client signs `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}`; server verifies and responds with `hello_ack`. | **PASS** |
-| **Cert Revocation & Ejection** | Revoke runner certificate; prove immediate WebSocket reconnect rejection. | Revoked via `POST /api/v1/agent-runners/{id}/revoke` (HTTP 200 OK); reconnect rejected with HTTP 403 Forbidden. | **PASS** |
+| **Cert Revocation & Ejection** | Revoke runner certificate; prove immediate WebSocket reconnect rejection. | Revoked via `POST /api/v1/admin/agent-runners/{id}:revoke` (HTTP 200 OK); reconnect rejected with HTTP 403 Forbidden. | **PASS** |
 
 ---
 

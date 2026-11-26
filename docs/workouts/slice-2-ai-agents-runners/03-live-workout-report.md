@@ -432,7 +432,7 @@ HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: completion
-data: {"text": "    session = user.authenticate(password)\\n    return session", "tokens": 2}
+data: {"text": "    session = user.authenticate(password)\n    return session", "tokens": 2}
 
 event: done
 data: {"status": "ok", "ttft_ms": 7.99, "total_ms": 8.29}
