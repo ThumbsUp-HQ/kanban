@@ -12,6 +12,8 @@
 
 import React, { useEffect, useRef, useState, type JSX, type ChangeEvent, type SyntheticEvent } from 'react';
 import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './RbacPolicyBuilder.css';
 
 export interface RbacRole {
@@ -368,63 +370,104 @@ export function RbacPolicyBuilder({
     <div className="rbac-builder-container" data-testid="rbac-policy-builder">
       {/* Narrative Sentence Header */}
       <header className="rbac-narrative-header" aria-label="Narrative RBAC sentence">
-        <span>As a</span>
-        <select
-          className="rbac-tier-select"
-          value={roleTier}
-          data-testid="rbac-tier-select"
-          onChange={(e) => { setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin'); }
-          }
-        >
-          {isServerAdmin && <option value="system admin">system admin</option>}
-          <option value="workspace admin">workspace admin</option>
-          <option value="project admin">project admin</option>
-        </select>
-        <span>I want</span>
-        <div className="rbac-chips-group">
-          {selectedRoles.map((r) => (
-            <span key={r.id} className="rbac-role-chip" data-testid={`rbac-selected-role-${r.slug}`}>
-              <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
-                <circle cx="6" cy="6" r="5" fill={r.color_hex ?? '#3b82f6'} />
-              </svg>
-              <span>{r.name}</span>
-              <button
-                type="button"
-                className="rbac-chip-remove"
-                aria-label={`Deselect ${r.name}`}
-                onClick={() => { handleToggleRoleSelection(r.id); }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          {unselectedRoles.length > 0 && (
+        <div className="rbac-narrative-sentence">
+          <label className="rbac-tier-label" htmlFor="rbac-tier-select">
+            <span>As a</span>
+          </label>
+          <div className="rbac-tier-control-group">
             <select
-              className="rbac-select-role"
-              data-testid="rbac-select-role-dropdown"
-              onChange={handleSelectRoleFromDropdown}
-              value=""
+              id="rbac-tier-select"
+              className="rbac-tier-select"
+              value={roleTier}
+              data-testid="rbac-tier-select"
+              aria-label="Administrative Scope Tier"
+              onChange={(e) => {
+                setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin');
+              }}
             >
-              <option value="" disabled>
-                + Select role
-              </option>
-              {unselectedRoles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
+              {isServerAdmin && <option value="system admin">system admin</option>}
+              <option value="workspace admin">workspace admin</option>
+              <option value="project admin">project admin</option>
             </select>
-          )}
-          <button
-            type="button"
-            className="rbac-create-role-btn"
-            data-testid="rbac-open-create-role"
-            onClick={handleOpenPopover}
-          >
-            *create new*
-          </button>
+            <FieldHelpHint
+              title="Administrative Scope Tier"
+              summary="Defines role scope propagation and administrative privilege hierarchy. System Admin permissions apply server-wide, Workspace Admin permissions propagate across all workspace resources, and Project Admin permissions are constrained to individual projects."
+              defaultValue="workspace admin"
+              validValues={[
+                {
+                  label: 'system admin',
+                  description:
+                    'Server-wide administrative scope with full authority over workspaces, system roles, and global configurations.',
+                },
+                {
+                  label: 'workspace admin',
+                  description:
+                    'Workspace-level authority governing projects, member provisioning, groups, and workspace RBAC policies.',
+                },
+                {
+                  label: 'project admin',
+                  description:
+                    'Scoped project-level control over issues, fields, workflows, sprints, and project-specific settings.',
+                },
+              ]}
+              docHref="/docs/role-and-permission-matrix"
+              testId="rbac-tier-help"
+              ariaLabel="Help for Administrative Scope Tier"
+            />
+          </div>
+          <span>I want</span>
+          <div className="rbac-chips-group">
+            {selectedRoles.map((r) => (
+              <span key={r.id} className="rbac-role-chip" data-testid={`rbac-selected-role-${r.slug}`}>
+                <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
+                  <circle cx="6" cy="6" r="5" fill={r.color_hex ?? '#3b82f6'} />
+                </svg>
+                <span>{r.name}</span>
+                <button
+                  type="button"
+                  className="rbac-chip-remove"
+                  aria-label={`Deselect ${r.name}`}
+                  onClick={() => { handleToggleRoleSelection(r.id); }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {unselectedRoles.length > 0 && (
+              <select
+                className="rbac-select-role"
+                data-testid="rbac-select-role-dropdown"
+                onChange={handleSelectRoleFromDropdown}
+                value=""
+              >
+                <option value="" disabled>
+                  + Select role
+                </option>
+                {unselectedRoles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              className="rbac-create-role-btn"
+              data-testid="rbac-open-create-role"
+              onClick={handleOpenPopover}
+            >
+              *create new*
+            </button>
+          </div>
+          <span>to have access to</span>
         </div>
-        <span>to have access to</span>
+        <div className="rbac-header-actions">
+          <StudioDocLink
+            href="/docs/role-and-permission-matrix"
+            title="RBAC Policy Reference"
+            testId="rbac-policy-doc-link"
+          />
+        </div>
       </header>
 
       {errorMsg && (
