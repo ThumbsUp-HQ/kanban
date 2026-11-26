@@ -1,0 +1,172 @@
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 31c14f45..afd3cc35 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -301,6 +301,35 @@
+   margin-bottom: 12px;
+ }
+ 
++.kb-modules-advanced-fields {
++  width: 100%;
++  margin: var(--space-2, 8px) 0;
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm, 4px);
++  padding: var(--space-2, 8px) var(--space-3, 12px);
++  background: var(--bg-surface);
++}
++
++.kb-modules-advanced-fields summary {
++  cursor: pointer;
++  font-size: 13px;
++  font-weight: 500;
++  color: var(--fg-muted);
++  user-select: none;
++}
++
++.kb-modules-advanced-fields summary:hover {
++  color: var(--fg-primary);
++}
++
++.kb-modules-advanced-fields[open] {
++  padding-bottom: var(--space-3, 12px);
++}
++
++.kb-modules-advanced-row {
++  margin-top: var(--space-3, 12px);
++}
++
+ .kb-form-row {
+   display: flex;
+   gap: 12px;
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index f55d7b76..eae80f74 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -668,6 +668,12 @@ describe('IssuesWorkspaceRoute', () => {
+     await waitFor(() => {
+       expect(screen.getByTestId('module-error-banner').textContent).toContain('Module creation rejected');
+     });
++
++    // KAN-464: Collapsible advanced fields in Create Module form
++    const advancedDetails = document.querySelector('details.kb-modules-advanced-fields');
++    expect(advancedDetails).not.toBeNull();
++    const summary = advancedDetails?.querySelector('summary');
++    expect(summary?.textContent).toContain('Optional Dates & Description');
+   });
+ 
+   it('renders ProjectViewsRedirect, ProjectSavedViewsView, and fallback views without query client', () => {
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index b8f0788a..f19a0aaa 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -1476,9 +1476,10 @@ function ProjectModulesViewInner({
+             </div>
+           )}
+           <div className="kb-form-row">
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Module Name</span>
++            <div className="kb-form-field">
++              <label htmlFor="new-module-name-input" className="kb-form-label">Module Name</label>
+               <input
++                id="new-module-name-input"
+                 type="text"
+                 className="kb-form-input"
+                 data-testid="new-module-name-input"
+@@ -1487,10 +1488,11 @@ function ProjectModulesViewInner({
+                 onChange={(e) => { setNewName(e.target.value); }}
+                 required
+               />
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Status</span>
++            </div>
++            <div className="kb-form-field">
++              <label htmlFor="new-module-status-select" className="kb-form-label">Status</label>
+               <select
++                id="new-module-status-select"
+                 className="kb-form-input"
+                 data-testid="new-module-status-select"
+                 value={status}
+@@ -1503,40 +1505,48 @@ function ProjectModulesViewInner({
+                 <option value="completed">Completed</option>
+                 <option value="cancelled">Cancelled</option>
+               </select>
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Start Date</span>
+-              <input
+-                type="date"
+-                className="kb-form-input"
+-                data-testid="new-module-start-input"
+-                value={startDate}
+-                onChange={(e) => { setStartDate(e.target.value); }}
+-                title="Start date"
+-              />
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Target Date</span>
+-              <input
+-                type="date"
+-                className="kb-form-input"
+-                data-testid="new-module-target-input"
+-                value={targetDate}
+-                onChange={(e) => { setTargetDate(e.target.value); }}
+-                title="Target date"
+-              />
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Description</span>
+-              <input
+-                type="text"
+-                className="kb-form-input"
+-                data-testid="new-module-desc-input"
+-                placeholder="Description (optional)..."
+-                value={description}
+-                onChange={(e) => { setDescription(e.target.value); }}
+-              />
+-            </label>
++            </div>
++            <details className="kb-modules-advanced-fields">
++              <summary>Optional Dates & Description</summary>
++              <div className="kb-form-row kb-modules-advanced-row">
++                <div className="kb-form-field">
++                  <label htmlFor="new-module-start-input" className="kb-form-label">Start Date</label>
++                  <input
++                    id="new-module-start-input"
++                    type="date"
++                    className="kb-form-input"
++                    data-testid="new-module-start-input"
++                    value={startDate}
++                    onChange={(e) => { setStartDate(e.target.value); }}
++                    title="Start date"
++                  />
++                </div>
++                <div className="kb-form-field">
++                  <label htmlFor="new-module-target-input" className="kb-form-label">Target Date</label>
++                  <input
++                    id="new-module-target-input"
++                    type="date"
++                    className="kb-form-input"
++                    data-testid="new-module-target-input"
++                    value={targetDate}
++                    onChange={(e) => { setTargetDate(e.target.value); }}
++                    title="Target date"
++                  />
++                </div>
++                <div className="kb-form-field">
++                  <label htmlFor="new-module-desc-input" className="kb-form-label">Description</label>
++                  <input
++                    id="new-module-desc-input"
++                    type="text"
++                    className="kb-form-input"
++                    data-testid="new-module-desc-input"
++                    placeholder="Description (optional)..."
++                    value={description}
++                    onChange={(e) => { setDescription(e.target.value); }}
++                  />
++                </div>
++              </div>
++            </details>
+             <button
+               type="submit"
+               className="kb-btn-primary"

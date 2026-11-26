@@ -301,6 +301,35 @@
   margin-bottom: 12px;
 }
 
+.kb-modules-advanced-fields {
+  width: 100%;
+  margin: var(--space-2, 8px) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--bg-surface);
+}
+
+.kb-modules-advanced-fields summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  user-select: none;
+}
+
+.kb-modules-advanced-fields summary:hover {
+  color: var(--fg-primary);
+}
+
+.kb-modules-advanced-fields[open] {
+  padding-bottom: var(--space-3, 12px);
+}
+
+.kb-modules-advanced-row {
+  margin-top: var(--space-3, 12px);
+}
+
 .kb-form-row {
   display: flex;
   gap: 12px;

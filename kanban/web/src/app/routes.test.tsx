@@ -668,6 +668,12 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('module-error-banner').textContent).toContain('Module creation rejected');
     });
+
+    // KAN-464: Collapsible advanced fields in Create Module form
+    const advancedDetails = document.querySelector('details.kb-modules-advanced-fields');
+    expect(advancedDetails).not.toBeNull();
+    const summary = advancedDetails?.querySelector('summary');
+    expect(summary?.textContent).toContain('Optional Dates & Description');
   });
 
   it('renders ProjectViewsRedirect, ProjectSavedViewsView, and fallback views without query client', () => {

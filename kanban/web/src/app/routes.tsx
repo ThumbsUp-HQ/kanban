@@ -1476,9 +1476,10 @@ function ProjectModulesViewInner({
             </div>
           )}
           <div className="kb-form-row">
-            <label className="kb-form-field">
-              <span className="kb-form-label">Module Name</span>
+            <div className="kb-form-field">
+              <label htmlFor="new-module-name-input" className="kb-form-label">Module Name</label>
               <input
+                id="new-module-name-input"
                 type="text"
                 className="kb-form-input"
                 data-testid="new-module-name-input"
@@ -1487,10 +1488,11 @@ function ProjectModulesViewInner({
                 onChange={(e) => { setNewName(e.target.value); }}
                 required
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Status</span>
+            </div>
+            <div className="kb-form-field">
+              <label htmlFor="new-module-status-select" className="kb-form-label">Status</label>
               <select
+                id="new-module-status-select"
                 className="kb-form-input"
                 data-testid="new-module-status-select"
                 value={status}
@@ -1503,40 +1505,48 @@ function ProjectModulesViewInner({
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
               </select>
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Start Date</span>
-              <input
-                type="date"
-                className="kb-form-input"
-                data-testid="new-module-start-input"
-                value={startDate}
-                onChange={(e) => { setStartDate(e.target.value); }}
-                title="Start date"
-              />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Target Date</span>
-              <input
-                type="date"
-                className="kb-form-input"
-                data-testid="new-module-target-input"
-                value={targetDate}
-                onChange={(e) => { setTargetDate(e.target.value); }}
-                title="Target date"
-              />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Description</span>
-              <input
-                type="text"
-                className="kb-form-input"
-                data-testid="new-module-desc-input"
-                placeholder="Description (optional)..."
-                value={description}
-                onChange={(e) => { setDescription(e.target.value); }}
-              />
-            </label>
+            </div>
+            <details className="kb-modules-advanced-fields">
+              <summary>Optional Dates & Description</summary>
+              <div className="kb-form-row kb-modules-advanced-row">
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-start-input" className="kb-form-label">Start Date</label>
+                  <input
+                    id="new-module-start-input"
+                    type="date"
+                    className="kb-form-input"
+                    data-testid="new-module-start-input"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); }}
+                    title="Start date"
+                  />
+                </div>
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-target-input" className="kb-form-label">Target Date</label>
+                  <input
+                    id="new-module-target-input"
+                    type="date"
+                    className="kb-form-input"
+                    data-testid="new-module-target-input"
+                    value={targetDate}
+                    onChange={(e) => { setTargetDate(e.target.value); }}
+                    title="Target date"
+                  />
+                </div>
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-desc-input" className="kb-form-label">Description</label>
+                  <input
+                    id="new-module-desc-input"
+                    type="text"
+                    className="kb-form-input"
+                    data-testid="new-module-desc-input"
+                    placeholder="Description (optional)..."
+                    value={description}
+                    onChange={(e) => { setDescription(e.target.value); }}
+                  />
+                </div>
+              </div>
+            </details>
             <button
               type="submit"
               className="kb-btn-primary"
