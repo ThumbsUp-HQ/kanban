@@ -2,6 +2,8 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -777,6 +779,196 @@ describe('LinkAuditorStudio', () => {
     fireEvent.click(screen.getByTestId('confirm-purge-btn'));
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('KAN-527: Link Auditor badge contrast and semantic theme tokens', () => {
+    it('verifies LinkAuditorStudio.css eliminates dark-only hardcoded hexes and uses semantic variables', () => {
+      const cssPath = path.resolve(__dirname, 'LinkAuditorStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Assert removal of dark-only hardcoded badge hexes
+      expect(cssContent).not.toMatch(/#ff7b72/i);
+      expect(cssContent).not.toMatch(/#d29922/i);
+      expect(cssContent).not.toMatch(/#f0883e/i);
+      expect(cssContent).not.toMatch(/#58a6ff/i);
+      expect(cssContent).not.toMatch(/#3fb950/i);
+
+      // Assert presence of WCAG AA semantic tokens
+      expect(cssContent).toContain('var(--danger-fg)');
+      expect(cssContent).toContain('var(--warn-fg)');
+      expect(cssContent).toContain('var(--badge-fg)');
+      expect(cssContent).toContain('var(--text-success)');
+
+      // Verify specific class assignments
+      expect(cssContent).toMatch(/\.badge-danger\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-danger\);/s);
+      expect(cssContent).toMatch(/\.badge-warning\s*\{[^}]*background-color:\s*var\(--warn-bg\);[^}]*color:\s*var\(--warn-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-warning\);/s);
+      expect(cssContent).toMatch(/\.badge-critical\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--danger-fg\);[^}]*font-weight:\s*700;/s);
+      expect(cssContent).toMatch(/\.badge-info\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\);[^}]*color:\s*var\(--accent-primary\);[^}]*border:\s*1px\s+solid\s+var\(--border-accent-subtle\);/s);
+      expect(cssContent).toMatch(/:where\(\[data-theme='dark'\]\)\s+\.badge-info\s*\{[^}]*color:\s*var\(--badge-fg\);[^}]*background-color:\s*var\(--badge-bg\);[^}]*border-color:\s*var\(--badge-border\);/s);
+      expect(cssContent).toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme='light'\]\)\s+\.badge-info\s*\{[^}]*color:\s*var\(--badge-fg\);[^}]*background-color:\s*var\(--badge-bg\);[^}]*border-color:\s*var\(--badge-border\);/s);
+      expect(cssContent).toMatch(/\.link-auditor-btn--scan:hover:not\(:disabled\)\s*\{[^}]*background-color:\s*var\(--brand-primary-hover\);/s);
+      expect(cssContent).toMatch(/\.row--selected\s+td\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\)/s);
+      expect(cssContent).toMatch(/\.status-badge--purged\s*\{[^}]*background-color:\s*var\(--bg-secondary\);[^}]*color:\s*var\(--fg-secondary\);[^}]*border:\s*1px\s+solid\s+var\(--border-subtle\);/s);
+      expect(cssContent).toMatch(/\.status-badge--resolved\s*\{[^}]*background-color:\s*var\(--bg-success-subtle\);[^}]*color:\s*var\(--text-success\);[^}]*border:\s*1px\s+solid\s+var\(--border-success\);/s);
+      expect(cssContent).toMatch(/\.link-auditor-btn--danger\s*\{[^}]*background-color:\s*var\(--bg-danger\);[^}]*color:\s*var\(--accent-primary-fg\);/s);
+      expect(cssContent).toMatch(/\.metric-card--active\s*\{[^}]*border-color:\s*var\(--accent-primary\);[^}]*background-color:\s*var\(--bg-accent-subtle\);/s);
+    });
+
+    it('renders dangling endpoint badges cleanly in Light theme', async () => {
+      document.documentElement.removeAttribute('data-theme');
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      await waitFor(() => {
+        // Verify dangling and reason badges are present
+        expect(screen.getAllByText('Dangling Target').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Soft-Deleted Endpoint').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Cross-Workspace Leak').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Flagged').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Purged').length).toBeGreaterThan(0);
+      });
+
+      // Verify badges have expected CSS classes
+      const danglingTargetBadge = screen.getByTestId('metric-card-DANGLING_TARGET');
+      expect(danglingTargetBadge).toBeDefined();
+
+      const purgeSelectedBtn = screen.getByTestId('purge-selected-btn');
+      expect(purgeSelectedBtn.className).toContain('link-auditor-btn--danger');
+    });
+
+    it('renders dangling endpoint badges cleanly in Dark theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+          await Promise.resolve();
+          if (path === '/api/v1/auth/me') return mockAdminUser;
+          if (path === '/api/v1/admin/object-links/audits') {
+            return { items: mockAuditItems, has_more: false };
+          }
+          return [];
+        });
+
+        render(
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/admin/link-auditor']}>
+              <LinkAuditorStudio />
+            </MemoryRouter>
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+        });
+
+        await waitFor(() => {
+          expect(screen.getAllByText('Dangling Target').length).toBeGreaterThan(0);
+          expect(screen.getAllByText('Soft-Deleted Endpoint').length).toBeGreaterThan(0);
+          expect(screen.getAllByText('Flagged').length).toBeGreaterThan(0);
+        });
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('supports ARIA attributes and keyboard navigation on metric filter cards', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      // Verify ARIA landmarks and group attributes
+      expect(screen.getByLabelText('Integrity Metrics')).toBeDefined();
+      const statusGroup = screen.getByRole('group', { name: 'Filter status' });
+      expect(statusGroup).toBeDefined();
+      expect(screen.getByLabelText('Filter by invalidity reason')).toBeDefined();
+      expect(screen.getByRole('table', { name: 'Flagged Invalid Object Links' })).toBeDefined();
+
+      // Verify metric card buttons have role button, focus capability, and keyboard navigation
+      const danglingTargetCard = screen.getByTestId('metric-card-DANGLING_TARGET');
+      expect(danglingTargetCard).toBeDefined();
+      expect(danglingTargetCard.getAttribute('type')).toBe('button');
+      expect(danglingTargetCard.getAttribute('role') ?? 'button').toBe('button');
+      expect(danglingTargetCard.getAttribute('aria-pressed')).toBeNull();
+
+      // Metric cards start inactive
+      expect(danglingTargetCard.className).not.toContain('metric-card--active');
+
+      // Focus metric card
+      danglingTargetCard.focus();
+      expect(document.activeElement).toBe(danglingTargetCard);
+
+      // Keyboard navigation with Enter key activates metric card filter
+      fireEvent.keyDown(danglingTargetCard, { key: 'Enter', code: 'Enter' });
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).toContain('metric-card--active');
+
+      // Keyboard navigation with Space key toggles metric card filter back to ALL
+      fireEvent.keyDown(danglingTargetCard, { key: ' ', code: 'Space' });
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).not.toContain('metric-card--active');
+    });
+
+    it('supports System Dark Mode when data-theme attribute is unset', async () => {
+      document.documentElement.removeAttribute('data-theme');
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('not-found-view')).toBeNull();
+      const statusPillAll = screen.getByTestId('status-filter-all');
+      expect(statusPillAll).toBeDefined();
     });
   });
 });

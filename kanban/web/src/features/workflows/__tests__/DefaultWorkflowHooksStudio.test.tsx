@@ -10,6 +10,7 @@ import { DefaultWorkflowHooksStudio } from '../DefaultWorkflowHooksStudio';
 import { HookPipelineRow } from '../HookPipelineRow';
 import { WorkflowStudioPage } from '../WorkflowStudioPage';
 import * as api from '../api';
+import * as apiClient from '../../../api/client';
 
 const MOCK_SYSTEM_TEMPLATE: api.DefaultWorkflowHook = {
   id: 'template-sys-1',
@@ -518,5 +519,224 @@ describe('DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438)', () =>
 
     // Ensure misleading empty notice is NOT shown when error occurred
     expect(screen.queryByTestId('empty-templates-notice')).toBeNull();
+  });
+
+  it('covers edit flows across agent_async, wasm_sync, and builtin templates plus Escape and error branches', async () => {
+    const wasmTemplate: api.DefaultWorkflowHook = {
+      ...MOCK_WORKSPACE_TEMPLATE,
+      id: 'tpl-wasm-edit',
+      hook_kind: 'wasm_sync',
+      wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+      max_rework_attempts: 0,
+    };
+    const builtinTemplate: api.DefaultWorkflowHook = {
+      ...MOCK_SYSTEM_TEMPLATE,
+      id: 'tpl-builtin-edit',
+      hook_kind: 'builtin',
+      agent_slug: null,
+      wasm_module_sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
+    };
+    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([
+      { ...MOCK_SYSTEM_TEMPLATE, hook_kind: 'agent_async' },
+      wasmTemplate,
+      builtinTemplate,
+    ]);
+    const updateSpy = vi.spyOn(api, 'updateDefaultWorkflowHook').mockResolvedValue(MOCK_SYSTEM_TEMPLATE);
+    const deleteSpy = vi.spyOn(api, 'deleteDefaultWorkflowHook').mockRejectedValue(new Error('Delete blocked'));
+
+    renderStudio({ scopeKind: 'workspace', workspaceId: 'ws-1234', showSubnav: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('template-edit-btn-template-sys-1')).toBeDefined();
+    });
+
+    // 1. Edit agent_async template & close via Escape
+    fireEvent.click(screen.getByTestId('template-edit-btn-template-sys-1'));
+    expect(screen.getByTestId('template-dialog')).toBeDefined();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screen.getByTestId('template-dialog')).toBeDefined();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('template-dialog')).toBeNull();
+
+    const submitDialogForm = () => {
+      const formEl = screen.getByTestId('template-dialog').querySelector('form');
+      if (!formEl) throw new Error('Expected template dialog form');
+      fireEvent.submit(formEl);
+    };
+
+    // 2. Edit agent_async template & test required validation errors + successful save
+    fireEvent.click(screen.getByTestId('template-edit-btn-template-sys-1'));
+    fireEvent.change(screen.getByTestId('template-name-input'), { target: { value: '   ' } });
+    submitDialogForm();
+    expect(screen.getByRole('alert').textContent).toContain('Template name is required');
+
+    fireEvent.change(screen.getByTestId('template-name-input'), { target: { value: 'valid-name' } });
+    fireEvent.change(screen.getByTestId('template-to-state-input'), { target: { value: '   ' } });
+    submitDialogForm();
+    expect(screen.getByRole('alert').textContent).toContain('Target state is required');
+
+    fireEvent.change(screen.getByTestId('template-to-state-input'), { target: { value: 'Done' } });
+    fireEvent.change(screen.getByTestId('template-agent-slug-input'), { target: { value: '@@@' } });
+    submitDialogForm();
+    expect(screen.getByRole('alert').textContent).toContain('Agent slug is required');
+
+    fireEvent.change(screen.getByTestId('template-agent-slug-input'), { target: { value: '@qa-bot' } });
+    fireEvent.change(screen.getByTestId('template-from-state-input'), { target: { value: '*' } });
+    fireEvent.change(screen.getByTestId('template-timeout-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('template-policy-select'), { target: { value: 'fail_open_warn' } });
+    fireEvent.change(screen.getByTestId('template-sort-rank-input'), { target: { value: '40' } });
+    fireEvent.change(screen.getByTestId('template-rework-input'), { target: { value: '5' } });
+    submitDialogForm();
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        'template-sys-1',
+        expect.objectContaining({
+          hook_kind: 'agent_async',
+          agent_slug: 'qa-bot',
+          from_state_name: null,
+          timeout_ms: null,
+          failure_policy: 'fail_open_warn',
+        }),
+        'ws-1234',
+      );
+    });
+
+    // 3. Edit wasm_sync template (empty wasm validation + save)
+    fireEvent.click(screen.getByTestId('template-edit-btn-tpl-wasm-edit'));
+    fireEvent.change(screen.getByTestId('template-wasm-sha-input'), { target: { value: '   ' } });
+    submitDialogForm();
+    expect(screen.getByRole('alert').textContent).toContain('Wasm module SHA-256 is required');
+
+    fireEvent.change(screen.getByTestId('template-wasm-sha-input'), {
+      target: { value: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968' },
+    });
+    submitDialogForm();
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        'tpl-wasm-edit',
+        expect.objectContaining({ hook_kind: 'wasm_sync' }),
+        'ws-1234',
+      );
+    });
+
+    // 4. Edit builtin template & save
+    fireEvent.click(screen.getByTestId('template-edit-btn-tpl-builtin-edit'));
+    submitDialogForm();
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        'tpl-builtin-edit',
+        expect.objectContaining({ hook_kind: 'builtin' }),
+        'ws-1234',
+      );
+    });
+
+    // 5. Toggle error & Delete cancel + error
+    updateSpy.mockRejectedValueOnce(new Error('Toggle rejected'));
+    fireEvent.click(screen.getByTestId('template-toggle-template-sys-1'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Toggle rejected');
+    });
+
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('template-delete-btn-template-sys-1'));
+    expect(deleteSpy).not.toHaveBeenCalled();
+
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    fireEvent.click(screen.getByTestId('template-delete-btn-template-sys-1'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Delete blocked');
+    });
+  });
+
+  it('covers default workflow hooks API client functions across system and workspace scopes', async () => {
+    const fetchSpy = vi.spyOn(apiClient, 'apiFetch');
+
+    // 1. fetchDefaultWorkflowHooks: system, workspace, unfiltered, and non-array fallback
+    fetchSpy.mockResolvedValueOnce([MOCK_SYSTEM_TEMPLATE, MOCK_WORKSPACE_TEMPLATE]);
+    const sysOnly = await api.fetchDefaultWorkflowHooks('system');
+    expect(sysOnly).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenLastCalledWith('GET', '/api/v1/admin/default-workflow-hooks?scope_kind=system');
+
+    fetchSpy.mockResolvedValueOnce([MOCK_WORKSPACE_TEMPLATE]);
+    const wsOnly = await api.fetchDefaultWorkflowHooks('workspace', 'ws-1234');
+    expect(wsOnly).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'GET',
+      '/api/v1/workspaces/ws-1234/default-workflow-hooks?include_system=false',
+    );
+
+    fetchSpy.mockResolvedValueOnce([MOCK_SYSTEM_TEMPLATE, MOCK_WORKSPACE_TEMPLATE]);
+    const allWs = await api.fetchDefaultWorkflowHooks(undefined, 'ws-1234');
+    expect(allWs).toHaveLength(2);
+    expect(fetchSpy).toHaveBeenLastCalledWith('GET', '/api/v1/workspaces/ws-1234/default-workflow-hooks');
+
+    fetchSpy.mockResolvedValueOnce(null);
+    expect(await api.fetchDefaultWorkflowHooks()).toEqual([]);
+
+    // 2. createDefaultWorkflowHook: system vs workspace
+    fetchSpy.mockResolvedValueOnce(MOCK_SYSTEM_TEMPLATE);
+    await api.createDefaultWorkflowHook({
+      name: 'sys-tpl',
+      scope_kind: 'system',
+      to_state_name: 'Done',
+      hook_kind: 'agent_async',
+    });
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/v1/admin/default-workflow-hooks',
+      expect.any(Object),
+    );
+
+    fetchSpy.mockResolvedValueOnce(MOCK_WORKSPACE_TEMPLATE);
+    await api.createDefaultWorkflowHook(
+      {
+        name: 'ws-tpl',
+        scope_kind: 'workspace',
+        workspace_id: 'ws-1234',
+        to_state_name: 'Done',
+        hook_kind: 'wasm_sync',
+      },
+      'ws-1234',
+    );
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'POST',
+      '/api/v1/workspaces/ws-1234/default-workflow-hooks',
+      expect.any(Object),
+    );
+
+    // 3. updateDefaultWorkflowHook & deleteDefaultWorkflowHook: system vs workspace
+    fetchSpy.mockResolvedValueOnce(MOCK_SYSTEM_TEMPLATE);
+    await api.updateDefaultWorkflowHook('tpl-1', { is_enabled: false });
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'PATCH',
+      '/api/v1/admin/default-workflow-hooks/tpl-1',
+      expect.any(Object),
+    );
+
+    fetchSpy.mockResolvedValueOnce(MOCK_WORKSPACE_TEMPLATE);
+    await api.updateDefaultWorkflowHook('tpl-2', { is_enabled: true }, 'ws-1234');
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'PATCH',
+      '/api/v1/workspaces/ws-1234/default-workflow-hooks/tpl-2',
+      expect.any(Object),
+    );
+
+    fetchSpy.mockResolvedValueOnce(undefined);
+    await api.deleteDefaultWorkflowHook('tpl-1');
+    expect(fetchSpy).toHaveBeenLastCalledWith('DELETE', '/api/v1/admin/default-workflow-hooks/tpl-1');
+
+    fetchSpy.mockResolvedValueOnce(undefined);
+    await api.deleteDefaultWorkflowHook('tpl-2', 'ws-1234');
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'DELETE',
+      '/api/v1/workspaces/ws-1234/default-workflow-hooks/tpl-2',
+    );
+
+    // 4. syncDefaultWorkflowHooks: array vs non-array
+    fetchSpy.mockResolvedValueOnce([{ id: 'h1' }]);
+    expect(await api.syncDefaultWorkflowHooks('KAN')).toHaveLength(1);
+    fetchSpy.mockResolvedValueOnce(null);
+    expect(await api.syncDefaultWorkflowHooks('KAN')).toEqual([]);
   });
 });

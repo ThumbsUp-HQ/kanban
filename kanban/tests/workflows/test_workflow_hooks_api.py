@@ -353,7 +353,7 @@ async def test_attach_and_list_workflow_hooks_success(
     assert a_data["hook_kind"] == "agent_interceptor"
     assert "< 180.0 s" in a_data["target_latency_budget"]
     assert a_data["agent_slug"] == "qa-gatekeeper"
-    assert a_data["timeout_ms"] == 60000
+    assert a_data["timeout_ms"] is None
 
     # 4. List hooks - should return transition rules grouped by (from_state, to_state)
     list_resp = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
@@ -363,7 +363,7 @@ async def test_attach_and_list_workflow_hooks_success(
 
     agent_hooks = [h for r in rules for h in r["hooks"] if h["hook_kind"] == "agent_interceptor"]
     assert len(agent_hooks) == 1
-    assert agent_hooks[0]["timeout_ms"] == 60000
+    assert agent_hooks[0]["timeout_ms"] is None
     assert agent_hooks[0]["agent_slug"] == "qa-gatekeeper"
 
     # Check rule shapes
@@ -419,6 +419,7 @@ async def test_agent_interceptor_hook_with_repo_binding_and_timeout(
             "to_state": "Done",
             "hook_kind": "agent_interceptor",
             "agent": "ro-coder",
+            "timeout_ms": 180000,
         },
     )
     assert resp.status_code == 201
