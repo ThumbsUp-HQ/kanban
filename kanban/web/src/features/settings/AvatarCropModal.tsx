@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, useRef, type JSX } from 'react';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 
 export interface AvatarCropModalProps {
   file: File;
@@ -307,15 +308,22 @@ export function AvatarCropModal({
           <h2 id="avatar-crop-title" className="kb-avatar-crop-title">
             Crop Profile Picture
           </h2>
-          <button
-            type="button"
-            className="kb-avatar-crop-close-btn"
-            aria-label="Close"
-            onClick={onClose}
-            disabled={isSaving}
-          >
-            ✕
-          </button>
+          <div className="kb-avatar-crop-header-actions">
+            <StudioDocLink
+              href="/docs/studio-configuration-reference#user-avatars-profile-media"
+              title="User Avatars & Profile Media Documentation"
+              testId="avatar-crop-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-avatar-crop-close-btn"
+              aria-label="Close"
+              onClick={onClose}
+              disabled={isSaving}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div

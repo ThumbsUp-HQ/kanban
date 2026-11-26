@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useEffect, useRef, type JSX } from 'react';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 
 export interface AvatarLightboxModalProps {
   avatarUrl: string;
@@ -259,15 +260,22 @@ export function AvatarLightboxModal({
           <h2 id="avatar-lightbox-title" className="kb-avatar-lightbox-title">
             {displayName || 'User'} Picture
           </h2>
-          <button
-            type="button"
-            className="kb-avatar-lightbox-close-btn"
-            aria-label="Close"
-            data-testid="avatar-lightbox-close-btn"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div className="kb-avatar-lightbox-header-actions">
+            <StudioDocLink
+              href="/docs/studio-configuration-reference#user-avatars-profile-media"
+              title="User Avatars & Profile Media Documentation"
+              testId="avatar-lightbox-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-avatar-lightbox-close-btn"
+              aria-label="Close"
+              data-testid="avatar-lightbox-close-btn"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div

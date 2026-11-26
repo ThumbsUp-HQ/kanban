@@ -1,0 +1,22 @@
+$ pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/AvatarCropModal.test.tsx src/features/settings/__tests__/AvatarLightboxModal.test.tsx --coverage.enabled=true --coverage.include="src/features/settings/AvatarCropModal.tsx" --coverage.include="src/features/settings/AvatarLightboxModal.tsx"
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/AvatarLightboxModal.test.tsx (10 tests) 281ms
+ ✓ src/features/settings/__tests__/AvatarCropModal.test.tsx (13 tests) 441ms
+
+ Test Files  2 passed (2)
+      Tests  23 passed (23)
+   Start at  17:40:24
+   Duration  1.86s (environment 56%, tests 25%, import 12%, worker 3%, transform 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.08 |    97.81 |     100 |     100 |                   
+ ...rCropModal.tsx |   99.43 |     98.7 |     100 |     100 | 47                
+ ...htboxModal.tsx |   98.67 |    96.66 |     100 |     100 | 45,93             
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0
