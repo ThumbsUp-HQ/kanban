@@ -102,6 +102,7 @@ from database.models.webhooks import (
     WebhookSubscription,
 )
 from database.models.workflow import (
+    DefaultWorkflowHook,
     WorkflowHookInvocation,
     WorkflowTransitionExecution,
     WorkflowTransitionHook,
@@ -129,6 +130,7 @@ __all__ = [
     "CustomFieldDefinition",
     "CustomFieldValue",
     "Cycle",
+    "DefaultWorkflowHook",
     "DestructiveConfirmationToken",
     "Doc",
     "EffectiveResourceAccess",

@@ -553,6 +553,23 @@ export function Topbar({
                     </Link>
 
                     <Link
+                      to="/admin/workflows"
+                      role="menuitem"
+                      data-testid="topbar-admin-workflows-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          ⚡
+                        </span>
+                        Default Workflows
+                      </span>
+                    </Link>
+
+                    <Link
                       to="/admin/agent-runners"
                       role="menuitem"
                       data-testid="topbar-admin-runners-link"
