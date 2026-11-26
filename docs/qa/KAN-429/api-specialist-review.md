@@ -17,7 +17,7 @@ This API Specialist Review evaluates the documentation accuracy, protocol integr
 
 The documentation covers the entire Slice-5 subsystem across 5 authoritative wiki chapters and the offline in-app DocsCenter manifest (`wikiManifest.ts`). Every setting, data type, sandbox tier, dual-control approval gate, and hook execution contract was audited directly against the backend API routers and React studio components:
 1. **Workspace Policies & Project WIP Limits**:
-   - Workspace policy contracts (`auto_archive_days`, `trash_retention_days`, `allow_public_boards`, `allow_guest_invites`) documented with exact backend defaults and type constraints in `admin/workspace_settings.py` and `admin/destructive.py`.
+   - Workspace policy contracts (`session_idle_timeout_min`, `session_absolute_timeout_min`, `trash_retention_days`, `mcp_key_max_ttl_days`, `air_gap_mode`, `default_project_visibility`, `issue_export_enabled`, `issue_import_enabled`, `report_export_enabled`) documented with exact backend defaults and type constraints in `admin/workspace_settings.py` and `admin/destructive.py`.
    - Project lifecycle states and WIP limit validation rules (`wip_limit >= 0`, `stage` enum, `color` hex validation) documented in `project_config.py`.
 2. **Custom Fields 4 Flavors & 7 Output Formats**:
    - Field flavors (`scalar`, `safe_formula`, `wasm`, `nsjail`) and 7 output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`) specified with literal JSON schemas.

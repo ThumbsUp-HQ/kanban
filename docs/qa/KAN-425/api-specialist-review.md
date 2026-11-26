@@ -20,7 +20,7 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 
 ### Key Architectural Invariants Verified
 1. **Workspace Policies & Project WIP Limits**:
-   - Explicit settings governance across `auto_archive_days`, `trash_retention_days`, `allow_public_boards`, and `allow_guest_invites`.
+   - Explicit settings governance across `session_idle_timeout_min`, `session_absolute_timeout_min`, `trash_retention_days`, `mcp_key_max_ttl_days`, `air_gap_mode`, `default_project_visibility`, `issue_export_enabled`, `issue_import_enabled`, and `report_export_enabled`.
    - Project lifecycle states and WIP limit enforcement with zero data-corruption risks.
 2. **Dual-Control Custom Scripted Fields**:
    - 4 field flavors (`scalar`, `safe_formula`, `wasm`, `nsjail`) with 7 output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
