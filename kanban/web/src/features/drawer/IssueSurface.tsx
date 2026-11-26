@@ -41,7 +41,8 @@ import {
   type IssueItem,
 } from '../views/viewsApi';
 import { safeRandomUUID } from '../../utils/uuid';
-import { useRealtimeSubscription } from '../../realtime';
+import { useRealtimeSubscription, useRealtimeClient } from '../../realtime';
+import * as gates from '../gates';
 import {
   defaultUploadAttachment,
   MAX_ATTACHMENT_BYTES,
@@ -452,6 +453,13 @@ function IssueSurfaceContent({
 
   const resolvedProjectForAux =
     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
+
+  const realtimeClient = useRealtimeClient();
+  gates.useGateRealtimeSync({
+    client: realtimeClient,
+    queryClient,
+    projectKey: resolvedProjectForAux,
+  });
 
   // Normalize URL when issue key differs from loaded canonical key (e.g., cross-prefix alias KANBA-119 -> KAN-42)
   useEffect(() => {

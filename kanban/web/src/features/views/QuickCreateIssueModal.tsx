@@ -11,7 +11,7 @@ export interface QuickCreateIssueModalProps {
   onCreate: (newIssue: Partial<IssueItem>) => Promise<Partial<IssueItem> | undefined> | Partial<IssueItem> | undefined;
   projectKey: string;
   modulesEnabled?: boolean;
-  defaultStateId?: string;
+  defaultStateId?: string | undefined;
   defaultPrioritySlug?: string;
   defaultModuleIds?: string[];
   defaultDueDate?: string;
@@ -35,7 +35,7 @@ export function QuickCreateIssueModal({
   onCreate,
   projectKey,
   modulesEnabled = true,
-  defaultStateId = 'state-todo',
+  defaultStateId,
   defaultPrioritySlug = 'medium',
   defaultModuleIds = [],
   defaultDueDate,
@@ -46,7 +46,7 @@ export function QuickCreateIssueModal({
   onOpenPeek,
 }: QuickCreateIssueModalProps): JSX.Element | null {
   const resolvedInitialStateId = useMemo(() => {
-    if (defaultStateId && defaultStateId !== 'state-todo') {
+    if (defaultStateId) {
       return defaultStateId;
     }
     if (states && states.length > 0) {
@@ -54,14 +54,22 @@ export function QuickCreateIssueModal({
       if (def) return def.id;
       const unstarted = states.find((s) => s.group === 'unstarted');
       if (unstarted) return unstarted.id;
-      return states[0]?.id ?? defaultStateId;
+      return states[0]?.id ?? 'state-todo';
     }
-    return defaultStateId;
+    return 'state-todo';
   }, [defaultStateId, states]);
 
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
+  const [prevSyncedDefaultStateId, setPrevSyncedDefaultStateId] = useState(defaultStateId);
+  const [prevSyncedIsOpen, setPrevSyncedIsOpen] = useState(isOpen);
   const [stateId, setStateId] = useState(resolvedInitialStateId);
+
+  if (prevSyncedDefaultStateId !== defaultStateId || (!prevSyncedIsOpen && isOpen)) {
+    setPrevSyncedDefaultStateId(defaultStateId);
+    setPrevSyncedIsOpen(isOpen);
+    setStateId(resolvedInitialStateId);
+  }
   const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
     modulesEnabled ? defaultModuleIds : [],

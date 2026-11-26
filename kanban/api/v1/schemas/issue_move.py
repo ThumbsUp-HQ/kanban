@@ -70,3 +70,23 @@ class IssueMoveResponse(BaseModel):
         default=None,
         description="Resulting active issue count in column if WIP limit was evaluated",
     )
+    gate_status: str | None = Field(
+        default=None,
+        description="Gate status ('pending') if the move triggered an async workflow gate hold",
+    )
+    execution_id: uuid.UUID | None = Field(
+        default=None,
+        description="Active workflow gate execution UUID if gate is pending",
+    )
+    hook_name: str | None = Field(
+        default=None,
+        description="Triggered workflow gate hook name if gate is pending",
+    )
+    from_state_id: uuid.UUID | None = Field(
+        default=None,
+        description="Source state UUID if gate is pending",
+    )
+    to_state_id: uuid.UUID | None = Field(
+        default=None,
+        description="Target state UUID if gate is pending",
+    )

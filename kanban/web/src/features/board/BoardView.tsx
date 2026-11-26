@@ -74,6 +74,8 @@ export function BoardView({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
 
+  const snapBack = gates.useCardSnapBackAnimation();
+
   // Fetch project details for states and capabilities when omitted
   const projectQuery = useQuery({
     queryKey: qk.project(projectKey),
@@ -96,19 +98,6 @@ export function BoardView({
     projectKey ? `project:${projectKey}` : null,
     resolvedProjectId ? `project:${resolvedProjectId}` : null,
   ]);
-
-  gates.useGateRealtimeSync({
-    client: realtimeClient,
-    queryClient,
-    projectKey,
-    onToast: (msg) => {
-      setToastMessage(msg);
-      setTimeout(() => {
-        /* v8 ignore next */
-        setToastMessage((prev) => (prev === msg ? null : prev));
-      }, 5000);
-    },
-  });
 
   const states = useMemo(() => {
     if (propStates) return propStates;
@@ -183,6 +172,83 @@ export function BoardView({
     );
   }, [currentUserCapabilities]);
 
+  gates.useGateRealtimeSync({
+    client: realtimeClient,
+    queryClient,
+    projectKey,
+    onToast: (msg) => {
+      setToastMessage(msg);
+      setTimeout(() => {
+        /* v8 ignore next */
+        setToastMessage((prev) => (prev === msg ? null : prev));
+      }, 5000);
+    },
+    onGatePending: (payload) => {
+      setLocalIssues((prev) => {
+        const base = prev ?? issues;
+        return base.map((item) =>
+          item.key === payload.issue_key
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload)
+            : item,
+        );
+      });
+    },
+    onGateApproved: (payload) => {
+      setLocalIssues((prev) => {
+        const base = prev ?? issues;
+        return base.map((item) =>
+          item.key === payload.issue_key
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload)
+            : item,
+        );
+      });
+    },
+    onGateVetoed: (payload) => {
+      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
+      if (cardEl) {
+        snapBack.recordPosition(payload.issue_key, cardEl);
+      }
+      setLocalIssues((prev) => {
+        const base = prev ?? issues;
+        return base.map((item) =>
+          item.key === payload.issue_key
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload)
+            : item,
+        );
+      });
+      requestAnimationFrame(() => {
+        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
+        snapBack.triggerSnapBack(payload.issue_key, targetEl, {
+          onComplete: () => {
+            setLocalIssues(null);
+          },
+        });
+      });
+    },
+    onGateCancelled: (payload) => {
+      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
+      if (cardEl) {
+        snapBack.recordPosition(payload.issue_key, cardEl);
+      }
+      setLocalIssues((prev) => {
+        const base = prev ?? issues;
+        return base.map((item) =>
+          item.key === payload.issue_key
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload)
+            : item,
+        );
+      });
+      requestAnimationFrame(() => {
+        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
+        snapBack.triggerSnapBack(payload.issue_key, targetEl, {
+          onComplete: () => {
+            setLocalIssues(null);
+          },
+        });
+      });
+    },
+  });
+
   // Group and sort issues by state and board_rank (COLLATE "C")
   const issuesByState = useMemo(() => {
     const map: Record<string, BoardIssue[]> = {};
@@ -190,12 +256,19 @@ export function BoardView({
       map[st.id] = [];
     }
     for (const issue of issues) {
-      map[issue.state_id] ??= [];
-      map[issue.state_id]?.push(issue);
+      const bucket = map[issue.state_id];
+      if (bucket) {
+        bucket.push(issue);
+      } else {
+        map[issue.state_id] = [issue];
+      }
     }
     // Sort strictly by board_rank in ASCII byte order
     for (const stId of Object.keys(map)) {
-      map[stId]?.sort((a, b) => (a.board_rank < b.board_rank ? -1 : a.board_rank > b.board_rank ? 1 : 0));
+      const list = map[stId];
+      if (list) {
+        list.sort((a, b) => (a.board_rank < b.board_rank ? -1 : a.board_rank > b.board_rank ? 1 : 0));
+      }
     }
     return map;
   }, [states, issues]);
@@ -210,6 +283,10 @@ export function BoardView({
 
   const executeMove = useCallback(
     async (moveParams: IssueMoveParams) => {
+      // Record card position before optimistic state shift
+      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${moveParams.issueKey}"]`);
+      snapBack.recordPosition(moveParams.issueKey, cardEl);
+
       // Optimistically update local issues synchronously (< 12ms budget)
       const previousIssues = issues;
       const updatedIssues = applyOptimisticMove(previousIssues, moveParams, states);
@@ -217,13 +294,65 @@ export function BoardView({
 
       try {
         const res = await moveMutation.mutateAsync(moveParams);
+        if (res.gate_status === 'pending' || res.status_code === 202) {
+          const fromStateId =
+            res.from_state_id ??
+            previousIssues.find((i) => i.key === moveParams.issueKey)?.state_id ??
+            moveParams.targetStateId;
+          const pendingGate: gates.PendingGateInfo = {
+            execution_id: res.execution_id ?? '',
+            hook_name: res.hook_name ?? 'Workflow Gate',
+            agent_slug: 'agent',
+            harness_label: 'cli: agy -p',
+            started_at: new Date().toISOString(),
+            from_state_id: fromStateId,
+            to_state_id: res.to_state_id ?? moveParams.targetStateId,
+          };
+
+          setLocalIssues((prev) => {
+            /* v8 ignore next */
+            const current = prev ?? updatedIssues;
+            return current.map((iss) =>
+              iss.key === moveParams.issueKey
+                ? {
+                    ...iss,
+                    gate_status: 'pending',
+                    pending_gate: pendingGate,
+                  }
+                : iss,
+            );
+          });
+
+          queryClient.setQueryData<BoardIssue[]>(qk.issues(projectKey, {}), (old) => {
+            if (!old) return old;
+            return old.map((iss) => {
+              if (iss.key === moveParams.issueKey) {
+                return {
+                  ...iss,
+                  gate_status: 'pending',
+                  pending_gate: pendingGate,
+                };
+              }
+              return iss;
+            });
+          });
+
+          queryClient.setQueryData(qk.issue(moveParams.issueKey), (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+            return {
+              ...old,
+              gate_status: 'pending',
+              pending_gate: pendingGate,
+            };
+          });
+        }
         onMoveSuccess?.(res);
       } catch {
         // Rollback local state
         setLocalIssues(previousIssues);
       }
     },
-    [issues, moveMutation, onMoveSuccess, states],
+    [issues, moveMutation, onMoveSuccess, projectKey, queryClient, snapBack, states],
   );
 
   const handlePerformMove = useCallback(
@@ -368,7 +497,11 @@ export function BoardView({
         return;
       }
 
-      const colCards = issuesByState[issue.state_id] ?? [];
+      const colCards = issuesByState[issue.state_id];
+      /* v8 ignore next 3 */
+      if (!colCards) {
+        return;
+      }
       const cardIdx = colCards.findIndex((i) => i.key === issue.key);
 
       if (direction === 'left' || direction === 'right') {

@@ -1,0 +1,65 @@
+=== BACKEND PYTEST SECURITY & HEADERS COVERAGE ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 40 items
+
+kanban/tests/security/test_headers.py ............                       [ 30%]
+kanban/tests/security/test_client_ip.py ..........                       [ 55%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py ................ [ 95%]
+..                                                                       [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                         Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------
+kanban/security/headers.py     214      3     96      3    98%   125, 191, 230
+------------------------------------------------------------------------
+TOTAL                          214      3     96      3    98%
+============================== 40 passed in 2.51s ==============================
+
+=== FRONTEND VITEST COVERAGE (>=95% BRANCHES) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/gates/__tests__/useGateRealtimeSync.test.tsx (13 tests) 60ms
+ ✓ src/features/board/BoardColumn.test.tsx (10 tests) 280ms
+ ✓ src/features/board/__tests__/BoardGateLifecycle.test.tsx (13 tests) 576ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1248ms
+
+ Test Files  4 passed (4)
+      Tests  58 passed (58)
+   Start at  20:23:55
+   Duration  2.56s (environment 47%, tests 36%, import 12%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.74 |    96.69 |     100 |     100 |                   
+ board             |   99.65 |    96.05 |     100 |     100 |                   
+  BoardColumn.tsx  |     100 |      100 |     100 |     100 |                   
+  BoardView.tsx    |   99.57 |    95.13 |     100 |     100 | ...27,382,393-401 
+ gates             |     100 |    97.43 |     100 |     100 |                   
+  ...altimeSync.ts |     100 |    97.43 |     100 |     100 | ...58,176,244,262 
+-------------------|---------|----------|---------|---------|-------------------
+
+=== PLAYWRIGHT ZERO-MOCK BROWSER CSP & CONSOLE LOG REPORT ===
+Routes Inspected: /setup, /login, /projects/KAN/issues?layout=board, /projects/KAN/issues/KAN-2
+CSP Directive Violations Detected: 0 (manifest-src 'self' verified active)
+Console Errors: 0
+Captured Responsive Viewports: 1440x900 light/dark, 1024x768, 768x1024, 390x844
+Screenshot Artifacts Saved in docs/qa/KAN-432/screenshots/:
+  - 01-desktop-1440x900-light-board-gate-indicators.png
+  - 02-desktop-1440x900-dark-board-gate-indicators.png
+  - 03-tablet-landscape-1024x768-board-gate-indicators.png
+  - 04-tablet-portrait-768x1024-board-gate-indicators.png
+  - 05-mobile-portrait-390x844-board-gate-indicators.png
+  - 06-lane-new-item-modal-state-default.png
+  - 07-issue-detail-gate-vetoed-state.png
+=== END VERIFICATION REPORT ===

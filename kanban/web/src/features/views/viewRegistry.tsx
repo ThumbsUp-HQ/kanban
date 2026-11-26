@@ -622,6 +622,7 @@ export function IssuesWorkspaceRoute({
   );
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalStateId, setCreateModalStateId] = useState<string | undefined>(undefined);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
@@ -633,15 +634,20 @@ export function IssuesWorkspaceRoute({
     setCsvModalTab('export');
   }, []);
 
-  const handleOpenCreateModal = useCallback(() => {
+  const handleOpenCreateModal = useCallback((initialStateId?: unknown) => {
+    setCreateModalStateId(typeof initialStateId === 'string' ? initialStateId : undefined);
     setIsCreateModalOpen(true);
   }, []);
 
   useEffect(() => {
     if (!canEdit) return;
-    window.addEventListener('kb:create-issue', handleOpenCreateModal);
+    const handleCustomCreate = (e: Event): void => {
+      const customEv = e as CustomEvent<{ stateId?: string } | undefined>;
+      handleOpenCreateModal(customEv.detail?.stateId);
+    };
+    window.addEventListener('kb:create-issue', handleCustomCreate);
     return () => {
-      window.removeEventListener('kb:create-issue', handleOpenCreateModal);
+      window.removeEventListener('kb:create-issue', handleCustomCreate);
     };
   }, [canEdit, handleOpenCreateModal]);
   const [popoverState, setPopoverState] = useState<{
@@ -1600,10 +1606,14 @@ export function IssuesWorkspaceRoute({
       {canEdit && (
         <QuickCreateIssueModal
           isOpen={isCreateModalOpen}
-          onClose={() => { setIsCreateModalOpen(false); }}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setCreateModalStateId(undefined);
+          }}
           onCreate={handleCreateIssue}
           projectKey={projectKey}
           modulesEnabled={modulesEnabled}
+          defaultStateId={createModalStateId}
           states={boardStates}
         />
       )}
