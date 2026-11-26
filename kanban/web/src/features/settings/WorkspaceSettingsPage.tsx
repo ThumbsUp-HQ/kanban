@@ -23,6 +23,7 @@ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { AiStudioPage } from '../admin-ai/AiStudioPage';
 import { AgentStudioPage } from '../admin-agents/AgentStudioPage';
+import { DefaultWorkflowHooksStudio } from '../workflows/DefaultWorkflowHooksStudio';
 import './ProjectSettingsPage.css';
 import './WorkspaceSettingsPage.css';
 
@@ -63,7 +64,7 @@ export function formatHandle(handle?: string | null): string {
   return clean ? `@${clean}` : '';
 }
 
-export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'ai' | 'agents' | 'trash';
+export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'ai' | 'agents' | 'workflows' | 'trash';
 
 export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (!hash) return null;
@@ -74,6 +75,7 @@ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
   if (clean === 'tab-roles' || clean === 'roles') return 'roles';
   if (clean === 'tab-ai' || clean === 'ai') return 'ai';
   if (clean === 'tab-agents' || clean === 'agents') return 'agents';
+  if (clean === 'tab-workflows' || clean === 'workflows') return 'workflows';
   if (clean === 'tab-trash' || clean === 'trash') return 'trash';
   return null;
 }
@@ -924,6 +926,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
               onClick={() => { handleTabChange('agents'); }}
             >
               Autonomous Agents
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-workflows"
+              aria-selected={activeTab === 'workflows'}
+              data-testid="tab-workflows"
+              className={`kb-settings-tab ${activeTab === 'workflows' ? 'kb-settings-tab-active' : ''}`}
+              onClick={() => { handleTabChange('workflows'); }}
+            >
+              Workflow Hooks
             </button>
           </>
         )}
@@ -1824,6 +1837,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
         {activeTab === 'agents' && (
           <div data-testid="workspace-agents-section">
             <AgentStudioPage />
+          </div>
+        )}
+
+        {activeTab === 'workflows' && (
+          <div data-testid="workspace-workflows-section">
+            <DefaultWorkflowHooksStudio
+              scopeKind="workspace"
+              workspaceId={settings?.workspace_id ?? settings?.id}
+              showSubnav={false}
+            />
           </div>
         )}
 

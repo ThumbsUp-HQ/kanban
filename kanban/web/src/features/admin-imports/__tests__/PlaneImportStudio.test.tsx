@@ -2,6 +2,8 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -548,5 +550,177 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
+  });
+
+  it('binds .kb-plane-mode-active to semantic tokens without low-contrast hexes (KAN-529)', () => {
+    const cssPath = path.resolve(import.meta.dirname, '../PlaneImportStudio.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    // Verify .kb-plane-mode-active uses semantic tokens
+    const activeRuleMatch = /\.kb-plane-mode-active\s*\{([^}]+)\}/.exec(cssContent);
+    expect(activeRuleMatch).not.toBeNull();
+    const activeRule = activeRuleMatch ? activeRuleMatch[1] : '';
+
+    expect(activeRule).toContain('background-color: var(--bg-accent-subtle);');
+    expect(activeRule).toContain('border-color: var(--badge-fg);');
+    expect(activeRule).toContain('color: var(--badge-fg);');
+    expect(activeRule).toContain('font-weight: 600;');
+
+    // Verify no low-contrast hex values in .kb-plane-mode-active
+    expect(activeRule).not.toContain('#58a6ff');
+    expect(activeRule).not.toContain('#388bfd');
+
+    // Verify .kb-plane-mode-active:hover prevents hover state from overriding active tab contrast
+    const hoverRuleMatch = /\.kb-plane-mode-active:hover\s*\{([^}]+)\}/.exec(cssContent);
+    expect(hoverRuleMatch).not.toBeNull();
+    const hoverRule = hoverRuleMatch ? hoverRuleMatch[1] : '';
+    expect(hoverRule).toContain('background-color: var(--bg-accent-subtle);');
+    expect(hoverRule).toContain('border-color: var(--badge-fg);');
+    expect(hoverRule).toContain('color: var(--badge-fg);');
+
+    // Verify alert, warning, and button tokens
+    expect(cssContent).toMatch(/\.kb-plane-warnings-box\s*\{[^}]*var\(--warn-bg\)/);
+    expect(cssContent).toMatch(/\.kb-plane-warnings-box\s*\{[^}]*var\(--border-warning\)/);
+    expect(cssContent).toMatch(/\.kb-plane-warnings-title\s*\{[^}]*var\(--warn-fg\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--danger-bg\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--border-danger\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--danger-fg\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--bg-success-subtle\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--border-success\)/);
+    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--text-success\)/);
+    expect(cssContent).toMatch(/\.kb-plane-btn-primary\s*\{[^}]*var\(--accent-primary\)/);
+    expect(cssContent).toMatch(/\.kb-plane-btn-primary\s*\{[^}]*var\(--accent-primary-fg\)/);
+    expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary\)/);
+    expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary-fg\)/);
+
+    // Verify mobile responsive wrapping on mode row and container padding
+    expect(cssContent).toMatch(/\.kb-plane-mode-row\s*\{[^}]*flex-wrap:\s*wrap;/);
+    expect(cssContent).toMatch(/\.kb-plane-import-container\s*\{[^}]*padding:\s*16px;/);
+  });
+
+  it('switches import source and mode selection tabs cleanly across light and dark themes (KAN-529)', () => {
+    for (const theme of ['light', 'dark']) {
+      document.documentElement.setAttribute('data-theme', theme);
+
+      const { unmount } = render(
+        <MemoryRouter initialEntries={['/admin/imports']}>
+          <PlaneImportStudio />
+        </MemoryRouter>,
+      );
+
+      // Initially, plane source button is active
+      const planeBtn = screen.getByTestId('source-plane-btn');
+      const jiraBtn = screen.getByTestId('source-jira-btn');
+      const githubBtn = screen.getByTestId('source-github-btn');
+      const linearBtn = screen.getByTestId('source-linear-btn');
+
+      expect(planeBtn.className).toContain('kb-plane-mode-active');
+      expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
+      expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
+      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
+      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
+
+      // Switch to Jira
+      fireEvent.click(jiraBtn);
+      expect(jiraBtn.className).toContain('kb-plane-mode-active');
+      expect(jiraBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(planeBtn.className).not.toContain('kb-plane-mode-active');
+      expect(planeBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Switch to GitHub Issues
+      fireEvent.click(githubBtn);
+      expect(githubBtn.className).toContain('kb-plane-mode-active');
+      expect(githubBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
+
+      // Switch to Linear
+      fireEvent.click(linearBtn);
+      expect(linearBtn.className).toContain('kb-plane-mode-active');
+      expect(linearBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
+
+      // Switch back to Plane
+      fireEvent.click(planeBtn);
+      expect(planeBtn.className).toContain('kb-plane-mode-active');
+      expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
+
+      // Test input mode tabs (Upload vs Paste)
+      const uploadModeBtn = screen.getByTestId('mode-upload-btn');
+      const pasteModeBtn = screen.getByTestId('mode-paste-btn');
+
+      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
+      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
+      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('false');
+
+      fireEvent.click(pasteModeBtn);
+      expect(pasteModeBtn.className).toContain('kb-plane-mode-active');
+      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(uploadModeBtn.className).not.toContain('kb-plane-mode-active');
+      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('false');
+
+      fireEvent.click(uploadModeBtn);
+      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
+      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
+      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('false');
+
+      unmount();
+    }
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('enforces ARIA group roles, aria-pressed states, and keyboard navigation across tabs (KAN-529)', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    // 1. Source selector bar has role="group" and aria-label="Import source"
+    const sourceBar = screen.getByTestId('source-selector-bar');
+    expect(sourceBar.getAttribute('role')).toBe('group');
+    expect(sourceBar.getAttribute('aria-label')).toBe('Import source');
+
+    const planeBtn = screen.getByTestId('source-plane-btn');
+    const jiraBtn = screen.getByTestId('source-jira-btn');
+    const githubBtn = screen.getByTestId('source-github-btn');
+    const linearBtn = screen.getByTestId('source-linear-btn');
+
+    expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(githubBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(linearBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // Keyboard focus and activation
+    jiraBtn.focus();
+    expect(document.activeElement).toBe(jiraBtn);
+    fireEvent.click(jiraBtn);
+    expect(jiraBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(planeBtn.getAttribute('aria-pressed')).toBe('false');
+
+    githubBtn.focus();
+    expect(document.activeElement).toBe(githubBtn);
+    fireEvent.click(githubBtn);
+    expect(githubBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
+
+    // 2. Step 1 mode row has role="group" and aria-label="Input mode"
+    const uploadBtn = screen.getByTestId('mode-upload-btn');
+    const pasteBtn = screen.getByTestId('mode-paste-btn');
+    const modeGroup = uploadBtn.parentElement;
+    expect(modeGroup?.getAttribute('role')).toBe('group');
+    expect(modeGroup?.getAttribute('aria-label')).toBe('Input mode');
+
+    expect(uploadBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(pasteBtn.getAttribute('aria-pressed')).toBe('false');
+
+    pasteBtn.focus();
+    expect(document.activeElement).toBe(pasteBtn);
+    fireEvent.click(pasteBtn);
+    expect(pasteBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(uploadBtn.getAttribute('aria-pressed')).toBe('false');
   });
 });

@@ -53,6 +53,8 @@ export interface WorkflowHook {
   allowed_mutable_fields?: string[] | undefined;
   last_execution_log?: string | undefined;
   last_execution_status?: string | undefined;
+  inherited_from_template_id?: string | null | undefined;
+  inherited_from_scope?: 'system' | 'workspace' | null | undefined;
 }
 
 export interface TransitionRule {
@@ -546,4 +548,132 @@ export async function fetchApprovedWasmModules(projectKey?: string): Promise<Was
   } catch {
     return DEFAULT_WASM_MODULES;
   }
+}
+
+export type DefaultHookScopeKind = 'system' | 'workspace';
+
+export interface DefaultWorkflowHook {
+  id: string;
+  scope_kind: DefaultHookScopeKind;
+  workspace_id?: string | null;
+  name: string;
+  from_state_name?: string | null;
+  to_state_name: string;
+  hook_kind: string;
+  sort_rank: number;
+  is_enabled: boolean;
+  wasm_module_sha256?: string | null;
+  agent_definition_id?: string | null;
+  agent_slug?: string | null;
+  allowed_mutable_fields: string[];
+  failure_policy: FailurePolicy;
+  timeout_ms?: number | null;
+  max_rework_attempts: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDefaultWorkflowHookPayload {
+  name: string;
+  scope_kind: DefaultHookScopeKind;
+  workspace_id?: string | null | undefined;
+  from_state_name?: string | null | undefined;
+  to_state_name: string;
+  hook_kind?: string | undefined;
+  sort_rank?: number | undefined;
+  is_enabled?: boolean | undefined;
+  wasm_module_sha256?: string | null | undefined;
+  agent?: string | null | undefined;
+  agent_definition_id?: string | null | undefined;
+  agent_slug?: string | null | undefined;
+  allowed_mutable_fields?: string[] | undefined;
+  failure_policy?: FailurePolicy | undefined;
+  timeout_ms?: number | null | undefined;
+  max_rework_attempts?: number | undefined;
+}
+
+export interface UpdateDefaultWorkflowHookPayload {
+  name?: string | undefined;
+  from_state_name?: string | null | undefined;
+  to_state_name?: string | undefined;
+  hook_kind?: string | undefined;
+  sort_rank?: number | undefined;
+  is_enabled?: boolean | undefined;
+  wasm_module_sha256?: string | null | undefined;
+  agent?: string | null | undefined;
+  agent_definition_id?: string | null | undefined;
+  agent_slug?: string | null | undefined;
+  allowed_mutable_fields?: string[] | undefined;
+  failure_policy?: FailurePolicy | undefined;
+  timeout_ms?: number | null | undefined;
+  max_rework_attempts?: number | undefined;
+}
+
+export async function fetchDefaultWorkflowHooks(
+  scopeKind?: DefaultHookScopeKind,
+  workspaceId?: string,
+): Promise<DefaultWorkflowHook[]> {
+  const params = new URLSearchParams();
+  if (scopeKind) params.set('scope_kind', scopeKind);
+  if (workspaceId && scopeKind !== 'system') params.set('workspace_id', workspaceId);
+  const qs = params.toString();
+  const endpoint =
+    workspaceId && scopeKind !== 'system'
+      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=false` : ''}`
+      : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
+  const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
+  if (!Array.isArray(data)) return [];
+  if (scopeKind) {
+    return data.filter((t) => t.scope_kind === scopeKind);
+  }
+  return data;
+}
+
+export async function createDefaultWorkflowHook(
+  payload: CreateDefaultWorkflowHookPayload,
+  workspaceId?: string,
+): Promise<DefaultWorkflowHook> {
+  const endpoint =
+    payload.scope_kind === 'workspace' && workspaceId
+      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks`
+      : '/api/v1/admin/default-workflow-hooks';
+  const res = (await apiFetch('POST', endpoint as never, {
+    body: payload,
+  })) as DefaultWorkflowHook;
+  return res;
+}
+
+export async function updateDefaultWorkflowHook(
+  hookId: string,
+  payload: UpdateDefaultWorkflowHookPayload,
+  workspaceId?: string,
+): Promise<DefaultWorkflowHook> {
+  const endpoint = workspaceId
+    ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks/${encodeURIComponent(hookId)}`
+    : `/api/v1/admin/default-workflow-hooks/${encodeURIComponent(hookId)}`;
+  const res = (await apiFetch('PATCH', endpoint as never, {
+    body: payload,
+  })) as DefaultWorkflowHook;
+  return res;
+}
+
+export async function deleteDefaultWorkflowHook(
+  hookId: string,
+  workspaceId?: string,
+): Promise<void> {
+  const endpoint = workspaceId
+    ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks/${encodeURIComponent(hookId)}`
+    : `/api/v1/admin/default-workflow-hooks/${encodeURIComponent(hookId)}`;
+  await apiFetch('DELETE', endpoint as never);
+}
+
+export async function syncDefaultWorkflowHooks(
+  projectKey: string,
+): Promise<WorkflowHook[]> {
+  const res = (await apiFetch(
+    'POST',
+    `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks/sync-defaults` as never,
+  )) as WorkflowHook[];
+  return Array.isArray(res) ? res : [];
 }
