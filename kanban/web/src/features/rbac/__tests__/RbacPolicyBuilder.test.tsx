@@ -2,10 +2,12 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { RbacPolicyBuilder, type RbacRole } from '../RbacPolicyBuilder';
 import * as clientModule from '../../../api/client';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
+import { defaultHintController } from '../../../components/emoji/hintTiming';
 
 const MOCK_ROLES: RbacRole[] = [
   {
@@ -425,5 +427,210 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
     fireEvent.change(slugInput, { target: { value: 'qa-specialist' } });
     fireEvent.change(nameInput, { target: { value: 'QA Lead Architect' } });
     expect(slugInput.value).toBe('qa-specialist');
+  });
+
+  describe('StudioDocLink and FieldHelpHint Integrations (KAN-501)', () => {
+    beforeEach(() => {
+      defaultHintController.close();
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+        if (path.endsWith('/api/v1/admin/rbac/roles')) {
+          return Promise.resolve(MOCK_ROLES as never);
+        }
+        return Promise.resolve({ permissions: [] } as never);
+      });
+    });
+
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+      defaultHintController.close();
+    });
+
+    it('renders rbac-policy-doc-link with correct href, label, and title in header actions in Light and Dark themes', async () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('rbac-policy-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('rbac-policy-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/role-and-permission-matrix');
+        expect(docLink.getAttribute('aria-label')).toBe('RBAC Policy Reference');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.rbac-header-actions');
+        expect(headerActions).not.toBeNull();
+
+        const narrativeHeader = docLink.closest('.rbac-narrative-header');
+        expect(narrativeHeader).not.toBeNull();
+        expect(narrativeHeader?.querySelector('.rbac-tier-select')).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus and opens in-app help panel on click via ShellPanelsProvider', async () => {
+      let openedPanelHref: string | undefined;
+      let openedPanelTitle: string | undefined;
+
+      const unregister = registerShellPanel('help', ({ arg }) => {
+        const parsed = arg as { href?: string; title?: string } | undefined;
+        openedPanelHref = parsed?.href;
+        openedPanelTitle = parsed?.title;
+        return <div data-testid="in-app-help-drawer">Help Drawer: {parsed?.href}</div>;
+      });
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <RbacPolicyBuilder isServerAdmin={true} />
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('rbac-policy-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('rbac-policy-doc-link');
+        docLink.focus();
+        expect(document.activeElement).toBe(docLink);
+
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-drawer')).toBeDefined();
+        });
+
+        expect(openedPanelHref).toBe('/docs/role-and-permission-matrix');
+        expect(openedPanelTitle).toBe('RBAC Policy Reference');
+      } finally {
+        unregister();
+      }
+    });
+
+    it('renders rbac-tier-help adjacent to the tier selector with complete ARIA attributes', async () => {
+      render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
+      });
+
+      const hintTrigger = screen.getByTestId('rbac-tier-help');
+      const tierSelect = screen.getByTestId('rbac-tier-select');
+
+      const controlGroup = hintTrigger.closest('.rbac-tier-control-group');
+      expect(controlGroup).not.toBeNull();
+      expect(controlGroup?.contains(tierSelect)).toBe(true);
+
+      expect(hintTrigger.getAttribute('aria-label')).toBe('Help for Administrative Scope Tier');
+      expect(hintTrigger.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(hintTrigger.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('opens FieldHelpHint popover on focus, displays title, summary, default, and values, and closes on Escape', async () => {
+      render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
+      });
+
+      const hintTrigger = screen.getByTestId('rbac-tier-help');
+      act(() => {
+        hintTrigger.focus();
+      });
+
+      expect(screen.getByTestId('rbac-tier-help-popover')).toBeDefined();
+      expect(hintTrigger.getAttribute('aria-expanded')).toBe('true');
+
+      const popover = screen.getByTestId('rbac-tier-help-popover');
+      expect(popover.textContent).toContain('Administrative Scope Tier');
+      expect(popover.textContent).toContain(
+        'Defines role scope propagation and administrative privilege hierarchy',
+      );
+      expect(popover.textContent).toContain('Default:');
+      expect(popover.textContent).toContain('workspace admin');
+      expect(popover.textContent).toContain('system admin');
+      expect(popover.textContent).toContain('workspace admin');
+      expect(popover.textContent).toContain('project admin');
+
+      const docLink = screen.getByTestId('rbac-tier-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/role-and-permission-matrix');
+      expect(docLink.textContent).toContain('More info ->');
+
+      // Escape closes popover
+      act(() => {
+        fireEvent.keyDown(hintTrigger, { key: 'Escape' });
+      });
+
+      expect(hintTrigger.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('rbac-tier-help-popover')).toBeNull();
+    });
+
+    it('supports clicking trigger to toggle popover and Tab forward navigation', async () => {
+      render(<RbacPolicyBuilder isServerAdmin={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
+      });
+
+      const hintTrigger = screen.getByTestId('rbac-tier-help');
+      act(() => {
+        hintTrigger.focus();
+      });
+
+      expect(screen.getByTestId('rbac-tier-help-popover')).toBeDefined();
+
+      // Tab navigation from trigger to doc link inside popover
+      act(() => {
+        fireEvent.keyDown(hintTrigger, { key: 'Tab' });
+      });
+      const docLink = screen.getByTestId('rbac-tier-help-doc-link');
+      expect(document.activeElement).toBe(docLink);
+
+      // Clicking trigger closes popover
+      act(() => {
+        fireEvent.click(hintTrigger);
+      });
+      expect(screen.queryByTestId('rbac-tier-help-popover')).toBeNull();
+    });
+
+    it('opens help drawer when clicking documentation link inside FieldHelpHint popover', async () => {
+      let openedPanelHref: string | undefined;
+
+      const unregister = registerShellPanel('help', ({ arg }) => {
+        const parsed = arg as { href?: string; title?: string } | undefined;
+        openedPanelHref = parsed?.href;
+        return <div data-testid="in-app-help-drawer-from-hint">Hint Drawer: {parsed?.href}</div>;
+      });
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <RbacPolicyBuilder isServerAdmin={true} />
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId('rbac-tier-help'));
+
+        await waitFor(() => {
+          expect(screen.getByTestId('rbac-tier-help-doc-link')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId('rbac-tier-help-doc-link'));
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-drawer-from-hint')).toBeDefined();
+        });
+
+        expect(openedPanelHref).toBe('/docs/role-and-permission-matrix');
+      } finally {
+        unregister();
+      }
+    });
   });
 });
