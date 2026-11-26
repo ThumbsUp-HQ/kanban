@@ -679,4 +679,61 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
 
     expect(screen.getByText('Flow Telemetry Studio')).toBeDefined();
   });
+
+  it('renders FieldHelpHint and default value indicators for horizon and target batch inputs (KAN-460)', async () => {
+    renderWithProviders(<FlowAnalyticsPage />);
+
+    // Invariant: NEVER nest FieldHelpHint inside <label htmlFor> (HTML 4.10.4)
+    expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+
+    // Invariant: FieldHelpHint triggers are sibling children of .kb-flow-label-row
+    const labelRows = document.querySelectorAll('.kb-flow-label-row');
+    expect(labelRows.length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('.kb-flow-label-row button.field-help-hint').length).toBe(2);
+
+    // Verify Default Value Badges
+    expect(screen.getByText('(Default: 14d)')).toBeDefined();
+    expect(screen.getByText('(Default: 20)')).toBeDefined();
+
+    // Verify Horizon Help Hint
+    const horizonHelpBtn = screen.getByTestId('flow-horizon-help');
+    expect(horizonHelpBtn).toBeDefined();
+    fireEvent.click(horizonHelpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeDefined();
+      expect(screen.getByText('Forecast Horizon')).toBeDefined();
+      expect(screen.getByText('14 days')).toBeDefined();
+    });
+
+    // Dismiss popover
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    // Verify Target Batch Help Hint
+    const targetHelpBtn = screen.getByTestId('flow-target-items-help');
+    expect(targetHelpBtn).toBeDefined();
+    fireEvent.click(targetHelpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeDefined();
+      expect(screen.getByText('Target Batch Size')).toBeDefined();
+      expect(screen.getByText('20 items')).toBeDefined();
+    });
+  });
+
+  it('renders StudioDocLink in header left and header actions (KAN-461)', () => {
+    renderWithProviders(<FlowAnalyticsPage />);
+
+    const docLink = screen.getByTestId('flow-analytics-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/statistical-flow-telemetry-and-lean-analytics');
+    expect(docLink.textContent).toContain('Flow Telemetry Guide ->');
+
+    // Verify placement inside .kb-flow-header-left and .kb-flow-header-actions
+    const headerLeft = docLink.closest('.kb-flow-header-left');
+    expect(headerLeft).not.toBeNull();
+    const headerActions = docLink.closest('.kb-flow-header-actions');
+    expect(headerActions).not.toBeNull();
+    expect(headerLeft?.querySelector('.kb-flow-title-group')).not.toBeNull();
+  });
 });

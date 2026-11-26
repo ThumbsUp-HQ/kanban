@@ -9,6 +9,8 @@ import { AgingWipChart } from './charts/AgingWipChart';
 import { MonteCarloForecastCard } from './charts/MonteCarloForecastCard';
 import { CycleBurndownChart } from './charts/CycleBurndownChart';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './FlowAnalyticsPage.css';
 
 export type ProjectFlowMetricsResponse = components['schemas']['ProjectFlowMetricsResponse'];
@@ -91,20 +93,34 @@ export function FlowAnalyticsPage(): JSX.Element {
   return (
     <div className="kb-flow-analytics" data-testid="flow-analytics-page">
       <header className="kb-flow-header">
-        <div className="kb-flow-title-group">
-          <h1>
-            <span role="img" aria-hidden="true">📊</span>
-            Flow Telemetry Studio
-          </h1>
-          <p>
-            Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
-          </p>
+        <div className="kb-flow-header-left">
+          <div className="kb-flow-title-group">
+            <h1>
+              <span role="img" aria-hidden="true">📊</span>
+              Flow Telemetry Studio
+            </h1>
+            <p>
+              Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
+            </p>
+          </div>
+          <div className="kb-flow-header-actions">
+            <StudioDocLink
+              href="/docs/statistical-flow-telemetry-and-lean-analytics"
+              label="Flow Telemetry Guide ->"
+              testId="flow-analytics-doc-link"
+            />
+          </div>
         </div>
 
         <div className="kb-flow-controls">
-          <label className="kb-flow-control-group">
-            <span>Historical Window:</span>
+          <div className="kb-flow-control-group">
+            <div className="kb-flow-label-row">
+              <label htmlFor="flow-window-select" className="kb-flow-label">
+                Historical Window:
+              </label>
+            </div>
             <select
+              id="flow-window-select"
               className="kb-flow-select"
               data-testid="flow-window-select"
               value={windowDays}
@@ -116,35 +132,65 @@ export function FlowAnalyticsPage(): JSX.Element {
               <option value={180}>Last 180 Days</option>
               <option value={365}>Last 365 Days</option>
             </select>
-          </label>
+          </div>
 
-          <label className="kb-flow-control-group">
-            <span>Horizon:</span>
-            <input
-              type="number"
-              className="kb-flow-input"
-              data-testid="flow-horizon-input"
-              min={1}
-              max={366}
-              value={horizonDays}
-              onChange={(e) => { setHorizonDays(Math.max(1, Math.min(366, Number(e.target.value) || 14))); }}
-            />
-            <span>days</span>
-          </label>
+          <div className="kb-flow-control-group">
+            <div className="kb-flow-label-row">
+              <label htmlFor="flow-horizon-input" className="kb-flow-label">
+                Horizon <span className="kb-flow-default-badge">(Default: 14d)</span>:
+              </label>
+              <FieldHelpHint
+                title="Forecast Horizon"
+                fieldKey="horizon_days"
+                summary="Future time window in days for Monte Carlo throughput forecasting ('How Many' items will be delivered)."
+                defaultValue="14 days"
+                docHref="/docs/statistical-flow-telemetry-and-lean-analytics"
+                testId="flow-horizon-help"
+              />
+            </div>
+            <div className="kb-flow-input-wrap">
+              <input
+                id="flow-horizon-input"
+                type="number"
+                className="kb-flow-input"
+                data-testid="flow-horizon-input"
+                min={1}
+                max={366}
+                value={horizonDays}
+                onChange={(e) => { setHorizonDays(Math.max(1, Math.min(366, Number(e.target.value) || 14))); }}
+              />
+              <span className="kb-flow-unit">days</span>
+            </div>
+          </div>
 
-          <label className="kb-flow-control-group">
-            <span>Target Batch:</span>
-            <input
-              type="number"
-              className="kb-flow-input"
-              data-testid="flow-target-items-input"
-              min={1}
-              max={10000}
-              value={targetItems}
-              onChange={(e) => { setTargetItems(Math.max(1, Math.min(10000, Number(e.target.value) || 20))); }}
-            />
-            <span>items</span>
-          </label>
+          <div className="kb-flow-control-group">
+            <div className="kb-flow-label-row">
+              <label htmlFor="flow-target-items-input" className="kb-flow-label">
+                Target Batch <span className="kb-flow-default-badge">(Default: 20)</span>:
+              </label>
+              <FieldHelpHint
+                title="Target Batch Size"
+                fieldKey="target_items"
+                summary="Target number of items for Monte Carlo delivery date forecasting ('When' a fixed batch will be completed)."
+                defaultValue="20 items"
+                docHref="/docs/statistical-flow-telemetry-and-lean-analytics"
+                testId="flow-target-items-help"
+              />
+            </div>
+            <div className="kb-flow-input-wrap">
+              <input
+                id="flow-target-items-input"
+                type="number"
+                className="kb-flow-input"
+                data-testid="flow-target-items-input"
+                min={1}
+                max={10000}
+                value={targetItems}
+                onChange={(e) => { setTargetItems(Math.max(1, Math.min(10000, Number(e.target.value) || 20))); }}
+              />
+              <span className="kb-flow-unit">items</span>
+            </div>
+          </div>
         </div>
       </header>
 
