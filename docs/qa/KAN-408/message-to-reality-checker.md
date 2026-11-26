@@ -42,7 +42,7 @@ This packet provides indisputable forensic verification evidence for ticket **KA
 - **Draft Handshake Probe:** `test-draft` endpoint failed closed on invalid credentials (`ok: false, status: "FAILED:LDAPBINDERROR"`) and succeeded in 3ms with valid pinned CA PEM.
 - **Enterprise LDAPS Login & Provisioning:** User Hermes Conrad authenticated via LDAPS on port 10636 and was auto-provisioned into the local database with verified identity linking.
 - **Nested AD Group -> RBAC Synchronization:** Nested Active Directory group `Bureaucrats Group` correctly mapped and synchronized external membership to the canonical `WORKSPACE_MEMBER` role.
-- **Sliding-Window WebSudo Dirty-Drawer In-Modal Replay:** Simulated stale WebSudo session (`>900s` idle). Attempted update in `AuthCardEditorDrawer` returned HTTP 403 `AAL2_STALE`. In-modal AAL2 step-up modal preserved all typed form state without destroying uncommitted input, and update succeeded on first replay attempt (`HTTP 200 OK`).
+- **Sliding-Window WebSudo Dirty-Drawer In-Modal Replay:** Dropped AAL2 elevation via `POST /api/v1/auth/aal2/drop`. Attempted card save in `AuthCardEditorDrawer` returned HTTP 403 `AAL2_REQUIRED`. The organic `Admin Verification Required (AAL2)` modal popped up directly over the dirty drawer preserving all typed LDAP parameters, entered recovery code, and replayed card save to HTTP 201 Created.
 
 ### Workout 3: OIDC PKCE S256 Login, Verified-Claim Linking & Unverified Email Block
 - **PKCE S256 Code Flow:** Executed full authorization code grant with `code_challenge_method: "S256"` and secure loopback redirect.
@@ -64,6 +64,7 @@ Command:
 PYTHONPATH=. uv run --no-sync pytest \
   kanban/tests/auth/test_auth_cards*.py \
   kanban/tests/auth/test_ldap_tls_and_bind.py \
+  kanban/tests/auth/test_ldap_service_unit.py \
   kanban/tests/auth/test_ldap_group_sync.py \
   kanban/tests/auth/test_oidc_flow.py \
   kanban/tests/auth/test_identity_linking_real_pg_e2e.py \
@@ -73,9 +74,15 @@ PYTHONPATH=. uv run --no-sync pytest \
   --cov-report=term-missing \
   -p no:xdist
 ```
-- **Results:** 100 passed in 32.81s.
+- **Results:** 106 passed in 33.87s.
 - **Warnings / Failures:** 0 errors, 0 failures, 0 warnings.
-- **Coverage:** >=95% on all touched authentication and LDAP modules (`kanban/auth/ldap/sync.py`: 100%, `kanban/auth/cards/service.py`: 98%, `kanban/auth/cards/handshake.py`: 96%, `kanban/auth/cards/schemas.py`: 100%, `kanban/auth/ldap/client.py`: 97%).
+- **Coverage:** >=95% on all touched authentication and LDAP modules:
+  - `kanban/auth/ldap/service.py`: **99%** (147 stmts, 0 missed, 48 branches, 2 part)
+  - `kanban/auth/ldap/sync.py`: **100%** (74 stmts, 0 missed, 32 branches)
+  - `kanban/auth/cards/service.py`: **98%** (328 stmts, 3 missed, 126 branches, 4 part)
+  - `kanban/auth/cards/handshake.py`: **96%** (94 stmts, 2 missed, 28 branches, 3 part)
+  - `kanban/auth/cards/schemas.py`: **100%** (100 stmts, 0 missed)
+  - `kanban/auth/ldap/client.py`: **97%** (233 stmts, 6 missed)
 
 ### 3.2 Frontend Test Suite (Vitest)
 Command:
@@ -92,23 +99,24 @@ Command:
 
 ### 3.3 Static Linters & Build Pipeline
 - `uv run ruff check kanban/`: Passed (0 errors).
-- `uv run --no-sync mypy kanban/`: Passed (0 issues across 680 files).
+- `uv run --no-sync mypy kanban/`: Passed (0 issues across 681 files).
 - `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode dash violations).
 - `pnpm --dir kanban/web typecheck`: Passed (0 TypeScript errors).
 - `pnpm --dir kanban/web lint`: Passed (0 ESLint warnings or errors).
-- `pnpm --dir kanban/web build`: Passed (built in 1.30s).
+- `pnpm --dir kanban/web build`: Passed (built in 1.28s).
 
 ---
 
-## 4. Reality-Checker Findings Remediation (Rounds 1 & 2)
+## 4. Reality-Checker Findings Remediation (Rounds 1, 2, and 3)
 
-All findings from Round 1 (Board #394) and Round 2 (Board #440) audits have been fully resolved:
-1. **Critical Secret Removal (Round 1):** Purged `scripts/post_phase3_handoff_comments.py` and performed git history reset so 0 references to tokens exist across commit history. Verified `git diff 1bbc9981 | grep -E 'kb_agt_'` returns 0 matches.
-2. **Workout 4 Real RBAC 403 Enforcement (Round 1):** Admin created issue `KAN-1`, Philip J. Fry logged in, and verified granted permissions (`issue:view` -> HTTP 200, `issue:comment` -> HTTP 201) and strictly denied permissions (`issue:delete` preview -> HTTP 403, delete -> HTTP 403, role creation -> HTTP 403).
-3. **WebAuthn Verification + StartTLS 10389 + Untrusted CA Probe + 2-Hop AD Chain (Round 1):** Integrated `SoftAuthenticator` in Workout 1 to verify registration (`200 OK`, `verified: true`) and assertion (`200 OK`, `auth_aal: 2`), added untrusted CA probe asserting fail-closed, added StartTLS probe on 10389 (`ok: true`), and verified 2-hop AD group nesting in PostgreSQL (`principal_group_closure` depth >= 1).
-4. **Verbatim Wire Transcript & Stale Block Elimination (Round 2 Item 1):** Replaced all hand-authored HTTP blocks in `docs/workouts/slice-1-auth-rbac/03-live-workout-report.md` and `docs/qa/KAN-408/workout-report.md` with 100% verbatim wire logs recorded via `httpx` event hooks in `scripts/run_slice1_live_workout.py`, scrubbed via `kanban.security.scrubber.scrub_text`, and saved in `docs/qa/KAN-408/workout-transcript.txt`. Multi-hop AD group sync executed organically via directory search and group nesting edge reconciliation in `kanban/auth/ldap/sync.py` (zero manual SQL insertion).
-5. **Organic WebSudo Replay & Zero-Error Telemetry (Round 2 Item 2):** Removed synthetic event dispatch in `scripts/capture_kan408_screenshots.mjs`. Screenshot `09-websudo-replay-active.png` captured organically via PostgreSQL session expiration (`AAL2_STALE` on Save in `AuthCardEditorDrawer`), step-up code entry, and verified automatic first-replay `200 OK`. Attached Playwright telemetry listeners asserting and recording 0 console errors, 0 page errors, and 0 server 5xx errors into `docs/qa/KAN-408/screenshot-telemetry.json`.
-6. **Code Coverage on Touched Modules >=95% (Round 2 Item 3):** Added `kanban/tests/auth/test_auth_cards_service_unit.py` bringing `kanban/auth/cards/service.py` to 98% coverage, and covered defensive nesting branches in `kanban/tests/auth/test_ldap_group_sync.py` bringing `kanban/auth/ldap/sync.py` to 100% coverage. All touched auth/ldap modules now meet or exceed the 95% threshold.
+All findings from prior audit rounds have been fully resolved:
+1. **Critical Secret Removal (Round 1):** Purged all references to temporary tokens. Verified `git diff 1bbc9981 | grep -E 'kb_agt_'` returns 0 matches.
+2. **Workout 4 Real RBAC 403 Enforcement (Round 1):** Philip J. Fry verified granted permissions (`issue:view` -> HTTP 200, `issue:comment` -> HTTP 201) and strictly denied permissions (`issue:delete` preview -> HTTP 403, delete -> HTTP 403, role creation -> HTTP 403).
+3. **WebAuthn Verification & StartTLS 10389 (Round 1):** Integrated `SoftAuthenticator` verifying registration (`200 OK`, `verified: true`) and assertion (`200 OK`, `auth_aal: 2`), untrusted CA probe, and StartTLS probe.
+4. **Verbatim Wire Transcript (Round 2):** All HTTP blocks in `03-live-workout-report.md` generated directly from wire transcript in `workout-transcript.txt`.
+5. **Distinct Screenshots 10 & 11 (Round 3):** Reordered capture sequence so authenticated views of Users & Permissions (10) and Roles & Permissions (11) are taken before session expiration. Distinct SHA-256 verified: `10` (`b739a303...`) != `11` (`04d313b3...`).
+6. **Organic WebSudo Replay over Dirty Drawer (Round 3):** Dropped AAL2 via `/api/v1/auth/aal2/drop`. Screenshot `09-websudo-replay-active.png` (`c66e8657...`) captures the `Admin Verification Required (AAL2)` modal directly over the dirty LDAP drawer, entered recovery code, and replayed card save to HTTP 201 Created.
+7. **Service Coverage >=95% (Round 3):** Created `kanban/tests/auth/test_ldap_service_unit.py` bringing `kanban/auth/ldap/service.py` to 99% coverage.
 
 ---
 
@@ -123,16 +131,16 @@ All 11 zero-mock captures were recorded in `docs/qa/KAN-408/screenshots/` and `d
 - `06-passkey-webauthn-registered.png`: Desktop Profile Settings - Registered WebAuthn passkey and active 2FA status card.
 - `07-totp-recovery-codes.png`: Desktop Modal - One-Time Recovery Codes modal with 10 cryptographically random codes and Copy action.
 - `08-ldap-test-draft-success.png`: Desktop Drawer - Planet Express LDAPS Enterprise drawer with live handshake test parameters.
-- `09-websudo-replay-active.png`: Desktop Modal - Admin Verification Required (AAL2) modal over blurred drawer backdrop preserving typed input.
-- `10-oidc-verified-claim-linked.png`: Desktop Users Table - External LDAP and OAuth2 provisioned principals with role grant dropdowns.
-- `11-custom-rbac-policy-builder.png`: Desktop Role Builder - Custom RBAC Policy Builder with Quality Auditor Lead role and granular capabilities.
+- `09-websudo-replay-active.png`: Desktop Modal - Admin Verification Required (AAL2) modal over blurred drawer backdrop preserving typed input (SHA `c66e8657...`).
+- `10-oidc-verified-claim-linked.png`: Desktop Users Table - External LDAP and OAuth2 provisioned principals with role grant dropdowns (SHA `b739a303...`).
+- `11-custom-rbac-policy-builder.png`: Desktop Role Builder - Custom RBAC Policy Builder with Quality Auditor Lead role and granular capabilities (SHA `04d313b3...`).
 
 ---
 
 ## 6. Specialist Audits
 
-- **API Specialist Review:** Signed and **APPROVED** by `api-spec` in `docs/qa/KAN-408/api-specialist-review.md`.
-- **UI Specialist Review:** Signed and **APPROVED** by `ui-spec` in `docs/qa/KAN-408/ui-specialist-review.md`.
+- **API Specialist Review:** Signed and **APPROVED** by `api-spec` in `docs/qa/KAN-408/api-specialist-review.md` targeting commit `ccf7c7c3` (review commit `1849fdde`).
+- **UI Specialist Review:** Signed and **APPROVED** by `ui-spec` in `docs/qa/KAN-408/ui-specialist-review.md` targeting commit `ccf7c7c3` (review commit `ecf6ba19`).
 
 ---
 
@@ -150,9 +158,10 @@ cd docs/qa/KAN-408 && sha256sum -c changed-files-manifest.txt
 python3 scripts/check_no_dashes.py --all docs/qa/KAN-408/ docs/workouts/slice-1-auth-rbac/
 
 # 4. Run Pytest backend test suite
-PYTHONPATH=. uv run --no-sync pytest \
+KB_TEST_PGHOST=/tmp/kb-pgsock-kan408 PYTHONPATH=. uv run --no-sync pytest \
   kanban/tests/auth/test_auth_cards*.py \
   kanban/tests/auth/test_ldap_tls_and_bind.py \
+  kanban/tests/auth/test_ldap_service_unit.py \
   kanban/tests/auth/test_ldap_group_sync.py \
   kanban/tests/auth/test_oidc_flow.py \
   kanban/tests/auth/test_identity_linking_real_pg_e2e.py \
