@@ -195,12 +195,33 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
 
             async with session_cm as session:
                 budget_enforcer = BudgetEnforcer(session=session)
-                stmt_freeze = text(
-                    "SELECT provider_config_id FROM ai_token_ledgers "
-                    "WHERE (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
-                    "LIMIT 1"
-                )
-                res_freeze = await session.execute(stmt_freeze)
+                candidates = getattr(router, "_candidates", ())
+                target_cfg_id = candidates[0].provider_config_id if candidates else None
+
+                if target_cfg_id is not None:
+                    stmt_freeze = text(
+                        "SELECT provider_config_id FROM ai_token_ledgers "
+                        "WHERE workspace_id = :ws_id "
+                        "  AND provider_config_id = :cfg_id "
+                        "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
+                        "LIMIT 1"
+                    )
+                    res_freeze = await session.execute(
+                        stmt_freeze,
+                        {"ws_id": principal_ctx.workspace_id, "cfg_id": target_cfg_id},
+                    )
+                else:
+                    stmt_freeze = text(
+                        "SELECT provider_config_id FROM ai_token_ledgers "
+                        "WHERE workspace_id = :ws_id "
+                        "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
+                        "LIMIT 1"
+                    )
+                    res_freeze = await session.execute(
+                        stmt_freeze,
+                        {"ws_id": principal_ctx.workspace_id},
+                    )
+
                 frozen_provider_id = res_freeze.scalar_one_or_none()
                 if frozen_provider_id is not None:
                     _logger.warning(
@@ -218,7 +239,6 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
                         route_trace=[],
                     )
 
-                candidates = getattr(router, "_candidates", ())
                 stmt = text(
                     "SELECT id FROM ai_provider_configs "
                     "WHERE workspace_id = :ws_id AND enabled = true "
@@ -226,9 +246,7 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
                 )
                 res = await session.execute(stmt, {"ws_id": principal_ctx.workspace_id})
                 db_provider_id = res.scalar_one_or_none()
-                provider_config_id = db_provider_id or (
-                    candidates[0].provider_config_id if candidates else None
-                )
+                provider_config_id = target_cfg_id or db_provider_id
 
                 if provider_config_id is not None:
                     try:
