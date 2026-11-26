@@ -1,89 +1,8 @@
-👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
-👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p4_14_mcp_scopable_keys, Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_14_mcp_scopable_keys -> p5_19b_project_repo_bindings, project_repo_bindings registry for hardened bare git mirrors (KB-P5-19b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_19b_project_repo_bindings -> p4_07_mcp_read_taint, mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_07_mcp_read_taint -> p5_17a_workflow_hooks, Workflow hook DDL, executions, and invocations (KB-P5-17a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_17a_workflow_hooks -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p4_18_oauth_mcp_scoping, OAuth & MCP scoping helpers, label column, and RLS-safe workspace functions.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_23_oidc_link_intent_fk -> p4_24_agent_safe_sequences, Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_24_agent_safe_sequences -> p6_02_pdf_attachments, Allow application/pdf attachments and page_count.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_02_pdf_attachments -> p6_03_multi_source_imports_and_aliases, Multi source imports and issue key aliases.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_03_multi_source_imports_and_aliases -> p6_04_enforce_credential_boundary_rls_gucs, Enforce credential boundary rls gucs.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_04_enforce_credential_boundary_rls_gucs -> p6_05_issue_leases_and_fencing, Issue leases and fencing.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_05_issue_leases_and_fencing -> p6_06_crypto_shredded_activity_ledger, Envelope-encrypted activity records payloads and AAL2 two-stage crypto-shredding.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_06_crypto_shredded_activity_ledger -> p6_07_content_provenance_and_taint, Content provenance trust tiers and untrusted content taint tracking.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_07_content_provenance_and_taint -> p6_08_workload_identity_policies, Workload identity policies and JTI replay prevention (KB-AUTH-OIDC-EXCHANGE-01, KAN-74).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_08_workload_identity_policies -> p6_09_scm_webhooks_and_outbound_bus, SCM webhooks, artifacts, and outbound webhook bus (KB-DEVSECOPS-BUS-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_09_scm_webhooks_and_outbound_bus -> p6_11_git_truststore_and_attestations, Git truststore and commit signature attestations (KB-DEVSECOPS-ATTEST-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_11_git_truststore_and_attestations -> p6_13_csv_import_export_governance, csv import export governance.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_13_csv_import_export_governance -> p6_14_jinja_report_templates, jinja report templates.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_14_jinja_report_templates -> p6_10_issue_workpads_and_rework_breaker, Issue workpads and rework breaker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_10_issue_workpads_and_rework_breaker -> p6_12_granular_rbac_roles, Granular rbac roles.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_12_granular_rbac_roles -> p6_15_hardened_workspace_switch_and_module_issues, Hardened workspace switch and module_issues security invoker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_15_hardened_workspace_switch_and_module_issues -> p6_16_oauth_confidential_clients, Support confidential OAuth 2.1 clients.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_16_oauth_confidential_clients -> p6_17_server_admin_role_access, Update app_principal_has_role for server admin scope.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_17_server_admin_role_access -> p6_18_websudo_sliding_aal2, WebSudo sliding window and request replay.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_18_websudo_sliding_aal2 -> p6_19_server_admin_cross_workspace_role_access, Fix app_principal_has_role for cross-workspace server admin and credential scoping.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_19_server_admin_cross_workspace_role_access -> p6_20_oauth_clients_status_check, Update oauth_clients status check constraint for suspended and revoked.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_20_oauth_clients_status_check -> p6_21_agent_onboarding_preferences, Add agent_onboarding_prefs_json to user_preferences.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_21_agent_onboarding_preferences -> p6_22_mcp_api_keys_capability_mask_boundary, Allow capability_mask 0 for deny-all MCP keys.
+================================================================================
+=== KAN-419 UNIT TEST RESULTS: WIKI BUNDLE SYNC & IN-APP DOCSCENTER ===
+================================================================================
+
+=== 1. Pytest Wiki Bundle Sync ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af
@@ -100,26 +19,26 @@ kanban/tests/test_wiki_bundle_sync.py::test_reject_unreferenced_orphan_images PA
 kanban/tests/test_wiki_bundle_sync.py::test_sync_wiki_bundle_execution PASSED [ 85%]
 kanban/tests/test_wiki_bundle_sync.py::test_feature_comparison_day2_clean_and_synced PASSED [100%]
 
-============================== 7 passed in 0.14s ===============================
----
+============================== 7 passed in 0.13s ===============================
+
+=== 2. Vitest DocsCenter Component & Visual Assets (>=95% Coverage) ===
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 180ms
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 163ms
 Not implemented: navigation to another Document
- ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 5894ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 5147ms
    ✓ DocsCenter & Help System (KAN-16) (50)
      ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (17)
-       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 328ms
-       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1723ms
-       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 515ms
-       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 416ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1575ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 476ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 419ms
 
  Test Files  2 passed (2)
       Tests  71 passed (71)
-   Start at  22:30:14
-   Duration  7.37s (tests 74%, environment 18%, import 6%, worker 1%, transform 1%)
+   Start at  22:48:16
+   Duration  6.50s (tests 73%, environment 20%, import 5%, worker 1%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------

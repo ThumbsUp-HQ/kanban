@@ -165,5 +165,5 @@ The Slice 3 documentation and knowledge bundle is published, verified, and synch
 - **Pytest:** 100% pass on wiki bundle sync tests.
 - **Vitest:** 100% pass on DocsCenter and DocsCenterImages test suites (>=95% branch coverage).
 - **Static Checks:** `check_no_dashes.py --all` exit code 0; `pnpm typecheck` exit code 0; `pnpm lint` exit code 0; `pnpm build` clean production bundle.
-- **Playwright Visual Verification:** Zero-mock unclipped screenshots captured across 5 standard viewports (Desktop 1440x900 light/dark, Tablet 1024x768 landscape, Tablet 768x1024 portrait, Mobile 390x844 portrait) showing clean Mermaid diagrams and embedded image rendering without horizontal scrollbars.
+- **Playwright Visual Verification:** Unclipped Playwright screenshots captured across 5 standard viewports using app-shell API stubs (mockApi(page, getDocsMocks())) while rendering the real offline wikiManifest.ts and public/docs-images/ bundle (Desktop 1440x900 light/dark, Tablet 1024x768 landscape, Tablet 768x1024 portrait, Mobile 390x844 portrait) showing clean Mermaid diagrams and embedded image rendering without horizontal scrollbars.
 ```

@@ -6,7 +6,7 @@
 **Upstream Phase Tickets:** `KAN-416` (Audit & Cuts), `KAN-417` (UI Simplification & Wiring), `KAN-418` (Live Workouts)  
 **Branch:** `docs/KAN-419-slice3-mcp-docs` (branched from `main` at commit `685b9edf`)  
 **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af`  
-**Wiki Branch:** `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki` (Commit: `758f9b2`)  
+**Wiki Branch:** `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki` (Commit: `44545f4`)  
 **Zero Schema Mutations:** No database migrations added or modified in Phase 4.  
 **Pre-Prod Safety Invariant:** Absolute zero-mutation on protected pre-production (`192.168.1.101` / `k.hackedyour.info`).  
 
@@ -22,7 +22,7 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
 1. **Three-Surface MCP Architecture (25 Tools Total):**
    - `/mcp/agent` exposes exactly 10 execution and QA tools: `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`, and `update_workpad`.
    - `/mcp/docs` exposes exactly 3 documentation tools: `search`, `create`, `update`.
-   - `/mcp/admin` exposes exactly 12 governance and lifecycle tools: `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links`, and `destructive_lifecycle` (with mandatory 2-stage token confirmation).
+   - `/mcp/admin` exposes exactly 12 governance and lifecycle tools: `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links` (actions: `run_audit`, `list_flagged`, `purge_audited`, `help`), and `destructive_lifecycle` (with mandatory 2-stage token confirmation).
 2. **Granular Capability Bitmasks (`0..255`):**
    - Capability bitmask supports 0 (Deny-All) through 255. Bit flags: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`.
 3. **RFC 8628 Device Authorization Flow:**
@@ -42,15 +42,15 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
 
 | # | Ticket Definition of Done Requirement | Verification Artifact / Log Evidence | Forensic Pass Verdict |
 | :-: | :--- | :--- | :--- |
-| **1** | **Authoritative 4 Wiki Chapters Updated**<br>Authoritative documentation updated across all 4 target chapters: `Three-Surface-MCP-Server-Architecture.md`, `Zero-Trust-Service-Auth-and-Workload-OIDC.md`, `MCP-Tools-Reference.md`, and `Studio-Configuration-Reference.md` (Sections 6 & 7 only). | `thumbs-up-kanban.wiki/*.md`<br>`docs/qa/KAN-419/wiki-diff.patch` (Commit `758f9b2`) | **PASS**<br>All 4 chapters updated with accurate architecture, wire schemas, and operator guides. |
+| **1** | **Authoritative 4 Wiki Chapters Updated**<br>Authoritative documentation updated across all 4 target chapters: `Three-Surface-MCP-Server-Architecture.md`, `Zero-Trust-Service-Auth-and-Workload-OIDC.md`, `MCP-Tools-Reference.md`, and `Studio-Configuration-Reference.md` (Sections 6 & 7 only). | `thumbs-up-kanban.wiki/*.md`<br>`docs/qa/KAN-419/wiki-diff.patch` (Commit `44545f4`) | **PASS**<br>All 4 chapters updated with accurate architecture, wire schemas, and operator guides. |
 | **2** | **Verified KAN-418 Screenshots Embedded**<br>Embed all 7 verified zero-mock live workout screenshots from `docs/workouts/slice-3-mcp-oauth/screenshots/` into both `thumbs-up-kanban.wiki/images/` and `kanban/web/public/docs-images/`. | `thumbs-up-kanban.wiki/images/slice3-*.png`<br>`kanban/web/public/docs-images/slice3-*.png` | **PASS**<br>All 7 screenshots copied and embedded in wiki chapters and offline bundle (0 unreferenced orphans, 100% SHA-256 match). |
-| **3** | **Setting-by-Setting Technical Paragraphs & Contracts**<br>Provide 1 concise technical paragraph per setting listing all options and exact backend contracts: MCP Access Studio (12 settings across 4 groups), OAuth 2.1 Governance Studio (11 settings across 4 groups), Workload OIDC (10 settings across 3 groups). | `thumbs-up-kanban.wiki/Studio-Configuration-Reference.md`<br>`docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md` | **PASS**<br>33 settings documented with exact technical contracts, types, defaults, and security impacts. |
+| **3** | **Setting-by-Setting Technical Paragraphs & Contracts**<br>Provide 1 concise technical paragraph per setting listing all options and exact backend contracts: MCP Access Studio (9 settings across 3 groups), Workload Identity Federation Studio (13 settings across 3 groups), OAuth 2.1 Client Governance Studio & Device Flow (11 settings across 3 groups). | `thumbs-up-kanban.wiki/Studio-Configuration-Reference.md`<br>`docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md` | **PASS**<br>33 settings documented with exact technical contracts, types, defaults, and security impacts. |
 | **4** | **Step-by-Step Operator Runbooks for All 4 Flows**<br>Step-by-step guides for: (a) Connecting Gemini App, Claude, Cursor & CLI via OAuth 2.1, (b) Minting Scoped MCP Keys, (c) Configuring GitHub Actions / GitLab CI / Kubernetes Workload OIDC, and (d) Governing & Purging OAuth 2.1 Clients. | Sections 4 in target wiki chapters<br>`04-published-docs-manifest.md` Section 3 | **PASS**<br>Comprehensive CLI, REST, and UI operator procedures documented with copy-paste YAML/JSON snippets. |
-| **5** | **Offline In-App Docs Center Bundle Sync**<br>Synchronize all 34 wiki chapters into `kanban/web/src/features/docs-center/wikiManifest.ts` using `scripts/sync_wiki_bundle.py`. | `kanban/web/src/features/docs-center/wikiManifest.ts`<br>`build-check.txt` | **PASS**<br>34 chapters synced cleanly into manifest (596,791 bytes, 102 images copied). |
+| **5** | **Offline In-App Docs Center Bundle Sync**<br>Synchronize all 34 wiki chapters into `kanban/web/src/features/docs-center/wikiManifest.ts` using `scripts/sync_wiki_bundle.py`. | `kanban/web/src/features/docs-center/wikiManifest.ts`<br>`build-check.txt` | **PASS**<br>34 chapters synced cleanly into manifest (599,201 bytes, 102 images copied). |
 | **6** | **Zero Broken UI Doc Links**<br>Verify every `StudioDocLink` and `FieldHelpHint` `docHref` in `McpAccessStudio.tsx`, `McpUnifiedStudio.tsx`, `ConnectOAuthAppModal.tsx`, `McpConfigSnippetModal.tsx`, `OAuthClientGovernanceStudio.tsx`, and `DeviceActivatePage.tsx` resolves to a valid chapter and anchor. | `04-published-docs-manifest.md` Section 4<br>`kanban/tests/test_wiki_bundle_sync.py` | **PASS**<br>All 8 Slice-3 UI help links resolve to valid chapter headings and explicit anchors (0 broken links). |
 | **7** | **Published Documentation Manifest**<br>Write `docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md` cataloging chapters, screenshots, setting counts, and verified anchor table. | `docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md` | **PASS**<br>Full publication manifest recorded. Verified 0 Unicode dashes. |
 | **8** | **Phase 4 Completion Packet Comment on KAN-415**<br>Provide exact markdown text for Phase 4 completion comment on parent epic `KAN-415` for coordinator MCP posting (without state transitions). | `04-published-docs-manifest.md` Section 6 | **PASS**<br>Exact markdown packet provided for coordinator posting. |
-| **9** | **Docs Center Automated Unit Test Coverage (>=95%)**<br>Execute DocsCenter unit test suites with branch coverage threshold >=95%. | `docs/qa/KAN-419/unit-test-results.txt` | **PASS**<br>70 passed across 2 suites. 99.6% statements, 96.44% branches, 100% lines. |
+| **9** | **Docs Center Automated Unit Test Coverage (>=95%)**<br>Execute DocsCenter unit test suites with branch coverage threshold >=95%. | `docs/qa/KAN-419/unit-test-results.txt` | **PASS**<br>71 passed across 2 suites. 99.6% statements, 96.74% branches, 100% lines. |
 | **10** | **DoD Build-Check Pipeline Execution**<br>Execute full build check: `sync_wiki_bundle && check_no_dashes --all && check_no_dashes <wiki-files> && pnpm typecheck && pnpm lint && pnpm build`. | `docs/qa/KAN-419/build-check.txt` | **PASS**<br>Exit code 0. Zero linter warnings, zero type errors, zero Unicode dashes, production build verified. |
 | **11** | **Multi-Viewport Playwright Visual Verification**<br>Capture unclipped screenshots across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-419/screenshots/`. Visually inspect every PNG via `read_file`. | `docs/qa/KAN-419/screenshots/*.png`<br>`kanban/web/e2e/qa/kan-419-slice3-docs-screenshots.spec.ts` | **PASS**<br>26 screenshots captured and visually verified. Flawless layout and typography. |
 | **12** | **Strict Plain ASCII Directives (Zero Unicode Dashes)**<br>Enforce zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) in all documentation, code, and QA artifacts. | `scripts/check_no_dashes.py --all`<br>`docs/qa/KAN-419/build-check.txt` | **PASS**<br>Zero Unicode dashes detected across repository and wiki chapters. |
@@ -78,11 +78,11 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
   ```
 - **Results:**
   - `DocsCenterImages.test.tsx`: 21 passed
-  - `DocsCenter.test.tsx`: 49 passed
-  - Total: **70 passed in 6.67s**
+  - `DocsCenter.test.tsx`: 50 passed
+  - Total: **71 passed in 6.50s**
   - **Coverage Metrics:**
     - **Statements:** **99.6%**
-    - **Branches:** **96.44%** (exceeds mandatory `>=95%` standard)
+    - **Branches:** **96.74%** (exceeds mandatory `>=95%` standard)
     - **Functions:** **100%**
     - **Lines:** **100%**
 
@@ -97,12 +97,12 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
   pnpm --dir kanban/web build
   ```
 - **Results:**
-  - `sync_wiki_bundle`: 34 chapters synced into `wikiManifest.ts` (596,791 bytes, 102 images copied)
+  - `sync_wiki_bundle`: 34 chapters synced into `wikiManifest.ts` (599,201 bytes, 102 images copied)
   - `check_no_dashes.py --all`: 0 violations
   - `check_no_dashes.py <wiki-files>`: 0 violations
   - `typecheck`: `tsc -b --noEmit` passed with 0 errors
   - `lint`: `eslint . --max-warnings 0` passed with 0 warnings
-  - `build`: `tsc -b && vite build` built production client in 1.35s
+  - `build`: `tsc -b && vite build` built production client in 1.34s
 
 ---
 

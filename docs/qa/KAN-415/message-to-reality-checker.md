@@ -6,7 +6,7 @@
 - **Execution Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af`
 - **Git Branch:** `docs/KAN-419-slice3-mcp-docs`
 - **Base Commit:** `8c6a77e29e8fe036ebbc14400d15053e4d1bb335`
-- **Wiki Branch:** `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki` (Commit: `758f9b2`)
+- **Wiki Branch:** `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki` (Commit: `44545f4`)
 - **Target Surfaces:**
   - MCP Access Studio (`/settings/mcp` and `/admin/mcp`)
   - Connect OAuth App Modal & Client Configuration Snippet Generator
@@ -24,7 +24,7 @@
 | **Phase 1** | `KAN-416` | Audit, Inventory & Cuts Blueprint | **Grade-A READY** | `docs/workouts/slice-3-mcp-oauth/01-audit-and-cuts.md` |
 | **Phase 2** | `KAN-417` | UI Simplification & Backend Wiring | **Grade-A READY** | `docs/workouts/slice-3-mcp-oauth/02-implemented-changes.md` (Merged `20320478`) |
 | **Phase 3** | `KAN-418` | Live Container Workouts & Zero-Mock Proof | **Grade-A READY** | `docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md`, 7 live PNG screenshots (Merged `d601e2f1`) |
-| **Phase 4** | `KAN-419` | In-App Docs Sync, Wiki Chapters & Runbooks | **Grade-A READY** | `docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md`, 26 PNG screenshots (Commit `758f9b2` in wiki) |
+| **Phase 4** | `KAN-419` | In-App Docs Sync, Wiki Chapters & Runbooks | **Grade-A READY** | `docs/workouts/slice-3-mcp-oauth/04-published-docs-manifest.md`, 26 PNG screenshots (Commit `44545f4` in wiki) |
 
 ---
 
@@ -88,24 +88,24 @@ cd kanban/web && COVERAGE_INCLUDE="src/features/settings/McpAccessStudio.tsx,src
   --coverage --coverage.thresholds.branches=95
 ```
 
-- **Execution Results:** **206 passed across 7 test files in 8.09s** (0 failures, 0 errors, 0 `act(...)` warnings).
+- **Execution Results:** **207 passed across 7 test files in 8.58s** (0 failures, 0 errors, 0 `act(...)` warnings).
 - **Branch Coverage Across All Touched Slice-3 Components (All >=95% Threshold):**
-  - `All files`: **99.44% Statements, 96.26% Branches, 100% Functions, 99.61% Lines**
+  - `All files`: **99.44% Statements, 96.34% Branches, 100% Functions, 99.61% Lines**
   - `DeviceActivatePage.tsx`: **100% Statements, 96.55% Branches, 100% Lines**
   - `OAuthClientGovernanceStudio.tsx`: **98.45% Statements, 96.11% Branches, 98.39% Lines**
   - `ConnectOAuthAppModal.tsx`: **100% Statements, 96.07% Branches, 100% Lines**
   - `McpAccessStudio.tsx`: **99.53% Statements, 96.28% Branches, 99.74% Lines**
   - `McpUnifiedStudio.tsx`: **100% Statements, 95.60% Branches, 100% Lines**
-  - `DocsCenter (all files)`: **99.60% Statements, 96.44% Branches, 100% Lines**
+  - `DocsCenter (all files)`: **99.60% Statements, 96.74% Branches, 100% Lines**
 
 ### C. Build Check Pipeline (`docs/qa/KAN-415/build-check.txt`)
-- **1. sync_wiki_bundle:** 34 chapters synced into `wikiManifest.ts` (596,791 bytes, 102 images copied).
+- **1. sync_wiki_bundle:** 34 chapters synced into `wikiManifest.ts` (599,201 bytes, 102 images copied).
 - **2. check-migrations:** 84 migrations valid, single head: `p6_22_mcp_api_keys_capability_mask_boundary`.
 - **3. ruff check:** All checks passed (0 errors across `kanban/`, `mcp/`).
 - **4. check_no_dashes:** Zero Unicode dashes across repository.
 - **5. pnpm typecheck:** `tsc -b --noEmit` exit code 0.
 - **6. pnpm lint:** `eslint . --max-warnings 0` exit code 0 (0 warnings).
-- **7. pnpm build:** `tsc -b && vite build` built production client in 1.25s.
+- **7. pnpm build:** `tsc -b && vite build` built production client in 1.34s.
 
 ---
 
