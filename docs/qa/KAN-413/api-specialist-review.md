@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
-**Target Commit:** `feat/KAN-413-slice2-ai-workout`  
+**Target Commit:** `51e20c98` (branch `feat/KAN-413-slice2-ai-workout`, base `1bbc9981`)  
 
 ---
 
@@ -73,11 +73,13 @@ The live workouts were executed against an isolated PostgreSQL instance and loca
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 63 tests passed in 65.76s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, and `test_remote_runner.py`.
+   - 76 tests passed in 38.39s across `test_ai_providers_api.py`, `test_net_guard.py`, `test_agent_definitions_api.py`, `test_llms_txt.py`, `test_remote_runner.py`, and `test_scrubber.py`.
+   - Coverage on touched modules: 97% overall (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
    - 0 failures, 0 errors, 0 warnings.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 4,106 tests passed across 285 test files in 78.80s.
+   - 165 tests passed across 6 test files in 4.41s.
+   - Branch coverage: **96.60%** with clean V8 coverage table (all files >= 95.48%: `AiStudioPage` 95.9%, `AiProviderEditorDrawer` 96.08%, `AiBudgetModal` 97.77%, `AgentStudioPage` 97.5%, `AgentDefinitionEditorDrawer` 95.48%, `RunnerStudioPage` 97.61%).
    - 0 failures, 0 `act(...)` stderr warnings.
 
 3. **Build & Static Analysis Pipeline**:
@@ -85,7 +87,7 @@ The live workouts were executed against an isolated PostgreSQL instance and loca
    - `mypy`: 0 issues found in 815 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 2.08s.
+   - `vite build`: Succeeded in 1.23s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -95,10 +97,10 @@ The live workouts were executed against an isolated PostgreSQL instance and loca
 - QA Directory: `docs/qa/KAN-413/`
 - Specialist Reviews:
   - `api-specialist-review.md`: **APPROVED** (`api-spec`)
-  - `ui-specialist-review.md`: In review (`ui-spec`)
+  - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 63 Pytest and 4,106 Vitest tests.
+  - `unit-test-results.txt`: Documents 76 Pytest and 165 Vitest tests.
   - `screenshots/`: 22 zero-mock PNG captures across 5 viewports and live workflow states.
   - `03-live-workout-report.md`: Complete live workout log with secret sanitization.
 
