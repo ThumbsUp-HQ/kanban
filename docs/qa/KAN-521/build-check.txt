@@ -1,4 +1,4 @@
-$ pnpm --dir kanban/web exec tsc --noEmit && pnpm --dir kanban/web run lint && pnpm --dir kanban/web run build
+$ cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build
 
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan521-b3a813fd/kanban/web
 > eslint . --max-warnings 0
@@ -14,22 +14,10 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-BdYBZNTi.css            641.58 kB │ gzip:  89.96 kB
-dist/assets/index-DgcNWppP.js           3,108.70 kB │ gzip: 865.47 kB
+dist/assets/index-DCrw_m0q.css            633.98 kB │ gzip:  89.21 kB
+dist/assets/index-nisQup5j.js           3,108.53 kB │ gzip: 865.40 kB
 
-[plugin builtin:vite-reporter] 
-(!) Some chunks are larger than 500 kB after minification. Consider:
-- Using dynamic import() to code-split the application
-- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.46s
-
-Exit Code: 0
-
+✓ built in 2.28s
+Web Build Exit Code: 0
 $ uv run python -m scripts.check_no_dashes --all
-Using CPython 3.12.7
-Creating virtual environment at: .venv
-Installed 121 packages in 67ms
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan521-b3a813fd/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-
-Exit Code: 0
+Check No Dashes Exit Code: 0
