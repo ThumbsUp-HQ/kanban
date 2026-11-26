@@ -9,20 +9,20 @@ $ cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build
 
 vite v8.3.8 building client environment for production...
 transforming...
-✓ 765 modules transformed.
+✓ 766 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-mTEXqdoK.css            633.20 kB │ gzip:  89.09 kB
-dist/assets/index-DgBcRSjn.js           3,109.83 kB │ gzip: 865.61 kB
+dist/assets/index-DXxBBQq0.css            635.74 kB │ gzip:  89.39 kB
+dist/assets/index-zlY-EsAB.js           3,132.88 kB │ gzip: 870.79 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.95s
+✓ built in 1.84s
 Exit code: 0
 
 $ uv run python -m scripts.check_no_dashes --all
