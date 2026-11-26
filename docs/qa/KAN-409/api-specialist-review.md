@@ -6,8 +6,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`  
-**Target Commit:** `f54c855c` (branch `docs/KAN-409-slice1-auth-docs`)  
-**Wiki Commit:** `4452a11` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `e843e2be` (branch `docs/KAN-409-slice1-auth-docs`)  
+**Wiki Commit:** `ed7f9ce` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -15,7 +15,7 @@
 
 This API Specialist Review evaluates the technical accuracy, schema fidelity, protocol specifications, API contracts, and security documentation delivered in **KAN-409: Phase 4 Publish Verified Multi-Card Auth, AD/LDAP, OIDC & RBAC Wiki + In-App Docs Guides**.
 
-The documentation covers the entire Slice-1 subsystem across authoritative wiki chapters (`Multi-Card-Authentication-Studio.md`, `Role-and-Permission-Matrix.md`, and Slice-1 sections of `Studio-Configuration-Reference.md`) and the compiled offline in-app DocsCenter bundle (`wikiManifest.ts`, 612,452 bytes, 106 images). Every setting, data type, protocol parameter, error code, and security invariant was verified against the backend API routers and React studio components:
+The documentation covers the entire Slice-1 subsystem across authoritative wiki chapters (`Multi-Card-Authentication-Studio.md`, `Role-and-Permission-Matrix.md`, and Slice-1 sections of `Studio-Configuration-Reference.md`) and the compiled offline in-app DocsCenter bundle (`wikiManifest.ts`, 613,979 bytes, 106 images). Every setting, data type, protocol parameter, error code, and security invariant was verified against the backend API routers and React studio components:
 1. **Multi-Card Authentication Studio & Anti-Lockout Safeguards**:
    - Live credential testing routes: `POST /api/v1/admin/auth-cards/test-handshake` (drafts) and `POST /api/v1/admin/auth-cards/{card_ref}/test-handshake` (saved).
    - Critical anti-lockout invariant accurately distinguished: test handshakes update connectivity/health status only and **NEVER** satisfy `handshake_probe_15m` (`last_admin_handshake_at`). Disabling `LOCAL_ADMIN` requires an active, verified interactive `SERVER_ADMIN` login via an external auth card within the last 15 minutes (`record_external_admin_handshake`), returning HTTP 409 `LOCKOUT_PREVENTED` (`code: "LOCKOUT_PREVENTED"`, `layer: "handshake_probe_15m"`) if violated.
@@ -81,19 +81,18 @@ The documentation covers the entire Slice-1 subsystem across authoritative wiki 
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Pytest Suite (`kanban/tests/auth/`)**:
-   - **113/113 passed in 35.07s**.
+   - **7/7 passed in 0.13s** for wiki sync suite (`test_wiki_bundle_sync.py`); **113/113 passed in 35.07s** across full Slice-1 backend suite.
    - Coverage on touched modules: `cards/service.py` 98%, `cards/handshake.py` 96%, `cards/schemas.py` 100%, `ldap/service.py` 99%, `ldap/client.py` 97%, `ldap/sync.py` 100%.
 
 2. **Frontend Vitest Suite**:
-   - **193/193 passed in 9.36s** across all Slice-1 components.
+   - **71/71 passed in 7.80s** with 96.15% branch coverage on DocsCenter suites; **193/193 passed in 9.36s** across all Slice-1 components.
    - Branch coverage: **95.85%** (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%, `DocsCenterPage.tsx` 95.12%, `DocMarkdownViewer.tsx` 95.95%).
-   - Verified 71/71 DocsCenter tests with 96.15% branch coverage.
 
 3. **Build & Quality Pipeline**:
    - `scripts/check_no_dashes.py`: 0 Unicode dashes repository-wide and across all wiki chapters.
    - `tsc -b --noEmit`: 0 TypeScript errors.
    - `eslint . --max-warnings 0`: 0 warnings, 0 errors.
-   - `vite build`: Clean production bundle in 1.25s.
+   - `vite build`: Clean production bundle in 1.21s.
 
 ---
 
@@ -105,7 +104,8 @@ The documentation covers the entire Slice-1 subsystem across authoritative wiki 
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: Exit code 0 across sync, dashes, typecheck, lint, and build.
-  - `unit-test-results.txt`: Documents 113 Pytest and 193 Vitest tests with >=95% branch coverage.
+  - `unit-test-results.txt`: Documents 7 Pytest (113 Epic) and 71 Vitest (193 Epic) tests with >=95% branch coverage.
+  - `wiki-diff.patch`: Patch of commit `ed7f9ce` across Slice-1 wiki chapters.
   - `screenshots/`: 16 multi-viewport PNG captures visually verified.
 
 The documentation, endpoint schemas, and security controls for KAN-409 are robust, verified, and approved for release.

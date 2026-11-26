@@ -5,8 +5,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`  
-**Target Commit:** `f54c855c` (branch `docs/KAN-409-slice1-auth-docs`)  
-**Wiki Commit:** `4452a11` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `e843e2be` (branch `docs/KAN-409-slice1-auth-docs`)  
+**Wiki Commit:** `ed7f9ce` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -94,11 +94,11 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
      * **Overall Vitest Branch Coverage:** **95.85%**.
 
 3. **Build & Quality Pipeline (`docs/qa/KAN-405/build-check.txt`)**:
-   - `sync_wiki_bundle`: 34 chapters synced cleanly (612,452 bytes, 106 images).
+   - `sync_wiki_bundle`: 34 chapters synced cleanly (613,979 bytes, 106 images).
    - `check-migrations`: 84 migrations valid, single head `p6_22_mcp_api_keys_capability_mask_boundary`.
    - `ruff check`: All checks passed (0 errors).
    - `check_no_dashes`: 0 Unicode dashes detected across repository.
-   - `typecheck`, `lint`, `build`: All exit code 0 clean (built in 1.25s).
+   - `typecheck`, `lint`, `build`: All exit code 0 clean (built in 1.21s).
 
 ---
 
