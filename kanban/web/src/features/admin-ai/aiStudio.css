@@ -153,6 +153,7 @@
 .kb-provider-meta-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2, 8px);
 }
 
@@ -414,6 +415,16 @@
     justify-content: center;
   }
 
+  .kb-provider-meta-row {
+    flex-wrap: wrap;
+  }
+
+  .kb-provider-meta-row code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+
   .kb-modal-footer,
   .kb-ai-drawer-footer {
     position: sticky;
@@ -490,7 +501,7 @@
 }
 
 .kb-advanced-settings-summary:hover {
-  color: var(--accent-primary);
+  color: var(--badge-fg);
 }
 
 .kb-advanced-settings-body {
@@ -774,7 +785,7 @@
 }
 
 .kb-key-status--no-key {
-  color: var(--accent-primary);
+  color: var(--badge-fg);
 }
 
 .kb-key-status--missing {

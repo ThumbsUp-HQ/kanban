@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
-index 964128a2..b4060641 100644
+index 964128a2..70ccac0b 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
 @@ -1,6 +1,8 @@
@@ -11,7 +11,7 @@ index 964128a2..b4060641 100644
  import { describe, it, expect, vi, beforeEach } from 'vitest';
  import { render, screen, fireEvent, createEvent, waitFor, act } from '@testing-library/react';
  import React from 'react';
-@@ -2250,4 +2252,118 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+@@ -2250,4 +2252,123 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
        });
      });
    });
@@ -123,15 +123,20 @@ index 964128a2..b4060641 100644
 +      expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*color:\s*var\(--fg-secondary\)/);
 +      expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
 +
-+      // Assert provider meta row code
++      // Assert provider meta row code and flex wrapping
++      expect(cssContent).toMatch(/\.kb-provider-meta-row\s*\{[^}]*flex-wrap:\s*wrap/);
 +      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*background-color:\s*var\(--bg-secondary\)/);
 +      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*color:\s*var\(--fg-primary\)/);
 +      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
++
++      // Assert high contrast text tokens for dark mode WCAG AA
++      expect(cssContent).toMatch(/\.kb-key-status--no-key\s*\{[^}]*color:\s*var\(--badge-fg\)/);
++      expect(cssContent).toMatch(/\.kb-advanced-settings-summary:hover\s*\{[^}]*color:\s*var\(--badge-fg\)/);
 +    });
 +  });
  });
 diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
-index c4ab01b3..78a8977a 100644
+index c4ab01b3..7d02cb52 100644
 --- a/kanban/web/src/features/admin-ai/aiStudio.css
 +++ b/kanban/web/src/features/admin-ai/aiStudio.css
 @@ -23,7 +23,7 @@
@@ -273,7 +278,7 @@ index c4ab01b3..78a8977a 100644
    margin: var(--space-1, 4px) 0;
    word-break: break-word;
  }
-@@ -181,7 +146,7 @@
+@@ -181,50 +146,48 @@
    flex-direction: column;
    gap: var(--space-2, 8px);
    font-size: var(--text-xs, 12px);
@@ -282,7 +287,11 @@ index c4ab01b3..78a8977a 100644
    margin-bottom: var(--space-4, 16px);
  }
  
-@@ -192,39 +157,36 @@
+ .kb-provider-meta-row {
+   display: flex;
+   align-items: center;
++  flex-wrap: wrap;
+   gap: var(--space-2, 8px);
  }
  
  .kb-provider-meta-row code {
@@ -344,7 +353,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-provider-models-list {
-@@ -237,27 +199,19 @@
+@@ -237,27 +200,19 @@
  .kb-model-chip {
    padding: 2px 6px;
    border-radius: 4px;
@@ -376,7 +385,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  /* Modal and Drawer Styles */
-@@ -274,7 +228,9 @@
+@@ -274,7 +229,9 @@
  }
  
  .kb-modal-card {
@@ -387,7 +396,7 @@ index c4ab01b3..78a8977a 100644
    border-radius: var(--radius-lg, 12px);
    padding: var(--space-6, 24px);
    max-width: 540px;
-@@ -285,12 +241,6 @@
+@@ -285,12 +242,6 @@
    overflow-y: auto;
  }
  
@@ -400,7 +409,7 @@ index c4ab01b3..78a8977a 100644
  .kb-modal-header {
    display: flex;
    justify-content: space-between;
-@@ -314,11 +264,7 @@
+@@ -314,11 +265,7 @@
  .kb-form-label {
    font-size: var(--text-sm, 14px);
    font-weight: 600;
@@ -413,7 +422,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-form-input,
-@@ -326,37 +272,25 @@
+@@ -326,37 +273,25 @@
  .kb-form-textarea {
    padding: 8px 12px;
    border-radius: 6px;
@@ -456,7 +465,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-modal-footer {
-@@ -381,63 +315,51 @@
+@@ -381,63 +316,51 @@
    border: none;
    border-radius: 9999px;
    overflow: hidden;
@@ -530,7 +539,21 @@ index c4ab01b3..78a8977a 100644
  /* Responsive adjustments (KAN-344) */
  @media (max-width: 768px) {
    .kb-ai-studio {
-@@ -496,7 +418,7 @@
+@@ -492,11 +415,21 @@
+     justify-content: center;
+   }
+ 
++  .kb-provider-meta-row {
++    flex-wrap: wrap;
++  }
++
++  .kb-provider-meta-row code {
++    white-space: normal;
++    overflow-wrap: anywhere;
++    max-width: 100%;
++  }
++
+   .kb-modal-footer,
    .kb-ai-drawer-footer {
      position: sticky;
      bottom: 0;
@@ -539,7 +562,7 @@ index c4ab01b3..78a8977a 100644
      border-top: 1px solid var(--border-subtle);
      padding: var(--space-3, 12px);
      z-index: 5;
-@@ -512,11 +434,11 @@
+@@ -512,11 +445,11 @@
  
  /* Form Helper & Strict CSP Classes */
  .kb-form-error {
@@ -554,7 +577,7 @@ index c4ab01b3..78a8977a 100644
    padding: var(--space-2, 8px) var(--space-3, 12px);
    border-radius: var(--radius-md, 6px);
  }
-@@ -545,35 +467,30 @@
+@@ -545,35 +478,30 @@
    align-items: center;
    gap: var(--space-2, 8px);
    font-size: var(--text-sm, 14px);
@@ -591,11 +614,11 @@ index c4ab01b3..78a8977a 100644
  
  .kb-advanced-settings-summary:hover {
 -  color: var(--brand-primary, #1d4ed8);
-+  color: var(--accent-primary);
++  color: var(--badge-fg);
  }
  
  .kb-advanced-settings-body {
-@@ -599,21 +516,16 @@
+@@ -599,21 +527,16 @@
  }
  
  .kb-probed-models-picker {
@@ -619,7 +642,7 @@ index c4ab01b3..78a8977a 100644
  .kb-probed-models-toolbar {
    display: flex;
    justify-content: space-between;
-@@ -628,19 +540,13 @@
+@@ -628,19 +551,13 @@
    max-width: 280px;
    padding: 4px 8px;
    font-size: var(--text-xs, 12px);
@@ -642,7 +665,7 @@ index c4ab01b3..78a8977a 100644
  .kb-probed-actions {
    display: flex;
    align-items: center;
-@@ -671,36 +577,26 @@
+@@ -671,36 +588,26 @@
  .kb-probed-only-btn {
    padding: 2px 4px;
    border-radius: var(--radius-sm, 4px);
@@ -687,7 +710,7 @@ index c4ab01b3..78a8977a 100644
    font-size: 11px;
    cursor: pointer;
    display: inline-flex;
-@@ -710,29 +606,17 @@
+@@ -710,29 +617,17 @@
    transition: all 0.15s ease;
  }
  
@@ -721,7 +744,7 @@ index c4ab01b3..78a8977a 100644
  .kb-probe-status-message {
    font-size: var(--text-xs, 12px);
    padding: var(--space-2, 8px);
-@@ -740,13 +624,13 @@
+@@ -740,13 +635,13 @@
  }
  
  .kb-probe-status-message--loading {
@@ -739,7 +762,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  /* Drawer Connection Test Status */
-@@ -760,20 +644,21 @@
+@@ -760,20 +655,21 @@
  }
  
  .kb-drawer-test-status--success {
@@ -769,7 +792,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  /* Numbered Failover Priority Stack & Card Enhancements */
-@@ -795,8 +680,8 @@
+@@ -795,8 +691,8 @@
  }
  
  .kb-provider-stack-item--drag-over {
@@ -780,7 +803,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-provider-card-header-left {
-@@ -819,7 +704,7 @@
+@@ -819,7 +715,7 @@
    padding: 4px;
    background: transparent;
    border: none;
@@ -789,7 +812,7 @@ index c4ab01b3..78a8977a 100644
    display: inline-flex;
    align-items: center;
    justify-content: center;
-@@ -832,13 +717,8 @@
+@@ -832,13 +728,8 @@
  }
  
  .kb-drag-handle:hover {
@@ -805,7 +828,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-provider-rank {
-@@ -849,16 +729,12 @@
+@@ -849,16 +740,12 @@
    font-weight: 700;
    padding: 2px 6px;
    border-radius: var(--radius-sm, 4px);
@@ -825,7 +848,7 @@ index c4ab01b3..78a8977a 100644
  .kb-reorder-btn {
    padding: 2px 6px;
    font-size: 10px;
-@@ -877,27 +753,15 @@
+@@ -877,27 +764,15 @@
  }
  
  .kb-residency-badge--local {
@@ -859,7 +882,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-key-status {
-@@ -906,27 +770,15 @@
+@@ -906,27 +781,15 @@
  }
  
  .kb-key-status--set {
@@ -869,7 +892,7 @@ index c4ab01b3..78a8977a 100644
  
  .kb-key-status--no-key {
 -  color: var(--brand-primary, #1d4ed8);
-+  color: var(--accent-primary);
++  color: var(--badge-fg);
  }
  
  .kb-key-status--missing {
@@ -890,7 +913,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-test-connection-status {
-@@ -939,42 +791,34 @@
+@@ -939,42 +802,34 @@
  }
  
  .kb-test-connection-status--success {
@@ -945,7 +968,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-provider-enable-btn {
-@@ -992,11 +836,7 @@
+@@ -992,11 +847,7 @@
  }
  
  .kb-provider-air-gap-alert {
@@ -958,7 +981,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  @media (max-width: 768px), (pointer: coarse) {
-@@ -1020,7 +860,7 @@
+@@ -1020,7 +871,7 @@
  .kb-provider-presets-label {
    font-size: var(--text-xs, 12px);
    font-weight: 600;
@@ -967,7 +990,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-preset-btn {
-@@ -1048,7 +888,7 @@
+@@ -1048,7 +899,7 @@
  .kb-budget-presets-label {
    font-size: var(--text-xs, 12px);
    font-weight: 600;
@@ -976,7 +999,7 @@ index c4ab01b3..78a8977a 100644
  }
  
  .kb-budget-preset-btn {
-@@ -1059,246 +899,26 @@
+@@ -1059,246 +910,26 @@
  }
  
  .kb-budget-preset-btn--freeze {

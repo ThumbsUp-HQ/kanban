@@ -2360,10 +2360,15 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*color:\s*var\(--fg-secondary\)/);
       expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
 
-      // Assert provider meta row code
+      // Assert provider meta row code and flex wrapping
+      expect(cssContent).toMatch(/\.kb-provider-meta-row\s*\{[^}]*flex-wrap:\s*wrap/);
       expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*background-color:\s*var\(--bg-secondary\)/);
       expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*color:\s*var\(--fg-primary\)/);
       expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
+
+      // Assert high contrast text tokens for dark mode WCAG AA
+      expect(cssContent).toMatch(/\.kb-key-status--no-key\s*\{[^}]*color:\s*var\(--badge-fg\)/);
+      expect(cssContent).toMatch(/\.kb-advanced-settings-summary:hover\s*\{[^}]*color:\s*var\(--badge-fg\)/);
     });
   });
 });
