@@ -12,6 +12,7 @@ import {
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { isAal2StepUpCancelled } from '../../api/client';
@@ -398,8 +399,7 @@ export function PlaneImportStudio(): JSX.Element {
       <AdminStudioSubnav activeTab="imports" />
 
       <div
-        className="kb-plane-mode-row"
-        style={{ margin: '1rem 0' }}
+        className="kb-plane-mode-row kb-plane-source-row"
         data-testid="source-selector-bar"
         role="group"
         aria-label="Import source"
@@ -565,7 +565,7 @@ export function PlaneImportStudio(): JSX.Element {
           {/* Parsed Entity Metrics Preview */}
           {entityCounts !== null && (
             <div data-testid="entity-metrics-preview">
-              <h3 className="kb-plane-section-title" style={{ marginTop: 24 }}>
+              <h3 className="kb-plane-section-title kb-plane-metrics-heading">
                 Detected Bundle Entities
               </h3>
               <div className="kb-plane-stats-grid">
@@ -601,95 +601,97 @@ export function PlaneImportStudio(): JSX.Element {
             </div>
           )}
 
-          <div style={{ marginTop: 20 }}>
-            <label
-              htmlFor="target-ws-slug"
-              style={{
-                display: 'block',
-                fontSize: '0.825rem',
-                fontWeight: 600,
-                marginBottom: 6,
-                color: 'var(--kb-color-text-secondary)',
-              }}
-            >
-              Target Workspace Slug (Optional, defaults to active workspace):
+          <div className="kb-plane-field">
+            <label htmlFor="target-ws-slug" className="kb-plane-field-label">
+              <span>Target Workspace Slug (Optional, defaults to active workspace):</span>
+              <FieldHelpHint
+                title="Target Workspace Slug"
+                summary="Target workspace identifier where imported entities and work items are placed. Resolves caller active workspace by default, or validates that the specified slug exists."
+                defaultValue="Caller active workspace"
+                validValues={[
+                  'URL-safe lowercase slug (e.g. my-workspace)',
+                  'Defaults to active caller workspace if omitted',
+                ]}
+                caution="Target workspace must exist prior to executing live import."
+                docHref="/docs/multi-source-migration-and-key-alias-redirects"
+                testId="target-ws-slug-help"
+              />
             </label>
             <input
               id="target-ws-slug"
               type="text"
-              className="kb-plane-textarea"
-              style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
+              className="kb-plane-textarea kb-plane-input-control"
               data-testid="target-ws-slug-input"
+              aria-describedby="target-ws-slug-helper"
               placeholder="e.g. my-workspace"
               value={workspaceSlug}
               onChange={(e) => {
                 setWorkspaceSlug(e.target.value);
               }}
             />
+            <span id="target-ws-slug-helper" className="kb-plane-field-helper">
+              Defaults to active workspace if omitted. Workspace resolution validates existence before live import.
+            </span>
           </div>
 
           {source !== 'plane' && (
-            <div style={{ marginTop: 14 }}>
-              <label
-                htmlFor="target-proj-key"
-                style={{
-                  display: 'block',
-                  fontSize: '0.825rem',
-                  fontWeight: 600,
-                  marginBottom: 6,
-                  color: 'var(--kb-color-text-secondary)',
-                }}
-              >
-                Target Project Key (Optional, default{' '}
-                {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
+            <div className="kb-plane-field">
+              <label htmlFor="target-proj-key" className="kb-plane-field-label">
+                <span>
+                  Target Project Key (Optional, default{' '}
+                  {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
+                </span>
+                <FieldHelpHint
+                  title="Target Project Key"
+                  summary="Project key prefix for imported work items. Automatically creates the target project if absent and registers permanent legacy issue key alias redirects in the Universal Object Graph."
+                  defaultValue={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
+                  validValues={['2 to 10 uppercase alphanumeric characters (e.g. JIRA, GH, LIN)']}
+                  example={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
+                  docHref="/docs/multi-source-migration-and-key-alias-redirects"
+                  testId="target-project-key-help"
+                />
               </label>
               <input
                 id="target-proj-key"
                 type="text"
-                className="kb-plane-textarea"
-                style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
+                className="kb-plane-textarea kb-plane-input-control"
                 data-testid="target-project-key-input"
+                aria-describedby="target-proj-key-helper"
                 placeholder={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
                 value={projectKey}
                 onChange={(e) => {
                   setProjectKey(e.target.value);
                 }}
               />
+              <span id="target-proj-key-helper" className="kb-plane-field-helper">
+                Defaults to {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'} if omitted. Auto-creates absent projects and establishes key alias redirects.
+              </span>
             </div>
           )}
 
-          <div style={{ marginTop: 20 }}>
+          <div className="kb-plane-advanced-wrap">
             <AdvancedSection
               title="Advanced Import Options"
               summary="User identity mapping and custom member attribution overrides"
               testId="advanced-import-options"
               activeOverridesCount={userMappingJson.trim() ? 1 : 0}
             >
-              <div>
-                <label
-                  htmlFor="import-user-mapping"
-                  style={{
-                    display: 'block',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    marginBottom: 6,
-                    color: 'var(--kb-color-text-secondary)',
-                  }}
-                >
-                  Custom User Mapping JSON (Optional):
+              <div className="kb-plane-field">
+                <label htmlFor="import-user-mapping" className="kb-plane-field-label">
+                  <span>Custom User Mapping JSON (Optional):</span>
+                  <FieldHelpHint
+                    title="User Identity Mapping"
+                    summary="Optional JSON object mapping legacy source user IDs or emails to local usernames or handles."
+                    defaultValue="None (unmapped members recorded in diff report)"
+                    example='{"legacy-uuid-or-email": "@current_user"}'
+                    docHref="/docs/multi-source-migration-and-key-alias-redirects"
+                    testId="import-user-mapping-help"
+                  />
                 </label>
                 <textarea
                   id="import-user-mapping"
-                  className="kb-plane-textarea"
-                  style={{
-                    minHeight: 70,
-                    height: 70,
-                    width: '100%',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box',
-                    fontFamily: 'monospace',
-                    fontSize: '0.8rem',
-                  }}
+                  className="kb-plane-textarea kb-plane-user-mapping-textarea"
+                  aria-describedby="import-user-mapping-helper"
                   placeholder={'{\n  "legacy-uuid-or-email": "@current_user"\n}'}
                   data-testid="import-user-mapping-json"
                   value={userMappingJson}
@@ -703,9 +705,12 @@ export function PlaneImportStudio(): JSX.Element {
                     }
                   }}
                 />
+                <span id="import-user-mapping-helper" className="kb-plane-field-helper">
+                  Optional JSON mapping source platform UUIDs or emails to local accounts.
+                </span>
                 {userMappingError && (
                   <div
-                    style={{ color: 'var(--kb-color-danger, #ef4444)', fontSize: '0.8rem', marginTop: 4 }}
+                    className="kb-plane-field-error"
                     data-testid="import-user-mapping-error"
                   >
                     {userMappingError}
@@ -895,9 +900,8 @@ export function PlaneImportStudio(): JSX.Element {
 
       {/* Portable Workspace Export Panel */}
       <section
-        className="kb-plane-section"
+        className="kb-plane-section kb-plane-export-section"
         data-testid="portable-export-panel"
-        style={{ marginTop: '2rem' }}
       >
         <h2 className="kb-plane-section-title">
           <EmojiHint kind="sparkle" /> Portable Workspace Export
@@ -927,51 +931,37 @@ export function PlaneImportStudio(): JSX.Element {
           </div>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem',
-            maxWidth: 450,
-            marginTop: '1rem',
-          }}
-        >
-          <div>
-            <label
-              htmlFor="export-workspace-slug"
-              style={{
-                display: 'block',
-                fontSize: '0.825rem',
-                fontWeight: 600,
-                marginBottom: 6,
-                color: 'var(--kb-color-text-secondary)',
-              }}
-            >
-              Export Workspace Slug (Optional, defaults to active workspace):
+        <div className="kb-plane-export-form">
+          <div className="kb-plane-field">
+            <label htmlFor="export-workspace-slug" className="kb-plane-field-label">
+              <span>Export Workspace Slug (Optional, defaults to active workspace):</span>
+              <FieldHelpHint
+                title="Export Workspace Slug"
+                summary="Organization workspace slug identifier to export into a portable tar.gz archive. Resolves active caller workspace if omitted."
+                defaultValue="Caller active workspace"
+                validValues={['URL-safe lowercase slug (e.g. current-workspace)']}
+                docHref="/docs/multi-source-migration-and-key-alias-redirects"
+                testId="export-workspace-slug-help"
+              />
             </label>
             <input
               id="export-workspace-slug"
               type="text"
-              className="kb-plane-textarea"
-              style={{ minHeight: 40, height: 40, width: '100%' }}
+              className="kb-plane-textarea kb-plane-export-input"
               data-testid="export-workspace-slug-input"
+              aria-describedby="export-workspace-slug-helper"
               placeholder="e.g. current-workspace"
               value={exportWorkspaceSlug}
               onChange={(e) => {
                 setExportWorkspaceSlug(e.target.value);
               }}
             />
+            <span id="export-workspace-slug-helper" className="kb-plane-field-helper">
+              Defaults to active workspace if omitted.
+            </span>
           </div>
 
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-            }}
-          >
+          <label className="kb-plane-checkbox-label">
             <input
               type="checkbox"
               data-testid="export-scrub-checkbox"
@@ -983,7 +973,7 @@ export function PlaneImportStudio(): JSX.Element {
             <span>Scrub secrets and sensitive tokens from markdown</span>
           </label>
 
-          <div className="kb-plane-btn-row" style={{ marginTop: '0.5rem' }}>
+          <div className="kb-plane-btn-row kb-plane-export-btn-row">
             <button
               type="button"
               className="kb-plane-btn kb-plane-btn-primary"

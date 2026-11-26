@@ -56,6 +56,10 @@
   margin-bottom: 20px;
 }
 
+.kb-plane-source-row {
+  margin: 1rem 0;
+}
+
 .kb-plane-mode-btn {
   padding: 8px 16px;
   min-height: 44px;
@@ -337,6 +341,107 @@
   }
 }
 
+.kb-plane-metrics-heading {
+  margin-top: 24px;
+}
+
+.kb-plane-field {
+  margin-top: 16px;
+  max-width: 450px;
+  width: 100%;
+}
+
+.kb-plane-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--kb-color-text-secondary, var(--fg-secondary));
+  flex-wrap: nowrap;
+}
+
+.kb-plane-field-label > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kb-plane-field-label .field-help-hint {
+  flex-shrink: 0;
+}
+
+.kb-plane-field-helper {
+  font-size: 0.78rem;
+  color: var(--kb-color-text-secondary, var(--fg-secondary));
+  margin-top: 4px;
+  display: block;
+  line-height: 1.4;
+}
+
+.kb-plane-input-control {
+  min-height: 40px;
+  height: 40px;
+  width: 100%;
+  max-width: 450px;
+  box-sizing: border-box;
+  font-size: 0.875rem;
+}
+
+.kb-plane-advanced-wrap {
+  margin-top: 20px;
+}
+
+.kb-plane-user-mapping-textarea {
+  min-height: 70px;
+  height: 70px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.kb-plane-field-error {
+  color: var(--danger-fg, var(--kb-color-danger, #ef4444));
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.kb-plane-export-section {
+  margin-top: 2rem;
+}
+
+.kb-plane-export-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 450px;
+  margin-top: 1rem;
+}
+
+.kb-plane-export-input {
+  min-height: 40px;
+  height: 40px;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.875rem;
+}
+
+.kb-plane-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--fg-primary);
+}
+
+.kb-plane-export-btn-row {
+  margin-top: 0.5rem;
+}
+
 @media (max-width: 768px) {
   .kb-plane-import-container {
     padding: 16px;
@@ -350,5 +455,31 @@
   }
   .kb-plane-diff-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .kb-plane-import-container {
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .kb-plane-input-control,
+  .kb-plane-export-form,
+  .kb-plane-user-mapping-textarea {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .kb-plane-input-control,
+  .kb-plane-export-input {
+    min-height: 44px;
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .kb-plane-mode-btn {
+    flex: 1 1 calc(50% - 6px);
+    text-align: center;
   }
 }

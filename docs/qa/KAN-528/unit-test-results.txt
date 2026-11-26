@@ -1,0 +1,21 @@
+$ pnpm --dir kanban/web exec vitest run --coverage.enabled --coverage.include='src/features/admin-imports/PlaneImportStudio.tsx' src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan528-48d034f9/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (22 tests) 1320ms
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  15:34:28
+   Duration  2.74s (tests 56%, environment 31%, import 9%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |     95.7 |     100 |     100 |                   
+ ...portStudio.tsx |     100 |     95.7 |     100 |     100 | ...47,338-344,915 
+-------------------|---------|----------|---------|---------|-------------------
+Exit code: 0

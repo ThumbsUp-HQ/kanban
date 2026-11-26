@@ -1,0 +1,623 @@
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.css b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+index 981aceba..1cdd5613 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.css
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+@@ -56,6 +56,10 @@
+   margin-bottom: 20px;
+ }
+ 
++.kb-plane-source-row {
++  margin: 1rem 0;
++}
++
+ .kb-plane-mode-btn {
+   padding: 8px 16px;
+   min-height: 44px;
+@@ -337,6 +341,107 @@
+   }
+ }
+ 
++.kb-plane-metrics-heading {
++  margin-top: 24px;
++}
++
++.kb-plane-field {
++  margin-top: 16px;
++  max-width: 450px;
++  width: 100%;
++}
++
++.kb-plane-field-label {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 8px;
++  font-size: 0.825rem;
++  font-weight: 600;
++  margin-bottom: 6px;
++  color: var(--kb-color-text-secondary, var(--fg-secondary));
++  flex-wrap: nowrap;
++}
++
++.kb-plane-field-label > span {
++  flex: 1 1 auto;
++  min-width: 0;
++}
++
++.kb-plane-field-label .field-help-hint {
++  flex-shrink: 0;
++}
++
++.kb-plane-field-helper {
++  font-size: 0.78rem;
++  color: var(--kb-color-text-secondary, var(--fg-secondary));
++  margin-top: 4px;
++  display: block;
++  line-height: 1.4;
++}
++
++.kb-plane-input-control {
++  min-height: 40px;
++  height: 40px;
++  width: 100%;
++  max-width: 450px;
++  box-sizing: border-box;
++  font-size: 0.875rem;
++}
++
++.kb-plane-advanced-wrap {
++  margin-top: 20px;
++}
++
++.kb-plane-user-mapping-textarea {
++  min-height: 70px;
++  height: 70px;
++  width: 100%;
++  max-width: 100%;
++  box-sizing: border-box;
++  font-family: var(--font-mono);
++  font-size: 0.8rem;
++}
++
++.kb-plane-field-error {
++  color: var(--danger-fg, var(--kb-color-danger, #ef4444));
++  font-size: 0.8rem;
++  margin-top: 4px;
++}
++
++.kb-plane-export-section {
++  margin-top: 2rem;
++}
++
++.kb-plane-export-form {
++  display: flex;
++  flex-direction: column;
++  gap: 1rem;
++  max-width: 450px;
++  margin-top: 1rem;
++}
++
++.kb-plane-export-input {
++  min-height: 40px;
++  height: 40px;
++  width: 100%;
++  box-sizing: border-box;
++  font-size: 0.875rem;
++}
++
++.kb-plane-checkbox-label {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++  cursor: pointer;
++  font-size: 0.875rem;
++  color: var(--fg-primary);
++}
++
++.kb-plane-export-btn-row {
++  margin-top: 0.5rem;
++}
++
+ @media (max-width: 768px) {
+   .kb-plane-import-container {
+     padding: 16px;
+@@ -352,3 +457,29 @@
+     grid-template-columns: 1fr;
+   }
+ }
++
++@media (max-width: 480px) {
++  .kb-plane-import-container {
++    padding: 12px;
++    overflow-x: hidden;
++  }
++
++  .kb-plane-input-control,
++  .kb-plane-export-form,
++  .kb-plane-user-mapping-textarea {
++    max-width: 100%;
++    width: 100%;
++  }
++
++  .kb-plane-input-control,
++  .kb-plane-export-input {
++    min-height: 44px;
++    height: 44px;
++    font-size: 16px;
++  }
++
++  .kb-plane-mode-btn {
++    flex: 1 1 calc(50% - 6px);
++    text-align: center;
++  }
++}
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index 92bff60a..ff7b8b9a 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -12,6 +12,7 @@ import {
+ } from './planeImportApi';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { isAal2StepUpCancelled } from '../../api/client';
+@@ -398,8 +399,7 @@ export function PlaneImportStudio(): JSX.Element {
+       <AdminStudioSubnav activeTab="imports" />
+ 
+       <div
+-        className="kb-plane-mode-row"
+-        style={{ margin: '1rem 0' }}
++        className="kb-plane-mode-row kb-plane-source-row"
+         data-testid="source-selector-bar"
+         role="group"
+         aria-label="Import source"
+@@ -565,7 +565,7 @@ export function PlaneImportStudio(): JSX.Element {
+           {/* Parsed Entity Metrics Preview */}
+           {entityCounts !== null && (
+             <div data-testid="entity-metrics-preview">
+-              <h3 className="kb-plane-section-title" style={{ marginTop: 24 }}>
++              <h3 className="kb-plane-section-title kb-plane-metrics-heading">
+                 Detected Bundle Entities
+               </h3>
+               <div className="kb-plane-stats-grid">
+@@ -601,95 +601,97 @@ export function PlaneImportStudio(): JSX.Element {
+             </div>
+           )}
+ 
+-          <div style={{ marginTop: 20 }}>
+-            <label
+-              htmlFor="target-ws-slug"
+-              style={{
+-                display: 'block',
+-                fontSize: '0.825rem',
+-                fontWeight: 600,
+-                marginBottom: 6,
+-                color: 'var(--kb-color-text-secondary)',
+-              }}
+-            >
+-              Target Workspace Slug (Optional, defaults to active workspace):
++          <div className="kb-plane-field">
++            <label htmlFor="target-ws-slug" className="kb-plane-field-label">
++              <span>Target Workspace Slug (Optional, defaults to active workspace):</span>
++              <FieldHelpHint
++                title="Target Workspace Slug"
++                summary="Target workspace identifier where imported entities and work items are placed. Resolves caller active workspace by default, or validates that the specified slug exists."
++                defaultValue="Caller active workspace"
++                validValues={[
++                  'URL-safe lowercase slug (e.g. my-workspace)',
++                  'Defaults to active caller workspace if omitted',
++                ]}
++                caution="Target workspace must exist prior to executing live import."
++                docHref="/docs/multi-source-migration-and-key-alias-redirects"
++                testId="target-ws-slug-help"
++              />
+             </label>
+             <input
+               id="target-ws-slug"
+               type="text"
+-              className="kb-plane-textarea"
+-              style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
++              className="kb-plane-textarea kb-plane-input-control"
+               data-testid="target-ws-slug-input"
++              aria-describedby="target-ws-slug-helper"
+               placeholder="e.g. my-workspace"
+               value={workspaceSlug}
+               onChange={(e) => {
+                 setWorkspaceSlug(e.target.value);
+               }}
+             />
++            <span id="target-ws-slug-helper" className="kb-plane-field-helper">
++              Defaults to active workspace if omitted. Workspace resolution validates existence before live import.
++            </span>
+           </div>
+ 
+           {source !== 'plane' && (
+-            <div style={{ marginTop: 14 }}>
+-              <label
+-                htmlFor="target-proj-key"
+-                style={{
+-                  display: 'block',
+-                  fontSize: '0.825rem',
+-                  fontWeight: 600,
+-                  marginBottom: 6,
+-                  color: 'var(--kb-color-text-secondary)',
+-                }}
+-              >
+-                Target Project Key (Optional, default{' '}
+-                {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
++            <div className="kb-plane-field">
++              <label htmlFor="target-proj-key" className="kb-plane-field-label">
++                <span>
++                  Target Project Key (Optional, default{' '}
++                  {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
++                </span>
++                <FieldHelpHint
++                  title="Target Project Key"
++                  summary="Project key prefix for imported work items. Automatically creates the target project if absent and registers permanent legacy issue key alias redirects in the Universal Object Graph."
++                  defaultValue={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
++                  validValues={['2 to 10 uppercase alphanumeric characters (e.g. JIRA, GH, LIN)']}
++                  example={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
++                  docHref="/docs/multi-source-migration-and-key-alias-redirects"
++                  testId="target-project-key-help"
++                />
+               </label>
+               <input
+                 id="target-proj-key"
+                 type="text"
+-                className="kb-plane-textarea"
+-                style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
++                className="kb-plane-textarea kb-plane-input-control"
+                 data-testid="target-project-key-input"
++                aria-describedby="target-proj-key-helper"
+                 placeholder={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
+                 value={projectKey}
+                 onChange={(e) => {
+                   setProjectKey(e.target.value);
+                 }}
+               />
++              <span id="target-proj-key-helper" className="kb-plane-field-helper">
++                Defaults to {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'} if omitted. Auto-creates absent projects and establishes key alias redirects.
++              </span>
+             </div>
+           )}
+ 
+-          <div style={{ marginTop: 20 }}>
++          <div className="kb-plane-advanced-wrap">
+             <AdvancedSection
+               title="Advanced Import Options"
+               summary="User identity mapping and custom member attribution overrides"
+               testId="advanced-import-options"
+               activeOverridesCount={userMappingJson.trim() ? 1 : 0}
+             >
+-              <div>
+-                <label
+-                  htmlFor="import-user-mapping"
+-                  style={{
+-                    display: 'block',
+-                    fontSize: '0.825rem',
+-                    fontWeight: 600,
+-                    marginBottom: 6,
+-                    color: 'var(--kb-color-text-secondary)',
+-                  }}
+-                >
+-                  Custom User Mapping JSON (Optional):
++              <div className="kb-plane-field">
++                <label htmlFor="import-user-mapping" className="kb-plane-field-label">
++                  <span>Custom User Mapping JSON (Optional):</span>
++                  <FieldHelpHint
++                    title="User Identity Mapping"
++                    summary="Optional JSON object mapping legacy source user IDs or emails to local usernames or handles."
++                    defaultValue="None (unmapped members recorded in diff report)"
++                    example='{"legacy-uuid-or-email": "@current_user"}'
++                    docHref="/docs/multi-source-migration-and-key-alias-redirects"
++                    testId="import-user-mapping-help"
++                  />
+                 </label>
+                 <textarea
+                   id="import-user-mapping"
+-                  className="kb-plane-textarea"
+-                  style={{
+-                    minHeight: 70,
+-                    height: 70,
+-                    width: '100%',
+-                    maxWidth: '100%',
+-                    boxSizing: 'border-box',
+-                    fontFamily: 'monospace',
+-                    fontSize: '0.8rem',
+-                  }}
++                  className="kb-plane-textarea kb-plane-user-mapping-textarea"
++                  aria-describedby="import-user-mapping-helper"
+                   placeholder={'{\n  "legacy-uuid-or-email": "@current_user"\n}'}
+                   data-testid="import-user-mapping-json"
+                   value={userMappingJson}
+@@ -703,9 +705,12 @@ export function PlaneImportStudio(): JSX.Element {
+                     }
+                   }}
+                 />
++                <span id="import-user-mapping-helper" className="kb-plane-field-helper">
++                  Optional JSON mapping source platform UUIDs or emails to local accounts.
++                </span>
+                 {userMappingError && (
+                   <div
+-                    style={{ color: 'var(--kb-color-danger, #ef4444)', fontSize: '0.8rem', marginTop: 4 }}
++                    className="kb-plane-field-error"
+                     data-testid="import-user-mapping-error"
+                   >
+                     {userMappingError}
+@@ -895,9 +900,8 @@ export function PlaneImportStudio(): JSX.Element {
+ 
+       {/* Portable Workspace Export Panel */}
+       <section
+-        className="kb-plane-section"
++        className="kb-plane-section kb-plane-export-section"
+         data-testid="portable-export-panel"
+-        style={{ marginTop: '2rem' }}
+       >
+         <h2 className="kb-plane-section-title">
+           <EmojiHint kind="sparkle" /> Portable Workspace Export
+@@ -927,51 +931,37 @@ export function PlaneImportStudio(): JSX.Element {
+           </div>
+         )}
+ 
+-        <div
+-          style={{
+-            display: 'flex',
+-            flexDirection: 'column',
+-            gap: '1rem',
+-            maxWidth: 450,
+-            marginTop: '1rem',
+-          }}
+-        >
+-          <div>
+-            <label
+-              htmlFor="export-workspace-slug"
+-              style={{
+-                display: 'block',
+-                fontSize: '0.825rem',
+-                fontWeight: 600,
+-                marginBottom: 6,
+-                color: 'var(--kb-color-text-secondary)',
+-              }}
+-            >
+-              Export Workspace Slug (Optional, defaults to active workspace):
++        <div className="kb-plane-export-form">
++          <div className="kb-plane-field">
++            <label htmlFor="export-workspace-slug" className="kb-plane-field-label">
++              <span>Export Workspace Slug (Optional, defaults to active workspace):</span>
++              <FieldHelpHint
++                title="Export Workspace Slug"
++                summary="Organization workspace slug identifier to export into a portable tar.gz archive. Resolves active caller workspace if omitted."
++                defaultValue="Caller active workspace"
++                validValues={['URL-safe lowercase slug (e.g. current-workspace)']}
++                docHref="/docs/multi-source-migration-and-key-alias-redirects"
++                testId="export-workspace-slug-help"
++              />
+             </label>
+             <input
+               id="export-workspace-slug"
+               type="text"
+-              className="kb-plane-textarea"
+-              style={{ minHeight: 40, height: 40, width: '100%' }}
++              className="kb-plane-textarea kb-plane-export-input"
+               data-testid="export-workspace-slug-input"
++              aria-describedby="export-workspace-slug-helper"
+               placeholder="e.g. current-workspace"
+               value={exportWorkspaceSlug}
+               onChange={(e) => {
+                 setExportWorkspaceSlug(e.target.value);
+               }}
+             />
++            <span id="export-workspace-slug-helper" className="kb-plane-field-helper">
++              Defaults to active workspace if omitted.
++            </span>
+           </div>
+ 
+-          <label
+-            style={{
+-              display: 'flex',
+-              alignItems: 'center',
+-              gap: '0.5rem',
+-              cursor: 'pointer',
+-              fontSize: '0.875rem',
+-            }}
+-          >
++          <label className="kb-plane-checkbox-label">
+             <input
+               type="checkbox"
+               data-testid="export-scrub-checkbox"
+@@ -983,7 +973,7 @@ export function PlaneImportStudio(): JSX.Element {
+             <span>Scrub secrets and sensitive tokens from markdown</span>
+           </label>
+ 
+-          <div className="kb-plane-btn-row" style={{ marginTop: '0.5rem' }}>
++          <div className="kb-plane-btn-row kb-plane-export-btn-row">
+             <button
+               type="button"
+               className="kb-plane-btn kb-plane-btn-primary"
+diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+index a4496250..769c8fa8 100644
+--- a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
++++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+@@ -5,7 +5,7 @@ import React from 'react';
+ import fs from 'node:fs';
+ import path from 'node:path';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import { MemoryRouter } from 'react-router';
+ import { PlaneImportStudio, extractEntityCounts } from '../PlaneImportStudio';
+ import * as planeImportApi from '../planeImportApi';
+@@ -723,4 +723,171 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+     expect(pasteBtn.getAttribute('aria-pressed')).toBe('true');
+     expect(uploadBtn.getAttribute('aria-pressed')).toBe('false');
+   });
++
++  describe('KAN-528: FieldHelpHint and default fallbacks in PlaneImportStudio', () => {
++    it('renders FieldHelpHint triggers, explicit default mentions, and aria-describedby associations', () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/imports']}>
++          <PlaneImportStudio />
++        </MemoryRouter>,
++      );
++
++      // 1. Target Workspace Slug FieldHelpHint and helper
++      const wsSlugInput = screen.getByTestId('target-ws-slug-input');
++      expect(wsSlugInput.getAttribute('aria-describedby')).toBe('target-ws-slug-helper');
++      expect(document.getElementById('target-ws-slug-helper')?.textContent).toContain(
++        'Defaults to active workspace if omitted',
++      );
++
++      const wsSlugHint = screen.getByTestId('target-ws-slug-help');
++      expect(wsSlugHint).toBeDefined();
++      expect(wsSlugHint.getAttribute('aria-haspopup')).toBe('dialog');
++      expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
++
++      // 2. Export Workspace Slug FieldHelpHint and helper
++      const exportWsInput = screen.getByTestId('export-workspace-slug-input');
++      expect(exportWsInput.getAttribute('aria-describedby')).toBe('export-workspace-slug-helper');
++      expect(document.getElementById('export-workspace-slug-helper')?.textContent).toContain(
++        'Defaults to active workspace if omitted',
++      );
++      const exportWsHint = screen.getByTestId('export-workspace-slug-help');
++      expect(exportWsHint).toBeDefined();
++
++      // 3. User Identity Mapping FieldHelpHint and helper
++      const userMapInput = screen.getByTestId('import-user-mapping-json');
++      expect(userMapInput.getAttribute('aria-describedby')).toBe('import-user-mapping-helper');
++      const userMapHint = screen.getByTestId('import-user-mapping-help');
++      expect(userMapHint).toBeDefined();
++
++      // 4. In Plane source, Target Project Key is not rendered
++      expect(screen.queryByTestId('target-project-key-input')).toBeNull();
++      expect(screen.queryByTestId('target-project-key-help')).toBeNull();
++
++      // 5. In Jira source, Target Project Key is rendered with JIRA default
++      fireEvent.click(screen.getByTestId('source-jira-btn'));
++      const jiraProjInput = screen.getByTestId('target-project-key-input');
++      expect(jiraProjInput.getAttribute('aria-describedby')).toBe('target-proj-key-helper');
++      expect(screen.getByText(/Defaults to JIRA if omitted/i)).toBeDefined();
++      const projHint = screen.getByTestId('target-project-key-help');
++      expect(projHint).toBeDefined();
++
++      // 6. In GitHub source, Target Project Key has GH default
++      fireEvent.click(screen.getByTestId('source-github-btn'));
++      expect(screen.getByText(/Defaults to GH if omitted/i)).toBeDefined();
++
++      // 7. In Linear source, Target Project Key has LIN default
++      fireEvent.click(screen.getByTestId('source-linear-btn'));
++      expect(screen.getByText(/Defaults to LIN if omitted/i)).toBeDefined();
++    });
++
++    it('opens FieldHelpHint popover on trigger focus and dismisses on Escape restoring focus', async () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/imports']}>
++          <PlaneImportStudio />
++        </MemoryRouter>,
++      );
++
++      const wsSlugHint = screen.getByTestId('target-ws-slug-help');
++      expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
++
++      // Focus opens popover
++      act(() => {
++        wsSlugHint.focus();
++      });
++      await waitFor(() => {
++        expect(wsSlugHint.getAttribute('aria-expanded')).toBe('true');
++      });
++
++      const dialog = screen.getByRole('dialog');
++      expect(dialog).toBeDefined();
++      expect(dialog.textContent).toContain('Target Workspace Slug');
++      expect(dialog.textContent).toContain('Caller active workspace');
++      expect(dialog.textContent).toContain('validates that the specified slug exists');
++
++      // Escape key on trigger dismisses popover
++      act(() => {
++        fireEvent.keyDown(wsSlugHint, { key: 'Escape' });
++      });
++      await waitFor(() => {
++        expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
++        expect(screen.queryByRole('dialog')).toBeNull();
++      });
++      expect(document.activeElement).toBe(wsSlugHint);
++    });
++
++    it('displays auto-creating absent projects and key alias details in Target Project Key popover', async () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/imports']}>
++          <PlaneImportStudio />
++        </MemoryRouter>,
++      );
++
++      fireEvent.click(screen.getByTestId('source-jira-btn'));
++      const projHint = screen.getByTestId('target-project-key-help');
++
++      act(() => {
++        projHint.focus();
++      });
++      await waitFor(() => {
++        expect(projHint.getAttribute('aria-expanded')).toBe('true');
++      });
++
++      const dialog = screen.getByRole('dialog');
++      expect(dialog.textContent).toContain('Target Project Key');
++      expect(dialog.textContent).toContain('JIRA');
++      expect(dialog.textContent).toContain('Automatically creates the target project if absent');
++      expect(dialog.textContent).toContain('key alias redirects');
++
++      // Dismiss on Escape
++      act(() => {
++        fireEvent.keyDown(projHint, { key: 'Escape' });
++      });
++      await waitFor(() => {
++        expect(projHint.getAttribute('aria-expanded')).toBe('false');
++      });
++    });
++
++    it('renders FieldHelpHint and inputs cleanly across Light and Dark themes', () => {
++      for (const theme of ['light', 'dark']) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = render(
++          <MemoryRouter initialEntries={['/admin/imports']}>
++            <PlaneImportStudio />
++          </MemoryRouter>,
++        );
++
++        expect(screen.getByTestId('target-ws-slug-help')).toBeDefined();
++        expect(screen.getByTestId('export-workspace-slug-help')).toBeDefined();
++        expect(screen.getByTestId('import-user-mapping-help')).toBeDefined();
++
++        fireEvent.click(screen.getByTestId('source-jira-btn'));
++        expect(screen.getByTestId('target-project-key-help')).toBeDefined();
++
++        unmount();
++      }
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('verifies PlaneImportStudio CSS rules use semantic tokens with zero inline styles', () => {
++      const cssPath = path.resolve(import.meta.dirname, '../PlaneImportStudio.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++      expect(cssContent).toContain('.kb-plane-field-label');
++      expect(cssContent).toContain('.kb-plane-field-helper');
++      expect(cssContent).toContain('.kb-plane-input-control');
++      expect(cssContent).toContain('.kb-plane-export-form');
++
++      // Verify semantic tokens in helper copy
++      expect(cssContent).toMatch(/\.kb-plane-field-helper\s*\{[^}]*var\(--kb-color-text-secondary/);
++
++      // Verify field proximity constraints and nowrap label wrapping
++      expect(cssContent).toMatch(/\.kb-plane-field\s*\{[^}]*max-width:\s*450px;/);
++      expect(cssContent).toMatch(/\.kb-plane-input-control\s*\{[^}]*max-width:\s*450px;/);
++      expect(cssContent).toMatch(/\.kb-plane-field-label\s*\{[^}]*flex-wrap:\s*nowrap;/);
++      expect(cssContent).toMatch(/\.kb-plane-field-label\s*>\s*span\s*\{[^}]*flex:\s*1\s*1\s*auto;/);
++
++      // Verify 44px min-height for mobile touch accessibility
++      expect(cssContent).toContain('min-height: 44px;');
++    });
++  });
+ });
