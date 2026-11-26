@@ -2849,7 +2849,7 @@ describe('ComposeExportTab', () => {
   });
 
   describe('KAN-530: Standalone Status Panel Backup & Schedule FieldHelpHints', () => {
-    it('renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention', () => {
+    it('renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention', async () => {
       const testClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
       });
@@ -2861,6 +2861,32 @@ describe('ComposeExportTab', () => {
         local_llm_endpoint_host: null,
       };
 
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/backup-schedule')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                enabled: false,
+                interval_hours: 24,
+                retention_count: 7,
+                last_run_at: null,
+                next_run_at: null,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        if (url.includes('/backups')) {
+          return Promise.resolve(
+            new Response('[]', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+
       render(
         <QueryClientProvider client={testClient}>
           <StandaloneStatusPanel
@@ -2870,6 +2896,10 @@ describe('ComposeExportTab', () => {
           />
         </QueryClientProvider>,
       );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
+      });
 
       // 1. Backup Passphrase Help Hint
       const passphraseHelpBtn = screen.getByTestId('backup-passphrase-help');
@@ -2923,7 +2953,7 @@ describe('ComposeExportTab', () => {
       expect(retentionDocLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook');
     });
 
-    it('renders backup and schedule FieldHelpHints without regressions in light and dark mode', () => {
+    it('renders backup and schedule FieldHelpHints without regressions in light and dark mode', async () => {
       const testClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
       });
@@ -2935,6 +2965,32 @@ describe('ComposeExportTab', () => {
         local_llm_endpoint_host: null,
       };
 
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/backup-schedule')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                enabled: false,
+                interval_hours: 24,
+                retention_count: 7,
+                last_run_at: null,
+                next_run_at: null,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        if (url.includes('/backups')) {
+          return Promise.resolve(
+            new Response('[]', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+
       const { container } = render(
         <QueryClientProvider client={testClient}>
           <StandaloneStatusPanel
@@ -2944,6 +3000,10 @@ describe('ComposeExportTab', () => {
           />
         </QueryClientProvider>,
       );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
+      });
 
       // Light mode verification
       document.documentElement.setAttribute('data-theme', 'light');
@@ -2961,6 +3021,83 @@ describe('ComposeExportTab', () => {
 
       // Cleanup
       document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('closes open FieldHelpHint on Escape without invoking onClose on StandaloneStatusPanel', async () => {
+      const testClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const adminStatus: SystemStatus = {
+        deployment_mode: 'standalone',
+        is_server_admin: true,
+        persistent_volume: true,
+        air_gap_mode: false,
+        local_llm_endpoint_host: null,
+      };
+
+      const onClose = vi.fn();
+
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/backup-schedule')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                enabled: false,
+                interval_hours: 24,
+                retention_count: 7,
+                last_run_at: null,
+                next_run_at: null,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        if (url.includes('/backups')) {
+          return Promise.resolve(
+            new Response('[]', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+
+      render(
+        <QueryClientProvider client={testClient}>
+          <StandaloneStatusPanel
+            onClose={onClose}
+            initialStatus={adminStatus}
+            initialTab="backup"
+          />
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
+      });
+
+      const passphraseHelpBtn = screen.getByTestId('backup-passphrase-help');
+      act(() => {
+        passphraseHelpBtn.focus();
+      });
+
+      // Verify popover is open
+      const popover = screen.getByTestId('backup-passphrase-help-popover');
+      expect(popover).toBeDefined();
+
+      // Fire Escape while popover is open
+      fireEvent.keyDown(passphraseHelpBtn, { key: 'Escape' });
+
+      // FieldHelpHint popover closes
+      expect(screen.queryByTestId('backup-passphrase-help-popover')).toBeNull();
+
+      // StandaloneStatusPanel onClose was NOT invoked
+      expect(onClose).not.toHaveBeenCalled();
+
+      // When no popover is open, Escape closes the panel
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
 });

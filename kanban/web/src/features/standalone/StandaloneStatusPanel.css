@@ -126,12 +126,18 @@
 
 .standalone-panel__tab-btn--active {
   background-color: var(--bg-hover, #f1f3f5);
-  color: var(--accent-primary, #1d4ed8);
+  color: var(--badge-fg);
   font-weight: 600;
 }
 
 [data-theme="dark"] .standalone-panel__tab-btn--active {
-  color: #60a5fa;
+  color: var(--badge-fg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .standalone-panel__tab-btn--active {
+    color: var(--badge-fg);
+  }
 }
 
 /* Dismissible Inline Error Alert */

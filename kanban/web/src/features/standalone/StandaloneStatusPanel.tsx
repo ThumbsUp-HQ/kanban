@@ -190,6 +190,7 @@ export function StandaloneStatusPanel({
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
         e.preventDefault();
         onClose();
         return;
