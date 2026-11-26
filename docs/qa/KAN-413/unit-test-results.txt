@@ -1,0 +1,165 @@
+=== Pytest Suite ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 105 items
+
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_1_positive_rest_lifecycle_and_budget_usage PASSED [  0%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_3_security_secret_suppression PASSED [  1%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_4_security_member_isolation PASSED [  2%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_5_security_csrf_and_airgap PASSED [  3%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_6_negative_base_url_ssrf_and_invalid_token_cap PASSED [  4%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_7_boundary_key_length_and_patch_clear PASSED [  5%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_9_audit_activity_records PASSED [  6%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_additional_coverage_branches PASSED [  7%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_reorder PASSED [  8%]
+kanban/tests/api/admin/test_ai_providers_api.py::test_case_admin_ai_providers_probe_and_test_connection PASSED [  9%]
+kanban/tests/ai_config/test_net_guard.py::test_hard_denied_networks_completeness PASSED [ 10%]
+kanban/tests/ai_config/test_net_guard.py::test_is_local_or_private_ip PASSED [ 11%]
+kanban/tests/ai_config/test_net_guard.py::test_is_private_lan_hostname PASSED [ 12%]
+kanban/tests/ai_config/test_net_guard.py::test_is_local_base_url PASSED [ 13%]
+kanban/tests/ai_config/test_resolve_and_pin_literal_success PASSED [ 14%]
+kanban/tests/ai_config/test_resolve_and_pin_metadata_rejection PASSED [ 15%]
+kanban/tests/ai_config/test_resolve_and_pin_cgnat_rejection PASSED [ 16%]
+kanban/tests/ai_config/test_resolve_and_pin_outside_allowed_cidrs PASSED [ 17%]
+kanban/tests/ai_config/test_resolve_and_pin_dns_resolver PASSED [ 18%]
+kanban/tests/ai_config/test_extract_ip_helper PASSED [ 19%]
+kanban/tests/ai_config/test_local_and_private_cidrs_and_ssrf_blocked_error PASSED [ 20%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_1_positive_create_cli_pipe_and_codex PASSED [ 20%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo] PASSED [ 21%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--YOLO] PASSED [ 22%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--yolo=true] PASSED [ 23%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-skip-permissions] PASSED [ 24%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously] PASSED [ 25%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--dangerously-foo] PASSED [ 26%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--full-auto] PASSED [ 27%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_2_security_banned_flags_table_driven[--allow-all-tools=1] PASSED [ 28%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args0] PASSED [ 29%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args1] PASSED [ 30%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args2] PASSED [ 31%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3_security_codex_sandbox_override[codex_args3] PASSED [ 32%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_3b_security_binary_allowlist PASSED [ 33%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_4_security_arg_boundaries_and_opaque_injection PASSED [ 34%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_5_runtime_argv_assertion_catches_tampered_records PASSED [ 35%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_6_rls_member_denial_and_cross_workspace_404 PASSED [ 36%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_7_boundary_and_validation PASSED [ 37%]
+kanban/tests/agents/test_agent_definitions_api.py::test_case_8_delete_and_agent_in_use PASSED [ 38%]
+kanban/tests/agents/test_agent_definitions_api.py::test_crud_endpoints_get_list_patch PASSED [ 39%]
+kanban/tests/agents/test_agent_definitions_api.py::test_duplicate_slug_conflict_409 PASSED [ 40%]
+kanban/tests/agents/test_agent_definitions_api.py::test_workspace_slug_lookup PASSED [ 41%]
+kanban/tests/agents/test_agent_definitions_api.py::test_project_scoped_agent_lifecycle PASSED [ 42%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_create PASSED [ 43%]
+kanban/tests/agents/test_agent_definitions_api.py::test_schema_validations_on_patch PASSED [ 44%]
+kanban/tests/agents/test_agent_definitions_api.py::test_agent_definition_service_coverage_branches PASSED [ 45%]
+kanban/tests/api/test_llms_txt.py::test_llms_txt_positive_get_and_head PASSED [ 46%]
+kanban/tests/api/test_llms_txt.py::test_llms_full_txt_positive_get_and_head PASSED [ 47%]
+kanban/tests/api/test_llms_txt.py::test_llms_skills_endpoints_positive PASSED [ 48%]
+kanban/tests/api/test_llms_txt.py::test_system_skills_catalog_endpoint PASSED [ 49%]
+kanban/tests/api/test_llms_txt.py::test_negative_and_security_cases PASSED [ 50%]
+kanban/tests/api/test_llms_txt.py::test_content_invariants_and_byte_budgets PASSED [ 51%]
+kanban/tests/api/test_llms_txt.py::test_byte_limit_exceeded_guards PASSED [ 52%]
+agent/tests/test_remote_runner.py::test_runner_config_toml_loading PASSED [ 53%]
+agent/tests/test_remote_runner.py::test_enroll_runner_persists_ca_pem_0600_and_runner_toml PASSED [ 54%]
+agent/tests/test_remote_runner.py::test_daemon_signs_pop_challenge_automatically PASSED [ 55%]
+agent/tests/test_remote_runner.py::test_daemon_full_pop_handshake_flow PASSED [ 56%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_env_override PASSED [ 57%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_root PASSED [ 58%]
+agent/tests/test_remote_runner.py::test_default_runner_state_dir_user_with_and_without_xdg PASSED [ 59%]
+agent/tests/test_remote_runner.py::test_default_runner_config_path_variations PASSED [ 60%]
+agent/tests/test_remote_runner.py::test_cli_enroll_server_url_and_url_alias PASSED [ 61%]
+agent/tests/test_remote_runner.py::test_cli_enroll_and_run_defaults PASSED [ 62%]
+agent/tests/test_remote_runner.py::test_enroll_runner_validation_and_failure_branches PASSED [ 63%]
+agent/tests/test_remote_runner.py::test_main_cli_security_and_failure_dispatches PASSED [ 64%]
+agent/tests/test_remote_runner.py::test_run_daemon_execution_flows PASSED [ 65%]
+kanban/tests/security/test_scrubber.py::test_case_1_positive_sk_variants PASSED [ 66%]
+kanban/tests/security/test_scrubber.py::test_case_2_positive_github_and_aws PASSED [ 67%]
+kanban/tests/security/test_scrubber.py::test_case_3_positive_and_boundary_pem_private_keys PASSED [ 68%]
+kanban/tests/security/test_scrubber.py::test_case_4_positive_bearer_jwt_and_kanban_keys PASSED [ 69%]
+kanban/tests/security/test_scrubber.py::test_case_5_multi_secret_and_overlapping_spans PASSED [ 70%]
+kanban/tests/security/test_scrubber.py::test_case_6_false_positive_guard_corpus PASSED [ 71%]
+kanban/tests/security/test_scrubber.py::test_case_7_secret_non_retention_in_metadata PASSED [ 72%]
+kanban/tests/security/test_scrubber.py::test_case_8_redos_and_linear_time_boundary PASSED [ 73%]
+kanban/tests/security/test_scrubber.py::test_edge_cases_and_branch_coverage PASSED [ 74%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_normal_ok PASSED [ 75%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_provider_scoped_freeze_token_cap_zero PASSED [ 76%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_provider_scoped_freeze_tokens_used_exhausted PASSED [ 77%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_unfrozen_higher_priority_succeeds_when_sibling_frozen PASSED [ 78%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_budget_enforcer_reserve_budget_exceeded PASSED [ 79%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_budget_enforcer_release_on_empty PASSED [ 80%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_budget_enforcer_release_on_timeout PASSED [ 81%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_fail_closed_on_db_unexpected_exception PASSED [ 82%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_secret_scrubbed_input PASSED [ 83%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_no_session_factory_succeeds PASSED [ 84%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_string_project_id_and_callable_session PASSED [ 85%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_no_candidates_fallback_freeze PASSED [ 86%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_sessionmaker_factory PASSED [ 87%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_resolve_provider_by_kind[_MockOllamaProvider-ollama] PASSED [ 88%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_resolve_provider_by_kind[_MockOpenAIProvider-openai] PASSED [ 89%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_resolve_provider_by_kind[_MockGeminiProvider-gemini] PASSED [ 90%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_direct_session_context_manager PASSED [ 91%]
+agent/tests/test_sparkle_pipeline.py::test_sparkle_pipeline_timeout_with_reservation_release PASSED [ 92%]
+agent/tests/sparkle/test_pipeline.py::test_case_01_positive_run PASSED [ 93%]
+agent/tests/sparkle/test_pipeline.py::test_case_02_security_scrub_first PASSED [ 94%]
+agent/tests/sparkle/test_pipeline.py::test_case_03_security_rls_isolation PASSED [ 95%]
+agent/tests/sparkle/test_pipeline.py::test_case_04_security_read_only_session PASSED [ 96%]
+agent/tests/sparkle/test_pipeline.py::test_case_06_fault_retrieval_query_canceled PASSED [ 97%]
+agent/tests/sparkle/test_pipeline.py::test_case_07_fault_ttft_timeout_and_429 PASSED [ 98%]
+agent/tests/sparkle/test_pipeline.py::test_case_08_boundary_overlong_and_prefix_boundary PASSED [ 99%]
+agent/tests/sparkle/test_pipeline.py::test_pipeline_embedder_failure_and_empty_vectors PASSED [ 99%]
+agent/tests/sparkle/test_pipeline.py::test_pipeline_direct_stream_timeout PASSED [100%]
+agent/tests/sparkle/test_pipeline.py::test_pipeline_provider_unavailable_with_aclose PASSED [100%]
+agent/tests/sparkle/test_pipeline.py::test_pipeline_empty_filtered_output PASSED [100%]
+
+============================= 105 passed in 37.69s =============================
+
+=== Backend Coverage on Touched Modules ===
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+agent/remote_runner/cli.py      166      4     34      4    96%   88->90, 231, 238, 344, 348
+agent/sparkle/pipeline.py       192      2     66      6    97%   160->164, 266->276, 317->350, 375->377, 378-379, 399->401
+kanban/agents/service.py        145      2     34      4    97%   86->exit, 218, 338->341, 375
+kanban/ops/llms_txt.py          126      0     20      0   100%
+kanban/security/scrubber.py     159      5     62      5    95%   210, 224, 231, 265, 292
+-------------------------------------------------------------------------
+TOTAL                           788     13    216     19    97%
+
+=== Vitest Suite ===
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 26ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (7 tests) 394ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 880ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1945ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (48 tests) 2053ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 2961ms
+
+ Test Files  6 passed (6)
+      Tests  165 passed (165)
+   Start at  21:44:20
+   Duration  4.55s (tests 54%, environment 33%, import 9%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.07 |     96.6 |     100 |   99.75 |                   
+ admin-agents      |   99.04 |    96.26 |     100 |   99.49 |                   
+  ...torDrawer.tsx |   99.07 |    95.48 |     100 |   99.05 | 236               
+  ...tudioPage.tsx |      98 |     97.5 |     100 |     100 | 73                
+  ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
+  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
+  cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
+ admin-ai          |    98.9 |    96.55 |     100 |    99.8 |                   
+  ...dgetModal.tsx |     100 |    97.77 |     100 |     100 | 130,224           
+  ...torDrawer.tsx |   99.62 |    96.08 |     100 |     100 | ...65,377,404,425 
+  AiStudioPage.tsx |    97.4 |     95.9 |     100 |   99.28 | 241               
+  aiAdminApi.ts    |   97.91 |    98.52 |     100 |     100 | 172               
+ admin-runners     |     100 |    98.43 |     100 |     100 |                   
+  ...okenModal.tsx |     100 |      100 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    97.61 |     100 |     100 | 128               
+  ...rsAdminApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

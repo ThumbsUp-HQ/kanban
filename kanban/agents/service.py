@@ -28,10 +28,10 @@ _FOREIGN_KEY_VIOLATION: Final[str] = "23503"
 _UNIQUE_VIOLATION: Final[str] = "23505"
 
 
-def _is_fk_violation(exc: IntegrityError) -> bool:
+def _is_fk_violation(exc: BaseException) -> bool:
     """Return True if wrapped database exception indicates foreign key restrict violation."""
-    orig = exc.orig
-    candidates = (orig, getattr(orig, "__cause__", None))
+    orig = getattr(exc, "orig", exc)
+    candidates = (exc, orig, getattr(orig, "__cause__", None), getattr(exc, "__cause__", None))
     return any(
         getattr(c, "sqlstate", None) == _FOREIGN_KEY_VIOLATION
         or getattr(c, "pgcode", None) == _FOREIGN_KEY_VIOLATION
@@ -39,10 +39,10 @@ def _is_fk_violation(exc: IntegrityError) -> bool:
     )
 
 
-def _is_unique_violation(exc: IntegrityError) -> bool:
+def _is_unique_violation(exc: BaseException) -> bool:
     """Return True if wrapped database exception indicates unique constraint violation."""
-    orig = exc.orig
-    candidates = (orig, getattr(orig, "__cause__", None))
+    orig = getattr(exc, "orig", exc)
+    candidates = (exc, orig, getattr(orig, "__cause__", None), getattr(exc, "__cause__", None))
     return any(
         getattr(c, "sqlstate", None) == _UNIQUE_VIOLATION
         or getattr(c, "pgcode", None) == _UNIQUE_VIOLATION
@@ -203,7 +203,7 @@ class AgentDefinitionService:
 
         try:
             await session.flush()
-        except IntegrityError as exc:
+        except (IntegrityError, Exception) as exc:
             await session.rollback()
             if _is_unique_violation(exc):
                 detail_msg = (
@@ -363,7 +363,7 @@ class AgentDefinitionService:
                 )
                 await session.delete(agent)
                 await session.flush()
-        except IntegrityError as exc:
+        except (IntegrityError, Exception) as exc:
             if _is_fk_violation(exc):
                 msg = f"Agent definition {agent.slug!r} is referenced by transition hooks"
                 raise ProblemException(

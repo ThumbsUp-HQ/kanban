@@ -198,6 +198,8 @@ def test_case_4_positive_bearer_jwt_and_kanban_keys() -> None:
         "kb_doc_0123456789abcdef",
         "kb_adm_0123456789abcdef",
         "kb_setup_0123456789abcdef",
+        "kb_runner_0123456789abcdef",
+        "kb_rnr_enroll_0123456789abcdef",
     ]
     for kb_tok in kb_tokens:
         text = f"Platform key: {kb_tok}"

@@ -10,6 +10,8 @@ from sqlalchemy import text
 
 from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
 from kanban.agents.schemas import AgentDefinitionCreate, AgentDefinitionPatch
+from kanban.agents.service import AgentDefinitionService
+from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
 
 if TYPE_CHECKING:
@@ -1057,3 +1059,25 @@ async def test_schema_validations_on_patch(
     with pytest.raises(ProblemException) as exc_patch_surr:
         AgentDefinitionPatch(system_instructions_md="hello \ud800 world")
     assert exc_patch_surr.value.code == "CLI_ARGS_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_agent_definition_service_coverage_branches(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Exercise verify_workspace current and list_all with project_id filter."""
+    admin = await make_user("service-cov-admin", workspace_role="WORKSPACE_ADMIN")
+    pctx = PrincipalContext(
+        principal_id=admin.id,
+        workspace_id=api_env.workspace_id,
+        token_scopes=("workspace:read", "workspace:write"),
+        aal_level=2,
+    )
+    await AgentDefinitionService.verify_workspace(api_env.seed, pctx, "current")
+    target_proj_id = uuid.uuid4()
+    res = await AgentDefinitionService.list_definitions(
+        api_env.seed, pctx, "current", project_id=target_proj_id
+    )
+    assert res == []
+

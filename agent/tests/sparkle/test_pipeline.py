@@ -19,6 +19,7 @@ import hashlib
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import text
@@ -378,9 +379,17 @@ async def test_case_06_fault_retrieval_query_canceled() -> None:
             return self
 
         async def execute(self, stmt: object, params: object = None) -> object:
-            del stmt, params
-            msg = "canceling statement due to statement timeout"
-            raise DBAPIError(msg, params=None, orig=Exception("57014"))
+            del params
+            sql = str(stmt)
+            if "object_embeddings" in sql:
+                msg = "canceling statement due to statement timeout"
+                raise DBAPIError(msg, params=None, orig=Exception("57014"))
+            mock_res = MagicMock()
+            mock_res.scalar_one_or_none.return_value = None
+            mappings_mock = MagicMock()
+            mappings_mock.all.return_value = []
+            mock_res.mappings.return_value = mappings_mock
+            return mock_res
 
     class _TimeoutSessionFactory:
         def sessionmaker(self) -> _TimeoutSession:

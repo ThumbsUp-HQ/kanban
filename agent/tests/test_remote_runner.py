@@ -14,6 +14,7 @@ import sys
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -23,16 +24,24 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 from agent.remote_runner.cli import (
+    _write_secure_file,
     default_runner_config_path,
     default_runner_state_dir,
     enroll_runner,
     main,
+    run_daemon,
 )
 from agent.remote_runner.config import (
+    KeyPermissionsError,
     RunnerConfig,
     load_runner_config,
 )
-from agent.remote_runner.daemon import RemoteRunnerDaemon, RunnerDaemon
+from agent.remote_runner.daemon import (
+    EXIT_CODE_REVOKED,
+    RemoteRunnerDaemon,
+    RunnerDaemon,
+    RunnerRevokedError,
+)
 from kanban.runners.hub import (
     ChallengeResponseFrame,
 )
@@ -536,3 +545,135 @@ def test_cli_enroll_and_run_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyP
     rc_run = main(["run"])
     assert rc_run == 0
     assert mock_ran_path == [state_dir / "runner.toml"]
+
+
+def test_enroll_runner_validation_and_failure_branches(tmp_path: Path) -> None:
+    """Exercise empty token, server failure without key creation, and _write_secure_file error."""
+    state_dir = tmp_path / "failure-state"
+
+    # 1. Empty token raises ValueError
+    with pytest.raises(ValueError, match="Enrollment token is empty"):
+        enroll_runner(
+            server_url="https://kanban.internal",
+            enrollment_token="   ",
+            pool_slug="default",
+            state_dir=state_dir,
+        )
+
+    # 2. Server 500 error raises RuntimeError and does NOT write client.key
+    mock_client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _req: httpx.Response(500, text="Internal Server Error")
+        )
+    )
+    with pytest.raises(RuntimeError, match="Enrollment failed with status 500"):
+        enroll_runner(
+            server_url="https://kanban.internal",
+            enrollment_token="valid_token",
+            pool_slug="default",
+            state_dir=state_dir,
+            client=mock_client,
+        )
+    assert not (state_dir / "client.key").exists()
+
+    # 3. _write_secure_file cleanup on write failure
+    target_file = tmp_path / "test-cleanup.txt"
+    with (
+        patch("os.fdopen", side_effect=OSError("Disk full")),
+        pytest.raises(OSError, match="Disk full"),
+    ):
+        _write_secure_file(target_file, "data", mode=0o600)
+    assert not target_file.exists()
+
+
+def test_main_cli_security_and_failure_dispatches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Exercise CLI argument security guards and enrollment/run error handling."""
+    # 1. --token argument rejected
+    rc_token = main(["enroll", "--token", "secret"])
+    assert rc_token == 2
+    err = capsys.readouterr().err
+    assert "Passing --token on CLI arguments is rejected for security" in err
+
+    rc_token_eq = main(["enroll", "--token=secret"])
+    assert rc_token_eq == 2
+
+    # 2. enroll fails when server rejects
+    monkeypatch.setattr(sys, "stdin", io.StringIO("bad_token\n"))
+    mock_client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _req: httpx.Response(401, json={"detail": "Token invalid"})
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda *_a, **_k: mock_client)
+    rc_fail = main(
+        [
+            "enroll",
+            "--server-url",
+            "https://kanban.internal",
+            "--token-stdin",
+            "--pool",
+            "default",
+            "--state-dir",
+            str(tmp_path / "fail-state"),
+        ]
+    )
+    assert rc_fail == 1
+    assert "Enrollment error" in capsys.readouterr().err
+
+    # 3. run subcommand error handling
+    def mock_run_daemon_key_err(_path: Path) -> int:
+        msg = "Insecure permissions on key"
+        raise KeyPermissionsError(msg)
+
+    monkeypatch.setattr("agent.remote_runner.cli.run_daemon", mock_run_daemon_key_err)
+    rc_run_perm = main(["run", "--config", str(tmp_path / "runner.toml")])
+    assert rc_run_perm == 1
+    assert "Security error: Insecure permissions on key" in capsys.readouterr().err
+
+    def mock_run_daemon_generic_err(_path: Path) -> int:
+        msg = "Network failure"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr("agent.remote_runner.cli.run_daemon", mock_run_daemon_generic_err)
+    rc_run_gen = main(["run", "--config", str(tmp_path / "runner.toml")])
+    assert rc_run_gen == 1
+    assert "Runner error: Network failure" in capsys.readouterr().err
+
+
+def test_run_daemon_execution_flows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise run_daemon lifecycle: normal exit, KeyboardInterrupt, and RunnerRevokedError."""
+    cfg_path = tmp_path / "runner.toml"
+    cfg_path.write_text("server_url = 'https://kanban.internal'\n", encoding="utf-8")
+
+    # 1. Normal run
+    mock_daemon = MagicMock()
+
+    async def mock_run_forever_ok() -> None:
+        pass
+
+    mock_daemon.run_forever = mock_run_forever_ok
+    monkeypatch.setattr("agent.remote_runner.cli.RunnerDaemon", lambda _cfg: mock_daemon)
+    monkeypatch.setattr("agent.remote_runner.cli.validate_key_permissions", lambda _k: None)
+    monkeypatch.setattr(
+        "agent.remote_runner.cli.load_runner_config",
+        lambda _p: MagicMock(client_key_path=None, key_path=None),
+    )
+
+    assert run_daemon(cfg_path) == 0
+
+    # 2. KeyboardInterrupt
+    async def mock_run_forever_kbd() -> None:
+        raise KeyboardInterrupt
+
+    mock_daemon.run_forever = mock_run_forever_kbd
+    assert run_daemon(cfg_path) == 0
+
+    # 3. RunnerRevokedError
+    async def mock_run_forever_revoked() -> None:
+        msg = "Certificate revoked"
+        raise RunnerRevokedError(msg)
+
+    mock_daemon.run_forever = mock_run_forever_revoked
+    assert run_daemon(cfg_path) == EXIT_CODE_REVOKED
