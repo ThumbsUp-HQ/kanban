@@ -82,6 +82,10 @@ export function CreateProjectModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   let navigateFn: ((to: string) => void) | null = null;
   try {
@@ -141,7 +145,7 @@ export function CreateProjectModal({
       if (e.key === 'Escape') {
         e.preventDefault();
         resetForm();
-        onClose();
+        onCloseRef.current();
       }
     };
 
@@ -151,7 +155,7 @@ export function CreateProjectModal({
       clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;
@@ -256,7 +260,7 @@ export function CreateProjectModal({
 
   return (
     <div
-      className="kb-palette-scrim kb-create-project-scrim"
+      className="kb-create-project-scrim"
       data-testid="create-project-scrim"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -312,12 +316,21 @@ export function CreateProjectModal({
           </div>
 
           <div className="kb-create-project-field">
-            <label
-              htmlFor="create-project-identifier"
-              className="kb-create-project-label"
-            >
-              Identifier (Key)
-            </label>
+            <div className="kb-create-project-label-row">
+              <label
+                htmlFor="create-project-identifier"
+                className="kb-create-project-label"
+              >
+                Project Key
+              </label>
+              <FieldHelpHint
+                title="Project Key"
+                summary="Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123)."
+                validValues={['2 to 10 uppercase characters starting with a letter']}
+                docHref="/docs/studio-configuration-reference#projects"
+                testId="create-project-key-help"
+              />
+            </div>
             <input
               id="create-project-identifier"
               type="text"
@@ -330,9 +343,6 @@ export function CreateProjectModal({
               }}
               className="kb-create-project-input kb-create-project-input-mono"
             />
-            <span className="kb-create-project-hint">
-              2-10 uppercase characters starting with a letter (used for issue keys like {identifier || 'SEC'}-1).
-            </span>
           </div>
 
           <div className="kb-create-project-field">

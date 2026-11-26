@@ -1,3 +1,28 @@
+/* Create Project Modal Styles (KANBA-166 / KB-QA-05 / KAN-503) */
+
+:root {
+  --kb-create-project-bg: var(--bg-surface-raised, #ffffff);
+  --kb-create-project-border: var(--border-subtle, #e5e7eb);
+  --kb-create-project-fg: var(--fg-primary, #111827);
+  --kb-create-project-input-bg: var(--bg-surface, #ffffff);
+}
+
+[data-theme="dark"] {
+  --kb-create-project-bg: var(--bg-surface-raised, #1f232b);
+  --kb-create-project-border: var(--border-subtle, #2d333f);
+  --kb-create-project-fg: var(--fg-primary, #f9fafb);
+  --kb-create-project-input-bg: var(--bg-surface, #16181d);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --kb-create-project-bg: var(--bg-surface-raised, #1f232b);
+    --kb-create-project-border: var(--border-subtle, #2d333f);
+    --kb-create-project-fg: var(--fg-primary, #f9fafb);
+    --kb-create-project-input-bg: var(--bg-surface, #16181d);
+  }
+}
+
 .kb-create-project-scrim {
   position: fixed;
   inset: 0;
@@ -6,16 +31,20 @@
   align-items: center;
   justify-content: center;
   z-index: 1200;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .kb-create-project-dialog {
-  background: var(--bg-surface-raised, #24272f);
-  border: 1px solid var(--border-subtle, #333842);
+  background: var(--kb-create-project-bg);
+  border: 1px solid var(--kb-create-project-border);
   border-radius: var(--radius-lg, 8px);
   width: 100%;
   max-width: 480px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   padding: 24px;
-  color: var(--fg-primary, #f8fafc);
+  color: var(--kb-create-project-fg);
   box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
   box-sizing: border-box;
 }
@@ -31,6 +60,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: var(--kb-create-project-fg);
 }
 
 .kb-create-project-close {
@@ -39,6 +69,16 @@
   color: var(--fg-muted, #94a3b8);
   font-size: 18px;
   cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kb-create-project-close:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
 }
 
 .kb-create-project-form {
@@ -53,37 +93,58 @@
   gap: 6px;
 }
 
+.kb-create-project-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kb-create-project-label-row .field-help-hint {
+  margin: 0;
+  margin-left: 0;
+}
+
 .kb-create-project-label {
   font-size: 13px;
   font-weight: 600;
+  color: var(--kb-create-project-fg);
 }
 
 .kb-create-project-input {
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle, #333842);
-  background: var(--bg-surface, #1e2025);
-  color: var(--fg-primary, #f8fafc);
+  border: 1px solid var(--kb-create-project-border);
+  background: var(--kb-create-project-input-bg);
+  color: var(--kb-create-project-fg);
   font-size: 14px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kb-create-project-input:focus {
+  outline: none;
+  border-color: var(--accent-primary, #2563eb);
 }
 
 .kb-create-project-input-mono {
   font-family: var(--font-mono, monospace);
 }
 
-.kb-create-project-hint {
-  font-size: 11px;
-  color: var(--fg-muted, #94a3b8);
-}
-
 .kb-create-project-textarea {
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle, #333842);
-  background: var(--bg-surface, #1e2025);
-  color: var(--fg-primary, #f8fafc);
+  border: 1px solid var(--kb-create-project-border);
+  background: var(--kb-create-project-input-bg);
+  color: var(--kb-create-project-fg);
   font-size: 13px;
   resize: vertical;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kb-create-project-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary, #2563eb);
 }
 
 .kb-create-project-checkbox-row {
@@ -93,6 +154,7 @@
   gap: 8px;
   font-size: 13px;
   cursor: pointer;
+  color: var(--kb-create-project-fg);
 }
 
 .kb-create-project-checkbox-row-wrap {
@@ -125,18 +187,23 @@
 .kb-create-project-cancel-btn {
   padding: 8px 14px;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle, #333842);
+  border: 1px solid var(--kb-create-project-border);
   background: transparent;
-  color: var(--fg-secondary, #cbd5e1);
+  color: var(--fg-secondary, #4b5563);
   font-size: 13px;
   cursor: pointer;
+}
+
+.kb-create-project-cancel-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--kb-create-project-fg);
 }
 
 .kb-create-project-submit-btn {
   padding: 8px 16px;
   border-radius: 6px;
   border: none;
-  background: var(--accent-primary);
+  background: var(--accent-primary, #2563eb);
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
@@ -146,4 +213,25 @@
 .kb-create-project-submit-btn:disabled {
   cursor: wait;
   opacity: 0.75;
+}
+
+@media (max-width: 480px) {
+  .kb-create-project-scrim {
+    padding: 8px;
+  }
+
+  .kb-create-project-dialog {
+    padding: 16px 14px;
+    max-height: calc(100vh - 16px);
+  }
+
+  .kb-create-project-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .kb-create-project-cancel-btn,
+  .kb-create-project-submit-btn {
+    min-height: 44px;
+  }
 }

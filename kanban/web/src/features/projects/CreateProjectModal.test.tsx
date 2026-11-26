@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import {
@@ -87,7 +87,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
     );
 
     const nameInput = screen.getByLabelText('Project Name');
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     const descInput = screen.getByLabelText('Description (Markdown)');
 
     // Auto-derived identifier from name
@@ -150,7 +150,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
     );
 
     const nameInput = screen.getByLabelText('Project Name');
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
     fireEvent.change(idInput, { target: { value: '1' } });
     if (form) {
@@ -371,7 +371,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
 
     const nameInput = screen.getByLabelText('Project Name');
     fireEvent.change(nameInput, { target: { value: 'Safe Sequences Project' } });
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     fireEvent.change(idInput, { target: { value: 'SAFE' } });
 
     const skipCheckbox = screen.getByTestId<HTMLInputElement>('create-project-skip-loaded-seq');
@@ -625,5 +625,120 @@ describe('CreateProjectModal & useSessionGuard', () => {
     const popover = screen.getByTestId('create-proj-skip-seq-help-popover');
     expect(popover.textContent).toContain('Default:');
     expect(popover.textContent).toContain('Enabled (true)');
+  });
+
+  describe('Project Key FieldHelpHint (KAN-503)', () => {
+    it('renders FieldHelpHint for Project Key with validValues and doc link', () => {
+      render(
+        <MemoryRouter>
+          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+
+      const trigger = screen.getByTestId('create-project-key-help');
+      expect(trigger).toBeDefined();
+      expect(trigger.getAttribute('aria-label')).toBe('Help for Project Key');
+
+      // Focus opens the popover
+      fireEvent.focus(trigger);
+
+      const popover = screen.getByTestId('create-project-key-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Project Key');
+      expect(popover.textContent).toContain(
+        'Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123).',
+      );
+      expect(popover.textContent).toContain('2 to 10 uppercase characters starting with a letter');
+
+      const docLink = popover.querySelector('a');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe('/docs/studio-configuration-reference#projects');
+      expect(docLink?.textContent).toContain('More info');
+    });
+
+    it('dismisses popover on Escape key and restores focus to trigger without closing modal', () => {
+      const onClose = vi.fn();
+      render(
+        <MemoryRouter>
+          <CreateProjectModal isOpen={true} onClose={onClose} />
+        </MemoryRouter>,
+      );
+
+      const trigger = screen.getByTestId('create-project-key-help');
+      act(() => {
+        trigger.focus();
+      });
+
+      expect(screen.queryByTestId('create-project-key-help-popover')).not.toBeNull();
+
+      // Escape should dismiss popover and restore focus to the trigger
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape' });
+      });
+
+      expect(screen.queryByTestId('create-project-key-help-popover')).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('renders in Light and Dark themes with zero inline style violations', () => {
+      // 1. Light Theme
+      document.documentElement.removeAttribute('data-theme');
+      const { unmount } = render(
+        <MemoryRouter>
+          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+
+      const lightTrigger = screen.getByTestId('create-project-key-help');
+      expect(lightTrigger.style.length).toBe(0);
+
+      fireEvent.focus(lightTrigger);
+      const lightPopover = screen.getByTestId('create-project-key-help-popover');
+      expect(lightPopover.style.color).toBe('');
+      expect(lightPopover.style.backgroundColor).toBe('');
+      unmount();
+
+      // 2. Dark Theme
+      document.documentElement.setAttribute('data-theme', 'dark');
+      render(
+        <MemoryRouter>
+          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+
+      const darkTrigger = screen.getByTestId('create-project-key-help');
+      expect(darkTrigger.style.length).toBe(0);
+
+      fireEvent.focus(darkTrigger);
+      const darkPopover = screen.getByTestId('create-project-key-help-popover');
+      expect(darkPopover.style.color).toBe('');
+      expect(darkPopover.style.backgroundColor).toBe('');
+
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('verifies CSS rules in CreateProjectModal.css for layout, gap, themes, and mobile responsiveness', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const cssPath = path.resolve(__dirname, 'CreateProjectModal.css');
+      const css = fs.readFileSync(cssPath, 'utf8');
+
+      // Theme rules
+      expect(css).toContain(':root');
+      expect(css).toContain('[data-theme="dark"]');
+      expect(css).toContain('@media (prefers-color-scheme: dark)');
+
+      // Label row and gap
+      expect(css).toContain('.kb-create-project-label-row');
+      expect(css).toContain('gap: 6px;');
+
+      // Mobile responsiveness
+      expect(css).toContain('@media (max-width: 480px)');
+      expect(css).toContain('.kb-create-project-dialog');
+
+      // Zero em-dashes or en-dashes
+      expect(css).not.toContain('\u2014');
+      expect(css).not.toContain('\u2013');
+    });
   });
 });

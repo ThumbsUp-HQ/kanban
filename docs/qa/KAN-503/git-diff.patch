@@ -1,0 +1,463 @@
+diff --git a/kanban/web/src/app/browserQaCoverageBooster.test.tsx b/kanban/web/src/app/browserQaCoverageBooster.test.tsx
+index aa14ea7e..a450bd60 100644
+--- a/kanban/web/src/app/browserQaCoverageBooster.test.tsx
++++ b/kanban/web/src/app/browserQaCoverageBooster.test.tsx
+@@ -99,7 +99,7 @@ describe('Browser QA Branch Coverage Booster', () => {
+       expect(screen.queryByTestId('create-project-error')).toBeNull();
+ 
+       // Invalid identifier (1 char)
+-      const idInput = screen.getByLabelText('Identifier (Key)');
++      const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
+       fireEvent.change(idInput, { target: { value: 'S' } });
+       fireEvent.submit(form);
+       expect((await screen.findByTestId('create-project-error')).textContent).toContain(
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.css b/kanban/web/src/features/projects/CreateProjectModal.css
+index f8856427..f9160633 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.css
++++ b/kanban/web/src/features/projects/CreateProjectModal.css
+@@ -1,3 +1,28 @@
++/* Create Project Modal Styles (KANBA-166 / KB-QA-05 / KAN-503) */
++
++:root {
++  --kb-create-project-bg: var(--bg-surface-raised, #ffffff);
++  --kb-create-project-border: var(--border-subtle, #e5e7eb);
++  --kb-create-project-fg: var(--fg-primary, #111827);
++  --kb-create-project-input-bg: var(--bg-surface, #ffffff);
++}
++
++[data-theme="dark"] {
++  --kb-create-project-bg: var(--bg-surface-raised, #1f232b);
++  --kb-create-project-border: var(--border-subtle, #2d333f);
++  --kb-create-project-fg: var(--fg-primary, #f9fafb);
++  --kb-create-project-input-bg: var(--bg-surface, #16181d);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) {
++    --kb-create-project-bg: var(--bg-surface-raised, #1f232b);
++    --kb-create-project-border: var(--border-subtle, #2d333f);
++    --kb-create-project-fg: var(--fg-primary, #f9fafb);
++    --kb-create-project-input-bg: var(--bg-surface, #16181d);
++  }
++}
++
+ .kb-create-project-scrim {
+   position: fixed;
+   inset: 0;
+@@ -6,16 +31,20 @@
+   align-items: center;
+   justify-content: center;
+   z-index: 1200;
++  padding: 16px;
++  box-sizing: border-box;
+ }
+ 
+ .kb-create-project-dialog {
+-  background: var(--bg-surface-raised, #24272f);
+-  border: 1px solid var(--border-subtle, #333842);
++  background: var(--kb-create-project-bg);
++  border: 1px solid var(--kb-create-project-border);
+   border-radius: var(--radius-lg, 8px);
+   width: 100%;
+   max-width: 480px;
++  max-height: calc(100vh - 32px);
++  overflow-y: auto;
+   padding: 24px;
+-  color: var(--fg-primary, #f8fafc);
++  color: var(--kb-create-project-fg);
+   box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
+   box-sizing: border-box;
+ }
+@@ -31,6 +60,7 @@
+   margin: 0;
+   font-size: 18px;
+   font-weight: 600;
++  color: var(--kb-create-project-fg);
+ }
+ 
+ .kb-create-project-close {
+@@ -39,6 +69,16 @@
+   color: var(--fg-muted, #94a3b8);
+   font-size: 18px;
+   cursor: pointer;
++  padding: 4px;
++  border-radius: 4px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-create-project-close:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
+ }
+ 
+ .kb-create-project-form {
+@@ -53,37 +93,58 @@
+   gap: 6px;
+ }
+ 
++.kb-create-project-label-row {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++}
++
++.kb-create-project-label-row .field-help-hint {
++  margin: 0;
++  margin-left: 0;
++}
++
+ .kb-create-project-label {
+   font-size: 13px;
+   font-weight: 600;
++  color: var(--kb-create-project-fg);
+ }
+ 
+ .kb-create-project-input {
+   padding: 8px 12px;
+   border-radius: 6px;
+-  border: 1px solid var(--border-subtle, #333842);
+-  background: var(--bg-surface, #1e2025);
+-  color: var(--fg-primary, #f8fafc);
++  border: 1px solid var(--kb-create-project-border);
++  background: var(--kb-create-project-input-bg);
++  color: var(--kb-create-project-fg);
+   font-size: 14px;
++  box-sizing: border-box;
++  width: 100%;
+ }
+ 
+-.kb-create-project-input-mono {
+-  font-family: var(--font-mono, monospace);
++.kb-create-project-input:focus {
++  outline: none;
++  border-color: var(--accent-primary, #2563eb);
+ }
+ 
+-.kb-create-project-hint {
+-  font-size: 11px;
+-  color: var(--fg-muted, #94a3b8);
++.kb-create-project-input-mono {
++  font-family: var(--font-mono, monospace);
+ }
+ 
+ .kb-create-project-textarea {
+   padding: 8px 12px;
+   border-radius: 6px;
+-  border: 1px solid var(--border-subtle, #333842);
+-  background: var(--bg-surface, #1e2025);
+-  color: var(--fg-primary, #f8fafc);
++  border: 1px solid var(--kb-create-project-border);
++  background: var(--kb-create-project-input-bg);
++  color: var(--kb-create-project-fg);
+   font-size: 13px;
+   resize: vertical;
++  box-sizing: border-box;
++  width: 100%;
++}
++
++.kb-create-project-textarea:focus {
++  outline: none;
++  border-color: var(--accent-primary, #2563eb);
+ }
+ 
+ .kb-create-project-checkbox-row {
+@@ -93,6 +154,7 @@
+   gap: 8px;
+   font-size: 13px;
+   cursor: pointer;
++  color: var(--kb-create-project-fg);
+ }
+ 
+ .kb-create-project-checkbox-row-wrap {
+@@ -125,18 +187,23 @@
+ .kb-create-project-cancel-btn {
+   padding: 8px 14px;
+   border-radius: 6px;
+-  border: 1px solid var(--border-subtle, #333842);
++  border: 1px solid var(--kb-create-project-border);
+   background: transparent;
+-  color: var(--fg-secondary, #cbd5e1);
++  color: var(--fg-secondary, #4b5563);
+   font-size: 13px;
+   cursor: pointer;
+ }
+ 
++.kb-create-project-cancel-btn:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--kb-create-project-fg);
++}
++
+ .kb-create-project-submit-btn {
+   padding: 8px 16px;
+   border-radius: 6px;
+   border: none;
+-  background: var(--accent-primary);
++  background: var(--accent-primary, #2563eb);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 600;
+@@ -147,3 +214,24 @@
+   cursor: wait;
+   opacity: 0.75;
+ }
++
++@media (max-width: 480px) {
++  .kb-create-project-scrim {
++    padding: 8px;
++  }
++
++  .kb-create-project-dialog {
++    padding: 16px 14px;
++    max-height: calc(100vh - 16px);
++  }
++
++  .kb-create-project-actions {
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .kb-create-project-cancel-btn,
++  .kb-create-project-submit-btn {
++    min-height: 44px;
++  }
++}
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.test.tsx b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+index f8102912..099103b8 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.test.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { MemoryRouter } from 'react-router';
+ import {
+@@ -87,7 +87,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
+     );
+ 
+     const nameInput = screen.getByLabelText('Project Name');
+-    const idInput = screen.getByLabelText('Identifier (Key)');
++    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
+     const descInput = screen.getByLabelText('Description (Markdown)');
+ 
+     // Auto-derived identifier from name
+@@ -150,7 +150,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
+     );
+ 
+     const nameInput = screen.getByLabelText('Project Name');
+-    const idInput = screen.getByLabelText('Identifier (Key)');
++    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
+     fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
+     fireEvent.change(idInput, { target: { value: '1' } });
+     if (form) {
+@@ -371,7 +371,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
+ 
+     const nameInput = screen.getByLabelText('Project Name');
+     fireEvent.change(nameInput, { target: { value: 'Safe Sequences Project' } });
+-    const idInput = screen.getByLabelText('Identifier (Key)');
++    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
+     fireEvent.change(idInput, { target: { value: 'SAFE' } });
+ 
+     const skipCheckbox = screen.getByTestId<HTMLInputElement>('create-project-skip-loaded-seq');
+@@ -626,4 +626,119 @@ describe('CreateProjectModal & useSessionGuard', () => {
+     expect(popover.textContent).toContain('Default:');
+     expect(popover.textContent).toContain('Enabled (true)');
+   });
++
++  describe('Project Key FieldHelpHint (KAN-503)', () => {
++    it('renders FieldHelpHint for Project Key with validValues and doc link', () => {
++      render(
++        <MemoryRouter>
++          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
++        </MemoryRouter>,
++      );
++
++      const trigger = screen.getByTestId('create-project-key-help');
++      expect(trigger).toBeDefined();
++      expect(trigger.getAttribute('aria-label')).toBe('Help for Project Key');
++
++      // Focus opens the popover
++      fireEvent.focus(trigger);
++
++      const popover = screen.getByTestId('create-project-key-help-popover');
++      expect(popover).toBeDefined();
++      expect(popover.textContent).toContain('Project Key');
++      expect(popover.textContent).toContain(
++        'Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123).',
++      );
++      expect(popover.textContent).toContain('2 to 10 uppercase characters starting with a letter');
++
++      const docLink = popover.querySelector('a');
++      expect(docLink).not.toBeNull();
++      expect(docLink?.getAttribute('href')).toBe('/docs/studio-configuration-reference#projects');
++      expect(docLink?.textContent).toContain('More info');
++    });
++
++    it('dismisses popover on Escape key and restores focus to trigger without closing modal', () => {
++      const onClose = vi.fn();
++      render(
++        <MemoryRouter>
++          <CreateProjectModal isOpen={true} onClose={onClose} />
++        </MemoryRouter>,
++      );
++
++      const trigger = screen.getByTestId('create-project-key-help');
++      act(() => {
++        trigger.focus();
++      });
++
++      expect(screen.queryByTestId('create-project-key-help-popover')).not.toBeNull();
++
++      // Escape should dismiss popover and restore focus to the trigger
++      act(() => {
++        fireEvent.keyDown(trigger, { key: 'Escape' });
++      });
++
++      expect(screen.queryByTestId('create-project-key-help-popover')).toBeNull();
++      expect(onClose).not.toHaveBeenCalled();
++    });
++
++    it('renders in Light and Dark themes with zero inline style violations', () => {
++      // 1. Light Theme
++      document.documentElement.removeAttribute('data-theme');
++      const { unmount } = render(
++        <MemoryRouter>
++          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
++        </MemoryRouter>,
++      );
++
++      const lightTrigger = screen.getByTestId('create-project-key-help');
++      expect(lightTrigger.style.length).toBe(0);
++
++      fireEvent.focus(lightTrigger);
++      const lightPopover = screen.getByTestId('create-project-key-help-popover');
++      expect(lightPopover.style.color).toBe('');
++      expect(lightPopover.style.backgroundColor).toBe('');
++      unmount();
++
++      // 2. Dark Theme
++      document.documentElement.setAttribute('data-theme', 'dark');
++      render(
++        <MemoryRouter>
++          <CreateProjectModal isOpen={true} onClose={vi.fn()} />
++        </MemoryRouter>,
++      );
++
++      const darkTrigger = screen.getByTestId('create-project-key-help');
++      expect(darkTrigger.style.length).toBe(0);
++
++      fireEvent.focus(darkTrigger);
++      const darkPopover = screen.getByTestId('create-project-key-help-popover');
++      expect(darkPopover.style.color).toBe('');
++      expect(darkPopover.style.backgroundColor).toBe('');
++
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('verifies CSS rules in CreateProjectModal.css for layout, gap, themes, and mobile responsiveness', async () => {
++      const fs = await import('fs');
++      const path = await import('path');
++      const cssPath = path.resolve(__dirname, 'CreateProjectModal.css');
++      const css = fs.readFileSync(cssPath, 'utf8');
++
++      // Theme rules
++      expect(css).toContain(':root');
++      expect(css).toContain('[data-theme="dark"]');
++      expect(css).toContain('@media (prefers-color-scheme: dark)');
++
++      // Label row and gap
++      expect(css).toContain('.kb-create-project-label-row');
++      expect(css).toContain('gap: 6px;');
++
++      // Mobile responsiveness
++      expect(css).toContain('@media (max-width: 480px)');
++      expect(css).toContain('.kb-create-project-dialog');
++
++      // Zero em-dashes or en-dashes
++      expect(css).not.toContain('\u2014');
++      expect(css).not.toContain('\u2013');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/projects/CreateProjectModal.tsx b/kanban/web/src/features/projects/CreateProjectModal.tsx
+index 7066d8ad..e9307ab6 100644
+--- a/kanban/web/src/features/projects/CreateProjectModal.tsx
++++ b/kanban/web/src/features/projects/CreateProjectModal.tsx
+@@ -82,6 +82,10 @@ export function CreateProjectModal({
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+   const nameInputRef = useRef<HTMLInputElement | null>(null);
++  const onCloseRef = useRef(onClose);
++  useEffect(() => {
++    onCloseRef.current = onClose;
++  });
+ 
+   let navigateFn: ((to: string) => void) | null = null;
+   try {
+@@ -141,7 +145,7 @@ export function CreateProjectModal({
+       if (e.key === 'Escape') {
+         e.preventDefault();
+         resetForm();
+-        onClose();
++        onCloseRef.current();
+       }
+     };
+ 
+@@ -151,7 +155,7 @@ export function CreateProjectModal({
+       clearTimeout(timer);
+       window.removeEventListener('keydown', handleKeyDown);
+     };
+-  }, [isOpen, onClose]);
++  }, [isOpen]);
+ 
+   if (!isOpen) {
+     return null;
+@@ -256,7 +260,7 @@ export function CreateProjectModal({
+ 
+   return (
+     <div
+-      className="kb-palette-scrim kb-create-project-scrim"
++      className="kb-create-project-scrim"
+       data-testid="create-project-scrim"
+       onClick={(e) => {
+         if (e.target === e.currentTarget) {
+@@ -312,12 +316,21 @@ export function CreateProjectModal({
+           </div>
+ 
+           <div className="kb-create-project-field">
+-            <label
+-              htmlFor="create-project-identifier"
+-              className="kb-create-project-label"
+-            >
+-              Identifier (Key)
+-            </label>
++            <div className="kb-create-project-label-row">
++              <label
++                htmlFor="create-project-identifier"
++                className="kb-create-project-label"
++              >
++                Project Key
++              </label>
++              <FieldHelpHint
++                title="Project Key"
++                summary="Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123)."
++                validValues={['2 to 10 uppercase characters starting with a letter']}
++                docHref="/docs/studio-configuration-reference#projects"
++                testId="create-project-key-help"
++              />
++            </div>
+             <input
+               id="create-project-identifier"
+               type="text"
+@@ -330,9 +343,6 @@ export function CreateProjectModal({
+               }}
+               className="kb-create-project-input kb-create-project-input-mono"
+             />
+-            <span className="kb-create-project-hint">
+-              2-10 uppercase characters starting with a letter (used for issue keys like {identifier || 'SEC'}-1).
+-            </span>
+           </div>
+ 
+           <div className="kb-create-project-field">
