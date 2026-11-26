@@ -2,6 +2,8 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
@@ -1372,6 +1374,116 @@ describe('OAuthClientGovernanceStudio', () => {
           grant_types: ['authorization_code'],
         }),
       );
+    });
+  });
+
+  describe('KAN-523: Purge and Action Button Contrast and Semantic Tokens', () => {
+    it('renders Purge Unused / Revoked Clients button cleanly in light theme', async () => {
+      document.documentElement.removeAttribute('data-theme');
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      render(
+        <MemoryRouter initialEntries={['/admin/oauth']}>
+          <OAuthClientGovernanceStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('purge-clients-btn')).toBeDefined();
+      });
+
+      const purgeBtn = screen.getByTestId('purge-clients-btn');
+      expect(purgeBtn.textContent).toContain('Purge Unused / Revoked Clients');
+      expect(purgeBtn.className).toContain('kb-oauth-gov-purge-btn');
+
+      // Assert zero inline hardcoded color overrides
+      expect(purgeBtn.style.backgroundColor).toBe('');
+      expect(purgeBtn.style.borderColor).toBe('');
+      expect(purgeBtn.style.color).toBe('');
+
+      // Click enters confirm state
+      fireEvent.click(purgeBtn);
+      expect(screen.getByTestId('confirm-purge-btn')).toBeDefined();
+    });
+
+    it('renders Purge Unused / Revoked Clients button cleanly in dark theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      try {
+        render(
+          <MemoryRouter initialEntries={['/admin/oauth']}>
+            <OAuthClientGovernanceStudio />
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('purge-clients-btn')).toBeDefined();
+        });
+
+        const purgeBtn = screen.getByTestId('purge-clients-btn');
+        expect(purgeBtn.textContent).toContain('Purge Unused / Revoked Clients');
+        expect(purgeBtn.className).toContain('kb-oauth-gov-purge-btn');
+        expect(purgeBtn.style.backgroundColor).toBe('');
+        expect(purgeBtn.style.borderColor).toBe('');
+        expect(purgeBtn.style.color).toBe('');
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('asserts OAuthClientGovernanceStudio.css removes #d29922 and uses WCAG AA semantic tokens for purge button', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../OAuthClientGovernanceStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      const purgeRuleMatch = /\.kb-oauth-gov-purge-btn\s*\{[^}]+\}/.exec(cssContent);
+      expect(purgeRuleMatch).not.toBeNull();
+      const purgeRule = purgeRuleMatch?.[0] ?? '';
+
+      // Assert #d29922 is completely removed from the purge button class
+      expect(purgeRule).not.toContain('#d29922');
+
+      // Assert WCAG AA >= 4.5:1 semantic tokens
+      expect(purgeRule).toContain('background-color: var(--warn-bg);');
+      expect(purgeRule).toContain('border: 1px solid var(--border-warning);');
+      expect(purgeRule).toContain('color: var(--warn-fg);');
+
+      // Assert hover state uses semantic warning tokens
+      const hoverMatch = /\.kb-oauth-gov-purge-btn:hover[^{]*\{[^}]+\}/.exec(cssContent);
+      expect(hoverMatch).not.toBeNull();
+      const hoverRule = hoverMatch?.[0] ?? '';
+      expect(hoverRule).toContain('background-color: var(--bg-warning-subtle);');
+      expect(hoverRule).toContain('border-color: var(--warn-fg);');
+      expect(hoverRule).toContain('color: var(--warn-fg);');
+    });
+
+    it('asserts semantic tokens for register, filter pill, and bulk delete buttons', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../OAuthClientGovernanceStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Register button
+      const registerMatch = /\.kb-oauth-gov-register-btn\s*\{[^}]+\}/.exec(cssContent);
+      expect(registerMatch).not.toBeNull();
+      const registerRule = registerMatch?.[0] ?? '';
+      expect(registerRule).toContain('background-color: var(--accent-primary);');
+      expect(registerRule).toContain('color: var(--accent-primary-fg);');
+      expect(registerRule).toContain('border: 1px solid var(--accent-primary);');
+
+      // Filter pill active
+      const filterPillMatch = /\.kb-oauth-filter-pill-active\s*\{[^}]+\}/.exec(cssContent);
+      expect(filterPillMatch).not.toBeNull();
+      const filterPillRule = filterPillMatch?.[0] ?? '';
+      expect(filterPillRule).toContain('background-color: var(--accent-primary);');
+      expect(filterPillRule).toContain('color: var(--accent-primary-fg);');
+      expect(filterPillRule).toContain('border-color: var(--accent-primary);');
+
+      // Bulk delete button
+      const bulkDeleteMatch = /\.kb-oauth-gov-bulk-delete-btn\s*\{[^}]+\}/.exec(cssContent);
+      expect(bulkDeleteMatch).not.toBeNull();
+      const bulkDeleteRule = bulkDeleteMatch?.[0] ?? '';
+      expect(bulkDeleteRule).toContain('background-color: var(--danger-bg);');
+      expect(bulkDeleteRule).toContain('border: 1px solid var(--danger-fg);');
+      expect(bulkDeleteRule).toContain('color: var(--danger-fg);');
     });
   });
 });
