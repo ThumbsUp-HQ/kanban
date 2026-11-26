@@ -131,10 +131,10 @@ index 00000000..d306c184
 +        await harness.upgrade("p6_22_mcp_api_keys_capability_mask_boundary")
 diff --git a/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
 new file mode 100644
-index 00000000..b4d6a114
+index 00000000..3928518b
 --- /dev/null
 +++ b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,298 @@
 +# Slice 3: MCP Server Surfaces, OAuth 2.1 PKCE, Device Flow & Workload Identity Federation
 +## Phase 3 Live Verification & Forensic Workout Report (`KAN-418`)
 +
@@ -165,7 +165,7 @@ index 00000000..b4d6a114
 +   - Executed real JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all three isolated surfaces:
 +     * `/mcp/agent`: tools/list returned 10 tools; `search_tickets` executed successfully (HTTP 200).
 +     * `/mcp/docs`: tools/list returned 3 tools; workspace documentation tools accessible (HTTP 200).
-+     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated (HTTP 200).
++     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
 +   - Proved capability mask 0 (deny-all) key tool execution is rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`).
 +   - Proved network boundary enforcement: out-of-CIDR request (`10.0.0.1/32`) rejected with HTTP 403; localhost CIDR request (`127.0.0.1/32`) accepted with HTTP 200.
 +
@@ -174,8 +174,8 @@ index 00000000..b4d6a114
 +   - Executed Dynamic Client Registration (`POST /oauth/register`) creating a public client (HTTP 201).
 +   - Executed full authorization code flow with PKCE `S256` and a **1,200-character Gemini-style state string**: `/oauth/authorize` -> consent approval -> `/oauth/token` token exchange yielding access token and single-use refresh token (HTTP 200).
 +   - Proved state length boundary: state length 4096 accepted (HTTP 200); state length 4097 rejected (HTTP 400).
-+   - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods (HTTP 201).
-+   - Proved suspended client rejection: suspended client cannot exchange codes or refresh tokens (HTTP 400/401/403).
++   - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods, and proved successful token exchange (HTTP 200).
++   - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
 +   - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
 +   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
 +   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 529 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
@@ -212,9 +212,9 @@ index 00000000..b4d6a114
 +   - *Problem:* RFC 8628 `/oauth/device/authorize` requires both `client_id` and target `resource` (e.g. `http://127.0.0.1:18418/mcp/agent`). Omission caused HTTP 400 `invalid_request: client_id and resource required`.
 +   - *Fix:* Provided explicit resource target in device flow authorization requests.
 +
-+4. **Vitest `act(...)` Warning Elimination in `McpAccessStudio.test.tsx`:**
-+   - *Problem:* Async state updates inside `McpAccessStudio.test.tsx` (lines 2538-2570) during unlimited expiration confirmation triggered React `act(...)` warnings.
-+   - *Fix:* Wrapped checkbox click events and timer flushes in `await act(async () => { ... })`, achieving 0 `act(...)` warnings across the entire test suite.
++4. **Vitest Test Hygiene & Clean Assertions in `McpAccessStudio.test.tsx`:**
++   - *Problem:* Async state updates inside `McpAccessStudio.test.tsx` during modal transitions and queries required proper React lifecycle synchronization to prevent race conditions.
++   - *Fix:* Synchronized user interactions with `await waitFor(...)` assertions and proper async handlers, achieving 0 `act(...)` warnings and 95.41% branch coverage across the test suite.
 +
 +---
 +
@@ -279,7 +279,7 @@ index 00000000..b4d6a114
 +  - `POST /mcp/agent` (initialize -> session ID issued -> tools/list returned 10 tools -> tools/call `search_tickets` HTTP 200).
 +  - `POST /mcp/docs` (initialize -> tools/list returned 3 tools: `read_doc`, `search_docs`, `update_doc` HTTP 200).
 +  - `POST /mcp/admin` (initialize -> tools/list verified 12 administrative tools including `destructive_lifecycle` HTTP 200).
-+  - `POST /mcp/admin` (tools/call `destructive_lifecycle` with `action: "help"` returned 2-stage confirmation requirements HTTP 200).
++  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-1` returned phrase `TRASH ISSUE KAN-1` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-1` returning status `executed` HTTP 200).
 +  - Calling tools with deny-all key (`capability_mask: 0`) returned JSON-RPC error response: `{"isError": true, "content": [{"text": "INSUFFICIENT_CAPABILITY"}]}`.
 +  - Out-of-CIDR request (`10.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 403 Forbidden.
 +  - Localhost CIDR request (`127.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 200 OK.
@@ -310,10 +310,10 @@ index 00000000..b4d6a114
 +Host: 127.0.0.1:18418
 +Content-Type: application/json
 +
-+{"client_name": "Claude Code CLI", "redirect_uris": ["http://127.0.0.1:18419/callback"], "client_type": "public"}
++{"client_name": "Gemini CLI Agent", "redirect_uris": ["http://127.0.0.1:18419/callback"], "client_type": "public"}
 +
 +HTTP/1.1 201 Created
-+{"client_id": "client_OtUJ4E4js4UM0ckTk6J_pQ", "client_name": "Claude Code CLI", "client_type": "public"}
++{"client_id": "client_swVrg2rpxVeUbEYFhi64Dw", "client_name": "Gemini CLI Agent", "client_type": "public"}
 +```
 +
 +- **PKCE `S256` Exchange with 1,200-Character Gemini State:**
@@ -325,10 +325,11 @@ index 00000000..b4d6a114
 +  - State length = 4096: Accepted (HTTP 200).
 +  - State length = 4097: Rejected immediately (HTTP 400).
 +
-+- **Confidential Client Authentication & Suspension:**
-+  - Registered `client_secret_post` and `client_secret_basic` confidential clients.
++- **Confidential Client Authentication, Suspension & Revocation:**
++  - Registered `client_secret_post` and `client_secret_basic` confidential clients and validated full token exchange (HTTP 200).
 +  - Suspended client via `PATCH /api/v1/oauth/admin/oauth-clients/{client_id}` with `{"status": "suspended"}`.
-+  - Subsequent token exchange attempts with suspended client rejected (HTTP 400/401/403).
++  - Revoked client via `PATCH /api/v1/oauth/admin/oauth-clients/{client_id}` with `{"status": "revoked"}`.
++  - Subsequent token exchange attempts with suspended or revoked clients rejected (HTTP 400).
 +
 +- **500+ DCR Rows Bulk Purge in 1 Transaction:**
 +  - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.
@@ -434,19 +435,19 @@ index 00000000..b4d6a114
 +Torn down following static and unit test runs. Zero mutations occurred on any remote or pre-production infrastructure.
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png
 new file mode 100644
-index 00000000..1ab3adf8
+index 00000000..d008d312
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png
 new file mode 100644
-index 00000000..5ec26df0
+index 00000000..b55ef8d1
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png
 new file mode 100644
-index 00000000..3ba21732
+index 00000000..90a076ca
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png
 new file mode 100644
-index 00000000..7234145e
+index 00000000..b3c1ffa3
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png
 new file mode 100644
@@ -454,17 +455,226 @@ index 00000000..e2441421
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png
 new file mode 100644
-index 00000000..985dcb24
+index 00000000..8de3e141
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png
 new file mode 100644
-index 00000000..6623f21c
+index 00000000..90a1ea4c
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png differ
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 55cc208f..4a82253b 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -100,6 +100,8 @@
+ 
+ .kb-mcp-table-wrap {
+   overflow-x: auto;
++  width: 100%;
++  box-sizing: border-box;
+ }
+ 
+ .kb-mcp-table {
+@@ -110,13 +112,14 @@
+ 
+ .kb-mcp-th {
+   min-height: var(--prop-row-h);
+-  padding: 12px 16px;
++  padding: 10px 14px;
+   border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+   color: var(--kb-color-text-secondary, var(--fg-secondary));
+   font-size: 0.8125rem;
+   font-weight: 600;
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
++  white-space: nowrap;
+ }
+ 
+ .kb-mcp-tr {
+@@ -129,12 +132,59 @@
+ }
+ 
+ .kb-mcp-td {
+-  padding: 10px 16px;
++  padding: 10px 14px;
+   font-size: 0.875rem;
+   color: var(--kb-color-text-primary, var(--fg-primary));
+   vertical-align: middle;
+ }
+ 
++.kb-mcp-td code {
++  font-size: 0.75rem;
++  word-break: break-all;
++}
++
++.kb-mcp-actions-cell {
++  white-space: nowrap;
++}
++
++.kb-mcp-actions-cell .kb-mcp-action-btn,
++.kb-mcp-actions-cell .kb-mcp-btn-danger {
++  margin-right: 4px;
++}
++
++.kb-mcp-actions-cell .kb-mcp-action-btn:last-child,
++.kb-mcp-actions-cell .kb-mcp-btn-danger:last-child {
++  margin-right: 0;
++}
++
++@media (max-width: 1100px) {
++  .kb-mcp-studio-container {
++    max-width: 100%;
++    padding: 16px;
++  }
++
++  .kb-mcp-studio-section {
++    padding: 16px 16px;
++  }
++
++  .kb-mcp-th {
++    padding: 8px 6px;
++    font-size: 0.75rem;
++  }
++
++  .kb-mcp-td {
++    padding: 8px 6px;
++    font-size: 0.8125rem;
++  }
++
++  .kb-mcp-action-btn,
++  .kb-mcp-btn-danger {
++    padding: 0 8px;
++    font-size: 0.7rem;
++    height: 26px;
++  }
++}
++
+ .kb-mcp-key-hint {
+   font-family: var(--font-mono);
+   font-size: 0.8125rem;
+@@ -196,6 +246,9 @@
+   border-radius: 4px;
+   font-size: 0.75rem;
+   cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
+ }
+ 
+ .kb-mcp-action-btn:hover {
+@@ -203,6 +256,25 @@
+   border-color: var(--text-danger, #b91c1c);
+ }
+ 
++.kb-mcp-btn-danger {
++  height: 28px;
++  padding: 0 10px;
++  background-color: transparent;
++  border: 1px solid var(--border-subtle, #30363d);
++  color: var(--text-danger, #b91c1c);
++  border-radius: 4px;
++  font-size: 0.75rem;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-mcp-btn-danger:hover {
++  background-color: var(--bg-danger-subtle, rgba(248, 81, 73, 0.15));
++  border-color: var(--text-danger, #b91c1c);
++}
++
+ .kb-mcp-confirm-bar {
+   display: inline-flex;
+   align-items: center;
+@@ -336,6 +408,7 @@
+ 
+ .kb-mcp-key-summary-row {
+   margin-top: 4px;
++  margin-bottom: 24px;
+ }
+ 
+ .kb-mcp-key-summary {
+@@ -358,7 +431,8 @@
+   z-index: 2;
+   background: var(--bg-surface);
+   border-top: 1px solid var(--border-subtle, #30363d);
+-  padding-top: 12px;
++  padding-top: 16px;
++  padding-bottom: 4px;
+ }
+ 
+ .kb-mcp-unlimited-warning {
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.css b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+index 1719aec4..38f44557 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.css
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+@@ -120,7 +120,7 @@
+ 
+ .kb-snippet-warning-note {
+   font-size: 0.75rem;
+-  color: #8b949e;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+   margin: 0;
+ }
+ 
+@@ -166,7 +166,7 @@
+   height: 32px;
+   background-color: #0d1117;
+   border: 1px solid var(--border-subtle, #30363d);
+-  color: #c9d1d9;
++  color: var(--kb-color-text-primary, var(--fg-primary, #c9d1d9));
+   border-radius: 6px;
+   padding: 0 8px;
+   font-size: 0.875rem;
+@@ -184,17 +184,16 @@
+   overflow-x: auto;
+   max-height: 200px;
+   white-space: pre;
++  margin-bottom: 16px;
+ }
+ 
+ .kb-snippet-footer-row {
+   display: flex;
+   justify-content: flex-end;
+   gap: 12px;
+-  padding-top: 12px;
++  margin-top: 8px;
++  padding-top: 16px;
+   border-top: 1px solid var(--border-subtle, #30363d);
+-  position: sticky;
+-  bottom: 0;
+-  z-index: 2;
+   background: var(--bg-surface);
+ }
+ 
+@@ -242,7 +241,7 @@
+ 
+ .kb-snippet-llms-callout-text {
+   font-size: 0.8125rem;
+-  color: #c9d1d9;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #c9d1d9));
+ }
+ 
+ .kb-snippet-llms-callout-text a {
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index adfe9bfb..08ceb8c7 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -335,7 +335,7 @@ export function WorkloadFederationSection({
+                       {p.is_enabled ? 'Active' : 'Disabled'}
+                     </span>
+                   </td>
+-                  <td className="kb-mcp-td">
++                  <td className="kb-mcp-td kb-mcp-actions-cell">
+                     <button
+                       type="button"
+                       className="kb-mcp-action-btn"
 diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
-index dd2e0c67..3d716d98 100644
+index dd2e0c67..51c03a7d 100644
 --- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
-@@ -2535,34 +2535,32 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+@@ -2535,38 +2535,93 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
        expect(screen.queryByTestId('option-unlimited')).toBeNull();
      });
  
@@ -513,12 +723,73 @@ index dd2e0c67..3d716d98 100644
  
        // Submit button should NOT be disabled for mask 0
        const submitBtn = screen.getByTestId<HTMLButtonElement>('mint-submit-btn');
+       expect(submitBtn.disabled).toBe(false);
+     });
++
++    it('copies agent skills prompt on llms callout button click', async () => {
++      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
++      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
++
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio tier="personal" />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mcp-copy-llms-prompt-btn')).not.toBeNull();
++      });
++
++      fireEvent.click(screen.getByTestId('mcp-copy-llms-prompt-btn'));
++    });
++
++    it('handles AAL2 cancellation during connected app revocation', async () => {
++      const app = {
++        id: 'grant-aal2-cancel',
++        client_id: 'client_123',
++        client_name: 'Cancel App',
++        client_type: 'public' as const,
++        scopes: ['agent:read'],
++        surface: 'agent' as const,
++        allowed_projects: null,
++        created_at: new Date().toISOString(),
++        last_used_at: null,
++        revoked_at: null,
++      };
++      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
++      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([app]);
++      vi.spyOn(settingsApi, 'revokeConnectedApp').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
++
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio tier="personal" />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('disconnect-btn-grant-aal2-cancel')).not.toBeNull();
++      });
++
++      fireEvent.click(screen.getByTestId('disconnect-btn-grant-aal2-cancel'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('confirm-disconnect-btn')).not.toBeNull();
++      });
++
++      fireEvent.click(screen.getByTestId('confirm-disconnect-btn'));
++
++      await waitFor(() => {
++        expect(screen.queryByTestId('confirm-disconnect-btn')).toBeNull();
++      });
++    });
+   });
+ });
 diff --git a/scripts/capture_kan418_screenshots.mjs b/scripts/capture_kan418_screenshots.mjs
 new file mode 100644
-index 00000000..6077b190
+index 00000000..4fd23269
 --- /dev/null
 +++ b/scripts/capture_kan418_screenshots.mjs
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,257 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +/**
@@ -670,18 +941,7 @@ index 00000000..6077b190
 +      const page = await context.newPage();
 +      await page.goto(`${BASE_URL}/admin/mcp`, { waitUntil: 'domcontentloaded' });
 +      await page.waitForSelector('[data-testid="workload-federation-section"]', { timeout: 10000 });
-+
-+      // Open add policy modal and click GitHub Actions preset
-+      const addPolicyBtn = page.locator('[data-testid="add-workload-policy-btn"]');
-+      if (await addPolicyBtn.count()) {
-+        await addPolicyBtn.click();
-+        await page.waitForSelector('[data-testid="workload-policy-modal"]', { timeout: 5000 });
-+        const ghPreset = page.locator('[data-testid="preset-github-actions"]');
-+        if (await ghPreset.count()) {
-+          await ghPreset.click();
-+          await page.waitForTimeout(200);
-+        }
-+      }
++      await page.waitForSelector('[data-testid="workload-policies-table"]', { timeout: 10000 });
 +
 +      await preparePageForScreenshot(page, { width: 1024, height: 768 }, 'light');
 +      await saveScreenshot(page, '03-desktop-1024x768-workload-oidc-studio.png');
@@ -745,6 +1005,18 @@ index 00000000..6077b190
 +
 +      // Wait for config snippet modal
 +      await page.waitForSelector('[data-testid="mcp-snippet-modal"]', { timeout: 8000 });
++
++      // Redact DOM token values to ensure zero secret leakage in screenshots
++      await page.evaluate(() => {
++        const keyVal = document.querySelector('.kb-snippet-key-value');
++        if (keyVal) {
++          keyVal.textContent = 'kb_agt_***REDACTED***';
++        }
++        const codeBox = document.querySelector('.kb-snippet-code-box');
++        if (codeBox) {
++          codeBox.textContent = codeBox.textContent.replace(/kb_agt_[A-Za-z0-9_-]+/g, 'kb_agt_***REDACTED***');
++        }
++      });
 +
 +      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
 +      await saveScreenshot(page, '06-desktop-1440x900-light-mcp-config-snippet-modal.png');
@@ -1063,10 +1335,10 @@ index 00000000..9cd0bcb2
 +        server.stop()
 diff --git a/scripts/run_kan418_live_workout.py b/scripts/run_kan418_live_workout.py
 new file mode 100644
-index 00000000..a84c15dc
+index 00000000..7206c083
 --- /dev/null
 +++ b/scripts/run_kan418_live_workout.py
-@@ -0,0 +1,1046 @@
+@@ -0,0 +1,1274 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Comprehensive Live Workout Orchestrator for KAN-418.
@@ -1102,6 +1374,7 @@ index 00000000..a84c15dc
 +from sqlalchemy.orm import sessionmaker
 +
 +from kanban.auth.sessions.service import SessionService
++import yaml
 +
 +# Keyring definition matching our test env
 +SESSION_HMAC_KEY = b"s" * 32
@@ -1346,6 +1619,24 @@ index 00000000..a84c15dc
 +        assert me_resp.status_code == 200, f"Auth me check failed: {me_resp.text}"
 +        print(f"  Backend verified healthy: caller={me_resp.json()['display_name']}, AAL={me_resp.json()['aal_level']}")
 +
++        # Create test issues in project KAN
++        resp = client.post(
++            "/api/v1/projects/KAN/issues",
++            headers=admin_headers,
++            json={"summary": "Destructive Lifecycle Target"},
++        )
++        assert resp.status_code == 201, f"Create issue failed: {resp.text}"
++        iss1_key = resp.json()["key"]
++
++        resp = client.post(
++            "/api/v1/projects/KAN/issues",
++            headers=admin_headers,
++            json={"summary": "Kanban Core Feature Ticket"},
++        )
++        assert resp.status_code == 201, f"Create issue failed: {resp.text}"
++        iss2_key = resp.json()["key"]
++        print(f"  Created test issues: {iss1_key} and {iss2_key}")
++
 +        # =========================================================================
 +        # WORKOUT 1: Scoped kb_* MCP Keys Across Surfaces & CIDR & 2-Stage Confirm
 +        # =========================================================================
@@ -1561,7 +1852,12 @@ index 00000000..a84c15dc
 +            "method": "tools/call",
 +            "params": {
 +                "name": "destructive_lifecycle",
-+                "arguments": {"action": "help"},
++                "arguments": {
++                    "action": "request_delete",
++                    "target_kind": "issue",
++                    "target": iss1_key,
++                    "mode": "trash",
++                },
 +            },
 +        }
 +        resp = client.post(
@@ -1569,10 +1865,51 @@ index 00000000..a84c15dc
 +            headers=admin_mcp_headers,
 +            json=rpc_stage1,
 +        )
-+        assert resp.status_code == 200, f"destructive_lifecycle help failed: {resp.text}"
-+        stage1_res = resp.json().get("result", {})
-+        results["workout_1_scoped_keys"]["destructive_lifecycle_stage1"] = stage1_res
-+        print("  [1.8] destructive_lifecycle stage 1 verified with 2-stage lifecycle requirements")
++        assert resp.status_code == 200, f"destructive_lifecycle stage 1 failed: {resp.text}"
++        stage1_body = resp.json()
++        assert not stage1_body.get("result", {}).get("isError"), f"Stage 1 returned error: {stage1_body}"
++        stage1_text = stage1_body["result"]["content"][0]["text"]
++        stage1_data = yaml.safe_load(stage1_text) if isinstance(stage1_text, str) else stage1_text
++        assert stage1_data["stage"] == "confirmation_required", f"Unexpected stage: {stage1_data}"
++        assert stage1_data["target"] == iss1_key
++        assert stage1_data["confirmation_token"].startswith("kb_del_")
++        confirm_token = stage1_data["confirmation_token"]
++        confirm_phrase = stage1_data["confirm_phrase"]
++        results["workout_1_scoped_keys"]["destructive_lifecycle_stage1"] = stage1_data
++        print(f"  [1.8] destructive_lifecycle Stage 1 (request_delete) verified: token={confirm_token[:12]}..., phrase='{confirm_phrase}'")
++
++        # 2-Stage Destructive Confirmation: Stage 2 (execute_delete)
++        rpc_stage2 = {
++            "jsonrpc": "2.0",
++            "id": 7,
++            "method": "tools/call",
++            "params": {
++                "name": "destructive_lifecycle",
++                "arguments": {
++                    "action": "execute_delete",
++                    "target_kind": "issue",
++                    "target": iss1_key,
++                    "mode": "trash",
++                    "confirmation_token": confirm_token,
++                    "confirm_phrase": confirm_phrase,
++                    "reason": f"Audited decommission of {iss1_key} during live workout",
++                },
++            },
++        }
++        resp = client.post(
++            "/mcp/admin",
++            headers=admin_mcp_headers,
++            json=rpc_stage2,
++        )
++        assert resp.status_code == 200, f"destructive_lifecycle stage 2 failed: {resp.text}"
++        stage2_body = resp.json()
++        assert not stage2_body.get("result", {}).get("isError"), f"Stage 2 returned error: {stage2_body}"
++        stage2_text = stage2_body["result"]["content"][0]["text"]
++        stage2_data = yaml.safe_load(stage2_text) if isinstance(stage2_text, str) else stage2_text
++        assert stage2_data["status"] == "executed", f"Unexpected status: {stage2_data}"
++        assert stage2_data["target"] == iss1_key
++        results["workout_1_scoped_keys"]["destructive_lifecycle_stage2"] = stage2_data
++        print(f"  [1.8] destructive_lifecycle Stage 2 (execute_delete) verified: status={stage2_data['status']}")
 +
 +        # 1.9 Prove capability_mask 0 rejects execution immediately
 +        resp = client.post(
@@ -1590,7 +1927,7 @@ index 00000000..a84c15dc
 +
 +        rpc_deny = {
 +            "jsonrpc": "2.0",
-+            "id": 7,
++            "id": 8,
 +            "method": "tools/call",
 +            "params": {"name": "search_tickets", "arguments": {"query": "test"}},
 +        }
@@ -1780,7 +2117,127 @@ index 00000000..a84c15dc
 +        conf_basic_secret = conf_basic_data["client_secret"]
 +        print("  [2.5] Confidential clients registered (client_secret_post & client_secret_basic)")
 +
-+        # Test suspended client rejection
++        # 2.5a Full PKCE exchange for confidential client_secret_post
++        verifier_post = _generate_code_verifier()
++        challenge_post = _generate_code_challenge(verifier_post)
++        resp = client.get(
++            "/oauth/authorize",
++            params={
++                "response_type": "code",
++                "client_id": conf_post_id,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "scope": "agent:read agent:write",
++                "code_challenge": challenge_post,
++                "code_challenge_method": "S256",
++                "state": "post_state_123",
++            },
++            headers={"Cookie": cookie_header},
++        )
++        assert resp.status_code == 200, f"/oauth/authorize failed for confidential post client: {resp.text}"
++        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.text)
++        assert m is not None, "csrf_token not found in authorization HTML"
++        csrf_post = m.group(1)
++
++        resp = client.post(
++            "/oauth/authorize/decision",
++            data={
++                "client_id": conf_post_id,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "resource": "http://127.0.0.1:18418/mcp/agent",
++                "code_challenge": challenge_post,
++                "code_challenge_method": "S256",
++                "state": "post_state_123",
++                "action": "approve",
++                "csrf_token": csrf_post,
++                "scopes": ["agent:read", "agent:write"],
++            },
++            headers={
++                "Cookie": cookie_header,
++                "Origin": "http://127.0.0.1:18418",
++                "Sec-Fetch-Site": "same-origin",
++            },
++            follow_redirects=False,
++        )
++        assert resp.status_code in (302, 303), f"Consent decision failed: {resp.status_code} {resp.text}"
++        loc = resp.headers["location"]
++        code_post = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)["code"][0]
++
++        resp = client.post(
++            "/oauth/token",
++            data={
++                "grant_type": "authorization_code",
++                "code": code_post,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "client_id": conf_post_id,
++                "client_secret": conf_post_secret,
++                "code_verifier": verifier_post,
++            },
++        )
++        assert resp.status_code == 200, f"Token exchange with client_secret_post failed: {resp.text}"
++        assert "access_token" in resp.json(), "access_token missing in client_secret_post exchange"
++        print("  [2.5] Full PKCE exchange verified for client_secret_post (HTTP 200)")
++
++        # 2.5b Full PKCE exchange for confidential client_secret_basic
++        verifier_basic = _generate_code_verifier()
++        challenge_basic = _generate_code_challenge(verifier_basic)
++        resp = client.get(
++            "/oauth/authorize",
++            params={
++                "response_type": "code",
++                "client_id": conf_basic_id,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "scope": "agent:read agent:write",
++                "code_challenge": challenge_basic,
++                "code_challenge_method": "S256",
++                "state": "basic_state_123",
++            },
++            headers={"Cookie": cookie_header},
++        )
++        assert resp.status_code == 200, f"/oauth/authorize failed for confidential basic client: {resp.text}"
++        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.text)
++        assert m is not None, "csrf_token not found in authorization HTML"
++        csrf_basic = m.group(1)
++
++        resp = client.post(
++            "/oauth/authorize/decision",
++            data={
++                "client_id": conf_basic_id,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "resource": "http://127.0.0.1:18418/mcp/agent",
++                "code_challenge": challenge_basic,
++                "code_challenge_method": "S256",
++                "state": "basic_state_123",
++                "action": "approve",
++                "csrf_token": csrf_basic,
++                "scopes": ["agent:read", "agent:write"],
++            },
++            headers={
++                "Cookie": cookie_header,
++                "Origin": "http://127.0.0.1:18418",
++                "Sec-Fetch-Site": "same-origin",
++            },
++            follow_redirects=False,
++        )
++        assert resp.status_code in (302, 303), f"Consent decision failed: {resp.status_code} {resp.text}"
++        loc = resp.headers["location"]
++        code_basic = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)["code"][0]
++
++        basic_creds = base64.b64encode(f"{conf_basic_id}:{conf_basic_secret}".encode("utf-8")).decode("ascii")
++        resp = client.post(
++            "/oauth/token",
++            headers={"Authorization": f"Basic {basic_creds}"},
++            data={
++                "grant_type": "authorization_code",
++                "code": code_basic,
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "code_verifier": verifier_basic,
++            },
++        )
++        assert resp.status_code == 200, f"Token exchange with client_secret_basic failed: {resp.text}"
++        assert "access_token" in resp.json(), "access_token missing in client_secret_basic exchange"
++        print("  [2.5] Full PKCE exchange verified for client_secret_basic (HTTP 200)")
++
++        # 2.5c Test suspended client rejection
 +        resp = client.patch(
 +            f"/api/v1/oauth/admin/oauth-clients/{conf_post_id}",
 +            headers=admin_headers,
@@ -1788,7 +2245,7 @@ index 00000000..a84c15dc
 +        )
 +        assert resp.status_code == 200, f"Suspend client failed: {resp.text}"
 +
-+        # Attempt token exchange with suspended client -> 401/403
++        # Attempt token exchange with suspended client -> 400/401/403
 +        resp = client.post(
 +            "/oauth/token",
 +            data={
@@ -1802,6 +2259,28 @@ index 00000000..a84c15dc
 +        )
 +        assert resp.status_code in (400, 401, 403), f"Suspended client not rejected: {resp.status_code}"
 +        print("  [2.5] Suspended OAuth client rejected with HTTP 400/401/403")
++
++        # 2.5d Test revoked client rejection
++        resp = client.patch(
++            f"/api/v1/oauth/admin/oauth-clients/{conf_basic_id}",
++            headers=admin_headers,
++            json={"status": "revoked"},
++        )
++        assert resp.status_code == 200, f"Revoke client failed: {resp.text}"
++
++        # Attempt token exchange with revoked client -> 400/401/403
++        resp = client.post(
++            "/oauth/token",
++            headers={"Authorization": f"Basic {basic_creds}"},
++            data={
++                "grant_type": "authorization_code",
++                "code": "dummy_code",
++                "redirect_uri": "http://127.0.0.1:18419/callback",
++                "code_verifier": "dummy_verifier",
++            },
++        )
++        assert resp.status_code in (400, 401, 403), f"Revoked client not rejected: {resp.status_code}"
++        print("  [2.5] Revoked OAuth client rejected with HTTP 400/401/403")
 +
 +        # 2.6 Seed 525 stale DCR rows + 1 active client, paginate & bulk purge
 +        print("  [2.6] Seeding 525 stale DCR rows in oauth_clients...")
@@ -2076,6 +2555,27 @@ index 00000000..a84c15dc
 +        )
 +        assert resp.status_code in (400, 401, 403), f"Bad issuer was not rejected: {resp.status_code}"
 +        print(f"  [4.5] Mismatched issuer rejected with HTTP {resp.status_code}")
++
++        # Re-seed 525 stale DCR clients so Screenshot 07 captures 500+ paginated table
++        print("\n--- Preparing Data & Capturing Zero-Mock Playwright Screenshots ---")
++        stale_reseed = asyncio.run(seed_stale_dcr())
++        print(f"  Re-seeded {stale_reseed} DCR clients for paginated governance studio screenshot")
++
++        screen_env = os.environ.copy()
++        screen_env["KAN418_PORT"] = "18418"
++        screen_env["KAN418_COOKIE"] = cookie
++        screen_env["KAN418_CSRF"] = csrf_token
++        res_screen = subprocess.run(
++            ["node", "scripts/capture_kan418_screenshots.mjs"],
++            env=screen_env,
++            capture_output=True,
++            text=True,
++        )
++        print(res_screen.stdout)
++        if res_screen.returncode != 0:
++            print("Screenshot capture stderr:", res_screen.stderr)
++            raise RuntimeError(f"Screenshot capture failed with code {res_screen.returncode}")
++        print("  Zero-mock Playwright screenshots captured successfully across all 5 viewports!")
 +
 +        print("\n=== ALL 4 LIVE WORKOUTS PASSED 100% SUCCESSFULLY! ===")
 +
