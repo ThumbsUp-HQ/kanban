@@ -379,6 +379,133 @@ describe('ReportTemplateStudioModal', () => {
       );
     });
   });
+
+  it('KAN-468: renders Jinja2 template syntax FieldHelpHint sibling to label without label nesting', () => {
+    const { container } = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+        workspaceSlug="default"
+      />,
+    );
+
+    const hint = screen.getByTestId('studio-template-syntax-hint');
+    expect(hint).toBeDefined();
+
+    // Verify HTML 4.10.4: zero nested triggers inside <label>
+    const nested = container.querySelectorAll('label button.field-help-hint, label .kb-field-help-trigger');
+    expect(nested.length).toBe(0);
+
+    // Verify sibling relationship inside .reports-label-row
+    const labelRow = hint.closest('.reports-label-row');
+    expect(labelRow).not.toBeNull();
+    const label = labelRow?.querySelector('label.reports-label');
+    expect(label).not.toBeNull();
+    expect(label?.contains(hint)).toBe(false);
+    expect(label?.getAttribute('for')).toBe('studio-template-editor');
+
+    // Popover interaction
+    fireEvent.click(hint);
+    expect(screen.getByText('Jinja2 Template Syntax')).toBeDefined();
+    expect(
+      screen.getByText(
+        'Accepts standard Jinja2 syntax, loops, and filters. Insert snippets above or write custom Markdown.',
+      ),
+    ).toBeDefined();
+    const docLink = screen.getByText('More info ->');
+    expect(docLink.getAttribute('href')).toBe('/docs/studio-configuration-reference');
+  });
+
+  it('preserves manually customized slug when changing name in ReportTemplateStudioModal', () => {
+    render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+        workspaceSlug="default"
+      />,
+    );
+
+    const nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    const slugInput = screen.getByTestId<HTMLInputElement>('studio-template-slug-input');
+
+    fireEvent.change(slugInput, { target: { value: 'custom-static-slug' } });
+    fireEvent.change(nameInput, { target: { value: 'Updated Report Name' } });
+    expect(slugInput.value).toBe('custom-static-slug');
+  });
+
+  it('resolves active workspace dynamically in ReportTemplateStudioModal from routeParams, query cache, or fallback', async () => {
+    const tpl0 = MOCK_TEMPLATES[0];
+    if (!tpl0) throw new Error('Missing mock template');
+    const createSpy = vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(tpl0);
+
+    // 1. From routeParams
+    const routerMock = await vi.importActual<typeof import('react-router')>('react-router');
+    vi.spyOn(routerMock, 'useParams').mockReturnValue({ workspaceSlug: 'ws-from-route' });
+
+    const { unmount } = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />,
+    );
+    let nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    let form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Route Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('ws-from-route', expect.anything());
+    });
+    unmount();
+
+    // 2. From cachedMe in queryClient
+    vi.spyOn(routerMock, 'useParams').mockReturnValue({});
+    vi.spyOn(authModule, 'useAuth').mockReturnValue({
+      session: null,
+      isLoading: false,
+      initialized: true,
+      refreshSession: () => Promise.resolve(null),
+      logout: () => Promise.resolve(),
+    });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(qk.me(), { workspace_id: 'ws-from-cached-me' });
+
+    const renderedCache = render(
+      <QueryClientProvider client={queryClient}>
+        <ReportTemplateStudioModal
+          isOpen={true}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Cache Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('ws-from-cached-me', expect.anything());
+    });
+    renderedCache.unmount();
+
+    // 3. Fallback to default
+    queryClient.clear();
+    const renderedFallback = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />,
+    );
+    nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Fallback Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('default', expect.anything());
+    });
+    renderedFallback.unmount();
+  });
 });
 
 describe('ReportExportModal', () => {
