@@ -95,6 +95,12 @@
   margin-bottom: var(--space-4);
 }
 
+.kb-revoke-runner-rotation-note {
+  font-size: 0.85rem;
+  color: var(--fg-secondary);
+  margin-top: 8px;
+}
+
 .kb-mint-token-error {
   color: var(--danger-fg);
   margin: var(--space-2) 0;
@@ -281,6 +287,38 @@
   border: 1px solid #374151;
 }
 
+/* Certificate Rotation & Runner Lifecycle Guidance */
+.kb-runner-rotation-guidance {
+  padding: 12px 16px;
+  background: var(--bg-accent-subtle);
+  border: 1px solid var(--border-accent-subtle);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.kb-runner-guidance-title {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--badge-fg);
+}
+
+.kb-runner-rotation-guidance p,
+.kb-runner-rotation-guidance ol {
+  color: var(--fg-secondary);
+}
+
+.kb-runner-rotation-guidance p {
+  margin: 0 0 6px 0;
+  font-size: 0.85rem;
+}
+
+.kb-runner-rotation-guidance ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.825rem;
+}
+
 /* Runner Filter Pills */
 .kb-runner-filters {
   display: flex;
@@ -392,9 +430,9 @@
 }
 
 .kb-runner-status-badge--offline {
-  background-color: #f3f4f6;
-  color: #4b5563;
-  border: 1px solid #e5e7eb;
+  background-color: var(--bg-secondary);
+  color: var(--fg-secondary);
+  border: 1px solid var(--border-subtle);
 }
 
 [data-theme='dark'] .kb-runner-status-badge--active {
@@ -409,12 +447,6 @@
   border-color: #991b1b;
 }
 
-[data-theme='dark'] .kb-runner-status-badge--offline {
-  background-color: #374151;
-  color: #9ca3af;
-  border-color: #4b5563;
-}
-
 .kb-runner-meta-row {
   display: flex;
   align-items: center;
@@ -423,6 +455,21 @@
   margin-top: var(--space-2, 8px);
   font-size: var(--text-xs, 12px);
   color: var(--kb-color-text-secondary, #4b5563);
+}
+
+.kb-runner-meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.kb-runner-meta-row--advanced {
+  margin-top: 8px;
+}
+
+.kb-runner-cert-sha256 {
+  word-break: break-all;
+  font-size: 0.75rem;
 }
 
 .kb-runner-meta-row code {
@@ -589,12 +636,6 @@
     background-color: #7f1d1d;
     color: #fecaca;
     border-color: #991b1b;
-  }
-
-  :root:not([data-theme='light']) .kb-runner-status-badge--offline {
-    background-color: #374151;
-    color: #9ca3af;
-    border-color: #4b5563;
   }
 
   :root:not([data-theme='light']) .kb-runner-meta-row code {

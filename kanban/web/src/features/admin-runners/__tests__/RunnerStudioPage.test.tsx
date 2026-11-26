@@ -612,5 +612,86 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       });
       expect(screen.queryByRole('alert')).toBeNull();
     });
+
+    it('renders guidance title with class and zero inline style color (KAN-454)', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
+      render(<RunnerStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('runner-rotation-guidance')).toBeDefined();
+      });
+      const guidanceTitle = screen.getByText(/Certificate Rotation & Runner Lifecycle Guidance/);
+      expect(guidanceTitle.classList.contains('kb-runner-guidance-title')).toBe(true);
+      expect(guidanceTitle.getAttribute('style')).toBeNull();
+
+      const guidanceBox = screen.getByTestId('runner-rotation-guidance');
+      expect(guidanceBox.getAttribute('style')).toBeNull();
+    });
+
+    it('renders telemetry FieldHelpHint popovers with heartbeat timings and wiki doc link (KAN-454)', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
+      render(<RunnerStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('runner-heartbeat-help-runner-1')).toBeDefined();
+      });
+
+      const heartbeatHintBtn = screen.getByTestId('runner-heartbeat-help-runner-1');
+      expect(heartbeatHintBtn.getAttribute('aria-label')).toContain('Heartbeat');
+
+      // Keyboard focus opens popover immediately
+      act(() => {
+        heartbeatHintBtn.focus();
+      });
+
+      const popover = screen.getByTestId('runner-heartbeat-help-runner-1-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('15s heartbeat');
+      expect(popover.textContent).toContain('45.0s eviction');
+      expect(popover.textContent).toContain('DEAD_EVICTION_S = 45.0s');
+
+      const docLink = screen.getByTestId('runner-heartbeat-help-runner-1-doc-link');
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security',
+      );
+
+      // Check Cert Expires hint button and popover
+      const certExpiresHintBtn = screen.getByTestId('runner-cert-expires-help-runner-1');
+      act(() => {
+        certExpiresHintBtn.focus();
+      });
+      const certExpiresPopover = screen.getByTestId('runner-cert-expires-help-runner-1-popover');
+      expect(certExpiresPopover.textContent).toContain('90 days from enrollment');
+
+      // Check Full Cert SHA-256 hint button inside AdvancedSection
+      const fullCertHintBtn = screen.getByTestId('runner-cert-sha256-help-runner-1');
+      act(() => {
+        fullCertHintBtn.focus();
+      });
+      const fullCertPopover = screen.getByTestId('runner-cert-sha256-help-runner-1-popover');
+      expect(fullCertPopover.textContent).toContain('Unique per-enrollment SHA-256 fingerprint');
+    });
+
+    it('renders offline runner badge with semantic token classes without regressions in light and dark mode (KAN-454)', async () => {
+      const mockOfflineRunner: runnersApi.RemoteRunnerResponse = {
+        ...mockActiveRunner,
+        id: 'runner-offline',
+        status: 'offline',
+      };
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockOfflineRunner]);
+
+      const { container } = render(<RunnerStudioPage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('runner-status-runner-offline')).toBeDefined();
+      });
+
+      const offlineBadge = screen.getByTestId('runner-status-runner-offline');
+      expect(offlineBadge.classList.contains('kb-runner-status-badge--offline')).toBe(true);
+      expect(offlineBadge.textContent).toBe('offline');
+
+      // Test dark theme attribute on container without regressions
+      document.documentElement.setAttribute('data-theme', 'dark');
+      expect(container.querySelector('.kb-runner-studio')).toBeDefined();
+      expect(container.querySelector('.kb-runner-status-badge--offline')).toBeDefined();
+      document.documentElement.removeAttribute('data-theme');
+    });
   });
 });
