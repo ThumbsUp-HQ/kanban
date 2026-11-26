@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
 import { AboutPage } from '../AboutPage';
 import * as aboutApi from '../aboutApi';
 
@@ -344,6 +347,14 @@ describe('AboutPage', () => {
       expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
     );
 
+    // Wait for timeout reset
+    await waitFor(
+      () => {
+        expect(screen.getByText('Copy Onboarding Prompt')).toBeDefined();
+      },
+      { timeout: 3000 },
+    );
+
     // Test copy error fallback without crashing
     Object.assign(navigator, {
       clipboard: {
@@ -385,5 +396,173 @@ describe('AboutPage', () => {
     expect(screen.getByTestId('about-build-timestamp').textContent).toBe(
       mockAboutData.build_timestamp,
     );
+  });
+
+  it('filters SBOM table by license and purl searches, and handles empty component datasets', async () => {
+    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
+    const { unmount: unmountFirst } = renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sbom-table')).toBeDefined();
+    });
+
+    const searchInput = screen.getByTestId('sbom-search-input');
+
+    // Search by license (MIT-CMU)
+    fireEvent.change(searchInput, { target: { value: 'CMU' } });
+    expect(screen.getByText('pillow')).toBeDefined();
+    expect(screen.queryByText('fastapi')).toBeNull();
+
+    // Search by purl (pkg:npm)
+    fireEvent.change(searchInput, { target: { value: 'pkg:npm' } });
+    expect(screen.getByText('lucide-react')).toBeDefined();
+    expect(screen.queryByText('pillow')).toBeNull();
+
+    unmountFirst();
+
+    // Render with components empty and optional build hashes omitted
+    const emptyData: aboutApi.SystemAboutData = {
+      platform: mockAboutData.platform,
+      slug: mockAboutData.slug,
+      tagline: mockAboutData.tagline,
+      version: mockAboutData.version,
+      license_spdx: mockAboutData.license_spdx,
+      api_docs_urls: mockAboutData.api_docs_urls,
+      sbom_summary: mockAboutData.sbom_summary,
+      license: '',
+      notice: '',
+      components: [],
+    };
+    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(emptyData);
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AboutPage />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('about-tagline')).toBeDefined();
+    });
+    expect(screen.getByText('No components match your search or filter criteria.')).toBeDefined();
+    expect(screen.getByTestId('about-git-commit').textContent).toBe('unknown');
+    expect(screen.queryByTestId('about-build-commit')).toBeNull();
+
+    // Copy with undefined license
+    const copyBtn = screen.getByTestId('copy-license-btn');
+    fireEvent.click(copyBtn);
+    expect(writeTextMock).toHaveBeenCalledWith('');
+
+    unmount();
+  });
+
+  describe('StudioDocLink Header Integration and Responsive Invariants (KAN-512)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders about-doc-link with correct href, label, and title in hero header actions next to download-sbom-btn in Light and Dark themes', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = renderPage();
+
+        await waitFor(() => {
+          expect(screen.getByTestId('about-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('about-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
+        expect(docLink.getAttribute('aria-label')).toBe('Architecture & System Topology');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        // Verify placement inside hero actions next to download sbom button
+        const heroActions = docLink.closest('.kb-about-hero-actions');
+        expect(heroActions).not.toBeNull();
+        const downloadBtn = heroActions?.querySelector('[data-testid="download-sbom-btn"]');
+        expect(downloadBtn).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus navigation on about-doc-link', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('about-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('about-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+    });
+
+    it('activates in-app help panel via ShellPanelsProvider when doc link is clicked', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string; title?: string } | undefined)?.title} at {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <QueryClientProvider client={queryClient}>
+              <AboutPage />
+            </QueryClientProvider>
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('about-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('about-doc-link');
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-panel')).toBeDefined();
+        });
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel.textContent).toContain('Architecture & System Topology');
+        expect(helpPanel.textContent).toContain('/docs/system-topology-and-multi-container-architecture');
+      } finally {
+        unregister();
+      }
+    });
+
+    it('verifies AboutPage.tsx contains zero inline style attributes (KAN-512 CSP invariant)', () => {
+      const tsxPath = path.resolve(__dirname, '../AboutPage.tsx');
+      const content = fs.readFileSync(tsxPath, 'utf8');
+
+      // Reject any style={{...}} prop in TSX
+      const inlineStyleMatch = /style=\{\{/.exec(content);
+      expect(inlineStyleMatch).toBeNull();
+    });
+
+    it('verifies AboutPage.css enforces canonical tokens, zero raw hex color literals, and 38px/44px button heights', () => {
+      const cssPath = path.resolve(__dirname, '../AboutPage.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Zero raw hex colors
+      expect(cssContent).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+
+      // Hero actions and doc link matching desktop height and nowrap
+      expect(cssContent).toContain('.kb-about-hero-actions .kb-studio-doc-link');
+      expect(cssContent).toContain('min-height: var(--prop-row-h, 38px)');
+      expect(cssContent).toContain('white-space: nowrap');
+
+      // Primary download button matching 38px desktop height
+      expect(cssContent).toMatch(/\.kb-about-btn-primary\s*\{[^}]*min-height:\s*var\(--prop-row-h,\s*38px\)/);
+
+      // Mobile media query with 44px tap target height
+      expect(cssContent).toContain('@media (max-width: 767px)');
+      expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
+    });
   });
 });

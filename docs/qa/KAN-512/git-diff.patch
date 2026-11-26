@@ -1,0 +1,335 @@
+diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
+index cb75cc68..b046ba40 100644
+--- a/kanban/web/src/features/about/AboutPage.css
++++ b/kanban/web/src/features/about/AboutPage.css
+@@ -99,10 +99,10 @@
+ }
+ 
+ .kb-about-badge-commit {
+-  background: var(--bg-surface-raised, #24272f);
+-  color: var(--accent-primary, #60a5fa);
+-  border: 1px solid var(--border-subtle, #333842);
+-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
++  background: var(--bg-surface-raised);
++  color: var(--accent-primary);
++  border: 1px solid var(--border-subtle);
++  font-family: var(--font-mono);
+ }
+ 
+ .kb-about-metadata-grid {
+@@ -146,15 +146,24 @@
+ .kb-about-hero-actions {
+   display: flex;
+   align-items: center;
++  flex-wrap: wrap;
+   gap: var(--space-3);
+   margin-top: var(--space-2);
+ }
+ 
++.kb-about-hero-actions .kb-studio-doc-link {
++  min-height: var(--prop-row-h, 38px);
++  box-sizing: border-box;
++  white-space: nowrap;
++}
++
+ .kb-about-btn-primary {
+   display: inline-flex;
+   align-items: center;
++  justify-content: center;
+   gap: var(--space-2);
+   padding: var(--space-2) var(--space-4);
++  min-height: var(--prop-row-h, 38px);
+   background: var(--accent-primary);
+   color: var(--accent-primary-fg);
+   border: 1px solid transparent;
+@@ -163,6 +172,8 @@
+   font-weight: 600;
+   cursor: pointer;
+   text-decoration: none;
++  box-sizing: border-box;
++  white-space: nowrap;
+   transition: opacity 0.15s ease;
+ }
+ 
+@@ -170,6 +181,14 @@
+   opacity: 0.9;
+ }
+ 
++.kb-about-advanced-wrapper {
++  margin-top: var(--space-3);
++}
++
++.kb-about-advanced-grid {
++  margin-top: var(--space-2);
++}
++
+ .kb-about-btn-secondary {
+   display: inline-flex;
+   align-items: center;
+@@ -525,3 +544,22 @@
+   background: var(--bg-surface);
+   border-color: var(--brand-primary);
+ }
++
++@media (max-width: 767px) {
++  .kb-about-hero-actions {
++    width: 100%;
++    flex-direction: column;
++    align-items: stretch;
++  }
++
++  .kb-about-hero-actions .kb-studio-doc-link {
++    min-height: var(--tap-min, 44px);
++    width: 100%;
++    justify-content: center;
++  }
++
++  .kb-about-btn-primary {
++    min-height: var(--tap-min, 44px);
++    width: 100%;
++  }
++}
+diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
+index 85448984..c5dd8c42 100644
+--- a/kanban/web/src/features/about/AboutPage.tsx
++++ b/kanban/web/src/features/about/AboutPage.tsx
+@@ -13,6 +13,7 @@ import {
+   type SystemAboutData,
+ } from './aboutApi';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { buildAgentOnboardingPrompt } from '../settings/agentOnboardingPrompt';
+ import './AboutPage.css';
+ 
+@@ -153,6 +154,11 @@ export function AboutPage(): JSX.Element {
+             </div>
+           </div>
+           <div className="kb-about-hero-actions">
++            <StudioDocLink
++              href="/docs/system-topology-and-multi-container-architecture"
++              title="Architecture & System Topology"
++              testId="about-doc-link"
++            />
+             <a
+               href={getSbomDownloadUrl()}
+               download="thumbs-up-kanban-sbom-cdx-1.5.json"
+@@ -192,13 +198,13 @@ export function AboutPage(): JSX.Element {
+             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
+           </div>
+         </div>
+-        <div style={{ marginTop: '0.75rem' }}>
++        <div className="kb-about-advanced-wrapper">
+           <AdvancedSection
+             title="Advanced Technical Details"
+             summary="OpenAPI bundle hash, frontend distribution integrity hashes, and compiler build timestamps"
+             testId="about-advanced-technical-details"
+           >
+-            <div className="kb-about-metadata-grid" style={{ marginTop: '0.5rem' }}>
++            <div className="kb-about-metadata-grid kb-about-advanced-grid">
+               {data.build_timestamp && (
+                 <div className="kb-about-meta-item">
+                   <span className="kb-about-meta-label">Build Timestamp:</span>
+diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+index a1c1c0a3..21385090 100644
+--- a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
++++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+@@ -1,7 +1,10 @@
+-import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
+ import { AboutPage } from '../AboutPage';
+ import * as aboutApi from '../aboutApi';
+ 
+@@ -344,6 +347,14 @@ describe('AboutPage', () => {
+       expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
+     );
+ 
++    // Wait for timeout reset
++    await waitFor(
++      () => {
++        expect(screen.getByText('Copy Onboarding Prompt')).toBeDefined();
++      },
++      { timeout: 3000 },
++    );
++
+     // Test copy error fallback without crashing
+     Object.assign(navigator, {
+       clipboard: {
+@@ -386,4 +397,172 @@ describe('AboutPage', () => {
+       mockAboutData.build_timestamp,
+     );
+   });
++
++  it('filters SBOM table by license and purl searches, and handles empty component datasets', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    const { unmount: unmountFirst } = renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('sbom-table')).toBeDefined();
++    });
++
++    const searchInput = screen.getByTestId('sbom-search-input');
++
++    // Search by license (MIT-CMU)
++    fireEvent.change(searchInput, { target: { value: 'CMU' } });
++    expect(screen.getByText('pillow')).toBeDefined();
++    expect(screen.queryByText('fastapi')).toBeNull();
++
++    // Search by purl (pkg:npm)
++    fireEvent.change(searchInput, { target: { value: 'pkg:npm' } });
++    expect(screen.getByText('lucide-react')).toBeDefined();
++    expect(screen.queryByText('pillow')).toBeNull();
++
++    unmountFirst();
++
++    // Render with components empty and optional build hashes omitted
++    const emptyData: aboutApi.SystemAboutData = {
++      platform: mockAboutData.platform,
++      slug: mockAboutData.slug,
++      tagline: mockAboutData.tagline,
++      version: mockAboutData.version,
++      license_spdx: mockAboutData.license_spdx,
++      api_docs_urls: mockAboutData.api_docs_urls,
++      sbom_summary: mockAboutData.sbom_summary,
++      license: '',
++      notice: '',
++      components: [],
++    };
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(emptyData);
++    const { unmount } = render(
++      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
++        <AboutPage />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('about-tagline')).toBeDefined();
++    });
++    expect(screen.getByText('No components match your search or filter criteria.')).toBeDefined();
++    expect(screen.getByTestId('about-git-commit').textContent).toBe('unknown');
++    expect(screen.queryByTestId('about-build-commit')).toBeNull();
++
++    // Copy with undefined license
++    const copyBtn = screen.getByTestId('copy-license-btn');
++    fireEvent.click(copyBtn);
++    expect(writeTextMock).toHaveBeenCalledWith('');
++
++    unmount();
++  });
++
++  describe('StudioDocLink Header Integration and Responsive Invariants (KAN-512)', () => {
++    afterEach(() => {
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('renders about-doc-link with correct href, label, and title in hero header actions next to download-sbom-btn in Light and Dark themes', async () => {
++      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
++
++      for (const theme of ['light', 'dark'] as const) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = renderPage();
++
++        await waitFor(() => {
++          expect(screen.getByTestId('about-doc-link')).toBeDefined();
++        });
++
++        const docLink = screen.getByTestId('about-doc-link');
++        expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
++        expect(docLink.getAttribute('aria-label')).toBe('Architecture & System Topology');
++        expect(docLink.textContent).toContain('Documentation ->');
++
++        // Verify placement inside hero actions next to download sbom button
++        const heroActions = docLink.closest('.kb-about-hero-actions');
++        expect(heroActions).not.toBeNull();
++        const downloadBtn = heroActions?.querySelector('[data-testid="download-sbom-btn"]');
++        expect(downloadBtn).not.toBeNull();
++
++        unmount();
++      }
++    });
++
++    it('supports keyboard focus navigation on about-doc-link', async () => {
++      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
++      renderPage();
++
++      await waitFor(() => {
++        expect(screen.getByTestId('about-doc-link')).toBeDefined();
++      });
++
++      const docLink = screen.getByTestId('about-doc-link');
++      docLink.focus();
++      expect(document.activeElement).toBe(docLink);
++    });
++
++    it('activates in-app help panel via ShellPanelsProvider when doc link is clicked', async () => {
++      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
++
++      const unregister = registerShellPanel('help', ({ arg }) => (
++        <div data-testid="in-app-help-panel">
++          Help Drawer for {(arg as { href?: string; title?: string } | undefined)?.title} at {(arg as { href?: string } | undefined)?.href}
++        </div>
++      ));
++
++      try {
++        render(
++          <ShellPanelsProvider>
++            <QueryClientProvider client={queryClient}>
++              <AboutPage />
++            </QueryClientProvider>
++          </ShellPanelsProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('about-doc-link')).toBeDefined();
++        });
++
++        const docLink = screen.getByTestId('about-doc-link');
++        fireEvent.click(docLink);
++
++        await waitFor(() => {
++          expect(screen.getByTestId('in-app-help-panel')).toBeDefined();
++        });
++
++        const helpPanel = screen.getByTestId('in-app-help-panel');
++        expect(helpPanel.textContent).toContain('Architecture & System Topology');
++        expect(helpPanel.textContent).toContain('/docs/system-topology-and-multi-container-architecture');
++      } finally {
++        unregister();
++      }
++    });
++
++    it('verifies AboutPage.tsx contains zero inline style attributes (KAN-512 CSP invariant)', () => {
++      const tsxPath = path.resolve(__dirname, '../AboutPage.tsx');
++      const content = fs.readFileSync(tsxPath, 'utf8');
++
++      // Reject any style={{...}} prop in TSX
++      const inlineStyleMatch = /style=\{\{/.exec(content);
++      expect(inlineStyleMatch).toBeNull();
++    });
++
++    it('verifies AboutPage.css enforces canonical tokens, zero raw hex color literals, and 38px/44px button heights', () => {
++      const cssPath = path.resolve(__dirname, '../AboutPage.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++      // Zero raw hex colors
++      expect(cssContent).not.toMatch(/#[0-9a-fA-F]{3,8}/);
++
++      // Hero actions and doc link matching desktop height and nowrap
++      expect(cssContent).toContain('.kb-about-hero-actions .kb-studio-doc-link');
++      expect(cssContent).toContain('min-height: var(--prop-row-h, 38px)');
++      expect(cssContent).toContain('white-space: nowrap');
++
++      // Primary download button matching 38px desktop height
++      expect(cssContent).toMatch(/\.kb-about-btn-primary\s*\{[^}]*min-height:\s*var\(--prop-row-h,\s*38px\)/);
++
++      // Mobile media query with 44px tap target height
++      expect(cssContent).toContain('@media (max-width: 767px)');
++      expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
++    });
++  });
+ });
