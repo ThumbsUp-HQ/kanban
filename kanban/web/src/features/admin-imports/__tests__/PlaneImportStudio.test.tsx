@@ -592,6 +592,10 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     expect(cssContent).toMatch(/\.kb-plane-btn-primary\s*\{[^}]*var\(--accent-primary-fg\)/);
     expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary\)/);
     expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary-fg\)/);
+
+    // Verify mobile responsive wrapping on mode row and container padding
+    expect(cssContent).toMatch(/\.kb-plane-mode-row\s*\{[^}]*flex-wrap:\s*wrap;/);
+    expect(cssContent).toMatch(/\.kb-plane-import-container\s*\{[^}]*padding:\s*16px;/);
   });
 
   it('switches import source and mode selection tabs cleanly across light and dark themes (KAN-529)', () => {

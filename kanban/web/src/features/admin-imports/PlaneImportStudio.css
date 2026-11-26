@@ -51,6 +51,7 @@
 
 .kb-plane-mode-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -337,6 +338,9 @@
 }
 
 @media (max-width: 768px) {
+  .kb-plane-import-container {
+    padding: 16px;
+  }
   .kb-plane-import-header {
     flex-direction: column;
     align-items: stretch;
