@@ -42,6 +42,7 @@ export interface ProjectDetail {
   skip_loaded_sequence_numbers?: boolean;
   default_module_ids?: string[];
   auto_archive_days?: number | null;
+  default_gate_timeout_ms?: number | null;
   capabilities?: string[];
   is_project_admin?: boolean;
   project_role?: string | null;
@@ -233,6 +234,7 @@ export function ProjectSettingsPage(): JSX.Element {
   const [skipLoadedSeq, setSkipLoadedSeq] = useState<boolean>(false);
   const [defaultModuleIds, setDefaultModuleIds] = useState<string[]>([]);
   const [autoArchiveDays, setAutoArchiveDays] = useState<string>('');
+  const [defaultGateTimeoutMs, setDefaultGateTimeoutMs] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Workflow States Form State
@@ -333,6 +335,11 @@ export function ProjectSettingsPage(): JSX.Element {
           setAutoArchiveDays(
             projRes.auto_archive_days !== null && projRes.auto_archive_days !== undefined
               ? String(projRes.auto_archive_days)
+              : '',
+          );
+          setDefaultGateTimeoutMs(
+            projRes.default_gate_timeout_ms !== null && projRes.default_gate_timeout_ms !== undefined
+              ? String(projRes.default_gate_timeout_ms)
               : '',
           );
         }
@@ -532,12 +539,24 @@ export function ProjectSettingsPage(): JSX.Element {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
+        let parsedTimeout: number | null = null;
+        if (defaultGateTimeoutMs.trim()) {
+          const parsed = parseInt(defaultGateTimeoutMs.trim(), 10);
+          if (Number.isNaN(parsed) || parsed < 1000 || parsed > 600000) {
+            setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+            setIsSaving(false);
+            return;
+          }
+          parsedTimeout = parsed;
+        }
+
         const payload = {
           name: name.trim(),
           description_markdown: description,
           modules_enabled: modulesEnabled,
           skip_loaded_sequence_numbers: skipLoadedSeq,
           auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
+          default_gate_timeout_ms: parsedTimeout,
         };
 
         const updated = (await apiFetch(
@@ -1612,7 +1631,7 @@ export function ProjectSettingsPage(): JSX.Element {
               title="Advanced Project Options"
               summary="Agent-Safe sequence numbering and work item auto-archival policies"
               testId="project-general-advanced-section"
-              activeOverridesCount={(skipLoadedSeq ? 1 : 0) + (autoArchiveDays ? 1 : 0)}
+              activeOverridesCount={(skipLoadedSeq ? 1 : 0) + (autoArchiveDays ? 1 : 0) + (defaultGateTimeoutMs ? 1 : 0)}
               defaultOpen={false}
             >
               <div className="kb-form-group kb-form-group-checkbox">
@@ -1659,6 +1678,91 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setAutoArchiveDays(e.target.value); }}
                   placeholder="e.g. 30"
                 />
+              </div>
+
+              <div className="kb-form-group" style={{ marginTop: '1rem' }}>
+                <label className="kb-form-label" htmlFor="project-gate-timeout-input">
+                  Default Workflow Gate Timeout (ms)
+                  <FieldHelpHint
+                    title="Default Workflow Gate Timeout"
+                    summary="Execution timeout in milliseconds for all workflow interceptor gates in this project (1000..600000). Leave blank to inherit agent default."
+                    defaultValue="Inherit (Agent Default)"
+                    validValues={['1000 to 600000 ms (up to 10 minutes)']}
+                    example="60000"
+                    docHref="/docs/scripted-workflows-and-transition-helpers"
+                    testId="proj-default-gate-timeout-help"
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <input
+                    id="project-gate-timeout-input"
+                    data-testid="project-default-gate-timeout-input"
+                    className="kb-input"
+                    type="number"
+                    min="1000"
+                    max="600000"
+                    step="1000"
+                    value={defaultGateTimeoutMs}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDefaultGateTimeoutMs(v);
+                      if (v.trim()) {
+                        const parsed = parseInt(v.trim(), 10);
+                        if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                          setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                        } else {
+                          setErrorMessage(null);
+                        }
+                      } else {
+                        setErrorMessage(null);
+                      }
+                    }}
+                    placeholder="Inherit agent default"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-btn-xs"
+                    onClick={() => { setDefaultGateTimeoutMs(''); }}
+                    data-testid="project-gate-timeout-clear-btn"
+                  >
+                    Inherit
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-btn-xs"
+                    onClick={() => { setDefaultGateTimeoutMs('60000'); }}
+                    data-testid="project-gate-timeout-preset-60s"
+                  >
+                    60s
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-btn-xs"
+                    onClick={() => { setDefaultGateTimeoutMs('180000'); }}
+                    data-testid="project-gate-timeout-preset-3m"
+                  >
+                    3m
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-btn-xs"
+                    onClick={() => { setDefaultGateTimeoutMs('300000'); }}
+                    data-testid="project-gate-timeout-preset-5m"
+                  >
+                    5m
+                  </button>
+                  <button
+                    type="button"
+                    className="kb-btn kb-btn-secondary kb-btn-xs"
+                    onClick={() => { setDefaultGateTimeoutMs('600000'); }}
+                    data-testid="project-gate-timeout-preset-10m"
+                  >
+                    10m
+                  </button>
+                </div>
               </div>
             </AdvancedSection>
 

@@ -42,7 +42,7 @@ class AgentDefinitionCreate(BaseModel):
         default_factory=lambda: ["search_tickets", "read_ticket", "search_knowledge", "read_doc"]
     )
     system_instructions_md: str = ""
-    timeout_ms: int = Field(default=60000, ge=1000, le=300000)
+    timeout_ms: int = Field(default=60000, ge=1000, le=600000)
 
     @field_validator("slug")
     @classmethod
@@ -194,7 +194,7 @@ class AgentDefinitionPatch(BaseModel):
     repo_access_mode: RepoAccessMode | None = None
     mcp_allowed_tools: list[str] | None = None
     system_instructions_md: str | None = None
-    timeout_ms: int | None = Field(default=None, ge=1000, le=300000)
+    timeout_ms: int | None = Field(default=None, ge=1000, le=600000)
 
     def _validate_patch_tools(self) -> None:
         """Validate MCP tools allowlist on patch."""

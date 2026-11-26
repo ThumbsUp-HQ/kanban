@@ -222,7 +222,7 @@ MANAGE_AI_AND_AGENT_RUNNERS_SCHEMA: Final[dict[str, Any]] = {
         "timeout_ms": {
             "type": "integer",
             "minimum": 1000,
-            "maximum": 300000,
+            "maximum": 600000,
             "description": "Agent execution timeout in milliseconds",
         },
         "pool_slug": {

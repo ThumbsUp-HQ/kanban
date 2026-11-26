@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import (
     ARRAY,
+    CheckConstraint,
     ForeignKey,
     Integer,
     Text,
@@ -23,6 +24,10 @@ class AgentDefinition(Base):
     __tablename__ = "agent_definitions"
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="agent_definitions_workspace_id_slug_key"),
+        CheckConstraint(
+            "timeout_ms BETWEEN 1000 AND 600000",
+            name="chk_agent_definitions_timeout_ms",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))

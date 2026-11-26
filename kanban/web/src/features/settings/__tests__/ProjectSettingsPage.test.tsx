@@ -268,6 +268,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       modules_enabled: true,
       skip_loaded_sequence_numbers: false,
       auto_archive_days: 30,
+      default_gate_timeout_ms: null,
     });
   });
 
@@ -3517,6 +3518,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       modules_enabled: false,
       skip_loaded_sequence_numbers: true,
       auto_archive_days: null,
+      default_gate_timeout_ms: null,
     });
   });
 

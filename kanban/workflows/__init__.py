@@ -10,7 +10,12 @@ from kanban.workflows.engine import (
     TransitionEngine,
     TransitionOutcome,
 )
-from kanban.workflows.gate_types import GateDecision, GateEventType, LinkSpec
+from kanban.workflows.gate_types import (
+    GateDecision,
+    GateEventType,
+    LinkSpec,
+    resolve_effective_gate_timeout_ms,
+)
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 from kanban.workflows.mutations import (
     MUTABLE_FIELD_UNIVERSE,
@@ -31,5 +36,6 @@ __all__ = [
     "apply_field_updates",
     "compute_hook_manifest_sha256",
     "is_in_mutable_universe",
+    "resolve_effective_gate_timeout_ms",
     "validate_field_updates",
 ]

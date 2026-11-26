@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import func, select
 
 from database.models.agent_definition import AgentDefinition
+from database.models.projects import Project
 from database.models.workflow import (
     WorkflowHookInvocation,
     WorkflowTransitionExecution,
@@ -34,6 +35,26 @@ class GateTimeoutSweeper:
         if now is None:
             now = dt.datetime.now(dt.UTC)
 
+        fallback_deadline = WorkflowHookInvocation.started_at + func.make_interval(
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            func.coalesce(
+                WorkflowTransitionHook.timeout_ms,
+                Project.default_gate_timeout_ms,
+                AgentDefinition.timeout_ms,
+                60000,
+            )
+            / 1000.0,
+        )
+        effective_deadline = func.coalesce(
+            WorkflowHookInvocation.deadline_at,
+            fallback_deadline,
+        )
+
         stmt = (
             select(
                 WorkflowHookInvocation.execution_id,
@@ -47,6 +68,10 @@ class GateTimeoutSweeper:
                 WorkflowTransitionHook,
                 WorkflowTransitionHook.id == WorkflowHookInvocation.hook_id,
             )
+            .join(
+                Project,
+                Project.id == WorkflowTransitionExecution.project_id,
+            )
             .outerjoin(
                 AgentDefinition,
                 AgentDefinition.id == WorkflowTransitionHook.agent_definition_id,
@@ -54,11 +79,7 @@ class GateTimeoutSweeper:
             .where(
                 WorkflowTransitionExecution.status == "pending_async",
                 WorkflowHookInvocation.status == "running",
-                WorkflowHookInvocation.started_at
-                + func.make_interval(
-                    0, 0, 0, 0, 0, 0, func.coalesce(AgentDefinition.timeout_ms, 60000) / 1000.0
-                )
-                <= now,
+                effective_deadline <= now,
             )
             .with_for_update(of=WorkflowHookInvocation, skip_locked=True)
             .limit(100)

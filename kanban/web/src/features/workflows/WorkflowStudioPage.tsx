@@ -65,7 +65,7 @@ export function WorkflowStudioPage({
     queryFn: async () => {
       try {
         const data: unknown = await apiFetch('GET', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never);
-        return data as { name?: string; capabilities?: string[] };
+        return data as { name?: string; capabilities?: string[]; default_gate_timeout_ms?: number | null };
       } catch {
         return null;
       }
@@ -114,6 +114,48 @@ export function WorkflowStudioPage({
     from_state: string | null;
     to_state: string;
   } | null>(null);
+
+  // Project default gate timeout state
+  const [overrideTimeout, setOverrideTimeout] = useState<number | null | undefined>(undefined);
+  const projectDefaultTimeout =
+    overrideTimeout !== undefined
+      ? overrideTimeout
+      : (projectQuery.data?.default_gate_timeout_ms ?? null);
+  const [isSavingTimeout, setIsSavingTimeout] = useState(false);
+  const [timeoutSuccess, setTimeoutSuccess] = useState<string | null>(null);
+  const [timeoutError, setTimeoutError] = useState<string | null>(null);
+
+  const handleSaveProjectTimeout = async (val: number | null) => {
+    if (val !== null && (Number.isNaN(val) || val < 1000 || val > 600000)) {
+      setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+      return;
+    }
+    try {
+      setIsSavingTimeout(true);
+      setTimeoutError(null);
+      setTimeoutSuccess(null);
+      await apiFetch('PATCH', `/api/v1/projects/${encodeURIComponent(projectKey)}` as never, {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_gate_timeout_ms: val }),
+      });
+      setOverrideTimeout(val);
+      setTimeoutSuccess(
+        val !== null
+          ? `Project default gate timeout set to ${String(val)} ms.`
+          : 'Project default gate timeout reset to agent defaults.',
+      );
+      await queryClient.invalidateQueries({ queryKey: qk.project(projectKey) });
+      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setTimeoutError(err.message);
+      } else {
+        setTimeoutError('Failed to update project default gate timeout.');
+      }
+    } finally {
+      setIsSavingTimeout(false);
+    }
+  };
 
 
   // Auxiliary data queries
@@ -278,6 +320,128 @@ export function WorkflowStudioPage({
         </div>
       )}
 
+      {/* Project Default Gate Timeout Control */}
+      <section
+        className="workflow-project-timeout-panel"
+        data-testid="project-gate-timeout-panel"
+      >
+        <div className="workflow-project-timeout-row">
+          <div className="workflow-project-timeout-title-group">
+            <h2 className="workflow-project-timeout-heading">
+              <span>⏱️ Project Default Gate Timeout</span>
+              <span className="workflow-studio-title-badge" data-testid="project-timeout-current-badge">
+                {projectDefaultTimeout !== null ? `${String(projectDefaultTimeout)} ms` : 'Agent Default'}
+              </span>
+            </h2>
+            <p className="workflow-project-timeout-description">
+              Inherited timeout for all workflow interceptor gates in this project unless overridden by a hook. Max 10 minutes (600,000 ms).
+            </p>
+          </div>
+          <div className="workflow-project-timeout-controls">
+            <input
+              type="number"
+              min="1000"
+              max="600000"
+              step="1000"
+              className="workflow-form-control"
+              style={{ width: '130px' }}
+              placeholder="Inherit agent"
+              value={projectDefaultTimeout !== null ? String(projectDefaultTimeout) : ''}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                if (v === '') {
+                  setOverrideTimeout(null);
+                  setTimeoutError(null);
+                } else {
+                  const parsed = parseInt(v, 10);
+                  setOverrideTimeout(Number.isNaN(parsed) ? null : parsed);
+                  if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                    setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                  } else {
+                    setTimeoutError(null);
+                  }
+                }
+              }}
+              data-testid="project-default-gate-timeout-input"
+            />
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+              onClick={() => {
+                setOverrideTimeout(60000);
+                setTimeoutError(null);
+              }}
+              data-testid="project-timeout-preset-60s"
+            >
+              60s
+            </button>
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+              onClick={() => {
+                setOverrideTimeout(180000);
+                setTimeoutError(null);
+              }}
+              data-testid="project-timeout-preset-3m"
+            >
+              3m
+            </button>
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+              onClick={() => {
+                setOverrideTimeout(300000);
+                setTimeoutError(null);
+              }}
+              data-testid="project-timeout-preset-5m"
+            >
+              5m
+            </button>
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+              onClick={() => {
+                setOverrideTimeout(600000);
+                setTimeoutError(null);
+              }}
+              data-testid="project-timeout-preset-10m"
+            >
+              10m
+            </button>
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+              onClick={() => {
+                setOverrideTimeout(null);
+                setTimeoutError(null);
+              }}
+              data-testid="project-timeout-preset-clear"
+            >
+              Inherit
+            </button>
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-primary workflow-btn-sm"
+              onClick={() => void handleSaveProjectTimeout(projectDefaultTimeout)}
+              disabled={isSavingTimeout}
+              data-testid="save-project-gate-timeout-btn"
+            >
+              {isSavingTimeout ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+        {timeoutSuccess && (
+          <div className="workflow-project-timeout-success" role="status" data-testid="project-timeout-success">
+            {timeoutSuccess}
+          </div>
+        )}
+        {timeoutError && (
+          <div className="workflow-project-timeout-error" role="alert" data-testid="project-timeout-error">
+            {timeoutError}
+          </div>
+        )}
+      </section>
+
       {/* Loading State */}
       {isLoading ? (
         <div className="empty-hooks-cta">Loading workflow helper rules...</div>
@@ -291,6 +455,7 @@ export function WorkflowStudioPage({
             key={`${rule.from_state ?? 'any'}-${rule.to_state}`}
             rule={rule}
             projectKey={projectKey}
+            projectDefaultTimeoutMs={projectDefaultTimeout}
             agents={agentsQuery.data ?? []}
             onReorder={handleReorder}
             onToggle={handleToggle}

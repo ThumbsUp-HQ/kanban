@@ -8,7 +8,7 @@ KB-P5-17a, S14.1, S14.2.
 from __future__ import annotations
 
 import uuid  # noqa: TC003
-from datetime import datetime
+from datetime import datetime  # noqa: TC003
 from typing import Any
 
 from sqlalchemy import (
@@ -57,6 +57,10 @@ class WorkflowTransitionHook(Base):
             "max_rework_attempts BETWEEN 1 AND 20",
             name="ck_workflow_transition_hooks_max_rework",
         ),
+        CheckConstraint(
+            "timeout_ms IS NULL OR timeout_ms BETWEEN 1000 AND 600000",
+            name="chk_workflow_transition_hooks_timeout_ms",
+        ),
         Index(
             "wth_lookup",
             "project_id",
@@ -99,6 +103,7 @@ class WorkflowTransitionHook(Base):
     max_rework_attempts: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, default=3, server_default=text("3")
     )
+    timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class WorkflowTransitionExecution(Base):
@@ -176,6 +181,11 @@ class WorkflowHookInvocation(Base):
             name="ck_workflow_hook_invocations_output_json",
         ),
         UniqueConstraint("execution_id", "hook_id", name="uq_workflow_hook_invocations_exec_hook"),
+        Index(
+            "idx_workflow_hook_invocations_deadline_at_running",
+            "deadline_at",
+            postgresql_where=text("status = 'running'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
@@ -203,20 +213,4 @@ class WorkflowHookInvocation(Base):
         server_default=text("clock_timestamp()"),
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    @property
-    def deadline_at(self) -> datetime | None:
-        """Computed or stored deadline timestamp."""
-        if hasattr(self, "_deadline_at") and self._deadline_at is not None:
-            return self._deadline_at
-        if self.output_json and "deadline_at" in self.output_json:
-            val = self.output_json["deadline_at"]
-            if isinstance(val, str):
-                return datetime.fromisoformat(val)
-            if isinstance(val, datetime):
-                return val
-        return None
-
-    @deadline_at.setter
-    def deadline_at(self, value: datetime | None) -> None:
-        self._deadline_at = value
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

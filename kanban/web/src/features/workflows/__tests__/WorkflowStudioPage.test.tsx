@@ -10,6 +10,7 @@ import { WorkflowStudioPage } from '../WorkflowStudioPage';
 import { AttachHookDialog } from '../AttachHookDialog';
 import { CustomFieldDefinitionEditor } from '../../custom-fields/CustomFieldDefinitionEditor';
 import * as api from '../api';
+import * as client from '../../../api/client';
 import { Aal2StepUpCancelledError } from '../../../api/client';
 
 describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
@@ -488,9 +489,9 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
         expect(screen.getByText('long-thinking-agent')).toBeDefined();
       });
 
-      // Assert 180s is displayed instead of 60s
+      // Assert 3m is displayed (180,000 ms formatted as 3m)
       const latencyPill = screen.getByTestId('hook-latency-hook-custom-timeout');
-      expect(latencyPill.textContent).toBe('180s');
+      expect(latencyPill.textContent).toBe('3m');
 
       // Assert kanban-main and Repo badge are NOT rendered in this hook row
       const hookRow = screen.getByTestId('hook-pipeline-row-hook-custom-timeout');
@@ -543,12 +544,74 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
         expect(screen.getByText('lookup-agent-gate')).toBeDefined();
       });
 
-      // Resolved 300s from agent definition
+      // Resolved 5m from agent definition (300000 ms formatted as 5m)
       const latencyPill = screen.getByTestId('hook-latency-hook-agent-lookup');
-      expect(latencyPill.textContent).toBe('300s');
+      expect(latencyPill.textContent).toBe('5m');
+      expect(latencyPill.getAttribute('title')).toBe('agent default');
 
       // repo_access_mode === 'none' -> repo badge omitted
       expect(screen.queryByText('my-repo')).toBeNull();
+    });
+
+    it('supports configuring and saving project default gate timeout with presets (KAN-437)', async () => {
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
+      const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({ default_gate_timeout_ms: 600000 });
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('project-default-gate-timeout-input')).toBeDefined();
+      });
+
+      const input = screen.getByTestId<HTMLInputElement>('project-default-gate-timeout-input');
+      const currentBadge = screen.getByTestId('project-timeout-current-badge');
+      expect(currentBadge.textContent).toBe('Agent Default');
+
+      // Click 10m preset (600,000 ms)
+      fireEvent.click(screen.getByTestId('project-timeout-preset-10m'));
+      expect(input.value).toBe('600000');
+      expect(currentBadge.textContent).toBe('600000 ms');
+
+      // Click Save
+      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
+
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          'PATCH',
+          '/api/v1/projects/KAN',
+          expect.objectContaining({
+            body: JSON.stringify({ default_gate_timeout_ms: 600000 }),
+          }),
+        );
+        expect(screen.getByTestId('project-timeout-success').textContent).toContain('600000 ms');
+      });
+    });
+
+    it('validates client-side [1000, 600000] range and rejects out-of-range project timeout with alert (KAN-437)', async () => {
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
+      const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({});
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('project-default-gate-timeout-input')).toBeDefined();
+      });
+
+      const input = screen.getByTestId<HTMLInputElement>('project-default-gate-timeout-input');
+
+      // Enter value below 1000
+      fireEvent.change(input, { target: { value: '500' } });
+      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
+
+      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
+      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
+
+      // Enter value above 600000
+      fireEvent.change(input, { target: { value: '700000' } });
+      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
+
+      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
+      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
     });
   });
 });

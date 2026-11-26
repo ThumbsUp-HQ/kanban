@@ -1,0 +1,112 @@
+=== PYTEST WORKFLOW, GATE RUNNER, MODELS, AND OPENAPI TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 64 items
+
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_resolve_effective_gate_timeout_ms_precedence PASSED [  1%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_resolve_effective_gate_timeout_ms_clamping PASSED [  3%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_project_schema_gate_timeout_validation PASSED [  4%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_workflow_hook_schema_gate_timeout_validation PASSED [  6%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_gate_sweeper_future_deadline_not_expired PASSED [  7%]
+kanban/tests/workflows/test_async_gate.py::test_case_1_positive_single_agent_hook_202_then_approve PASSED [  9%]
+kanban/tests/workflows/test_async_gate.py::test_format_approve_comment_canonical_header_and_no_dashes PASSED [ 10%]
+kanban/tests/workflows/test_async_gate.py::test_case_2_positive_two_sequential_agent_hooks_and_reject PASSED [ 12%]
+kanban/tests/workflows/test_async_gate.py::test_case_3_security_toctou_concurrent_description_edit PASSED [ 14%]
+kanban/tests/workflows/test_async_gate.py::test_case_4_security_forbidden_mutations_and_sanitization PASSED [ 15%]
+kanban/tests/workflows/test_async_gate.py::test_case_5_security_out_of_order_and_replay_idempotency PASSED [ 17%]
+kanban/tests/workflows/test_async_gate.py::test_case_6_boundary_concurrent_transition_during_pending_async PASSED [ 18%]
+kanban/tests/workflows/test_async_gate.py::test_case_7_boundary_cancel_invoker_vs_non_invoker PASSED [ 20%]
+kanban/tests/workflows/test_async_gate.py::test_case_8_serializer_pending_gate_and_latest_gate_verdict PASSED [ 21%]
+kanban/tests/workflows/test_async_gate.py::test_case_9_hop_depth_limit PASSED [ 23%]
+kanban/tests/workflows/test_async_gate.py::test_compute_harness_label_and_reason_preview PASSED [ 25%]
+kanban/tests/workflows/test_async_gate.py::test_apply_labels_and_links_in_decision PASSED [ 26%]
+kanban/tests/workflows/test_async_gate.py::test_fail_open_warn_advance_and_commit PASSED [ 28%]
+kanban/tests/workflows/test_async_gate.py::test_cancel_unauthorized_and_invalid_state PASSED [ 29%]
+kanban/tests/workflows/test_async_gate.py::test_gate_coverage_branches PASSED [ 31%]
+kanban/tests/workflows/test_async_gate.py::test_completed_state_forces_fail_closed PASSED [ 32%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_approval_and_comment PASSED [ 34%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_timeout_sweep PASSED [ 35%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_heartbeat_lease_renews_claim PASSED [ 37%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_heartbeat_stops_when_deadline_exceeded PASSED [ 39%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_dispatch_timeout_against_deadline_records_failure PASSED [ 40%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_positive_e2e_real_pg_and_mock_ollama_gate_approval PASSED [ 42%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_negative_gate_rejection_on_incomplete_ticket PASSED [ 43%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_negative_inference_failure_rollback PASSED [ 45%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_structured_request_deadline_boundary_cases PASSED [ 46%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_budget_enforcer_resolve_and_scoped_session_coverage PASSED [ 48%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_in_app_sdk_harness_coverage_branches PASSED [ 50%]
+agent/tests/providers/test_base_protocol.py::test_error_hierarchy_and_properties PASSED [ 51%]
+agent/tests/providers/test_base_protocol.py::test_error_code_validation PASSED [ 53%]
+agent/tests/providers/test_base_protocol.py::test_secret_redaction PASSED [ 54%]
+agent/tests/providers/test_base_protocol.py::test_completion_request_dto PASSED [ 56%]
+agent/tests/providers/test_base_protocol.py::test_stream_chunk_and_tool_call_step PASSED [ 57%]
+agent/tests/providers/test_base_protocol.py::test_structured_request_and_response PASSED [ 59%]
+agent/tests/providers/test_base_protocol.py::test_embed_batch_request_bounds PASSED [ 60%]
+agent/tests/providers/test_base_protocol.py::test_cli_run_request_and_result PASSED [ 62%]
+agent/tests/providers/test_base_protocol.py::test_runtime_protocols PASSED [ 64%]
+agent/tests/providers/test_base_protocol.py::test_structured_request_token_bounds_and_defaults PASSED [ 65%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 67%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 68%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 70%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 71%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 73%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 75%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 76%]
+kanban/tests/test_export_openapi.py::test_export_openapi_valid_json PASSED [ 78%]
+kanban/tests/test_export_openapi.py::test_export_openapi_deterministic PASSED [ 79%]
+kanban/tests/test_export_openapi.py::test_export_openapi_contains_issue_routes PASSED [ 81%]
+kanban/tests/test_export_openapi.py::test_export_openapi_cli_to_file PASSED [ 82%]
+kanban/tests/test_export_openapi.py::test_export_openapi_cli_to_stdout PASSED [ 84%]
+kanban/tests/test_export_openapi.py::test_export_openapi_module_main_execution PASSED [ 85%]
+kanban/tests/test_export_openapi.py::test_export_openapi_issue_and_activity_response_schemas PASSED [ 87%]
+kanban/tests/test_export_openapi.py::test_export_openapi_security_schemes_and_top_level_security PASSED [ 89%]
+kanban/tests/test_export_openapi.py::test_export_openapi_public_routes_empty_security PASSED [ 90%]
+kanban/tests/test_export_openapi.py::test_export_openapi_rfc7807_responses_and_schemas PASSED [ 92%]
+kanban/tests/test_export_openapi.py::test_export_openapi_build_info_metadata_and_hashes PASSED [ 93%]
+kanban/tests/test_export_openapi.py::test_export_openapi_no_duplicate_operation_ids PASSED [ 95%]
+kanban/tests/test_export_openapi.py::test_openapi_builder_enrich_paths_defensive_types PASSED [ 96%]
+kanban/tests/test_export_openapi.py::test_export_openapi_openid_configuration_public PASSED [ 98%]
+kanban/tests/test_export_openapi.py::test_api_docs_swagger_and_redoc_security_and_problem_schemas PASSED [100%]
+
+============================= 64 passed in 32.83s ==============================
+
+=== PYTEST MIGRATION LIFECYCLE TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+database/tests/migrations/test_p6_23_gate_timeouts_and_project_defaults_migration.py::test_p6_23_gate_timeouts_and_project_defaults_migration_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.63s ===============================
+
+=== VITEST FRONTEND UNIT TESTS ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/kanban/web
+> vitest run src/features/workflows/__tests__/WorkflowStudioPage.test.tsx src/features/workflows/__tests__/AttachHookDialog.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/kanban/web
+
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (17 tests) 1328ms
+   ✓ AttachHookDialog (KB-P5-24) (17)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 318ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1402ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (18 tests) 1039ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 3851ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 344ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 304ms
+
+ Test Files  4 passed (4)
+      Tests  130 passed (130)
+   Start at  12:58:41
+   Duration  5.07s (tests 63%, environment 22%, import 11%, transform 4%)
+

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select, text
 
 from database.models.agent_definition import AgentDefinition
-from database.models.projects import WorkflowState
+from database.models.projects import Project, WorkflowState
 from database.models.wasm_module import ApprovedWasmModule
 from database.models.workflow import WorkflowTransitionHook
 from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
@@ -21,6 +21,7 @@ from kanban.api.problems import ProblemException, not_found
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
 from kanban.workflows.builtins import seed_builtin_wasm
+from kanban.workflows.gate_types import resolve_effective_gate_timeout_ms
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 from kanban.workflows.mutations import IMMUTABLE_FIELDS, is_in_mutable_universe
 
@@ -70,9 +71,9 @@ class WorkflowHookCreateRequest(BaseModel):
     )
     timeout_ms: int | None = Field(
         default=None,
-        ge=1,
-        le=300000,
-        description="Optional timeout in milliseconds",
+        ge=1000,
+        le=600000,
+        description="Optional timeout in milliseconds (1000..600000)",
     )
     description: str | None = Field(
         default=None,
@@ -91,7 +92,7 @@ class WorkflowHookUpdateRequest(BaseModel):
     allowed_mutable_fields: list[str] | None = Field(default=None)
     wasm_module_sha256: str | None = Field(default=None)
     agent: str | None = Field(default=None)
-    timeout_ms: int | None = Field(default=None, ge=1, le=300000)
+    timeout_ms: int | None = Field(default=None, ge=1000, le=600000)
     description: str | None = Field(default=None, max_length=1000)
 
 
@@ -136,6 +137,7 @@ class WorkflowHookResponse(BaseModel):
     cli_binary_allowlist_id: str | None = None
     cli_args: list[str] | None = None
     timeout_ms: int | None = None
+    effective_timeout_ms: int = 60000
     repo_binding_slug: str | None = None
     repo_access_mode: str | None = None
     mcp_access_summary: str | None = None
@@ -333,7 +335,7 @@ class WorkflowHookService:
         cli_bin_id: str | None = None
         cli_args: list[str] | None = None
         mcp_summary: str | None = None
-        timeout_ms: int | None = None
+        agent_timeout: int | None = None
         repo_binding_slug: str | None = None
         repo_access_mode: str | None = None
 
@@ -353,7 +355,7 @@ class WorkflowHookService:
                 if isinstance(agent_def.cli_args_json, list):
                     cli_args = [str(x) for x in agent_def.cli_args_json]
                 mcp_summary = f"{len(agent_def.mcp_allowed_tools)} tools"
-                timeout_ms = agent_def.timeout_ms
+                agent_timeout = agent_def.timeout_ms
                 repo_access_mode = agent_def.repo_access_mode
 
                 if agent_def.repo_access_mode != "none":
@@ -365,6 +367,18 @@ class WorkflowHookService:
                         .limit(1)
                     )
                     repo_binding_slug = (await session.execute(repo_stmt)).scalar_one_or_none()
+
+        proj_stmt = select(Project.default_gate_timeout_ms).where(
+            Project.id == hook.project_id,
+            Project.workspace_id == hook.workspace_id,
+        )
+        proj_timeout = (await session.execute(proj_stmt)).scalar_one_or_none()
+
+        effective_timeout_ms = resolve_effective_gate_timeout_ms(
+            hook_timeout_ms=hook.timeout_ms,
+            project_default_timeout_ms=proj_timeout,
+            agent_timeout_ms=agent_timeout,
+        )
 
         wasm_hex = hook.wasm_module_sha256.hex() if hook.wasm_module_sha256 else None
         manifest_hex = hook.manifest_sha256.hex()
@@ -391,7 +405,8 @@ class WorkflowHookService:
             cli_binary_allowlist_id=cli_bin_id,
             cli_args=cli_args,
             mcp_access_summary=mcp_summary,
-            timeout_ms=timeout_ms,
+            timeout_ms=hook.timeout_ms,
+            effective_timeout_ms=effective_timeout_ms,
             repo_binding_slug=repo_binding_slug,
             repo_access_mode=repo_access_mode,
         )
@@ -627,6 +642,7 @@ class WorkflowHookService:
             allowed_mutable_fields=clean_fields,
             failure_policy=payload.failure_policy,
             manifest_sha256=manifest_sha,
+            timeout_ms=payload.timeout_ms,
         )
         session.add(hook)
         await session.flush()
@@ -774,6 +790,9 @@ class WorkflowHookService:
 
             hook.agent_definition_id = agent_row.id
             needs_manifest_recompute = True
+
+        if "timeout_ms" in payload.model_fields_set:
+            hook.timeout_ms = payload.timeout_ms
 
         if needs_manifest_recompute:
             new_manifest_sha = compute_hook_manifest_sha256(

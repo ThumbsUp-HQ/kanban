@@ -29,7 +29,12 @@ from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.workflows.engine import TransitionOutcome
-from kanban.workflows.gate_types import GateDecision, GateEventType, LinkSpec
+from kanban.workflows.gate_types import (
+    GateDecision,
+    GateEventType,
+    LinkSpec,
+    resolve_effective_gate_timeout_ms,
+)
 from kanban.workflows.mutations import apply_field_updates, validate_field_updates
 
 if TYPE_CHECKING:
@@ -196,7 +201,14 @@ class AgentGateDispatcher:
                 issue_id=issue.id,
                 principal_id=agent_def.principal_id,
             )
-        timeout_ms = agent_def.timeout_ms if agent_def else 60000
+        project = await session.get(Project, execution.project_id)
+        proj_timeout = project.default_gate_timeout_ms if project else None
+        agent_timeout = agent_def.timeout_ms if agent_def else None
+        timeout_ms = resolve_effective_gate_timeout_ms(
+            hook_timeout_ms=first_hook.timeout_ms,
+            project_default_timeout_ms=proj_timeout,
+            agent_timeout_ms=agent_timeout,
+        )
         deadline_at = now + dt.timedelta(milliseconds=timeout_ms)
 
         # 5. Insert workflow_hook_invocations row status='running' for FIRST hook only
@@ -208,6 +220,7 @@ class AgentGateDispatcher:
             hook_kind="agent_interceptor",
             status="running",
             started_at=now,
+            deadline_at=deadline_at,
             output_json={"deadline_at": deadline_at.isoformat()},
         )
         session.add(inv)
@@ -216,7 +229,6 @@ class AgentGateDispatcher:
         # 6. Resolve states, project, and issue key for event payloads
         from_state = await session.get(WorkflowState, execution.from_state_id)
         to_state = await session.get(WorkflowState, execution.to_state_id)
-        project = await session.get(Project, execution.project_id)
         issue_key = f"{project.identifier}-{issue.sequence_id}" if project else str(issue.id)
 
         agent_slug = agent_def.slug if agent_def else "agent"
@@ -608,7 +620,13 @@ class GateCoordinator:
                     issue_id=issue.id,
                     principal_id=next_agent_def.principal_id,
                 )
-            next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
+            project = await session.get(Project, execution.project_id)
+            proj_timeout = project.default_gate_timeout_ms if project else None
+            next_timeout = resolve_effective_gate_timeout_ms(
+                hook_timeout_ms=next_hook.timeout_ms,
+                project_default_timeout_ms=proj_timeout,
+                agent_timeout_ms=next_agent_def.timeout_ms if next_agent_def else None,
+            )
             next_deadline = now + dt.timedelta(milliseconds=next_timeout)
 
             next_inv = WorkflowHookInvocation(
@@ -619,6 +637,7 @@ class GateCoordinator:
                 hook_kind="agent_interceptor",
                 status="running",
                 started_at=now,
+                deadline_at=next_deadline,
                 output_json={"deadline_at": next_deadline.isoformat()},
             )
             session.add(next_inv)
@@ -1041,7 +1060,13 @@ class GateCoordinator:
                         issue_id=issue.id,
                         principal_id=next_agent_def.principal_id,
                     )
-                next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
+                project = await session.get(Project, execution.project_id)
+                proj_timeout = project.default_gate_timeout_ms if project else None
+                next_timeout = resolve_effective_gate_timeout_ms(
+                    hook_timeout_ms=next_hook.timeout_ms,
+                    project_default_timeout_ms=proj_timeout,
+                    agent_timeout_ms=next_agent_def.timeout_ms if next_agent_def else None,
+                )
                 next_deadline = now + dt.timedelta(milliseconds=next_timeout)
 
                 next_inv = WorkflowHookInvocation(
@@ -1052,6 +1077,7 @@ class GateCoordinator:
                     hook_kind="agent_interceptor",
                     status="running",
                     started_at=now,
+                    deadline_at=next_deadline,
                     output_json={"deadline_at": next_deadline.isoformat()},
                 )
                 session.add(next_inv)
@@ -1101,7 +1127,11 @@ class GateCoordinator:
 
         # Fail closed: reject/time out
         final_status = "timed_out" if is_timeout else "rejected"
-        timeout_ms = agent_def.timeout_ms if agent_def else 60000
+        timeout_ms = resolve_effective_gate_timeout_ms(
+            hook_timeout_ms=hook.timeout_ms,
+            project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
+            agent_timeout_ms=agent_def.timeout_ms if agent_def else None,
+        )
         if is_timeout:
             reason_text = detail or f"Gate timed out after {timeout_ms} ms"
         else:

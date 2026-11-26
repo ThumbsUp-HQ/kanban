@@ -46,6 +46,12 @@ class ProjectCreate(BaseModel):
     auto_archive_days: AutoArchiveDays | None = Field(
         default=None, description="Number of days after completion before auto-archiving issues"
     )
+    default_gate_timeout_ms: int | None = Field(
+        default=None,
+        ge=1000,
+        le=600000,
+        description="Default workflow transition gate timeout in milliseconds (1000..600000)",
+    )
 
 
 class ProjectPatch(BaseModel):
@@ -71,6 +77,12 @@ class ProjectPatch(BaseModel):
     )
     auto_archive_days: AutoArchiveDays | None = Field(
         default=None, description="Updated auto-archive retention threshold in days"
+    )
+    default_gate_timeout_ms: int | None = Field(
+        default=None,
+        ge=1000,
+        le=600000,
+        description="Updated default workflow gate timeout in milliseconds (1000..600000, or null)",
     )
 
 
@@ -112,6 +124,10 @@ class ProjectResponse(BaseModel):
     )
     auto_archive_days: int | None = Field(
         description="Configured auto-archive retention threshold in days, if enabled"
+    )
+    default_gate_timeout_ms: int | None = Field(
+        default=None,
+        description="Configured default workflow gate timeout in milliseconds",
     )
     access_manifest: AccessManifest = Field(
         description="Anti-enumeration access manifest metadata (S3.4)"

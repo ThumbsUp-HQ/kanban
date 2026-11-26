@@ -50,6 +50,29 @@ class LinkSpec:
     target: str
 
 
+def resolve_effective_gate_timeout_ms(
+    hook_timeout_ms: int | None = None,
+    project_default_timeout_ms: int | None = None,
+    agent_timeout_ms: int | None = None,
+    fallback_default_ms: int = 60000,
+) -> int:
+    """Resolve effective workflow transition gate timeout with precedence and clamping.
+
+    Precedence: hook -> project -> agent -> fallback (60000 ms).
+    Result is strictly clamped to [1000, 600000] ms (up to 10 minutes).
+    """
+    selected: int
+    if hook_timeout_ms is not None:
+        selected = hook_timeout_ms
+    elif project_default_timeout_ms is not None:
+        selected = project_default_timeout_ms
+    elif agent_timeout_ms is not None:
+        selected = agent_timeout_ms
+    else:
+        selected = fallback_default_ms
+    return max(1000, min(600000, int(selected)))
+
+
 @dataclass(frozen=True)
 class GateDecision:
     """Parsed and validated decision produced by an AI transition gate."""

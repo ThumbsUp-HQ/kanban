@@ -46,6 +46,7 @@ export interface WorkflowHook {
   cli_binary_allowlist_id?: string | undefined;
   cli_args?: string[] | undefined;
   timeout_ms?: number | null | undefined;
+  effective_timeout_ms?: number | undefined;
   repo_binding_slug?: string | null | undefined;
   repo_access_mode?: string | null | undefined;
   mcp_access_summary?: string | undefined;
@@ -70,7 +71,7 @@ export interface CreateWorkflowHookPayload {
   wasm_module_sha256?: string | undefined;
   agent?: string | undefined;
   allowed_mutable_fields?: string[] | undefined;
-  timeout_ms?: number | undefined;
+  timeout_ms?: number | null | undefined;
   description?: string | undefined;
 }
 
@@ -80,7 +81,7 @@ export interface UpdateWorkflowHookPayload {
   allowed_mutable_fields?: string[] | undefined;
   wasm_module_sha256?: string | undefined;
   agent?: string | undefined;
-  timeout_ms?: number | undefined;
+  timeout_ms?: number | null | undefined;
 }
 
 export interface ReorderHooksPayload {

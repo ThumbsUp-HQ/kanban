@@ -64,6 +64,7 @@ function AttachHookDialogInner({
   const [allowedMutableFields, setAllowedMutableFields] = useState<string[]>(
     editingHook?.allowed_mutable_fields ?? [],
   );
+  const [timeoutMs, setTimeoutMs] = useState<number | null>(editingHook?.timeout_ms ?? null);
 
   const validSelectedSlug = agentDefinitions.some((a) => a.slug === selectedAgentSlug)
     ? selectedAgentSlug
@@ -131,10 +132,12 @@ function AttachHookDialogInner({
         setError('Agent definition is required.');
         return;
       }
-      payload.agent = effectiveAgentSlug;
-      if (selectedAgent?.timeout_ms) {
-        payload.timeout_ms = selectedAgent.timeout_ms;
+      if (timeoutMs !== null && (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000)) {
+        setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
+        return;
       }
+      payload.agent = effectiveAgentSlug;
+      payload.timeout_ms = timeoutMs;
     }
 
     try {
@@ -394,7 +397,8 @@ function AttachHookDialogInner({
               activeOverridesCount={
                 (failurePolicy === 'fail_closed' ? 1 : 0) +
                 ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
-                (allowedMutableFields.length > 0 ? 1 : 0)
+                (allowedMutableFields.length > 0 ? 1 : 0) +
+                (hookKind === 'agent_interceptor' && timeoutMs !== null ? 1 : 0)
               }
               defaultOpen={false}
             >
@@ -442,6 +446,112 @@ function AttachHookDialogInner({
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* Per-Hook Timeout Override (ms) for agent_interceptor */}
+              {hookKind === 'agent_interceptor' && (
+                <div className="workflow-form-group" data-testid="hook-timeout-override-group">
+                  <label htmlFor="hook-timeout-override-input" className="workflow-form-label">
+                    Per-Hook Timeout Override (ms)
+                    <FieldHelpHint
+                      title="Per-Hook Timeout Override"
+                      summary="Optional execution deadline override in milliseconds (1000..600000). Leave blank to inherit project or agent default."
+                      defaultValue="Inherit (Project / Agent Default)"
+                      validValues={['1000 to 600000 ms (up to 10 minutes)']}
+                      example="120000"
+                      testId="hook-timeout-help"
+                    />
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <input
+                      id="hook-timeout-override-input"
+                      type="number"
+                      min="1000"
+                      max="600000"
+                      step="1000"
+                      className="workflow-form-control"
+                      placeholder="Inherit project/agent default"
+                      value={timeoutMs ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        if (val === '') {
+                          setTimeoutMs(null);
+                          setError(null);
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          setTimeoutMs(Number.isNaN(parsed) ? null : parsed);
+                          if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                            setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                          } else {
+                            setError(null);
+                          }
+                        }
+                      }}
+                      data-testid="hook-timeout-input"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                      onClick={() => {
+                        setTimeoutMs(null);
+                        setError(null);
+                      }}
+                      data-testid="hook-timeout-preset-inherit"
+                    >
+                      Inherit
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                      onClick={() => {
+                        setTimeoutMs(60000);
+                        setError(null);
+                      }}
+                      data-testid="hook-timeout-preset-60s"
+                    >
+                      60s
+                    </button>
+                    <button
+                      type="button"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                      onClick={() => {
+                        setTimeoutMs(180000);
+                        setError(null);
+                      }}
+                      data-testid="hook-timeout-preset-3m"
+                    >
+                      3m
+                    </button>
+                    <button
+                      type="button"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                      onClick={() => {
+                        setTimeoutMs(300000);
+                        setError(null);
+                      }}
+                      data-testid="hook-timeout-preset-5m"
+                    >
+                      5m
+                    </button>
+                    <button
+                      type="button"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+                      onClick={() => {
+                        setTimeoutMs(600000);
+                        setError(null);
+                      }}
+                      data-testid="hook-timeout-preset-10m"
+                    >
+                      10m
+                    </button>
+                  </div>
+                  <span className="workflow-form-hint">
+                    Override transition gate execution deadline up to 10 minutes (600,000 ms).
+                  </span>
                 </div>
               )}
 

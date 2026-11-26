@@ -183,7 +183,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
         failure_policy: 'fail_closed',
         agent: 'forensic-code-check',
         allowed_mutable_fields: ['labels'],
-        timeout_ms: 60000,
+        timeout_ms: null,
       });
       expect(handleClose).toHaveBeenCalled();
     });
@@ -510,7 +510,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
           name: 'single-agent-hook',
           hook_kind: 'agent_interceptor',
           agent: 'solitary-qa-agent',
-          timeout_ms: 180000,
+          timeout_ms: null,
         }),
       );
     });
@@ -578,9 +578,105 @@ describe('AttachHookDialog (KB-P5-24)', () => {
           name: 'async-single-agent-hook',
           hook_kind: 'agent_interceptor',
           agent: 'solitary-qa-agent',
-          timeout_ms: 180000,
+          timeout_ms: null,
         }),
       );
     });
+  });
+
+  it('supports setting per-hook timeout override up to 600,000 ms with quick presets (KAN-437)', async () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={handleSave}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to agent_interceptor
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'long-eval-hook' } });
+
+    // Open advanced section
+    const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
+    fireEvent.click(advancedToggle);
+
+    // Verify per-hook timeout input is present
+    const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
+    expect(timeoutInput).toBeDefined();
+    expect(timeoutInput.value).toBe('');
+
+    // Click 10m preset (600000 ms)
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
+    expect(timeoutInput.value).toBe('600000');
+
+    // Click 3m preset (180000 ms)
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-3m'));
+    expect(timeoutInput.value).toBe('180000');
+
+    // Click Inherit clear button
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-inherit'));
+    expect(timeoutInput.value).toBe('');
+
+    // Manually enter 600000 ms
+    fireEvent.change(timeoutInput, { target: { value: '600000' } });
+    expect(timeoutInput.value).toBe('600000');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+
+    await waitFor(() => {
+      expect(handleSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'long-eval-hook',
+          hook_kind: 'agent_interceptor',
+          timeout_ms: 600000,
+        }),
+      );
+    });
+  });
+
+  it('validates client-side [1000, 600000] range and increments activeOverridesCount on hook timeout (KAN-437)', () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={handleSave}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to agent_interceptor
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'validation-test-hook' } });
+
+    // Open advanced section
+    const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
+    fireEvent.click(advancedToggle);
+
+    const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
+
+    // Enter out of range timeout < 1000
+    fireEvent.change(timeoutInput, { target: { value: '500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+
+    expect(handleSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('1,000 and 600,000 ms');
+
+    // Set valid timeout 600000 ms and check active overrides count pill
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
+    expect(screen.getByText(/1 custom setting active|2 custom settings active/i)).toBeDefined();
   });
 });

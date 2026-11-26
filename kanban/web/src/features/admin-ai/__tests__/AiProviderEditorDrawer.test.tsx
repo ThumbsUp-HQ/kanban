@@ -146,7 +146,7 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
     const timeoutInput = screen.getByTestId<HTMLInputElement>('provider-timeout-ms-input');
     expect(timeoutInput.value).toBe('45000');
     expect(timeoutInput.min).toBe('1000');
-    expect(timeoutInput.max).toBe('300000');
+    expect(timeoutInput.max).toBe('600000');
     expect(timeoutInput.step).toBe('1000');
 
     // Change timeout to 15000

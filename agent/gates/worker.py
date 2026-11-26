@@ -218,8 +218,10 @@ class GateWorker:
             )
             return
 
+        event_dict: dict[str, Any] = event if isinstance(event, dict) else {}
         timeout_ms = (
-            getattr(agent_def, "timeout_ms", None)
+            event_dict.get("timeout_ms")
+            or getattr(agent_def, "timeout_ms", None)
             or (agent_def.get("timeout_ms") if isinstance(agent_def, dict) else None)
             or 60_000
         )
