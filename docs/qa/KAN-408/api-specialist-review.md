@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade`  
-**Target Commit:** `6e8b9d54` (branch `feat/KAN-408-slice1-auth-workout`, base `1bbc9981`)  
+**Target Commit:** `2f0f18c9` (branch `feat/KAN-408-slice1-auth-workout`, base `1bbc9981`)  
 
 ---
 
@@ -21,7 +21,7 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 2. **Break-Glass Administrative Lockout Prevention (HTTP 409 `LOCKOUT_PREVENTED`)**:
    - Attempting to disable the `LOCAL_ADMIN` auth card without a verified external admin login in the preceding 15 minutes was strictly blocked with HTTP 409 Conflict (`code: "LOCKOUT_PREVENTED"`, `layer: "handshake_probe_15m"`), preventing catastrophic administrator lockout.
 3. **LDAPS / StartTLS Handshake & Nested Group RBAC Synchronization**:
-   - `test-draft` endpoint (`POST /api/v1/admin/auth-cards/test-draft`) failed closed on untrusted CA / invalid bind credentials (`ok: false, status: "FAILED:LDAPBINDERROR"`) and succeeded in 3ms with valid pinned CA PEM.
+   - `POST /api/v1/admin/auth-cards/test-handshake` and draft probe endpoints (`POST /api/v1/admin/auth-cards/{id}/draft-probe`) failed closed on untrusted CA / invalid bind credentials (`ok: false, status: "FAILED:LDAPBINDERROR"`) and succeeded in 3ms with valid pinned CA PEM.
    - Nested Active Directory group mapping correctly synchronized external group membership to the canonical `WORKSPACE_MEMBER` role.
 4. **Sliding-Window WebSudo Session Replay (HTTP 403 `AAL2_STALE` -> Step-Up -> HTTP 200)**:
    - Proved that an expired WebSudo session (`> 900s` idle) mid-edit in `AuthCardEditorDrawer` triggered HTTP 403 `AAL2_STALE`, prompted in-modal AAL2 step-up without destroying uncommitted form state, and replayed the card update successfully on first attempt (`HTTP 200 OK`).
@@ -38,7 +38,7 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 
 ### 2.1 Multi-Card Authentication & Administrative Safeguards
 - **Endpoints Verified:**
-  - `POST /api/v1/auth/login`
+  - `POST /api/v1/auth/local/login`
   - `POST /api/v1/auth/webauthn/register/options`
   - `POST /api/v1/auth/mfa/totp/setup`
   - `POST /api/v1/auth/mfa/totp/confirm`
@@ -46,7 +46,8 @@ The workout results, verified against an isolated local PostgreSQL instance and 
   - `POST /api/v1/auth/mfa/recovery/regenerate`
   - `POST /api/v1/admin/auth-cards`
   - `PATCH /api/v1/admin/auth-cards/{id}`
-  - `POST /api/v1/admin/auth-cards/test-draft`
+  - `POST /api/v1/admin/auth-cards/test-handshake`
+  - `POST /api/v1/admin/auth-cards/{id}/draft-probe`
 - **Security Invariants:**
   - Mandatory AAL2 elevation (`Depends(require_admin_aal2)`) on administrative endpoints.
   - Fail-closed break-glass lockout guard enforcing active external administrator presence before permitting deactivation of local admin login.
@@ -67,12 +68,12 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 69 tests passed in 31.41s across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, `test_oidc_flow.py`, `test_identity_linking_real_pg_e2e.py`, and `test_granular_rbac_api.py`.
+   - 100 tests passed in 32.81s across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, `test_oidc_flow.py`, `test_identity_linking_real_pg_e2e.py`, `test_granular_rbac_api.py`, `test_auth_cards_service_unit.py`, and `test_ldap_sync_unit.py`.
    - 0 failures, 0 errors, 0 warnings.
-   - Module coverage: `kanban/auth/ldap/client.py` 97%, `kanban/auth/cards/schemas.py` 97%, `kanban/auth/ldap/sync.py` 100%, `kanban/auth/ldap/group_sync.py` 100%.
+   - Module coverage: `kanban/auth/ldap/sync.py` 100%, `kanban/auth/cards/service.py` 98%, `kanban/auth/cards/handshake.py` 96%, `kanban/auth/cards/schemas.py` 100%, `kanban/auth/ldap/client.py` 97%.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 122 tests passed across `AuthStudioPage.test.tsx`, `AuthCardEditorDrawer.test.tsx`, and `RbacPolicyBuilder.test.tsx` in 8.70s.
+   - 122 tests passed across `AuthStudioPage.test.tsx`, `AuthCardEditorDrawer.test.tsx`, and `RbacPolicyBuilder.test.tsx` in 8.92s.
    - Branch coverage: **95.76%** across touched files (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%).
    - 0 `act(...)` stderr warnings.
 
@@ -81,7 +82,7 @@ The workout results, verified against an isolated local PostgreSQL instance and 
    - `mypy`: 0 issues in 680 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.34s.
+   - `vite build`: Succeeded in 1.30s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -94,7 +95,7 @@ The workout results, verified against an isolated local PostgreSQL instance and 
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 69 backend and 122 frontend tests.
+  - `unit-test-results.txt`: Documents 100 backend and 122 frontend tests.
   - `workout-report.md`: Complete live workout log with secret sanitization.
   - `workout-results.json`: Machine-readable execution results.
   - `screenshots/`: 11 zero-mock PNG captures across 5 viewports and live workflow states.
