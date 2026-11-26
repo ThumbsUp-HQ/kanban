@@ -1,3 +1,38 @@
+diff --git a/kanban/web/src/features/docs-center/DocMarkdownViewer.css b/kanban/web/src/features/docs-center/DocMarkdownViewer.css
+index e024fcd4..c214f141 100644
+--- a/kanban/web/src/features/docs-center/DocMarkdownViewer.css
++++ b/kanban/web/src/features/docs-center/DocMarkdownViewer.css
+@@ -184,6 +184,10 @@
+   color: var(--fg-secondary);
+ }
+ 
++.kb-doc-td:first-child code {
++  white-space: nowrap;
++}
++
+ .kb-doc-tr:hover {
+   background: var(--bg-hover);
+ }
+@@ -263,6 +267,10 @@
+     white-space: normal;
+     overflow-wrap: anywhere;
+   }
++
++  .kb-doc-td:first-child code {
++    white-space: nowrap;
++  }
+ }
+ 
+ @media (max-width: 640px) {
+@@ -317,4 +325,8 @@
+     white-space: normal;
+     overflow-wrap: anywhere;
+   }
++
++  .kb-doc-td:first-child code {
++    white-space: nowrap;
++  }
+ }
 diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
 index 2c1c0d89..3d8a4dba 100644
 --- a/kanban/web/src/features/docs-center/wikiManifest.ts

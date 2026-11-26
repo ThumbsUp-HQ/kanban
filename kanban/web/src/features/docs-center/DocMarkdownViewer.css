@@ -184,6 +184,10 @@
   color: var(--fg-secondary);
 }
 
+.kb-doc-td:first-child code {
+  white-space: nowrap;
+}
+
 .kb-doc-tr:hover {
   background: var(--bg-hover);
 }
@@ -263,6 +267,10 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
+
+  .kb-doc-td:first-child code {
+    white-space: nowrap;
+  }
 }
 
 @media (max-width: 640px) {
@@ -316,5 +324,9 @@
   .kb-doc-td code {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  .kb-doc-td:first-child code {
+    white-space: nowrap;
   }
 }
