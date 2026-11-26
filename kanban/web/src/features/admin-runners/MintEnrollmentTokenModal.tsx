@@ -144,12 +144,12 @@ function MintEnrollmentTokenContent({
 
           <div className="kb-form-group">
             <label htmlFor="token-ttl-select" className="kb-form-label">
-              Token Expiration (TTL)
+              Token Expiration (TTL) (Default: 15 minutes)
               <FieldHelpHint
                 title="Token Expiration (TTL)"
-                summary="Lifetime of the single-use enrollment token before expiry."
-                defaultValue="900 seconds (15 minutes)"
-                docHref="/docs/multi-provider-ai-engine-and-runners"
+                summary="Lifetime of the single-use enrollment token before expiry. Enforces 15-minute (900s) default and maximum lifetime, single-use burn-on-first-enrollment (burn-on-first-use) security, and provisions default read-only runner capability scopes until approved."
+                defaultValue="15 minutes (900 seconds - Max)"
+                docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
                 testId="mint-token-ttl-help"
               />
             </label>
@@ -164,6 +164,9 @@ function MintEnrollmentTokenContent({
               <option value={600}>10 minutes (600 seconds)</option>
               <option value={900}>15 minutes (900 seconds - Max)</option>
             </select>
+            <span className="kb-form-hint" data-testid="token-ttl-hint">
+              15-minute (900s) default and maximum lifetime with single-use burn-on-first-enrollment and default read-only runner capability scopes.
+            </span>
           </div>
 
           <div className="kb-modal-footer">
