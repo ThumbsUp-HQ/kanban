@@ -7,7 +7,8 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`  
 **Target Branch:** `docs/KAN-409-slice1-auth-docs`  
-**Target Commit:** `f54c855c`  
+**Target Commit:** `e843e2be`  
+**Wiki Commit:** `ed7f9ce`  
 
 ---
 
@@ -24,6 +25,8 @@ Key findings:
    - All 11 visual artifacts in `docs/workouts/slice-1-auth-rbac/screenshots/` verify unclipped cards, registered passkey rows, live probe success banners, organic WebSudo elevation dialogs over dirty drawers, and granular custom RBAC policies.
 2. **Docs Center Surfaces (Screenshots from KAN-409)**:
    - Chapters render embedded screenshots with high visual fidelity, zero broken links, and crisp Mermaid sequence diagrams without `<br/>` glitches.
+   - Narrative RBAC policy builder header displays intuitive sentence structure ("As a system admin I want Users to have access to"), `*create new*` in role selector, and indeterminate states reflecting multi-role partial coverage.
+   - 30 canonical permissions partitioned into Workspace Tier (8), Issue Tier (10), and Field Tier (12).
 3. **Responsive Reflow & Contrast**:
    - Zero horizontal overflow across all 5 responsive widths (`scrollWidth <= viewportWidth`).
    - Color contrast exceeds WCAG 2.2 AA (>4.5:1 light, >7.5:1 dark).
