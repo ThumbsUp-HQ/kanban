@@ -1,5 +1,5 @@
 diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
-index 7c6cf68..c46edd1 100644
+index 7c6cf68..769bb34 100644
 --- a/MCP-Tools-Reference.md
 +++ b/MCP-Tools-Reference.md
 @@ -2,30 +2,30 @@
@@ -63,17 +63,31 @@ index 7c6cf68..c46edd1 100644
  
      Note over Admin,MCP: Phase 1: Dry-Run Inspection
 -    Admin->>MCP: Call purge_invalid_links(confirm=false)
-+    Admin->>MCP: Call audit_and_purge_object_links(action="audit")
++    Admin->>MCP: Call audit_and_purge_object_links(action="run_audit")
      MCP->>DB: Audit dangling links & compute blast radius
      DB-->>MCP: 14 broken links identified
      MCP-->>Admin: Return dry-run summary + ephemeral confirmation_token (valid 300s)
  
      Note over Admin,MCP: Phase 2: Explicit Two-Stage Execution
 -    Admin->>MCP: Call purge_invalid_links(confirm=true, confirmation_token="tok_...")
-+    Admin->>MCP: Call audit_and_purge_object_links(action="purge", confirmation_token="tok_...")
++    Admin->>MCP: Call audit_and_purge_object_links(action="purge_audited", confirmation_token="tok_...")
      MCP->>MCP: Verify AAL2 session & token validity
      MCP->>DB: BEGIN TX & DELETE dangling links & record audit event
      DB-->>MCP: 14 rows removed
+@@ -341,11 +350,11 @@ sequenceDiagram
+ ### 11. `audit_and_purge_object_links`
+ - **Description:** Execute the Invalid Object Link Auditor to detect and remediate orphaned or corrupt graph relationships.
+ - **Required Parameters:**
+-  - `action` (string): `scan_dry_run`, `purge_invalid`.
++  - `action` (string): `run_audit`, `list_flagged`, `purge_audited`, `help`.
+ - **Optional Parameters:**
+   - `reason_filter` (string): Filter by violation class (`orphaned_target`, `cross_tenant_leak`, etc.).
+   - `reason` (string): Mandatory audit ledger explanation for purge actions.
+-- **CLI Example:** `kanban-cli-admin audit_and_purge_object_links --action="scan_dry_run"`
++- **CLI Example:** `kanban-cli-admin audit_and_purge_object_links --action="run_audit"`
+ 
+ ### 12. `destructive_lifecycle` (Two-Stage Confirmation Safety)
+ - **Description:** Administrative destruction tool for projects, workspaces, or entire datasets. Enforces a non-bypassable two-stage confirmation protocol.
 diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
 index 907f8ce..c3fabea 100644
 --- a/Studio-Configuration-Reference.md
