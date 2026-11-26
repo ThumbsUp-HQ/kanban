@@ -223,6 +223,19 @@ export function HookPipelineRow({
           {/* Hook Name & Command Summary */}
           <span className="hook-name">{hook.name}</span>
           {commandSummary && <span className="hook-command-summary">{commandSummary}</span>}
+          {Boolean(hook.inherited_from_template_id) && (
+            <span
+              className="hook-inherited-badge"
+              data-testid={`hook-inherited-badge-${hook.id}`}
+              title={
+                hook.inherited_from_scope === 'system'
+                  ? 'Inherited from System Default Template'
+                  : 'Inherited from Workspace Default Template'
+              }
+            >
+              Inherited from Default
+            </span>
+          )}
         </div>
 
         <div className="hook-pipeline-right">
