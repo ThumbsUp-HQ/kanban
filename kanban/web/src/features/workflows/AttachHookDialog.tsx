@@ -59,11 +59,18 @@ function AttachHookDialogInner({
     editingHook?.wasm_module_sha256 ?? wasmModules[0]?.sha256 ?? '',
   );
   const [selectedAgentSlug, setSelectedAgentSlug] = useState<string>(
-    editingHook?.agent_slug ?? agentDefinitions[0]?.slug ?? '',
+    editingHook?.agent_slug ?? (agentDefinitions[0]?.slug ?? ''),
   );
   const [allowedMutableFields, setAllowedMutableFields] = useState<string[]>(
     editingHook?.allowed_mutable_fields ?? [],
   );
+
+  const validSelectedSlug = agentDefinitions.some((a) => a.slug === selectedAgentSlug)
+    ? selectedAgentSlug
+    : '';
+  const effectiveAgentSlug =
+    validSelectedSlug || (agentDefinitions[0]?.slug ?? '');
+
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -85,7 +92,7 @@ function AttachHookDialogInner({
     setAllowedMutableFields([]);
   };
 
-  const selectedAgent = agentDefinitions.find((a) => a.slug === selectedAgentSlug);
+  const selectedAgent = agentDefinitions.find((a) => a.slug === effectiveAgentSlug);
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -120,7 +127,11 @@ function AttachHookDialogInner({
     if (hookKind === 'sync_validator' || hookKind === 'sync_mutator') {
       payload.wasm_module_sha256 = selectedWasmSha;
     } else {
-      payload.agent = selectedAgentSlug;
+      if (!effectiveAgentSlug) {
+        setError('Agent definition is required.');
+        return;
+      }
+      payload.agent = effectiveAgentSlug;
       if (selectedAgent?.timeout_ms) {
         payload.timeout_ms = selectedAgent.timeout_ms;
       }
@@ -147,7 +158,8 @@ function AttachHookDialogInner({
   const remoteAgents = agentDefinitions.filter((a) => a.harness_kind === 'remote_runner');
 
   const isSubmitDisabled =
-    isSubmitting || (hookKind === 'agent_interceptor' && agentDefinitions.length === 0);
+    isSubmitting ||
+    (hookKind === 'agent_interceptor' && (!effectiveAgentSlug || agentDefinitions.length === 0));
 
   return (
     <div className="workflow-modal-backdrop" role="presentation" onClick={onClose}>
@@ -295,6 +307,85 @@ function AttachHookDialogInner({
               </div>
             </div>
 
+            {/* Top-Level Agent Definition Selector (Promoted out of Advanced Accordion for agent_interceptor) */}
+            {hookKind === 'agent_interceptor' && (
+              agentDefinitions.length === 0 ? (
+                <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
+                  <strong>No Agent Definitions configured</strong>
+                  <p className="no-agents-warning-text">
+                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+                  </p>
+                  <Link
+                    to="/admin/agents"
+                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+                    data-testid="configure-agents-link"
+                  >
+                    Configure Agent Definitions &rarr;
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <div className="workflow-form-group">
+                    <label htmlFor="agent-def-select" className="workflow-form-label">
+                      Agent Definition
+                    </label>
+                    <select
+                      id="agent-def-select"
+                      className="workflow-form-control"
+                      value={effectiveAgentSlug}
+                      onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
+                      required
+                    >
+                      {cliAgents.length > 0 && (
+                        <optgroup key="cli" label="CLI Pipe Agents (agy, codex)">
+                          {cliAgents.map((a) => (
+                            <option key={a.id} value={a.slug}>
+                              {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {sdkAgents.length > 0 && (
+                        <optgroup key="sdk" label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+                          {sdkAgents.map((a) => (
+                            <option key={a.id} value={a.slug}>
+                              {a.display_name} ({a.model_id ?? a.provider_kind})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {remoteAgents.length > 0 && (
+                        <optgroup key="remote" label="Remote Runner Pools">
+                          {remoteAgents.map((a) => (
+                            <option key={a.id} value={a.slug}>
+                              {a.display_name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Agent read-only details summary */}
+                  {selectedAgent && (
+                    <div className="workflow-notice" data-testid="agent-details-summary">
+                      <strong>Agent Config Summary:</strong>
+                      <div>Harness: {selectedAgent.harness_kind}</div>
+                      {selectedAgent.cli_args.length > 0 && (
+                        <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
+                      )}
+                      {Boolean(selectedAgent.repo_access_mode) && (
+                        <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+                      )}
+                      {typeof selectedAgent.timeout_ms === 'number' && (
+                        <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            )}
+
             {/* Advanced Hook Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
             <AdvancedSection
               title="Advanced Hook Settings"
@@ -303,7 +394,6 @@ function AttachHookDialogInner({
               activeOverridesCount={
                 (failurePolicy === 'fail_closed' ? 1 : 0) +
                 ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
-                (hookKind === 'agent_interceptor' && selectedAgent?.timeout_ms && selectedAgent.timeout_ms !== 30000 ? 1 : 0) +
                 (allowedMutableFields.length > 0 ? 1 : 0)
               }
               defaultOpen={false}
@@ -353,84 +443,6 @@ function AttachHookDialogInner({
                     ))}
                   </select>
                 </div>
-              )}
-
-              {/* Conditional: Agent Transition Helper selector */}
-              {hookKind === 'agent_interceptor' && (
-                agentDefinitions.length === 0 ? (
-                  <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
-                    <strong>No Agent Definitions configured</strong>
-                    <p className="no-agents-warning-text">
-                      There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
-                    </p>
-                    <Link
-                      to="/admin/agents"
-                      className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
-                      data-testid="configure-agents-link"
-                    >
-                      Configure Agent Definitions &rarr;
-                    </Link>
-                  </div>
-                ) : (
-                  <>
-                    <div className="workflow-form-group">
-                      <label htmlFor="agent-def-select" className="workflow-form-label">
-                        Agent Definition
-                      </label>
-                      <select
-                        id="agent-def-select"
-                        className="workflow-form-control"
-                        value={selectedAgentSlug}
-                        onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
-                      >
-                        {cliAgents.length > 0 && (
-                          <optgroup key="cli" label="CLI Pipe Agents (agy, codex)">
-                            {cliAgents.map((a) => (
-                              <option key={a.id} value={a.slug}>
-                                {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {sdkAgents.length > 0 && (
-                          <optgroup key="sdk" label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
-                            {sdkAgents.map((a) => (
-                              <option key={a.id} value={a.slug}>
-                                {a.display_name} ({a.model_id ?? a.provider_kind})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {remoteAgents.length > 0 && (
-                          <optgroup key="remote" label="Remote Runner Pools">
-                            {remoteAgents.map((a) => (
-                              <option key={a.id} value={a.slug}>
-                                {a.display_name}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    </div>
-
-                    {/* Agent read-only details summary */}
-                    {selectedAgent && (
-                      <div className="workflow-notice" data-testid="agent-details-summary">
-                        <strong>Agent Config Summary:</strong>
-                        <div>Harness: {selectedAgent.harness_kind}</div>
-                        {selectedAgent.cli_args.length > 0 && (
-                          <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
-                        )}
-                        {Boolean(selectedAgent.repo_access_mode) && (
-                          <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
-                        )}
-                        {typeof selectedAgent.timeout_ms === 'number' && (
-                          <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )
               )}
 
               {/* Allowed Mutable Fields */}

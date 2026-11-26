@@ -291,6 +291,7 @@ export function WorkflowStudioPage({
             key={`${rule.from_state ?? 'any'}-${rule.to_state}`}
             rule={rule}
             projectKey={projectKey}
+            agents={agentsQuery.data ?? []}
             onReorder={handleReorder}
             onToggle={handleToggle}
             onEdit={(hook) => {

@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, type JSX } from 'react';
+import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
@@ -9,6 +9,7 @@ import { isAal2StepUpCancelled } from '../../api/client';
 import {
   createAgentDefinition,
   updateAgentDefinition,
+  fetchAgentDefinition,
   type AgentDefinitionResponse,
   type AgentDefinitionCreate,
   type AgentDefinitionPatch,
@@ -97,8 +98,33 @@ function AgentDefinitionEditorContent({
     agent ? agent.mcp_allowed_tools : ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'],
   );
   const [systemInstructions, setSystemInstructions] = useState<string>(
-    agent?.system_instructions_md ?? 'You are an autonomous Kanban specialist agent.',
+    agent ? agent.system_instructions_md : 'You are an autonomous Kanban specialist agent.',
   );
+  const hasUserEditedInstructions = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!agent?.id && !agent?.slug) {
+      return;
+    }
+    let isMounted = true;
+    fetchAgentDefinition(agent.id || agent.slug)
+      .then((detail) => {
+        if (
+          isMounted &&
+          !hasUserEditedInstructions.current &&
+          typeof detail.system_instructions_md === 'string'
+        ) {
+          setSystemInstructions(detail.system_instructions_md);
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully on network error or missing detail
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [agent?.id, agent?.slug]);
+
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -556,7 +582,10 @@ function AgentDefinitionEditorContent({
               rows={4}
               className="kb-form-textarea"
               value={systemInstructions}
-              onChange={(e) => { setSystemInstructions(e.target.value); }}
+              onChange={(e) => {
+                hasUserEditedInstructions.current = true;
+                setSystemInstructions(e.target.value);
+              }}
               placeholder="System prompt context and rules of engagement..."
               data-testid="agent-instructions-textarea"
             />

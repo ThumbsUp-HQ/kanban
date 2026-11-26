@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from database.models.agent_definition import AgentDefinition
 from database.models.projects import WorkflowState
+from database.models.repo_binding import ProjectRepoBinding
 from database.models.wasm_module import ApprovedWasmModule
 
 if TYPE_CHECKING:
@@ -77,6 +78,8 @@ async def _seed_agent_definition(
     admin_id: uuid.UUID,
     slug: str = "qa-gatekeeper",
     name: str = "QA Gatekeeper",
+    repo_access_mode: str = "none",
+    timeout_ms: int = 60000,
 ) -> uuid.UUID:
     """Seed an AgentDefinition and return its ID."""
     agent_id = uuid.uuid4()
@@ -89,6 +92,8 @@ async def _seed_agent_definition(
         harness_kind="in_app_sdk",
         provider_kind="openai",
         model_id="gpt-4o",
+        repo_access_mode=repo_access_mode,
+        timeout_ms=timeout_ms,
     )
     session.add(agent)
     await session.commit()
@@ -348,12 +353,20 @@ async def test_attach_and_list_workflow_hooks_success(
     assert a_data["hook_kind"] == "agent_interceptor"
     assert "< 180.0 s" in a_data["target_latency_budget"]
     assert a_data["agent_slug"] == "qa-gatekeeper"
+    assert a_data["timeout_ms"] == 60000
 
     # 4. List hooks - should return transition rules grouped by (from_state, to_state)
     list_resp = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
     assert list_resp.status_code == 200
     rules = list_resp.json()
     assert len(rules) == 3
+
+    agent_hooks = [
+        h for r in rules for h in r["hooks"] if h["hook_kind"] == "agent_interceptor"
+    ]
+    assert len(agent_hooks) == 1
+    assert agent_hooks[0]["timeout_ms"] == 60000
+    assert agent_hooks[0]["agent_slug"] == "qa-gatekeeper"
 
     # Check rule shapes
     for rule in rules:
@@ -362,6 +375,60 @@ async def test_attach_and_list_workflow_hooks_success(
         assert "active_hook_count" in rule
         assert "hooks" in rule
         assert isinstance(rule["hooks"], list)
+
+
+@pytest.mark.asyncio
+async def test_agent_interceptor_hook_with_repo_binding_and_timeout(
+    workflow_api_setup: dict[str, Any],
+    as_principal: Any,
+    api_env: ApiEnv,
+) -> None:
+    """Agent interceptor reflects custom timeout and repo binding.
+
+    Validates that repo_access_mode is not none and is properly reflected.
+    """
+    admin = workflow_api_setup["admin"]
+    client = as_principal(admin, aal_level=2)
+
+    await _seed_agent_definition(
+        api_env.seed,
+        api_env.workspace_id,
+        admin.id,
+        slug="ro-coder",
+        name="RO Coder",
+        repo_access_mode="ro_vfs_mount",
+        timeout_ms=180000,
+    )
+
+    repo_binding = ProjectRepoBinding(
+        id=uuid.uuid4(),
+        workspace_id=api_env.workspace_id,
+        project_id=workflow_api_setup["project_id"],
+        slug="frontend-core",
+        remote_url="https://github.com/example/frontend.git",
+        default_ref="main",
+        access_mode="bare_git_tools",
+        created_by=admin.id,
+    )
+    api_env.seed.add(repo_binding)
+    await api_env.seed.commit()
+
+    resp = await client.post(
+        "/api/v1/projects/WFAPI/workflow-hooks",
+        json={
+            "name": "RO Coder Gate",
+            "from_state": "In QA",
+            "to_state": "Done",
+            "hook_kind": "agent_interceptor",
+            "agent": "ro-coder",
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["hook_kind"] == "agent_interceptor"
+    assert data["timeout_ms"] == 180000
+    assert data["repo_access_mode"] == "ro_vfs_mount"
+    assert data["repo_binding_slug"] == "frontend-core"
 
 
 @pytest.mark.asyncio

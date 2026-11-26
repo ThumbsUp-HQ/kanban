@@ -333,6 +333,9 @@ class WorkflowHookService:
         cli_bin_id: str | None = None
         cli_args: list[str] | None = None
         mcp_summary: str | None = None
+        timeout_ms: int | None = None
+        repo_binding_slug: str | None = None
+        repo_access_mode: str | None = None
 
         if hook.agent_definition_id is not None:
             agent_stmt = select(AgentDefinition).where(
@@ -350,6 +353,18 @@ class WorkflowHookService:
                 if isinstance(agent_def.cli_args_json, list):
                     cli_args = [str(x) for x in agent_def.cli_args_json]
                 mcp_summary = f"{len(agent_def.mcp_allowed_tools)} tools"
+                timeout_ms = agent_def.timeout_ms
+                repo_access_mode = agent_def.repo_access_mode
+
+                if agent_def.repo_access_mode != "none":
+                    from database.models.repo_binding import ProjectRepoBinding  # noqa: PLC0415
+
+                    repo_stmt = (
+                        select(ProjectRepoBinding.slug)
+                        .where(ProjectRepoBinding.project_id == hook.project_id)
+                        .limit(1)
+                    )
+                    repo_binding_slug = (await session.execute(repo_stmt)).scalar_one_or_none()
 
         wasm_hex = hook.wasm_module_sha256.hex() if hook.wasm_module_sha256 else None
         manifest_hex = hook.manifest_sha256.hex()
@@ -376,6 +391,9 @@ class WorkflowHookService:
             cli_binary_allowlist_id=cli_bin_id,
             cli_args=cli_args,
             mcp_access_summary=mcp_summary,
+            timeout_ms=timeout_ms,
+            repo_binding_slug=repo_binding_slug,
+            repo_access_mode=repo_access_mode,
         )
 
     @classmethod

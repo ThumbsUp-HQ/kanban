@@ -8,6 +8,7 @@ import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
 import * as aiApi from '../../admin-ai/aiAdminApi';
 import type { ProviderConfigPublic } from '../../admin-ai/aiAdminApi';
 import * as agentApi from '../agentDefinitionsApi';
+import * as clientModule from '../../../api/client';
 
 describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01)', () => {
   const mockAiProviders: ProviderConfigPublic[] = [
@@ -289,6 +290,174 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       expect(screen.getByTestId('agent-editor-error').textContent).toContain(
         'Air-Gap Egress Denied: Autonomous agents cannot use cloud providers under active air-gap policy.',
       );
+    });
+  });
+
+  describe('System Instructions Preservation on Edit (KAN-431)', () => {
+    const existingAgentWithInstructions: agentApi.AgentDefinitionResponse = {
+      id: 'agent-custom-1',
+      workspace_id: 'ws-1',
+      principal_id: 'prin-1',
+      slug: 'forensic-auditor',
+      display_name: 'Forensic Security Auditor',
+      harness_kind: 'in_app_sdk',
+      provider_kind: 'gemini',
+      model_id: 'gemini-2.5-pro',
+      cli_binary_allowlist_id: null,
+      cli_args: [],
+      remote_runner_pool_slug: null,
+      repo_access_mode: 'bare_git_tools',
+      mcp_allowed_tools: ['search_tickets', 'read_ticket'],
+      system_instructions_md: '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
+      timeout_ms: 60000,
+    };
+
+    it('displays saved system instructions verbatim and preserves them when updating timeout', async () => {
+      const updateSpy = vi.spyOn(agentApi, 'updateAgentDefinition').mockResolvedValue(existingAgentWithInstructions);
+      const onSaved = vi.fn();
+      const onClose = vi.fn();
+
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={onClose}
+          agent={existingAgentWithInstructions}
+          onSaved={onSaved}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      // Verify custom instructions are displayed verbatim
+      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+      expect(textarea.value).toBe(
+        '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
+      );
+
+      // Change timeout to 180000
+      const timeoutInput = screen.getByTestId('agent-timeout-input');
+      fireEvent.change(timeoutInput, { target: { value: '180000' } });
+
+      // Save agent
+      fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'agent-custom-1',
+          expect.objectContaining({
+            timeout_ms: 180000,
+            system_instructions_md:
+              '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
+          }),
+        );
+        expect(onSaved).toHaveBeenCalled();
+        expect(onClose).toHaveBeenCalled();
+      });
+    });
+
+    it('hydrates saved system instructions via fetchAgentDefinition when prop instructions are empty', async () => {
+      const agentWithEmptyInstructions: agentApi.AgentDefinitionResponse = {
+        ...existingAgentWithInstructions,
+        id: 'agent-fetch-detail',
+        slug: 'fetch-detail-agent',
+        system_instructions_md: '',
+      };
+
+      const detailResponse: agentApi.AgentDefinitionResponse = {
+        ...agentWithEmptyInstructions,
+        system_instructions_md: 'Fetched from backend detail endpoint verbatim.',
+      };
+
+      vi.spyOn(agentApi, 'fetchAgentDefinition').mockResolvedValue(detailResponse);
+
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={agentWithEmptyInstructions}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      // Verify that fetchAgentDefinition hydrated instructions into textarea
+      await waitFor(() => {
+        const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+        expect(textarea.value).toBe('Fetched from backend detail endpoint verbatim.');
+      });
+    });
+
+    it('silently ignores Aal2StepUpCancelledError and handles non-Error rejection during submit', async () => {
+      vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValueOnce(
+        new clientModule.Aal2StepUpCancelledError(),
+      );
+
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'cancel-slug' } });
+      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Cancel Name' } });
+      fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('agent-editor-error')).toBeNull();
+      });
+
+      // Non-Error rejection fallback
+      vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValueOnce('raw string error');
+      fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Failed to save agent definition');
+      });
+    });
+
+    it('handles aiProviders fetch failure and fetchAgentDefinition rejection gracefully', async () => {
+      vi.spyOn(aiApi, 'fetchAiProviders').mockRejectedValueOnce(new Error('Fetch providers failed'));
+      vi.spyOn(agentApi, 'fetchAgentDefinition').mockRejectedValueOnce(new Error('Fetch detail failed'));
+
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={existingAgentWithInstructions}
+          onSaved={vi.fn()}
+          aiProviders={undefined}
+          workspaceSlug="qa-ws"
+        />,
+      );
+
+      // Verify drawer still renders despite fetch errors
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-slug-input')).toBeDefined();
+      });
+    });
+
+    it('exercises all isDirty field conditions on edit and create', () => {
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={existingAgentWithInstructions}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      // Mutate display_name
+      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Different Name' } });
+      // Mutate timeout
+      fireEvent.change(screen.getByTestId('agent-timeout-input'), { target: { value: '99000' } });
+      // Mutate instructions textarea (sets user edited ref)
+      const textarea = screen.getByTestId('agent-instructions-textarea');
+      fireEvent.change(textarea, { target: { value: 'New user prompt' } });
+      expect((textarea as HTMLTextAreaElement).value).toBe('New user prompt');
     });
   });
 });
