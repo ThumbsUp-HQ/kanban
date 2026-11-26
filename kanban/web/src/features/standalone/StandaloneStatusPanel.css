@@ -518,8 +518,13 @@
 /* Buttons */
 .standalone-panel__btn-group {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3, 12px);
+}
+
+.standalone-panel__btn-group .kb-studio-doc-link {
+  white-space: nowrap;
 }
 
 .standalone-panel__compose-mode-toggle {
@@ -669,5 +674,10 @@
   .standalone-panel__copy-btn {
     min-height: var(--tap-min, 44px);
     min-width: var(--tap-min, 44px);
+  }
+
+  .standalone-panel__btn-group {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
   }
 }

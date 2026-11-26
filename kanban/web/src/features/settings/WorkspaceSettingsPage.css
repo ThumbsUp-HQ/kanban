@@ -16,6 +16,17 @@
 
 /* Horizontal swipeable tabs for mobile viewports (KAN-344) */
 @media (max-width: 767px) {
+  .kb-settings-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3, 12px);
+  }
+
+  .kb-settings-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .kb-settings-tabs {
     display: flex;
     flex-wrap: nowrap;

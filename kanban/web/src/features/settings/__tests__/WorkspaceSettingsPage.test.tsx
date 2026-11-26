@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
@@ -15,6 +15,7 @@ import {
 } from '../WorkspaceSettingsPage';
 import * as clientModule from '../../../api/client';
 import * as sessionGuardModule from '../../auth/useSessionGuard';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 
 describe('WorkspaceSettingsPage (KANBA-202)', () => {
   let queryClient: QueryClient;
@@ -2986,5 +2987,83 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     const genLink = within(retCard).getByRole('button', { name: 'General tab' });
     fireEvent.click(genLink);
     expect(await screen.findByTestId('workspace-general-form')).toBeDefined();
+  });
+
+  describe('StudioDocLink Header Integration (KAN-446)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders workspace-settings-doc-link inside .kb-settings-header-actions in Light and Dark themes', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+        if (path.includes('/api/v1/auth/me')) {
+          return Promise.resolve({ is_workspace_admin: true, is_server_admin: true });
+        }
+        if (path.includes('/api/v1/workspaces/current') || path.includes('/api/v1/admin/workspace-settings')) {
+          return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+        }
+        return Promise.resolve([]);
+      });
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = renderComponent();
+
+        const docLink = await screen.findByTestId('workspace-settings-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/role-and-permission-matrix');
+        expect(docLink.getAttribute('aria-label')).toBe('Workspace Settings Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.kb-settings-header-actions');
+        expect(headerActions).not.toBeNull();
+        const header = docLink.closest('.kb-settings-header');
+        expect(header).not.toBeNull();
+
+        // Keyboard focus
+        docLink.focus();
+        expect(document.activeElement).toBe(docLink);
+
+        unmount();
+      }
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path) => {
+        if (path.includes('/api/v1/auth/me')) {
+          return Promise.resolve({ is_workspace_admin: true, is_server_admin: true });
+        }
+        if (path.includes('/api/v1/workspaces/current') || path.includes('/api/v1/admin/workspace-settings')) {
+          return Promise.resolve({ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace' });
+        }
+        return Promise.resolve([]);
+      });
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/workspaces/settings']}>
+              <ShellPanelsProvider>
+                <WorkspaceSettingsPage />
+              </ShellPanelsProvider>
+            </MemoryRouter>
+          </QueryClientProvider>,
+        );
+
+        const docLink = await screen.findByTestId('workspace-settings-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain('/docs/role-and-permission-matrix');
+      } finally {
+        unregister();
+      }
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
@@ -9,6 +9,7 @@ import * as adminAuthApi from './adminAuthApi';
 import type { AdminAuthCard } from './adminAuthApi';
 import { ApiProblem } from '../../api/problem';
 import { Aal2StepUpCancelledError } from '../../api/client';
+import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 
 describe('AuthStudioPage (KB-P3-36)', () => {
   const adminUser = {
@@ -2449,6 +2450,156 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       await waitFor(() => {
         expect(deleteSpy).toHaveBeenCalledWith('c-ext-only');
       });
+    });
+  });
+
+  describe('StudioDocLink Header Integration (KAN-446)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders auth-studio-doc-link inside .auth-studio-header-actions to the left of + Add auth card in cards tab', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        return {};
+      });
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(<AuthStudioPage />);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('auth-studio-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('auth-studio-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/multi-card-authentication-studio');
+        expect(docLink.getAttribute('aria-label')).toBe('Multi-Card Authentication Studio Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.auth-studio-header-actions');
+        expect(headerActions).not.toBeNull();
+        if (!headerActions) throw new Error('headerActions is null');
+
+        // Check placement: docLink is before the add card button
+        const addBtn = headerActions.querySelector('.auth-studio-add-btn');
+        expect(addBtn).not.toBeNull();
+        expect(addBtn?.textContent).toContain('+ Add auth card');
+        expect(headerActions.firstElementChild).toBe(docLink);
+
+        // Keyboard focus
+        docLink.focus();
+        expect(document.activeElement).toBe(docLink);
+
+        unmount();
+      }
+    });
+
+    it('renders auth-studio-doc-link to the left of + Add Local User in users tab', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).includes('/api/v1/admin/principals')) {
+          return [
+            {
+              id: 'u-1',
+              principal: 'local-admin',
+              handle: 'local-admin',
+              display_name: 'Local Admin',
+              principal_type: 'USER',
+              type: 'USER',
+              provider: 'LOCAL',
+              role: 'SERVER_ADMIN',
+              role_name: 'Server Admin',
+            },
+          ];
+        }
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-studio-doc-link')).toBeDefined();
+      });
+
+      // Switch to users tab
+      fireEvent.click(screen.getByRole('tab', { name: /users & permissions/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('+ Add Local User')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('auth-studio-doc-link');
+      const headerActions = docLink.closest('.auth-studio-header-actions');
+      expect(headerActions).not.toBeNull();
+
+      const addUserBtn = headerActions?.querySelector('.auth-studio-add-btn');
+      expect(addUserBtn?.textContent).toContain('+ Add Local User');
+      expect(headerActions?.firstElementChild).toBe(docLink);
+    });
+
+    it('renders auth-studio-doc-link in .auth-studio-header-actions when rbac tab is active without CTA button', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        if ((path as string).includes('/api/v1/admin/rbac/roles')) return [];
+        return {};
+      });
+
+      render(<AuthStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auth-studio-doc-link')).toBeDefined();
+      });
+
+      // Switch to roles tab
+      fireEvent.click(screen.getByRole('tab', { name: /roles & permissions/i }));
+
+      const docLink = screen.getByTestId('auth-studio-doc-link');
+      const headerActions = docLink.closest('.auth-studio-header-actions');
+      expect(headerActions).not.toBeNull();
+      expect(headerActions?.querySelector('.auth-studio-add-btn')).toBeNull();
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', async () => {
+      vi.spyOn(client, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if ((path as string) === '/api/v1/auth/me') return adminUser;
+        if ((path as string) === '/api/v1/admin/auth-cards') return { cards: mockCards };
+        return {};
+      });
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <AuthStudioPage />
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('auth-studio-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('auth-studio-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain('/docs/multi-card-authentication-studio');
+      } finally {
+        unregister();
+      }
     });
   });
 });

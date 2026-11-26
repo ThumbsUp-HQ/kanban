@@ -152,6 +152,12 @@ export function ComposeExportTab({
       </div>
 
       <div className="standalone-panel__btn-group">
+        <StudioDocLink
+          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
+          title="Compose Promotion Runbook"
+          testId="compose-export-doc-link"
+        />
+
         <button
           type="button"
           onClick={() => {
@@ -179,12 +185,6 @@ export function ComposeExportTab({
             {copiedEnv ? 'Copied!' : 'Copy .env.example'}
           </button>
         )}
-
-        <StudioDocLink
-          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
-          title="Compose Promotion Runbook"
-          testId="compose-export-doc-link"
-        />
       </div>
 
       {composeMode === 'multi' ? (

@@ -838,11 +838,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
           <h1 className="kb-settings-title">Workspace Settings</h1>
           <p className="kb-settings-subtitle">Configure organization policies, membership, and workspace integrations.</p>
         </div>
-        <StudioDocLink
-          href="/docs/role-and-permission-matrix"
-          title="Workspace Settings Documentation"
-          testId="workspace-settings-doc-link"
-        />
+        <div className="kb-settings-header-actions">
+          <StudioDocLink
+            href="/docs/role-and-permission-matrix"
+            title="Workspace Settings Documentation"
+            testId="workspace-settings-doc-link"
+          />
+        </div>
       </header>
 
       {errorMessage && (

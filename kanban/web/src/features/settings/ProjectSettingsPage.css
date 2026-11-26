@@ -13,6 +13,22 @@
   margin-bottom: 2rem;
   border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
   padding-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4, 16px);
+}
+
+.kb-settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.kb-settings-header-actions .kb-studio-doc-link {
+  white-space: nowrap;
 }
 
 .kb-settings-title {
