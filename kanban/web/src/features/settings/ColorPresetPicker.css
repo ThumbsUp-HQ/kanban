@@ -1,4 +1,4 @@
-/* Color Preset Picker Styles (KB-P3-AUDIT-23) */
+/* Color Preset Picker Styles (KB-P3-AUDIT-23, KAN-505) */
 
 .kb-color-picker-wrapper {
   display: inline-flex;
@@ -6,6 +6,14 @@
   gap: 6px;
   position: relative;
   flex-wrap: wrap;
+}
+
+.kb-input-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-secondary);
+  display: inline-flex;
+  align-items: center;
 }
 
 .kb-color-swatch-badge {
@@ -29,7 +37,7 @@
   font-size: 13px;
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-input);
   color: var(--fg-primary);
   min-width: 190px;
   max-width: 220px;
@@ -60,6 +68,18 @@
   border-radius: 4px;
   background-color: var(--bg-input);
   color: var(--fg-primary);
+}
+
+.kb-color-preset-select:focus,
+.kb-color-hex-input:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+}
+
+.kb-color-preset-select:disabled,
+.kb-color-hex-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .kb-colored-pill {

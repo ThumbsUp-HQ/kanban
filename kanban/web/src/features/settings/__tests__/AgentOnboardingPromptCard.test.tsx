@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentOnboardingPromptCard } from '../AgentOnboardingPromptCard';
 import * as personalSettingsApi from '../personalSettingsApi';
@@ -493,5 +495,84 @@ describe('AgentOnboardingPromptCard component', () => {
   it('renders and self-heals with fallback QueryClientProvider when mounted outside provider', () => {
     render(<AgentOnboardingPromptCard />);
     expect(screen.getByTestId('agent-onboarding-prompt-card')).toBeDefined();
+  });
+
+  describe('WCAG AA contrast & button styling (KAN-521)', () => {
+    it('renders and copies cleanly in Light theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'light');
+      try {
+        renderCard();
+        const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
+        expect(copyBtn).toBeDefined();
+        expect(copyBtn.className).toContain('kb-agent-onboarding-btn-primary');
+        expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
+
+        fireEvent.click(copyBtn);
+        expect(clipboardUtil.copyToClipboard).toHaveBeenCalled();
+        await waitFor(() => {
+          expect(copyBtn.textContent).toContain('Copied Prompt!');
+        });
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('renders and copies cleanly in Dark theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        renderCard();
+        const copyBtn = screen.getByTestId('copy-agent-onboarding-prompt-btn');
+        expect(copyBtn).toBeDefined();
+        expect(copyBtn.className).toContain('kb-agent-onboarding-btn-primary');
+        expect(copyBtn.textContent).toContain('Copy Agent Onboarding Prompt');
+
+        fireEvent.click(copyBtn);
+        expect(clipboardUtil.copyToClipboard).toHaveBeenCalled();
+        await waitFor(() => {
+          expect(copyBtn.textContent).toContain('Copied Prompt!');
+        });
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('asserts AgentOnboardingPromptCard.css enforces WCAG AA contrast tokens without low-contrast dark overrides', () => {
+      const cssPath = path.resolve(__dirname, '../AgentOnboardingPromptCard.css');
+      expect(fs.existsSync(cssPath)).toBe(true);
+      const css = fs.readFileSync(cssPath, 'utf8');
+
+      // Primary button uses accent tokens
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary\s*\{[^}]*background:\s*var\(--accent-primary/);
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary\s*\{[^}]*color:\s*var\(--accent-primary-fg/);
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary\s*\{[^}]*border:\s*1px solid var\(--accent-primary/);
+
+      // Primary button hover uses brand-primary-hover without opacity: 0.9 reduction
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--brand-primary-hover/);
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary:hover:not\(:disabled\)\s*\{[^}]*border-color:\s*var\(--brand-primary-hover/);
+      expect(css).not.toMatch(/\.kb-agent-onboarding-btn-primary:hover:not\(:disabled\)\s*\{[^}]*opacity:/);
+
+      // Focus-visible outline
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-primary:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring/);
+      expect(css).toMatch(/\.kb-agent-onboarding-btn-secondary:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring/);
+
+      // Dark theme rules use var(--badge-fg) for high contrast (>= 4.5:1)
+      expect(css).toMatch(/\[data-theme="dark"\]\s+\.kb-agent-onboarding-btn-secondary[^{]*\{[^}]*color:\s*var\(--badge-fg/);
+      expect(css).toMatch(/\[data-theme="dark"\]\s+\.kb-agent-onboarding-btn-secondary[^{]*\{[^}]*background:\s*var\(--bg-surface-raised/);
+      expect(css).toMatch(/\[data-theme="dark"\]\s+\.kb-agent-onboarding-btn-secondary[^{]*\{[^}]*border:\s*1px solid var\(--border-subtle/);
+
+      // No low-contrast dark mode text overrides like rgb(37, 99, 235) on dark background
+      expect(css).not.toMatch(/\[data-theme="dark"\][^{]*\{[^}]*color:\s*(?:rgb\(37,\s*99,\s*235\)|#2563eb)/);
+
+      // Success alert uses high-contrast text: var(--ok-fg, #047857) in light, var(--ok-fg, #34d399) in dark
+      expect(css).toMatch(/\.kb-agent-onboarding-alert-success\s*\{[^}]*color:\s*var\(--ok-fg,\s*#047857\)/);
+      expect(css).toMatch(/\[data-theme="dark"\]\s+\.kb-agent-onboarding-alert-success\s*\{[^}]*color:\s*var\(--ok-fg/);
+
+      // Foreign .kb-mcp-copy-prompt-btn rule should not exist in AgentOnboardingPromptCard.css (owned by McpAccessStudio.css)
+      expect(css).not.toContain('.kb-mcp-copy-prompt-btn');
+
+      // No forbidden unicode em-dash or en-dash
+      expect(css).not.toContain('\u2014');
+      expect(css).not.toContain('\u2013');
+    });
   });
 });

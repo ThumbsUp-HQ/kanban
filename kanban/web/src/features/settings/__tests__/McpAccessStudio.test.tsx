@@ -2741,4 +2741,95 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       expect(darkSubnavContrast).toBeGreaterThanOrEqual(4.5);
     });
   });
+
+  describe('Copy Agent Skill Prompt Contrast & Responsive Callout (KAN-521)', () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
+      vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+        if (path === '/api/v1/projects') {
+          return Promise.resolve({
+            items: [{ id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' }],
+          });
+        }
+        return Promise.resolve({
+          is_server_admin: true,
+          is_workspace_admin: true,
+        });
+      });
+    });
+
+    it('renders Copy Agent Skill Prompt button with .kb-mcp-copy-prompt-btn and copies cleanly in Light theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'light');
+      try {
+        render(
+          <MemoryRouter initialEntries={['/settings/mcp']}>
+            <McpAccessStudio tier="personal" />
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('mcp-copy-llms-prompt-btn')).not.toBeNull();
+        });
+
+        const copyBtn = screen.getByTestId('mcp-copy-llms-prompt-btn');
+        expect(copyBtn.classList.contains('kb-mcp-copy-prompt-btn')).toBe(true);
+        expect(copyBtn.textContent).toContain('Copy Agent Skill Prompt');
+
+        fireEvent.click(copyBtn);
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('renders and copies cleanly in Dark theme', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        render(
+          <MemoryRouter initialEntries={['/settings/mcp']}>
+            <McpAccessStudio tier="personal" />
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('mcp-copy-llms-prompt-btn')).not.toBeNull();
+        });
+
+        const copyBtn = screen.getByTestId('mcp-copy-llms-prompt-btn');
+        expect(copyBtn.classList.contains('kb-mcp-copy-prompt-btn')).toBe(true);
+        expect(copyBtn.textContent).toContain('Copy Agent Skill Prompt');
+
+        fireEvent.click(copyBtn);
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('asserts McpAccessStudio.css enforces WCAG AA tokens on .kb-mcp-copy-prompt-btn and responsive callout', () => {
+      const cssPath = path.resolve(__dirname, '../McpAccessStudio.css');
+      expect(fs.existsSync(cssPath)).toBe(true);
+      const css = fs.readFileSync(cssPath, 'utf8');
+
+      // .kb-mcp-copy-prompt-btn binds var(--badge-fg) and var(--bg-surface-raised)
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn\s*\{[^}]*color:\s*var\(--badge-fg/);
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn\s*\{[^}]*background:\s*var\(--bg-surface-raised/);
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn\s*\{[^}]*border:\s*1px solid var\(--border-subtle/);
+
+      // Hover uses var(--bg-hover) and var(--badge-fg)
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--bg-hover/);
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn:hover:not\(:disabled\)\s*\{[^}]*color:\s*var\(--badge-fg/);
+
+      // Focus ring
+      expect(css).toMatch(/\.kb-mcp-copy-prompt-btn:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring/);
+
+      // Mobile callout wrapping at 640px
+      expect(css).toMatch(/@media\s*\(max-width:\s*640px\)\s*\{[^}]*\.kb-mcp-llms-callout\s*\{[^}]*flex-direction:\s*column;/);
+
+      // No forbidden unicode dashes
+      expect(css).not.toContain('\u2014');
+      expect(css).not.toContain('\u2013');
+    });
+  });
 });
