@@ -8,11 +8,14 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .role-label-picker-header {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -23,6 +26,7 @@
 .role-label-picker-label {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -33,6 +37,7 @@
 .role-label-picker-label-text {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
 }
 

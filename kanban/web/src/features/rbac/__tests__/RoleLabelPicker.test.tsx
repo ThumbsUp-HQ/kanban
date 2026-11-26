@@ -135,7 +135,7 @@ describe('RoleLabelPicker Component (KAN-83, KAN-502)', () => {
       return Promise.resolve([] as never);
     });
 
-    const { rerender } = render(
+    const { container, rerender } = render(
       <RoleLabelPicker
         principalId="user-1"
         availableRoles={MOCK_AVAILABLE}
@@ -145,6 +145,7 @@ describe('RoleLabelPicker Component (KAN-83, KAN-502)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('add-role-label-select')).toBeDefined();
+      expect(container.querySelector('label[for]')).toBeDefined();
     });
 
     // Error branch on POST
@@ -165,11 +166,13 @@ describe('RoleLabelPicker Component (KAN-83, KAN-502)', () => {
       expect(onRolesChange).toHaveBeenCalledWith(['role-1', 'role-2', 'role-3']);
     });
 
-    // Disabled state hides remove buttons and add select
+    // Disabled state hides remove buttons and add select, rendering span instead of dangling label
     rerender(
       <RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} disabled={true} />,
     );
     expect(screen.queryByTestId('add-role-label-select')).toBeNull();
+    expect(container.querySelector('label')).toBeNull();
+    expect(container.querySelector('span.role-label-picker-label')).toBeDefined();
   });
 
   it('handles initial load error, empty principalId, and fallback error messages gracefully', async () => {

@@ -170,21 +170,36 @@ export function RoleLabelPicker({
 
   const assignedRoleIds = new Set(labelsList.map((l) => l.role_id));
   const unassignedRoles = rolesList.filter((r) => Boolean(r.id) && !assignedRoleIds.has(r.id));
+  const hasSelect = !disabled && unassignedRoles.length > 0;
 
   return (
     <div className="role-label-picker-container" data-testid="role-label-picker-container">
       <div className="role-label-picker-header">
-        <label htmlFor={selectId} className="role-label-picker-label">
-          <span className="role-label-picker-label-text">
-            {label}
-            <span
-              className="role-label-default-indicator"
-              data-testid="role-label-default-indicator"
-            >
-              (Default: {defaultValue})
+        {hasSelect ? (
+          <label htmlFor={selectId} className="role-label-picker-label">
+            <span className="role-label-picker-label-text">
+              {label}
+              <span
+                className="role-label-default-indicator"
+                data-testid="role-label-default-indicator"
+              >
+                (Default: {defaultValue})
+              </span>
+            </span>
+          </label>
+        ) : (
+          <span className="role-label-picker-label">
+            <span className="role-label-picker-label-text">
+              {label}
+              <span
+                className="role-label-default-indicator"
+                data-testid="role-label-default-indicator"
+              >
+                (Default: {defaultValue})
+              </span>
             </span>
           </span>
-        </label>
+        )}
         {showHelpHint && (
           <FieldHelpHint
             testId="role-label-help"
@@ -240,12 +255,11 @@ export function RoleLabelPicker({
           </span>
         ))}
 
-        {!disabled && unassignedRoles.length > 0 && (
+        {hasSelect && (
           <select
             id={selectId}
             className="role-label-select"
             data-testid="add-role-label-select"
-            aria-label="Add role"
             aria-describedby={`role-label-hint-${sanitizedId}`}
             onChange={(e) => void handleAddRole(e)}
             value=""
