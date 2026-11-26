@@ -87,6 +87,21 @@ async function main() {
       page.setDefaultTimeout(5000);
       page.setDefaultNavigationTimeout(10000);
 
+      async function applyTheme(theme) {
+        await page.evaluate((th) => {
+          try {
+            localStorage.setItem('kb-theme', th);
+            localStorage.setItem('kb.theme', th);
+            document.documentElement.setAttribute('data-theme', th);
+            if (th === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch (_) {}
+        }, theme);
+      }
+
       async function safeNavigate(targetUrl, expectedSelector) {
         try {
           await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 8000 });
@@ -96,7 +111,8 @@ async function main() {
         } catch (e) {
           console.warn(`safeNavigate to ${targetUrl} fallback:`, e.message);
         }
-        await page.waitForTimeout(150);
+        await applyTheme(vp.colorScheme);
+        await page.waitForTimeout(200);
       }
 
       // ==========================================
@@ -104,18 +120,6 @@ async function main() {
       // ==========================================
       console.log('Navigating to /workspaces/settings...');
       await safeNavigate(`${BASE_URL}/workspaces/settings`, '[data-testid="idle-preset-30m"]');
-
-      await page.evaluate((theme) => {
-        try {
-          localStorage.setItem('kb-theme', theme);
-          document.documentElement.setAttribute('data-theme', theme);
-          if (theme === 'dark') {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        } catch (_) {}
-      }, vp.colorScheme);
 
       const idlePill = page.locator('[data-testid="idle-preset-30m"]');
       if (await idlePill.isVisible()) {
@@ -181,8 +185,13 @@ async function main() {
 
       const tzInput = page.locator('[data-testid="timezone-filter-input"]');
       if (await tzInput.isVisible()) {
-        await tzInput.fill('New York');
+        await tzInput.fill('New_York');
         await page.waitForTimeout(150);
+      }
+      const autoBtn = page.locator('[data-testid="timezone-auto-detect-btn"]');
+      if (await autoBtn.isVisible()) {
+        await autoBtn.click();
+        await page.waitForTimeout(100);
       }
       await saveScreenshot(page, `08-personal-settings-${vp.name}.png`);
 
@@ -194,23 +203,41 @@ async function main() {
       await saveScreenshot(page, `10-custom-fields-studio-${vp.name}.png`);
 
       if (vp.name === 'desktop-1440x900-light') {
+        // 13: EscalationApprovalPanel dual-control unclipped
         const invoiceRow = page.locator('[data-testid="field-item-invoice-total"], li:has-text("invoice-total"), li:has-text("Invoice Total")');
         if (await invoiceRow.first().isVisible()) {
           await invoiceRow.first().click();
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(250);
+          const approvalPanel = page.locator('[data-testid="escalation-approval-panel"]');
+          if (await approvalPanel.isVisible()) {
+            await approvalPanel.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(200);
+          }
           await saveScreenshot(page, `13-custom-fields-escalation-dual-control-${vp.name}.png`);
         }
 
-        const newCfBtn = page.locator('[data-testid="new-custom-field-btn"], button:has-text("+ New Field"), button:has-text("New Custom Field"), button:has-text("Create")');
+        // 11: Tier A Editor (click create new field)
+        const newCfBtn = page.locator('[data-testid="create-new-field-btn"], [data-testid="new-custom-field-btn"], button:has-text("+ New Field")');
         if (await newCfBtn.first().isVisible()) {
           await newCfBtn.first().click();
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(250);
+          const basicTab = page.locator('[data-testid="custom-fields-basic-tab"]');
+          if (await basicTab.isVisible()) {
+            await basicTab.click();
+            await page.waitForTimeout(150);
+          }
           await saveScreenshot(page, `11-custom-fields-editor-tier-a-${vp.name}.png`);
 
+          // 12: Structured Format options
           const formatSelect = page.locator('select[name="output_format"], [data-testid="output-format-select"]');
           if (await formatSelect.isVisible()) {
             await formatSelect.selectOption('number');
-            await page.waitForTimeout(150);
+            await page.waitForTimeout(200);
+            const numSection = page.locator('[data-testid="structured-meta-number"]');
+            if (await numSection.isVisible()) {
+              await numSection.scrollIntoViewIfNeeded();
+              await page.waitForTimeout(150);
+            }
             await saveScreenshot(page, `12-custom-fields-structured-format-${vp.name}.png`);
           }
         }
@@ -240,7 +267,21 @@ async function main() {
         const dryRunBtn = page.locator('button:has-text("Dry-Run Against Sample Ticket"), button[aria-label*="Dry-run against sample ticket"], [data-testid="launch-dry-run-btn"]');
         if (await dryRunBtn.first().isVisible()) {
           await dryRunBtn.first().click();
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(300);
+
+          const issueKeyInput = page.locator('#dry-run-issue-key');
+          if (await issueKeyInput.isVisible()) {
+            await issueKeyInput.fill('KAN-1');
+            await page.waitForTimeout(100);
+          }
+
+          const runDryRunSubmit = page.locator('button[type="submit"]:has-text("Run Dry-Run"), button:has-text("▶ Run Dry-Run")');
+          if (await runDryRunSubmit.first().isVisible()) {
+            await runDryRunSubmit.first().click();
+            await page.waitForTimeout(600);
+            await page.locator('[data-testid="dry-run-results"]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+          }
+
           await saveScreenshot(page, `17-workflow-dry-run-drawer-${vp.name}.png`);
 
           const closeDrawerBtn = page.locator('button[aria-label="Close Dry-Run Drawer"], button:has-text("✕ Close"), [data-testid="close-drawer-btn"]');

@@ -419,3 +419,106 @@ async def test_custom_field_execution_edge_cases(
     resp_esc = await client.post(f"/api/v1/issues/{issue_key}/custom-fields/{escalated_id}/execute")
     assert resp_esc.status_code == 409
     assert resp_esc.json()["code"] == "APPROVAL_REVOKED"
+
+
+async def test_custom_field_test_execute_api_endpoint(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """Test-execute custom field draft via POST /projects/{project}/custom-fields/test-execute."""
+    admin = await make_user("test_exec_admin", workspace_role="WORKSPACE_ADMIN")
+    await make_project("TEX", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = _as_admin_aal2(api_env, admin)
+
+    # Create test issue
+    resp_iss = await client.post(
+        "/api/v1/projects/TEX/issues",
+        json={
+            "summary": "Test Execute Issue",
+            "description_markdown": "Evaluating draft custom fields",
+        },
+    )
+    assert resp_iss.status_code == 201
+    issue_key = resp_iss.json()["key"]
+
+    # 1. Valid Tier A script evaluation
+    resp_test = await client.post(
+        "/api/v1/projects/TEX/custom-fields/test-execute",
+        json={
+            "issue_key": issue_key,
+            "tier": "wasm",
+            "output_format": "number",
+            "output_format_metadata": {
+                "format": "number",
+                "maximum_fraction_digits": 2,
+                "unit_suffix": "$",
+            },
+            "script_source": "return 42.50;",
+            "target_scope": "PROJECT",
+            "credential_mode": "INVOKING_USER",
+        },
+    )
+    assert resp_test.status_code == 200
+    data = resp_test.json()
+    assert data["status"] == "SUCCESS"
+    assert data["value"] == 42.50
+    assert data["output_format"] == "number"
+    assert data["latency_ms"] >= 0
+
+    # 2. Non-existent issue key -> 404
+    resp_no_iss = await client.post(
+        "/api/v1/projects/TEX/custom-fields/test-execute",
+        json={
+            "issue_key": "TEX-99999",
+            "tier": "wasm",
+            "output_format": "text",
+            "script_source": "return 'hello';",
+        },
+    )
+    assert resp_no_iss.status_code == 404
+
+    # 3. Non-existent project -> 404
+    resp_no_proj = await client.post(
+        "/api/v1/projects/NONEXIST/custom-fields/test-execute",
+        json={
+            "issue_key": issue_key,
+            "tier": "wasm",
+            "output_format": "text",
+            "script_source": "return 'hello';",
+        },
+    )
+    assert resp_no_proj.status_code == 404
+
+    # 4. nsjail tier check
+    resp_nsjail = await client.post(
+        "/api/v1/projects/TEX/custom-fields/test-execute",
+        json={
+            "issue_key": issue_key,
+            "tier": "nsjail",
+            "output_format": "text",
+            "script_source": "print('hello')",
+        },
+    )
+    assert resp_nsjail.status_code in (200, 422, 503)
+
+    # 5. Rate limit loop on test-execute
+    limited_resp = None
+    for _ in range(15):
+        rl = await client.post(
+            "/api/v1/projects/TEX/custom-fields/test-execute",
+            json={
+                "issue_key": issue_key,
+                "tier": "wasm",
+                "output_format": "number",
+                "script_source": "return 1;",
+            },
+        )
+        if rl.status_code == 429:
+            limited_resp = rl
+            break
+    assert limited_resp is not None
+    assert limited_resp.status_code == 429
+
+
+

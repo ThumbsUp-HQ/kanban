@@ -458,3 +458,43 @@ def test_schema_validators_and_get_kek() -> None:
     req.app.state.key_material.master_kek = b"m" * 32
     kek = _get_kek(req)
     assert kek is not None
+
+
+async def test_delete_repo_binding_cleans_up_existing_disk_mirror(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+    fake_mirror_manager: MirrorManager,
+) -> None:
+    """When mirror directory exists on disk, DELETE cleanly prunes it."""
+    admin = await make_user("del_admin", workspace_role="WORKSPACE_ADMIN")
+    project_id = await make_project("DELDIR", created_by=admin)
+    client = as_principal(admin, aal_level=2)
+
+    app = api_env.client._transport.app  # type: ignore[attr-defined] # noqa: SLF001
+    app.state.mirror_manager = fake_mirror_manager
+    app.state.git_dns_resolver = lambda _h: ["140.82.121.3"]
+
+    r = await client.post(
+        f"/api/v1/projects/{project_id}/repo-bindings",
+        json={
+            "slug": "disk-delete-test",
+            "remote_url": "https://github.com/ThumbsUp-HQ/kanban.git",
+            "access_mode": "bare_git_tools",
+        },
+    )
+    assert r.status_code == 201
+    binding_id = uuid.UUID(r.json()["id"])
+
+    # Simulate existing mirror on disk
+    mirror_path = fake_mirror_manager.base_dir / str(admin.workspace_id) / f"{binding_id}.git"
+    mirror_path.mkdir(parents=True, exist_ok=True)
+    (mirror_path / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    assert mirror_path.exists()
+
+    # Delete binding
+    r_del = await client.delete(f"/api/v1/repo-bindings/{binding_id}")
+    assert r_del.status_code == 204
+    assert not mirror_path.exists()
+

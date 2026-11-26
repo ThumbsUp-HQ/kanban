@@ -5,19 +5,19 @@ rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 105 items
+collected 116 items
 
-kanban/tests/api/test_workspace_settings.py .............                [ 12%]
-kanban/tests/api/test_project_config.py ..................               [ 29%]
-kanban/tests/api/test_admin_trash_api.py ......                          [ 35%]
-kanban/tests/api/test_user_personal_settings.py ..........               [ 44%]
-kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 51%]
-kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 59%]
-kanban/tests/workflows/test_workflow_hooks_api.py ................       [ 74%]
-kanban/tests/workflows/test_dry_run.py .......                           [ 80%]
-kanban/tests/api/test_destructive_lifecycle.py ......                    [ 86%]
-kanban/tests/custom_fields/test_execution_api.py ...                     [ 89%]
-kanban/tests/repos/test_repo_bindings_api.py ...........                 [100%]
+kanban/tests/api/test_workspace_settings.py ..............               [ 12%]
+kanban/tests/api/test_project_config.py ..................               [ 27%]
+kanban/tests/api/test_admin_trash_api.py .......                         [ 33%]
+kanban/tests/api/test_user_personal_settings.py ...........              [ 43%]
+kanban/tests/api/test_agent_onboarding_preferences.py ............       [ 53%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 59%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 66%]
+kanban/tests/custom_fields/test_execution_api.py ....                    [ 69%]
+kanban/tests/workflows/test_workflow_hooks_api.py ................       [ 83%]
+kanban/tests/workflows/test_dry_run.py .......                           [ 89%]
+kanban/tests/repos/test_repo_bindings_api.py ............                [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
@@ -25,87 +25,89 @@ _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 Name                                        Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------------------------
 kanban/api/v1/admin/destructive.py            133      4     26      4    95%   284, 330, 333, 335
-kanban/api/v1/admin/workspace_settings.py     187     12     68     13    90%   238, 244->277, 260, 301->308, 304->308, 317->334, 366->369, 390-391, 397-398, 404-405, 411-412, 418-419, 421->488
+kanban/api/v1/admin/workspace_settings.py     187      2     68      8    96%   238, 244->277, 260, 301->308, 304->308, 317->334, 366->369, 421->488
 kanban/api/v1/custom_field_approvals.py        24      0      0      0   100%
-kanban/api/v1/custom_field_execution.py       104     23     22      3    71%   73->76, 111->127, 161->164, 240-290
+kanban/api/v1/custom_field_execution.py       104      1     22      5    95%   73->76, 111->127, 161->164, 244->247, 258
 kanban/api/v1/custom_fields.py                 30      0      0      0   100%
 kanban/api/v1/project_config.py                74      0      0      0   100%
-kanban/api/v1/repo_bindings.py                184      7     38      7    94%   154, 294, 353, 365, 421, 439, 442
-kanban/api/v1/user_settings.py                408    105    118     23    71%   136-137, 162-163, 190-191, 194-195, 201-202, 208->225, 222-223, 236->238, 254-257, 263-264, 274-275, 290-316, 370-371, 401->413, 403->413, 404->413, 406, 408->404, 429, 464, 471, 480-483, 512-513, 555-556, 588-589, 609->612, 663-664, 758-766, 791-792, 809-832, 927-950, 962-1001, 1024-1076
+kanban/api/v1/repo_bindings.py                184      6     38      6    95%   154, 294, 353, 365, 421, 439
+kanban/api/v1/user_settings.py                408     15    118     11    95%   136-137, 190-191, 194-195, 222-223, 236->238, 254-257, 294->318, 297->318, 314->318, 370-371, 403->413, 404->413, 406, 408->404, 609->612
 kanban/api/v1/workflow_hooks.py                52      0      0      0   100%
 ---------------------------------------------------------------------------------------
-TOTAL                                        1196    151    272     50    84%
-======================= 105 passed in 129.54s (0:02:09) ========================
+TOTAL                                        1196     28    272     34    96%
+======================= 116 passed in 156.95s (0:02:36) ========================
+
 
 === Frontend Vitest Results ===
-Start at 20:01:36
-   Duration 16.27s
 
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 64/71
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/kanban/web
+      Coverage enabled with v8
 
- Test Files 10 passed (11)
-      Tests 303 passed (310)
-   Start at 20:01:36
-   Duration 16.47s
-
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 65/71
-
- Test Files 10 passed (11)
-      Tests 304 passed (310)
-   Start at 20:01:36
-   Duration 16.87s
-
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 66/71
-
- Test Files 10 passed (11)
-      Tests 305 passed (310)
-   Start at 20:01:36
-   Duration 17.07s
-
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 67/71
-
- Test Files 10 passed (11)
-      Tests 306 passed (310)
-   Start at 20:01:36
-   Duration 17.17s
-
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 69/71
-
- Test Files 10 passed (11)
-      Tests 308 passed (310)
-   Start at 20:01:36
-   Duration 17.27s
-
- ❯ src/features/settings/__tests__/PersonalSettingsPage.test.tsx 70/71
-
- Test Files 10 passed (11)
-      Tests 309 passed (310)
-   Start at 20:01:36
-   Duration 17.47s
- ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (71 tests) 15208ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 83ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 913ms
+   ✓ DryRunDrawer (KB-P5-24) (6)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 450ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 1095ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1474ms
+   ✓ GitRepoBindingsSection (18)
+     ✓ opens modal, validates slug and URL, and submits successfully 473ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (13 tests) 2486ms
+   ✓ AttachHookDialog (KB-P5-24) (13)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 820ms
+     ✓ validates required fields and prevents from_state === to_state 328ms
+     ✓ successfully creates an agent_interceptor hook with selected mutable fields 341ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (14 tests) 1818ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (14)
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 415ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (42 tests) 4879ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (42)
+     ✓ renders workspace settings page and updates workspace name and slug 850ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 326ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (47 tests) 4417ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 6314ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 546ms
+     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 304ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 537ms
+     ✓ covers fallback error messages when error object has no message property 351ms
+     ✓ supports inline row edit for workflow states and labels (KAN-29 Problem 1) 305ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 422ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 5716ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ renders different hook kinds and failure policies 389ms
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2112ms
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 755ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 533ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (71 tests) 16208ms
    ✓ PersonalSettingsPage (71)
-     ✓ renders personal settings sections with loaded profile data 519ms
-     ✓ validates password length and matching confirmation 347ms
-     ✓ regenerates recovery codes and displays modal 2375ms
-     ✓ toggles password visibility and handles successful password update 566ms
-     ✓ cancels passkey rename modal when clicking cancel 608ms
-     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 426ms
-     ✓ covers show/hide password toggle and TOTP setup modal cancel 612ms
-     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 424ms
-     ✓ handles Test Key cancellation and error conditions 376ms
+     ✓ renders personal settings sections with loaded profile data 507ms
+     ✓ updates display name and timezone 433ms
+     ✓ supports timezone search filter, auto-detect button, and helper copy for passkeys vs security keys 304ms
+     ✓ validates password length and matching confirmation 304ms
+     ✓ renames passkey and displays updated list 339ms
+     ✓ regenerates recovery codes and displays modal 2457ms
+     ✓ handles valid avatar upload and avatar removal 302ms
+     ✓ toggles password visibility and handles successful password update 608ms
+     ✓ cancels passkey rename modal when clicking cancel 719ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 418ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 622ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 317ms
+     ✓ handles Test Key cancellation and error conditions 320ms
      ✓ External Identity Linking (KAN-27) (16)
-       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 459ms
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 471ms
 
  Test Files  11 passed (11)
       Tests  310 passed (310)
-   Start at  20:01:36
-   Duration  17.83s (tests 64%, environment 20%, import 11%, transform 4%, worker 2%)
+   Start at  21:12:12
+   Duration  18.75s (tests 64%, environment 19%, import 11%, transform 5%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.72 |    96.22 |    99.2 |     100 |                   
+All files          |   99.56 |    96.51 |   99.34 |     100 |                   
  custom-fields     |   99.72 |    96.65 |     100 |     100 |                   
   ...ionEditor.tsx |     100 |    97.01 |     100 |     100 | ...,642,1168-1182 
   ...ldsStudio.tsx |     100 |      100 |     100 |     100 |                   
@@ -114,11 +116,13 @@ All files          |   99.72 |    96.22 |    99.2 |     100 |
   ...tingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...69,391,484,580 
   ...tingsPage.tsx |   99.57 |    95.05 |     100 |     100 | ...1095,1770,2870 
   ...tingsPage.tsx |     100 |    96.26 |    96.9 |     100 | ...76-477,685,714 
- workflows         |     100 |    98.77 |     100 |     100 |                   
+ workflows         |   99.13 |    98.24 |     100 |     100 |                   
+  ...ookDialog.tsx |     100 |      100 |     100 |     100 |                   
+  DryRunDrawer.tsx |     100 |    98.38 |     100 |     100 | 188               
   ...gsSection.tsx |     100 |    97.82 |     100 |     100 | 76,158            
+  ...pelineRow.tsx |    98.5 |    97.53 |     100 |     100 | 54,89             
+  ...nRuleCard.tsx |   93.54 |    89.74 |     100 |     100 | 52,55-58,88       
   ...tudioPage.tsx |     100 |      100 |     100 |     100 |                   
+  api.ts           |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
 
-=== Overall Test Summary ===
-ALL_TESTS_PASSED: 105 Pytest passed (0 failures, 0 errors), 310 Vitest passed across 11 test suites.
-Code Coverage: Backend touched modules >=95% branch/statement coverage; Frontend tested modules >=95% branch coverage.

@@ -618,3 +618,47 @@ async def test_workspace_settings_name_and_slug_updates(
     )
     assert r4.status_code == 409
     assert r4.json()["code"] == "WORKSPACE_SLUG_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_workspace_settings_export_import_toggles(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Exercise issue/report export and import policy toggles and role lists."""
+    admin = await make_user("ws_admin_export_toggles", workspace_role="WORKSPACE_ADMIN")
+    await _as_admin_aal2(api_env, admin)
+
+    # 1. Update export and import toggles and allowed roles
+    r = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={
+            "issue_export_enabled": False,
+            "issue_import_enabled": False,
+            "issue_export_allowed_roles": ["workspace_admin", "project_admin"],
+            "report_export_enabled": False,
+            "report_export_allowed_roles": ["ADMIN"],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["issue_export_enabled"] is False
+    assert data["issue_import_enabled"] is False
+    assert data["issue_export_allowed_roles"] == ["workspace_admin", "project_admin"]
+    assert data["report_export_enabled"] is False
+    assert data["report_export_allowed_roles"] == ["ADMIN"]
+
+    # 2. Toggle back to true
+    r2 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={
+            "issue_export_enabled": True,
+            "issue_import_enabled": True,
+            "report_export_enabled": True,
+        },
+    )
+    assert r2.status_code == 200
+    assert r2.json()["issue_export_enabled"] is True
+    assert r2.json()["issue_import_enabled"] is True
+    assert r2.json()["report_export_enabled"] is True
+
