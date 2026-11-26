@@ -179,6 +179,11 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
         "configuration": "configuration-value-reference",
         "studio-config": "studio-configuration-reference",
         "studio-configuration": "studio-configuration-reference",
+        "workspace-settings": "studio-configuration-reference",
+        "project-settings": "studio-configuration-reference",
+        "personal-settings": "studio-configuration-reference",
+        "user-profile-and-personal-settings": "studio-configuration-reference",
+        "custom-colors": "enterprise-whitespace-and-kanban-board",
         "diagnostics": "admin-diagnostics-and-link-inspector-studio",
         "link-inspector": "admin-diagnostics-and-link-inspector-studio",
         "migration": "multi-source-migration-and-key-alias-redirects",
@@ -193,10 +198,26 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
         "leases": "agent-lease-fencing-workpads-and-push-protection",
         "workpad": "agent-lease-fencing-workpads-and-push-protection",
         "push-protection": "agent-lease-fencing-workpads-and-push-protection",
+        "rbac": "role-and-permission-matrix",
+        "auth-studio": "multi-card-authentication-studio",
     }
     for alias, target in slug_aliases.items():
         if target in chapter_anchors and alias not in chapter_anchors:
             chapter_anchors[alias] = chapter_anchors[target]
+
+    # Ensure known section aliases exist in chapter anchors
+    if "multi-card-authentication-studio" in chapter_anchors:
+        chapter_anchors["multi-card-authentication-studio"].update({
+            "initial-setup", "local-admin-break-glass", "break-glass",
+        })
+    if "multi-provider-ai-engine-and-runners" in chapter_anchors:
+        chapter_anchors["multi-provider-ai-engine-and-runners"].update({
+            "agent-onboarding",
+        })
+    if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
+        chapter_anchors["enterprise-whitespace-and-kanban-board"].update({
+            "palette", "color-presets",
+        })
 
     return chapter_anchors
 

@@ -1,0 +1,60 @@
+=== 1. Documentation Taxonomy & Link Audit (scripts.check_docs_taxonomy) ===
+$ uv run python -m scripts.check_docs_taxonomy --wiki-dir /home/adamoutler/kanban/thumbs-up-kanban.wiki
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+EXIT_CODE=0
+
+=== 2. In-App Docs Center Unit Test Suite (Vitest) ===
+$ pnpm --dir kanban/web exec vitest run src/features/docs-center/
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan534-9a51babf/kanban/web
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 404ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/DocsCenter.test.tsx (54 tests) 15893ms
+   ✓ DocsCenter & Help System (KAN-16) (54)
+     ✓ DocMarkdownViewer Component (8)
+       ✓ renders headings with generated anchor IDs and handles anchor navigation 443ms
+     ✓ HelpDrawer Component (4)
+       ✓ handles keyboard Escape and other keys on window and on drawer container 321ms
+     ✓ DocsCenterPage Component (10)
+       ✓ copies agent onboarding prompt when clicking copy prompt button 325ms
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 533ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 658ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (21)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 631ms
+       ✓ manages WAI-ARIA modal dialog focus, traps Tab/Shift+Tab, restores trigger focus on close, and resyncs on arg change 461ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 2602ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 815ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 677ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 3003ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 495ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 1334ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (54 tests) 16086ms
+   ✓ DocsCenter & Help System (KAN-16) (54)
+     ✓ DocMarkdownViewer Component (8)
+       ✓ renders headings with generated anchor IDs and handles anchor navigation 378ms
+     ✓ HelpDrawer Component (4)
+       ✓ handles keyboard Escape and other keys on window and on drawer container 467ms
+     ✓ DocsCenterPage Component (10)
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 571ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 734ms
+       ✓ displays category badge pills in chapter meta bar, sidebar, and search results 373ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (21)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 702ms
+       ✓ manages WAI-ARIA modal dialog focus, traps Tab/Shift+Tab, restores trigger focus on close, and resyncs on arg change 307ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 2500ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 869ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 676ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 2960ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 527ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 1254ms
+
+ Test Files  3 passed (3)
+      Tests  129 passed (129)
+   Start at  15:55:21
+   Duration  20.01s (tests 76%, environment 12%, transform 7%, import 4%)
+
+EXIT_CODE=0
+=== All Unit Tests Finished Cleanly (EXIT_CODE=0) ===
