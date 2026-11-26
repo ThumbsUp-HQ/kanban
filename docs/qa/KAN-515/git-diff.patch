@@ -1,0 +1,120 @@
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index 08ceb8c7..4c0bc8b4 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -4,6 +4,7 @@
+ import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
+ import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { McpAccessStudio } from './McpAccessStudio';
+@@ -253,19 +254,32 @@ export function WorkloadFederationSection({
+         <div>
+           <h2 className="kb-mcp-section-title">
+             <span>Workload Identity Federation (RFC 8693)</span>
++            <FieldHelpHint
++              title="Workload Identity Federation"
++              summary="Enables keyless OIDC JWT token exchange (RFC 8693) for CI/CD pipelines (GitHub Actions, GitLab CI) and Kubernetes workloads to acquire scoped MCP credentials without long-lived static secrets."
++              docHref="/docs/zero-trust-service-auth-and-workload-oidc"
++              testId="workload-federation-header-help"
++            />
+           </h2>
+           <p className="kb-mcp-studio-subtitle">
+             Configure headless CI/CD runners (GitHub Actions, GitLab CI, Kubernetes) to exchange OIDC JWT tokens for scoped MCP credentials without long-lived static secrets.
+           </p>
+         </div>
+-        <button
+-          type="button"
+-          className="kb-mcp-studio-mint-btn"
+-          data-testid="add-workload-policy-btn"
+-          onClick={handleOpenCreate}
+-        >
+-          + Add Workload Policy
+-        </button>
++        <div className="kb-mcp-header-actions">
++          <StudioDocLink
++            href="/docs/zero-trust-service-auth-and-workload-oidc"
++            title="Workload Identity Federation Documentation"
++            testId="workload-federation-doc-link"
++          />
++          <button
++            type="button"
++            className="kb-mcp-studio-mint-btn"
++            data-testid="add-workload-policy-btn"
++            onClick={handleOpenCreate}
++          >
++            + Add Workload Policy
++          </button>
++        </div>
+       </div>
+ 
+       {error && (
+diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+index 591ae2ea..b6a93e84 100644
+--- a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+@@ -1154,4 +1154,62 @@ describe('WorkloadFederationSection (KAN-74)', () => {
+     });
+     unmount();
+   });
++
++  it('renders StudioDocLink and header FieldHelpHint in Light and Dark themes without breaking Add Workload Policy (KAN-515)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if ((path as string) === '/api/v1/admin/workload-identities') {
++        return [];
++      }
++      return undefined;
++    });
++
++    const { container, unmount } = render(<WorkloadFederationSection isAdmin={true} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
++    });
++
++    // 1. Verify StudioDocLink rendering, href, title, and label
++    const docLink = screen.getByTestId('workload-federation-doc-link');
++    expect(docLink).toBeDefined();
++    expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
++    expect(docLink.getAttribute('aria-label')).toBe('Workload Identity Federation Documentation');
++    expect(docLink.textContent).toContain('Documentation ->');
++
++    // 2. Verify header FieldHelpHint trigger and popover contents
++    const helpBtn = screen.getByTestId('workload-federation-header-help');
++    expect(helpBtn).toBeDefined();
++    fireEvent.focus(helpBtn);
++
++    const helpPopover = screen.getByTestId('workload-federation-header-help-popover');
++    expect(helpPopover).toBeDefined();
++    expect(helpPopover.textContent).toContain('Workload Identity Federation');
++    expect(helpPopover.textContent).toContain('keyless OIDC JWT token exchange (RFC 8693)');
++    expect(helpPopover.textContent).toContain('Kubernetes workloads');
++    const helpDocLink = screen.getByTestId('workload-federation-header-help-doc-link');
++    expect(helpDocLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
++
++    // 3. Verify + Add Workload Policy button renders alongside docLink and opens create modal cleanly
++    const addBtn = screen.getByTestId('add-workload-policy-btn');
++    expect(addBtn).toBeDefined();
++    expect(addBtn.textContent).toContain('+ Add Workload Policy');
++    fireEvent.click(addBtn);
++
++    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
++    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
++    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
++
++    // 4. Verify Theme switching (Light & Dark) retains valid structure
++    document.documentElement.setAttribute('data-theme', 'light');
++    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
++
++    document.documentElement.setAttribute('data-theme', 'dark');
++    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
++    document.documentElement.removeAttribute('data-theme');
++
++    unmount();
++  });
+ });

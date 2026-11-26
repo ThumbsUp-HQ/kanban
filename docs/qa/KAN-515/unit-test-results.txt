@@ -1,0 +1,17 @@
+$ pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan515-7d6b8438/kanban/web
+
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (27 tests) 3312ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles AAL2 cancellation on minting and retries without error banners 637ms
+     ✓ handles MFA cancellation on minting without error banners 344ms
+     ✓ handles mint error reporting on generic failure 371ms
+     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 308ms
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  14:43:39
+   Duration  6.75s (tests 52%, import 18%, environment 18%, transform 12%)
+
+exit code: 0
