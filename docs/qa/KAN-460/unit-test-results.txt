@@ -1,0 +1,31 @@
+$ cd kanban/web && pnpm vitest run src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx --coverage --coverage.include='src/features/analytics/FlowAnalyticsPage.tsx'
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan460-461-a2c8914d/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx (14 tests) 1376ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  18:25:03
+   Duration  3.40s (tests 47%, environment 38%, import 10%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    96.77 |     100 |     100 |                   
+ ...lyticsPage.tsx |     100 |    96.77 |     100 |     100 | 64                
+-------------------|---------|----------|---------|---------|-------------------
+
+$ cd kanban/web && pnpm vitest run src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan460-461-a2c8914d/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 28ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  18:25:08
+   Duration  1.61s (environment 93%, import 3%, tests 2%, worker 1%, transform 1%)
+

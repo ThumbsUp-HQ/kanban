@@ -44,9 +44,43 @@
 .kb-flow-control-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.kb-flow-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kb-flow-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-primary, #111827);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kb-flow-default-badge {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--fg-muted, #525866);
+}
+
+.kb-flow-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kb-flow-unit {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-secondary, #4b5563);
 }
 
 .kb-flow-select,
@@ -334,4 +368,18 @@
   flex-direction: column;
   gap: 24px;
   padding-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .kb-flow-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .kb-flow-control-group {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
