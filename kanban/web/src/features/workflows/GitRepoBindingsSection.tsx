@@ -425,17 +425,17 @@ export function GitRepoBindingsSection({
                       summary="Filesystem mounting and tooling isolation boundary granted to agent transition runners."
                       validValues={[
                         {
-                          label: 'Read-Only Virtual Filesystem Mount (:ro VFS)',
+                          label: ':ro VFS',
                           description:
                             'Materializes a detached, immutable snapshot of the git commit in a read-only VFS mount. Prevents repository tampering while enabling fast file-tree inspection.',
                         },
                         {
-                          label: 'Bare Git Tools Only',
+                          label: 'Bare Tools',
                           description:
                             'Provides direct access to bare git porcelain and plumbing commands without mounting a materialized working tree.',
                         },
                       ]}
-                      defaultValue="Read-Only Virtual Filesystem Mount (:ro VFS)"
+                      defaultValue=":ro VFS"
                       testId="repo-access-help"
                       docHref="/docs/scripted-workflows-and-transition-helpers#read-only-bare-git-repository-bindings"
                     />

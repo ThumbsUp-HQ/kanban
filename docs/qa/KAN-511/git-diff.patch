@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx b/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
-index 3a949188..861c4f6c 100644
+index 3a949188..d6d9208a 100644
 --- a/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
 +++ b/kanban/web/src/features/workflows/GitRepoBindingsSection.tsx
 @@ -4,6 +4,8 @@
@@ -58,17 +58,17 @@ index 3a949188..861c4f6c 100644
 +                      summary="Filesystem mounting and tooling isolation boundary granted to agent transition runners."
 +                      validValues={[
 +                        {
-+                          label: 'Read-Only Virtual Filesystem Mount (:ro VFS)',
++                          label: ':ro VFS',
 +                          description:
 +                            'Materializes a detached, immutable snapshot of the git commit in a read-only VFS mount. Prevents repository tampering while enabling fast file-tree inspection.',
 +                        },
 +                        {
-+                          label: 'Bare Git Tools Only',
++                          label: 'Bare Tools',
 +                          description:
 +                            'Provides direct access to bare git porcelain and plumbing commands without mounting a materialized working tree.',
 +                        },
 +                      ]}
-+                      defaultValue="Read-Only Virtual Filesystem Mount (:ro VFS)"
++                      defaultValue=":ro VFS"
 +                      testId="repo-access-help"
 +                      docHref="/docs/scripted-workflows-and-transition-helpers#read-only-bare-git-repository-bindings"
 +                    />
@@ -77,7 +77,7 @@ index 3a949188..861c4f6c 100644
                      id="repo-access-select"
                      className="workflow-form-control"
 diff --git a/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx b/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx
-index 271777e3..046d1857 100644
+index 271777e3..3451674a 100644
 --- a/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx
 +++ b/kanban/web/src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx
 @@ -242,8 +242,8 @@ describe('GitRepoBindingsSection', () => {
@@ -156,13 +156,13 @@ index 271777e3..046d1857 100644
 +      expect(screen.getByText('Filesystem mounting and tooling isolation boundary granted to agent transition runners.')).toBeDefined();
 +    });
 +    expect(screen.getByTestId('repo-access-help-default')).toBeDefined();
-+    expect(screen.getAllByText('Read-Only Virtual Filesystem Mount (:ro VFS)').length).toBeGreaterThan(1);
-+    expect(screen.getAllByText('Bare Git Tools Only').length).toBeGreaterThan(1);
++    expect(screen.getAllByText(':ro VFS').length).toBe(2);
++    expect(screen.getByText('Bare Tools')).toBeDefined();
 +    expect(screen.getByText(/Materializes a detached, immutable snapshot/i)).toBeDefined();
 +  });
  });
 diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
-index f76e65e6..84573bc7 100644
+index f76e65e6..5705e6df 100644
 --- a/kanban/web/src/features/workflows/workflows.css
 +++ b/kanban/web/src/features/workflows/workflows.css
 @@ -632,6 +632,17 @@
@@ -172,7 +172,7 @@ index f76e65e6..84573bc7 100644
 +.workflow-form-label-row {
 +  display: flex;
 +  align-items: center;
-+  gap: 6px;
++  gap: var(--space-2, 8px);
 +}
 +
 +.workflow-form-label-row .field-help-hint {
@@ -188,8 +188,8 @@ index f76e65e6..84573bc7 100644
  }
  
 +.repo-fetch-error-alert {
-+  margin-top: 6px;
-+  font-size: 0.75rem;
++  margin-top: var(--space-2, 8px);
++  font-size: var(--text-xs, 0.75rem);
 +  padding: 6px 10px;
 +}
 +

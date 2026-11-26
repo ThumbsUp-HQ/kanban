@@ -522,8 +522,8 @@ describe('GitRepoBindingsSection', () => {
       expect(screen.getByText('Filesystem mounting and tooling isolation boundary granted to agent transition runners.')).toBeDefined();
     });
     expect(screen.getByTestId('repo-access-help-default')).toBeDefined();
-    expect(screen.getAllByText('Read-Only Virtual Filesystem Mount (:ro VFS)').length).toBeGreaterThan(1);
-    expect(screen.getAllByText('Bare Git Tools Only').length).toBeGreaterThan(1);
+    expect(screen.getAllByText(':ro VFS').length).toBe(2);
+    expect(screen.getByText('Bare Tools')).toBeDefined();
     expect(screen.getByText(/Materializes a detached, immutable snapshot/i)).toBeDefined();
   });
 });

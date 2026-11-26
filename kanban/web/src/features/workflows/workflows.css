@@ -635,7 +635,7 @@
 .workflow-form-label-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2, 8px);
 }
 
 .workflow-form-label-row .field-help-hint {
@@ -1183,8 +1183,8 @@
 }
 
 .repo-fetch-error-alert {
-  margin-top: 6px;
-  font-size: 0.75rem;
+  margin-top: var(--space-2, 8px);
+  font-size: var(--text-xs, 0.75rem);
   padding: 6px 10px;
 }
 
