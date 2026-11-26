@@ -1,5 +1,5 @@
 diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
-index 7c6cf68..a022d64 100644
+index 7c6cf68..c46edd1 100644
 --- a/MCP-Tools-Reference.md
 +++ b/MCP-Tools-Reference.md
 @@ -2,30 +2,30 @@
@@ -58,11 +58,27 @@ index 7c6cf68..a022d64 100644
  ---
  
  ## Surface 2: `/mcp/docs` (Consolidated 3-Tool Suite)
+@@ -213,13 +222,13 @@ sequenceDiagram
+     participant DB as PostgreSQL Engine
+ 
+     Note over Admin,MCP: Phase 1: Dry-Run Inspection
+-    Admin->>MCP: Call purge_invalid_links(confirm=false)
++    Admin->>MCP: Call audit_and_purge_object_links(action="audit")
+     MCP->>DB: Audit dangling links & compute blast radius
+     DB-->>MCP: 14 broken links identified
+     MCP-->>Admin: Return dry-run summary + ephemeral confirmation_token (valid 300s)
+ 
+     Note over Admin,MCP: Phase 2: Explicit Two-Stage Execution
+-    Admin->>MCP: Call purge_invalid_links(confirm=true, confirmation_token="tok_...")
++    Admin->>MCP: Call audit_and_purge_object_links(action="purge", confirmation_token="tok_...")
+     MCP->>MCP: Verify AAL2 session & token validity
+     MCP->>DB: BEGIN TX & DELETE dangling links & record audit event
+     DB-->>MCP: 14 rows removed
 diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
-index 907f8ce..e7911c7 100644
+index 907f8ce..c3fabea 100644
 --- a/Studio-Configuration-Reference.md
 +++ b/Studio-Configuration-Reference.md
-@@ -107,6 +107,8 @@ The Multi-Card Authentication Studio (`/admin/auth`) configures enterprise ident
+@@ -107,25 +107,96 @@ The Multi-Card Authentication Studio (`/admin/auth`) configures enterprise ident
  ## 6. MCP Access Studio
  The MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.
  
@@ -71,31 +87,38 @@ index 907f8ce..e7911c7 100644
  
  ### MCP Access Studio Configuration Table
  
-@@ -119,13 +121,68 @@ The MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Pr
- | `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |
- | `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |
- | `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+ | `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |
+-| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |
+-| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |
+-| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |
+-| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |
+-| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |
+-| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |
 -| `capability_mask` | Operational capability bitmask ceiling | Integer bitmask (1=View, 3=Comment, 31=Member, 255=Admin) | 255 (Full) | Monotonic `CredentialBoundary` ceiling; mask 1 restricts scopes to `${surface}:read` |
-+| `capability_mask` | Operational capability bitmask ceiling | Integer bitmask (0 to 255, 0=Deny-All, 1=Read-Only, 31=Standard, 255=Admin) | 255 (Full) | Monotonic `CredentialBoundary` ceiling; mask 0 rejects all tools with `INSUFFICIENT_CAPABILITY` |
++| `label` | Human-readable label identifying the key or client tool | String (1 to 120 characters) | None (Optional) | Surfaced in audit logs and active session inspector |
++| `owner_kind` | Identity persona bound to minted key | `personal_user`, `service_bot` | `personal_user` | Service bot keys enforce strict service account RLS boundaries |
++| `scope_tier` | Tenancy authorization scope boundary | `personal`, `project`, `workspace`, `global` | `workspace` | Restricts object graph access to specified tenant boundary |
++| `expires_in_days` | Key validity lifespan in days | `30`, `60`, `90`, `365`, `0` (Unlimited) | `60` (Studio mint) / `30` (Personal OAuth) | Expired keys reject calls with `401 UNAUTHORIZED`; Unlimited requires explicit risk confirmation |
++| `capability_mask` | Operational capability bitmask ceiling | Integer bitmask (0 to 255) | `31` (UI default) / `7` (API default) | Monotonic `CredentialBoundary` ceiling; mask 0 rejects all tools with `INSUFFICIENT_CAPABILITY` |
++| `allowed_tools` | Explicit whitelist of accessible tools | List of tool name strings | None (All tools in surface) | Restricts tool visibility and invocation to specified set |
++| `disabled_tools` | Explicit blacklist of prohibited tools | List of tool name strings | `[]` (Empty) | Blocks invocation of specified tools even if permitted by surface |
  | `allowed_cidrs` | Subnet IP allowlist for incoming MCP invocations | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Rejects calls originating outside specified subnets with `403 FORBIDDEN_CIDR` |
-+| `scope_tier` | Tenancy authorization scope boundary | `project`, `workspace`, `global`, `personal` | `project` | Restricts object graph access to specified tenant boundary |
-+| `role` | Identity persona bound to minted key | `personal`, `service_bot` | `personal` | Service bot keys enforce strict service account RLS boundaries |
-+
+ 
 +![Connect OAuth App Modal](images/slice3-connect-oauth-modal.png)
 +
 +### Setting-by-Setting Technical Paragraphs
 +
 +- **`surface_type`:** Selects the target streamable MCP endpoint. `/mcp/agent` exposes 10 execution and QA tools with a strict token ceiling of <= 1,850 tokens. `/mcp/docs` exposes 3 knowledge and documentation tools capped at <= 1,350 tokens. `/mcp/admin` exposes 12 governance and lifecycle tools capped at <= 2,800 tokens, requiring AAL2 administrative credentials.
-+- **`key_name`:** Human-readable label assigned to the key during creation (1 to 64 characters). Surfaced in audit log feeds, active session inspectors, and the visual key management table to identify the calling entity or developer machine.
-+- **`token_prefix`:** Standardized 7-character prefix assigned automatically based on surface type and privilege. Keys bound to `/mcp/agent` use `kb_agt_*`, documentation keys use `kb_doc_*`, and administrative keys use `kb_adm_*`. Allows fast static routing and early denial before database lookup.
-+- **`lod_tier`:** Default Level of Detail returned in search and read responses. `summary` returns bare identifiers and titles (~40 tokens), `standard` provides descriptions and assignees (~200 tokens), and `full` returns complete object graphs, comment feeds, and activity manifests.
-+- **`rate_limit_rpm`:** Configurable per-key sliding-window rate limit (10 to 600 requests per minute, default 120). Protects PostgreSQL connection pools and worker queues from runaway autonomous agent recursion loops. Exceeding callers receive `429 TOO_MANY_REQUESTS`.
-+- **`expires_at`:** Key expiration timestamp. The UI offers presets for 30 days, 60 days, 90 days (default), 1 year, and `Unlimited`. Selecting `Unlimited` triggers an explicit security risk warning checkbox that must be acknowledged before the key can be minted. Expired keys are rejected with `401 UNAUTHORIZED`.
-+- **`destructive_gate`:** Master safety switch governing dangerous mutations. When enabled on `/mcp/admin`, irreversible deletions (`destructive_lifecycle`) require a two-stage confirmation protocol: requesting a blast-radius summary and receiving a short-lived cryptographic confirmation token, then explicitly confirming execution with that token.
-+- **`capability_mask`:** Monotonic 8-bit integer capability bitmask ceiling (0 to 255). A value of `0` creates a deny-all key where all tool calls are rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`). A value of `1` restricts scopes to read-only (`${surface}:read`), `31` grants standard member permissions, and `255` enables full administrative execution. Enforced via PostgreSQL `SET LOCAL app.credential_boundary`.
-+- **`allowed_cidrs`:** Optional network boundary allowlist containing comma- or whitespace-separated IPv4 or IPv6 subnets (e.g. `127.0.0.1/32`, `192.168.1.0/24`). Requests originating outside allowed CIDR blocks are rejected immediately with HTTP 403 `FORBIDDEN_CIDR`.
++- **`label`:** Human-readable label assigned to the key during creation (1 to 120 characters). Surfaced in audit log feeds, active session inspectors, and the visual key management table to identify the calling entity or developer machine.
++- **`owner_kind`:** Selects between `personal_user` (executing on behalf of an authenticated human user) and `service_bot` (executing as an autonomous background bot). Service bot keys execute under dedicated service accounts with explicit RLS principal contexts.
 +- **`scope_tier`:** Binds the minted token to a specific tenant boundary: `personal` (bound to current user), `project` (scoped to a single project key like `KAN`), `workspace` (scoped to all projects in workspace), or `global` (cross-workspace server scope). Project-scoped keys cannot query or mutate tickets in adjacent projects.
-+- **`role`:** Selects between `personal` (executing on behalf of an authenticated human user) and `service_bot` (executing as an autonomous background bot). Service bot keys execute under dedicated service accounts with explicit RLS principal contexts.
++- **`expires_in_days`:** Key expiration duration in days. The UI offers presets for 30 days, 60 days (default in Studio mint modal), 90 days, 365 days (1 year), and `0` (Unlimited). Selecting `Unlimited` triggers an explicit security risk warning checkbox (`confirm_unlimited`) that must be acknowledged before the key can be minted. Expired keys are rejected with `401 UNAUTHORIZED`.
++- **`capability_mask`:** Monotonic 8-bit integer capability bitmask ceiling (0 to 255). A value of `0` (`NONE`) creates a deny-all key where all tool calls are rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`). A value of `1` (`VIEW`) restricts operations to read-only, `31` (`VIEW | COMMENT | EDIT | TRANSITION | LINK`) grants standard member permissions (UI default), and `255` (`ALL`) enables complete operational privileges. The backend API default is `7` (`VIEW | COMMENT | EDIT`). Enforced via PostgreSQL `SET LOCAL app.credential_boundary`.
++- **`allowed_tools`:** Optional explicit tool allowlist. When specified, only tools in this list may be listed or invoked by the client. Any invocation of unlisted tools is rejected with `TOOL_NOT_PERMITTED`.
++- **`disabled_tools`:** Explicit tool denylist (default empty). Specific tools can be disabled on a per-key basis (e.g. disabling `transition_ticket` for read/comment bots) even if permitted by surface and capability mask.
++- **`allowed_cidrs`:** Optional network boundary allowlist containing comma- or whitespace-separated IPv4 or IPv6 subnets (e.g. `127.0.0.1/32`, `192.168.1.0/24`). Requests originating outside allowed CIDR blocks are rejected immediately with HTTP 403 `FORBIDDEN_CIDR`.
 +
 +![MCP Config Snippet and Client Onboarding Modal](images/slice3-mcp-config-snippet-modal.png)
 +
@@ -111,27 +134,45 @@ index 907f8ce..e7911c7 100644
 +
 +![Workload OIDC Federation Studio](images/slice3-workload-oidc-studio.png)
 +
-+### Workload Identity Federation Studio (`/admin/workload-identities`)
++### Workload Identity Federation Studio (`/settings/mcp` and `/admin/mcp`)
 +
 +The Workload Identity Federation Studio allows administrators to author and manage RFC 8693 token exchange policies for headless CI/CD runners:
 +
 +| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
 +| :--- | :--- | :--- | :--- | :--- |
 +| `name` | Descriptive policy identifier | String (1 to 120 characters) | Required | Displayed in workload policy table and audit ledger |
++| `description` | Human-readable explanation of policy purpose | String (up to 500 characters) or None | None | Documents workload integration context and team ownership |
 +| `issuer` | OpenID Connect token issuer URL | Strict HTTPS URL (1 to 500 characters) | Required | Validates incoming JWT `iss` claim; plaintext HTTP rejected |
 +| `client_id` | Expected audience claim | String (1 to 255 characters) | Required | Matches incoming JWT `aud` claim |
 +| `subject_pattern` | Subject matching pattern | Glob or Regex (1 to 500 characters) | Required | Matches incoming JWT `sub` claim (e.g. `repo:org/repo:*`) |
 +| `required_claims_json` | Exact claim match constraints | JSON Object | `{}` | Enforces additional claims (e.g. `{"environment": "production"}`) |
 +| `surface` | Target MCP surface | `agent` or `docs` | `agent` | Determines which MCP endpoint the federated token can invoke |
++| `scopes` | Allowed OAuth privilege scopes | List of `SURFACE_SCOPES` strings | `[]` (Empty) | Bounds the granted scopes (e.g. `["agent:read", "agent:write"]`) |
++| `allowed_project_ids` | Permitted project UUID boundaries | List of UUIDs or None | None (All accessible) | Limits workload token authority strictly to designated project IDs |
++| `allowed_cidrs` | Subnet IP allowlist for token exchange | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Restricts token exchange to specific runner network IP blocks |
 +| `capability_mask` | Capability bitmask ceiling | Integer between 0 and 255 | 255 | Monotonic capability ceiling enforced by RLS |
 +| `max_ttl_seconds` | Lifespan of issued ephemeral token | Integer between 60 and 86400 seconds | 3600 (1 hour) | Limits exposure window of federated workload credentials |
 +| `is_enabled` | Policy active toggle | Boolean (`true` / `false`) | `true` | Disabled policies immediately reject token exchange |
 +
++- **Setting-by-Setting Workload Technical Details:**
++  - **`name`:** Descriptive name assigned to the workload identity policy (1 to 120 characters). Displayed in governance tables and audit records.
++  - **`description`:** Optional documentation field (up to 500 characters) explaining the pipeline context, team owner, or workflow triggering the token exchange.
++  - **`issuer`:** The trusted OpenID Connect issuer URL. Must use a strict HTTPS scheme (e.g. `https://token.actions.githubusercontent.com`). Plaintext HTTP URLs are rejected.
++  - **`client_id`:** Expected audience identifier (`aud`) matching the workload runner configuration (1 to 255 characters).
++  - **`subject_pattern`:** Glob pattern or regex matched against the incoming OIDC JWT `sub` claim (1 to 500 characters). Evaluated using POSIX pattern matching.
++  - **`required_claims_json`:** Arbitrary JSON dictionary of required key-value claims that must match exactly in the incoming token (e.g. branch, environment, or repository slug).
++  - **`surface`:** The target MCP surface granted to the federated token (`agent` or `docs`).
++  - **`scopes`:** List of allowed scopes granted upon successful exchange, restricted strictly to valid surface scopes (such as `agent:read`, `agent:write`, or `docs:read`).
++  - **`allowed_project_ids`:** Optional list of project UUIDs restricting where the exchanged token can query or mutate work items.
++  - **`allowed_cidrs`:** Optional network boundary allowlist restricting token exchange requests to authorized runner subnet IP addresses.
++  - **`capability_mask`:** Monotonic capability bitmask ceiling (0 to 255, default 255). Further constrains the operations permitted by the resulting token.
++  - **`max_ttl_seconds`:** Maximum validity period for issued short-lived access tokens (60 to 86,400 seconds, default 3,600 seconds / 1 hour).
++  - **`is_enabled`:** Administrative master switch for the policy. When set to `false`, token exchange requests matching this policy are rejected immediately.
 +- **Built-in Presets:** The Studio provides one-click presets for common automated environments:
-+  - **GitHub Actions:** Pre-fills issuer `https://token.actions.githubusercontent.com` and pattern `repo:org/repo:ref:refs/heads/main`.
-+  - **GitLab CI:** Pre-fills issuer `https://gitlab.com` and pattern `project_path:group/project:ref_type:branch:ref:main`.
-+  - **Kubernetes:** Pre-fills in-cluster issuer `https://kubernetes.default.svc.cluster.local` and pattern `system:serviceaccount:default:runner`.
- 
++  - **GitHub Actions:** Pre-fills issuer `https://token.actions.githubusercontent.com` and pattern `repo:org/repo:ref:refs/heads/*`.
++  - **GitLab CI:** Pre-fills issuer `https://gitlab.com` and pattern `project_path:group/project:ref:*:ref_type:branch`.
++  - **Kubernetes:** Pre-fills in-cluster issuer `https://kubernetes.default.svc.cluster.local` and pattern `system:serviceaccount:default:*`.
++
  ---
  
  ## 7. OAuth 2.1 Governance Studio
@@ -142,17 +183,21 @@ index 907f8ce..e7911c7 100644
  
  
  ### OAuth 2.1 Governance Studio Configuration Table
-@@ -134,11 +191,42 @@ The OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications,
+@@ -133,12 +204,43 @@ The OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications,
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
  | :--- | :--- | :--- | :--- | :--- |
  | `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |
- | `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |
+-| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |
++| `client_id` | Unique OAuth client identifier | String prefixed with `client_` | Auto-generated | Public application key used during authorization code flow |
 +| `client_type` | Client confidentiality tier | `public`, `confidential` | `public` | Confidential clients require client secret authentication |
-+| `auth_method` | Client authentication method | `none`, `client_secret_post`, `client_secret_basic` | `none` for public | Governs how client verifies identity at token endpoint |
++| `auth_method` | Client authentication method | `none`, `client_secret_post`, `client_secret_basic`, `private_key_jwt` | `none` for public | Governs how client verifies identity at token endpoint |
  | `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |
- | `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |
+-| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |
 -| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |
-+| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `admin:read`, `admin:write`, `admin:destructive`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |
- | `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |
+-| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |
++| `pkce_enforce` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `true` (`S256`) | Rejects plaintext code challenges; mitigates authorization code interception |
++| `allowed_scopes` | List of privilege scopes client can request | `agent:read`, `agent:write`, `docs:read`, `docs:write`, `admin:read`, `admin:write`, `admin:destructive` | `agent:read` | Token capability bitmask cannot exceed granted scopes |
++| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (60 to 86400) | 3600 (1 hour, 900 for JWT) | Ephemeral lifetime limiting blast radius of token leakage |
  | `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |
 +| `max_state_len` | Maximum length of OAuth state parameter | 4096 characters | 4096 | Supports large serialized state payloads required by Google Gemini |
 +| `status_filter` | Filter tabs for client lifecycle view | `all`, `active`, `suspended`, `revoked` | `all` | Isolates active integrations from suspended or revoked clients |
@@ -162,13 +207,13 @@ index 907f8ce..e7911c7 100644
 +### Setting-by-Setting Technical Paragraphs
 +
 +- **`client_name`:** Human-readable title of the client application (1 to 128 characters). Displayed prominently to users on authorization consent screens and within the administrative governance directory.
-+- **`client_id`:** Unique identifier generated upon client registration, prefixed with `kb_client_`. Serves as the public identifier across OAuth 2.1 authorization and device authorization flows.
++- **`client_id`:** Unique identifier generated upon client registration, prefixed with `client_` (`client_{secrets.token_urlsafe(16)}`). Serves as the public identifier across OAuth 2.1 authorization and device authorization flows.
 +- **`client_type`:** Distinguishes between `public` clients (single-page applications, native desktop tools like Cursor or Claude Desktop, and CLI binaries that cannot safeguard secrets) and `confidential` clients (backend server applications capable of storing secrets securely).
-+- **`auth_method`:** Defines the client authentication mechanism used at `/oauth/token`. Public clients use `none` with mandatory PKCE `S256`. Confidential clients use `client_secret_post` (secret in POST body) or `client_secret_basic` (HTTP Basic authentication header).
++- **`auth_method`:** Defines the client authentication mechanism used at `/oauth/token`. Public clients use `none` with mandatory PKCE `S256`. Confidential clients use `client_secret_post` (secret in POST body), `client_secret_basic` (HTTP Basic authentication header), or `private_key_jwt` (RFC 7523 asymmetric client assertion).
 +- **`redirect_uris`:** Exact list of authorized redirect callback URIs. Every entry must be a valid HTTPS URL, with `http://localhost` and `http://127.0.0.1` permitted exclusively for local development and desktop tools. Wildcards and open redirect patterns are strictly rejected.
-+- **`pkce_enforced`:** Enforces Proof Key for Code Exchange (RFC 7636). 👍kanban requires `code_challenge_method = S256` for all authorization code flows. Plain code challenges (`code_challenge_method = plain`) are rejected with `400 invalid_request`.
-+- **`allowed_scopes`:** Space- or comma-delimited list of privilege scopes available to the client: `agent` (general execution), `docs` (documentation), `admin` (administrative operations), `admin:read` (read-only diagnostics), `admin:write` (configuration updates), `admin:destructive` (deletion tools), `read:issues`, and `write:issues`.
-+- **`access_token_ttl`:** Lifetime in seconds of minted access tokens (configurable from 300 to 86,400 seconds, default 3,600 seconds / 1 hour). Minimizes the window of exposure if a bearer token is intercepted.
++- **`pkce_enforce`:** Enforces Proof Key for Code Exchange (RFC 7636). 👍kanban requires `code_challenge_method = S256` for all authorization code flows. Plain code challenges (`code_challenge_method = plain`) are rejected with `400 invalid_request`.
++- **`allowed_scopes`:** Space- or comma-delimited list of privilege scopes available to the client, strictly adhering to `SURFACE_SCOPES`: `agent:read`, `agent:write`, `docs:read`, `docs:write`, `admin:read`, `admin:write`, and `admin:destructive`.
++- **`access_token_ttl`:** Lifetime in seconds of minted access tokens (configurable from 60 to 86,400 seconds; default 3,600 seconds / 1 hour for client credentials, 900 seconds / 15 minutes for JWT assertions). Minimizes the window of exposure if a bearer token is intercepted.
 +- **`refresh_token_ttl`:** Lifetime in seconds of refresh tokens (86,400 to 2,592,000 seconds, default 30 days). Refresh tokens rotate upon every exchange; if a previously used refresh token is presented, the entire token family is revoked to prevent replay attacks.
 +- **`max_state_len`:** Defines the maximum permitted length of the OAuth `state` parameter (4,096 characters). Specifically engineered to accommodate complex serialized routing and nonce payloads generated by Google Gemini and enterprise identity gateways. Requests exceeding 4,096 characters are rejected with HTTP 400.
 +- **`status_filter`:** Filters displayed clients in the Governance Studio across four lifecycle states: `all` (complete registry), `active` (operational clients), `suspended` (temporarily blocked from token exchange), and `revoked` (permanently disabled).
@@ -187,10 +232,10 @@ index 907f8ce..e7911c7 100644
  ---
  
 diff --git a/Three-Surface-MCP-Server-Architecture.md b/Three-Surface-MCP-Server-Architecture.md
-index 245278c..2b3dc0d 100644
+index 245278c..8d1f88a 100644
 --- a/Three-Surface-MCP-Server-Architecture.md
 +++ b/Three-Surface-MCP-Server-Architecture.md
-@@ -4,7 +4,7 @@
+@@ -4,23 +4,23 @@
  
  The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonomous engineering agents to interact with development platforms. However, conventional tracker integrations (such as legacy Jira REST bridges and generic CRUD wrappers) expose raw REST endpoints 1:1 as MCP tools. This naive approach results in 70 to 120 bloated tools consuming 15,000 to 25,000 context tokens before the agent begins reasoning, causing catastrophic context exhaustion and multi-turn thrashing.
  
@@ -199,7 +244,11 @@ index 245278c..2b3dc0d 100644
  
  ---
  
-@@ -14,13 +14,13 @@ The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonom
+-<a id="scope-tiers"></a>
+-## The Three Isolated MCP Surfaces
++## Scope Tiers
++### The Three Isolated MCP Surfaces
+ 
  ```mermaid
  flowchart TD
      subgraph Hub["👍kanban Multi-Surface MCP Server"]
@@ -256,7 +305,7 @@ index 245278c..2b3dc0d 100644
  ```
  
  ### `InlineSafeDumper` Compact YAML Output
-@@ -87,20 +87,24 @@ Search and read tools support a progressive disclosure parameter:
+@@ -87,49 +87,148 @@ Search and read tools support a progressive disclosure parameter:
  
  ## MCP Access Studio and Key Management
  
@@ -284,8 +333,14 @@ index 245278c..2b3dc0d 100644
 +
  ---
  
- <a id="oauth-21--pkce"></a>
-@@ -112,24 +116,120 @@ In addition to static API keys, 👍kanban provides an enterprise OAuth 2.1 auth
+-<a id="oauth-21--pkce"></a>
+-<a id="oauth-21-pkce"></a>
+-## Admin OAuth 2.1 Governance Studio (`/admin/oauth`)
++## OAuth 2.1 & PKCE
++### Admin OAuth 2.1 Governance Studio (`/admin/oauth`)
+ 
+ In addition to static API keys, 👍kanban provides an enterprise OAuth 2.1 authorization server with mandatory PKCE (Proof Key for Code Exchange with `S256` challenge), accessible at `/admin/oauth`.
+ 
  ```mermaid
  flowchart TD
      subgraph OAuthGovernance["OAuth 2.1 & PKCE Architecture"]
@@ -316,12 +371,12 @@ index 245278c..2b3dc0d 100644
 -### Key OAuth Governance Capabilities:
 -1. **Registered OAuth 2.1 Clients:** View, register, and manage client applications with designated redirect URIs and client secrets.
 +### Key OAuth Governance Capabilities
-+1. **Registered OAuth 2.1 Clients:** View, register, and manage client applications with designated redirect URIs, client types (`public` or `confidential`), and authentication methods (`none`, `client_secret_post`, `client_secret_basic`).
++1. **Registered OAuth 2.1 Clients:** View, register, and manage client applications with designated redirect URIs, client types (`public` or `confidential`), and authentication methods (`none`, `client_secret_post`, `client_secret_basic`, `private_key_jwt`).
  2. **Mandatory PKCE (`S256`):** Disallows plain code challenges, protecting public clients against authorization code interception attacks.
 -3. **Granular Scopes:** Scopes are scoped strictly (`mcp:read`, `mcp:write`, `agent:execute`, `docs:read`, `admin:full`).
 -4. **Immediate Client Revocation:** Administrators can revoke compromised OAuth clients or reset client secrets with zero system downtime.
 +3. **State Parameter Ceiling (`MAX_STATE_LEN = 4096`):** Supports large serialized state objects (up to 4,096 characters) required by cloud AI assistants like Google Gemini.
-+4. **Granular Scopes:** Scopes are scoped strictly (`agent`, `docs`, `admin`, `admin:read`, `admin:write`, `admin:destructive`, `read:issues`, `write:issues`).
++4. **Granular Scopes:** Scopes are scoped strictly (`agent:read`, `agent:write`, `docs:read`, `docs:write`, `admin:read`, `admin:write`, `admin:destructive`).
 +5. **Immediate Client Revocation & Bulk Purge:** Administrators can revoke compromised OAuth clients or execute single-transaction bulk purges (`POST /api/v1/admin/oauth-clients/bulk-delete`) to remove hundreds of stale Dynamic Client Registration (DCR) clients without disrupting active client sessions.
 +
 +---
@@ -340,7 +395,7 @@ index 245278c..2b3dc0d 100644
 +1. In the **Connect OAuth App** modal, select the **Claude Code** tab.
 +2. For Claude Code CLI, run the auto-generated command:
 +   ```bash
-+   claude mcp add kanban https://kanban.example.com/mcp/agent
++   claude mcp add --transport http kanban https://kanban.example.com/mcp/agent
 +   ```
 +3. For Claude Desktop, add the server configuration to `claude_desktop_config.json`:
 +   ```json
@@ -415,7 +470,7 @@ index 245278c..2b3dc0d 100644
 +
 +![Device Activation Page](images/slice3-device-activate-page.png)
 diff --git a/Zero-Trust-Service-Auth-and-Workload-OIDC.md b/Zero-Trust-Service-Auth-and-Workload-OIDC.md
-index 9b48464..969f3c8 100644
+index 9b48464..d901cf8 100644
 --- a/Zero-Trust-Service-Auth-and-Workload-OIDC.md
 +++ b/Zero-Trust-Service-Auth-and-Workload-OIDC.md
 @@ -24,6 +24,8 @@ graph TD
@@ -446,7 +501,7 @@ index 9b48464..969f3c8 100644
 +| `subject_pattern` | Glob or Regex (1 to 500 chars) | Matching pattern for token `sub` claim |
 +| `required_claims_json` | JSON Object | Exact claims required in the OIDC JWT payload |
 +| `surface` | `agent` or `docs` | Target MCP surface granted to the federated token |
-+| `scopes` | List of Strings | Allowed OAuth scopes (e.g. `["agent", "read:issues"]`) |
++| `scopes` | List of Strings | Allowed OAuth scopes (e.g. `["agent:read", "agent:write"]`) |
 +| `allowed_project_ids` | List of UUIDs or `None` | Restricts token access to specific project IDs |
 +| `capability_mask` | Integer (`0` to `255`, default `255`) | Monotonic capability ceiling enforced by RLS |
 +| `allowed_cidrs` | List of CIDR Strings or `None` | Restricts token exchange to specific IP subnets |
@@ -455,7 +510,7 @@ index 9b48464..969f3c8 100644
  
  ---
  
-@@ -112,13 +135,15 @@ The `CredentialBoundary` bitmask restricts the maximum capabilities a token can
+@@ -112,13 +135,16 @@ The `CredentialBoundary` bitmask restricts the maximum capabilities a token can
  
  | Capability Bit | Bitmask Value | Description & Bound |
  | :--- | :--- | :--- |
@@ -466,19 +521,20 @@ index 9b48464..969f3c8 100644
 -| `WRITE_DOCS` | `0x0010` | Author and edit documents |
 -| `EXECUTE_AGENT` | `0x0020` | Invoke autonomous agent helper routines |
 -| `ADMIN_READ` | `0x0040` | Read non-destructive system diagnostics |
-+| `DENY_ALL` | `0x0000` (`0`) | Zero privilege; all operations rejected with `INSUFFICIENT_CAPABILITY` |
-+| `READ_ISSUES` | `0x0001` (`1`) | Read work items and comments within project scope |
-+| `WRITE_ISSUES` | `0x0002` (`2`) | Create and modify issues and work items |
-+| `TRANSITION_ISSUES`| `0x0004` (`4`) | Execute workflow state transitions |
-+| `READ_DOCS` | `0x0008` (`8`) | Access technical documentation and project stickies |
-+| `WRITE_DOCS` | `0x0010` (`16`) | Author and edit documents |
-+| `EXECUTE_AGENT` | `0x0020` (`32`) | Invoke autonomous agent helper routines |
-+| `ADMIN_READ` | `0x0040` (`64`) | Read non-destructive system diagnostics |
-+| `FULL_ADMIN` | `0x00FF` (`255`) | Complete administrative privileges |
++| `NONE` | `0x0000` (`0`) | Zero privilege; all operations rejected with `INSUFFICIENT_CAPABILITY` |
++| `VIEW` | `0x0001` (`1`) | Read issues, documents, stickies, and views |
++| `COMMENT` | `0x0002` (`2`) | Post comments and feedback |
++| `EDIT` | `0x0004` (`4`) | Create and modify issues, documents, and stickies |
++| `TRANSITION` | `0x0008` (`8`) | Execute workflow state transitions |
++| `LINK` | `0x0010` (`16`) | Create and delete typed object links |
++| `SHARE` | `0x0020` (`32`) | Manage object sharing and visibility |
++| `ADMIN` | `0x0040` (`64`) | Administrative settings and diagnostics |
++| `DELETE` | `0x0080` (`128`) | Permanent deletion of entities |
++| `ALL` | `0x00FF` (`255`) | Complete operational privileges |
  
  When an incoming request is authenticated:
  1. The middleware computes the effective capability set: $\text{Effective} = \text{UserRoleCapabilities} \cap \text{CredentialBoundary}$.
-@@ -133,7 +158,7 @@ When an incoming request is authenticated:
+@@ -133,7 +159,7 @@ When an incoming request is authenticated:
  
  ## 5. Practical Implementation Recipes
  
@@ -487,7 +543,26 @@ index 9b48464..969f3c8 100644
  
  To authenticate a GitHub Actions workflow to the 👍kanban Model Context Protocol (MCP) server without storing permanent secrets:
  
-@@ -187,8 +212,56 @@ jobs:
+@@ -176,19 +202,72 @@ jobs:
+ 
+       - name: Execute Model Context Protocol Tool
+         run: |
+-          curl -sLS -X POST "https://kanban.example.com/mcp/agent/tools/call" \
++          curl -sLS -X POST "https://kanban.example.com/mcp/agent" \
+             -H "Authorization: Bearer ${{ steps.auth.outputs.mcp_token }}" \
+             -H "Content-Type: application/json" \
+             -d '{
+-              "name": "read_ticket",
+-              "arguments": {"identifier": "KAN-42", "lod": "summary"}
++              "jsonrpc": "2.0",
++              "id": 1,
++              "method": "tools/call",
++              "params": {
++                "name": "read_ticket",
++                "arguments": {"identifier": "KAN-42", "lod": "summary"}
++              }
+             }'
+ ```
  
  ---
  
@@ -508,10 +583,10 @@ index 9b48464..969f3c8 100644
 +        -d "subject_token_type=urn:ietf:params:oauth:token-type:jwt" \
 +        -d "audience=https://kanban.example.com/mcp/agent")
 +      TOKEN=$(echo "${RESPONSE}" | jq -r .access_token)
-+      curl -sLS -X POST "https://kanban.example.com/mcp/agent/tools/call" \
++      curl -sLS -X POST "https://kanban.example.com/mcp/agent" \
 +        -H "Authorization: Bearer ${TOKEN}" \
 +        -H "Content-Type: application/json" \
-+        -d '{"name": "search_tickets", "arguments": {"query": "CI Pipeline", "lod": "summary"}}'
++        -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_tickets", "arguments": {"query": "CI Pipeline", "lod": "summary"}}}'
 +```
 +
 +---
