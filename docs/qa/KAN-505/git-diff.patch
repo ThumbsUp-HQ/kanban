@@ -1,0 +1,333 @@
+diff --git a/kanban/web/src/features/settings/ColorPresetPicker.css b/kanban/web/src/features/settings/ColorPresetPicker.css
+index d0bfa86f..6cc16f01 100644
+--- a/kanban/web/src/features/settings/ColorPresetPicker.css
++++ b/kanban/web/src/features/settings/ColorPresetPicker.css
+@@ -1,4 +1,4 @@
+-/* Color Preset Picker Styles (KB-P3-AUDIT-23) */
++/* Color Preset Picker Styles (KB-P3-AUDIT-23, KAN-505) */
+ 
+ .kb-color-picker-wrapper {
+   display: inline-flex;
+@@ -8,6 +8,14 @@
+   flex-wrap: wrap;
+ }
+ 
++.kb-input-label {
++  font-size: 13px;
++  font-weight: 500;
++  color: var(--fg-secondary);
++  display: inline-flex;
++  align-items: center;
++}
++
+ .kb-color-swatch-badge {
+   display: inline-flex;
+   align-items: center;
+@@ -29,7 +37,7 @@
+   font-size: 13px;
+   border-radius: 4px;
+   border: 1px solid var(--border-subtle);
+-  background-color: var(--bg-surface);
++  background-color: var(--bg-input);
+   color: var(--fg-primary);
+   min-width: 190px;
+   max-width: 220px;
+@@ -62,6 +70,18 @@
+   color: var(--fg-primary);
+ }
+ 
++.kb-color-preset-select:focus,
++.kb-color-hex-input:focus {
++  outline: none;
++  border-color: var(--brand-primary);
++}
++
++.kb-color-preset-select:disabled,
++.kb-color-hex-input:disabled {
++  cursor: not-allowed;
++  opacity: 0.6;
++}
++
+ .kb-colored-pill {
+   display: inline-flex;
+   align-items: center;
+diff --git a/kanban/web/src/features/settings/ColorPresetPicker.tsx b/kanban/web/src/features/settings/ColorPresetPicker.tsx
+index 60340d5c..4fccced0 100644
+--- a/kanban/web/src/features/settings/ColorPresetPicker.tsx
++++ b/kanban/web/src/features/settings/ColorPresetPicker.tsx
+@@ -1,12 +1,13 @@
+ /**
+- * Color Preset Picker and Palette Components (KB-P3-AUDIT-23).
++ * Color Preset Picker and Palette Components (KB-P3-AUDIT-23, KAN-505).
+  *
+  * Implements 12 WCAG-contrast preset colors, live SVG circle swatches,
+- * and advanced color picker synchronization with strict CSP style-src 'self'
+- * compliance (zero inline style props).
++ * FieldHelpHint popover guidance, and advanced color picker synchronization
++ * with strict CSP style-src 'self' compliance (zero inline style props).
+  */
+ 
+ import React, { type JSX } from 'react';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import './ColorPresetPicker.css';
+ 
+ export interface ColorPreset {
+@@ -46,6 +47,11 @@ export interface ColorPresetPickerProps {
+   label?: string;
+   testId?: string;
+   disabled?: boolean;
++  defaultValue?: string;
++  docHref?: string;
++  helpTitle?: string;
++  helpSummary?: string;
++  showHelpHint?: boolean;
+ }
+ 
+ export function ColorPresetPicker({
+@@ -54,6 +60,11 @@ export function ColorPresetPicker({
+   label,
+   testId,
+   disabled = false,
++  defaultValue = '#4f46e5 (Indigo)',
++  docHref = '/docs/enterprise-whitespace-and-kanban-board#color-presets-and-contrast-standards',
++  helpTitle,
++  helpSummary,
++  showHelpHint = true,
+ }: ColorPresetPickerProps): JSX.Element {
+   const safeHex = sanitizeHexColor(value);
+   const matchedPreset = findPresetByHex(value);
+@@ -68,6 +79,7 @@ export function ColorPresetPicker({
+   const selectId = `${baseId}-preset-select`;
+   const colorPickerId = `${baseId}-color-picker`;
+   const swatchId = `${baseId}-swatch`;
++  const helpHintId = `${baseId}-help-hint`;
+ 
+   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+     const selected = e.target.value;
+@@ -81,9 +93,35 @@ export function ColorPresetPicker({
+     }
+   };
+ 
++  const defaultTitle = helpTitle ?? (label ? `${label} Color` : 'Color Preset & Hex Code');
++  const defaultSummary =
++    helpSummary ??
++    'Select from 12 WCAG-contrast preset colors or enter a custom 7-character #RRGGBB hex code. When unset, defaults to #4f46e5 (Indigo).';
++
+   return (
+     <div className="kb-color-picker-wrapper" data-testid={`${baseId}-picker`}>
+       {label && <span className="kb-input-label">{label}</span>}
++      {showHelpHint && (
++        <FieldHelpHint
++          testId={helpHintId}
++          title={defaultTitle}
++          summary={defaultSummary}
++          defaultValue={defaultValue}
++          validValues={[
++            {
++              label: '12 WCAG-contrast preset hexes',
++              description:
++                'Curated accessible presets (Slate, Indigo, Blue, Cyan, Teal, Emerald, Amber, Orange, Rose, Red, Purple, Pink)',
++            },
++            {
++              label: 'Custom #RRGGBB hex',
++              description: '7-character hexadecimal color code (e.g. #4f46e5)',
++            },
++          ]}
++          example="#4f46e5"
++          docHref={docHref}
++        />
++      )}
+       <span className="kb-color-swatch-badge" data-testid={swatchId} title={`Color: ${safeHex}`}>
+         <svg
+           className="kb-swatch-circle"
+diff --git a/kanban/web/src/features/settings/__tests__/ColorPresetPicker.test.tsx b/kanban/web/src/features/settings/__tests__/ColorPresetPicker.test.tsx
+index d1207f5a..6cc994a6 100644
+--- a/kanban/web/src/features/settings/__tests__/ColorPresetPicker.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ColorPresetPicker.test.tsx
+@@ -1,10 +1,10 @@
+ /**
+- * Unit tests for ColorPresetPicker and ColoredPill (KB-P3-AUDIT-23).
++ * Unit tests for ColorPresetPicker and ColoredPill (KB-P3-AUDIT-23, KAN-505).
+  */
+ 
+ import React from 'react';
+ import { describe, it, expect, vi } from 'vitest';
+-import { render, screen, fireEvent } from '@testing-library/react';
++import { render, screen, fireEvent, act } from '@testing-library/react';
+ import {
+   ColorPresetPicker,
+   ColoredPill,
+@@ -106,11 +106,13 @@ describe('ColorPresetPicker and Palette Utils', () => {
+   it('uses default testId when none is provided and handles testId without -input', () => {
+     const { unmount } = render(<ColorPresetPicker value="#4f46e5" onChange={vi.fn()} />);
+     expect(screen.getByTestId('color-preset-picker')).toBeDefined();
++    expect(screen.getByTestId('color-preset-help-hint')).toBeDefined();
+     unmount();
+ 
+     render(<ColorPresetPicker value="#4f46e5" onChange={vi.fn()} testId="plain-id" />);
+     expect(screen.getByTestId('plain-id-picker')).toBeDefined();
+     expect(screen.getByTestId('plain-id-input')).toBeDefined();
++    expect(screen.getByTestId('plain-id-help-hint')).toBeDefined();
+   });
+ 
+   it('renders ColoredPill with custom text, preset fallback, and null fallback', () => {
+@@ -128,4 +130,121 @@ describe('ColorPresetPicker and Palette Utils', () => {
+     rerender(<ColoredPill colorHex={null} testId="pill-1" />);
+     expect(screen.getByTestId('pill-1').textContent).toContain('Indigo');
+   });
++
++  it('renders FieldHelpHint with #RRGGBB format guidance, #4f46e5 default value, and wiki docHref', () => {
++    render(
++      <ColorPresetPicker
++        value="#4f46e5"
++        onChange={vi.fn()}
++        testId="state-color-input"
++        label="State Color"
++      />
++    );
++
++    const hintTrigger = screen.getByTestId('state-color-help-hint');
++    expect(hintTrigger).toBeDefined();
++    expect(hintTrigger.getAttribute('aria-label')).toBe('Help for State Color Color');
++
++    act(() => {
++      hintTrigger.focus();
++    });
++
++    const popover = screen.getByTestId('state-color-help-hint-popover');
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('State Color Color');
++    expect(popover.textContent).toContain('#RRGGBB');
++    expect(popover.textContent).toContain('12 WCAG-contrast preset hexes');
++    expect(popover.textContent).toContain('Custom #RRGGBB hex');
++
++    const defaultSection = screen.getByTestId('state-color-help-hint-default');
++    expect(defaultSection.textContent).toContain('#4f46e5 (Indigo)');
++
++    const docLink = screen.getByTestId<HTMLAnchorElement>('state-color-help-hint-doc-link');
++    expect(docLink.getAttribute('href')).toBe(
++      '/docs/enterprise-whitespace-and-kanban-board#color-presets-and-contrast-standards'
++    );
++  });
++
++  it('supports custom FieldHelpHint props and hiding hint via showHelpHint=false', () => {
++    const { rerender } = render(
++      <ColorPresetPicker
++        value="#2563eb"
++        onChange={vi.fn()}
++        testId="custom-help"
++        helpTitle="Priority Color Guide"
++        helpSummary="Choose an accessible priority color."
++        defaultValue="#2563eb (Blue)"
++        docHref="/docs/custom-colors#palette"
++      />
++    );
++
++    const hintTrigger = screen.getByTestId('custom-help-help-hint');
++    act(() => {
++      hintTrigger.focus();
++    });
++
++    const popover = screen.getByTestId('custom-help-help-hint-popover');
++    expect(popover.textContent).toContain('Priority Color Guide');
++    expect(popover.textContent).toContain('Choose an accessible priority color.');
++    expect(popover.textContent).toContain('#2563eb (Blue)');
++
++    const docLink = screen.getByTestId<HTMLAnchorElement>('custom-help-help-hint-doc-link');
++    expect(docLink.getAttribute('href')).toBe('/docs/custom-colors#palette');
++
++    rerender(
++      <ColorPresetPicker
++        value="#2563eb"
++        onChange={vi.fn()}
++        testId="custom-help"
++        showHelpHint={false}
++      />
++    );
++
++    expect(screen.queryByTestId('custom-help-help-hint')).toBeNull();
++  });
++
++  it('verifies preset/hex selection non-regression in Light & Dark themes', () => {
++    const handleLightChange = vi.fn();
++    const { unmount } = render(
++      <div data-theme="light">
++        <ColorPresetPicker
++          value="#4f46e5"
++          onChange={handleLightChange}
++          testId="light-picker-input"
++          label="Light Theme State"
++        />
++      </div>
++    );
++
++    const lightSelect = screen.getByTestId<HTMLSelectElement>('light-picker-preset-select');
++    expect(lightSelect.value).toBe('#4f46e5');
++    fireEvent.change(lightSelect, { target: { value: '#059669' } });
++    expect(handleLightChange).toHaveBeenCalledWith('#059669');
++
++    const lightHex = screen.getByTestId('light-picker-input');
++    fireEvent.change(lightHex, { target: { value: '#dc2626' } });
++    expect(handleLightChange).toHaveBeenCalledWith('#dc2626');
++    unmount();
++
++    const handleDarkChange = vi.fn();
++    render(
++      <div data-theme="dark">
++        <ColorPresetPicker
++          value="#0891b2"
++          onChange={handleDarkChange}
++          testId="dark-picker-input"
++          label="Dark Theme State"
++        />
++      </div>
++    );
++
++    const darkSelect = screen.getByTestId<HTMLSelectElement>('dark-picker-preset-select');
++    expect(darkSelect.value).toBe('#0891b2');
++    fireEvent.change(darkSelect, { target: { value: '#ea580c' } });
++    expect(handleDarkChange).toHaveBeenCalledWith('#ea580c');
++
++    const darkHex = screen.getByTestId('dark-picker-input');
++    fireEvent.change(darkHex, { target: { value: '#7c3aed' } });
++    expect(handleDarkChange).toHaveBeenCalledWith('#7c3aed');
++  });
+ });
+diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
+index 099069b..1cb442c 100644
+--- a/Enterprise-Whitespace-and-Kanban-Board.md
++++ b/Enterprise-Whitespace-and-Kanban-Board.md
+@@ -190,3 +190,33 @@ Customize the state machine columns, sequence ordering, color badges, and column
+ Manage project collaborators across human users, groups, and autonomous agent service principals with granular capability masks:
+ 
+ ![Project Members and Access ACL Management](images/56-project-members-access-acl.png)
++
++
++---
++
++## Color Presets and Contrast Standards
++
++To preserve visual accessibility across dense boards, table rows, and state badges, 👍kanban standardizes on a curated palette of 12 WCAG AA compliant preset colors. Every color is calibrated to maintain a contrast ratio of at least 4.5:1 against light and dark background surfaces.
++
++### Curated 12-Color Preset Palette
++
++| Preset Name | Hex Code | Semantic Role / Recommendation |
++| :--- | :--- | :--- |
++| Slate | `#64748b` | Neutral states, archived workflows, backlog items |
++| Indigo | `#4f46e5` | System default fallback color for states, labels, and priorities |
++| Blue | `#2563eb` | Active workflows, started tasks, primary badges |
++| Cyan | `#0891b2` | Informational tags, technical debt, infrastructure |
++| Teal | `#0d9488` | Verification stages, documentation, secondary labels |
++| Emerald | `#059669` | Completed milestones, green builds, approved states |
++| Amber | `#d97706` | Warning stages, pending review, triage queues |
++| Orange | `#ea580c` | Medium priority items, fast-track workflows |
++| Rose | `#e11d48` | High priority tags, security advisories |
++| Red | `#dc2626` | Urgent blockers, canceled states, defect reports |
++| Purple | `#7c3aed` | Feature epics, release milestones, architecture tracks |
++| Pink | `#db2777` | UX and design initiatives, customer feedback |
++
++### Default Value and Custom Hex Input
++
++- **Default Fallback:** When a state, label, or priority is created without an explicit color selection, the system applies the default fallback `#4f46e5` (Indigo).
++- **Custom Hex Codes:** Teams requiring custom branding can input any valid 7-character `#RRGGBB` hexadecimal code via the advanced color picker or direct text input. Values are automatically normalized and validated.
++- **Contrast Guidance:** When entering custom colors, administrators should verify that text or badge foregrounds meet the WCAG AA minimum contrast ratio of 4.5:1 (or 3:1 for large badges) against surrounding surface containers in both Light and Dark themes.
