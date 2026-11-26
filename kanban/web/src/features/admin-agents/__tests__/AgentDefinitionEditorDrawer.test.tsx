@@ -551,6 +551,8 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       expect(slugHelp).toBeDefined();
       expect(slugHelp.getAttribute('aria-label')).toBe('Help for Agent Slug (Permanent Handle)');
 
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+
       const mcpHelp = screen.getByTestId('agent-mcp-tools-help');
       expect(mcpHelp).toBeDefined();
       expect(mcpHelp.getAttribute('aria-label')).toBe('Help for Allowed MCP Agent Tools');

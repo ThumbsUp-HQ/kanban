@@ -1,8 +1,118 @@
 diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-index 90f4de03..c5f90808 100644
+index 90f4de03..9d038b39 100644
 --- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-@@ -668,23 +668,25 @@ function AgentDefinitionEditorContent({
+@@ -329,8 +329,10 @@ function AgentDefinitionEditorContent({
+ 
+       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
+         <div className="kb-form-group">
+-          <label htmlFor="agent-slug-input" className="kb-form-label">
+-            Agent Slug (Permanent Handle)
++          <div className="kb-form-label-row">
++            <label htmlFor="agent-slug-input" className="kb-form-label">
++              Agent Slug (Permanent Handle)
++            </label>
+             <FieldHelpHint
+               title="Agent Slug (Permanent Handle)"
+               fieldKey="agent_slug"
+@@ -341,7 +343,7 @@ function AgentDefinitionEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+               testId="agent-slug-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="agent-slug-input"
+             type="text"
+@@ -373,8 +375,10 @@ function AgentDefinitionEditorContent({
+         </div>
+ 
+         <div className="kb-form-group">
+-          <label htmlFor="agent-harness-select" className="kb-form-label">
+-            Autonomous Execution Harness
++          <div className="kb-form-label-row">
++            <label htmlFor="agent-harness-select" className="kb-form-label">
++              Autonomous Execution Harness
++            </label>
+             <FieldHelpHint
+               title="Autonomous Execution Harness"
+               fieldKey="agent_harness_kind"
+@@ -383,7 +387,7 @@ function AgentDefinitionEditorContent({
+               validValues={['in_app_sdk', 'cli_pipe', 'remote_runner']}
+               defaultValue="in_app_sdk"
+             />
+-          </label>
++          </div>
+           <select
+             id="agent-harness-select"
+             className="kb-form-select"
+@@ -546,8 +550,10 @@ function AgentDefinitionEditorContent({
+           )}
+ 
+           <div className="kb-form-group">
+-            <label htmlFor="agent-timeout-input" className="kb-form-label">
+-              Timeout (milliseconds, 1000 to 600000)
++            <div className="kb-form-label-row">
++              <label htmlFor="agent-timeout-input" className="kb-form-label">
++                Timeout (milliseconds, 1000 to 600000)
++              </label>
+               <FieldHelpHint
+                 title="Agent Timeout"
+                 summary="Execution deadline in milliseconds before aborting agent harness invocation."
+@@ -556,7 +562,7 @@ function AgentDefinitionEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners"
+                 testId="agent-timeout-help"
+               />
+-            </label>
++            </div>
+             <input
+               id="agent-timeout-input"
+               type="number"
+@@ -574,8 +580,10 @@ function AgentDefinitionEditorContent({
+           </div>
+ 
+           <div className="kb-form-group">
+-            <label htmlFor="agent-repo-mode-select" className="kb-form-label">
+-              Repository Access Mode
++            <div className="kb-form-label-row">
++              <label htmlFor="agent-repo-mode-select" className="kb-form-label">
++                Repository Access Mode
++              </label>
+               <FieldHelpHint
+                 title="Repository Access Mode"
+                 fieldKey="agent_repo_access_mode"
+@@ -584,7 +592,7 @@ function AgentDefinitionEditorContent({
+                 validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
+                 defaultValue="none"
+               />
+-            </label>
++            </div>
+             <select
+               id="agent-repo-mode-select"
+               className="kb-form-select"
+@@ -599,8 +607,10 @@ function AgentDefinitionEditorContent({
+           </div>
+ 
+           <div className="kb-form-group">
+-            <label id="agent-mcp-tools-label" className="kb-form-label">
+-              Allowed MCP Agent Tools
++            <div className="kb-form-label-row">
++              <span id="agent-mcp-tools-label" className="kb-form-label">
++                Allowed MCP Agent Tools
++              </span>
+               <FieldHelpHint
+                 title="Allowed MCP Agent Tools"
+                 fieldKey="agent_mcp_allowed_tools"
+@@ -615,7 +625,7 @@ function AgentDefinitionEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+                 testId="agent-mcp-tools-help"
+               />
+-            </label>
++            </div>
+             <span className="kb-form-hint">
+               Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).
+             </span>
+@@ -668,23 +678,25 @@ function AgentDefinitionEditorContent({
            </div>
          </AdvancedSection>
  
@@ -46,10 +156,19 @@ index 90f4de03..c5f90808 100644
        </form>
      </div>
 diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
-index 1d897c5b..81af96f6 100644
+index 1d897c5b..db51ad33 100644
 --- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
 +++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
-@@ -672,4 +672,372 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+@@ -551,6 +551,8 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       expect(slugHelp).toBeDefined();
+       expect(slugHelp.getAttribute('aria-label')).toBe('Help for Agent Slug (Permanent Handle)');
+ 
++      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++
+       const mcpHelp = screen.getByTestId('agent-mcp-tools-help');
+       expect(mcpHelp).toBeDefined();
+       expect(mcpHelp.getAttribute('aria-label')).toBe('Help for Allowed MCP Agent Tools');
+@@ -672,4 +674,372 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
        document.documentElement.removeAttribute('data-theme');
      });
    });
@@ -423,15 +542,22 @@ index 1d897c5b..81af96f6 100644
 +  });
  });
 diff --git a/kanban/web/src/features/admin-agents/agentStudio.css b/kanban/web/src/features/admin-agents/agentStudio.css
-index ef049ca7..120243fe 100644
+index ef049ca7..f5451030 100644
 --- a/kanban/web/src/features/admin-agents/agentStudio.css
 +++ b/kanban/web/src/features/admin-agents/agentStudio.css
-@@ -460,3 +460,57 @@
+@@ -460,3 +460,76 @@
      align-items: stretch;
    }
  }
 +
 +/* Drawer and Modal Footers (KAN-451) */
++.kb-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  max-width: 100%;
++}
++
 +.kb-drawer-footer,
 +.kb-modal-footer {
 +  display: flex;
@@ -455,14 +581,25 @@ index ef049ca7..120243fe 100644
 +  margin-left: auto;
 +}
 +
++.kb-drawer-footer button,
++.kb-drawer-footer-actions-left button,
++.kb-drawer-footer-actions-right button {
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
 +@media (max-width: 767px) {
++  .kb-modal-card {
++    padding-bottom: 0;
++  }
++
 +  .kb-modal-footer,
 +  .kb-drawer-footer {
 +    position: sticky;
 +    bottom: 0;
 +    background: var(--bg-surface);
 +    border-top: 1px solid var(--border-subtle);
-+    padding: var(--space-3, 12px) 0 calc(var(--space-3, 12px) + env(safe-area-inset-bottom, 0px));
++    padding: var(--space-3, 12px) 0 calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
 +    z-index: 5;
 +    flex-direction: column-reverse;
 +  }
@@ -475,6 +612,7 @@ index ef049ca7..120243fe 100644
 +  .kb-drawer-footer-actions-right button {
 +    width: 100%;
 +    min-height: var(--tap-min, 44px);
++    white-space: normal;
 +  }
 +
 +  .kb-drawer-footer-actions-right {
@@ -485,10 +623,265 @@ index ef049ca7..120243fe 100644
 +}
 +
 diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-index 5e2be665..5127fe66 100644
+index 5e2be665..a93e4aa3 100644
 --- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-@@ -1141,32 +1141,36 @@ function AiProviderEditorContent({
+@@ -589,8 +589,10 @@ function AiProviderEditorContent({
+       >
+         {/* 1. Protocol & Provider Engine */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-kind-select" className="kb-form-label">
+-            <span>Protocol & Provider Engine</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-kind-select" className="kb-form-label">
++              <span>Protocol & Provider Engine</span>
++            </label>
+             <FieldHelpHint
+               title="AI Provider Engine"
+               summary="The underlying runtime and API protocol for AI completions and evaluations."
+@@ -602,7 +604,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+               testId="provider-kind-help"
+             />
+-          </label>
++          </div>
+           <select
+             id="provider-kind-select"
+             className="kb-form-select"
+@@ -664,8 +666,10 @@ function AiProviderEditorContent({
+ 
+         {/* 2. Display Name */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-name-input" className="kb-form-label">
+-            <span>Display Name</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-name-input" className="kb-form-label">
++              <span>Display Name</span>
++            </label>
+             <FieldHelpHint
+               title="Display Name"
+               summary="Human-readable label for this AI provider instance."
+@@ -674,7 +678,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+               testId="provider-name-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-name-input"
+             type="text"
+@@ -694,8 +698,10 @@ function AiProviderEditorContent({
+ 
+         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-key-input" className="kb-form-label">
+-            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-key-input" className="kb-form-label">
++              <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
++            </label>
+             <FieldHelpHint
+               title="API Secret Key"
+               summary="Authentication secret for upstream LLM provider API requests."
+@@ -703,7 +709,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+               testId="provider-key-help"
+             />
+-          </label>
++          </div>
+           <div className="kb-api-key-row">
+             <input
+               id="provider-key-input"
+@@ -769,15 +775,17 @@ function AiProviderEditorContent({
+ 
+         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            <span>
+-              HTTP Base URL{' '}
+-              {providerKind === 'ollama'
+-                ? '(Default: http://127.0.0.1:11434)'
+-                : providerKind === 'gemini'
+-                  ? '(Default: https://generativelanguage.googleapis.com)'
+-                  : '(Default: https://api.openai.com/v1)'}
+-            </span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-base-url-input" className="kb-form-label">
++              <span>
++                HTTP Base URL{' '}
++                {providerKind === 'ollama'
++                  ? '(Default: http://127.0.0.1:11434)'
++                  : providerKind === 'gemini'
++                    ? '(Default: https://generativelanguage.googleapis.com)'
++                    : '(Default: https://api.openai.com/v1)'}
++              </span>
++            </label>
+             <FieldHelpHint
+               title="HTTP Base URL"
+               summary="Base endpoint URL for outbound LLM API requests."
+@@ -796,7 +804,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+               testId="provider-base-url-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-base-url-input"
+             type="url"
+@@ -828,8 +836,10 @@ function AiProviderEditorContent({
+ 
+         {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+-            <span>Cutoff Timeout (ms)</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
++              <span>Cutoff Timeout (ms)</span>
++            </label>
+             <FieldHelpHint
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+@@ -838,7 +848,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
+               testId="provider-timeout-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-timeout-ms-input"
+             type="number"
+@@ -862,8 +872,10 @@ function AiProviderEditorContent({
+         {/* 6. Model Allowlist & Probing */}
+         <div className="kb-form-group">
+           <div className="kb-model-allowlist-header">
+-            <label htmlFor="provider-models-input" className="kb-form-label">
+-              <span>Model Allowlist (comma separated)</span>
++            <div className="kb-form-label-row">
++              <label htmlFor="provider-models-input" className="kb-form-label">
++                <span>Model Allowlist (comma separated)</span>
++              </label>
+               <FieldHelpHint
+                 title="Model Allowlist"
+                 summary="Comma-separated model names permitted for inference or probed from the endpoint."
+@@ -871,7 +883,7 @@ function AiProviderEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+                 testId="provider-models-help"
+               />
+-            </label>
++            </div>
+             <button
+               type="button"
+               className="kb-btn kb-btn-secondary kb-probe-btn"
+@@ -983,8 +995,10 @@ function AiProviderEditorContent({
+           <div data-testid="advanced-model-harness-config">
+             <div className="kb-model-params-grid">
+               <div className="kb-form-group">
+-                <label htmlFor="provider-temperature-input" className="kb-form-label">
+-                  <span>Temperature</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-temperature-input" className="kb-form-label">
++                    <span>Temperature</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Temperature"
+                     summary="Sampling randomness governing creative variance versus deterministic predictability."
+@@ -993,7 +1007,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-temperature-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-temperature-input"
+                   type="number"
+@@ -1012,8 +1026,10 @@ function AiProviderEditorContent({
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="provider-top-p-input" className="kb-form-label">
+-                  <span>Top-P (Nucleus)</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-top-p-input" className="kb-form-label">
++                    <span>Top-P (Nucleus)</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Top-P (Nucleus)"
+                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
+@@ -1022,7 +1038,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-top-p-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-top-p-input"
+                   type="number"
+@@ -1041,8 +1057,10 @@ function AiProviderEditorContent({
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+-                  <span>Max Tokens</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-max-tokens-input" className="kb-form-label">
++                    <span>Max Tokens</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Max Tokens"
+                     summary="Maximum generation token ceiling for completion and reasoning generation."
+@@ -1051,7 +1069,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-max-tokens-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-max-tokens-input"
+                   type="number"
+@@ -1071,15 +1089,17 @@ function AiProviderEditorContent({
+             </div>
+ 
+             <div className="kb-form-group kb-form-group--mt12">
+-              <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
+-                <span>mTLS Client Certificate PEM (Optional)</span>
++              <div className="kb-form-label-row">
++                <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
++                  <span>mTLS Client Certificate PEM (Optional)</span>
++                </label>
+                 <FieldHelpHint
+                   title="mTLS Client Certificate PEM"
+                   summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
+                   docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+                   testId="provider-mtls-cert-help"
+                 />
+-              </label>
++              </div>
+               <textarea
+                 id="provider-mtls-cert-input"
+                 className="kb-form-input kb-form-textarea--mono"
+@@ -1096,8 +1116,10 @@ function AiProviderEditorContent({
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="provider-residency-select" className="kb-form-label">
+-                <span>Data Residency Tier (Override)</span>
++              <div className="kb-form-label-row">
++                <label htmlFor="provider-residency-select" className="kb-form-label">
++                  <span>Data Residency Tier (Override)</span>
++                </label>
+                 <FieldHelpHint
+                   title="Data Residency Tier"
+                   summary="Enforces data locality boundaries preventing external data egress."
+@@ -1106,7 +1128,7 @@ function AiProviderEditorContent({
+                   docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+                   testId="provider-residency-help"
+                 />
+-              </label>
++              </div>
+               <select
+                 id="provider-residency-select"
+                 className="kb-form-select"
+@@ -1141,32 +1163,36 @@ function AiProviderEditorContent({
            </div>
          )}
  
@@ -552,10 +945,19 @@ index 5e2be665..5127fe66 100644
        </form>
      </div>
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
-index 3aaa5353..7948f04e 100644
+index 3aaa5353..ea95a07a 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 +++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
-@@ -2205,5 +2205,70 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+@@ -2133,6 +2133,8 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+         const residencyHelp = screen.getByTestId('provider-residency-help');
+         expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
+ 
++        expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++
+         // Verify popover interaction on provider-name-help
+         act(() => {
+           nameHelp.focus();
+@@ -2205,5 +2207,70 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
          });
        });
      });
@@ -627,10 +1029,31 @@ index 3aaa5353..7948f04e 100644
    });
  });
 diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
-index 9dbeb4f3..eea9520a 100644
+index 9dbeb4f3..d978f882 100644
 --- a/kanban/web/src/features/admin-ai/aiStudio.css
 +++ b/kanban/web/src/features/admin-ai/aiStudio.css
-@@ -340,14 +340,29 @@
+@@ -286,6 +286,20 @@
+   font-size: var(--text-xl, 18px);
+   font-weight: 700;
+   margin: 0;
++  flex: 1;
++  min-width: 0;
++}
++
++.kb-modal-header > button,
++.kb-modal-header-actions {
++  flex-shrink: 0;
++}
++
++.kb-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  max-width: 100%;
+ }
+ 
+ .kb-modal-header-actions {
+@@ -340,14 +354,36 @@
    color: var(--fg-secondary);
  }
  
@@ -658,12 +1081,40 @@ index 9dbeb4f3..eea9520a 100644
 +  margin-left: auto;
 +}
 +
++.kb-drawer-footer button,
++.kb-drawer-footer-actions-left button,
++.kb-drawer-footer-actions-right button {
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
  /* Ledger and Progress Bar */
  .kb-budget-progress-container {
    margin: var(--space-3, 12px) 0;
-@@ -474,21 +489,33 @@
+@@ -423,15 +459,6 @@
+     flex-direction: column;
+     align-items: stretch;
+   }
+-
+-  .kb-modal-footer {
+-    flex-direction: column-reverse;
+-  }
+-
+-  .kb-modal-footer button {
+-    width: 100%;
+-    min-height: 44px;
+-  }
+ }
+ 
+ @media (max-width: 767px) {
+@@ -473,21 +500,38 @@
+     max-width: 100%;
    }
  
++  .kb-modal-card {
++    padding-bottom: 0;
++  }
++
    .kb-modal-footer,
 +  .kb-drawer-footer,
    .kb-ai-drawer-footer {
@@ -672,7 +1123,7 @@ index 9dbeb4f3..eea9520a 100644
      background: var(--bg-surface);
      border-top: 1px solid var(--border-subtle);
 -    padding: var(--space-3, 12px);
-+    padding: var(--space-3, 12px) 0 calc(var(--space-3, 12px) + env(safe-area-inset-bottom, 0px));
++    padding: var(--space-3, 12px) 0 calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
      z-index: 5;
      flex-direction: column-reverse;
    }
@@ -686,16 +1137,29 @@ index 9dbeb4f3..eea9520a 100644
    .kb-ai-drawer-footer button {
      width: 100%;
      min-height: var(--tap-min, 44px);
-   }
++    white-space: normal;
++  }
 +
 +  .kb-drawer-footer-actions-right {
 +    margin-left: 0;
 +    flex-direction: column-reverse;
 +    gap: var(--space-3, 12px);
-+  }
+   }
  }
  
- /* Form Helper & Strict CSP Classes */
+@@ -944,10 +988,11 @@
+ @media (max-width: 640px) {
+   .kb-modal-card {
+     padding: var(--space-4, 16px);
++    padding-bottom: 0;
+   }
+ 
+   .kb-modal-header {
+-    flex-wrap: wrap;
++    flex-wrap: nowrap;
+     gap: var(--space-2, 8px);
+   }
+ 
 diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
 index c8c49de8..ce1fdb38 100644
 --- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx

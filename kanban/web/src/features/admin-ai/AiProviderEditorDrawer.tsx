@@ -589,8 +589,10 @@ function AiProviderEditorContent({
       >
         {/* 1. Protocol & Provider Engine */}
         <div className="kb-form-group">
-          <label htmlFor="provider-kind-select" className="kb-form-label">
-            <span>Protocol & Provider Engine</span>
+          <div className="kb-form-label-row">
+            <label htmlFor="provider-kind-select" className="kb-form-label">
+              <span>Protocol & Provider Engine</span>
+            </label>
             <FieldHelpHint
               title="AI Provider Engine"
               summary="The underlying runtime and API protocol for AI completions and evaluations."
@@ -602,7 +604,7 @@ function AiProviderEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
               testId="provider-kind-help"
             />
-          </label>
+          </div>
           <select
             id="provider-kind-select"
             className="kb-form-select"
@@ -664,8 +666,10 @@ function AiProviderEditorContent({
 
         {/* 2. Display Name */}
         <div className="kb-form-group">
-          <label htmlFor="provider-name-input" className="kb-form-label">
-            <span>Display Name</span>
+          <div className="kb-form-label-row">
+            <label htmlFor="provider-name-input" className="kb-form-label">
+              <span>Display Name</span>
+            </label>
             <FieldHelpHint
               title="Display Name"
               summary="Human-readable label for this AI provider instance."
@@ -674,7 +678,7 @@ function AiProviderEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
               testId="provider-name-help"
             />
-          </label>
+          </div>
           <input
             id="provider-name-input"
             type="text"
@@ -694,8 +698,10 @@ function AiProviderEditorContent({
 
         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
         <div className="kb-form-group">
-          <label htmlFor="provider-key-input" className="kb-form-label">
-            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
+          <div className="kb-form-label-row">
+            <label htmlFor="provider-key-input" className="kb-form-label">
+              <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
+            </label>
             <FieldHelpHint
               title="API Secret Key"
               summary="Authentication secret for upstream LLM provider API requests."
@@ -703,7 +709,7 @@ function AiProviderEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
               testId="provider-key-help"
             />
-          </label>
+          </div>
           <div className="kb-api-key-row">
             <input
               id="provider-key-input"
@@ -769,15 +775,17 @@ function AiProviderEditorContent({
 
         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
         <div className="kb-form-group">
-          <label htmlFor="provider-base-url-input" className="kb-form-label">
-            <span>
-              HTTP Base URL{' '}
-              {providerKind === 'ollama'
-                ? '(Default: http://127.0.0.1:11434)'
-                : providerKind === 'gemini'
-                  ? '(Default: https://generativelanguage.googleapis.com)'
-                  : '(Default: https://api.openai.com/v1)'}
-            </span>
+          <div className="kb-form-label-row">
+            <label htmlFor="provider-base-url-input" className="kb-form-label">
+              <span>
+                HTTP Base URL{' '}
+                {providerKind === 'ollama'
+                  ? '(Default: http://127.0.0.1:11434)'
+                  : providerKind === 'gemini'
+                    ? '(Default: https://generativelanguage.googleapis.com)'
+                    : '(Default: https://api.openai.com/v1)'}
+              </span>
+            </label>
             <FieldHelpHint
               title="HTTP Base URL"
               summary="Base endpoint URL for outbound LLM API requests."
@@ -796,7 +804,7 @@ function AiProviderEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
               testId="provider-base-url-help"
             />
-          </label>
+          </div>
           <input
             id="provider-base-url-input"
             type="url"
@@ -828,8 +836,10 @@ function AiProviderEditorContent({
 
         {/* 4. Configurable Cutoff Timeout (ms) */}
         <div className="kb-form-group">
-          <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
-            <span>Cutoff Timeout (ms)</span>
+          <div className="kb-form-label-row">
+            <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+              <span>Cutoff Timeout (ms)</span>
+            </label>
             <FieldHelpHint
               title="Cutoff Timeout (ms)"
               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
@@ -838,7 +848,7 @@ function AiProviderEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
               testId="provider-timeout-help"
             />
-          </label>
+          </div>
           <input
             id="provider-timeout-ms-input"
             type="number"
@@ -862,8 +872,10 @@ function AiProviderEditorContent({
         {/* 6. Model Allowlist & Probing */}
         <div className="kb-form-group">
           <div className="kb-model-allowlist-header">
-            <label htmlFor="provider-models-input" className="kb-form-label">
-              <span>Model Allowlist (comma separated)</span>
+            <div className="kb-form-label-row">
+              <label htmlFor="provider-models-input" className="kb-form-label">
+                <span>Model Allowlist (comma separated)</span>
+              </label>
               <FieldHelpHint
                 title="Model Allowlist"
                 summary="Comma-separated model names permitted for inference or probed from the endpoint."
@@ -871,7 +883,7 @@ function AiProviderEditorContent({
                 docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
                 testId="provider-models-help"
               />
-            </label>
+            </div>
             <button
               type="button"
               className="kb-btn kb-btn-secondary kb-probe-btn"
@@ -983,8 +995,10 @@ function AiProviderEditorContent({
           <div data-testid="advanced-model-harness-config">
             <div className="kb-model-params-grid">
               <div className="kb-form-group">
-                <label htmlFor="provider-temperature-input" className="kb-form-label">
-                  <span>Temperature</span>
+                <div className="kb-form-label-row">
+                  <label htmlFor="provider-temperature-input" className="kb-form-label">
+                    <span>Temperature</span>
+                  </label>
                   <FieldHelpHint
                     title="Temperature"
                     summary="Sampling randomness governing creative variance versus deterministic predictability."
@@ -993,7 +1007,7 @@ function AiProviderEditorContent({
                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
                     testId="provider-temperature-help"
                   />
-                </label>
+                </div>
                 <input
                   id="provider-temperature-input"
                   type="number"
@@ -1012,8 +1026,10 @@ function AiProviderEditorContent({
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="provider-top-p-input" className="kb-form-label">
-                  <span>Top-P (Nucleus)</span>
+                <div className="kb-form-label-row">
+                  <label htmlFor="provider-top-p-input" className="kb-form-label">
+                    <span>Top-P (Nucleus)</span>
+                  </label>
                   <FieldHelpHint
                     title="Top-P (Nucleus)"
                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
@@ -1022,7 +1038,7 @@ function AiProviderEditorContent({
                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
                     testId="provider-top-p-help"
                   />
-                </label>
+                </div>
                 <input
                   id="provider-top-p-input"
                   type="number"
@@ -1041,8 +1057,10 @@ function AiProviderEditorContent({
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="provider-max-tokens-input" className="kb-form-label">
-                  <span>Max Tokens</span>
+                <div className="kb-form-label-row">
+                  <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+                    <span>Max Tokens</span>
+                  </label>
                   <FieldHelpHint
                     title="Max Tokens"
                     summary="Maximum generation token ceiling for completion and reasoning generation."
@@ -1051,7 +1069,7 @@ function AiProviderEditorContent({
                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
                     testId="provider-max-tokens-help"
                   />
-                </label>
+                </div>
                 <input
                   id="provider-max-tokens-input"
                   type="number"
@@ -1071,15 +1089,17 @@ function AiProviderEditorContent({
             </div>
 
             <div className="kb-form-group kb-form-group--mt12">
-              <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
-                <span>mTLS Client Certificate PEM (Optional)</span>
+              <div className="kb-form-label-row">
+                <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
+                  <span>mTLS Client Certificate PEM (Optional)</span>
+                </label>
                 <FieldHelpHint
                   title="mTLS Client Certificate PEM"
                   summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
                   docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
                   testId="provider-mtls-cert-help"
                 />
-              </label>
+              </div>
               <textarea
                 id="provider-mtls-cert-input"
                 className="kb-form-input kb-form-textarea--mono"
@@ -1096,8 +1116,10 @@ function AiProviderEditorContent({
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="provider-residency-select" className="kb-form-label">
-                <span>Data Residency Tier (Override)</span>
+              <div className="kb-form-label-row">
+                <label htmlFor="provider-residency-select" className="kb-form-label">
+                  <span>Data Residency Tier (Override)</span>
+                </label>
                 <FieldHelpHint
                   title="Data Residency Tier"
                   summary="Enforces data locality boundaries preventing external data egress."
@@ -1106,7 +1128,7 @@ function AiProviderEditorContent({
                   docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
                   testId="provider-residency-help"
                 />
-              </label>
+              </div>
               <select
                 id="provider-residency-select"
                 className="kb-form-select"

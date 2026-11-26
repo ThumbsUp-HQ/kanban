@@ -2133,6 +2133,8 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
         const residencyHelp = screen.getByTestId('provider-residency-help');
         expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
 
+        expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+
         // Verify popover interaction on provider-name-help
         act(() => {
           nameHelp.focus();

@@ -329,8 +329,10 @@ function AgentDefinitionEditorContent({
 
       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
         <div className="kb-form-group">
-          <label htmlFor="agent-slug-input" className="kb-form-label">
-            Agent Slug (Permanent Handle)
+          <div className="kb-form-label-row">
+            <label htmlFor="agent-slug-input" className="kb-form-label">
+              Agent Slug (Permanent Handle)
+            </label>
             <FieldHelpHint
               title="Agent Slug (Permanent Handle)"
               fieldKey="agent_slug"
@@ -341,7 +343,7 @@ function AgentDefinitionEditorContent({
               docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
               testId="agent-slug-help"
             />
-          </label>
+          </div>
           <input
             id="agent-slug-input"
             type="text"
@@ -373,8 +375,10 @@ function AgentDefinitionEditorContent({
         </div>
 
         <div className="kb-form-group">
-          <label htmlFor="agent-harness-select" className="kb-form-label">
-            Autonomous Execution Harness
+          <div className="kb-form-label-row">
+            <label htmlFor="agent-harness-select" className="kb-form-label">
+              Autonomous Execution Harness
+            </label>
             <FieldHelpHint
               title="Autonomous Execution Harness"
               fieldKey="agent_harness_kind"
@@ -383,7 +387,7 @@ function AgentDefinitionEditorContent({
               validValues={['in_app_sdk', 'cli_pipe', 'remote_runner']}
               defaultValue="in_app_sdk"
             />
-          </label>
+          </div>
           <select
             id="agent-harness-select"
             className="kb-form-select"
@@ -546,8 +550,10 @@ function AgentDefinitionEditorContent({
           )}
 
           <div className="kb-form-group">
-            <label htmlFor="agent-timeout-input" className="kb-form-label">
-              Timeout (milliseconds, 1000 to 600000)
+            <div className="kb-form-label-row">
+              <label htmlFor="agent-timeout-input" className="kb-form-label">
+                Timeout (milliseconds, 1000 to 600000)
+              </label>
               <FieldHelpHint
                 title="Agent Timeout"
                 summary="Execution deadline in milliseconds before aborting agent harness invocation."
@@ -556,7 +562,7 @@ function AgentDefinitionEditorContent({
                 docHref="/docs/multi-provider-ai-engine-and-runners"
                 testId="agent-timeout-help"
               />
-            </label>
+            </div>
             <input
               id="agent-timeout-input"
               type="number"
@@ -574,8 +580,10 @@ function AgentDefinitionEditorContent({
           </div>
 
           <div className="kb-form-group">
-            <label htmlFor="agent-repo-mode-select" className="kb-form-label">
-              Repository Access Mode
+            <div className="kb-form-label-row">
+              <label htmlFor="agent-repo-mode-select" className="kb-form-label">
+                Repository Access Mode
+              </label>
               <FieldHelpHint
                 title="Repository Access Mode"
                 fieldKey="agent_repo_access_mode"
@@ -584,7 +592,7 @@ function AgentDefinitionEditorContent({
                 validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
                 defaultValue="none"
               />
-            </label>
+            </div>
             <select
               id="agent-repo-mode-select"
               className="kb-form-select"
@@ -599,8 +607,10 @@ function AgentDefinitionEditorContent({
           </div>
 
           <div className="kb-form-group">
-            <label id="agent-mcp-tools-label" className="kb-form-label">
-              Allowed MCP Agent Tools
+            <div className="kb-form-label-row">
+              <span id="agent-mcp-tools-label" className="kb-form-label">
+                Allowed MCP Agent Tools
+              </span>
               <FieldHelpHint
                 title="Allowed MCP Agent Tools"
                 fieldKey="agent_mcp_allowed_tools"
@@ -615,7 +625,7 @@ function AgentDefinitionEditorContent({
                 docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
                 testId="agent-mcp-tools-help"
               />
-            </label>
+            </div>
             <span className="kb-form-hint">
               Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).
             </span>
