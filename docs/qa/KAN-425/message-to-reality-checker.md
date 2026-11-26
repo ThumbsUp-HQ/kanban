@@ -34,7 +34,7 @@
 ### A. Backend Pytest Test Suite (`docs/qa/KAN-425/unit-test-results.txt`)
 Executed via:
 ```bash
-PYTHONPATH=. uv run --no-sync python -m pytest \
+uv run --no-sync coverage run --branch -m pytest \
   kanban/tests/api/test_workspace_settings.py \
   kanban/tests/api/test_project_config.py \
   kanban/tests/api/test_admin_trash_api.py \
@@ -47,11 +47,11 @@ PYTHONPATH=. uv run --no-sync python -m pytest \
   kanban/tests/workflows/test_dry_run.py \
   kanban/tests/repos/test_repo_bindings_api.py \
   kanban/tests/test_wiki_bundle_sync.py \
-  kanban/tests/test_docs_custom_fields_guide.py \
-  --cov=kanban --cov-config=scripts/coverage_slice5.ini --cov-report=term-missing
+  kanban/tests/test_docs_custom_fields_guide.py
+uv run --no-sync coverage report --include="kanban/api/v1/admin/destructive.py,kanban/api/v1/admin/workspace_settings.py,kanban/api/v1/custom_field_approvals.py,kanban/api/v1/custom_field_execution.py,kanban/api/v1/custom_fields.py,kanban/api/v1/project_config.py,kanban/api/v1/repo_bindings.py,kanban/api/v1/user_settings.py,kanban/api/v1/workflow_hooks.py" -m
 ```
 
-- **Execution Results:** **128 passed in 115.07s** (0 failures, 0 errors, 0 warnings).
+- **Execution Results:** **128 passed in 105.09s** (0 failures, 0 errors, 0 warnings).
 - **Core Touched Modules Coverage (100% >=95% Threshold):**
   - `kanban/api/v1/admin/destructive.py`: **95%** (133 stmts, 4 miss, 26 branch, 4 brpart)
   - `kanban/api/v1/admin/workspace_settings.py`: **96%** (187 stmts, 2 miss, 68 branch, 8 brpart)
@@ -67,24 +67,19 @@ PYTHONPATH=. uv run --no-sync python -m pytest \
 ### B. Frontend Vitest Test Suite (`docs/qa/KAN-425/unit-test-results.txt`)
 Executed via:
 ```bash
-cd kanban/web && COVERAGE_INCLUDE="src/features/custom-fields/**,src/features/workflows/**,src/features/settings/**,src/features/docs-center/**" npx vitest run \
-  src/features/custom-fields/ \
-  src/features/workflows/ \
-  src/features/settings/ \
-  src/features/docs-center/ \
-  --coverage
+(cd kanban/web && COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldsStudio.tsx,src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/EscalationApprovalPanel.tsx,src/features/settings/WorkspaceSettingsPage.tsx,src/features/settings/ProjectSettingsPage.tsx,src/features/settings/PersonalSettingsPage.tsx,src/features/workflows/WorkflowStudioPage.tsx,src/features/workflows/AttachHookDialog.tsx,src/features/workflows/DryRunDrawer.tsx,src/features/workflows/GitRepoBindingsSection.tsx,src/features/workflows/HookPipelineRow.tsx,src/features/workflows/TransitionRuleCard.tsx,src/features/workflows/api.ts,src/features/docs-center/DocMarkdownViewer.tsx,src/features/docs-center/DocsCenterPage.tsx,src/features/docs-center/HelpDrawer.tsx,src/features/docs-center/docsService.ts,src/features/docs-center/wikiManifest.ts" npx vitest run src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/workflows/__tests__/WorkflowStudioPage.test.tsx src/features/workflows/__tests__/AttachHookDialog.test.tsx src/features/workflows/__tests__/DryRunDrawer.test.tsx src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx src/features/workflows/__tests__/workflowCoverageBooster.test.tsx src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx --coverage --coverage.thresholds.branches=95)
 ```
 
-- **Execution Results:** **744 passed across 35 test files in 22.23s** (0 failed). Zero `act(...)` stderr warnings.
+- **Execution Results:** **385 passed across 13 test files in 16.75s** (0 failed). Zero `act(...)` stderr warnings.
 - **V8 Coverage Breakdown (all >=95% branch threshold):**
-  - `All files`: **99.57% Statements, 96.77% Branch, 99.62% Functions, 99.86% Lines**
-  - `custom-fields`: **99.69% Stmts, 96.89% Branch, 100% Lines**
-  - `settings`: **99.56% Stmts, 96.40% Branch, 99.85% Lines**
+  - `All files`: **99.63% Statements, 96.55% Branch, 99.43% Functions, 99.93% Lines**
+  - `custom-fields`: **99.72% Stmts, 96.65% Branch, 100% Lines**
+  - `settings`: **99.68% Stmts, 95.81% Branch, 100% Lines**
   - `workflows`: **99.48% Stmts, 98.64% Branch, 99.64% Lines**
-  - `docs-center`: **99.60% Stmts, 96.44% Branch, 100% Lines**
+  - `docs-center`: **99.60% Stmts, 96.15% Branch, 100% Lines**
 
 ### C. Playwright Multi-Viewport Visual Suite (`docs/qa/KAN-425/unit-test-results.txt`)
-- **Execution Results:** **1 passed in 50.2s**
+- **Execution Results:** **1 passed in 48.4s**
 - **Verified Invariants:** Zero horizontal scrollbars at 390px, 768px, 1024px, 1440px across all target chapters. Non-zero `naturalWidth` on all embedded images. Port 18429 cleanly released.
 
 ---

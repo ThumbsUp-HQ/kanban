@@ -145,7 +145,7 @@ The following configuration parameters and backend contracts are documented with
 - **`air_gap_mode`:** Zero-external-egress enforcement flag blocking external AI providers and remote webhooks.
 - **`issue_export_enabled` & `issue_import_enabled`:** Master data exfiltration and bulk ingestion prevention toggles.
 - **`issue_export_allowed_roles` & `report_export_allowed_roles`:** Granular role allowlists governing work item and statistical telemetry exports.
-- **`destructive_lifecycle`:** Two-stage deletion protocol (`POST /api/v1/admin/destructive/request` returning blast-radius summary, followed by `POST /api/v1/admin/destructive/execute` with confirmation token and AAL2 verification).
+- **`destructive_lifecycle`:** Two-stage deletion protocol (`POST /api/v1/admin/destructive:request` returning blast-radius summary, followed by `POST /api/v1/admin/destructive:execute` with confirmation token and AAL2 verification).
 
 #### 2. Project Configuration (`project_config.py` & `schemas/project_config.py`)
 - **`name` & `key`:** Scoped display name and immutable uppercase prefix key (2-10 chars, e.g. `KAN`).
@@ -166,13 +166,13 @@ The following configuration parameters and backend contracts are documented with
 - **`standalone_mode_gating`:** Standalone mode rejects `nsjail` fields with HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
 - **`output_formats`:** 7 canonical schemas (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
 - **`test_execute`:** Pre-commit simulation endpoint `POST /api/v1/projects/{project}/custom-fields/test-execute` evaluating formulas in memory.
-- **`dual_control_approvals`:** Escalation requests to `WORKSPACE` or `SERVER` scope enter `pending` state and require cryptographic review via `POST /api/v1/custom-fields/approvals/{id}/approve` with fresh AAL2 credentials.
+- **`dual_control_approvals`:** Escalation requests to `WORKSPACE` or `SERVER` scope enter `pending` state and require cryptographic review via `POST /api/v1/custom-field-approvals/{id}/approve` with fresh AAL2 credentials.
 
 #### 5. Workflow Transition Studio & Git Repos (`workflow_hooks.py` & `repo_bindings.py`)
 - **`hook_kinds`:** `sync_validator` (Wasm check <25ms), `sync_mutator` (Wasm property update), and `agent_interceptor` (Async AI agent gate with real `timeout_ms`).
-- **`failure_policies`:** `fail_closed` (blocks transition on error/timeout) and `fail_open` (logs warning).
+- **`failure_policies`:** `fail_closed` (blocks transition on error/timeout) and `fail_open_warn` (logs warning).
 - **`dry_run`:** Endpoint `POST /api/v1/projects/{project}/workflow-hooks/dry-run` executing transition rules inside a non-mutating simulated sandbox.
-- **`repo_bindings`:** Read-only bare Git mirror bindings (`POST /api/v1/projects/{project}/repo-bindings`) provisioned with `:ro` volume mounts and automated background fetch loops.
+- **`repo_bindings`:** Read-only bare Git mirror bindings (`POST /api/v1/projects/{project}/repo-bindings`) provisioned with `:ro` volume mounts, UI buttons **`+ Bind Git Repository`** and **`Refresh Mirror`**, and automated background fetch loops.
 
 ---
 

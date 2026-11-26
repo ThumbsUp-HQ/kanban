@@ -98,7 +98,8 @@ def test_custom_fields_guide_markdown_content() -> None:
     assert "SERVER" in content
     assert "AAL2" in content
     assert "INVOKING_USER" in content
-    assert "SERVICE_ACCOUNT" in content
+    assert "PROJECT_ADMIN_SP" in content
+    assert "SERVER_ADMIN_SP" in content
 
 
 def test_custom_fields_guide_no_forbidden_dashes() -> None:
