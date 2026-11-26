@@ -694,7 +694,6 @@ describe('StandaloneStatusPanel', () => {
     pill.focus = focusSpy;
     document.body.appendChild(pill);
 
-    const prevActive = document.activeElement;
     Object.defineProperty(document, 'activeElement', {
       value: null,
       configurable: true,
@@ -709,10 +708,7 @@ describe('StandaloneStatusPanel', () => {
     unmount();
     expect(focusSpy).toHaveBeenCalled();
     document.body.removeChild(pill);
-    Object.defineProperty(document, 'activeElement', {
-      value: prevActive,
-      configurable: true,
-    });
+    delete (document as { activeElement?: unknown }).activeElement;
   });
 
   it('switches between 3 tabs and renders respective panels', async () => {
@@ -2154,6 +2150,124 @@ describe('ComposeExportTab', () => {
       document.execCommand = originalExec;
     }
     /* eslint-enable @typescript-eslint/no-deprecated */
+  });
+
+  it('KAN-446: renders compose-export-doc-link inside .standalone-panel__tab-header-actions positioned above mode toggle with ARIA, focus and Light/Dark rendering', () => {
+    const mockExportData = {
+      filename: 'docker-compose.yml',
+      compose_yaml: 'services:\n  kanban:\n    image: kanban:latest\n',
+      single_container_compose_yaml: 'services:\n  standalone:\n    image: kanban:all-in-one\n',
+      env_template: 'SECRET_KEY=test\n',
+      migration_steps_markdown: 'Steps\n',
+    };
+
+    for (const theme of ['light', 'dark'] as const) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const { unmount } = render(<ComposeExportTab initialData={mockExportData} />);
+
+      const docLink = screen.getByTestId('compose-export-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow');
+      expect(docLink.getAttribute('aria-label')).toBe('Compose Promotion Runbook');
+      expect(docLink.textContent).toContain('Documentation ->');
+
+      // Placed inside .standalone-panel__tab-header-actions
+      const headerActions = docLink.closest('.standalone-panel__tab-header-actions');
+      expect(headerActions).not.toBeNull();
+      if (!headerActions) throw new Error('headerActions is null');
+
+      // Placed inside .standalone-panel__tab-header
+      const tabHeader = docLink.closest('.standalone-panel__tab-header');
+      expect(tabHeader).not.toBeNull();
+      if (!tabHeader) throw new Error('tabHeader is null');
+
+      // Placed above mode toggle in container DOM order
+      const modeToggle = screen.getByRole('group', { name: 'Compose template mode' });
+      expect(tabHeader.compareDocumentPosition(modeToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      // Keyboard focus
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+
+      unmount();
+    }
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('KAN-446: handles fetchExportData non-ApiProblem Error and falls back to Error.message', async () => {
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.reject(new Error('Network offline'));
+    });
+    global.fetch = mockFetch;
+
+    render(<ComposeExportTab />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+      expect(screen.getByText('Network offline')).toBeDefined();
+    });
+  });
+
+  it('KAN-446: handles fetchExportData non-ApiProblem Error with empty message and falls back to default message', async () => {
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.reject(new Error(''));
+    });
+    global.fetch = mockFetch;
+
+    render(<ComposeExportTab />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+      expect(screen.getByText('Failed to load export data')).toBeDefined();
+    });
+  });
+
+  it('KAN-446: falls back to docker-compose.yml filename when filename is empty in multi mode', async () => {
+    const mockExportData = {
+      filename: '',
+      compose_yaml: 'services:\n',
+      env_template: 'SECRET=1\n',
+      migration_steps_markdown: 'Steps',
+    };
+
+    render(<ComposeExportTab initialData={mockExportData} />);
+    const downloadBtn = screen.getByRole('button', { name: 'Download docker-compose.yml' });
+    await act(async () => {
+      fireEvent.click(downloadBtn);
+      await Promise.resolve();
+    });
+    expect(createObjectURLMock).toHaveBeenCalled();
+  });
+
+  it('KAN-446: opens in-app help panel when compose-export-doc-link is clicked in ShellPanelsProvider', () => {
+    const mockExportData = {
+      filename: 'docker-compose.yml',
+      compose_yaml: 'services:\n',
+      env_template: 'VAR=1\n',
+      migration_steps_markdown: 'Steps',
+    };
+
+    const unregister = registerShellPanel('help', ({ arg }) => (
+      <div data-testid="in-app-help-panel">
+        Help Drawer for {(arg as { href?: string } | undefined)?.href}
+      </div>
+    ));
+
+    try {
+      render(
+        <ShellPanelsProvider>
+          <ComposeExportTab initialData={mockExportData} />
+        </ShellPanelsProvider>,
+      );
+
+      const docLink = screen.getByTestId('compose-export-doc-link');
+      fireEvent.click(docLink);
+
+      const helpPanel = screen.getByTestId('in-app-help-panel');
+      expect(helpPanel).toBeDefined();
+      expect(helpPanel.textContent).toContain('/docs/production-promotion-and-backup-runbook');
+    } finally {
+      unregister();
+    }
   });
 
   it('handles automated backup schedule editing and saving', async () => {

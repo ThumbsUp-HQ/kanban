@@ -133,6 +133,22 @@ export function ComposeExportTab({
         </div>
       )}
 
+      <header className="standalone-panel__tab-header">
+        <div className="standalone-panel__tab-header-title-group">
+          <h3 className="standalone-panel__tab-header-title">Compose &amp; Promotion</h3>
+          <p className="standalone-panel__tab-header-subtitle">
+            Export container manifests and runbooks for standalone and production deployment.
+          </p>
+        </div>
+        <div className="standalone-panel__tab-header-actions">
+          <StudioDocLink
+            href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
+            title="Compose Promotion Runbook"
+            testId="compose-export-doc-link"
+          />
+        </div>
+      </header>
+
       {/* Mode Selector */}
       <div className="standalone-panel__compose-mode-toggle" role="group" aria-label="Compose template mode">
         <button
@@ -179,12 +195,6 @@ export function ComposeExportTab({
             {copiedEnv ? 'Copied!' : 'Copy .env.example'}
           </button>
         )}
-
-        <StudioDocLink
-          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
-          title="Compose Promotion Runbook"
-          testId="compose-export-doc-link"
-        />
       </div>
 
       {composeMode === 'multi' ? (

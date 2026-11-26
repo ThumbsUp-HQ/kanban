@@ -726,37 +726,39 @@ export function AuthStudioPage(): JSX.Element {
             label="Authentication architecture info"
             content="Simultaneous OIDC, OAuth2, LDAPS/StartTLS, and Local Admin cards. Matching email addresses never auto-merge accounts across cards (bound strictly by auth_card_id + immutable_subject_id)."
           />
+        </div>
+
+        <div className="auth-studio-header-actions">
           <StudioDocLink
             href="/docs/multi-card-authentication-studio"
             title="Multi-Card Authentication Studio Documentation"
             testId="auth-studio-doc-link"
           />
+          {activeTab === 'cards' ? (
+            <button
+              type="button"
+              className="auth-studio-add-btn"
+              onClick={() => {
+                setEditingCard(null);
+                setIsDrawerOpen(true);
+              }}
+            >
+              + Add auth card
+            </button>
+          ) : activeTab === 'users' ? (
+            <button
+              type="button"
+              className="auth-studio-add-btn"
+              onClick={() => {
+                setUserActionError(null);
+                setUserActionSuccess(null);
+                setIsAddUserOpen(true);
+              }}
+            >
+              + Add Local User
+            </button>
+          ) : null}
         </div>
-
-        {activeTab === 'cards' ? (
-          <button
-            type="button"
-            className="auth-studio-add-btn"
-            onClick={() => {
-              setEditingCard(null);
-              setIsDrawerOpen(true);
-            }}
-          >
-            + Add auth card
-          </button>
-        ) : activeTab === 'users' ? (
-          <button
-            type="button"
-            className="auth-studio-add-btn"
-            onClick={() => {
-              setUserActionError(null);
-              setUserActionSuccess(null);
-              setIsAddUserOpen(true);
-            }}
-          >
-            + Add Local User
-          </button>
-        ) : null}
       </header>
 
       {/* Tabs Bar */}

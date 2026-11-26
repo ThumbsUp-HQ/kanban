@@ -1,0 +1,74 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan446-067f8d0c/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (44 tests) 3646ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (44)
+     ✓ renders workspace settings page and updates workspace name and slug 470ms
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (45 tests) 4487ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 346ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 655ms
+stderr | src/features/admin-auth/AuthStudioPage.test.tsx > AuthStudioPage (KB-P3-36) > StudioDocLink Header Integration (KAN-446) > renders auth-studio-doc-link in .auth-studio-header-actions when rbac tab is active without CTA button
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (59 tests) 8188ms
+   ✓ AuthStudioPage (KB-P3-36) (59)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 398ms
+     ✓ opens drawer to add a new auth card and appends created card 920ms
+     ✓ opens drawer to edit an existing card and updates it 404ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 374ms
+     ✓ handles Aal2StepUpCancelledError during user create or role change 343ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 606ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ opens Reset Password modal and resets user password 375ms
+       ✓ covers role change in add user modal and cancelling reset password modal 389ms
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 821ms
+
+ Test Files  3 passed (3)
+      Tests  148 passed (148)
+   Start at  15:43:30
+   Duration  9.66s (tests 84%, environment 11%, import 4%, transform 1%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.96 |    95.64 |    98.1 |   99.88 |                   
+ admin-auth        |   98.14 |    95.68 |     100 |     100 |                   
+  ...tudioPage.tsx |   98.14 |    95.68 |     100 |     100 | ...22,613,619,644 
+ settings          |   99.59 |    95.26 |   95.91 |   99.77 |                   
+  ...tingsPage.tsx |   99.59 |    95.26 |   95.91 |   99.77 | 939               
+ standalone        |     100 |      100 |     100 |     100 |                   
+  ...ExportTab.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0
