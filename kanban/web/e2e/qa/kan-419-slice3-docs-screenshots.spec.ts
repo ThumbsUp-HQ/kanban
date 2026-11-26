@@ -254,13 +254,12 @@ test.describe('KAN-419: Slice-3 Published Docs Visual Verification', () => {
     });
 
     // Focused Scrolled View 07: Mermaid Diagrams Rendered Cleanly
-    await page.goto('/docs/zero-trust-service-auth-and-workload-oidc');
+    await page.goto('/docs/three-surface-mcp-server-architecture');
     await applyTheme(page, 'light');
-    const mermaidContainer = page.locator('.mermaid, pre.mermaid, [data-testid="mermaid-viewer"]').first();
-    if (await mermaidContainer.count() > 0) {
-      await mermaidContainer.scrollIntoViewIfNeeded();
-    }
-    await page.waitForTimeout(400);
+    const mermaidContainer = page.locator('.mermaid-block, [data-lang="mermaid"], .mermaid-block__preview, svg[id^="mermaid-"]').first();
+    await expect(mermaidContainer).toBeVisible({ timeout: 10000 });
+    await mermaidContainer.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
     await page.screenshot({
       path: resolve(SCREENSHOT_DIR, '07-slice3-mermaid-diagrams-rendered-1440x900.png'),
       fullPage: false,

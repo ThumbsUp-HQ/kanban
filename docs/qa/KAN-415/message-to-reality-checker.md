@@ -28,6 +28,24 @@
 
 ---
 
+## 2.1 Core Source Code Parity Truths Verified
+
+1. **Three-Surface MCP Architecture (25 Tools Total):**
+   - `/mcp/agent` (10 tools): `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`, `update_workpad`.
+   - `/mcp/docs` (3 tools): `search`, `create`, `update`.
+   - `/mcp/admin` (12 tools): `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links`, `destructive_lifecycle`.
+2. **Granular Capability Bitmasks (`0..255`):**
+   - Capability bitmask supports 0 (Deny-All) through 255. Bit flags: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`. Enforced via PostgreSQL `SET LOCAL app.credential_boundary`.
+3. **RFC 8628 Device Flow:**
+   - Base20 charset `BCDFGHJKLMNPQRSTVWXZ` (excluding vowels `A,E,I,O,U` and digits `0-9`). User code formatted as `XXXX-XXXX`. `MAX_STATE_LEN = 4096`.
+4. **RFC 8693 Workload Identity Federation:**
+   - Headless CI token exchange supports GitHub Actions (`repo:org/repo:ref:refs/heads/*`), GitLab CI (`project_path:group/project:ref:*:ref_type:branch`), and Kubernetes (`system:serviceaccount:default:*`). `max_ttl_seconds <= 86400`.
+5. **Single-Transaction Bulk DCR Client Purge:**
+   - Admin purge endpoint: `POST /api/v1/admin/oauth-clients/bulk-delete`.
+
+
+---
+
 ## 3. Automated Unit Testing & Coverage Metrics
 
 ### A. Backend Pytest Test Suite

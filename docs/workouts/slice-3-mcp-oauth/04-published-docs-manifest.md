@@ -73,51 +73,54 @@ All 6 Slice-3 UI components contain verified documentation links that resolve ag
 
 ### Setting-by-Setting Technical Inventory and Backend Contracts
 
-#### 1. MCP Access Studio & Key Minting (11 Settings + Backend Contracts)
+#### 1. MCP Access Studio & Key Minting (9 Settings + Backend Contracts)
 - **`surface_type`:** Selects target streamable surface (`/mcp/agent` [10 tools, <= 1,850 tokens], `/mcp/docs` [3 tools, <= 1,350 tokens], `/mcp/admin` [12 tools, <= 2,800 tokens]).
-- **`key_name`:** Human-readable key identifier (1 to 64 chars) surfaced in audit ledgers.
-- **`token_prefix`:** Standardized 7-character routing prefix (`kb_agt_*`, `kb_doc_*`, `kb_adm_*`).
-- **`lod_tier`:** Level of Detail default (`summary`, `standard`, `full`).
-- **`rate_limit_rpm`:** Sliding-window rate limit (10 to 600 RPM, default 120).
-- **`expires_at`:** Key TTL presets (30d, 60d, 90d, 1y, or unlimited with explicit risk acknowledgment).
-- **`destructive_gate`:** Two-stage confirmation protocol on `/mcp/admin` for irreversible deletions.
-- **`capability_mask`:** Monotonic 8-bit integer capability bitmask ceiling (`0` to `255`). Value `0` creates a deny-all key rejecting all tool invocations with `isError: true` (`INSUFFICIENT_CAPABILITY`). Value `1` restricts scopes to read-only (`${surface}:read`). Enforced via PostgreSQL `SET LOCAL app.credential_boundary`.
+- **`label`:** Human-readable key identifier (1 to 120 chars) surfaced in audit ledgers.
+- **`owner_kind`:** Principal persona (`personal_user` or `service_bot`).
+- **`scope_tier`:** Tenancy boundary (`personal`, `project`, `workspace`, `global`).
+- **`expires_in_days`:** Key TTL presets (`30`, `60`, `90`, `365`, `0` for unlimited with explicit risk acknowledgment).
+- **`capability_mask`:** Monotonic 8-bit integer capability bitmask ceiling (`0` to `255`). Flags: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`. Enforced via PostgreSQL `SET LOCAL app.credential_boundary`.
+- **`allowed_tools`:** Explicit whitelist of permitted tool names.
+- **`disabled_tools`:** Explicit blacklist of prohibited tool names.
 - **`allowed_cidrs`:** Network subnet boundary (comma-separated IPv4/IPv6 CIDRs). Out-of-subnet requests rejected with HTTP 403 `FORBIDDEN_CIDR`.
-- **`scope_tier`:** Tenancy boundary (`project`, `workspace`, `global`, `personal`).
-- **`role`:** Principal persona (`personal` or `service_bot`).
 
 #### 2. Connect OAuth App and MCP Config Snippets Modals
 - **Supported Integrations:** One-click configuration stanzas and CLI commands for:
   - Google Gemini Connected Apps via OAuth 2.1 PKCE Resource URL.
-  - Claude Desktop (`claude_desktop_config.json`) and Claude Code CLI (`claude mcp add`).
+  - Claude Desktop (`claude_desktop_config.json`) and Claude Code CLI (`claude mcp add --transport http`).
   - VS Code and Cursor via `mcpServers` configuration blocks.
   - Google Antigravity CLI (`agy mcp add kanban <url> --auth oauth`).
   - OpenAI Codex CLI (`codex mcp add kanban <url> --auth oauth`).
 - **Write-Only Custody:** Static key secrets are write-only and displayed exactly once in the snippet modal.
 
-#### 3. Workload Identity Federation Studio (11 Settings + Presets)
+#### 3. Workload Identity Federation Studio (13 Settings + Presets)
 - **`name`:** Descriptive policy name (1 to 120 chars).
+- **`description`:** Optional documentation field (up to 500 chars).
 - **`issuer`:** Identity provider OIDC discovery URL (strict HTTPS required).
 - **`client_id`:** Expected audience claim (`aud`) matching the workload token.
 - **`subject_pattern`:** Glob or regex pattern evaluated against incoming JWT `sub` claim.
 - **`required_claims_json`:** Exact claim key-value pairs required in the OIDC JWT.
 - **`surface`:** Target MCP surface (`agent` or `docs`).
+- **`scopes`:** Allowed OAuth privilege scopes (restricted strictly to `SURFACE_SCOPES`).
+- **`allowed_project_ids`:** Optional list of project UUIDs restricting access.
+- **`allowed_cidrs`:** Network subnet boundary for token exchange.
 - **`capability_mask`:** Capability bitmask ceiling (`0` to `255`).
 - **`max_ttl_seconds`:** Ephemeral token lifespan ceiling (`60` to `86400`, default `3600`).
 - **`is_enabled`:** Master active toggle for the workload policy.
-- **One-Click Presets:** Built-in templates for GitHub Actions (`https://token.actions.githubusercontent.com`), GitLab CI (`https://gitlab.com`), and Kubernetes (`https://kubernetes.default.svc.cluster.local`).
+- **One-Click Presets:** Built-in templates for GitHub Actions (`repo:org/repo:ref:refs/heads/*`), GitLab CI (`project_path:group/project:ref:*:ref_type:branch`), and Kubernetes (`system:serviceaccount:default:*`).
 
 #### 4. OAuth 2.1 Governance Studio & Device Flow (11 Settings + Backend Contracts)
 - **`client_name`:** Display name of integrating application (1 to 128 chars).
-- **`client_id`:** Public identifier prefixed with `kb_client_`.
+- **`client_id`:** Public identifier prefixed with `client_` (`client_{token}`).
 - **`client_type`:** `public` (SPA, native IDE, CLI) vs `confidential` (backend services).
-- **`auth_method`:** `none` (public PKCE), `client_secret_post`, `client_secret_basic`.
+- **`auth_method`:** `none` (public PKCE), `client_secret_post`, `client_secret_basic`, `private_key_jwt`.
 - **`redirect_uris`:** Exact HTTPS URLs (localhost permitted for development).
-- **`pkce_enforced`:** Mandatory `S256` challenge (plain challenges rejected).
-- **`allowed_scopes`:** Strict privilege scopes (`agent`, `docs`, `admin`, `admin:read`, `admin:write`, `admin:destructive`, `read:issues`, `write:issues`).
-- **`access_token_ttl`:** Access token lifespan (300 to 86,400s, default 3,600s).
+- **`pkce_enforce`:** Mandatory `S256` challenge (plain challenges rejected).
+- **`allowed_scopes`:** Strict privilege scopes adhering to `SURFACE_SCOPES` (`agent:read`, `agent:write`, `docs:read`, `docs:write`, `admin:read`, `admin:write`, `admin:destructive`).
+- **`access_token_ttl`:** Access token lifespan (60 to 86,400s, default 3,600s, 900s for JWT).
 - **`refresh_token_ttl`:** Refresh token lifespan (86,400 to 2,592,000s, default 30 days) with single-use rotation.
 - **`max_state_len`:** State string ceiling of 4,096 characters supporting Google Gemini extended state tokens.
+- **`status_filter`:** Filters displayed clients across `all`, `active`, `suspended`, `revoked`.
 - **RFC 8628 `/activate` Device Flow:** Terminal onboarding using Base20 user codes (`BCDFGHJKLMNPQRSTVWXZ` excluding vowels `A,E,I,O,U` and digits `0-9`) with AAL2 step-up for administrative surfaces.
 - **Single-Transaction Bulk DCR Client Purge:** Atomic cleanup (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging hundreds of unused DCR clients while preserving active client grants intact.
 

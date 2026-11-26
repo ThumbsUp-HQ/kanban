@@ -22,9 +22,9 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
 1. **Three-Surface MCP Architecture (25 Tools Total):**
    - `/mcp/agent` exposes exactly 10 execution and QA tools: `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects`, and `update_workpad`.
    - `/mcp/docs` exposes exactly 3 documentation tools: `search`, `create`, `update`.
-   - `/mcp/admin` exposes exactly 12 governance and lifecycle tools: `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `administer_views_and_fields`, `run_diagnostics`, `audit_and_purge_links`, `orchestrate_migration`, `execute_backup_or_restore`, and `destructive_lifecycle` (with mandatory 2-stage token confirmation).
+   - `/mcp/admin` exposes exactly 12 governance and lifecycle tools: `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links`, and `destructive_lifecycle` (with mandatory 2-stage token confirmation).
 2. **Granular Capability Bitmasks (`0..255`):**
-   - Capability bitmask supports 0 (Deny-All) through 255. Bit flags: `READ=1`, `WRITE=2`, `TRANSITION=4`, `COMMENT=8`, `ADMIN=16`, `DESTRUCTIVE=32`, `DIAGNOSTIC=64`, `EXTERNAL=128`.
+   - Capability bitmask supports 0 (Deny-All) through 255. Bit flags: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`.
 3. **RFC 8628 Device Authorization Flow:**
    - User verification code uses Base20 charset `BCDFGHJKLMNPQRSTVWXZ` (excluding vowels `A,E,I,O,U` and digits `0-9`). Code length is 8 characters (`XXXX-XXXX`).
    - Endpoint: `/oauth/device/authorize` and `/oauth/device/token`. State parameter limit: `MAX_STATE_LEN = 4096`.
