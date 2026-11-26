@@ -2,8 +2,10 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PasskeyEnrollModal } from '../PasskeyEnrollModal';
 import * as personalSettingsApi from '../personalSettingsApi';
@@ -455,6 +457,205 @@ describe('PasskeyEnrollModal (KAN-25)', () => {
 
     await waitFor(() => {
       expect(onInterceptAal2).toHaveBeenCalledWith(aal2Problem, expect.any(Function));
+    });
+  });
+
+  describe('KAN-498: FieldHelpHint in PasskeyEnrollModal', () => {
+    it('renders FieldHelpHint triggers on Nickname and Authenticator Type with ARIA and testId', () => {
+      renderModal();
+
+      const nicknameHelp = screen.getByTestId('passkey-nickname-help');
+      const attachmentHelp = screen.getByTestId('passkey-attachment-help');
+
+      expect(nicknameHelp).toBeDefined();
+      expect(attachmentHelp).toBeDefined();
+
+      expect(nicknameHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(nicknameHelp.getAttribute('aria-expanded')).toBe('false');
+      expect(nicknameHelp.getAttribute('aria-label')).toContain('Passkey Nickname');
+
+      expect(attachmentHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(attachmentHelp.getAttribute('aria-expanded')).toBe('false');
+      expect(attachmentHelp.getAttribute('aria-label')).toContain('Authenticator Attachment');
+
+      // Zero inline style props (strict CSP requirement)
+      expect(nicknameHelp.style.length).toBe(0);
+      expect(attachmentHelp.style.length).toBe(0);
+
+      // Ensure FieldHelpHint triggers are siblings and not nested inside label elements (HTML A11y invariant)
+      const nicknameLabel = screen.getByText('Nickname');
+      expect(nicknameLabel.tagName.toLowerCase()).toBe('label');
+      expect(nicknameLabel.contains(nicknameHelp)).toBe(false);
+
+      const attachmentLabel = screen.getByText('Authenticator Type');
+      expect(attachmentLabel.contains(attachmentHelp)).toBe(false);
+    });
+
+    it('opens nickname help popover on focus and displays summary, example, and doc link', () => {
+      renderModal();
+
+      const nicknameHelp = screen.getByTestId('passkey-nickname-help');
+      act(() => {
+        nicknameHelp.focus();
+      });
+
+      const popover = screen.getByTestId('passkey-nickname-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.getAttribute('role')).toBe('dialog');
+      expect(popover.textContent).toContain('Passkey Nickname');
+      expect(popover.textContent).toContain('friendly label');
+      expect(popover.textContent).toContain('MacBook Touch ID');
+
+      const docLink = popover.querySelector<HTMLAnchorElement>('.field-help-hint-link');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe('/docs/multi-card-authentication-studio#passkeys');
+
+      act(() => {
+        fireEvent.keyDown(nicknameHelp, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('passkey-nickname-help-popover')).toBeNull();
+    });
+
+    it('opens attachment help popover on focus and displays platform vs cross-platform explanation', () => {
+      renderModal();
+
+      const attachmentHelp = screen.getByTestId('passkey-attachment-help');
+      act(() => {
+        attachmentHelp.focus();
+      });
+
+      const popover = screen.getByTestId('passkey-attachment-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.getAttribute('role')).toBe('dialog');
+      expect(popover.textContent).toContain('Authenticator Attachment');
+      expect(popover.textContent).toContain('Passkey (Platform)');
+      expect(popover.textContent).toContain('Touch ID, Face ID, Windows Hello');
+      expect(popover.textContent).toContain('Hardware Key (Cross-Platform)');
+      expect(popover.textContent).toContain('YubiKey or Feitian');
+
+      const docLink = popover.querySelector<HTMLAnchorElement>('.field-help-hint-link');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe('/docs/multi-card-authentication-studio#passkeys');
+
+      act(() => {
+        fireEvent.keyDown(attachmentHelp, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('passkey-attachment-help-popover')).toBeNull();
+    });
+
+    it('isolates Escape key: closes open FieldHelpHint without closing PasskeyEnrollModal', () => {
+      const onClose = vi.fn();
+      renderModal({ onClose });
+
+      const nicknameHelp = screen.getByTestId('passkey-nickname-help');
+      act(() => {
+        nicknameHelp.focus();
+      });
+
+      expect(screen.getByTestId('passkey-nickname-help-popover')).toBeDefined();
+
+      // Fire Escape while popover is open
+      act(() => {
+        fireEvent.keyDown(nicknameHelp, { key: 'Escape' });
+      });
+
+      // Popover closes
+      expect(screen.queryByTestId('passkey-nickname-help-popover')).toBeNull();
+
+      // Modal onClose must NOT have been called
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Document keydown Escape while a hint is actively open in controller
+      act(() => {
+        nicknameHelp.blur();
+        nicknameHelp.focus();
+      });
+      expect(screen.getByTestId('passkey-nickname-help-popover')).toBeDefined();
+      const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+      act(() => {
+        document.dispatchEvent(escEvent);
+      });
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Focus inside popover, press Escape, popover closes
+      act(() => {
+        nicknameHelp.blur();
+        nicknameHelp.focus();
+      });
+      const popover = screen.getByTestId('passkey-nickname-help-popover');
+      act(() => {
+        fireEvent.keyDown(popover, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('passkey-nickname-help-popover')).toBeNull();
+
+      // When popover is closed, Escape closes the modal
+      act(() => {
+        fireEvent.keyDown(document, { key: 'Escape' });
+      });
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders cleanly in Light and Dark themes with zero inline style violations', () => {
+      // Test Light theme
+      document.documentElement.setAttribute('data-theme', 'light');
+      const { unmount } = renderModal();
+
+      const nicknameHelpLight = screen.getByTestId('passkey-nickname-help');
+      expect(nicknameHelpLight.style.length).toBe(0);
+
+      act(() => {
+        nicknameHelpLight.focus();
+      });
+      const popoverLight = screen.getByTestId('passkey-nickname-help-popover');
+      expect(popoverLight).toBeDefined();
+      expect(popoverLight.style.color).toBe('');
+      expect(popoverLight.style.backgroundColor).toBe('');
+
+      act(() => {
+        fireEvent.keyDown(nicknameHelpLight, { key: 'Escape' });
+      });
+      unmount();
+
+      // Test Dark theme
+      document.documentElement.setAttribute('data-theme', 'dark');
+      renderModal();
+
+      const nicknameHelpDark = screen.getByTestId('passkey-nickname-help');
+      expect(nicknameHelpDark.style.length).toBe(0);
+
+      act(() => {
+        nicknameHelpDark.focus();
+      });
+      const popoverDark = screen.getByTestId('passkey-nickname-help-popover');
+      expect(popoverDark).toBeDefined();
+      expect(popoverDark.style.color).toBe('');
+      expect(popoverDark.style.backgroundColor).toBe('');
+
+      act(() => {
+        fireEvent.keyDown(nicknameHelpDark, { key: 'Escape' });
+      });
+
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('verifies CSS layout rules for adjacent (?) placement, 6px gap, and mobile responsive visibility', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../PasskeyEnrollModal.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Theme modes support
+      expect(cssContent).toContain(':root {');
+      expect(cssContent).toContain("[data-theme='dark']");
+      expect(cssContent).toContain("@media (prefers-color-scheme: dark)");
+
+      // Adjacent (?) placement and 6px gap
+      expect(cssContent).toContain('.kb-passkey-enroll-label-row');
+      expect(cssContent).toContain('gap: 6px;');
+      expect(cssContent).toContain('.kb-passkey-enroll-label-row .field-help-hint');
+      expect(cssContent).toContain('margin: 0;');
+
+      // Mobile responsive visibility
+      expect(cssContent).toContain('@media (max-width: 480px)');
+      expect(cssContent).toContain('calc(100dvh');
     });
   });
 });

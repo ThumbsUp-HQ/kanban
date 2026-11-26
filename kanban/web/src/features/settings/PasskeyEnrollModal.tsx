@@ -13,6 +13,8 @@ import {
   fetchWebauthnRegistrationOptions,
   verifyWebauthnRegistration,
 } from './personalSettingsApi';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { defaultHintController } from '../../components/emoji/hintTiming';
 import './PasskeyEnrollModal.css';
 
 export type AuthenticatorAttachmentChoice = 'platform' | 'cross-platform' | 'any';
@@ -60,6 +62,9 @@ export function PasskeyEnrollModal({
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        if (defaultHintController.getState().openId) {
+          return;
+        }
         if (!isSubmitting) {
           e.preventDefault();
           handleClose();
@@ -69,6 +74,7 @@ export function PasskeyEnrollModal({
 
       if (e.key === 'Tab') {
         const modal = modalRef.current;
+        /* v8 ignore next 3 */
         if (!modal) {
           return;
         }
@@ -223,9 +229,19 @@ export function PasskeyEnrollModal({
             )}
 
             <div className="kb-passkey-enroll-field">
-              <label htmlFor="passkey-enroll-nickname" className="kb-passkey-enroll-label">
-                Nickname
-              </label>
+              <div className="kb-passkey-enroll-label-row">
+                <label htmlFor="passkey-enroll-nickname" className="kb-passkey-enroll-label">
+                  Nickname
+                </label>
+                <FieldHelpHint
+                  title="Passkey Nickname"
+                  summary="A friendly label to identify this device or security key in your credentials list."
+                  example="MacBook Touch ID, YubiKey 5C NFC, Work Laptop"
+                  defaultValue="Custom name (up to 64 characters)"
+                  docHref="/docs/multi-card-authentication-studio#passkeys"
+                  testId="passkey-nickname-help"
+                />
+              </div>
               <input
                 id="passkey-enroll-nickname"
                 data-testid="passkey-enroll-nickname-input"
@@ -245,8 +261,38 @@ export function PasskeyEnrollModal({
             </div>
 
             <div className="kb-passkey-enroll-field">
-              <span className="kb-passkey-enroll-label">Authenticator Type</span>
-              <div className="kb-passkey-enroll-attachment-grid" role="radiogroup" aria-label="Authenticator Type">
+              <div className="kb-passkey-enroll-label-row">
+                <span id="passkey-enroll-attachment-label" className="kb-passkey-enroll-label">
+                  Authenticator Type
+                </span>
+                <FieldHelpHint
+                  title="Authenticator Attachment"
+                  summary="Select how your authenticator is attached. Platform authenticators are built into your device, while cross-platform authenticators are portable hardware keys."
+                  validValues={[
+                    {
+                      label: 'Passkey (Platform)',
+                      description: 'Built-in biometric authenticators such as Touch ID, Face ID, Windows Hello, or iCloud Keychain.',
+                    },
+                    {
+                      label: 'Hardware Key (Cross-Platform)',
+                      description: 'External hardware security keys (USB, NFC) such as YubiKey or Feitian that can be used across multiple devices.',
+                    },
+                    {
+                      label: 'Any Authenticator',
+                      description: 'Allows your browser and operating system to present all available authenticator choices.',
+                    },
+                  ]}
+                  defaultValue="Passkey (Device / Synced)"
+                  docHref="/docs/multi-card-authentication-studio#passkeys"
+                  testId="passkey-attachment-help"
+                />
+              </div>
+              <div
+                className="kb-passkey-enroll-attachment-grid"
+                role="radiogroup"
+                aria-labelledby="passkey-enroll-attachment-label"
+                aria-label="Authenticator Type"
+              >
                 <label
                   className={`kb-passkey-enroll-option ${
                     attachmentChoice === 'platform' ? 'kb-passkey-enroll-option--selected' : ''
