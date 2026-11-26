@@ -67,3 +67,44 @@ index 69b16172..698a9da7 100644
            <Link to={emptyStateCtaLink}>Create a new work item →</Link>
          </div>
        ) : (
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 4256f596..9f3ec54a 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -1177,6 +1177,22 @@ describe('IssuesWorkspaceRoute', () => {
+       expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+     });
+ 
++    const draftsHintBtn = screen.getByRole('button', { name: /Local Browser Drafts/i });
++    act(() => {
++      draftsHintBtn.focus();
++    });
++    const popover = screen.getByRole('dialog', { name: 'Local Browser Drafts' });
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('Saved locally');
++    const moreInfoLink = popover.querySelector('a[href="/docs/ticket-screen-and-work-item-features"]');
++    expect(moreInfoLink).not.toBeNull();
++    expect(moreInfoLink?.textContent).toContain('More info');
++
++    act(() => {
++      fireEvent.keyDown(draftsHintBtn, { key: 'Escape' });
++    });
++    expect(screen.queryByRole('dialog', { name: 'Local Browser Drafts' })).toBeNull();
++
+     uDrafts();
+   });
+ 
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 698a9da7..b7344540 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -640,7 +640,8 @@ export function DraftsWorkspaceView(): JSX.Element {
+             title="Local Browser Drafts"
+             summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
+             defaultValue="Saved locally"
+-            docHref="/docs/scripted-workflows-and-transition-helpers"
++            docHref="/docs/ticket-screen-and-work-item-features"
++            testId="drafts-help-hint"
+           />
+         </div>
+         <p>Work item drafts saved before publishing to a project.</p>

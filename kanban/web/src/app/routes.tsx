@@ -640,7 +640,8 @@ export function DraftsWorkspaceView(): JSX.Element {
             title="Local Browser Drafts"
             summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
             defaultValue="Saved locally"
-            docHref="/docs/scripted-workflows-and-transition-helpers"
+            docHref="/docs/ticket-screen-and-work-item-features"
+            testId="drafts-help-hint"
           />
         </div>
         <p>Work item drafts saved before publishing to a project.</p>

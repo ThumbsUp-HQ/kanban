@@ -170,3 +170,39 @@ index b8f0788a..f19a0aaa 100644
              <button
                type="submit"
                className="kb-btn-primary"
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 512bbbe1..ccf4df9b 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -133,6 +133,23 @@
+   }
+ }
+ 
++@media (max-width: 767px), (pointer: coarse) {
++  .kb-modules-advanced-fields summary {
++    display: flex;
++    align-items: center;
++    min-height: var(--tap-min, 44px);
++  }
++
++  .kb-modules-create-form .kb-btn-primary {
++    min-height: var(--tap-min, 44px);
++    height: auto;
++  }
++
++  .kb-modules-create-form .kb-form-input {
++    min-height: var(--tap-min, 44px);
++  }
++}
++
+ /* Workspace Home & Section Views */
+ .kb-workspace-home {
+   display: flex;
+@@ -713,6 +730,7 @@
+     align-items: stretch;
+   }
+   .kb-form-field {
++    flex: 0 0 auto;
+     width: 100%;
+   }
+   .kb-form-input {

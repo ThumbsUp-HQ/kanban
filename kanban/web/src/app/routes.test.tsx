@@ -1177,6 +1177,22 @@ describe('IssuesWorkspaceRoute', () => {
       expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
     });
 
+    const draftsHintBtn = screen.getByRole('button', { name: /Local Browser Drafts/i });
+    act(() => {
+      draftsHintBtn.focus();
+    });
+    const popover = screen.getByRole('dialog', { name: 'Local Browser Drafts' });
+    expect(popover).toBeDefined();
+    expect(popover.textContent).toContain('Saved locally');
+    const moreInfoLink = popover.querySelector('a[href="/docs/ticket-screen-and-work-item-features"]');
+    expect(moreInfoLink).not.toBeNull();
+    expect(moreInfoLink?.textContent).toContain('More info');
+
+    act(() => {
+      fireEvent.keyDown(draftsHintBtn, { key: 'Escape' });
+    });
+    expect(screen.queryByRole('dialog', { name: 'Local Browser Drafts' })).toBeNull();
+
     uDrafts();
   });
 

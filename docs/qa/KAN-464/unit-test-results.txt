@@ -1,7 +1,7 @@
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan462-471-274b5db9/kanban/web
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 18ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 16ms
 stderr | src/app/routes.test.tsx > routes and AppShell integration > renders AppShell with sidebar items, breadcrumb, and layout=board selection
 An update to FilterDisplayBar inside a test was not wrapped in act(...).
 
@@ -131,11 +131,11 @@ act(() => {
 This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
 
 Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/views/wave4BranchBooster.test.tsx (46 tests) 1557ms
 stderr | src/app/routes.test.tsx > routes and AppShell integration > renders various project routes, auth routes, and dev story routes
 Attempted to synchronously unmount a root while React was already rendering. React cannot finish unmounting the root until the current render has completed, which may lead to a race condition.
 
-Not implemented: navigation to another Document
- ✓ src/features/views/wave4BranchBooster.test.tsx (46 tests) 1845ms
 stderr | src/app/routes.test.tsx > routes and AppShell integration > renders WorkspaceHomeView projects from /api/v1/projects and opens CreateProjectModal
 An update to Sidebar inside a test was not wrapped in act(...).
 
@@ -259,18 +259,16 @@ stderr | src/app/routes.test.tsx > IssuesWorkspaceRoute > KAN-11: Drafts empty-s
 No routes matched location "/settings/mcp?scope=custom&project=OVERRIDE" 
 No routes matched location "/settings/mcp?scope=project&project=PRJ" 
 
- ✓ src/app/routes.test.tsx (41 tests) 4903ms
+ ✓ src/app/routes.test.tsx (41 tests) 4119ms
    ✓ routes and AppShell integration (14)
-     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 568ms
-     ✓ renders various project routes, auth routes, and dev story routes 825ms
+     ✓ renders AppShell with sidebar items, breadcrumb, and layout=board selection 495ms
+     ✓ renders various project routes, auth routes, and dev story routes 724ms
    ✓ IssuesWorkspaceRoute (27)
-     ✓ ProjectCyclesView and ProjectModulesView lifecycle actions (KANBA-211) (3)
-       ✓ covers route guards loading and error states and modal cancel buttons 315ms
      ✓ KAN-11: Drafts empty-state CTA link and Mcp redirects (4)
-       ✓ covers ProjectMcpRedirect, WorkspaceMcpRedirect, and AdminMcpRedirect routes 397ms
+       ✓ covers ProjectMcpRedirect, WorkspaceMcpRedirect, and AdminMcpRedirect routes 323ms
 
  Test Files  3 passed (3)
       Tests  94 passed (94)
-   Start at  18:30:45
-   Duration  7.32s (tests 56%, environment 22%, import 14%, transform 8%)
+   Start at  18:48:53
+   Duration  6.24s (tests 56%, environment 21%, import 15%, transform 8%)
 
