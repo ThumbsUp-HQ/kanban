@@ -6,8 +6,8 @@
 - **Parent Epic:** `KAN-405` (`[EPIC][SLICE-1-AUTH-RBAC]`)
 - **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`
 - **Branch:** `docs/KAN-409-slice1-auth-docs`
-- **Worktree Commit:** `2f7b45c6` (HEAD of `docs/KAN-409-slice1-auth-docs`)
-- **Wiki Commit:** `8195469` (HEAD of `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki` and `/home/adamoutler/kanban/thumbs-up-kanban.wiki`)
+- **Worktree Commit:** `99d55922` (HEAD of `docs/KAN-409-slice1-auth-docs`, targeting `e843e2be`)
+- **Wiki Commit:** `ed7f9ce` (HEAD of `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki` and `/home/adamoutler/kanban/thumbs-up-kanban.wiki`)
 - **Deliverable Manifest:** `docs/workouts/slice-1-auth-rbac/04-published-docs-manifest.md`
 
 ---
@@ -59,5 +59,5 @@
 
 ## 5. Dual Specialist Approvals
 
-- **UI Specialist:** Signed and APPROVED by `@ui-spec` in `docs/qa/KAN-409/ui-specialist-review.md` (commit `292949e1`).
-- **API Specialist:** Signed and APPROVED by `@api-spec` in `docs/qa/KAN-409/api-specialist-review.md` (commit `2f7b45c6`).
+- **UI Specialist:** Signed and APPROVED by `@ui-spec` in `docs/qa/KAN-409/ui-specialist-review.md` (commit `99d55922`).
+- **API Specialist:** Signed and APPROVED by `@api-spec` in `docs/qa/KAN-409/api-specialist-review.md` (commit `09482080`).

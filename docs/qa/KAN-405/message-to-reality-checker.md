@@ -7,7 +7,8 @@
 - **Branch:** `docs/KAN-409-slice1-auth-docs`
 - **Base Commit:** `1bbc998163f9b7f6c7e18e56d682c497a5b122ae`
 - **Base Upstream Commit:** `cd65455e` (KAN-408 merged at `a62f8676`)
-- **HEAD Commit:** `2f7b45c6` (Dual Specialist Reviews Signed)
+- **HEAD Commit:** `99d55922` (Dual Specialist Reviews Signed, targeting `e843e2be`)
+- **Wiki Commit:** `ed7f9ce` (HEAD of `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki` and `/home/adamoutler/kanban/thumbs-up-kanban.wiki`)
 - **Target Surfaces:**
   - Multi-Card Authentication Studio (`/admin/auth`)
   - Auth Provider Card Editor Drawer (`Local Admin`, `LDAP / Active Directory`, `OIDC / Google Workspace`)
@@ -135,5 +136,5 @@ Total 27 verified screenshots in `docs/qa/KAN-405/screenshots/`:
 
 ## 6. Dual Specialist Approvals
 
-- **UI Specialist:** Signed and APPROVED by `@ui-spec` in `docs/qa/KAN-405/ui-specialist-review.md` (commit `292949e1`).
-- **API Specialist:** Signed and APPROVED by `@api-spec` in `docs/qa/KAN-405/api-specialist-review.md` (commit `2f7b45c6`).
+- **UI Specialist:** Signed and APPROVED by `@ui-spec` in `docs/qa/KAN-405/ui-specialist-review.md` (commit `99d55922`).
+- **API Specialist:** Signed and APPROVED by `@api-spec` in `docs/qa/KAN-405/api-specialist-review.md` (commit `09482080`).

@@ -1,5 +1,5 @@
 diff --git a/Multi-Card-Authentication-Studio.md b/Multi-Card-Authentication-Studio.md
-index 644272d..0952569 100644
+index 644272d..c721825 100644
 --- a/Multi-Card-Authentication-Studio.md
 +++ b/Multi-Card-Authentication-Studio.md
 @@ -7,17 +7,17 @@ Enterprise identity management demands both flexibility and strict security. Rat
@@ -96,7 +96,7 @@ index 644272d..0952569 100644
 +To prevent catastrophic platform lockouts where administrators lose all access:
 +- The system continuously evaluates active administrative authentication pathways before permitting any card modification or deletion.
 +- If an administrator attempts to disable or delete the sole remaining active admin card (e.g., disabling Local Admin before configuring working SSO), the mutation is rejected with RFC 7807 problem code `409 Conflict` (`LOCKOUT_PREVENTED`).
-+- Disabling or deleting the local admin card strictly requires that an external provider card has an active administrator account mapping AND has completed a successful handshake probe within the last 15 minutes (`handshake_probe_15m` layer, `HANDSHAKE_PROBE_MAX_AGE_SECONDS = 900`).
++- Disabling or deleting the local admin card strictly requires that an external provider card has an active administrator account mapping AND has completed a verified interactive `SERVER_ADMIN` login within the last 15 minutes (`handshake_probe_15m` layer, `HANDSHAKE_PROBE_MAX_AGE_SECONDS = 900`, recorded via `record_external_admin_handshake`). Administrative test handshakes (`POST /api/v1/admin/auth-cards/test-handshake` and `POST /api/v1/admin/auth-cards/{card_ref}/test-handshake`) validate endpoint connectivity and health only; they NEVER satisfy `handshake_probe_15m`.
  
  ```mermaid
  sequenceDiagram
@@ -116,16 +116,17 @@ index 644272d..0952569 100644
 +    API->>DB: Query active admin cards excluding target card
      alt Remaining Active Admin Cards == 0
 -        DB-->>API: 0 Active Admin Paths Remain!
+-        API-->>UI: 409 Conflict (LOCKOUT_PREVENTED)
 +        DB-->>API: 0 Active Admin Paths Remain
-         API-->>UI: 409 Conflict (LOCKOUT_PREVENTED)
++        API-->>UI: 409 Conflict (LOCKOUT_PREVENTED: sole admin card)
          UI-->>Admin: Show Error Modal: Cannot disable sole remaining admin card
 -    else Remaining Active Admin Cards >= 1
 -        DB-->>API: Active admin paths exist (e.g. OIDC configured)
 -        API->>DB: UPDATE auth_cards SET is_active = false
-+    else External Card Active but Probe > 15m Old
-+        API-->>UI: 409 Conflict (handshake_probe_15m required)
-+        UI-->>Admin: Error: Test Handshake probe required within last 15 minutes
-+    else Remaining Active Admin Card Verified within 15m
++    else External Card Active but No Interactive Login within 15m
++        API-->>UI: 409 Conflict (LOCKOUT_PREVENTED: handshake_probe_15m)
++        UI-->>Admin: Error: External SERVER_ADMIN login required within 15 minutes (test handshakes do not qualify)
++    else External Admin Card Verified via Interactive Login within 15m
 +        API->>DB: UPDATE auth_provider_cards SET is_enabled = false
          DB-->>API: 200 OK
          API-->>UI: Card disabled successfully
@@ -172,7 +173,7 @@ index 644272d..0952569 100644
 +  - Verification endpoint: `POST /api/v1/auth/mfa/verify` validates subsequent codes during login and WebSudo step-up.
 +- **Hardware Security Keys and WebAuthn Passkeys:** Direct FIDO2 browser authentication.
 +  - Registration: Uses standard browser navigator.credentials.create with Relying Party display name `rp.name = "👍kanban"` and ASCII FQDN `rp.id`.
-+- **Break-Glass Backup Recovery Codes:** High-entropy single-use recovery codes generated during MFA enrollment.
++- **Break-Glass Backup Recovery Codes:** Ten high-entropy single-use recovery codes (`RECOVERY_CODE_COUNT = 10`) generated during MFA enrollment.
 +  - Stored in PostgreSQL using secure one-way salted hashes.
 +  - Regenerated via `POST /api/v1/auth/mfa/recovery/regenerate`.
 +  - Once a code is used, it is permanently consumed and cannot be reused.
@@ -187,11 +188,11 @@ index 644272d..0952569 100644
 +
 +### Step-by-Step Guide: Connecting Active Directory
 +
-+1. **Navigate to Auth Studio:** Open `/admin/auth` and click **Add Authentication Card**, then select **LDAP / Active Directory**.
-+2. **Configure Server Connection:** Enter the Domain Controller FQDN in **LDAP Host** (e.g., `dc1.corp.example.com`), select port `636` for LDAPS or `389` for StartTLS, choose **Security Mode**, and optionally supply a custom PEM **CA Certificate** for private enterprise PKI. Plaintext LDAP is strictly rejected.
-+3. **Configure Service Account Bind:** Enter the read-only service account distinguished name in **Bind DN** (e.g., `CN=KanbanService,OU=ServiceAccounts,DC=corp,DC=example,DC=com`) and provide the **Bind Password** (stored encrypted at rest using AES-256-GCM envelope encryption).
-+4. **Define User Search Scope:** Specify **User Base DN** (e.g., `OU=Users,DC=corp,DC=example,DC=com`), enter **User Search Filter** syntax matching `sAMAccountName` or `userPrincipalName` (e.g., `(&(objectCategory=person)(sAMAccountName={username}))`), and configure **Email Attribute** (`mail`) and **Display Name Attribute** (`displayName`).
-+5. **Configure Active Directory Nested Group Sync:** Specify **Group Base DN** (e.g., `OU=SecurityGroups,DC=corp,DC=example,DC=com`), enter **Group Search Filter** utilizing the recursive AD `memberOf` rule `(&(objectCategory=group)(member:1.2.840.113556.1.4.1941:={user_dn}))`, and configure group mappings to 👍kanban workspace and project roles (`WORKSPACE_ADMIN`, `PROJECT_ADMIN`, `WORKSPACE_MEMBER`).
++1. **Navigate to Auth Studio:** Open `/admin/auth` and click **Add Authentication Card**, then select **LDAP / Active Directory** (or click the **Active Directory** preset).
++2. **Configure Server Connection:** Enter the directory connection URL in **Server URL** (e.g., `ldaps://ad.corp.local:636` for direct LDAPS, or `ldap://ad.corp.local:389` with **StartTLS** toggle enabled). Plaintext LDAP without encryption is strictly rejected. Optionally upload a custom PEM **CA Certificate** (`ca_cert_pem`) for private enterprise PKI. Note that SPKI certificate pins (`spki_sha256_pins`, up to 4 lowercase 64-hex SHA-256 digests) are configured via the administrative REST API.
++3. **Configure Service Account Bind:** Enter the read-only service account distinguished name in **Bind DN** (`service_bind_dn`, e.g., `CN=KanbanService,OU=ServiceAccounts,DC=corp,DC=example,DC=com`) and provide the **Bind Password** (stored encrypted at rest using AES-256-GCM envelope encryption).
++4. **Define User Search Scope:** Specify **Base DN** (`base_dn`, e.g., `OU=Users,DC=corp,DC=example,DC=com`), enter **User Search Filter** (`user_search_filter`) syntax matching `sAMAccountName` or `userPrincipalName` (default `(&(objectClass=person)(uid={username}))`, Active Directory preset `(&(objectCategory=person)(sAMAccountName={username}))`), and configure **Subject Attribute** (default `entryUUID`, Active Directory uses `objectGUID`), **Email Attribute** (`mail`), and **Display Name Attribute** (default `cn`, Active Directory uses `displayName`).
++5. **Configure Active Directory Nested Group Sync:** Set **Access Mode** (`any_user` or `group_restricted`, default `any_user`), map **Member Of Attribute** (`memberOf`), and configure **Group DN Map** (`group_dn_map`) utilizing recursive AD token groups to bind AD security groups to 👍kanban roles (`SERVER_ADMIN`, `WORKSPACE_ADMIN`, `PROJECT_ADMIN`, `WORKSPACE_MEMBER`). In `group_restricted` access mode, populate **User Groups** and **Admin Groups** DN allowlists.
 +6. **Execute Draft Handshake Probe:** Click **Test Handshake** before saving. The backend executes `POST /api/v1/admin/auth-cards/test-handshake` to verify TLS certificate negotiation and directory bind. Once green, click **Create Card**.
 +
 +---
@@ -208,7 +209,7 @@ index 644272d..0952569 100644
 +2. **Open Auth Studio:** Navigate to `/admin/auth`, click **Add Authentication Card**, and select **OpenID Connect (OIDC)** or **Google Workspace**.
 +3. **Configure Core Parameters:** Enter a lowercase ASCII identifier in **Card Slug** (e.g., `google` or `keycloak-corp`), user-facing label in **Display Name** (e.g., `Google Workspace SSO`), and discovery endpoint in **Issuer URL** (e.g., `https://accounts.google.com`).
 +4. **Enter Credentials or Import JSON:** Input **Client ID** and **Client Secret** (AES-256-GCM encrypted), or click **Import Google OAuth JSON** in the drawer to upload downloaded client secret JSON directly.
-+5. **Enforce Verified Claims and Domain Allowlist:** Specify requested scopes (`openid email profile`). The backend strictly enforces `email_verified: true` (rejecting unverified claims with HTTP 403 `EMAIL_NOT_VERIFIED`). Configure corporate domains in **Allowed Email Domains** (e.g., `corp.example.com`).
++5. **Enforce Verified Claims and Domain Allowlist:** Specify requested scopes in **Scopes** (comma-separated in the drawer UI, e.g., `openid, email, profile`, transmitted as `list[str]` in the API). The backend strictly enforces `email_verified: true` (rejecting unverified claims with HTTP 403 `EMAIL_NOT_VERIFIED`). Configure corporate domains in **Allowed Email Domains** (e.g., `corp.example.com`).
 +6. **Test Handshake and Enable:** Click **Test Handshake** to verify discovery document retrieval and endpoint reachability. Save the card and toggle **Enabled**.
 +
 +---
@@ -224,7 +225,7 @@ index 644272d..0952569 100644
 +1. **Open Personal Settings:** Navigate to `/settings/profile` and select the **Security** tab.
 +2. **Enroll Hardware Passkey:** Click **Register Passkey / Security Key** and complete platform biometrics or FIDO2 YubiKey touch. Relying Party parameters (`rp.name = "👍kanban"`, strict ASCII FQDN `rp.id`) protect against phishing. Assign a recognizable label (e.g., `MacBook Pro Touch ID` or `Backup YubiKey 5C`).
 +3. **Enroll Authenticator App (TOTP):** Click **Enroll Authenticator App**, scan the rendered QR code with your authenticator application or copy the base32 secret key, and enter the current 6-digit verification code to confirm setup.
-+4. **Store Break-Glass Recovery Codes:** Upon confirming MFA, the platform displays 8 single-use backup recovery codes. Store these codes in an encrypted password manager or secure physical safe. If your hardware key or phone is lost, recovery codes allow emergency account access.
++4. **Store Break-Glass Recovery Codes:** Upon confirming MFA, the platform displays 10 single-use backup recovery codes. Store these codes in an encrypted password manager or secure physical safe. If your hardware key or phone is lost, recovery codes allow emergency account access.
 +5. **Emergency Account Recovery:** In the event that your primary and second factors are lost, enter a single-use recovery code at the MFA prompt to restore account access and immediately regenerate your recovery set.
 +
 +---
@@ -236,10 +237,10 @@ index 644272d..0952569 100644
 +- **Cryptographic Hashing:** Passwords are never stored in cleartext. Credentials are hashed using state-of-the-art Argon2id with memory cost 65536 KiB, time cost 3 iterations, and parallelism 4.
 +- **Break-Glass Emergency Access:** In the event that all external identity providers are unreachable, the local administrator card ensures immediate platform recovery.
 diff --git a/Role-and-Permission-Matrix.md b/Role-and-Permission-Matrix.md
-index 8e6db3f..acb5545 100644
+index 8e6db3f..53f94cb 100644
 --- a/Role-and-Permission-Matrix.md
 +++ b/Role-and-Permission-Matrix.md
-@@ -16,20 +16,128 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+@@ -16,20 +16,134 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
  
  ---
  
@@ -293,57 +294,63 @@ index 8e6db3f..acb5545 100644
 +> **"As a [ system admin | workspace admin | project admin ] I want [ ● role x ] ... to have access to"**
 +
 +- **Tier Scope Selector:** Pins the target scope of the role being defined (`system admin`, `workspace admin`, or `project admin`). Built-in roles belonging to higher tiers are locked against modification by lower-tier administrators.
-+- **Role Selector & Creation Popover:** Allows administrators to select an existing custom role or click **Create Custom Role** to specify role name, slug, badge color, and description.
++- **Role Selector & Creation Popover:** Allows administrators to select an existing custom role or click `*create new*` in the role selector popover to specify role name, slug, badge color, and description.
 +- **Tri-State Checkboxes:** Permissions are toggled across three states:
-+  - **Unchecked (○):** Inherits default permission behavior from lower tiers or defaults to Deny.
-+  - **Checked (●):** Explicitly grants the capability.
-+  - **Indeterminate / Deny:** Applies an explicit Deny mask that overrides all inherited permissions.
++  - **Unchecked (○):** Unassigned / not granted for any selected role.
++  - **Checked (●):** Granted across all selected roles.
++  - **Indeterminate (-):** Partial grant across multiple selected roles (e.g., granted in one selected role, not granted in another; clicking sets grant across all selected roles). (Indeterminate state indicates multi-role partial coverage, NOT an explicit Deny mask).
 +
 +### Step-by-Step Guide: Building Custom RBAC Roles
 +
 +1. **Open RBAC Studio:** Navigate to Workspace Settings and select **Roles & Permissions**.
 +2. **Select Scope Tier:** In the narrative sentence header, select the target administrative scope (e.g., `workspace admin`).
-+3. **Define Custom Role Identity:** Click the role pill, select **Create Custom Role**, and enter a descriptive **Role Name** (e.g., `Security Auditor`), lowercase alphanumeric **Slug** (e.g., `security-auditor`), and badge **Color** preset.
-+4. **Configure Workspace Tier:** Toggle capabilities for member management, audit inspection, and integration configuration.
++3. **Define Custom Role Identity:** In the role selection popover, click `*create new*`, and enter a descriptive **Role Name** (e.g., `Security Auditor`), lowercase alphanumeric **Slug** (e.g., `security-auditor`), and badge **Color** preset.
++4. **Configure Workspace Tier:** Toggle capabilities for workspace provisioning, member management, audit log inspection, and integration configuration.
 +5. **Configure Issue Tier:** Toggle capabilities for creating issues, transitioning workflow states, moving rank, linking, and managing item ACLs.
-+6. **Configure Field Tier:** Toggle read and edit capabilities for standard and custom fields.
-+7. **Save Policy:** Click **Save Changes**. The backend executes `POST /api/v1/admin/rbac/roles` or `PUT /api/v1/admin/rbac/roles/{role_id}`, validating caller AAL2 elevation and persisting the policy in `rbac_roles` and `rbac_role_permissions`.
++6. **Configure Field Tier:** Toggle edit capabilities for summary, description, state, priority, assignees, labels, dates, cycle, module, parent, custom fields, and file attachments.
++7. **Immediate Auto-Save:** Permission checkbox mutations auto-save immediately to PostgreSQL via `PUT /api/v1/admin/rbac/roles/permissions:batch` (or single-role `PUT /api/v1/admin/rbac/roles/{role_id}/permissions`), validating caller AAL2 elevation and persisting the policy in `rbac_roles` and `rbac_role_permissions`.
 +
 +---
 +
 +## 30-Permission Granular Engine
 +
-+👍kanban implements 30 granular permission keys across three distinct operational tiers:
++👍kanban implements 30 granular permission keys across three distinct operational tiers, mapped to intuitive UI checkboxes in the Policy Builder:
 +
 +### 1. Workspace Tier (8 Permissions)
-+- `workspace:create` - Provision new tenant workspaces.
-+- `workspace:edit_settings` - Modify workspace metadata, retention thresholds, and default roles.
-+- `workspace:manage_members` - Invite, deactivate, and remove workspace members.
-+- `workspace:manage_groups` - Create and manage principal groups and nested group hierarchies.
-+- `workspace:create_role` - Author custom RBAC roles and modify role permission bitmasks.
-+- `workspace:create_project` - Create new projects within the workspace.
-+- `workspace:manage_trash` - Inspect soft-deleted workspace objects and restore items.
-+- `workspace:manage_mcp_keys` - Mint, scope, and revoke MCP API tokens.
++- `workspace:create` (UI: **Create Workspaces**) - Provision new tenant workspaces.
++- `workspace:edit_settings` (UI: **Edit Settings**) - Modify workspace metadata, retention thresholds, and default roles.
++- `workspace:manage_members` (UI: **Manage Members**) - Invite, deactivate, and remove workspace members.
++- `workspace:create_role` (UI: **Manage Roles**, alias `workspace:manage_roles`) - Author custom RBAC roles and modify role permission bitmasks.
++- `workspace:manage_mcp_keys` (UI: **Manage Integrations**, alias `workspace:manage_integrations`) - Mint, scope, and revoke MCP API tokens.
++- `workspace:audit_logs` (UI: **View Audit Logs**) - Inspect immutable workspace audit logs and ledger events.
++- `workspace:export_data` (UI: **Export Data**) - Export workspace and project data archives.
++- `workspace:manage_trash` (UI: **Purge Trash**, alias `workspace:purge_trash`) - Inspect and permanently purge soft-deleted workspace objects.
 +
 +### 2. Issue Tier (10 Permissions)
-+- `issue:create` - Author new issues, tasks, and bugs.
-+- `issue:view` - Read issue details, history, and metadata.
-+- `issue:comment` - Post comments and replies on work items.
-+- `issue:transition` - Move issues between workflow states.
-+- `issue:move_rank` - Reorder issues within Kanban columns and backlogs.
-+- `issue:link` - Create typed object links between issues, stickies, and docs.
-+- `issue:copy` - Duplicate existing issues with selective metadata cloning.
-+- `issue:archive` - Archive completed or stale issues outside active board views.
-+- `issue:delete` - Soft-delete issues to the project trash bin.
-+- `issue:manage_acl` - Share items with specific principals or set explicit Deny entries.
++- `issue:create` (UI: **Create Issues**) - Author new issues, tasks, and bugs.
++- `issue:view` (UI: **View Issues**) - Read issue details, history, and metadata.
++- `issue:comment` (UI: **Comment on Issues**) - Post comments and replies on work items.
++- `issue:transition` (UI: **Transition States**) - Move issues between workflow states.
++- `issue:move_rank` (UI: **Re-order / Move Rank**) - Reorder issues within Kanban columns and backlogs.
++- `issue:copy` (UI: **Copy Issues**) - Duplicate existing issues with selective metadata cloning.
++- `issue:link` (UI: **Link Objects**) - Create typed object links between issues, stickies, and docs.
++- `issue:archive` (UI: **Archive Issues**) - Archive completed or stale issues outside active board views.
++- `issue:delete` (UI: **Delete Issues**) - Soft-delete issues to the project trash bin.
++- `issue:manage_acl` (UI: **Subscribe to Issues**, alias `issue:subscribe`) - Share items with specific principals or set explicit item ACLs.
 +
 +### 3. Field Tier (12 Permissions)
-+- `field:title:view` / `field:title:edit` - Inspect and modify issue titles.
-+- `field:description:view` / `field:description:edit` - Inspect and author canonical markdown descriptions.
-+- `field:assignee:view` / `field:assignee:edit` - Inspect and change issue assignment.
-+- `field:priority:view` / `field:priority:edit` - Inspect and update issue priority tiers.
-+- `field:estimate:view` / `field:estimate:edit` - Inspect and update story point estimates.
-+- `field:custom:view` / `field:custom:edit` - Inspect and modify custom scripted and formula field values.
++- `field:modify_summary` - Modify issue title and summary.
++- `field:modify_description` - Modify issue description markdown content.
++- `field:modify_state` - Update issue status and workflow state.
++- `field:modify_priority` - Update issue priority (URGENT, HIGH, MEDIUM, LOW).
++- `field:modify_assignees` - Assign or reassign users to the issue.
++- `field:modify_labels` - Attach or remove issue labels and tags.
++- `field:modify_dates` - Set or adjust issue start dates and due dates.
++- `field:modify_cycle` - Associate or remove issue from sprint cycles.
++- `field:modify_modules` (UI: `field:modify_module`) - Associate or remove issue from project modules.
++- `field:modify_parent` - Establish or change parent-child epic relationships.
++- `field:modify_custom_fields` - Inspect and modify custom scripted and formula field values.
++- `field:attach_files` - Upload, manage, and remove file attachments.
 +
 +---
 +
@@ -378,7 +385,7 @@ index 8e6db3f..acb5545 100644
  ## Master Capability Matrix
  
  | Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
-@@ -64,13 +172,13 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+@@ -64,13 +178,13 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
  3. **Absolute DENY Precedence:** If an explicit `DENY` entry exists for a principal on an object (or inherited group), effective capability bitmasks collapse immediately (`allow & (~deny)`). Even Workspace Admins cannot view or manage objects guarded by an explicit `DENY`.
  4. **Ownership Share Delegation:** Standard Members can only share objects they originally authored, provided project policy permits user-level ACL delegation.
  5. **Admin Approval Gate:** Custom fields and scripts can only be defined by administrators. Executing a script with Workspace or Server token escalation requires cryptographic approval from an administrator of that tier.
@@ -395,10 +402,10 @@ index 8e6db3f..acb5545 100644
  ---
  
 diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
-index 907f8ce..a31b77d 100644
+index 907f8ce..750e6a6 100644
 --- a/Studio-Configuration-Reference.md
 +++ b/Studio-Configuration-Reference.md
-@@ -83,24 +83,120 @@ The Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dyna
+@@ -83,24 +83,133 @@ The Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dyna
  ---
  
  ## 5. Authentication Studio
@@ -429,7 +436,7 @@ index 907f8ce..a31b77d 100644
 +| `button_subtext` | Optional explanatory subtext beneath button | UTF-8 String (up to 200 characters) or null | None | Guides users on credential format or organizational tenant |
 +| `icon_preset` | Visual icon rendered inside login card button | `key`, `shield`, `google`, `github`, `microsoft`, `ldap`, `terminal` | `key` | Provides immediate visual recognition on `/login` container |
 +| `is_enabled` | Master active state toggle for the card | Boolean (`true` / `false`) | `false` | Disabled cards reject login attempts immediately with 403 FORBIDDEN |
-+| `sort_rank` | Fractional rank ordering on `/login` screen | Non-negative numeric string (e.g. `"10"`, `"20"`) | `"50"` | Lower ranks appear first; allows prioritizing corporate SSO over fallback admin |
++| `sort_rank` | Fractional rank ordering on `/login` screen | Fractional-index midpoint string (e.g. `"V00V"`, `"kV0FV"`) computed via `midpoint_rank()` | Derived | Lower ranks appear first; allows prioritizing corporate SSO over fallback admin |
 +| `auto_provision_users` | Automatic local user creation on first SSO login | Boolean (`true` / `false`) | `false` | When true, new users are provisioned in workspace with default role |
 +| `allowed_email_domains` | Domain allowlist for user registration and SSO | Array of domain strings (e.g. `["corp.example.com"]`) | Empty list (Allow all) | Rejects unmatched email claims during OIDC and LDAP authentication |
 +| `public_config` | Non-sensitive provider configuration dictionary | JSON object | `{}` | Exposes discovery URLs and client IDs without leaking secrets |
@@ -441,16 +448,21 @@ index 907f8ce..a31b77d 100644
 +
 +| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
 +| :--- | :--- | :--- | :--- | :--- |
-+| `ldap_host` | Directory server FQDN or IP address | Hostname or IP string | Required | Plaintext LDAP rejected; encrypted LDAPS or StartTLS mandatory |
-+| `ldap_port` | Directory service network port | Integer (1 to 65535) | `636` for LDAPS, `389` for StartTLS | Directs TLS connection to domain controller directory services |
-+| `ldap_security_mode` | Cryptographic transport security protocol | `ldaps` (SSL/TLS), `starttls` | `ldaps` | Enforces TLS handshake before transmitting bind credentials |
-+| `ca_cert_pem` | Custom enterprise Certificate Authority bundle | PEM-formatted X.509 certificate string | None | Pins enterprise root CA; rejects untrusted self-signed certificates |
-+| `bind_dn` | Service account Distinguished Name | LDAP DN string (e.g. `CN=svc-kanban,OU=ServiceAccounts,DC=corp,DC=com`) | Required | Read-only service principal used for user and group tree searches |
-+| `base_dn` | User search subtree root Distinguished Name | LDAP DN string (e.g. `OU=Users,DC=corp,DC=com`) | Required | Restricts user search scope to authorized organizational units |
-+| `user_search_filter` | LDAP query filter for user account resolution | Filter expression matching `{username}` | `(&(objectCategory=person)(sAMAccountName={username}))` | Resolves login username to Active Directory user object |
-+| `group_search_base` | Group search subtree root Distinguished Name | LDAP DN string (e.g. `OU=Groups,DC=corp,DC=com`) | Base DN | Restricts security group search scope for RBAC mapping |
-+| `group_search_filter` | LDAP query filter for group membership resolution | Filter expression matching `{user_dn}` | `(&(objectCategory=group)(member:1.2.840.113556.1.4.1941:={user_dn}))` | Traverses Active Directory recursive nested groups via `memberOf` |
-+| `sync_nested_groups` | Enables LDAP matching rule in chain recursion | Boolean (`true` / `false`) | `true` | Expands transitive nested Active Directory group memberships |
++| `url` | Directory connection URL with scheme and host | `^(ldaps\|ldap)://[A-Za-z0-9.-]+(:[0-9]{1,5})?$` | Required | Plaintext unencrypted LDAP rejected; requires `ldaps://` or `ldap://` with StartTLS |
++| `transport_mode` | Cryptographic transport security protocol | `ldaps` (implicit TLS on port 636), `starttls` (explicit StartTLS on port 389) | `ldaps` | Enforces TLS handshake before transmitting bind credentials |
++| `ca_cert_pem` | Custom enterprise Certificate Authority bundle | PEM-formatted X.509 certificate string (max 64 KiB) | None | Pins enterprise root CA; rejects untrusted self-signed certificates |
++| `spki_sha256_pins` | Subject Public Key Info SHA-256 pin hashes | Array of 64-hex SHA-256 strings (up to 4 pins) | `[]` | Cryptographically pins public key identity; prevents rogue CA issuance |
++| `service_bind_dn` | Service account Distinguished Name | LDAP DN string (up to 512 chars) or null | None | Read-only service principal used for user lookup and group searches |
++| `base_dn` | Directory search subtree root Distinguished Name | LDAP DN string (1 to 512 chars) | Required | Scopes user search to authorized organizational container (e.g. `OU=Users,DC=corp,DC=com`) |
++| `user_search_filter` | LDAP query filter for user account resolution | LDAP filter expression substituting `{username}` | `(&(objectClass=person)(uid={username}))` | Resolves login username to directory user; AD preset uses `sAMAccountName` |
++| `subject_attribute` | Attribute providing immutable user identity | ASCII attribute name (e.g. `entryUUID`, `objectGUID`) | `entryUUID` | Binds external user identity immutably across username renames |
++| `email_attribute` | Attribute containing user email address | ASCII attribute name (e.g. `mail`) | `mail` | Source of verified user email address for workspace mapping |
++| `display_name_attribute` | Attribute containing user full name | ASCII attribute name (e.g. `displayName`, `cn`) | `cn` | Displayed on user profile and activity ledger |
++| `member_of_attribute` | Attribute containing direct group memberships | ASCII attribute name (e.g. `memberOf`) | `memberOf` | Evaluated during group membership extraction and role mapping |
++| `group_dn_map` | Dictionary mapping directory group DNs to roles | JSON dictionary of `{dn: role_slug}` (up to 200 mappings) | `{}` | Automatically provisions mapped workspace and project roles upon login |
++| `access_mode` | Access restriction policy | `any_user` (all valid users), `group_restricted` (member of allowed group) | `any_user` | When restricted, users not in `user_groups` or `admin_groups` are denied entry |
++| `admin_groups` | Directory group names granting admin authority | Array of group names (up to 200 chars each) | `[]` | Grants `SERVER_ADMIN` or `WORKSPACE_ADMIN` to authenticated group members |
++| `user_groups` | Directory group names granting member authority | Array of group names (up to 200 chars each) | `[]` | Grants baseline member access when `access_mode` is `group_restricted` |
 +
 +
 +### OpenID Connect (OIDC) and Google OAuth Configuration Table
@@ -460,9 +472,9 @@ index 907f8ce..a31b77d 100644
 +| `issuer_url` | OIDC discovery endpoint base URL | Valid HTTPS URL | Required | Fetches `/.well-known/openid-configuration` and cryptographic JWKS keys |
 +| `client_id` | OAuth application client identifier | ASCII string | Required | Identifies application to identity provider authorization server |
 +| `client_secret` | OAuth application client secret | Write-only secret string | Required | Stored encrypted in PostgreSQL; never returned in REST responses |
-+| `scopes` | OIDC OAuth scope parameters | Space-delimited string (e.g. `"openid email profile"`) | `"openid email profile"` | Must include `openid` and `email` for verified claim extraction |
++| `scopes` | OIDC OAuth scope parameters | Array of scope strings in API; comma-separated in drawer | `["openid", "email", "profile"]` | Must include `openid` and `email` for verified claim extraction |
 +| `redirect_uri` | Callback endpoint registered with IdP | Fixed format `/api/v1/auth/oidc/{slug}/callback` | Derived | Enforces strict origin matching against current deployment URL |
-+| `require_email_verified`| Rejects unverified IdP email addresses | Boolean (`true`) | `true` | If `email_verified: false`, rejects authentication with 403 EMAIL_NOT_VERIFIED |
++| `require_email_verified` | Rejects unverified IdP email addresses | Boolean (`true`) | `true` | If `email_verified: false`, rejects authentication with 403 EMAIL_NOT_VERIFIED |
 +
 +
 +### Personal Security and Multi-Factor Authentication Configuration Table
@@ -471,21 +483,21 @@ index 907f8ce..a31b77d 100644
 +| :--- | :--- | :--- | :--- | :--- |
 +| `rp_name` | WebAuthn Relying Party display name | Canonical string `👍kanban` | `👍kanban` | Displayed by browser and hardware security keys during passkey prompts |
 +| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or relay attacks |
-+| `totp_step_seconds` | RFC 6238 TOTP time step interval | Integer | `30` | Validates time-based one-time password window with +/- 1 step drift |
-+| `recovery_codes_count` | Number of backup recovery codes generated | Integer | `8` | Single-use high-entropy emergency codes stored as salted hashes |
++| `totp_secret` | High-entropy base32 secret for TOTP | Base32 string (RFC 6238) | Generated on enroll | Validates 6-digit one-time codes with 30s step interval and +/- 1 drift |
++| `recovery_codes` | Backup emergency recovery codes | Array of 10 single-use high-entropy recovery codes | 10 codes | Single-use emergency codes stored as salted hashes for break-glass recovery |
 +| `websudo_duration_seconds` | Duration of elevated AAL2 administrator session | Integer (seconds) | `900` (15 minutes) | Sliding window for sensitive mutations; explicit drop via `/aal2/drop` |
-+| `lockout_prevention_layer`| Anti-lockout verification enforcement | `db_trigger`, `handshake_probe_15m` | Both active | Blocks disabling local admin without verified alternative within 15 min |
++| `lockout_prevention_layer` | Anti-lockout verification enforcement | `db_trigger`, `handshake_probe_15m` | Both active | Blocks disabling LOCAL_ADMIN without verified interactive admin login within 15m |
 +
 +
 +### Granular RBAC Policy Builder Configuration Table
 +
 +| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
 +| :--- | :--- | :--- | :--- | :--- |
-+| `scope_tier` | Administrative scope tier of the role | `system admin`, `workspace admin`, `project admin` | `workspace admin` | Governs role hierarchy and locks lower-tier admins from editing parent roles |
++| `rbac_scope_tier` | Administrative scope tier of the role | `system admin`, `workspace admin`, `project admin` | `workspace admin` | Governs role hierarchy and locks lower-tier admins from editing parent roles |
 +| `role_slug` | Unique lowercase identifier for custom role | Lowercase ASCII `^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$` | Required | Identifies role in database bindings and audit ledger records |
 +| `role_name` | Human-readable role title | UTF-8 String (1 to 100 characters) | Required | Displayed on user management surfaces, member cards, and badges |
 +| `color_hex` | UI badge accent color | 7-character hex code (e.g. `#4f46e5`) | `#6b7280` | Distinguishes role visually across member tables and peek drawers |
-+| `permissions` | List of granted granular permissions | Array of permission strings from 30 canonical keys | `[]` | Evaluated with explicit DENY precedence (`effective = allow & (~deny)`) |
++| `rbac_permissions` | List of granted granular permissions | Array of permission strings from 30 canonical keys | `[]` | Evaluated with explicit DENY precedence (`effective = allow & (~deny)`) |
 +
 +![Custom RBAC Policy Builder - Desktop](images/slice1-custom-rbac-policy-builder.png)
 +
@@ -498,35 +510,43 @@ index 907f8ce..a31b77d 100644
 +- **button_subtext:** Optional secondary guidance rendered in smaller typography directly below the card title (up to 200 characters). Commonly used to specify login formats, such as `"Use your firstname.lastname@example.com account"` or `"Hardware security key required"`.
 +- **icon_preset:** Visual icon token rendered on the authentication card button. Supported values include `key` (generic credential), `shield` (security key / passkey), `google` (Google colored G), `github` (GitHub octocat), `microsoft` (Windows logo), `ldap` (directory tree), and `terminal` (administrative root). Enhances visual scannability on multi-card login surfaces.
 +- **is_enabled:** Master toggle controlling whether the authentication card is active on the `/login` screen. When set to `false`, the card is hidden from the login container, and any authentication attempts targeting the card's routes are immediately rejected with HTTP 403 `FORBIDDEN`. Mutations toggling `is_enabled` enforce anti-lockout validation.
-+- **sort_rank:** Fractional rank order string governing the visual sequence of cards on the `/login` container. Cards with lower numeric ranks appear first. Administrators use this setting to position primary corporate SSO providers at the top while keeping break-glass local admin cards accessible at the bottom.
++- **sort_rank:** Fractional-index midpoint string computed via `midpoint_rank()` (e.g. `"V00V"`, `"kV0FV"`) governing the visual sequence of cards on the `/login` container. Cards with lower lexicographical ranks appear first. Administrators use this setting to position primary corporate SSO providers at the top while keeping break-glass local admin cards accessible at the bottom without needing to renumber surrounding cards.
 +- **auto_provision_users:** When enabled (`true`), an authenticated user whose external identity claim is verified but does not yet have an account in 👍kanban is automatically provisioned with a new local user record and assigned the workspace default role. When disabled (`false`), external users must be explicitly invited before logging in.
 +- **allowed_email_domains:** A security restriction array of permitted corporate email domains (e.g., `["corp.example.com", "subsidiary.com"]`). During OIDC token exchange or LDAP authentication, if the user's verified email address domain does not match any entry in this list, authentication is aborted with HTTP 403 `DOMAIN_NOT_ALLOWED`.
 +- **public_config:** A JSON dictionary containing non-sensitive provider configuration attributes. Stored in PostgreSQL `jsonb` columns and safe to expose to administrative API callers. Includes discovery URLs, client IDs, LDAP hosts, user search filters, and group mapping definitions.
 +- **secret:** Client secrets, LDAP bind passwords, and private key strings. Inbound payloads accept this write-only parameter, which is immediately encrypted at rest using AES-256-GCM envelope encryption with the platform `MASTER_KEK`. The secret is never returned in any REST API response or serialization model.
 +- **google_oauth_json:** A convenience payload accepting the raw client secret JSON file downloaded directly from the Google Cloud Console (up to 32,768 characters). The backend parses the JSON, validates client ID, client secret, redirect URI alignment, and populates `public_config` without manual copy-pasting.
-+- **ldap_host:** The fully qualified domain name or IP address of the target directory server. Plaintext LDAP on unencrypted port 389 is rejected by backend security policies; all connections must negotiate TLS.
-+- **ldap_port:** Network port for directory services. Defaults to port `636` for LDAPS (implicit SSL/TLS) and port `389` when `ldap_security_mode` is set to `starttls`.
-+- **ldap_security_mode:** Transport encryption mode for directory traffic. Permitted values are `ldaps` (direct TLS handshake upon TCP socket connection on port 636) and `starttls` (explicit StartTLS extended operation negotiation on port 389 prior to issuing bind requests).
-+- **ca_cert_pem:** Custom PEM-formatted X.509 certificate authority bundle. When connecting to enterprise directory controllers utilizing private internal PKI, administrators paste the issuing root and intermediate CA certificates here. The LDAP client validates the server certificate strictly against this bundle, rejecting untrusted certificates.
-+- **bind_dn:** The Distinguished Name of the service account used by 👍kanban to execute user lookup and group resolution queries (e.g., `CN=KanbanService,OU=ServiceAccounts,DC=corp,DC=com`). Must possess read-only search permissions over the target user and group subtrees.
-+- **base_dn:** The root Distinguished Name of the directory subtree searched for user accounts (e.g., `OU=Employees,DC=corp,DC=com`). Scopes directory queries to prevent scanning unrelated machine or organizational containers.
-+- **user_search_filter:** LDAP filter expression utilized to resolve the input login username to a specific Active Directory user object. The token `{username}` is safely escaped and substituted into the filter (e.g., `(&(objectCategory=person)(sAMAccountName={username}))` or `(&(objectCategory=person)(userPrincipalName={username}))`).
-+- **group_search_base:** The root Distinguished Name of the directory subtree containing security groups. Used during group synchronization to locate groups mapped to 👍kanban roles.
-+- **group_search_filter:** LDAP filter expression utilized to determine all security groups containing the authenticated user. In Active Directory environments, setting this to `(&(objectCategory=group)(member:1.2.840.113556.1.4.1941:={user_dn}))` leverages the LDAP Matching Rule in Chain (`LDAP_MATCHING_RULE_IN_CHAIN`) to traverse nested group memberships recursively.
-+- **sync_nested_groups:** Boolean toggle enabling automatic recursive resolution of nested Active Directory groups. When enabled, users inherit 👍kanban roles associated with parent groups even if their account is only directly assigned to a child group in the directory.
++- **url:** The directory connection URL with protocol scheme and hostname matching `^(ldaps|ldap)://[A-Za-z0-9.-]+(:[0-9]{1,5})?$`. Unencrypted plaintext LDAP is strictly rejected; connections must negotiate TLS via `ldaps://` or `ldap://` with StartTLS.
++- **transport_mode:** Transport encryption protocol for directory traffic. Permitted values are `ldaps` (direct TLS handshake upon TCP socket connection on port 636) and `starttls` (explicit StartTLS extended operation negotiation on port 389 prior to issuing bind requests).
++- **ca_cert_pem:** Custom PEM-formatted X.509 certificate authority bundle (up to 64 KiB). When connecting to enterprise directory controllers utilizing private internal PKI, administrators paste the issuing root and intermediate CA certificates here. The LDAP client validates the server certificate strictly against this bundle, rejecting untrusted certificates.
++- **spki_sha256_pins:** Array of Subject Public Key Info (SPKI) SHA-256 hashes (each exactly 64 hexadecimal characters, up to 4 pins). Configured via backend API to cryptographically pin the server certificate public key and block rogue CA or proxy interception.
++- **service_bind_dn:** The Distinguished Name of the service account used by 👍kanban to execute user lookup and group resolution queries (e.g., `CN=KanbanService,OU=ServiceAccounts,DC=corp,DC=com`, up to 512 characters). Must possess read-only search permissions over the target user and group subtrees.
++- **base_dn:** The root Distinguished Name of the directory subtree searched for user accounts (e.g., `OU=Employees,DC=corp,DC=com`, up to 512 characters). Scopes directory queries to prevent scanning unrelated machine or organizational containers.
++- **user_search_filter:** LDAP filter expression utilized to resolve the input login username to a specific Active Directory user object. The token `{username}` is safely escaped and substituted into the filter (default `(&(objectClass=person)(uid={username}))`, Active Directory preset `(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))`).
++- **subject_attribute:** The directory attribute providing an immutable, permanent identifier for the authenticated user (default `entryUUID`, Active Directory uses `objectGUID`). Ensures account continuity even if usernames or email addresses change.
++- **email_attribute:** The directory attribute containing the user's primary email address (default `mail`). Populates the verified user email address upon authentication.
++- **display_name_attribute:** The directory attribute containing the user's human-readable name (default `cn`, Active Directory uses `displayName`). Populates the user's profile display name.
++- **member_of_attribute:** The directory attribute containing direct group memberships on user objects (default `memberOf`). Used during group synchronization to locate groups mapped to 👍kanban roles.
++- **group_dn_map:** JSON dictionary mapping directory group Distinguished Names to 👍kanban role slugs (up to 200 mappings). During login, the backend evaluates user group memberships and assigns mapped roles automatically.
++- **access_mode:** Access restriction policy governing directory logins. Permitted values are `any_user` (permits all successfully bound directory users) and `group_restricted` (restricts login to users belonging to specified `user_groups` or `admin_groups`).
++- **admin_groups:** Array of directory group names granting administrative privileges (`SERVER_ADMIN` or `WORKSPACE_ADMIN`). Users belonging to these groups receive elevated administrative access upon login.
++- **user_groups:** Array of directory group names granting member privileges. When `access_mode` is set to `group_restricted`, users must belong to at least one group listed in `user_groups` or `admin_groups` to log in.
 +- **issuer_url:** The standard OpenID Connect discovery base URL (e.g., `https://accounts.google.com` or `https://keycloak.corp.example.com/realms/enterprise`). The backend appends `/.well-known/openid-configuration` to retrieve endpoint URLs, signing algorithms, and JSON Web Key Sets (JWKS).
 +- **client_id:** The public OAuth client identifier issued by the identity provider during application registration.
 +- **client_secret:** The confidential OAuth client secret credential issued by the identity provider. Held strictly in write-only custody and encrypted via AES-256-GCM.
-+- **scopes:** Space-separated OAuth scope list requested during authorization. Defaults to `"openid email profile"`. Scopes must guarantee delivery of the `sub` and `email` claims.
++- **scopes:** Array of requested OAuth scopes in API payloads (`["openid", "email", "profile"]`), entered as a comma-separated string in the editor drawer. Scopes must guarantee delivery of the `sub` and `email` claims.
 +- **redirect_uri:** The immutable callback URI derived from the deployment hostname and card slug: `https://<domain>/api/v1/auth/oidc/<slug>/callback`. Must be registered verbatim in the identity provider console.
 +- **require_email_verified:** Mandatory boolean safety check. When true, the ID token claim `email_verified` must be strictly `true`. If the claim is `false` or missing, authentication is aborted with HTTP 403 `EMAIL_NOT_VERIFIED` to prevent email spoofing attacks.
 +- **rp_name:** WebAuthn Relying Party display name. Hardcoded to the canonical platform brand `👍kanban` across all WebAuthn registration and authentication credential requests. Displayed by operating system biometric dialogs and hardware tokens.
 +- **rp_id:** WebAuthn Relying Party domain identifier. Formatted as a strict ASCII Fully Qualified Domain Name matching the browser window origin without protocol, port, or trailing slashes (e.g., `kanban.example.com`). Prevents cross-domain credential phishing.
-+- **totp_secret:** High-entropy base32 encoded secret key generated during TOTP authenticator enrollment (`POST /api/v1/auth/mfa/totp/enroll`). Encrypted at rest and used to validate 6-digit RFC 6238 time-step codes.
-+- **recovery_codes:** Array of single-use backup recovery codes minted during MFA enrollment. Stored in PostgreSQL exclusively as cryptographic salted hashes. Used for break-glass account recovery when hardware tokens or authenticator apps are unavailable.
++- **totp_secret:** High-entropy base32 encoded secret key generated during TOTP authenticator enrollment (`POST /api/v1/auth/mfa/totp/enroll`). Encrypted at rest and used to validate 6-digit RFC 6238 time-step codes with a 30-second interval and +/- 1 step drift tolerance.
++- **recovery_codes:** Array of 10 single-use backup recovery codes minted during MFA enrollment (`RECOVERY_CODE_COUNT = 10`). Stored in PostgreSQL exclusively as cryptographic salted hashes. Used for break-glass account recovery when hardware tokens or authenticator apps are unavailable.
 +- **websudo_duration_seconds:** The lifetime of an elevated Authenticator Assurance Level 2 (AAL2) session window (default 900 seconds / 15 minutes). All administrative endpoints (`/api/v1/admin/*`) require active AAL2 verification. When expired, the frontend prompts for step-up elevation via WebSudo without discarding dirty form state.
-+- **lockout_prevention_layer:** Multi-layered defense preventing administrative lockouts. Evaluated at both the PostgreSQL trigger layer (`db_trigger`) and application service layer (`handshake_probe_15m`). Prohibits disabling or deleting the last active administrator card unless an alternative external card has passed a live handshake probe within the last 15 minutes (`HANDSHAKE_PROBE_MAX_AGE_SECONDS = 900`).
++- **lockout_prevention_layer:** Multi-layered defense preventing administrative lockouts. Evaluated at both the PostgreSQL trigger layer (`db_trigger`) and application service layer (`handshake_probe_15m`). While test handshakes (`POST /api/v1/admin/auth-cards/test-handshake`) verify endpoint health status, disabling or deleting `LOCAL_ADMIN` strictly requires that an external provider card has an active administrator account mapping AND has recorded a verified interactive `SERVER_ADMIN` login within the last 15 minutes (`last_admin_handshake_at >= clock_timestamp() - interval '15 minutes'`).
 +- **rbac_scope_tier:** The administrative boundary defining where a custom RBAC role applies. Allowed values are `system admin` (global platform governance), `workspace admin` (workspace-wide settings, members, and custom fields), and `project admin` (project-specific workflows, WIP limits, and issue operations). Roles in higher tiers cannot be edited by administrators in lower tiers.
++- **role_slug:** The unique URL-safe identifier for the custom role, conforming to `^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$`. Identifies the role across role bindings and audit records.
++- **role_name:** The human-readable name of the custom role (1 to 100 characters), rendered in member lists, access matrices, and role assignment pills.
++- **color_hex:** Hexadecimal color string (e.g., `#4f46e5`) utilized for UI badges and role chips across user management and permission tables.
 +- **rbac_permissions:** The set of granular permissions assigned to a custom RBAC role, selected from the 30 canonical keys across Workspace (8), Issue (10), and Field (12) tiers. Evaluated alongside the 8-bit capability bitmask with absolute DENY precedence (`effective = allow & (~deny)`).
  
  ---
