@@ -539,13 +539,24 @@ export function ProjectSettingsPage(): JSX.Element {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
+        let parsedTimeout: number | null = null;
+        if (defaultGateTimeoutMs.trim()) {
+          const parsed = parseInt(defaultGateTimeoutMs.trim(), 10);
+          if (Number.isNaN(parsed) || parsed < 1000 || parsed > 600000) {
+            setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+            setIsSaving(false);
+            return;
+          }
+          parsedTimeout = parsed;
+        }
+
         const payload = {
           name: name.trim(),
           description_markdown: description,
           modules_enabled: modulesEnabled,
           skip_loaded_sequence_numbers: skipLoadedSeq,
           auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
-          default_gate_timeout_ms: defaultGateTimeoutMs ? parseInt(defaultGateTimeoutMs, 10) : null,
+          default_gate_timeout_ms: parsedTimeout,
         };
 
         const updated = (await apiFetch(
@@ -1692,7 +1703,20 @@ export function ProjectSettingsPage(): JSX.Element {
                     max="600000"
                     step="1000"
                     value={defaultGateTimeoutMs}
-                    onChange={(e) => { setDefaultGateTimeoutMs(e.target.value); }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDefaultGateTimeoutMs(v);
+                      if (v.trim()) {
+                        const parsed = parseInt(v.trim(), 10);
+                        if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                          setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                        } else {
+                          setErrorMessage(null);
+                        }
+                      } else {
+                        setErrorMessage(null);
+                      }
+                    }}
                     placeholder="Inherit agent default"
                     style={{ flex: 1 }}
                   />

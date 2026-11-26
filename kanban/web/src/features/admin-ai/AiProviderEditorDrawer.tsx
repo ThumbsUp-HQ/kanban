@@ -456,6 +456,11 @@ function AiProviderEditorContent({
 
     const models = getSelectedModelsList();
 
+    if (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
+      setError('Cutoff timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+      return;
+    }
+
     try {
       setIsSaving(true);
       setError(null);
@@ -804,7 +809,7 @@ function AiProviderEditorContent({
             value={timeoutMs}
             onChange={(e) => {
               const val = parseInt(e.target.value, 10);
-              setTimeoutMs(isNaN(val) ? 30000 : val);
+              setTimeoutMs(Number.isNaN(val) ? 30000 : val);
             }}
             placeholder="30000"
             data-testid="provider-timeout-ms-input"

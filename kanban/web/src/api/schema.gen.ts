@@ -13008,7 +13008,7 @@ export interface components {
             auto_archive_days?: number | null;
             /**
              * Default Gate Timeout Ms
-             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
+             * @description Updated default workflow gate timeout in milliseconds (1000..600000, or null)
              */
             default_gate_timeout_ms?: number | null;
             /**
@@ -13056,7 +13056,7 @@ export interface components {
             capabilities: string[];
             /**
              * Default Gate Timeout Ms
-             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
+             * @description Configured default workflow gate timeout in milliseconds
              */
             default_gate_timeout_ms?: number | null;
             /**

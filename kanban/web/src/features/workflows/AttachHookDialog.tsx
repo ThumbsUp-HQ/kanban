@@ -132,6 +132,10 @@ function AttachHookDialogInner({
         setError('Agent definition is required.');
         return;
       }
+      if (timeoutMs !== null && (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000)) {
+        setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
+        return;
+      }
       payload.agent = effectiveAgentSlug;
       payload.timeout_ms = timeoutMs;
     }
@@ -393,7 +397,8 @@ function AttachHookDialogInner({
               activeOverridesCount={
                 (failurePolicy === 'fail_closed' ? 1 : 0) +
                 ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
-                (allowedMutableFields.length > 0 ? 1 : 0)
+                (allowedMutableFields.length > 0 ? 1 : 0) +
+                (hookKind === 'agent_interceptor' && timeoutMs !== null ? 1 : 0)
               }
               defaultOpen={false}
             >
@@ -465,12 +470,23 @@ function AttachHookDialogInner({
                       min="1000"
                       max="600000"
                       step="1000"
-                      className="workflow-input"
+                      className="workflow-form-control"
                       placeholder="Inherit project/agent default"
                       value={timeoutMs ?? ''}
                       onChange={(e) => {
                         const val = e.target.value.trim();
-                        setTimeoutMs(val === '' ? null : parseInt(val, 10));
+                        if (val === '') {
+                          setTimeoutMs(null);
+                          setError(null);
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          setTimeoutMs(Number.isNaN(parsed) ? null : parsed);
+                          if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                            setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                          } else {
+                            setError(null);
+                          }
+                        }
                       }}
                       data-testid="hook-timeout-input"
                       style={{ flex: 1 }}
@@ -478,7 +494,10 @@ function AttachHookDialogInner({
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-                      onClick={() => { setTimeoutMs(null); }}
+                      onClick={() => {
+                        setTimeoutMs(null);
+                        setError(null);
+                      }}
                       data-testid="hook-timeout-preset-inherit"
                     >
                       Inherit
@@ -488,7 +507,10 @@ function AttachHookDialogInner({
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-                      onClick={() => { setTimeoutMs(60000); }}
+                      onClick={() => {
+                        setTimeoutMs(60000);
+                        setError(null);
+                      }}
                       data-testid="hook-timeout-preset-60s"
                     >
                       60s
@@ -496,7 +518,10 @@ function AttachHookDialogInner({
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-                      onClick={() => { setTimeoutMs(180000); }}
+                      onClick={() => {
+                        setTimeoutMs(180000);
+                        setError(null);
+                      }}
                       data-testid="hook-timeout-preset-3m"
                     >
                       3m
@@ -504,7 +529,10 @@ function AttachHookDialogInner({
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-                      onClick={() => { setTimeoutMs(300000); }}
+                      onClick={() => {
+                        setTimeoutMs(300000);
+                        setError(null);
+                      }}
                       data-testid="hook-timeout-preset-5m"
                     >
                       5m
@@ -512,7 +540,10 @@ function AttachHookDialogInner({
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-                      onClick={() => { setTimeoutMs(600000); }}
+                      onClick={() => {
+                        setTimeoutMs(600000);
+                        setError(null);
+                      }}
                       data-testid="hook-timeout-preset-10m"
                     >
                       10m

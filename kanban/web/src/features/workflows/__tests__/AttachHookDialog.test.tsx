@@ -641,4 +641,42 @@ describe('AttachHookDialog (KB-P5-24)', () => {
       );
     });
   });
+
+  it('validates client-side [1000, 600000] range and increments activeOverridesCount on hook timeout (KAN-437)', () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={handleSave}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to agent_interceptor
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'validation-test-hook' } });
+
+    // Open advanced section
+    const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
+    fireEvent.click(advancedToggle);
+
+    const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
+
+    // Enter out of range timeout < 1000
+    fireEvent.change(timeoutInput, { target: { value: '500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+
+    expect(handleSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('1,000 and 600,000 ms');
+
+    // Set valid timeout 600000 ms and check active overrides count pill
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
+    expect(screen.getByText(/1 custom setting active|2 custom settings active/i)).toBeDefined();
+  });
 });

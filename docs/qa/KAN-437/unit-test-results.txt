@@ -1,109 +1,91 @@
-=== PYTEST UNIT & MIGRATION TESTS ===
-👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
-👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
-👍 INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
-👍 INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p4_14_mcp_scopable_keys, Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_14_mcp_scopable_keys -> p5_19b_project_repo_bindings, project_repo_bindings registry for hardened bare git mirrors (KB-P5-19b).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_19b_project_repo_bindings -> p4_07_mcp_read_taint, mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_07_mcp_read_taint -> p5_17a_workflow_hooks, Workflow hook DDL, executions, and invocations (KB-P5-17a).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_17a_workflow_hooks -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
-👍 INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p4_18_oauth_mcp_scoping, OAuth & MCP scoping helpers, label column, and RLS-safe workspace functions.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_23_oidc_link_intent_fk -> p4_24_agent_safe_sequences, Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
-👍 INFO  [alembic.runtime.migration] Running upgrade p4_24_agent_safe_sequences -> p6_02_pdf_attachments, Allow application/pdf attachments and page_count.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_02_pdf_attachments -> p6_03_multi_source_imports_and_aliases, Multi source imports and issue key aliases.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_03_multi_source_imports_and_aliases -> p6_04_enforce_credential_boundary_rls_gucs, Enforce credential boundary rls gucs.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_04_enforce_credential_boundary_rls_gucs -> p6_05_issue_leases_and_fencing, Issue leases and fencing.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_05_issue_leases_and_fencing -> p6_06_crypto_shredded_activity_ledger, Envelope-encrypted activity records payloads and AAL2 two-stage crypto-shredding.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_06_crypto_shredded_activity_ledger -> p6_07_content_provenance_and_taint, Content provenance trust tiers and untrusted content taint tracking.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_07_content_provenance_and_taint -> p6_08_workload_identity_policies, Workload identity policies and JTI replay prevention (KB-AUTH-OIDC-EXCHANGE-01, KAN-74).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_08_workload_identity_policies -> p6_09_scm_webhooks_and_outbound_bus, SCM webhooks, artifacts, and outbound webhook bus (KB-DEVSECOPS-BUS-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_09_scm_webhooks_and_outbound_bus -> p6_11_git_truststore_and_attestations, Git truststore and commit signature attestations (KB-DEVSECOPS-ATTEST-01).
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_11_git_truststore_and_attestations -> p6_13_csv_import_export_governance, csv import export governance.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_13_csv_import_export_governance -> p6_14_jinja_report_templates, jinja report templates.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_14_jinja_report_templates -> p6_10_issue_workpads_and_rework_breaker, Issue workpads and rework breaker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_10_issue_workpads_and_rework_breaker -> p6_12_granular_rbac_roles, Granular rbac roles.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_12_granular_rbac_roles -> p6_15_hardened_workspace_switch_and_module_issues, Hardened workspace switch and module_issues security invoker.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_15_hardened_workspace_switch_and_module_issues -> p6_16_oauth_confidential_clients, Support confidential OAuth 2.1 clients.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_16_oauth_confidential_clients -> p6_17_server_admin_role_access, Update app_principal_has_role for server admin scope.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_17_server_admin_role_access -> p6_18_websudo_sliding_aal2, WebSudo sliding window and request replay.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_18_websudo_sliding_aal2 -> p6_19_server_admin_cross_workspace_role_access, Fix app_principal_has_role for cross-workspace server admin and credential scoping.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_19_server_admin_cross_workspace_role_access -> p6_20_oauth_clients_status_check, Update oauth_clients status check constraint for suspended and revoked.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_20_oauth_clients_status_check -> p6_21_agent_onboarding_preferences, Add agent_onboarding_prefs_json to user_preferences.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_21_agent_onboarding_preferences -> p6_22_mcp_api_keys_capability_mask_boundary, Allow capability_mask 0 for deny-all MCP keys.
-👍 INFO  [alembic.runtime.migration] Running upgrade p6_22_mcp_api_keys_capability_mask_boundary -> p6_23_gate_timeouts_and_project_defaults, Add project default_gate_timeout_ms, hook timeout_ms, invocation deadline_at, and 600s caps.
+=== PYTEST WORKFLOW, GATE RUNNER, MODELS, AND OPENAPI TESTS ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/.venv/bin/python
 rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 47 items
+collecting ... collected 64 items
 
-kanban/tests/workflows/test_per_project_gate_timeout.py .....            [ 10%]
-agent/tests/gates/test_gate_runner_lease_heartbeat.py ...                [ 17%]
-agent/tests/gates/test_gate_runner_rls_session.py ......                 [ 29%]
-agent/tests/providers/test_base_protocol.py ..........                   [ 51%]
-database/tests/test_p1_17_models.py .......                              [ 65%]
-database/tests/migrations/test_p6_23_gate_timeouts_and_project_defaults_migration.py . [ 68%]
-                                                                         [ 68%]
-kanban/tests/test_export_openapi.py ...............                      [100%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_resolve_effective_gate_timeout_ms_precedence PASSED [  1%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_resolve_effective_gate_timeout_ms_clamping PASSED [  3%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_project_schema_gate_timeout_validation PASSED [  4%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_workflow_hook_schema_gate_timeout_validation PASSED [  6%]
+kanban/tests/workflows/test_per_project_gate_timeout.py::test_gate_sweeper_future_deadline_not_expired PASSED [  7%]
+kanban/tests/workflows/test_async_gate.py::test_case_1_positive_single_agent_hook_202_then_approve PASSED [  9%]
+kanban/tests/workflows/test_async_gate.py::test_format_approve_comment_canonical_header_and_no_dashes PASSED [ 10%]
+kanban/tests/workflows/test_async_gate.py::test_case_2_positive_two_sequential_agent_hooks_and_reject PASSED [ 12%]
+kanban/tests/workflows/test_async_gate.py::test_case_3_security_toctou_concurrent_description_edit PASSED [ 14%]
+kanban/tests/workflows/test_async_gate.py::test_case_4_security_forbidden_mutations_and_sanitization PASSED [ 15%]
+kanban/tests/workflows/test_async_gate.py::test_case_5_security_out_of_order_and_replay_idempotency PASSED [ 17%]
+kanban/tests/workflows/test_async_gate.py::test_case_6_boundary_concurrent_transition_during_pending_async PASSED [ 18%]
+kanban/tests/workflows/test_async_gate.py::test_case_7_boundary_cancel_invoker_vs_non_invoker PASSED [ 20%]
+kanban/tests/workflows/test_async_gate.py::test_case_8_serializer_pending_gate_and_latest_gate_verdict PASSED [ 21%]
+kanban/tests/workflows/test_async_gate.py::test_case_9_hop_depth_limit PASSED [ 23%]
+kanban/tests/workflows/test_async_gate.py::test_compute_harness_label_and_reason_preview PASSED [ 25%]
+kanban/tests/workflows/test_async_gate.py::test_apply_labels_and_links_in_decision PASSED [ 26%]
+kanban/tests/workflows/test_async_gate.py::test_fail_open_warn_advance_and_commit PASSED [ 28%]
+kanban/tests/workflows/test_async_gate.py::test_cancel_unauthorized_and_invalid_state PASSED [ 29%]
+kanban/tests/workflows/test_async_gate.py::test_gate_coverage_branches PASSED [ 31%]
+kanban/tests/workflows/test_async_gate.py::test_completed_state_forces_fail_closed PASSED [ 32%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_approval_and_comment PASSED [ 34%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_timeout_sweep PASSED [ 35%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_heartbeat_lease_renews_claim PASSED [ 37%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_heartbeat_stops_when_deadline_exceeded PASSED [ 39%]
+agent/tests/gates/test_gate_runner_lease_heartbeat.py::test_dispatch_timeout_against_deadline_records_failure PASSED [ 40%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_positive_e2e_real_pg_and_mock_ollama_gate_approval PASSED [ 42%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_negative_gate_rejection_on_incomplete_ticket PASSED [ 43%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_negative_inference_failure_rollback PASSED [ 45%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_structured_request_deadline_boundary_cases PASSED [ 46%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_budget_enforcer_resolve_and_scoped_session_coverage PASSED [ 48%]
+agent/tests/gates/test_gate_runner_rls_session.py::test_in_app_sdk_harness_coverage_branches PASSED [ 50%]
+agent/tests/providers/test_base_protocol.py::test_error_hierarchy_and_properties PASSED [ 51%]
+agent/tests/providers/test_base_protocol.py::test_error_code_validation PASSED [ 53%]
+agent/tests/providers/test_base_protocol.py::test_secret_redaction PASSED [ 54%]
+agent/tests/providers/test_base_protocol.py::test_completion_request_dto PASSED [ 56%]
+agent/tests/providers/test_base_protocol.py::test_stream_chunk_and_tool_call_step PASSED [ 57%]
+agent/tests/providers/test_base_protocol.py::test_structured_request_and_response PASSED [ 59%]
+agent/tests/providers/test_base_protocol.py::test_embed_batch_request_bounds PASSED [ 60%]
+agent/tests/providers/test_base_protocol.py::test_cli_run_request_and_result PASSED [ 62%]
+agent/tests/providers/test_base_protocol.py::test_runtime_protocols PASSED [ 64%]
+agent/tests/providers/test_base_protocol.py::test_structured_request_token_bounds_and_defaults PASSED [ 65%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 67%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 68%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 70%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 71%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 73%]
+database/tests/test_p1_17_models.py::test_commit_attestation_and_repo_truststore_roundtrip PASSED [ 75%]
+database/tests/test_p1_17_models.py::test_issue_workpad_model_roundtrip PASSED [ 76%]
+kanban/tests/test_export_openapi.py::test_export_openapi_valid_json PASSED [ 78%]
+kanban/tests/test_export_openapi.py::test_export_openapi_deterministic PASSED [ 79%]
+kanban/tests/test_export_openapi.py::test_export_openapi_contains_issue_routes PASSED [ 81%]
+kanban/tests/test_export_openapi.py::test_export_openapi_cli_to_file PASSED [ 82%]
+kanban/tests/test_export_openapi.py::test_export_openapi_cli_to_stdout PASSED [ 84%]
+kanban/tests/test_export_openapi.py::test_export_openapi_module_main_execution PASSED [ 85%]
+kanban/tests/test_export_openapi.py::test_export_openapi_issue_and_activity_response_schemas PASSED [ 87%]
+kanban/tests/test_export_openapi.py::test_export_openapi_security_schemes_and_top_level_security PASSED [ 89%]
+kanban/tests/test_export_openapi.py::test_export_openapi_public_routes_empty_security PASSED [ 90%]
+kanban/tests/test_export_openapi.py::test_export_openapi_rfc7807_responses_and_schemas PASSED [ 92%]
+kanban/tests/test_export_openapi.py::test_export_openapi_build_info_metadata_and_hashes PASSED [ 93%]
+kanban/tests/test_export_openapi.py::test_export_openapi_no_duplicate_operation_ids PASSED [ 95%]
+kanban/tests/test_export_openapi.py::test_openapi_builder_enrich_paths_defensive_types PASSED [ 96%]
+kanban/tests/test_export_openapi.py::test_export_openapi_openid_configuration_public PASSED [ 98%]
+kanban/tests/test_export_openapi.py::test_api_docs_swagger_and_redoc_security_and_problem_schemas PASSED [100%]
 
-============================= 47 passed in 36.57s ==============================
+============================= 64 passed in 32.83s ==============================
+
+=== PYTEST MIGRATION LIFECYCLE TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+database/tests/migrations/test_p6_23_gate_timeouts_and_project_defaults_migration.py::test_p6_23_gate_timeouts_and_project_defaults_migration_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.63s ===============================
 
 === VITEST FRONTEND UNIT TESTS ===
 
@@ -113,15 +95,18 @@ kanban/tests/test_export_openapi.py ...............                      [100%]
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan437-740e5e0e/kanban/web
 
- ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (16 tests) 1195ms
-   ✓ AttachHookDialog (KB-P5-24) (16)
-     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 304ms
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1467ms
- ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (17 tests) 1096ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 3714ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (17 tests) 1328ms
+   ✓ AttachHookDialog (KB-P5-24) (17)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 318ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1402ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (18 tests) 1039ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 3851ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 344ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 304ms
 
  Test Files  4 passed (4)
-      Tests  128 passed (128)
-   Start at  12:35:07
-   Duration  4.87s (tests 63%, environment 22%, import 11%, transform 4%)
+      Tests  130 passed (130)
+   Start at  12:58:41
+   Duration  5.07s (tests 63%, environment 22%, import 11%, transform 4%)
 

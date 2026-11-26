@@ -235,6 +235,11 @@ function AgentDefinitionEditorContent({
       return;
     }
 
+    if (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
+      setError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+      return;
+    }
+
     try {
       setIsSaving(true);
       setError(null);
@@ -550,7 +555,10 @@ function AgentDefinitionEditorContent({
               step="1000"
               className="kb-form-input"
               value={timeoutMs}
-              onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                setTimeoutMs(Number.isNaN(val) ? 60000 : val);
+              }}
               data-testid="agent-timeout-input"
             />
           </div>
