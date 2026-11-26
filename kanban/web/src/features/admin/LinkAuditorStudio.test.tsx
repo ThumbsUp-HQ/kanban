@@ -1052,15 +1052,14 @@ describe('LinkAuditorStudio', () => {
       // Verify summary and default value
       expect(
         screen.getByText(
-          /Link verification detects non-referential integrity failures across the Universal Object Graph/i,
+          /Detects non-referential integrity failures across the Universal Object Graph/i,
         ),
       ).toBeDefined();
       const defaultVal = screen.getByTestId('integrity-metrics-help-default');
       expect(defaultVal.textContent).toContain('ALL (No reason filter active)');
 
       // Verify valid values dl list
-      expect(screen.getByText('DANGLING_SOURCE')).toBeDefined();
-      expect(screen.getByText('DANGLING_TARGET')).toBeDefined();
+      expect(screen.getByText('DANGLING_SOURCE / DANGLING_TARGET')).toBeDefined();
       expect(screen.getByText('SOFT_DELETED_ENDPOINT')).toBeDefined();
       expect(screen.getByText('ARCHIVED_POLICY_VIOLATION')).toBeDefined();
       expect(screen.getByText('TYPE_MATRIX_VIOLATION')).toBeDefined();

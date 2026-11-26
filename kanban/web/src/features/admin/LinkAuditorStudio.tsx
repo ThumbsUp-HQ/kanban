@@ -389,47 +389,34 @@ export function LinkAuditorStudio(): JSX.Element {
           <h2 className="link-auditor-metrics-title">Integrity Metrics</h2>
           <FieldHelpHint
             title="Integrity Metrics"
-            summary="Link verification detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
+            summary="Detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
             defaultValue="ALL (No reason filter active)"
             validValues={[
               {
-                label: 'DANGLING_SOURCE',
-                description:
-                  'Source entity does not exist in universal object graph',
-              },
-              {
-                label: 'DANGLING_TARGET',
-                description:
-                  'Target entity does not exist in universal object graph',
+                label: 'DANGLING_SOURCE / DANGLING_TARGET',
+                description: 'Missing source or target entity',
               },
               {
                 label: 'SOFT_DELETED_ENDPOINT',
-                description:
-                  'Endpoint entity is marked soft-deleted while link remains active',
+                description: 'Active link to soft-deleted endpoint',
               },
               {
                 label: 'ARCHIVED_POLICY_VIOLATION',
-                description:
-                  'Link references an archived entity in violation of linkage policy',
+                description: 'Link to archived entity violating policy',
               },
               {
                 label: 'TYPE_MATRIX_VIOLATION',
-                description:
-                  'Link connects object kinds prohibited by the universal type matrix',
+                description: 'Disallowed object kind relationship',
               },
               {
                 label: 'CROSS_WORKSPACE_LEAK',
-                description:
-                  'Link crosses workspace boundaries without multi-tenant grant',
+                description: 'Crosses workspace tenant boundary',
               },
               {
                 label: 'PERMISSION_SEVERED',
-                description:
-                  'Access boundary severed between linked entities',
+                description: 'Severed entity access boundary',
               },
             ]}
-            caution="Automated purges delete invalid links permanently with an immutable audit entry. Manually inspect cross-workspace leaks or severed permissions before purging."
-            example="Click 'Dangling Target' to inspect only links whose target object is missing."
             docHref="/docs/universal-object-graph-and-link-auditor"
             testId="integrity-metrics-help"
             ariaLabel="Help: Integrity Metrics"
