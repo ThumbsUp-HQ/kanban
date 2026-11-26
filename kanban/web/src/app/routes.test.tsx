@@ -898,7 +898,9 @@ describe('IssuesWorkspaceRoute', () => {
     // Fill form
     const nameInput = screen.getByTestId('new-module-name-input');
     fireEvent.change(nameInput, { target: { value: 'Core Auth' } });
-    const statusSelect = screen.getByTestId('new-module-status-select');
+    const statusSelect = screen.getByTestId<HTMLSelectElement>('new-module-status-select');
+    expect(statusSelect.value).toBe('planned');
+    expect(screen.getByRole('option', { name: 'Planned (Default)' })).toBeDefined();
     fireEvent.change(statusSelect, { target: { value: 'in_progress' } });
     const startInput = screen.getByTestId('new-module-start-input');
     fireEvent.change(startInput, { target: { value: '2026-03-01' } });

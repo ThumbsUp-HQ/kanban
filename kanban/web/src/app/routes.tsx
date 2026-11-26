@@ -1498,7 +1498,7 @@ function ProjectModulesViewInner({
                 value={status}
                 onChange={(e) => { setStatus(e.target.value); }}
               >
-                <option value="planned">Planned</option>
+                <option value="planned">Planned (Default)</option>
                 <option value="backlog">Backlog</option>
                 <option value="in_progress">In Progress</option>
                 <option value="paused">Paused</option>
