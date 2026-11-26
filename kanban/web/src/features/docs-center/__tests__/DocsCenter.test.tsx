@@ -1757,6 +1757,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(hashHref.anchor).toBe('some-anchor');
     });
 
+<<<<<<< HEAD
     it('asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM', () => {
       const slice1Links = [
         '/docs/multi-card-authentication-studio',
@@ -1859,6 +1860,35 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         }
         const element = resolveSectionElement(container, anchor);
         expect(element, `Anchor #${anchor} from ${href} must resolve in DocMarkdownViewer`).not.toBeNull();
+      }
+    });
+
+    it('renders three-surface-mcp-server-architecture and resolves all Slice-3 docHref anchors', () => {
+      const chapter = getChapter('three-surface-mcp-server-architecture');
+      expect(chapter).toBeDefined();
+
+      const { container } = render(
+        <DocMarkdownViewer content={chapter?.content ?? ''} />,
+      );
+
+      const slice3Hrefs = [
+        '/docs/three-surface-mcp-server-architecture#scope-tiers',
+        '/docs/three-surface-mcp-server-architecture#scope-tiers',
+        '/docs/three-surface-mcp-server-architecture#scope-tiers',
+        '/docs/three-surface-mcp-server-architecture#scope-tiers',
+        '/docs/three-surface-mcp-server-architecture#scope-tiers',
+        '/docs/three-surface-mcp-server-architecture#oauth-21--pkce',
+        '/docs/three-surface-mcp-server-architecture#oauth-21-pkce',
+        '/docs/three-surface-mcp-server-architecture#the-three-isolated-mcp-surfaces',
+      ];
+
+      for (const href of slice3Hrefs) {
+        const parsed = parseDocHref(href);
+        expect(parsed.slug).toBe('three-surface-mcp-server-architecture');
+        expect(parsed.anchor).toBeDefined();
+        const el = resolveSectionElement(container, parsed.anchor ?? '');
+        expect(el).not.toBeNull();
+        expect(el?.tagName).toMatch(/^H[1-6]$/);
       }
     });
       }
