@@ -105,10 +105,15 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
     const toggle = screen.getByTestId('advanced-section-toggle');
     const details = screen.getByTestId('advanced-section');
     const chevron = toggle.querySelector('.kb-advanced-chevron');
+    const content = details.querySelector('.kb-advanced-content');
 
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(details.className).not.toContain('kb-advanced-section--open');
     expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
+
+    // Explicit verification of role="region" and aria-label
+    expect(content?.getAttribute('role')).toBe('region');
+    expect(content?.getAttribute('aria-label')).toBe('Light Theme Section');
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -135,10 +140,15 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
     const toggle = screen.getByTestId('advanced-section-toggle');
     const details = screen.getByTestId('advanced-section');
     const chevron = toggle.querySelector('.kb-advanced-chevron');
+    const content = details.querySelector('.kb-advanced-content');
 
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(details.className).not.toContain('kb-advanced-section--open');
     expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
+
+    // Explicit verification of role="region" and aria-label
+    expect(content?.getAttribute('role')).toBe('region');
+    expect(content?.getAttribute('aria-label')).toBe('Dark Theme Section');
 
     fireEvent.keyDown(toggle, { key: 'Enter' });
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -290,12 +300,13 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
       expect(cssContent).not.toContain('#f1f5f9');
     });
 
-    it('uses canonical theme tokens for container, header, chevron, and badge', () => {
+    it('uses canonical theme tokens for container, header, chevron, focus ring, and badge', () => {
       expect(cssContent).toContain('var(--border-subtle, #e5e7eb)');
       expect(cssContent).toContain('var(--border-subtle, #2d333f)');
       expect(cssContent).toContain('var(--bg-card-subtle)');
       expect(cssContent).toContain('var(--border-color-focus)');
       expect(cssContent).toContain('var(--bg-surface)');
+      expect(cssContent).toContain('var(--focus-ring, #2563eb)');
       expect(cssContent).toContain('var(--fg-muted)');
       expect(cssContent).toContain('var(--fg-primary)');
       expect(cssContent).toContain('var(--fg-secondary)');
@@ -323,6 +334,15 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
       expect(cssContent).toMatch(
         /\[data-theme=['"]dark['"]\]\s+\.kb-advanced-content\s*\{[^}]*border-top-color:\s*var\(--border-subtle,\s*#2d333f\);/,
       );
+    });
+
+    it('avoids redundant dark theme re-declarations', () => {
+      // Base rules already handle variables via CSS inheritance
+      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-chevron--open");
+      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-title");
+      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-desc");
+      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-badge");
+      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-section--open");
     });
   });
 });

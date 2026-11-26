@@ -11,15 +11,9 @@
 
 [data-theme='dark'] .kb-advanced-section {
   border-color: var(--border-subtle, #2d333f);
-  background-color: var(--bg-card-subtle);
 }
 
 .kb-advanced-section--open {
-  border-color: var(--border-color-focus);
-  background-color: var(--bg-surface);
-}
-
-[data-theme='dark'] .kb-advanced-section--open {
   border-color: var(--border-color-focus);
   background-color: var(--bg-surface);
 }
@@ -41,7 +35,7 @@
 }
 
 .kb-advanced-summary:focus-visible {
-  outline: 2px solid var(--focus-ring, #3b82f6);
+  outline: 2px solid var(--focus-ring, #2563eb);
   outline-offset: -2px;
   border-radius: 6px;
 }
@@ -62,10 +56,6 @@
   color: var(--fg-primary);
 }
 
-[data-theme='dark'] .kb-advanced-chevron--open {
-  color: var(--fg-primary);
-}
-
 .kb-advanced-header {
   display: flex;
   align-items: center;
@@ -81,18 +71,10 @@
   letter-spacing: -0.01em;
 }
 
-[data-theme='dark'] .kb-advanced-title {
-  color: var(--fg-primary);
-}
-
 .kb-advanced-desc {
   font-size: 0.8125rem;
   color: var(--fg-secondary);
   font-weight: 400;
-}
-
-[data-theme='dark'] .kb-advanced-desc {
-  color: var(--fg-secondary);
 }
 
 .kb-advanced-badge {
@@ -106,12 +88,6 @@
   background-color: var(--badge-bg);
   color: var(--badge-fg);
   border: 1px solid var(--badge-border);
-}
-
-[data-theme='dark'] .kb-advanced-badge {
-  background-color: var(--badge-bg);
-  color: var(--badge-fg);
-  border-color: var(--badge-border);
 }
 
 .kb-advanced-content {
