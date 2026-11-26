@@ -666,6 +666,14 @@ function AiProviderEditorContent({
         <div className="kb-form-group">
           <label htmlFor="provider-name-input" className="kb-form-label">
             Display Name
+            <FieldHelpHint
+              title="Display Name"
+              summary="Human-readable label for this AI provider instance."
+              defaultValue="None (Required)"
+              example="OpenAI GPT-4o Production"
+              docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+              testId="provider-name-help"
+            />
           </label>
           <input
             id="provider-name-input"
@@ -688,6 +696,13 @@ function AiProviderEditorContent({
         <div className="kb-form-group">
           <label htmlFor="provider-key-input" className="kb-form-label">
             {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
+            <FieldHelpHint
+              title="API Secret Key"
+              summary="Authentication secret for upstream LLM provider API requests."
+              defaultValue={isLocal ? 'Optional (empty for unauthenticated local endpoints)' : 'None (Required)'}
+              docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+              testId="provider-key-help"
+            />
           </label>
           <div className="kb-api-key-row">
             <input
@@ -847,6 +862,13 @@ function AiProviderEditorContent({
           <div className="kb-model-allowlist-header">
             <label htmlFor="provider-models-input" className="kb-form-label">
               Model Allowlist (comma separated)
+              <FieldHelpHint
+                title="Model Allowlist"
+                summary="Comma-separated model names permitted for inference or probed from the endpoint."
+                example="gpt-4o, gpt-4o-mini, llama3.1"
+                docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+                testId="provider-models-help"
+              />
             </label>
             <button
               type="button"
@@ -957,7 +979,7 @@ function AiProviderEditorContent({
           className="kb-advanced-model-harness-section"
         >
           <div data-testid="advanced-model-harness-config">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
+            <div className="kb-model-params-grid">
               <div className="kb-form-group">
                 <label htmlFor="provider-temperature-input" className="kb-form-label">
                   Temperature
@@ -1046,14 +1068,19 @@ function AiProviderEditorContent({
               </div>
             </div>
 
-            <div className="kb-form-group" style={{ marginTop: '12px' }}>
+            <div className="kb-form-group kb-form-group--mt12">
               <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
                 mTLS Client Certificate PEM (Optional)
+                <FieldHelpHint
+                  title="mTLS Client Certificate PEM"
+                  summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
+                  docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+                  testId="provider-mtls-cert-help"
+                />
               </label>
               <textarea
                 id="provider-mtls-cert-input"
-                className="kb-form-input"
-                style={{ fontFamily: 'monospace', fontSize: '0.8rem', minHeight: '80px' }}
+                className="kb-form-input kb-form-textarea--mono"
                 placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
                 value={mtlsCertPem}
                 onChange={(e) => {
@@ -1069,6 +1096,14 @@ function AiProviderEditorContent({
             <div className="kb-form-group">
               <label htmlFor="provider-residency-select" className="kb-form-label">
                 Data Residency Tier (Override)
+                <FieldHelpHint
+                  title="Data Residency Tier"
+                  summary="Enforces data locality boundaries preventing external data egress."
+                  defaultValue="default"
+                  validValues={['local_only', 'cloud_standard', 'default', 'us-east', 'eu-central']}
+                  docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+                  testId="provider-residency-help"
+                />
               </label>
               <select
                 id="provider-residency-select"
