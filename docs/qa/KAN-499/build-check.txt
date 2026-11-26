@@ -1,8 +1,10 @@
-$ pnpm --dir kanban/web exec tsc -b --noEmit
-exit_code=0
-$ pnpm --dir kanban/web exec eslint . --max-warnings 0
-exit_code=0
-$ pnpm --dir kanban/web run build
+=== TSC CHECK ===
+=== ESLINT CHECK ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/kanban/web
+> eslint . --max-warnings 0
+
+=== VITE BUILD ===
 
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/kanban/web
 > tsc -b && vite build
@@ -12,22 +14,19 @@ transforming...
 ✓ 767 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-CkSbA3NN.css            657.63 kB │ gzip:  92.21 kB
-dist/assets/index-DDkSQLvd.js           3,182.84 kB │ gzip: 883.28 kB
+dist/assets/index-72FU_lC9.css            657.86 kB │ gzip:  92.23 kB
+dist/assets/index-BMlMeaJt.js           3,182.95 kB │ gzip: 883.29 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 2.42s
-exit_code=0
-$ python3 scripts/check_no_dashes.py --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-exit_code=0
-$ python3 scripts/check_docs_taxonomy.py --wiki-dir /home/adamoutler/kanban/thumbs-up-kanban.wiki
+✓ built in 1.62s
+=== DOCS TAXONOMY CHECK ===
 Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
 OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
-exit_code=0
+=== NO DASHES CHECK ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

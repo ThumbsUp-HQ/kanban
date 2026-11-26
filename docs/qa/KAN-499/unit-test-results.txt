@@ -1,22 +1,37 @@
-$ pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/AvatarCropModal.test.tsx src/features/settings/__tests__/AvatarLightboxModal.test.tsx --coverage.enabled=true --coverage.include="src/features/settings/AvatarCropModal.tsx" --coverage.include="src/features/settings/AvatarLightboxModal.tsx"
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/kanban/web
+> vitest run --coverage --coverage.include=src/features/settings/AvatarCropModal.tsx --coverage.include=src/features/settings/AvatarLightboxModal.tsx src/features/settings/__tests__/AvatarCropModal.test.tsx src/features/settings/__tests__/AvatarLightboxModal.test.tsx src/features/docs-center/__tests__/DocsCenter.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan499-202c7bef/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/AvatarLightboxModal.test.tsx (10 tests) 281ms
- ✓ src/features/settings/__tests__/AvatarCropModal.test.tsx (13 tests) 441ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 29ms
+ ✓ src/features/settings/__tests__/AvatarLightboxModal.test.tsx (10 tests) 306ms
+ ✓ src/features/settings/__tests__/AvatarCropModal.test.tsx (13 tests) 448ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (54 tests) 12675ms
+   ✓ DocsCenter & Help System (KAN-16) (54)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 416ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (21)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 400ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1940ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 702ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 488ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 2083ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 431ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 3313ms
 
- Test Files  2 passed (2)
-      Tests  23 passed (23)
-   Start at  17:40:24
-   Duration  1.86s (environment 56%, tests 25%, import 12%, worker 3%, transform 3%)
+ Test Files  4 passed (4)
+      Tests  84 passed (84)
+   Start at  17:53:35
+   Duration  14.28s (tests 75%, environment 19%, import 4%, worker 1%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
 All files          |   99.08 |    97.81 |     100 |     100 |                   
- ...rCropModal.tsx |   99.43 |     98.7 |     100 |     100 | 47                
- ...htboxModal.tsx |   98.67 |    96.66 |     100 |     100 | 45,93             
+ ...rCropModal.tsx |   99.43 |     98.7 |     100 |     100 | 48                
+ ...htboxModal.tsx |   98.67 |    96.66 |     100 |     100 | 46,94             
 -------------------|---------|----------|---------|---------|-------------------
-exit_code=0

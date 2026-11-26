@@ -121,12 +121,20 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
 
   useEffect(() => {
     if (activeAnchor) {
-      // Delay slightly for DOM to settle
-      const timer = window.setTimeout(() => {
+      // Delay slightly for DOM to settle and repeat to stabilize across layout shifts/images
+      const t1 = window.setTimeout(() => {
         scrollToAnchor(activeAnchor);
       }, 50);
+      const t2 = window.setTimeout(() => {
+        scrollToAnchor(activeAnchor);
+      }, 200);
+      const t3 = window.setTimeout(() => {
+        scrollToAnchor(activeAnchor);
+      }, 500);
       return () => {
-        window.clearTimeout(timer);
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+        window.clearTimeout(t3);
       };
     }
   }, [activeAnchor, activeSlug]);

@@ -1,3 +1,31 @@
+diff --git a/kanban/web/src/features/docs-center/HelpDrawer.tsx b/kanban/web/src/features/docs-center/HelpDrawer.tsx
+index 84e96b54..97ec1e6d 100644
+--- a/kanban/web/src/features/docs-center/HelpDrawer.tsx
++++ b/kanban/web/src/features/docs-center/HelpDrawer.tsx
+@@ -121,12 +121,20 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
+ 
+   useEffect(() => {
+     if (activeAnchor) {
+-      // Delay slightly for DOM to settle
+-      const timer = window.setTimeout(() => {
++      // Delay slightly for DOM to settle and repeat to stabilize across layout shifts/images
++      const t1 = window.setTimeout(() => {
+         scrollToAnchor(activeAnchor);
+       }, 50);
++      const t2 = window.setTimeout(() => {
++        scrollToAnchor(activeAnchor);
++      }, 200);
++      const t3 = window.setTimeout(() => {
++        scrollToAnchor(activeAnchor);
++      }, 500);
+       return () => {
+-        window.clearTimeout(timer);
++        window.clearTimeout(t1);
++        window.clearTimeout(t2);
++        window.clearTimeout(t3);
+       };
+     }
+   }, [activeAnchor, activeSlug]);
 diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
 index c8960933..81e7d207 100644
 --- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
@@ -134,18 +162,19 @@ index 3d8a4dba..7f5fda60 100644
    {
      "slug": "user-tasks-and-qa-matrix",
 diff --git a/kanban/web/src/features/settings/AvatarCropModal.tsx b/kanban/web/src/features/settings/AvatarCropModal.tsx
-index 42d37c30..7121b9fa 100644
+index 42d37c30..2c26c828 100644
 --- a/kanban/web/src/features/settings/AvatarCropModal.tsx
 +++ b/kanban/web/src/features/settings/AvatarCropModal.tsx
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,8 @@
  // Apache-2.0 License. See LICENSE for details.
  
  import React, { useState, useEffect, useRef, type JSX } from 'react';
 +import { StudioDocLink } from '../../components/help/StudioDocLink';
++import './PersonalSettingsPage.css';
  
  export interface AvatarCropModalProps {
    file: File;
-@@ -307,15 +308,22 @@ export function AvatarCropModal({
+@@ -307,15 +309,22 @@ export function AvatarCropModal({
            <h2 id="avatar-crop-title" className="kb-avatar-crop-title">
              Crop Profile Picture
            </h2>
@@ -178,18 +207,19 @@ index 42d37c30..7121b9fa 100644
  
          <div
 diff --git a/kanban/web/src/features/settings/AvatarLightboxModal.tsx b/kanban/web/src/features/settings/AvatarLightboxModal.tsx
-index b0e92d85..5cfdb411 100644
+index b0e92d85..f99287fa 100644
 --- a/kanban/web/src/features/settings/AvatarLightboxModal.tsx
 +++ b/kanban/web/src/features/settings/AvatarLightboxModal.tsx
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,8 @@
  // Apache-2.0 License. See LICENSE for details.
  
  import React, { useState, useEffect, useRef, type JSX } from 'react';
 +import { StudioDocLink } from '../../components/help/StudioDocLink';
++import './PersonalSettingsPage.css';
  
  export interface AvatarLightboxModalProps {
    avatarUrl: string;
-@@ -259,15 +260,22 @@ export function AvatarLightboxModal({
+@@ -259,15 +261,22 @@ export function AvatarLightboxModal({
            <h2 id="avatar-lightbox-title" className="kb-avatar-lightbox-title">
              {displayName || 'User'} Picture
            </h2>
@@ -222,10 +252,10 @@ index b0e92d85..5cfdb411 100644
  
          <div
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index 43730cdb..30b5d712 100644
+index 43730cdb..0968b117 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
-@@ -609,6 +609,13 @@
+@@ -609,6 +609,14 @@
    display: flex;
    align-items: center;
    justify-content: space-between;
@@ -236,10 +266,39 @@ index 43730cdb..30b5d712 100644
 +  display: flex;
 +  align-items: center;
 +  gap: var(--space-2);
++  flex-shrink: 0;
  }
  
  .kb-avatar-crop-title {
-@@ -782,6 +789,8 @@
+@@ -616,6 +624,7 @@
+   font-size: var(--text-lg);
+   font-weight: 600;
+   color: var(--fg-primary);
++  min-width: 0;
+ }
+ 
+ .kb-avatar-crop-close-btn {
+@@ -640,8 +649,8 @@
+   position: relative;
+   width: min(320px, calc(100vw - 48px));
+   height: min(320px, calc(100vw - 48px));
+-  max-width: calc(100vw - 48px);
+-  max-height: calc(100vw - 48px);
++  max-width: 100%;
++  max-height: calc(100dvh - 200px);
+   aspect-ratio: 1 / 1;
+   margin: 0 auto;
+   border-radius: var(--radius-md);
+@@ -711,6 +720,8 @@
+ 
+ .kb-avatar-crop-zoom-slider {
+   flex: 1;
++  min-width: 0;
++  width: 100%;
+   accent-color: var(--accent-primary);
+   cursor: pointer;
+ }
+@@ -782,6 +793,8 @@
    padding: 24px;
    max-width: 520px;
    width: 100%;
@@ -248,7 +307,7 @@ index 43730cdb..30b5d712 100644
    display: flex;
    flex-direction: column;
    gap: var(--space-4);
-@@ -792,6 +801,13 @@
+@@ -792,6 +805,14 @@
    display: flex;
    align-items: center;
    justify-content: space-between;
@@ -259,10 +318,19 @@ index 43730cdb..30b5d712 100644
 +  display: flex;
 +  align-items: center;
 +  gap: var(--space-2);
++  flex-shrink: 0;
  }
  
  .kb-avatar-lightbox-title {
-@@ -821,10 +837,11 @@
+@@ -799,6 +820,7 @@
+   font-size: var(--text-lg);
+   font-weight: 600;
+   color: var(--fg-primary);
++  min-width: 0;
+ }
+ 
+ .kb-avatar-lightbox-close-btn {
+@@ -821,10 +843,11 @@
  
  .kb-avatar-lightbox-viewport {
    position: relative;
@@ -277,7 +345,7 @@ index 43730cdb..30b5d712 100644
    margin: 0 auto;
    border-radius: var(--radius-md);
    overflow: hidden;
-@@ -847,8 +864,8 @@
+@@ -847,8 +870,8 @@
  }
  
  .kb-avatar-lightbox-canvas {
@@ -288,7 +356,16 @@ index 43730cdb..30b5d712 100644
    max-width: 100%;
    max-height: 100%;
    display: block;
-@@ -920,6 +937,18 @@
+@@ -887,6 +910,8 @@
+ 
+ .kb-avatar-lightbox-zoom-slider {
+   flex: 1;
++  min-width: 0;
++  width: 100%;
+   accent-color: var(--accent-primary);
+   cursor: pointer;
+ }
+@@ -920,6 +945,28 @@
  }
  
  @media (max-width: 640px) {
@@ -302,6 +379,16 @@ index 43730cdb..30b5d712 100644
 +  .kb-avatar-lightbox-header {
 +    flex-wrap: wrap;
 +    gap: var(--space-2);
++  }
++
++  .kb-avatar-crop-close-btn,
++  .kb-avatar-lightbox-close-btn {
++    min-width: var(--tap-min);
++    min-height: var(--tap-min);
++  }
++
++  .kb-avatar-lightbox-controls {
++    flex-wrap: wrap;
 +  }
 +
    .kb-personal-settings-table,

@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import './PersonalSettingsPage.css';
 
 export interface AvatarCropModalProps {
   file: File;
