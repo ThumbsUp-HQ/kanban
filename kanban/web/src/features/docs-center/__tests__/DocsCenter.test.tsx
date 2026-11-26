@@ -1960,6 +1960,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         '/docs/production-promotion-and-backup-runbook#restore-procedure',
         '/docs/scripted-workflows-and-transition-helpers#dry-run-simulation',
         '/docs/universal-object-graph-and-link-auditor#state-deletion',
+        '/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals',
       ];
 
       for (const href of slice5DocHrefs) {

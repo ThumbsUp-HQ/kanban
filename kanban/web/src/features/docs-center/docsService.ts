@@ -50,6 +50,9 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   'profile-media': 'user-avatars-profile-media',
   'avatar-crop': 'user-avatars-profile-media',
   'avatar-lightbox': 'user-avatars-profile-media',
+  'admin-escalation-and-sandbox-approvals': 'admin-escalation-sandbox-approvals',
+  'escalation-approvals': 'admin-escalation-sandbox-approvals',
+  'admin-escalation': 'admin-escalation-sandbox-approvals',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {

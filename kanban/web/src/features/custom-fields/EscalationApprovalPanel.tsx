@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAal2StepUpCode } from '../../api/problem';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   approveFieldEscalation,
@@ -198,20 +199,27 @@ export function EscalationApprovalPanel({
     <div className="custom-field-approval-panel" data-testid="escalation-approval-panel">
       <div className="custom-field-approval-header">
         <h4 className="custom-field-approval-title">Escalation & Security Approvals</h4>
-        <span
-          className={`custom-field-status-chip custom-field-status-chip--${latestApproval?.status.toLowerCase() ?? 'default'}`}
-          data-testid="approval-status-chip"
-        >
-          {latestApproval?.status === 'APPROVED'
-            ? `Approved by ${requiredTier}`
-            : latestApproval?.status === 'PENDING'
-              ? 'Pending approval'
-              : latestApproval?.status === 'PENDING_SECOND_APPROVER'
-                ? 'Pending second approver'
-                : latestApproval?.status === 'REVOKED'
-                  ? 'Revoked'
-                  : 'Default (no approval needed)'}
-        </span>
+        <div className="custom-field-approval-header-actions">
+          <StudioDocLink
+            href="/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals"
+            title="Admin Escalation & Sandbox Approvals Documentation"
+            testId="escalation-panel-doc-link"
+          />
+          <span
+            className={`custom-field-status-chip custom-field-status-chip--${latestApproval?.status.toLowerCase() ?? 'default'}`}
+            data-testid="approval-status-chip"
+          >
+            {latestApproval?.status === 'APPROVED'
+              ? `Approved by ${requiredTier}`
+              : latestApproval?.status === 'PENDING'
+                ? 'Pending approval'
+                : latestApproval?.status === 'PENDING_SECOND_APPROVER'
+                  ? 'Pending second approver'
+                  : latestApproval?.status === 'REVOKED'
+                    ? 'Revoked'
+                    : 'Default (no approval needed)'}
+          </span>
+        </div>
       </div>
 
       {/* Scope x Principal Matrix Requirements */}
@@ -382,8 +390,10 @@ export function EscalationApprovalPanel({
               Provide justification for running this field with elevated scope or credentials.
             </p>
             <div className="custom-field-form-group">
-              <label htmlFor="approval-justification" className="custom-field-form-label">
-                Business Justification (min 10 characters)
+              <div className="custom-field-approval-label-row">
+                <label htmlFor="approval-justification" className="custom-field-form-label">
+                  Business Justification (min 10 characters)
+                </label>
                 <FieldHelpHint
                   title="Business Justification"
                   summary="Audit justification explaining why elevated scope or service-principal credentials are required."
@@ -391,7 +401,7 @@ export function EscalationApprovalPanel({
                   docHref="/docs/custom-fields#approvals"
                   testId="hint-escalation-justification"
                 />
-              </label>
+              </div>
               <textarea
                 id="approval-justification"
                 className="custom-field-textarea"
@@ -445,15 +455,17 @@ export function EscalationApprovalPanel({
             </p>
             <form onSubmit={handleAal2Submit}>
               <div className="custom-field-form-group">
-                <label htmlFor="aal2-otp" className="custom-field-form-label">
-                  Passkey or Authenticator Code
+                <div className="custom-field-approval-label-row">
+                  <label htmlFor="aal2-otp" className="custom-field-form-label">
+                    Passkey or Authenticator Code
+                  </label>
                   <FieldHelpHint
                     title="AAL2 Step-Up Verification"
                     summary="Secondary factor verification required before executing or approving administrative escalation."
                     docHref="/docs/custom-fields#aal2-stepup"
                     testId="hint-escalation-aal2"
                   />
-                </label>
+                </div>
                 <input
                   id="aal2-otp"
                   type="text"
