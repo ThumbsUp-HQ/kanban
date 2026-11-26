@@ -1,0 +1,44 @@
+$ pnpm vitest run --coverage --coverage.include="src/features/admin-auth/AuthCardEditorDrawer.tsx" --coverage.include="src/features/admin-ai/AiProviderEditorDrawer.tsx" src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan449-5b189911/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (56 tests) 2413ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (67 tests) 14414ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (67)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 563ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 686ms
+     ✓ supports OAuth2 provider configuration with issuer_url 418ms
+     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 451ms
+     ✓ displays form error when onSave throws an error 364ms
+     ✓ edits an LDAP card with CA PEM, user filter, and replaces bind DN password 352ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 653ms
+     ✓ validates maximum lengths for display name and button subtext 328ms
+     ✓ validates empty slug on create and allows typing secret on create 421ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 699ms
+     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 571ms
+     ✓ handles empty public_config gracefully when loading OIDC and LDAP cards 326ms
+     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 1053ms
+     ✓ Progressive Disclosure & AdvancedSection (KAN-319) (17)
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 798ms
+       ✓ allows editing AdvancedSection allowlists, attributes, and file upload trigger 372ms
+       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 326ms
+       ✓ covers payload construction and error handling branches 396ms
+
+ Test Files  2 passed (2)
+      Tests  123 passed (123)
+   Start at  15:34:00
+   Duration  15.82s (tests 90%, environment 7%, import 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.23 |    95.22 |     100 |   99.44 |                   
+ admin-ai          |   98.89 |     94.6 |     100 |   99.23 |                   
+  ...torDrawer.tsx |   98.89 |     94.6 |     100 |   99.23 | 460-461           
+ admin-auth        |   99.41 |    95.57 |     100 |   99.56 |                   
+  ...torDrawer.tsx |   99.41 |    95.57 |     100 |   99.56 | 650,714           
+-------------------|---------|----------|---------|---------|-------------------
