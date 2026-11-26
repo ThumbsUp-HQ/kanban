@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/components/__tests__/AdvancedSection.test.tsx b/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
-index 68acb1db..e6bd2076 100644
+index 68acb1db..9ddce234 100644
 --- a/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
 +++ b/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
 @@ -4,6 +4,8 @@
@@ -11,7 +11,7 @@ index 68acb1db..e6bd2076 100644
  import DefaultAdvancedSection, { AdvancedSection } from '../AdvancedSection';
  
  describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
-@@ -90,6 +92,66 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
+@@ -90,6 +92,76 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
      expect(onToggle).toHaveBeenCalledWith(false);
    });
  
@@ -28,10 +28,15 @@ index 68acb1db..e6bd2076 100644
 +    const toggle = screen.getByTestId('advanced-section-toggle');
 +    const details = screen.getByTestId('advanced-section');
 +    const chevron = toggle.querySelector('.kb-advanced-chevron');
++    const content = details.querySelector('.kb-advanced-content');
 +
 +    expect(toggle.getAttribute('aria-expanded')).toBe('false');
 +    expect(details.className).not.toContain('kb-advanced-section--open');
 +    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
++
++    // Explicit verification of role="region" and aria-label
++    expect(content?.getAttribute('role')).toBe('region');
++    expect(content?.getAttribute('aria-label')).toBe('Light Theme Section');
 +
 +    fireEvent.click(toggle);
 +    expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -58,10 +63,15 @@ index 68acb1db..e6bd2076 100644
 +    const toggle = screen.getByTestId('advanced-section-toggle');
 +    const details = screen.getByTestId('advanced-section');
 +    const chevron = toggle.querySelector('.kb-advanced-chevron');
++    const content = details.querySelector('.kb-advanced-content');
 +
 +    expect(toggle.getAttribute('aria-expanded')).toBe('false');
 +    expect(details.className).not.toContain('kb-advanced-section--open');
 +    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
++
++    // Explicit verification of role="region" and aria-label
++    expect(content?.getAttribute('role')).toBe('region');
++    expect(content?.getAttribute('aria-label')).toBe('Dark Theme Section');
 +
 +    fireEvent.keyDown(toggle, { key: 'Enter' });
 +    expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -78,7 +88,7 @@ index 68acb1db..e6bd2076 100644
    it('renders active overrides badge when activeOverridesCount or activeOverrideCount > 0', () => {
      const { rerender } = render(
        <AdvancedSection title="Overrides Test" activeOverridesCount={3}>
-@@ -214,4 +276,53 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
+@@ -214,4 +286,63 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
        screen.getByText('Configure CIDR allowlists and proxies'),
      ).toBeDefined();
    });
@@ -96,12 +106,13 @@ index 68acb1db..e6bd2076 100644
 +      expect(cssContent).not.toContain('#f1f5f9');
 +    });
 +
-+    it('uses canonical theme tokens for container, header, chevron, and badge', () => {
++    it('uses canonical theme tokens for container, header, chevron, focus ring, and badge', () => {
 +      expect(cssContent).toContain('var(--border-subtle, #e5e7eb)');
 +      expect(cssContent).toContain('var(--border-subtle, #2d333f)');
 +      expect(cssContent).toContain('var(--bg-card-subtle)');
 +      expect(cssContent).toContain('var(--border-color-focus)');
 +      expect(cssContent).toContain('var(--bg-surface)');
++      expect(cssContent).toContain('var(--focus-ring, #2563eb)');
 +      expect(cssContent).toContain('var(--fg-muted)');
 +      expect(cssContent).toContain('var(--fg-primary)');
 +      expect(cssContent).toContain('var(--fg-secondary)');
@@ -130,13 +141,22 @@ index 68acb1db..e6bd2076 100644
 +        /\[data-theme=['"]dark['"]\]\s+\.kb-advanced-content\s*\{[^}]*border-top-color:\s*var\(--border-subtle,\s*#2d333f\);/,
 +      );
 +    });
++
++    it('avoids redundant dark theme re-declarations', () => {
++      // Base rules already handle variables via CSS inheritance
++      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-chevron--open");
++      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-title");
++      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-desc");
++      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-badge");
++      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-section--open");
++    });
 +  });
  });
 diff --git a/kanban/web/src/ui/AdvancedSection.css b/kanban/web/src/ui/AdvancedSection.css
-index 7cc40f3a..91ed0a3e 100644
+index 7cc40f3a..de5a2721 100644
 --- a/kanban/web/src/ui/AdvancedSection.css
 +++ b/kanban/web/src/ui/AdvancedSection.css
-@@ -3,25 +3,25 @@
+@@ -3,25 +3,19 @@
  .kb-advanced-section {
    display: block;
    margin: 16px 0;
@@ -152,17 +172,14 @@ index 7cc40f3a..91ed0a3e 100644
 -  border-color: var(--border-color, #334155);
 -  background-color: var(--bg-card-subtle, rgba(15, 23, 42, 0.5));
 +  border-color: var(--border-subtle, #2d333f);
-+  background-color: var(--bg-card-subtle);
  }
  
  .kb-advanced-section--open {
 -  border-color: var(--border-color-focus, #3b82f6);
 -  background-color: var(--bg-card, #ffffff);
-+  border-color: var(--border-color-focus);
-+  background-color: var(--bg-surface);
- }
- 
- [data-theme='dark'] .kb-advanced-section--open {
+-}
+-
+-[data-theme='dark'] .kb-advanced-section--open {
 -  border-color: var(--border-color-focus, #3b82f6);
 -  background-color: var(--bg-card, #0f172a);
 +  border-color: var(--border-color-focus);
@@ -170,7 +187,16 @@ index 7cc40f3a..91ed0a3e 100644
  }
  
  .kb-advanced-summary {
-@@ -52,18 +52,18 @@
+@@ -41,7 +35,7 @@
+ }
+ 
+ .kb-advanced-summary:focus-visible {
+-  outline: 2px solid var(--focus-ring, #3b82f6);
++  outline: 2px solid var(--focus-ring, #2563eb);
+   outline-offset: -2px;
+   border-radius: 6px;
+ }
+@@ -52,18 +46,14 @@
    justify-content: center;
    width: 16px;
    height: 16px;
@@ -183,16 +209,15 @@ index 7cc40f3a..91ed0a3e 100644
  .kb-advanced-chevron--open {
    transform: rotate(90deg);
 -  color: var(--text-primary, #0f172a);
-+  color: var(--fg-primary);
- }
- 
- [data-theme='dark'] .kb-advanced-chevron--open {
+-}
+-
+-[data-theme='dark'] .kb-advanced-chevron--open {
 -  color: var(--text-primary, #f8fafc);
 +  color: var(--fg-primary);
  }
  
  .kb-advanced-header {
-@@ -77,22 +77,22 @@
+@@ -77,24 +67,16 @@
  .kb-advanced-title {
    font-size: 0.875rem;
    font-weight: 600;
@@ -201,11 +226,10 @@ index 7cc40f3a..91ed0a3e 100644
    letter-spacing: -0.01em;
  }
  
- [data-theme='dark'] .kb-advanced-title {
+-[data-theme='dark'] .kb-advanced-title {
 -  color: var(--text-primary, #f1f5f9);
-+  color: var(--fg-primary);
- }
- 
+-}
+-
  .kb-advanced-desc {
    font-size: 0.8125rem;
 -  color: var(--text-muted, #64748b);
@@ -213,31 +237,29 @@ index 7cc40f3a..91ed0a3e 100644
    font-weight: 400;
  }
  
- [data-theme='dark'] .kb-advanced-desc {
+-[data-theme='dark'] .kb-advanced-desc {
 -  color: var(--text-muted, #94a3b8);
-+  color: var(--fg-secondary);
- }
- 
+-}
+-
  .kb-advanced-badge {
-@@ -103,22 +103,25 @@
+   display: inline-flex;
+   align-items: center;
+@@ -103,22 +85,19 @@
    font-size: 0.75rem;
    font-weight: 600;
    line-height: 1.25;
 -  background-color: var(--badge-bg, rgba(59, 130, 246, 0.12));
 -  color: var(--badge-fg, #2563eb);
 -  border: 1px solid var(--badge-border, rgba(59, 130, 246, 0.3));
-+  background-color: var(--badge-bg);
-+  color: var(--badge-fg);
-+  border: 1px solid var(--badge-border);
- }
- 
- [data-theme='dark'] .kb-advanced-badge {
+-}
+-
+-[data-theme='dark'] .kb-advanced-badge {
 -  background-color: var(--badge-bg, rgba(96, 165, 250, 0.16));
 -  color: var(--badge-fg, #93c5fd);
 -  border-color: var(--badge-border, rgba(96, 165, 250, 0.35));
 +  background-color: var(--badge-bg);
 +  color: var(--badge-fg);
-+  border-color: var(--badge-border);
++  border: 1px solid var(--badge-border);
  }
  
  .kb-advanced-content {
