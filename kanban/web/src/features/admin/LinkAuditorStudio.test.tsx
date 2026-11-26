@@ -5,7 +5,7 @@ import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { LinkAuditorStudio, formatEntitySummary } from './LinkAuditorStudio';
@@ -969,6 +969,255 @@ describe('LinkAuditorStudio', () => {
       expect(screen.queryByTestId('not-found-view')).toBeNull();
       const statusPillAll = screen.getByTestId('status-filter-all');
       expect(statusPillAll).toBeDefined();
+    });
+  });
+
+  describe('KAN-526: Link Auditor Integrity Metrics FieldHelpHint and Popover Guidance', () => {
+    it('renders Integrity Metrics section heading and FieldHelpHint trigger adjacent to it without layout push', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      // Verify section and heading
+      expect(screen.getByLabelText('Integrity Metrics')).toBeDefined();
+      const heading = screen.getByRole('heading', { name: 'Integrity Metrics' });
+      expect(heading).toBeDefined();
+      expect(heading.className).toContain('link-auditor-metrics-title');
+
+      // Verify trigger button accessibility and state
+      const trigger = screen.getByTestId('integrity-metrics-help');
+      expect(trigger).toBeDefined();
+      expect(trigger.getAttribute('aria-label')).toBe('Help: Integrity Metrics');
+      expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      // Verify CSS keeps (?) inline adjacent via margin-left: 0 and gap: 6px
+      const cssPath = path.resolve(__dirname, './LinkAuditorStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+      expect(cssContent).toMatch(/\.link-auditor-metrics-header\s*\{[^}]*gap:\s*6px;/s);
+      expect(cssContent).toMatch(/\.link-auditor-metrics-header\s+\.field-help-hint\s*\{[^}]*margin-left:\s*0;/s);
+    });
+
+    it('opens popover on click and renders title, summary, validValues, default indicator, and doc link', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('integrity-metrics-help');
+
+      // Open popover via click
+      fireEvent.click(trigger);
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+      // Popover element and dialog role
+      const popover = screen.getByTestId('integrity-metrics-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.getAttribute('role')).toBe('dialog');
+      expect(popover.getAttribute('aria-label')).toBe('Integrity Metrics');
+
+      // Verify summary and default value
+      expect(
+        screen.getByText(
+          /Detects non-referential integrity failures across the Universal Object Graph/i,
+        ),
+      ).toBeDefined();
+      const defaultVal = screen.getByTestId('integrity-metrics-help-default');
+      expect(defaultVal.textContent).toContain('ALL (No reason filter active)');
+
+      // Verify valid values dl list
+      expect(screen.getByText('DANGLING_SOURCE / DANGLING_TARGET')).toBeDefined();
+      expect(screen.getByText('SOFT_DELETED_ENDPOINT')).toBeDefined();
+      expect(screen.getByText('ARCHIVED_POLICY_VIOLATION')).toBeDefined();
+      expect(screen.getByText('TYPE_MATRIX_VIOLATION')).toBeDefined();
+      expect(screen.getByText('CROSS_WORKSPACE_LEAK')).toBeDefined();
+      expect(screen.getByText('PERMISSION_SEVERED')).toBeDefined();
+
+      // Verify documentation link
+      const docLink = screen.getByTestId('integrity-metrics-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/universal-object-graph-and-link-auditor');
+      expect(docLink.getAttribute('target')).toBe('_blank');
+      expect(docLink.getAttribute('rel')).toContain('noopener');
+    });
+
+    it('supports keyboard navigation, focus trap / escape dismissal on FieldHelpHint popover', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('integrity-metrics-help');
+
+      // Focus opens the popover directly (0ms keyboard focus)
+      act(() => {
+        trigger.focus();
+      });
+      expect(document.activeElement).toBe(trigger);
+      expect(screen.getByTestId('integrity-metrics-help-popover')).toBeDefined();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+      // Escape key on trigger closes the popover and restores state
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape', code: 'Escape' });
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId('integrity-metrics-help-popover')).toBeNull();
+      });
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+      // Clicking trigger toggles it open again
+      act(() => {
+        fireEvent.click(trigger);
+      });
+      const popover = screen.getByTestId('integrity-metrics-help-popover');
+      expect(popover).toBeDefined();
+
+      // Escape key inside popover closes it
+      act(() => {
+        fireEvent.keyDown(popover, { key: 'Escape', code: 'Escape' });
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId('integrity-metrics-help-popover')).toBeNull();
+      });
+    });
+
+    it('renders cleanly in Light and Dark themes without visual or semantic token regressions', async () => {
+      // Light theme
+      document.documentElement.removeAttribute('data-theme');
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByTestId('integrity-metrics-help'));
+      });
+      expect(screen.getByTestId('integrity-metrics-help-popover')).toBeDefined();
+
+      // Dark theme
+      unmount();
+      document.documentElement.setAttribute('data-theme', 'dark');
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/admin/link-auditor']}>
+              <LinkAuditorStudio />
+            </MemoryRouter>
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
+        });
+
+        // Open popover in dark theme
+        act(() => {
+          fireEvent.click(screen.getByTestId('integrity-metrics-help'));
+        });
+        expect(screen.getByTestId('integrity-metrics-help-popover')).toBeDefined();
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('preserves metric card filtering and purge workflow non-regressions with FieldHelpHint active', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      // Metric card filter still toggles properly
+      const danglingTargetCard = screen.getByTestId('metric-card-DANGLING_TARGET');
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).toContain('metric-card--active');
+
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).not.toContain('metric-card--active');
+
+      // Heading and help hint remain visible throughout interactions
+      expect(screen.getByRole('heading', { name: 'Integrity Metrics' })).toBeDefined();
+      expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
     });
   });
 });

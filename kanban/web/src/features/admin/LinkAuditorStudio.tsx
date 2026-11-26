@@ -8,6 +8,7 @@ import { qk } from '../../api/queryKeys';
 import { NotFoundView } from '../../app/routes';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './LinkAuditorStudio.css';
 
 export type InvalidLinkReason =
@@ -383,33 +384,72 @@ export function LinkAuditorStudio(): JSX.Element {
       )}
 
       {/* Reason Breakdown Overview Cards */}
-      <section className="link-auditor-metrics" aria-label="Integrity Metrics">
-        {(
-          Object.keys(REASON_DESCRIPTIONS) as InvalidLinkReason[]
-        ).map((code) => {
-          const info = REASON_DESCRIPTIONS[code];
-          const count = scanMutation.data?.by_reason[code] ?? 0;
-          const isActive = reasonFilter === code;
-          return (
-            <button
-              key={code}
-              type="button"
-              className={`metric-card${isActive ? ' metric-card--active' : ''}`}
-              onClick={() => {
-                setReasonFilter(isActive ? 'ALL' : code);
-              }}
-              data-testid={`metric-card-${code}`}
-            >
-              <div className="metric-card__header">
-                <span className={`metric-badge ${info.badgeClass}`}>
-                  {info.label}
-                </span>
-                <span className="metric-card__count">{count}</span>
-              </div>
-              <p className="metric-card__desc">{info.description}</p>
-            </button>
-          );
-        })}
+      <section className="link-auditor-metrics-section" aria-label="Integrity Metrics">
+        <div className="link-auditor-metrics-header">
+          <h2 className="link-auditor-metrics-title">Integrity Metrics</h2>
+          <FieldHelpHint
+            title="Integrity Metrics"
+            summary="Detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
+            defaultValue="ALL (No reason filter active)"
+            validValues={[
+              {
+                label: 'DANGLING_SOURCE / DANGLING_TARGET',
+                description: 'Missing source or target entity',
+              },
+              {
+                label: 'SOFT_DELETED_ENDPOINT',
+                description: 'Active link to soft-deleted endpoint',
+              },
+              {
+                label: 'ARCHIVED_POLICY_VIOLATION',
+                description: 'Link to archived entity violating policy',
+              },
+              {
+                label: 'TYPE_MATRIX_VIOLATION',
+                description: 'Disallowed object kind relationship',
+              },
+              {
+                label: 'CROSS_WORKSPACE_LEAK',
+                description: 'Crosses workspace tenant boundary',
+              },
+              {
+                label: 'PERMISSION_SEVERED',
+                description: 'Severed entity access boundary',
+              },
+            ]}
+            docHref="/docs/universal-object-graph-and-link-auditor"
+            testId="integrity-metrics-help"
+            ariaLabel="Help: Integrity Metrics"
+          />
+        </div>
+        <div className="link-auditor-metrics" role="region" aria-label="Metric cards">
+          {(
+            Object.keys(REASON_DESCRIPTIONS) as InvalidLinkReason[]
+          ).map((code) => {
+            const info = REASON_DESCRIPTIONS[code];
+            const count = scanMutation.data?.by_reason[code] ?? 0;
+            const isActive = reasonFilter === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                className={`metric-card${isActive ? ' metric-card--active' : ''}`}
+                onClick={() => {
+                  setReasonFilter(isActive ? 'ALL' : code);
+                }}
+                data-testid={`metric-card-${code}`}
+              >
+                <div className="metric-card__header">
+                  <span className={`metric-badge ${info.badgeClass}`}>
+                    {info.label}
+                  </span>
+                  <span className="metric-card__count">{count}</span>
+                </div>
+                <p className="metric-card__desc">{info.description}</p>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Audit List Controls */}
