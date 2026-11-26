@@ -1,12 +1,19 @@
 /**
- * Unit Tests for StickyPromotePreviewModal (KANBA-217, S8.2).
+ * Unit Tests for StickyPromotePreviewModal (KANBA-217, KAN-469).
  */
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StickyPromotePreviewModal } from './StickyPromotePreviewModal';
-import { previewStickyPromotion, type StickyItem } from './stickiesApi';
+import {
+  previewStickyPromotion,
+  type StickyItem,
+  type StickyPromotePreviewResponse,
+} from './stickiesApi';
+import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
+import fs from 'node:fs';
+import path from 'node:path';
 
 vi.mock('./stickiesApi', () => ({
   previewStickyPromotion: vi.fn(),
@@ -320,5 +327,221 @@ describe('StickyPromotePreviewModal', () => {
     // Backdrop click
     fireEvent.click(screen.getByTestId('sticky-promote-preview-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  describe('StudioDocLink Header Integration and Shift-Left Invariants (KAN-469)', () => {
+    it('renders StudioDocLink in sticky-promote-modal__header with required props', async () => {
+      mockPreview.mockResolvedValueOnce({
+        proposal: { title: 'Promotion Spec' },
+        rendered_markdown: '## Spec overview',
+        original_sha256: 'sha-123',
+        acl_preview: { direct_entries_count: 1 },
+      });
+
+      render(
+        <StickyPromotePreviewModal
+          sticky={baseSticky}
+          isOpen={true}
+          onClose={vi.fn()}
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
+      });
+
+      const docLink = screen.getByTestId('sticky-promote-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe('/docs/hierarchical-docs-and-stickies-with-smart-promotion');
+      expect(docLink.textContent).toContain('Promotion Guide ->');
+      expect(docLink.getAttribute('aria-label')).toBe('Promotion Guide ->');
+
+      // Check header-actions grouping container beside close button
+      const headerActions = docLink.closest('.sticky-promote-modal__header-actions');
+      expect(headerActions).not.toBeNull();
+      const closeBtn = screen.getByTestId('close-promote-modal-btn');
+      expect(headerActions?.contains(closeBtn)).toBe(true);
+      expect(headerActions?.contains(docLink)).toBe(true);
+
+      // Keyboard focusability
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+    });
+
+    it('opens in-app help panel via ShellPanelsProvider without closing modal state', async () => {
+      mockPreview.mockResolvedValueOnce({
+        proposal: { title: 'Promotion Spec' },
+        rendered_markdown: '## Spec overview',
+        original_sha256: 'sha-123',
+        acl_preview: { direct_entries_count: 2 },
+      });
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-drawer">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <StickyPromotePreviewModal
+              sticky={baseSticky}
+              isOpen={true}
+              onClose={vi.fn()}
+              onConfirm={vi.fn()}
+            />
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('sticky-promote-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('sticky-promote-doc-link');
+        fireEvent.click(docLink);
+
+        const helpDrawer = screen.getByTestId('in-app-help-drawer');
+        expect(helpDrawer).toBeDefined();
+        expect(helpDrawer.textContent).toContain(
+          '/docs/hierarchical-docs-and-stickies-with-smart-promotion',
+        );
+
+        // Modal remains open and functional
+        expect(screen.getByTestId('sticky-promote-preview-modal')).toBeDefined();
+      } finally {
+        unregister();
+      }
+    });
+
+    it('allows editing markdown preview textarea and submitting without sha256', async () => {
+      mockPreview.mockResolvedValueOnce({
+        proposal: {},
+        rendered_markdown: '',
+        original_sha256: '',
+        acl_preview: {},
+      });
+
+      const stickyWithoutSha: StickyItem = {
+        ...baseSticky,
+        body_sha256: undefined,
+      };
+
+      const onConfirm = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <StickyPromotePreviewModal
+          sticky={stickyWithoutSha}
+          isOpen={true}
+          onClose={vi.fn()}
+          onConfirm={onConfirm}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('promote-modal-loading')).toBeNull();
+      });
+
+      const titleInput = screen.getByTestId<HTMLInputElement>('promote-modal-title');
+      fireEvent.change(titleInput, { target: { value: 'Custom Edited Title' } });
+
+      const markdownArea = screen.getByTestId<HTMLTextAreaElement>('promote-modal-markdown');
+      fireEvent.change(markdownArea, { target: { value: '# Custom Markdown Content\n\nNotes here.' } });
+      expect(markdownArea.value).toBe('# Custom Markdown Content\n\nNotes here.');
+
+      const form = screen.getByTestId('sticky-promote-preview-modal').querySelector('form');
+      if (form) {
+        fireEvent.submit(form);
+      }
+
+      await waitFor(() => {
+        expect(onConfirm).toHaveBeenCalledWith({
+          title: 'Custom Edited Title',
+          structured_body_markdown: '# Custom Markdown Content\n\nNotes here.',
+        });
+      });
+    });
+
+    it('handles component unmount during active preview load cleanly', () => {
+      let resolvePromise: (val: StickyPromotePreviewResponse) => void = vi.fn();
+      mockPreview.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvePromise = resolve;
+          }),
+      );
+
+      const { unmount } = render(
+        <StickyPromotePreviewModal
+          sticky={baseSticky}
+          isOpen={true}
+          onClose={vi.fn()}
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('promote-modal-loading')).toBeDefined();
+      // Unmount before promise resolves
+      unmount();
+      resolvePromise({
+        proposal: { title: 'Late title' },
+        rendered_markdown: 'Late body',
+        original_sha256: 'sha-mock',
+        acl_preview: {},
+      });
+      // Should not throw or cause React unmounted state warnings
+    });
+
+    it('handles component unmount during catch rejection cleanly', () => {
+      let rejectPromise: (err: unknown) => void = vi.fn();
+      mockPreview.mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            rejectPromise = reject;
+          }),
+      );
+
+      const { unmount } = render(
+        <StickyPromotePreviewModal
+          sticky={baseSticky}
+          isOpen={true}
+          onClose={vi.fn()}
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      // Unmount before reject
+      unmount();
+      rejectPromise(new Error('Network error'));
+    });
+
+    it('verifies zero FieldHelpHint nested inside label and zero inline styles', () => {
+      const tsxPath = path.resolve(__dirname, 'StickyPromotePreviewModal.tsx');
+      const content = fs.readFileSync(tsxPath, 'utf8');
+
+      // Verify no FieldHelpHint inside <label>
+      expect(content).not.toMatch(/<label[^>]*>[\s\S]*?<FieldHelpHint[\s\S]*?<\/label>/);
+
+      // Verify no inline style={{}}
+      expect(content).not.toMatch(/\bstyle=\{\{/);
+
+      // Verify StudioDocLink placement and props
+      expect(content).toContain('<StudioDocLink');
+      expect(content).toContain('href="/docs/hierarchical-docs-and-stickies-with-smart-promotion"');
+      expect(content).toContain('label="Promotion Guide ->"');
+      expect(content).toContain('testId="sticky-promote-doc-link"');
+    });
+
+    it('verifies CSS rules in StickiesGrid.css for header actions and 44px touch targets', () => {
+      const cssPath = path.resolve(__dirname, 'StickiesGrid.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      expect(cssContent).toContain('.sticky-promote-modal__header-actions');
+      expect(cssContent).toContain('.sticky-promote-modal__close-btn');
+      expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
+      expect(cssContent).toContain('min-width: var(--tap-min, 44px)');
+      expect(cssContent).toContain('@media (max-width: 640px)');
+    });
   });
 });
