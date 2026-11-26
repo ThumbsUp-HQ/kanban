@@ -435,7 +435,9 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 8px;
-  position: static;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle, #30363d);
   padding-top: 12px;
