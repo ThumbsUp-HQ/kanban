@@ -405,11 +405,50 @@ index 0dfdd738..f0cdc81a 100644
    const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
    const computedSection =
      currentSection && currentSection !== 'Work Items'
+diff --git a/kanban/web/src/app/LayoutSwitcher.css b/kanban/web/src/app/LayoutSwitcher.css
+index 649a7769..d27e8f77 100644
+--- a/kanban/web/src/app/LayoutSwitcher.css
++++ b/kanban/web/src/app/LayoutSwitcher.css
+@@ -75,6 +75,18 @@
+   gap: 6px;
+ }
+ 
++@media (max-width: 640px) {
++  .kb-layout-switcher-prefix {
++    display: none;
++  }
++
++  .kb-layout-switcher-mobile-btn {
++    padding: 2px 6px;
++    font-size: 11px;
++    gap: 4px;
++  }
++}
++
+ .kb-layout-switcher-menu {
+   position: absolute;
+   top: calc(100% + 4px);
+diff --git a/kanban/web/src/app/LayoutSwitcher.tsx b/kanban/web/src/app/LayoutSwitcher.tsx
+index ef118dbf..2e378d78 100644
+--- a/kanban/web/src/app/LayoutSwitcher.tsx
++++ b/kanban/web/src/app/LayoutSwitcher.tsx
+@@ -168,7 +168,10 @@ export function LayoutSwitcher({
+           onClick={() => { setMenuOpen(!menuOpen); }}
+           className="kb-layout-switcher-mobile-btn"
+         >
+-          <span>Layout: {activeConfig.label}</span>
++          <span className="kb-layout-switcher-mobile-label">
++            <span className="kb-layout-switcher-prefix">Layout: </span>
++            {activeConfig.label}
++          </span>
+           <span aria-hidden="true">▾</span>
+         </button>
+ 
 diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
-index 3444fec0..dad00d45 100644
+index 3444fec0..28922a70 100644
 --- a/kanban/web/src/app/Topbar.css
 +++ b/kanban/web/src/app/Topbar.css
-@@ -425,6 +425,33 @@
+@@ -425,17 +425,50 @@
    }
  }
  
@@ -443,6 +482,99 @@ index 3444fec0..dad00d45 100644
  @media (max-width: 640px) {
    .kb-topbar,
    .topbar {
+     padding: 0 var(--space-2, 8px);
+-    gap: var(--space-2, 8px);
++    gap: 4px;
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    overflow: visible;
+   }
+ 
+   .kb-topbar-left {
+     min-width: 0;
+-    flex: 1 1 auto;
+-    gap: 6px;
++    max-width: 90px;
++    flex: 0 1 auto;
++    gap: 4px;
+     overflow: hidden;
+   }
+ 
+@@ -457,8 +490,8 @@
+ 
+   .kb-search-trigger {
+     min-width: unset;
+-    width: 36px;
+-    height: 36px;
++    width: 32px;
++    height: 32px;
+     padding: 0;
+     justify-content: center;
+     flex-shrink: 0;
+@@ -468,13 +501,60 @@
+   .topbar__search {
+     min-width: 0;
+     flex: 0 0 auto;
+-    max-width: 36px;
++    max-width: 32px;
+   }
+ 
+   .kb-search-trigger-text,
+   .kb-search-kbd {
+     display: none;
+   }
++
++  .kb-topbar-right,
++  .topbar__right {
++    min-width: 0;
++    flex: 1 1 auto;
++    justify-content: flex-end;
++    flex-shrink: 1;
++    gap: 4px;
++  }
++}
++
++@media (max-width: 480px) {
++  .kb-topbar,
++  .topbar {
++    padding: 0 4px;
++    gap: 3px;
++  }
++
++  .kb-topbar-left {
++    max-width: 75px;
++    gap: 2px;
++  }
++
++  .kb-topbar-hamburger {
++    padding: 4px;
++    font-size: 16px;
++  }
++
++  .kb-topbar-right,
++  .topbar__right {
++    gap: 3px;
++  }
++
++  .kb-topbar-docs-btn {
++    min-width: 32px !important;
++    width: 32px !important;
++    height: 32px !important;
++    min-height: 32px !important;
++  }
++
++  .kb-avatar-button {
++    min-width: 32px !important;
++    width: 32px !important;
++    height: 32px !important;
++    min-height: 32px !important;
++    font-size: 12px;
++  }
+ }
+ 
+ @media (max-width: 767px), (pointer: coarse) {
 diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
 index 8a19422f..b8e5a988 100644
 --- a/kanban/web/src/features/board/BoardView.tsx
@@ -1922,8 +2054,75 @@ index da8b2a0d..dd14d923 100644
    // Normalize URL when issue key differs from loaded canonical key (e.g., cross-prefix alias KANBA-119 -> KAN-42)
    useEffect(() => {
      if (!issue?.key || issue.key === issueKey) {
+diff --git a/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx b/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
+index 8927e1c0..8b38451f 100644
+--- a/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
++++ b/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
+@@ -234,6 +234,62 @@ describe('useGateRealtimeSync & handleGateEvent (KB-P5-25)', () => {
+       expect(detail?.state?.name).toBe('In Progress');
+     });
+ 
++    it('handles issue.transition_rejected event and snaps back state cleanly', () => {
++      const pendingIssue: BoardIssue = {
++        id: 'issue-1',
++        key: 'KAN-8',
++        summary: 'Task',
++        state_id: 'state-in-review',
++        board_rank: '0|hzzzzz:',
++        gate_status: 'pending',
++      };
++      queryClient.setQueryData(qk.issues('KAN', {}), [pendingIssue]);
++
++      const initialDetail: IssueDetail = {
++        key: 'KAN-8',
++        project_key: 'KAN',
++        summary: 'Task',
++        state: { id: 'state-in-review', name: 'In Review', group: 'started' },
++        pending_gate: {
++          execution_id: 'exec-trans-1',
++          hook_name: 'forensic-code-check',
++          agent_slug: 'reality-checker',
++          harness_label: 'cli: agy -p',
++          started_at: '2026-11-14T00:00:00Z',
++        },
++      };
++      queryClient.setQueryData(qk.issue('KAN-8'), initialDetail);
++
++      const onGateVetoed = vi.fn();
++      const payload: WorkflowGateEventPayload = {
++        issue_key: 'KAN-8',
++        execution_id: 'exec-trans-1',
++        hook_name: 'forensic-code-check',
++        agent_slug: 'reality-checker',
++        from_state: 'In Progress',
++        from_state_id: 'state-in-progress',
++        to_state: 'In Review',
++        to_state_id: 'state-in-review',
++        reason_preview: 'Transition rejected: gate vetoed.',
++      };
++
++      handleGateEvent('issue.transition_rejected', payload, queryClient, {
++        projectKey: 'KAN',
++        onGateVetoed,
++      });
++
++      expect(onGateVetoed).toHaveBeenCalledWith(payload);
++
++      const boardIssues = queryClient.getQueryData<BoardIssue[]>(qk.issues('KAN', {}));
++      expect(boardIssues?.[0]?.gate_status).toBe('rejected');
++      expect(boardIssues?.[0]?.state_id).toBe('state-in-progress');
++
++      const detail = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-8'));
++      expect(detail?.pending_gate).toBeNull();
++      expect(detail?.latest_gate_verdict?.decision).toBe('reject');
++      expect(detail?.state?.name).toBe('In Progress');
++    });
++
+     it('handles workflow.gate.timed_out, resets state, and updates caches', () => {
+       const pendingIssue: BoardIssue = {
+         id: 'issue-1',
 diff --git a/kanban/web/src/features/gates/useGateRealtimeSync.ts b/kanban/web/src/features/gates/useGateRealtimeSync.ts
-index d02fbe0d..42334119 100644
+index d02fbe0d..6cd0beff 100644
 --- a/kanban/web/src/features/gates/useGateRealtimeSync.ts
 +++ b/kanban/web/src/features/gates/useGateRealtimeSync.ts
 @@ -34,12 +34,58 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
@@ -2004,7 +2203,7 @@ index d02fbe0d..42334119 100644
      const verdict: LatestGateVerdict = {
        decision: 'approve',
        hook_name: p.hook_name,
-@@ -74,12 +123,24 @@ function updateBoardIssueWithGate(
+@@ -74,12 +123,25 @@ function updateBoardIssueWithGate(
        ...issue,
        gate_status: 'approved',
        pending_gate: null,
@@ -2017,6 +2216,7 @@ index d02fbe0d..42334119 100644
  
 -  if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
 +  if (
++    eventType === 'issue.transition_rejected' ||
 +    eventType === 'workflow.gate.rejected' ||
 +    eventType === 'workflow.gate.timed_out' ||
 +    eventType === 'workflow.gate.vetoed' ||
@@ -2031,7 +2231,7 @@ index d02fbe0d..42334119 100644
      const verdict: LatestGateVerdict = {
        decision: 'reject',
        hook_name: p.hook_name,
-@@ -92,17 +153,21 @@ function updateBoardIssueWithGate(
+@@ -92,17 +154,21 @@ function updateBoardIssueWithGate(
        ...issue,
        gate_status: 'rejected',
        pending_gate: null,
@@ -2056,7 +2256,7 @@ index d02fbe0d..42334119 100644
      };
    }
  
-@@ -155,7 +220,7 @@ export function handleGateEvent(
+@@ -155,7 +221,7 @@ export function handleGateEvent(
    // 2. Update single issue detail cache
    queryClient.setQueryData<IssueDetail>(qk.issue(issue_key), (oldIssue) => {
      if (!oldIssue) return oldIssue;
@@ -2065,7 +2265,7 @@ index d02fbe0d..42334119 100644
        const pendingGate: PendingGateInfo = {
          execution_id: payload.execution_id,
          hook_name: payload.hook_name,
-@@ -173,19 +238,21 @@ export function handleGateEvent(
+@@ -173,19 +239,21 @@ export function handleGateEvent(
        return {
          ...oldIssue,
          pending_gate: pendingGate,
@@ -2089,7 +2289,7 @@ index d02fbe0d..42334119 100644
          latest_gate_verdict: {
            decision: 'approve',
            hook_name: payload.hook_name,
-@@ -195,17 +262,31 @@ export function handleGateEvent(
+@@ -195,17 +263,32 @@ export function handleGateEvent(
          },
          state: payload.to_state
            ? {
@@ -2103,6 +2303,7 @@ index d02fbe0d..42334119 100644
      }
 -    if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
 +    if (
++      eventType === 'issue.transition_rejected' ||
 +      eventType === 'workflow.gate.rejected' ||
 +      eventType === 'workflow.gate.timed_out' ||
 +      eventType === 'workflow.gate.vetoed' ||
@@ -2123,7 +2324,7 @@ index d02fbe0d..42334119 100644
          latest_gate_verdict: {
            decision: 'reject',
            hook_name: payload.hook_name,
-@@ -214,23 +295,28 @@ export function handleGateEvent(
+@@ -214,23 +297,28 @@ export function handleGateEvent(
            audit_comment_id: payload.audit_comment_id,
            completed_at: payload.completed_at ?? new Date().toISOString(),
          },
@@ -2159,11 +2360,12 @@ index d02fbe0d..42334119 100644
                group: 'started',
              }
            : oldIssue.state,
-@@ -242,10 +328,19 @@ export function handleGateEvent(
+@@ -242,10 +330,20 @@ export function handleGateEvent(
    // 3. Update Activity Feed Cache (idempotent injection)
    const activityEventMap: Record<string, GateActivityItem['event_type']> = {
      'workflow.gate.approved': 'GATE_APPROVED',
 +    'gate.approved': 'GATE_APPROVED',
++    'issue.transition_rejected': 'GATE_REJECTED',
      'workflow.gate.rejected': 'GATE_REJECTED',
 +    'gate.rejected': 'GATE_REJECTED',
 +    'workflow.gate.vetoed': 'GATE_REJECTED',
@@ -2179,13 +2381,14 @@ index d02fbe0d..42334119 100644
    };
  
    const activityEventType = activityEventMap[eventType];
-@@ -309,11 +404,22 @@ export function handleGateEvent(
+@@ -309,11 +407,23 @@ export function handleGateEvent(
    }
  
    // 4. Notifications & Callbacks
 -  if (
 -    eventType === 'workflow.gate.approved' ||
 +  const isVetoOrReject =
++    eventType === 'issue.transition_rejected' ||
      eventType === 'workflow.gate.rejected' ||
      eventType === 'workflow.gate.timed_out' ||
 -    eventType === 'workflow.gate.cancelled'
@@ -2205,7 +2408,7 @@ index d02fbe0d..42334119 100644
    ) {
      void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
      void queryClient.invalidateQueries({
-@@ -321,15 +427,15 @@ export function handleGateEvent(
+@@ -321,15 +431,15 @@ export function handleGateEvent(
      });
    }
  
@@ -2225,7 +2428,7 @@ index d02fbe0d..42334119 100644
      if (payload.reason === 'STALE_SNAPSHOT') {
        const msg = 'Transition cancelled (ticket changed while gate was running)';
        options.onToast?.(msg);
-@@ -358,15 +464,25 @@ export function useGateRealtimeSync({
+@@ -358,15 +468,26 @@ export function useGateRealtimeSync({
      if (!client) return undefined;
  
      const handler = (event: RealtimeEvent): void => {
@@ -2236,6 +2439,7 @@ index d02fbe0d..42334119 100644
 +        normalizedType.startsWith('workflow.gate.') ||
 +        normalizedType.startsWith('gate.') ||
 +        [
++          'issue.transition_rejected',
            'workflow.gate.pending',
            'workflow.gate.approved',
            'workflow.gate.rejected',
@@ -2515,10 +2719,10 @@ index 85d07e05..4ded79cc 100644
                  "latency_ms": decision.latency_ms,
 diff --git a/scripts/capture_kan432_screenshots.mjs b/scripts/capture_kan432_screenshots.mjs
 new file mode 100644
-index 00000000..fd2f45bc
+index 00000000..2cc0412a
 --- /dev/null
 +++ b/scripts/capture_kan432_screenshots.mjs
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,305 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +/**
@@ -2659,6 +2863,21 @@ index 00000000..fd2f45bc
 +        console.log(`[Mobile Viewport Check] document.documentElement.scrollWidth = ${scrollWidth}px (max allowed: 390px)`);
 +        if (scrollWidth > 390) {
 +          throw new Error(`Mobile horizontal overflow detected: document.documentElement.scrollWidth (${scrollWidth}px) > 390px`);
++        }
++
++        const topbarScrollWidth = await page.evaluate(() => document.querySelector('.kb-topbar')?.scrollWidth ?? 0);
++        console.log(`[Mobile Topbar Check] .kb-topbar.scrollWidth = ${topbarScrollWidth}px (max allowed: 390px)`);
++        if (topbarScrollWidth > 390) {
++          throw new Error(`.kb-topbar scrollWidth (${topbarScrollWidth}px) > 390px`);
++        }
++
++        const avatarRight = await page.evaluate(() => {
++          const el = document.querySelector('.kb-avatar-button') || document.querySelector('.kb-avatar-wrapper');
++          return el ? el.getBoundingClientRect().right : 0;
++        });
++        console.log(`[Mobile Avatar Check] avatar right edge = ${avatarRight}px (max allowed: 390px)`);
++        if (avatarRight > 390) {
++          throw new Error(`avatar right edge (${avatarRight}px) > 390px - avatar is clipped!`);
 +        }
 +      }
 +
@@ -2811,10 +3030,10 @@ index 00000000..fd2f45bc
 +});
 diff --git a/scripts/run_kan432_screenshot_flow.py b/scripts/run_kan432_screenshot_flow.py
 new file mode 100644
-index 00000000..3c2b581f
+index 00000000..ac924885
 --- /dev/null
 +++ b/scripts/run_kan432_screenshot_flow.py
-@@ -0,0 +1,510 @@
+@@ -0,0 +1,541 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Zero-Mock Screenshot Orchestrator for KAN-432.
@@ -3176,6 +3395,37 @@ index 00000000..3c2b581f
 +                "to_s": state_ids["Done"],
 +                "snap": b"\x00" * 32,
 +                "vjson": verdict2,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_hook_invocations ("
++                "  id, workspace_id, execution_id, hook_id, hook_kind, status, duration_us, started_at, completed_at, output_json"
++                ") VALUES ("
++                "  :id, :ws, :exec_id, :hook_id, 'agent_interceptor', 'rejected', 320000, clock_timestamp(), clock_timestamp(), CAST(:out_json AS jsonb)"
++                ")"
++            ),
++            {
++                "id": uuid.uuid4(),
++                "ws": ws_id,
++                "exec_id": exec2_id,
++                "hook_id": hook1.id,
++                "out_json": verdict2,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO activity_records ("
++                "  workspace_id, object_id, object_type, actor_id, event_type, payload, recorded_at"
++                ") VALUES ("
++                "  :ws, :oid, 'issue'::object_kind, :actor, 'GATE_REJECTED', CAST(:payload AS jsonb), clock_timestamp()"
++                ")"
++            ),
++            {
++                "ws": ws_id,
++                "oid": created_issues["KAN-2"],
++                "actor": p_id,
++                "payload": verdict2,
 +            },
 +        )
 +
