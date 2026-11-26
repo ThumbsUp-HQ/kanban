@@ -263,21 +263,23 @@ ${resourceUrl}
           </p>
 
           <div className="kb-connect-oauth-field">
-            <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
-              Target Scope
+            <div className="kb-connect-oauth-label-row">
+              <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
+                Target Scope
+              </label>
               <FieldHelpHint
                 title="Target Scope"
-                summary="Security boundary defining whether OAuth client tokens access all projects across the workspace, a single project, or server-wide resources."
+                summary="Security boundary defining whether OAuth client tokens access all projects across the workspace, a single project, or server-wide resources. Workspace scope is selected by default."
                 validValues={[
-                  { label: 'Workspace', description: 'Access all projects and resources in the active workspace.' },
+                  { label: 'Workspace [Default]', description: 'Access all projects and resources in the active workspace (default).' },
                   { label: 'Single Project', description: 'Restricted strictly to the selected project.' },
                   { label: 'Server (Global)', description: 'Server-wide administrative scope across all workspaces (requires admin role).' },
                 ]}
-                defaultValue="Workspace"
+                defaultValue="Workspace [Default]"
                 docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
                 testId="target-scope-help"
               />
-            </label>
+            </div>
             <select
               id="scope-tier-select"
               className="kb-connect-oauth-select"
@@ -287,7 +289,7 @@ ${resourceUrl}
                 setTargetScope(e.target.value as 'workspace' | 'project' | 'server');
               }}
             >
-              <option value="workspace">Workspace ({workspaceSlug})</option>
+              <option value="workspace">Workspace ({workspaceSlug}) [Default]</option>
               <option value="project">Single Project</option>
               <option value="server">Server (Global)</option>
             </select>
@@ -321,8 +323,10 @@ ${resourceUrl}
           )}
 
           <div className="kb-connect-oauth-field">
-            <label htmlFor="surface-select" className="kb-connect-oauth-label">
-              Target MCP Surface
+            <div className="kb-connect-oauth-label-row">
+              <label htmlFor="surface-select" className="kb-connect-oauth-label">
+                Target MCP Surface
+              </label>
               <FieldHelpHint
                 title="Target MCP Surface"
                 summary="The MCP surface endpoint defining available tool namespaces and capability boundaries."
@@ -335,7 +339,7 @@ ${resourceUrl}
                 docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
                 testId="target-surface-help"
               />
-            </label>
+            </div>
             <select
               id="surface-select"
               className="kb-connect-oauth-select"

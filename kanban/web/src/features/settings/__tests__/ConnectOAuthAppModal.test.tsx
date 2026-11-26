@@ -837,4 +837,196 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
       expect(headerActions?.getAttribute('style')).toBeNull();
     });
   });
+
+  describe('Default Scope Option with FieldHelpHint (KAN-519)', () => {
+    it('renders [Default] suffix on the Workspace option and defaults to workspace scope', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="acme-engineering"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
+      expect(scopeSelect.value).toBe('workspace');
+
+      const options = Array.from(scopeSelect.querySelectorAll('option'));
+      const workspaceOpt = options.find((opt) => opt.value === 'workspace');
+      expect(workspaceOpt).toBeDefined();
+      expect(workspaceOpt?.textContent).toBe('Workspace (acme-engineering) [Default]');
+      expect(scopeSelect.selectedOptions[0]?.textContent).toBe('Workspace (acme-engineering) [Default]');
+    });
+
+    it('renders Target Scope FieldHelpHint with default selection notice, [Default] in validValues and defaultValue, and checks ARIA', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="kanban"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const scopeHelpBtn = screen.getByTestId('target-scope-help');
+      expect(scopeHelpBtn).toBeDefined();
+      expect(scopeHelpBtn.getAttribute('aria-label')).toBe('Help for Target Scope');
+      expect(scopeHelpBtn.getAttribute('aria-expanded')).toBe('false');
+
+      // Verify HTML semantics: FieldHelpHint is not nested inside label
+      const scopeLabel = screen.getByText('Target Scope');
+      expect(scopeLabel.tagName.toLowerCase()).toBe('label');
+      expect(scopeLabel.contains(scopeHelpBtn)).toBe(false);
+
+      act(() => {
+        scopeHelpBtn.focus();
+      });
+
+      expect(scopeHelpBtn.getAttribute('aria-expanded')).toBe('true');
+      const popover = screen.getByTestId('target-scope-help-popover');
+      expect(popover).toBeDefined();
+
+      // Summary explicitly clarifies default selection
+      expect(popover.textContent).toContain('Workspace scope is selected by default.');
+
+      // Valid values list includes Workspace [Default] with explanation
+      expect(popover.textContent).toContain('Workspace [Default]');
+      expect(popover.textContent).toContain('Access all projects and resources in the active workspace (default).');
+      expect(popover.textContent).toContain('Single Project');
+      expect(popover.textContent).toContain('Server (Global)');
+
+      // Default value row rendered
+      expect(popover.textContent).toContain('Default:');
+      expect(popover.textContent).toContain('Workspace [Default]');
+    });
+
+    it('handles Escape key behavior: closes FieldHelpHint popover without closing the modal', async () => {
+      const handleClose = vi.fn();
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="kanban"
+            onClose={handleClose}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const scopeHelpBtn = screen.getByTestId('target-scope-help');
+
+      // Open popover via focus
+      act(() => {
+        scopeHelpBtn.focus();
+      });
+      expect(screen.getByTestId('target-scope-help-popover')).toBeDefined();
+
+      // Press Escape while focused on trigger button
+      act(() => {
+        fireEvent.keyDown(scopeHelpBtn, { key: 'Escape' });
+      });
+
+      // Popover closes, but modal onClose was NOT called
+      expect(screen.queryByTestId('target-scope-help-popover')).toBeNull();
+      expect(handleClose).not.toHaveBeenCalled();
+
+      // Press Escape again now that popover is closed
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+
+      // Modal onClose is now called
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves non-regression across all scope tier selections and client snippets', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="prod-ws"
+            projectKey="CORE"
+            scopeTier="all"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
+      expect(scopeSelect.value).toBe('workspace');
+      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws');
+
+      // Switch to Single Project
+      act(() => {
+        fireEvent.change(scopeSelect, { target: { value: 'project' } });
+      });
+      expect(scopeSelect.value).toBe('project');
+      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws/p/CORE');
+
+      // Switch to Server
+      act(() => {
+        fireEvent.change(scopeSelect, { target: { value: 'server' } });
+      });
+      expect(scopeSelect.value).toBe('server');
+      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent');
+      expect(screen.getByTestId('mcp-resource-url').textContent).not.toContain('/w/');
+
+      // Switch back to Workspace default
+      act(() => {
+        fireEvent.change(scopeSelect, { target: { value: 'workspace' } });
+      });
+      expect(scopeSelect.value).toBe('workspace');
+      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws');
+
+      // Check snippets across tabs
+      fireEvent.click(screen.getByTestId('tab-antigravity'));
+      expect(screen.getByTestId('command-snippet').textContent).toContain('/mcp/agent/w/prod-ws');
+
+      fireEvent.click(screen.getByTestId('tab-codex'));
+      expect(screen.getByTestId('command-snippet').textContent).toContain('codex mcp add kanban');
+    });
+
+    it('verifies ConnectOAuthAppModal.css contains all 3 theme modes, adjacent gap: 6px, and mobile constraints', async () => {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const cssPath = path.resolve(__dirname, '../ConnectOAuthAppModal.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      // 3 Theme Modes
+      expect(cssContent).toContain(':root {');
+      expect(cssContent).toContain("[data-theme='dark'] {");
+      expect(cssContent).toContain('@media (prefers-color-scheme: dark) {');
+
+      // Adjacent (?) with gap: 6px and margin: 0
+      expect(cssContent).toContain('.kb-connect-oauth-label-row {');
+      expect(cssContent).toContain('.kb-connect-oauth-label-row .field-help-hint {');
+      expect(cssContent).toContain('.kb-connect-oauth-label {');
+      expect(cssContent).toContain('display: inline-flex;');
+      expect(cssContent).toContain('gap: 6px;');
+      expect(cssContent).toContain('.kb-connect-oauth-label .field-help-hint {');
+      expect(cssContent).toContain('margin: 0;');
+
+      // High contrast badge-fg links
+      expect(cssContent).toContain('color: var(--badge-fg);');
+
+      // Mobile unclipped constraints
+      expect(cssContent).toContain('@media (max-width: 640px) {');
+      expect(cssContent).toContain('max-height: min(96vh, 880px);');
+      expect(cssContent).toContain('overflow-y: auto;');
+    });
+  });
 });
