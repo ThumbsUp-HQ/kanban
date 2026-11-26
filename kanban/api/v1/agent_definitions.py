@@ -59,6 +59,7 @@ async def create_agent_definition(
 ) -> AgentDefinitionResponse:
     """Register a new agent definition and AGENT principal."""
     result = await AgentDefinitionService.create(session, caller, workspace, body)
+    await session.commit()
     response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
     return result
 
@@ -108,7 +109,9 @@ async def patch_agent_definition(
 ) -> AgentDefinitionResponse:
     """Update mutable configuration of an existing agent definition."""
     async with timing_floor(floor_ms=25.0):
-        return await AgentDefinitionService.patch(session, caller, agent, body)
+        result = await AgentDefinitionService.patch(session, caller, agent, body)
+        await session.commit()
+        return result
 
 
 @router.delete(
@@ -124,6 +127,7 @@ async def delete_agent_definition(
     """Delete an agent definition, returning 409 if referenced by transition hooks."""
     async with timing_floor(floor_ms=25.0):
         await AgentDefinitionService.delete(session, caller, agent)
+        await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -270,6 +274,7 @@ async def admin_create_agent_definition(
 ) -> AgentDefinitionResponse:
     """Create a new agent definition in caller's workspace under admin authority."""
     result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
+    await session.commit()
     response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
     return result
 
@@ -290,7 +295,9 @@ async def admin_patch_agent_definition(
     session: Session,
 ) -> AgentDefinitionResponse:
     """Update an existing agent definition under admin authority."""
-    return await AgentDefinitionService.patch(session, caller, agent, body)
+    result = await AgentDefinitionService.patch(session, caller, agent, body)
+    await session.commit()
+    return result
 
 
 @admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
@@ -299,6 +306,7 @@ async def admin_delete_agent_definition(
 ) -> Response:
     """Delete an agent definition under admin authority."""
     await AgentDefinitionService.delete(session, caller, agent)
+    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

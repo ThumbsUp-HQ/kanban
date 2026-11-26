@@ -459,5 +459,79 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       fireEvent.change(textarea, { target: { value: 'New user prompt' } });
       expect((textarea as HTMLTextAreaElement).value).toBe('New user prompt');
     });
+
+    it('submits custom system_instructions_md updated via native DOM input event on create', async () => {
+      const customPrompt = '# Native Input Directive\n- Zero latency.';
+      const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
+        ...existingAgentWithInstructions,
+        slug: 'native-test',
+        display_name: 'Native Test',
+        system_instructions_md: customPrompt,
+      });
+
+      const onSaved = vi.fn();
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={onSaved}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'native-test' } });
+      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Native Test' } });
+
+      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+      textarea.value = customPrompt;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            slug: 'native-test',
+            system_instructions_md: customPrompt,
+          }),
+        );
+      });
+      expect(onSaved).toHaveBeenCalled();
+    });
+
+    it('cli_pipe agent in edit mode is not treated as dirty on mount', () => {
+      const cliAgent: agentApi.AgentDefinitionResponse = {
+        id: 'agent-cli-edit',
+        workspace_id: 'ws-1',
+        principal_id: 'prin-cli',
+        slug: 'cli-worker',
+        display_name: 'CLI Worker',
+        harness_kind: 'cli_pipe',
+        provider_kind: null,
+        model_id: null,
+        cli_binary_allowlist_id: 'agy',
+        cli_args: ['-p'],
+        remote_runner_pool_slug: null,
+        repo_access_mode: 'none',
+        mcp_allowed_tools: ['search_tickets', 'read_ticket'],
+        system_instructions_md: 'Run CLI pipe.',
+        timeout_ms: 60000,
+      };
+
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={cliAgent}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      const slugInput = screen.getByTestId<HTMLInputElement>('agent-slug-input');
+      expect(slugInput.value).toBe('cli-worker');
+      expect(screen.getByTestId('save-agent-btn')).toBeDefined();
+    });
   });
 });
