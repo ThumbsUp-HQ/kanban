@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1`  
-**Target Commit:** `48988504` (branch `feat/KAN-418-slice3-mcp-workout`, base `1bbc9981`)  
+**Target Commit:** `ab8f2e17` (branch `feat/KAN-418-slice3-mcp-workout`, base `1bbc9981`)  
 
 ---
 
