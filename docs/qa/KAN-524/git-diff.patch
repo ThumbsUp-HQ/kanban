@@ -1,0 +1,277 @@
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+index 6bed8f69..0097deee 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+@@ -198,6 +198,20 @@
+   border-bottom-color: var(--accent-primary);
+ }
+ 
++:root[data-theme='dark'] .admin-diag-tab--active,
++[data-theme='dark'] .admin-diag-tab--active,
++:where([data-theme='dark']) .admin-diag-tab--active {
++  color: var(--badge-fg);
++  border-bottom-color: var(--badge-fg);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .admin-diag-tab--active {
++    color: var(--badge-fg);
++    border-bottom-color: var(--badge-fg);
++  }
++}
++
+ /* Subsystem Health Cards Grid */
+ .admin-diag-subsystems-grid {
+   display: grid;
+@@ -280,6 +294,10 @@
+   gap: 8px;
+ }
+ 
++.admin-diag-panel-title .field-help-hint {
++  margin-left: 0;
++}
++
+ /* Config Table */
+ .admin-diag-filter-bar {
+   display: flex;
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+index 75e58170..224fa51d 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+@@ -2,8 +2,10 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { AdminDiagnosticsStudio } from './AdminDiagnosticsStudio';
+@@ -872,4 +874,199 @@ describe('AdminDiagnosticsStudio Component', () => {
+     delete (window as unknown as { location?: unknown }).location;
+     (window as unknown as { location: unknown }).location = origLocation;
+   });
++
++  describe('KAN-524: FieldHelpHint on Subsystem Health Header and Dark Mode Tab Contrast', () => {
++    beforeEach(() => {
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const path = extractPath(args);
++        if (path.includes('/api/v1/auth/session/me') || path.includes('/api/v1/auth/me')) {
++          return Promise.resolve(mockAdminUser);
++        }
++        if (path.includes('/api/v1/admin/diagnostics')) {
++          return Promise.resolve(mockDiagnosticsData);
++        }
++        return Promise.resolve({});
++      });
++    });
++
++    it('renders FieldHelpHint trigger on Subsystem Health header with required ARIA attributes', async () => {
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('subsystem-health-help')).toBeDefined();
++      });
++
++      const trigger = screen.getByTestId('subsystem-health-help');
++      expect(trigger.getAttribute('aria-label')).toBe('Help for Subsystem Operational Health');
++      expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
++      expect(trigger.getAttribute('aria-expanded')).toBe('false');
++      expect(trigger.className).toContain('field-help-hint');
++    });
++
++    it('opens popover dialog on keyboard focus and closes on Escape', async () => {
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('subsystem-health-help')).toBeDefined();
++      });
++
++      const trigger = screen.getByTestId('subsystem-health-help');
++
++      // Focus opens the popover
++      act(() => {
++        trigger.focus();
++      });
++
++      await waitFor(() => {
++        expect(screen.getByRole('dialog')).toBeDefined();
++      });
++
++      const dialog = screen.getByRole('dialog');
++      expect(dialog.getAttribute('aria-label')).toBe('Subsystem Operational Health');
++      expect(dialog.textContent).toContain('Real-time operational health telemetry across core subsystems');
++
++      // Verify doc link href
++      const docLink = screen.getByTestId('subsystem-health-help-doc-link');
++      expect(docLink.getAttribute('href')).toBe('/docs/admin-diagnostics-and-link-inspector-studio');
++      expect(trigger.getAttribute('aria-expanded')).toBe('true');
++
++      // Escape closes the popover
++      act(() => {
++        fireEvent.keyDown(trigger, { key: 'Escape' });
++      });
++      expect(screen.queryByTestId('subsystem-health-help-popover')).toBeNull();
++      expect(trigger.getAttribute('aria-expanded')).toBe('false');
++    });
++
++    it('renders FieldHelpHint and active tab across Light and Dark themes', async () => {
++      for (const theme of ['light', 'dark']) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = renderStudio('/admin/diagnostics', 'health');
++
++        await waitFor(() => {
++          expect(screen.getByTestId('subsystem-health-help')).toBeDefined();
++        });
++
++        const activeTab = screen.getByTestId('tab-health');
++        expect(activeTab.className).toContain('admin-diag-tab--active');
++        expect(activeTab.getAttribute('aria-selected')).toBe('true');
++
++        unmount();
++      }
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('verifies CSS rules for field-help-hint margin and active tab dark mode token', () => {
++      const cssPath = path.resolve(__dirname, 'AdminDiagnosticsStudio.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf-8');
++
++      // Adjacent inline (?) with margin-left: 0
++      expect(cssContent).toContain('.admin-diag-panel-title .field-help-hint');
++      expect(cssContent).toMatch(
++        /\.admin-diag-panel-title\s+\.field-help-hint\s*\{[^}]*margin-left:\s*0;/,
++      );
++
++      // Dark mode active tab uses var(--badge-fg)
++      expect(cssContent).toContain(":root[data-theme='dark'] .admin-diag-tab--active");
++      expect(cssContent).toContain('@media (prefers-color-scheme: dark)');
++      expect(cssContent).toMatch(
++        /\[data-theme=['"]dark['"]\][\s\S]*?\.admin-diag-tab--active[\s\S]*?\{[^}]*color:\s*var\(--badge-fg\);/,
++      );
++    });
++
++    it('covers directory statuses (Read-Only and Missing), missing config, and refreshing button state', async () => {
++      const directoryBranchDiagnostics = {
++        ...mockDiagnosticsData,
++        config: [],
++        storage: {
++          ...mockDiagnosticsData.storage,
++          directories: [
++            {
++              name: 'readonly_dir',
++              path: '/var/lib/kanban/data/readonly',
++              exists: true,
++              writable: false,
++              free_bytes: 10737418240,
++              total_bytes: 53687091200,
++            },
++            {
++              name: 'missing_dir',
++              path: '/var/lib/kanban/data/missing',
++              exists: false,
++              writable: false,
++              free_bytes: 0,
++              total_bytes: 0,
++            },
++          ],
++        },
++      };
++
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const p = extractPath(args);
++        if (p.includes('/api/v1/auth/session/me') || p.includes('/api/v1/auth/me')) {
++          return Promise.resolve(mockAdminUser);
++        }
++        if (p.includes('/api/v1/admin/diagnostics')) {
++          return Promise.resolve(directoryBranchDiagnostics);
++        }
++        return Promise.resolve({});
++      });
++
++      renderStudio('/admin/diagnostics', 'runtime');
++
++      await waitFor(() => {
++        expect(screen.getByText('Read-Only')).toBeDefined();
++        expect(screen.getByText('Missing')).toBeDefined();
++      });
++
++      // Also verify config card with empty config falls back to 0
++      expect(screen.getByTestId('summary-card-config').textContent).toContain('0 Settings');
++    });
++
++    it('covers isFetching state showing Refreshing... on button', async () => {
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const p = extractPath(args);
++        if (p.includes('/api/v1/auth/session/me') || p.includes('/api/v1/auth/me')) {
++          return Promise.resolve(mockAdminUser);
++        }
++        if (p.includes('/api/v1/admin/diagnostics')) {
++          return Promise.resolve(mockDiagnosticsData);
++        }
++        return Promise.resolve({});
++      });
++
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('refresh-diagnostics-btn')).toBeDefined();
++      });
++
++      let finishRefetch: () => void = () => {
++        void 0;
++      };
++      const pendingPromise = new Promise((res) => {
++        finishRefetch = () => {
++          res(mockDiagnosticsData);
++        };
++      });
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const p = extractPath(args);
++        if (p.includes('/api/v1/admin/diagnostics')) {
++          return pendingPromise;
++        }
++        return Promise.resolve(mockAdminUser);
++      });
++
++      fireEvent.click(screen.getByTestId('refresh-diagnostics-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('refresh-diagnostics-btn').textContent).toContain('Refreshing...');
++      });
++
++      finishRefetch();
++      await waitFor(() => {
++        expect(screen.getByTestId('refresh-diagnostics-btn').textContent).toContain('Refresh Diagnostics');
++      });
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 5d36fe43..d234b12a 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
+ import { AdminStudioSubnav } from './AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import './AdminDiagnosticsStudio.css';
+ 
+@@ -588,6 +589,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+           <h2 id="health-heading" className="admin-diag-panel-title">
+             <span aria-hidden="true">🏥</span>
+             Subsystem Operational Health (7 Subsystems)
++            <FieldHelpHint
++              title="Subsystem Operational Health"
++              summary="Real-time operational health telemetry across core subsystems (Database, Realtime Hub, Job Worker, Sandbox, Agents, Runners, Rate Limiter) with automated failover and RLS enforcement."
++              docHref="/docs/admin-diagnostics-and-link-inspector-studio"
++              testId="subsystem-health-help"
++            />
+           </h2>
+           <div className="admin-diag-subsystems-grid">
+             {subsystemsList.map((sub) => (
