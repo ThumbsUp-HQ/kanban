@@ -78,12 +78,38 @@ describe('ComposeExportTab', () => {
     fireEvent.click(screen.getByText('Single-Container (Standalone)'));
     expect(screen.getByText('Download docker-compose.standalone.yml')).toBeDefined();
     expect(screen.queryByText('Copy .env.example')).toBeNull();
+    expect(screen.queryByText('5-Network Architecture Summary')).toBeNull();
+    expect(screen.queryByTestId('compose-network-help')).toBeNull();
     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL/i)).toBeDefined();
 
     // Switch back to multi-container mode
     fireEvent.click(screen.getByText('Multi-Container Stack (Production)'));
     expect(screen.getByText('Download docker-compose.yml')).toBeDefined();
     expect(screen.getByText('Copy .env.example')).toBeDefined();
+    expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
+    expect(screen.getByTestId('compose-network-help')).toBeDefined();
+  });
+
+  it('renders 5-Network Architecture Summary with adjacent FieldHelpHint and docHref', () => {
+    render(<ComposeExportTab initialData={mockData} />);
+
+    expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
+    const helpBtn = screen.getByTestId('compose-network-help');
+    expect(helpBtn).toBeDefined();
+    expect(helpBtn.getAttribute('aria-label')).toContain('5-Network Architecture Summary');
+
+    // Focus to open popover
+    fireEvent.focus(helpBtn);
+    const popover = screen.getByTestId('compose-network-help-popover');
+    expect(popover).toBeDefined();
+    expect(popover.textContent).toContain('edge_net');
+    expect(popover.textContent).toContain('app_net');
+    expect(popover.textContent).toContain('data_net');
+    expect(popover.textContent).toContain('sandbox_net');
+    expect(popover.textContent).toContain('egress_llm_net');
+
+    const docLink = screen.getByTestId('compose-network-help-doc-link');
+    expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
   });
 
   it('handles downloading compose yaml in multi and single mode', async () => {

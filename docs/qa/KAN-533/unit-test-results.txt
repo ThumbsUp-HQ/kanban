@@ -1,0 +1,42 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan533-bdb1b209/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/ComposeExportTab.test.tsx (9 tests) 627ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (54 tests) 9111ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 627ms
+     ✓ KANBA-208: handles verify and restore failure branches with API errors and file upload 328ms
+     ✓ KANBA-208: handles verify and restore using selectedSnapshotFilename and network exception branches 371ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 1089ms
+   ✓ ComposeExportTab (30)
+     ✓ triggers manual backup run and verifies snapshot restoration 554ms
+     ✓ handles backup verification failure and invalid restore confirmation text 301ms
+     ✓ covers restore from uploaded file with passphrase and manifest fallback 356ms
+     ✓ handles restore failure with server error detail and string rejection 359ms
+
+ Test Files  2 passed (2)
+      Tests  63 passed (63)
+   Start at  17:36:58
+   Duration  11.37s (tests 75%, environment 18%, import 5%, transform 1%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...eExportTab.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE: 0

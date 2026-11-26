@@ -8,6 +8,7 @@ import { safeCopyToClipboard } from '../../utils/uuid';
 import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 
 export interface ComposeExportData {
   readonly filename: string;
@@ -198,17 +199,47 @@ export function ComposeExportTab({
       </div>
 
       {composeMode === 'multi' ? (
-        <div className="standalone-panel__checklist-card">
-          <h4 className="standalone-panel__checklist-title">
-            PostgreSQL 16 Promotion Runbook:
-          </h4>
-          <pre className="standalone-panel__checklist-pre">
+        <>
+          <div className="standalone-panel__checklist-card">
+            <div className="standalone-panel__compose-network-header">
+              <h4 className="standalone-panel__checklist-title">
+                5-Network Architecture Summary
+              </h4>
+              <FieldHelpHint
+                title="5-Network Architecture Summary"
+                summary="Production Compose stacks isolate containers across 5 tiers: edge_net (reverse proxy ingress & TLS), app_net (application runtime & internal plane), data_net (PostgreSQL 16 DB), sandbox_net (air-gapped script sandbox), and egress_llm_net (outbound AI APIs)."
+                validValues={{
+                  edge_net: 'Reverse proxy public ingress & TLS termination',
+                  app_net: 'Application runtime & internal control plane',
+                  data_net: 'Isolated PostgreSQL 16 DB tier (no internet route)',
+                  sandbox_net: 'Air-gapped custom script sandbox (IPC only)',
+                  egress_llm_net: 'Restricted outbound HTTPS to configured AI APIs',
+                }}
+                docHref="/docs/system-topology-and-multi-container-architecture"
+                testId="compose-network-help"
+              />
+            </div>
+            <pre className="standalone-panel__checklist-pre">
+{`• edge_net: Reverse proxy public ingress & TLS termination
+• app_net: Application runtime & internal control plane
+• data_net: Isolated PostgreSQL 16 database tier (no internet route)
+• sandbox_net: Air-gapped custom script sandbox (IPC only)
+• egress_llm_net: Restricted outbound HTTPS to configured AI APIs`}
+            </pre>
+          </div>
+
+          <div className="standalone-panel__checklist-card">
+            <h4 className="standalone-panel__checklist-title">
+              PostgreSQL 16 Promotion Runbook:
+            </h4>
+            <pre className="standalone-panel__checklist-pre">
 {`1. Generate secrets
 2. Download encrypted backup (.kbbak)
 3. docker compose up -d postgres
 4. kanban-ctl restore / pg_restore into external PostgreSQL 16`}
-          </pre>
-        </div>
+            </pre>
+          </div>
+        </>
       ) : (
         <div className="standalone-panel__checklist-card">
           <h4 className="standalone-panel__checklist-title">

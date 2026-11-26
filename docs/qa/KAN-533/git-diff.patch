@@ -1,0 +1,330 @@
+diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+index 469c6484..2330c140 100644
+--- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
++++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
+@@ -8,6 +8,7 @@ import { safeCopyToClipboard } from '../../utils/uuid';
+ import { apiFetch } from '../../api/client';
+ import { ApiProblem } from '../../api/problem';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ 
+ export interface ComposeExportData {
+   readonly filename: string;
+@@ -198,17 +199,47 @@ export function ComposeExportTab({
+       </div>
+ 
+       {composeMode === 'multi' ? (
+-        <div className="standalone-panel__checklist-card">
+-          <h4 className="standalone-panel__checklist-title">
+-            PostgreSQL 16 Promotion Runbook:
+-          </h4>
+-          <pre className="standalone-panel__checklist-pre">
++        <>
++          <div className="standalone-panel__checklist-card">
++            <div className="standalone-panel__compose-network-header">
++              <h4 className="standalone-panel__checklist-title">
++                5-Network Architecture Summary
++              </h4>
++              <FieldHelpHint
++                title="5-Network Architecture Summary"
++                summary="Production Compose stacks isolate containers across 5 tiers: edge_net (reverse proxy ingress & TLS), app_net (application runtime & internal plane), data_net (PostgreSQL 16 DB), sandbox_net (air-gapped script sandbox), and egress_llm_net (outbound AI APIs)."
++                validValues={{
++                  edge_net: 'Reverse proxy public ingress & TLS termination',
++                  app_net: 'Application runtime & internal control plane',
++                  data_net: 'Isolated PostgreSQL 16 DB tier (no internet route)',
++                  sandbox_net: 'Air-gapped custom script sandbox (IPC only)',
++                  egress_llm_net: 'Restricted outbound HTTPS to configured AI APIs',
++                }}
++                docHref="/docs/system-topology-and-multi-container-architecture"
++                testId="compose-network-help"
++              />
++            </div>
++            <pre className="standalone-panel__checklist-pre">
++{`• edge_net: Reverse proxy public ingress & TLS termination
++• app_net: Application runtime & internal control plane
++• data_net: Isolated PostgreSQL 16 database tier (no internet route)
++• sandbox_net: Air-gapped custom script sandbox (IPC only)
++• egress_llm_net: Restricted outbound HTTPS to configured AI APIs`}
++            </pre>
++          </div>
++
++          <div className="standalone-panel__checklist-card">
++            <h4 className="standalone-panel__checklist-title">
++              PostgreSQL 16 Promotion Runbook:
++            </h4>
++            <pre className="standalone-panel__checklist-pre">
+ {`1. Generate secrets
+ 2. Download encrypted backup (.kbbak)
+ 3. docker compose up -d postgres
+ 4. kanban-ctl restore / pg_restore into external PostgreSQL 16`}
+-          </pre>
+-        </div>
++            </pre>
++          </div>
++        </>
+       ) : (
+         <div className="standalone-panel__checklist-card">
+           <h4 className="standalone-panel__checklist-title">
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.css b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+index 58230ed9..a01825b2 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.css
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+@@ -768,3 +768,17 @@
+   }
+ }
+ 
++/* 5-Network Architecture Summary Header (KAN-533) */
++.standalone-panel__compose-network-header {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 6px;
++  max-width: 100%;
++}
++
++.standalone-panel__compose-network-header .field-help-hint {
++  margin: 0;
++}
++
++
+diff --git a/kanban/web/src/features/standalone/__tests__/ComposeExportTab.test.tsx b/kanban/web/src/features/standalone/__tests__/ComposeExportTab.test.tsx
+index 8fd9a384..7ca4bde8 100644
+--- a/kanban/web/src/features/standalone/__tests__/ComposeExportTab.test.tsx
++++ b/kanban/web/src/features/standalone/__tests__/ComposeExportTab.test.tsx
+@@ -78,12 +78,38 @@ describe('ComposeExportTab', () => {
+     fireEvent.click(screen.getByText('Single-Container (Standalone)'));
+     expect(screen.getByText('Download docker-compose.standalone.yml')).toBeDefined();
+     expect(screen.queryByText('Copy .env.example')).toBeNull();
++    expect(screen.queryByText('5-Network Architecture Summary')).toBeNull();
++    expect(screen.queryByTestId('compose-network-help')).toBeNull();
+     expect(screen.getByText(/Runs 👍kanban and embedded PostgreSQL/i)).toBeDefined();
+ 
+     // Switch back to multi-container mode
+     fireEvent.click(screen.getByText('Multi-Container Stack (Production)'));
+     expect(screen.getByText('Download docker-compose.yml')).toBeDefined();
+     expect(screen.getByText('Copy .env.example')).toBeDefined();
++    expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
++    expect(screen.getByTestId('compose-network-help')).toBeDefined();
++  });
++
++  it('renders 5-Network Architecture Summary with adjacent FieldHelpHint and docHref', () => {
++    render(<ComposeExportTab initialData={mockData} />);
++
++    expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
++    const helpBtn = screen.getByTestId('compose-network-help');
++    expect(helpBtn).toBeDefined();
++    expect(helpBtn.getAttribute('aria-label')).toContain('5-Network Architecture Summary');
++
++    // Focus to open popover
++    fireEvent.focus(helpBtn);
++    const popover = screen.getByTestId('compose-network-help-popover');
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('edge_net');
++    expect(popover.textContent).toContain('app_net');
++    expect(popover.textContent).toContain('data_net');
++    expect(popover.textContent).toContain('sandbox_net');
++    expect(popover.textContent).toContain('egress_llm_net');
++
++    const docLink = screen.getByTestId('compose-network-help-doc-link');
++    expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
+   });
+ 
+   it('handles downloading compose yaml in multi and single mode', async () => {
+diff --git a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+index 03384313..674cb564 100644
+--- a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
++++ b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+@@ -3484,5 +3484,193 @@ describe('ComposeExportTab', () => {
+         document.documentElement.removeAttribute('data-theme');
+       });
+     });
++
++    describe('KAN-533: 5-Network Architecture Summary FieldHelpHint in Compose Tab', () => {
++      it('renders 5-Network Architecture Summary heading and adjacent FieldHelpHint in compose tab', async () => {
++        const testClient = new QueryClient({
++          defaultOptions: { queries: { retry: false } },
++        });
++        const adminStatus: SystemStatus = {
++          deployment_mode: 'standalone',
++          is_server_admin: true,
++          persistent_volume: true,
++          air_gap_mode: false,
++          local_llm_endpoint_host: null,
++        };
++
++        global.fetch = vi.fn().mockImplementation((url: string) => {
++          if (url.includes('/compose-export')) {
++            return Promise.resolve(
++              new Response(
++                JSON.stringify({
++                  filename: 'docker-compose.yml',
++                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
++                  env_template: 'POSTGRES_PASSWORD=secret',
++                  migration_steps_markdown: '# Runbook',
++                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
++                }),
++                { status: 200, headers: { 'Content-Type': 'application/json' } },
++              ),
++            );
++          }
++          return Promise.resolve(new Response('{}', { status: 200 }));
++        });
++
++        render(
++          <QueryClientProvider client={testClient}>
++            <StandaloneStatusPanel
++              onClose={vi.fn()}
++              initialStatus={adminStatus}
++              initialTab="compose"
++            />
++          </QueryClientProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
++        });
++
++        const helpBtn = screen.getByTestId('compose-network-help');
++        expect(helpBtn).toBeDefined();
++        expect(helpBtn.getAttribute('aria-label')).toContain('5-Network Architecture Summary');
++
++        // Verify container header has class .standalone-panel__compose-network-header
++        const header = helpBtn.closest('.standalone-panel__compose-network-header');
++        expect(header).toBeDefined();
++
++        // Focus hint button
++        act(() => {
++          helpBtn.focus();
++        });
++
++        const popover = screen.getByTestId('compose-network-help-popover');
++        expect(popover).toBeDefined();
++        expect(popover.textContent).toContain('edge_net');
++        expect(popover.textContent).toContain('app_net');
++        expect(popover.textContent).toContain('data_net');
++        expect(popover.textContent).toContain('sandbox_net');
++        expect(popover.textContent).toContain('egress_llm_net');
++
++        const docLink = screen.getByTestId('compose-network-help-doc-link');
++        expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
++      });
++
++      it('closes compose network FieldHelpHint popover on Escape without closing StandaloneStatusPanel', async () => {
++        const testClient = new QueryClient({
++          defaultOptions: { queries: { retry: false } },
++        });
++        const adminStatus: SystemStatus = {
++          deployment_mode: 'standalone',
++          is_server_admin: true,
++          persistent_volume: true,
++          air_gap_mode: false,
++          local_llm_endpoint_host: null,
++        };
++        const onClose = vi.fn();
++
++        global.fetch = vi.fn().mockImplementation((url: string) => {
++          if (url.includes('/compose-export')) {
++            return Promise.resolve(
++              new Response(
++                JSON.stringify({
++                  filename: 'docker-compose.yml',
++                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
++                  env_template: 'POSTGRES_PASSWORD=secret',
++                  migration_steps_markdown: '# Runbook',
++                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
++                }),
++                { status: 200, headers: { 'Content-Type': 'application/json' } },
++              ),
++            );
++          }
++          return Promise.resolve(new Response('{}', { status: 200 }));
++        });
++
++        render(
++          <QueryClientProvider client={testClient}>
++            <StandaloneStatusPanel
++              onClose={onClose}
++              initialStatus={adminStatus}
++              initialTab="compose"
++            />
++          </QueryClientProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('compose-network-help')).toBeDefined();
++        });
++
++        const helpBtn = screen.getByTestId('compose-network-help');
++        act(() => {
++          helpBtn.focus();
++        });
++
++        expect(screen.getByTestId('compose-network-help-popover')).toBeDefined();
++
++        // Press Escape
++        fireEvent.keyDown(helpBtn, { key: 'Escape' });
++
++        expect(screen.queryByTestId('compose-network-help-popover')).toBeNull();
++        expect(onClose).not.toHaveBeenCalled();
++      });
++
++      it('renders 5-Network Architecture Summary cleanly in both light and dark theme modes', async () => {
++        const testClient = new QueryClient({
++          defaultOptions: { queries: { retry: false } },
++        });
++        const adminStatus: SystemStatus = {
++          deployment_mode: 'standalone',
++          is_server_admin: true,
++          persistent_volume: true,
++          air_gap_mode: false,
++          local_llm_endpoint_host: null,
++        };
++
++        global.fetch = vi.fn().mockImplementation((url: string) => {
++          if (url.includes('/compose-export')) {
++            return Promise.resolve(
++              new Response(
++                JSON.stringify({
++                  filename: 'docker-compose.yml',
++                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
++                  env_template: 'POSTGRES_PASSWORD=secret',
++                  migration_steps_markdown: '# Runbook',
++                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
++                }),
++                { status: 200, headers: { 'Content-Type': 'application/json' } },
++              ),
++            );
++          }
++          return Promise.resolve(new Response('{}', { status: 200 }));
++        });
++
++        const { container } = render(
++          <QueryClientProvider client={testClient}>
++            <StandaloneStatusPanel
++              onClose={vi.fn()}
++              initialStatus={adminStatus}
++              initialTab="compose"
++            />
++          </QueryClientProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('compose-network-help')).toBeDefined();
++        });
++
++        // Test Light Mode
++        document.documentElement.setAttribute('data-theme', 'light');
++        expect(container.querySelector('.standalone-panel__compose-network-header')).toBeDefined();
++        expect(screen.getByTestId('compose-network-help')).toBeDefined();
++
++        // Test Dark Mode
++        document.documentElement.setAttribute('data-theme', 'dark');
++        expect(container.querySelector('.standalone-panel__compose-network-header')).toBeDefined();
++        expect(screen.getByTestId('compose-network-help')).toBeDefined();
++
++        // Cleanup
++        document.documentElement.removeAttribute('data-theme');
++      });
++    });
+   });
+ });

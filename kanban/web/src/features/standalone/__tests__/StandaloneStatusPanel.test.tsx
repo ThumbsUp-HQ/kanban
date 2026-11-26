@@ -3484,5 +3484,193 @@ describe('ComposeExportTab', () => {
         document.documentElement.removeAttribute('data-theme');
       });
     });
+
+    describe('KAN-533: 5-Network Architecture Summary FieldHelpHint in Compose Tab', () => {
+      it('renders 5-Network Architecture Summary heading and adjacent FieldHelpHint in compose tab', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/compose-export')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  filename: 'docker-compose.yml',
+                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
+                  env_template: 'POSTGRES_PASSWORD=secret',
+                  migration_steps_markdown: '# Runbook',
+                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={vi.fn()}
+              initialStatus={adminStatus}
+              initialTab="compose"
+            />
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByText('5-Network Architecture Summary')).toBeDefined();
+        });
+
+        const helpBtn = screen.getByTestId('compose-network-help');
+        expect(helpBtn).toBeDefined();
+        expect(helpBtn.getAttribute('aria-label')).toContain('5-Network Architecture Summary');
+
+        // Verify container header has class .standalone-panel__compose-network-header
+        const header = helpBtn.closest('.standalone-panel__compose-network-header');
+        expect(header).toBeDefined();
+
+        // Focus hint button
+        act(() => {
+          helpBtn.focus();
+        });
+
+        const popover = screen.getByTestId('compose-network-help-popover');
+        expect(popover).toBeDefined();
+        expect(popover.textContent).toContain('edge_net');
+        expect(popover.textContent).toContain('app_net');
+        expect(popover.textContent).toContain('data_net');
+        expect(popover.textContent).toContain('sandbox_net');
+        expect(popover.textContent).toContain('egress_llm_net');
+
+        const docLink = screen.getByTestId('compose-network-help-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
+      });
+
+      it('closes compose network FieldHelpHint popover on Escape without closing StandaloneStatusPanel', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+        const onClose = vi.fn();
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/compose-export')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  filename: 'docker-compose.yml',
+                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
+                  env_template: 'POSTGRES_PASSWORD=secret',
+                  migration_steps_markdown: '# Runbook',
+                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={onClose}
+              initialStatus={adminStatus}
+              initialTab="compose"
+            />
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('compose-network-help')).toBeDefined();
+        });
+
+        const helpBtn = screen.getByTestId('compose-network-help');
+        act(() => {
+          helpBtn.focus();
+        });
+
+        expect(screen.getByTestId('compose-network-help-popover')).toBeDefined();
+
+        // Press Escape
+        fireEvent.keyDown(helpBtn, { key: 'Escape' });
+
+        expect(screen.queryByTestId('compose-network-help-popover')).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+      });
+
+      it('renders 5-Network Architecture Summary cleanly in both light and dark theme modes', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/compose-export')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  filename: 'docker-compose.yml',
+                  compose_yaml: 'services:\n  kanban:\n    image: kanban:latest',
+                  env_template: 'POSTGRES_PASSWORD=secret',
+                  migration_steps_markdown: '# Runbook',
+                  single_container_compose_yaml: 'services:\n  app:\n    image: kanban:latest',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        const { container } = render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={vi.fn()}
+              initialStatus={adminStatus}
+              initialTab="compose"
+            />
+          </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('compose-network-help')).toBeDefined();
+        });
+
+        // Test Light Mode
+        document.documentElement.setAttribute('data-theme', 'light');
+        expect(container.querySelector('.standalone-panel__compose-network-header')).toBeDefined();
+        expect(screen.getByTestId('compose-network-help')).toBeDefined();
+
+        // Test Dark Mode
+        document.documentElement.setAttribute('data-theme', 'dark');
+        expect(container.querySelector('.standalone-panel__compose-network-header')).toBeDefined();
+        expect(screen.getByTestId('compose-network-help')).toBeDefined();
+
+        // Cleanup
+        document.documentElement.removeAttribute('data-theme');
+      });
+    });
   });
 });
