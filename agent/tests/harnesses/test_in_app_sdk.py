@@ -352,12 +352,15 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
     assert redacted["nested"]["num"] == 42
     assert redacted["clean"] == "hello"
 
+    captured_requests: list[StructuredRequest[Any]] = []
+
     class GenericMockProvider:
         @property
         def residency_tier(self) -> str:
             return "fixture"
 
         async def generate_structured(self, req: StructuredRequest[Any]) -> StructuredResponse[Any]:
+            captured_requests.append(req)
             payload = TransitionVerdictPayload(
                 decision="approve",
                 reason_markdown="General approval reason",
@@ -386,9 +389,55 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
     raw_output = await harness.run(ctx, agent_def)
     result = parse_verdict_output(raw_output, ctx)
     assert result.decision.decision == "approve"
+    assert len(captured_requests) == 1
+    assert captured_requests[0].max_output_tokens == 4096
     assert harness.last_report is not None
     assert harness.last_report.prompt_tokens == 100
     assert harness.last_report.completion_tokens == 50
+
+
+async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
+    """Verify InAppSdkHarness.run() passes max_output_tokens == 4096 (>= 4096) on StructuredRequest."""
+    from agent.harnesses.in_app_sdk import (
+        DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
+        TransitionVerdictPayload,
+    )
+    from agent.providers.base import StructuredRequest, StructuredResponse
+
+    captured: list[StructuredRequest[Any]] = []
+
+    class MockProvider:
+        @property
+        def residency_tier(self) -> str:
+            return "fixture"
+
+        async def generate_structured(self, req: StructuredRequest[Any]) -> StructuredResponse[Any]:
+            captured.append(req)
+            payload = TransitionVerdictPayload(
+                decision="approve",
+                reason_markdown="Token limit check passed",
+            )
+            return StructuredResponse(
+                parsed=payload,
+                raw_json=payload.model_dump_json(by_alias=True),
+                tool_trace=(),
+                ttft_ms=1.0,
+                total_latency_ms=2.0,
+                prompt_tokens=10,
+                completion_tokens=5,
+            )
+
+    harness = InAppSdkHarness(provider=MockProvider())  # type: ignore[arg-type]
+    execution = {"id": "exec-token-test", "project_key": "KAN", "allowed_mutable_fields": ()}
+    issue = {"key": "KAN-435", "summary": "Token test"}
+    agent_def = {"slug": "token-tester", "system_instructions_md": "Check tokens"}
+    ctx = build_transition_context(execution, issue, agent_def)
+
+    await harness.run(ctx, agent_def)
+    assert len(captured) == 1
+    assert captured[0].max_output_tokens == DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS
+    assert captured[0].max_output_tokens == 4096
+    assert captured[0].max_output_tokens >= 4096
 
 
 async def test_in_app_sdk_invalid_repo_and_undeclared_tools() -> None:

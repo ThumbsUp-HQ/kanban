@@ -904,3 +904,73 @@ async def test_ollama_generate_structured_strips_think_tags() -> None:
     assert res.parsed.ok is True
     assert "<think>" not in res.raw_json
     assert res.raw_json == '{"echo": "verified", "ok": true}'
+
+
+@pytest.mark.asyncio
+async def test_ollama_generate_structured_sends_default_num_predict() -> None:
+    """Verify OllamaProvider.generate_structured() sends num_predict=4096 by default."""
+    from typing import Any  # noqa: PLC0415
+
+    captured_payload: dict[str, Any] = {}
+
+    class MockCaptureTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal captured_payload
+            captured_payload = json.loads(request.content.decode("utf-8"))
+            resp_data = {
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps({"echo": "ok", "ok": True}),
+                },
+                "prompt_eval_count": 10,
+                "eval_count": 5,
+            }
+            return httpx.Response(200, json=resp_data)
+
+    settings = _make_settings()
+    provider = OllamaProvider(settings, transport=MockCaptureTransport())
+
+    req = StructuredRequest(
+        model="qwen2.5-coder:7b",
+        prompt="Hello",
+        response_model=DummyStructuredOutput,
+    )
+
+    resp = await provider.generate_structured(req)
+    assert resp.parsed.ok is True
+    assert captured_payload["options"]["num_predict"] == 4096
+
+
+@pytest.mark.asyncio
+async def test_ollama_generate_structured_done_reason_length_diagnostic() -> None:
+    """Verify done_reason=length on JSON error raises ProviderSchemaError with diagnostic."""
+
+    class MockLengthTruncatedTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
+            resp_data = {
+                "done_reason": "length",
+                "message": {
+                    "role": "assistant",
+                    "content": '{"decision":"approve","cited_files":["foo',
+                },
+                "prompt_eval_count": 100,
+                "eval_count": 4096,
+            }
+            return httpx.Response(200, json=resp_data)
+
+    settings = _make_settings()
+    provider = OllamaProvider(settings, transport=MockLengthTruncatedTransport())
+
+    req = StructuredRequest(
+        model="qwen2.5-coder:7b",
+        prompt="Classify changes",
+        response_model=DummyStructuredOutput,
+    )
+
+    with pytest.raises(ProviderSchemaError) as exc_info:
+        await provider.generate_structured(req)
+
+    err_msg = str(exc_info.value)
+    assert "done_reason=length" in err_msg
+    assert "num_predict=4096" in err_msg
+    assert '{"decision":"approve","cited_files":["foo' in err_msg

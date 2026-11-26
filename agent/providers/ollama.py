@@ -402,10 +402,17 @@ class OllamaProvider(LLMProvider):
             msg_obj = data.get("message", {})
             content_str = str(msg_obj.get("content", ""))
             cleaned_content = strip_think_tags(content_str)
+            done_reason = data.get("done_reason")
 
             try:
                 parsed_json = json.loads(cleaned_content)
             except json.JSONDecodeError as err:
+                if done_reason == "length":
+                    msg = (
+                        f"Ollama structured output truncated: done_reason=length "
+                        f"(truncated at num_predict={req.max_output_tokens}): {content_str!r}"
+                    )
+                    raise ProviderSchemaError(msg) from err
                 msg = f"Ollama message content is not valid JSON: {content_str!r}"
                 raise ProviderSchemaError(msg) from err
 

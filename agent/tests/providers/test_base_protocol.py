@@ -399,3 +399,48 @@ def test_runtime_protocols() -> None:
         assert res.exit_code == 0
 
     asyncio.run(_exercise())
+
+
+def test_structured_request_token_bounds_and_defaults() -> None:
+    """Verify StructuredRequest defaults max_output_tokens to 4096 and enforces bounds."""
+    req_default = StructuredRequest(
+        model="reasoning-model",
+        prompt="Classify code",
+        response_model=DummyOutput,
+    )
+    assert req_default.max_output_tokens == 4096
+
+    req_min = StructuredRequest(
+        model="m",
+        prompt="p",
+        response_model=DummyOutput,
+        max_output_tokens=1,
+    )
+    assert req_min.max_output_tokens == 1
+
+    req_max = StructuredRequest(
+        model="m",
+        prompt="p",
+        response_model=DummyOutput,
+        max_output_tokens=32768,
+    )
+    assert req_max.max_output_tokens == 32768
+
+    with pytest.raises(ValidationError):
+        StructuredRequest(
+            model="m",
+            prompt="p",
+            response_model=DummyOutput,
+            max_output_tokens=0,
+        )
+
+    with pytest.raises(ValidationError):
+        StructuredRequest(
+            model="m",
+            prompt="p",
+            response_model=DummyOutput,
+            max_output_tokens=32769,
+        )
+
+    comp_default = CompletionRequest(model="m", prompt="p")
+    assert comp_default.max_output_tokens == 256
