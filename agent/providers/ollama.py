@@ -76,7 +76,7 @@ class OllamaSettings(BaseModel):
     model_allowlist: tuple[str, ...] = Field(min_length=1)
     keep_alive: str = "30m"
     connect_timeout_s: float = Field(default=2.0, ge=0.1, le=10.0)
-    read_timeout_s: float = Field(default=30.0, ge=1.0, le=300.0)
+    read_timeout_s: float = Field(default=30.0, ge=1.0, le=600.0)
     mtls_client_cert_path: Path | None = None
     mtls_client_key_path: Path | None = None
     ca_bundle_path: Path | None = None

@@ -1,0 +1,24 @@
+# Copyright 2026 Kanban Platform Contributors
+# Apache-2.0 License. See LICENSE for details.
+"""Migration lifecycle test for p6_23_gate_timeouts_and_project_defaults."""
+
+import pytest
+
+from database.tests.migration_harness import MigrationHarness
+
+
+@pytest.mark.migration
+async def test_p6_23_gate_timeouts_and_project_defaults_migration_lifecycle() -> None:
+    """Verify p6_23_gate_timeouts_and_project_defaults upgrade and downgrade revert cleanly."""
+    async with MigrationHarness() as harness:
+        prev_rev = harness.previous_of("p6_23_gate_timeouts_and_project_defaults")
+        assert prev_rev == "p6_22_mcp_api_keys_capability_mask_boundary"
+
+        # 1. Upgrade to p6_23_gate_timeouts_and_project_defaults
+        await harness.upgrade("p6_23_gate_timeouts_and_project_defaults")
+
+        # 2. Downgrade to previous revision
+        await harness.downgrade(prev_rev)
+
+        # 3. Upgrade back to head
+        await harness.upgrade("p6_23_gate_timeouts_and_project_defaults")

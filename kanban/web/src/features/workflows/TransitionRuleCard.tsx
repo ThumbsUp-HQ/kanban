@@ -12,6 +12,7 @@ import type { AgentDefinitionSummary, TransitionRule, WorkflowHook } from './api
 export interface TransitionRuleCardProps {
   rule: TransitionRule;
   projectKey: string;
+  projectDefaultTimeoutMs?: number | null | undefined;
   agents?: AgentDefinitionSummary[] | undefined;
   onReorder: (
     transition: { from_state: string | null; to_state: string },
@@ -29,6 +30,7 @@ export interface TransitionRuleCardProps {
 export function TransitionRuleCard({
   rule,
   projectKey,
+  projectDefaultTimeoutMs,
   agents,
   onReorder,
   onToggle,
@@ -177,6 +179,7 @@ export function TransitionRuleCard({
               index={index}
               total={effectiveHooks.length}
               projectKey={projectKey}
+              projectDefaultTimeoutMs={projectDefaultTimeoutMs}
               agents={agents}
               onMove={(id, dir) => {
                 void handleKeyboardMove(id, dir);

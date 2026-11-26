@@ -96,7 +96,7 @@ class GeminiSettings(BaseModel):
         "text-embedding-004",
     )
     safety_settings: tuple[SafetySetting, ...] = DEFAULT_SAFETY_SETTINGS
-    timeout_s: float = Field(default=30.0, ge=1.0, le=300.0)
+    timeout_s: float = Field(default=30.0, ge=1.0, le=600.0)
 
     def _validate_ai_studio(self) -> None:
         if not self.api_key or not self.api_key.get_secret_value().strip():

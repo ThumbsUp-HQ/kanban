@@ -464,21 +464,21 @@ async def test_case_7_boundary_and_validation(
     )
     assert resp_t999.status_code == 422, resp_t999.text
 
-    # 4. Timeout 300001 rejected
-    resp_t300001 = await client.post(
+    # 4. Timeout 600001 rejected
+    resp_t600001 = await client.post(
         f"/api/v1/workspaces/{api_env.workspace_id}/agent-definitions",
         json={
-            "slug": "t300001-agent",
-            "display_name": "Timeout 300001",
+            "slug": "t600001-agent",
+            "display_name": "Timeout 600001",
             "harness_kind": "cli_pipe",
             "cli_binary_allowlist_id": "agy",
             "cli_args": ["-p"],
-            "timeout_ms": 300001,
+            "timeout_ms": 600001,
         },
     )
-    assert resp_t300001.status_code == 422, resp_t300001.text
+    assert resp_t600001.status_code == 422, resp_t600001.text
 
-    # 5. Timeout 1000 and 300000 accepted
+    # 5. Timeout 1000 and 600000 accepted
     resp_t1000 = await client.post(
         f"/api/v1/workspaces/{api_env.workspace_id}/agent-definitions",
         json={
@@ -493,19 +493,19 @@ async def test_case_7_boundary_and_validation(
     assert resp_t1000.status_code == 201, resp_t1000.text
     assert resp_t1000.json()["timeout_ms"] == 1000
 
-    resp_t300000 = await client.post(
+    resp_t600000 = await client.post(
         f"/api/v1/workspaces/{api_env.workspace_id}/agent-definitions",
         json={
-            "slug": "t300000-agent",
-            "display_name": "Timeout 300000",
+            "slug": "t600000-agent",
+            "display_name": "Timeout 600000",
             "harness_kind": "cli_pipe",
             "cli_binary_allowlist_id": "agy",
             "cli_args": ["-p"],
-            "timeout_ms": 300000,
+            "timeout_ms": 600000,
         },
     )
-    assert resp_t300000.status_code == 201, resp_t300000.text
-    assert resp_t300000.json()["timeout_ms"] == 300000
+    assert resp_t600000.status_code == 201, resp_t600000.text
+    assert resp_t600000.json()["timeout_ms"] == 600000
 
     # 6. mcp_allowed_tools containing update_ticket rejected
     resp_tools = await client.post(

@@ -11,6 +11,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 _MAX_KEY_LENGTH = 512
+_MIN_TIMEOUT_MS = 1000
+_MAX_TIMEOUT_MS = 600000
 
 
 class ProviderConfigPublic(BaseModel):
@@ -88,6 +90,19 @@ class ProviderConfigCreate(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("settings", "settings_json", check_fields=False)
+    @classmethod
+    def _validate_settings_timeouts(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is None:
+            return v
+        for key in ("timeout_ms", "cutoff_timeout_ms"):
+            if key in v and v[key] is not None:
+                val = v[key]
+                if not isinstance(val, int) or val < _MIN_TIMEOUT_MS or val > _MAX_TIMEOUT_MS:
+                    msg = f"settings.{key} must be between {_MIN_TIMEOUT_MS} and {_MAX_TIMEOUT_MS}"
+                    raise ValueError(msg)
+        return v
+
 
 class ProviderConfigUpdate(BaseModel):
     """Payload for updating an existing AI provider configuration."""
@@ -123,6 +138,19 @@ class ProviderConfigUpdate(BaseModel):
         if v is not None and len(v.get_secret_value()) > _MAX_KEY_LENGTH:
             msg = f"api_key length exceeds {_MAX_KEY_LENGTH} characters"
             raise ValueError(msg)
+        return v
+
+    @field_validator("settings", "settings_json", check_fields=False)
+    @classmethod
+    def _validate_settings_timeouts(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is None:
+            return v
+        for key in ("timeout_ms", "cutoff_timeout_ms"):
+            if key in v and v[key] is not None:
+                val = v[key]
+                if not isinstance(val, int) or val < _MIN_TIMEOUT_MS or val > _MAX_TIMEOUT_MS:
+                    msg = f"settings.{key} must be between {_MIN_TIMEOUT_MS} and {_MAX_TIMEOUT_MS}"
+                    raise ValueError(msg)
         return v
 
 
@@ -191,6 +219,19 @@ class ProviderProbeRequest(BaseModel):
             raise ValueError(msg)
         return v
 
+    @field_validator("settings", "settings_json", check_fields=False)
+    @classmethod
+    def _validate_settings_timeouts(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is None:
+            return v
+        for key in ("timeout_ms", "cutoff_timeout_ms"):
+            if key in v and v[key] is not None:
+                val = v[key]
+                if not isinstance(val, int) or val < _MIN_TIMEOUT_MS or val > _MAX_TIMEOUT_MS:
+                    msg = f"settings.{key} must be between {_MIN_TIMEOUT_MS} and {_MAX_TIMEOUT_MS}"
+                    raise ValueError(msg)
+        return v
+
 
 class SavedProviderProbeRequest(BaseModel):
     """Optional payload when probing or testing an existing saved provider."""
@@ -210,6 +251,19 @@ class SavedProviderProbeRequest(BaseModel):
         if v is not None and len(v.get_secret_value()) > _MAX_KEY_LENGTH:
             msg = f"api_key length exceeds {_MAX_KEY_LENGTH} characters"
             raise ValueError(msg)
+        return v
+
+    @field_validator("settings", "settings_json", check_fields=False)
+    @classmethod
+    def _validate_settings_timeouts(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is None:
+            return v
+        for key in ("timeout_ms", "cutoff_timeout_ms"):
+            if key in v and v[key] is not None:
+                val = v[key]
+                if not isinstance(val, int) or val < _MIN_TIMEOUT_MS or val > _MAX_TIMEOUT_MS:
+                    msg = f"settings.{key} must be between {_MIN_TIMEOUT_MS} and {_MAX_TIMEOUT_MS}"
+                    raise ValueError(msg)
         return v
 
 

@@ -789,7 +789,7 @@ function AiProviderEditorContent({
               title="Cutoff Timeout (ms)"
               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
               defaultValue="30000 ms (30 seconds)"
-              validValues={['1000 to 300000 (Default: 30000)']}
+              validValues={['1000 to 600000 (Default: 30000, up to 10 minutes)']}
               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
               testId="provider-timeout-help"
             />
@@ -798,7 +798,7 @@ function AiProviderEditorContent({
             id="provider-timeout-ms-input"
             type="number"
             min="1000"
-            max="300000"
+            max="600000"
             step="1000"
             className="kb-form-input"
             value={timeoutMs}

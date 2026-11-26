@@ -25,6 +25,7 @@ from database.models.workflow import (
 )
 from database.session import RLSContext, RLSSessionFactory
 from kanban.workflows.async_gate import GateCoordinator
+from kanban.workflows.gate_types import resolve_effective_gate_timeout_ms
 
 if TYPE_CHECKING:
     from agent.context.transition_context import RepoContext
@@ -48,6 +49,8 @@ class GateWorkerRunner:
         workspace_id: uuid.UUID | None = None,
         admin_principal_id: uuid.UUID | None = None,
         worker_id: str | None = None,
+        heartbeat_interval_s: float = 20.0,
+        lease_ttl_s: float = 60.0,
     ) -> None:
         """Initialize runner with session factory, harness registry, and poll interval."""
         self.session_factory = session_factory
@@ -56,6 +59,8 @@ class GateWorkerRunner:
         self.workspace_id = workspace_id
         self.admin_principal_id = admin_principal_id
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
+        self.heartbeat_interval_s = heartbeat_interval_s
+        self.lease_ttl_s = lease_ttl_s
         self.worker = GateWorker(
             registry=self.registry,
             coordinator=self,
@@ -189,7 +194,7 @@ class GateWorkerRunner:
                 )
             await session.commit()
 
-    async def _load_entities(  # noqa: C901, PLR0915
+    async def _load_entities(  # noqa: C901, PLR0912, PLR0915
         self, event: object
     ) -> tuple[object, object, object, RepoContext | None, object]:
         """Load execution, issue, agent_def, and metadata from database."""
@@ -291,10 +296,15 @@ class GateWorkerRunner:
                 "summary": issue.summary if issue else "",
                 "description_markdown": issue.description_markdown if issue else "",
             }
+            base_timeout = resolve_effective_gate_timeout_ms(
+                hook_timeout_ms=hook.timeout_ms if hook else None,
+                project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
+                agent_timeout_ms=agent_def.timeout_ms if agent_def else None,
+            )
             agent_dict: dict[str, Any] = {
                 "slug": agent_def.slug if agent_def else "agent",
                 "harness_kind": agent_def.harness_kind if agent_def else "in_app_sdk",
-                "timeout_ms": agent_def.timeout_ms if agent_def else 60000,
+                "timeout_ms": base_timeout,
                 "repo_access_mode": agent_def.repo_access_mode if agent_def else "read-only",
                 "cli_binary_allowlist_id": (
                     agent_def.cli_binary_allowlist_id if agent_def else None
@@ -334,11 +344,11 @@ class GateWorkerRunner:
                     )
                     if not is_dummy_fixture:
                         prov_settings = dict(provider_row.settings_json or {})
-                        agent_timeout = agent_def.timeout_ms or 30000
-                        prov_timeout = prov_settings.get("timeout_ms", agent_timeout)
-                        cutoff_ms = min(int(prov_timeout), int(agent_timeout))
-                        cutoff_s = float(cutoff_ms) / 1000.0
-                        agent_dict["timeout_ms"] = cutoff_ms
+                        prov_timeout = prov_settings.get("timeout_ms")
+                        if prov_timeout is not None and int(prov_timeout) > 0:
+                            base_timeout = min(int(prov_timeout), base_timeout)
+                        agent_dict["timeout_ms"] = base_timeout
+                        cutoff_s = float(base_timeout) / 1000.0
 
                         api_key_str: str | None = None
                         has_wrapped_key = (
@@ -506,45 +516,59 @@ class GateWorkerRunner:
 
             for inv in raw_candidates:
                 inv.claimed_by_worker = self.worker_id
-                inv.claim_expires_at = now + dt.timedelta(seconds=60)
+                inv.claim_expires_at = now + dt.timedelta(seconds=self.lease_ttl_s)
             if hasattr(session, "flush"):
                 await session.flush()
 
             for inv in raw_candidates:
                 agent_pid = None
                 agent_def_id = None
-                timeout_ms = 60000
+                hook = None
+                project = None
+                agent_def = None
+                provider_timeout_ms = None
                 if hasattr(session, "get"):
                     try:
                         hook = await session.get(WorkflowTransitionHook, inv.hook_id)
-                        if hook and hook.agent_definition_id:
-                            agent_def_id = hook.agent_definition_id
-                            agent_def = await session.get(AgentDefinition, hook.agent_definition_id)
-                            if agent_def:
-                                agent_pid = agent_def.principal_id
-                                if agent_def.timeout_ms:
-                                    timeout_ms = agent_def.timeout_ms
-                                if agent_def.provider_kind:
-                                    prov_stmt = (
-                                        select(AIProviderConfig)
-                                        .where(
-                                            AIProviderConfig.workspace_id == bound_ws,
-                                            AIProviderConfig.provider_kind
-                                            == agent_def.provider_kind,
-                                            AIProviderConfig.is_enabled.is_(True),
+                        if hook:
+                            if hook.project_id is not None:
+                                project = await session.get(Project, hook.project_id)
+                            if hook.agent_definition_id is not None:
+                                agent_def_id = hook.agent_definition_id
+                                agent_def = await session.get(
+                                    AgentDefinition, hook.agent_definition_id
+                                )
+                                if agent_def:
+                                    agent_pid = agent_def.principal_id
+                                    if agent_def.provider_kind:
+                                        prov_stmt = (
+                                            select(AIProviderConfig)
+                                            .where(
+                                                AIProviderConfig.workspace_id == bound_ws,
+                                                AIProviderConfig.provider_kind
+                                                == agent_def.provider_kind,
+                                                AIProviderConfig.is_enabled.is_(True),
+                                            )
+                                            .order_by(AIProviderConfig.priority.asc())
+                                            .limit(1)
                                         )
-                                        .order_by(AIProviderConfig.priority.asc())
-                                        .limit(1)
-                                    )
-                                    prov_res = await session.execute(prov_stmt)
-                                    provider_row = prov_res.scalar_one_or_none()
-                                    if provider_row and provider_row.settings_json:
-                                        prov_settings = dict(provider_row.settings_json or {})
-                                        prov_timeout = prov_settings.get("timeout_ms")
-                                        if prov_timeout:
-                                            timeout_ms = min(int(prov_timeout), int(timeout_ms))
+                                        prov_res = await session.execute(prov_stmt)
+                                        provider_row = prov_res.scalar_one_or_none()
+                                        if provider_row and provider_row.settings_json:
+                                            prov_settings = dict(provider_row.settings_json or {})
+                                            prov_timeout = prov_settings.get("timeout_ms")
+                                            if prov_timeout and int(prov_timeout) > 0:
+                                                provider_timeout_ms = int(prov_timeout)
                     except (AttributeError, KeyError, TypeError) as exc:
                         logger.debug("Failed resolving hook agent info for sweep: %s", exc)
+
+                timeout_ms = resolve_effective_gate_timeout_ms(
+                    hook_timeout_ms=hook.timeout_ms if hook else None,
+                    project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
+                    agent_timeout_ms=agent_def.timeout_ms if agent_def else None,
+                )
+                if provider_timeout_ms is not None and provider_timeout_ms > 0:
+                    timeout_ms = min(provider_timeout_ms, timeout_ms)
 
                 out_json = getattr(inv, "output_json", None) or {}
                 raw_deadline = getattr(inv, "deadline_at", None) or out_json.get("deadline_at")
@@ -569,6 +593,7 @@ class GateWorkerRunner:
                     "admin_principal_id": bound_pid,
                     "deadline_at": deadline,
                     "started_at": getattr(inv, "started_at", now),
+                    "timeout_ms": timeout_ms,
                 }
                 if deadline is not None and deadline < now:
                     expired_candidates.append(info)
@@ -626,17 +651,109 @@ class GateWorkerRunner:
                 "admin_principal_id": (
                     str(item["admin_principal_id"]) if item.get("admin_principal_id") else ""
                 ),
+                "timeout_ms": item.get("timeout_ms"),
             }
+            heartbeat_task: asyncio.Task[None] | None = None
             try:
-                await self.worker.handle_dispatch(event)
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_lease(
+                        invocation_id=inv_id,
+                        workspace_id=item["workspace_id"],
+                        admin_principal_id=item["admin_principal_id"],
+                        deadline_at=item.get("deadline_at"),
+                    )
+                )
+
+                remaining_s: float | None = None
+                deadline = item.get("deadline_at")
+                if deadline is not None:
+                    curr_now = dt.datetime.now(dt.UTC)
+                    remaining_s = (deadline - curr_now).total_seconds()
+
+                if remaining_s is not None and remaining_s <= 0.0:
+                    msg = "Gate exceeded deadline_at before dispatch"
+                    raise TimeoutError(msg)  # noqa: TRY301
+
+                if remaining_s is not None:
+                    await asyncio.wait_for(
+                        self.worker.handle_dispatch(event),
+                        timeout=remaining_s,
+                    )
+                else:
+                    await self.worker.handle_dispatch(event)
                 handled += 1
+            except TimeoutError:
+                logger.info("Invocation %s timed out against deadline_at", inv_id)
+                try:
+                    await self.record_failure(
+                        exec_id,
+                        hook_id,
+                        "GATE_TIMEOUT",
+                        invocation_id=inv_id,
+                        detail="Async agent gate exceeded deadline_at",
+                    )
+                    handled += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Error recording timeout failure: %s", exc)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Error handling gate dispatch: %s", exc)
             finally:
+                if heartbeat_task is not None:
+                    heartbeat_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await heartbeat_task
                 self._active_invocations.discard(inv_id)
                 self._execution_contexts.pop(exec_id, None)
 
         return handled
+
+    async def _heartbeat_lease(
+        self,
+        invocation_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        admin_principal_id: uuid.UUID,
+        deadline_at: dt.datetime | None = None,
+    ) -> None:
+        """Periodically renew worker claim lease on workflow_hook_invocations."""
+        while True:
+            await asyncio.sleep(self.heartbeat_interval_s)
+            now = dt.datetime.now(dt.UTC)
+            if deadline_at is not None and now >= deadline_at:
+                logger.debug("Stopping heartbeat for %s: deadline_at exceeded", invocation_id)
+                break
+
+            new_expiry = now + dt.timedelta(seconds=self.lease_ttl_s)
+            if deadline_at is not None and new_expiry > deadline_at:
+                new_expiry = deadline_at
+
+            try:
+                if self.session_factory is not None:
+                    admin_ctx = RLSContext(
+                        principal_id=admin_principal_id,
+                        workspace_id=workspace_id,
+                        token_scopes=("admin",),
+                        aal_level=2,
+                    )
+                    async with self.session_factory.session(admin_ctx) as session:
+                        stmt = text(
+                            "UPDATE workflow_hook_invocations "
+                            "SET claim_expires_at = :new_expiry "
+                            "WHERE id = :inv_id "
+                            "  AND status = 'running' "
+                            "  AND claimed_by_worker = :worker_id"
+                        )
+                        await session.execute(
+                            stmt,
+                            {
+                                "new_expiry": new_expiry,
+                                "inv_id": invocation_id,
+                                "worker_id": self.worker_id,
+                            },
+                        )
+                        if hasattr(session, "commit"):
+                            await session.commit()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Lease heartbeat iteration failed for %s: %s", invocation_id, exc)
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Run runner poll loop until stop_event is set."""

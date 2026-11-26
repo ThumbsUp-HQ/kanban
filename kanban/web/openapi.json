@@ -1,6 +1,22 @@
 {
   "components": {
     "schemas": {
+      "AISettingsPublic": {
+        "additionalProperties": false,
+        "description": "Workspace AI runtime settings including air gap policy.",
+        "properties": {
+          "air_gap_mode": {
+            "description": "Whether air-gap zero-egress mode is enforced",
+            "title": "Air Gap Mode",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "air_gap_mode"
+        ],
+        "title": "AISettingsPublic",
+        "type": "object"
+      },
       "Aal2TouchResponse": {
         "description": "Response payload for AAL2 WebSudo sliding window touch.",
         "properties": {
@@ -611,6 +627,14 @@
         "additionalProperties": false,
         "description": "Payload for administrative registration of an OAuth 2.1 client (AAL2).",
         "properties": {
+          "access_token_ttl": {
+            "default": 3600,
+            "description": "Access token TTL in seconds",
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Access Token Ttl",
+            "type": "integer"
+          },
           "client_name": {
             "default": "MCP Client",
             "description": "Human-readable client application name",
@@ -638,6 +662,12 @@
             ],
             "description": "Optional allowed grant types",
             "title": "Grant Types"
+          },
+          "pkce_enforce": {
+            "default": true,
+            "description": "Mandate RFC 7636 PKCE S256",
+            "title": "Pkce Enforce",
+            "type": "boolean"
           },
           "redirect_uris": {
             "description": "List of redirect URIs using HTTPS or loopback HTTP",
@@ -875,7 +905,7 @@
           },
           "timeout_ms": {
             "default": 60000,
-            "maximum": 300000.0,
+            "maximum": 600000.0,
             "minimum": 1000.0,
             "title": "Timeout Ms",
             "type": "integer"
@@ -1014,7 +1044,7 @@
           "timeout_ms": {
             "anyOf": [
               {
-                "maximum": 300000.0,
+                "maximum": 600000.0,
                 "minimum": 1000.0,
                 "type": "integer"
               },
@@ -1215,6 +1245,150 @@
           }
         },
         "title": "AgentFirstCapabilities",
+        "type": "object"
+      },
+      "AgentOnboardingPrefs": {
+        "additionalProperties": false,
+        "description": "Per-user onboarding preferences for AI coding agents.",
+        "properties": {
+          "custom_notes": {
+            "default": "",
+            "description": "Custom onboarding instructions or constraints (max 4096 bytes)",
+            "maxLength": 4096,
+            "title": "Custom Notes",
+            "type": "string"
+          },
+          "execution_mode": {
+            "default": "swarm",
+            "description": "Preferred execution topology",
+            "enum": [
+              "single_thread",
+              "teamwork",
+              "swarm"
+            ],
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "model_strategy": {
+            "default": "quota_sipping_flash",
+            "description": "Model tier and token allocation strategy",
+            "enum": [
+              "quota_sipping_flash",
+              "hybrid",
+              "unconstrained_max"
+            ],
+            "title": "Model Strategy",
+            "type": "string"
+          },
+          "qa_rigor": {
+            "default": "strict_forensic",
+            "description": "QA verification and coverage gate rigor",
+            "enum": [
+              "standard",
+              "strict_forensic"
+            ],
+            "title": "Qa Rigor",
+            "type": "string"
+          },
+          "scope": {
+            "default": "local_only",
+            "description": "Persistence scope boundary (defaults strictly to local project folder)",
+            "enum": [
+              "local_only",
+              "global_allowed"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "AgentOnboardingPrefs",
+        "type": "object"
+      },
+      "AgentOnboardingPrefsPatch": {
+        "additionalProperties": false,
+        "description": "Partial update payload for per-user agent onboarding preferences.",
+        "properties": {
+          "custom_notes": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Custom onboarding instructions or constraints (max 4096 bytes)",
+            "title": "Custom Notes"
+          },
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single_thread",
+                  "teamwork",
+                  "swarm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Preferred execution topology",
+            "title": "Execution Mode"
+          },
+          "model_strategy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "quota_sipping_flash",
+                  "hybrid",
+                  "unconstrained_max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model tier and token allocation strategy",
+            "title": "Model Strategy"
+          },
+          "qa_rigor": {
+            "anyOf": [
+              {
+                "enum": [
+                  "standard",
+                  "strict_forensic"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "QA verification and coverage gate rigor",
+            "title": "Qa Rigor"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "local_only",
+                  "global_allowed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Persistence scope boundary (defaults strictly to local project folder)",
+            "title": "Scope"
+          }
+        },
+        "title": "AgentOnboardingPrefsPatch",
         "type": "object"
       },
       "AgentValidationResponse": {
@@ -7813,6 +7987,44 @@
             "title": "Board Rank",
             "type": "string"
           },
+          "execution_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Active workflow gate execution UUID if gate is pending",
+            "title": "Execution Id"
+          },
+          "from_state_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source state UUID if gate is pending",
+            "title": "From State Id"
+          },
+          "gate_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gate status ('pending') if the move triggered an async workflow gate hold",
+            "title": "Gate Status"
+          },
           "hard_limit": {
             "anyOf": [
               {
@@ -7824,6 +8036,18 @@
             ],
             "description": "Configured hard WIP limit on target state if overridden",
             "title": "Hard Limit"
+          },
+          "hook_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Triggered workflow gate hook name if gate is pending",
+            "title": "Hook Name"
           },
           "issue_key": {
             "description": "Human-readable issue key (e.g. KAN-142)",
@@ -7852,6 +8076,19 @@
             "format": "uuid",
             "title": "State Id",
             "type": "string"
+          },
+          "to_state_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target state UUID if gate is pending",
+            "title": "To State Id"
           },
           "wip_warning": {
             "anyOf": [
@@ -10275,7 +10512,7 @@
           "capability_mask": {
             "default": 7,
             "maximum": 255.0,
-            "minimum": 1.0,
+            "minimum": 0.0,
             "title": "Capability Mask",
             "type": "integer"
           },
@@ -11625,6 +11862,33 @@
         "title": "NotificationListResponse",
         "type": "object"
       },
+      "OAuthClientBulkDeleteRequest": {
+        "description": "Payload for admin bulk deleting or purging OAuth clients.",
+        "properties": {
+          "client_ids": {
+            "description": "Explicit client IDs to permanently delete",
+            "items": {
+              "type": "string"
+            },
+            "title": "Client Ids",
+            "type": "array"
+          },
+          "purge_revoked": {
+            "default": false,
+            "description": "Purge revoked clients with no active non-expired tokens or grants",
+            "title": "Purge Revoked",
+            "type": "boolean"
+          },
+          "purge_unused_dcr": {
+            "default": false,
+            "description": "Purge dynamic client registration clients with no active non-expired tokens or grants",
+            "title": "Purge Unused Dcr",
+            "type": "boolean"
+          }
+        },
+        "title": "OAuthClientBulkDeleteRequest",
+        "type": "object"
+      },
       "OAuthClientPatchRequest": {
         "description": "Admin patch request for client approval.",
         "properties": {
@@ -11658,6 +11922,7 @@
               {
                 "enum": [
                   "active",
+                  "pending_admin_approval",
                   "disabled",
                   "suspended",
                   "revoked"
@@ -13907,6 +14172,20 @@
             "description": "Number of days after completion before auto-archiving issues",
             "title": "Auto Archive Days"
           },
+          "default_gate_timeout_ms": {
+            "anyOf": [
+              {
+                "maximum": 600000.0,
+                "minimum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default workflow transition gate timeout in milliseconds (1000..600000)",
+            "title": "Default Gate Timeout Ms"
+          },
           "description_markdown": {
             "default": "",
             "description": "Detailed project description in canonical Markdown",
@@ -14151,6 +14430,20 @@
             "description": "Updated auto-archive retention threshold in days",
             "title": "Auto Archive Days"
           },
+          "default_gate_timeout_ms": {
+            "anyOf": [
+              {
+                "maximum": 600000.0,
+                "minimum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)",
+            "title": "Default Gate Timeout Ms"
+          },
           "description_markdown": {
             "anyOf": [
               {
@@ -14244,6 +14537,18 @@
             },
             "title": "Capabilities",
             "type": "array"
+          },
+          "default_gate_timeout_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Configured default workflow transition gate timeout in milliseconds, if enabled",
+            "title": "Default Gate Timeout Ms"
           },
           "default_module_ids": {
             "description": "Module UUIDs assigned by default to newly created issues",
@@ -14725,6 +15030,19 @@
             "description": "Optional custom HTTP base URL",
             "title": "Base Url"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional project UUID if probing within project scope",
+            "title": "Project Id"
+          },
           "provider_kind": {
             "description": "Provider kind identifier (e.g. openai, gemini, ollama)",
             "title": "Provider Kind",
@@ -14825,6 +15143,19 @@
             "minItems": 1,
             "title": "Ordered Ids",
             "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional project UUID if reordering within a project scope",
+            "title": "Project Id"
           }
         },
         "required": [
@@ -19390,7 +19721,7 @@
           "capability_mask": {
             "default": 7,
             "maximum": 255.0,
-            "minimum": 1.0,
+            "minimum": 0.0,
             "title": "Capability Mask",
             "type": "integer"
           },
@@ -19933,6 +20264,97 @@
         "title": "UpdateRbacRoleRequest",
         "type": "object"
       },
+      "UpdateUserPreferencesRequest": {
+        "additionalProperties": false,
+        "description": "Payload for updating user preferences.",
+        "properties": {
+          "agent_onboarding_prefs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentOnboardingPrefsPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "custom_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Notes"
+          },
+          "execution_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single_thread",
+                  "teamwork",
+                  "swarm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Mode"
+          },
+          "model_strategy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "quota_sipping_flash",
+                  "hybrid",
+                  "unconstrained_max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Strategy"
+          },
+          "qa_rigor": {
+            "anyOf": [
+              {
+                "enum": [
+                  "standard",
+                  "strict_forensic"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Rigor"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "local_only",
+                  "global_allowed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "title": "UpdateUserPreferencesRequest",
+        "type": "object"
+      },
       "UpdateWorkspaceRequest": {
         "additionalProperties": false,
         "description": "Payload for updating workspace name or slug.",
@@ -19967,6 +20389,30 @@
           }
         },
         "title": "UpdateWorkspaceRequest",
+        "type": "object"
+      },
+      "UserPreferencesResponse": {
+        "additionalProperties": false,
+        "description": "Response containing user preferences.",
+        "properties": {
+          "agent_onboarding_prefs": {
+            "$ref": "#/components/schemas/AgentOnboardingPrefs"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "principal_id",
+          "workspace_id",
+          "agent_onboarding_prefs"
+        ],
+        "title": "UserPreferencesResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -21062,15 +21508,15 @@
           "timeout_ms": {
             "anyOf": [
               {
-                "maximum": 300000.0,
-                "minimum": 1.0,
+                "maximum": 600000.0,
+                "minimum": 1000.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Optional timeout in milliseconds",
+            "description": "Optional timeout in milliseconds (1000..600000)",
             "title": "Timeout Ms"
           },
           "to_state": {
@@ -21204,6 +21650,11 @@
               }
             ],
             "title": "Description"
+          },
+          "effective_timeout_ms": {
+            "default": 60000,
+            "title": "Effective Timeout Ms",
+            "type": "integer"
           },
           "failure_policy": {
             "title": "Failure Policy",
@@ -21495,8 +21946,8 @@
           "timeout_ms": {
             "anyOf": [
               {
-                "maximum": 300000.0,
-                "minimum": 1.0,
+                "maximum": 600000.0,
+                "minimum": 1000.0,
                 "type": "integer"
               },
               {
@@ -22382,9 +22833,9 @@
   },
   "info": {
     "title": "\ud83d\udc4dkanban API",
-    "version": "0.2.1524",
-    "x-build-commit": "71b847bab941",
-    "x-openapi-bundle-hash": "6f583f629ae2cedb9f94867196b5bfe9586be9752b3b43ff9e2a4c56d1454295"
+    "version": "0.2.1869",
+    "x-build-commit": "7e161c070c48",
+    "x-openapi-bundle-hash": "208b77d47e5910a5ec789571bb747d46331d9e95e816187a84247084e384de31"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -22966,7 +23417,7 @@
     "/api/v1/admin/agent-definitions/{agent}/validate": {
       "post": {
         "description": "Run test validation (kanban-agent validate-echo) on an existing agent definition.",
-        "operationId": "validate_agent_definition_slash",
+        "operationId": "admin_validate_agent_definition_slash",
         "parameters": [
           {
             "in": "path",
@@ -23029,7 +23480,7 @@
     "/api/v1/admin/agent-definitions/{agent}:validate": {
       "post": {
         "description": "Run test validation (kanban-agent validate-echo) on an existing agent definition.",
-        "operationId": "validate_agent_definition_colon",
+        "operationId": "admin_validate_agent_definition_colon",
         "parameters": [
           {
             "in": "path",
@@ -23451,6 +23902,16 @@
                 }
               ],
               "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_projects",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Projects",
+              "type": "boolean"
             }
           }
         ],
@@ -26037,6 +26498,90 @@
       "get": {
         "description": "Workspace/Server Admin list of all dynamically registered OAuth clients.",
         "operationId": "admin_list_oauth_clients_api_v1_admin_oauth_clients_get",
+        "parameters": [
+          {
+            "description": "Optional filter by client status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "pending_admin_approval",
+                    "disabled",
+                    "suspended",
+                    "revoked"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by client status",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Case-insensitive search query across client_name, client_id, and redirect_uris",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive search query across client_name, client_id, and redirect_uris",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "Pagination limit (1-200)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Pagination limit (1-200)",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Pagination offset",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Wrap response in envelope containing items, total, limit, and offset",
+            "in": "query",
+            "name": "envelope",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Wrap response in envelope containing items, total, limit, and offset",
+              "title": "Envelope",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -26055,6 +26600,16 @@
               }
             },
             "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -26128,9 +26683,68 @@
         ]
       }
     },
+    "/api/v1/admin/oauth-clients/bulk-delete": {
+      "post": {
+        "description": "Atomically hard-delete specific clients or purge stale DCR / revoked clients.",
+        "operationId": "admin_bulk_delete_oauth_clients_api_v1_admin_oauth_clients_bulk_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthClientBulkDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Admin bulk delete or purge OAuth clients (AAL2)",
+        "tags": [
+          "oauth-grants"
+        ]
+      }
+    },
     "/api/v1/admin/oauth-clients/{client_id}": {
       "delete": {
-        "description": "Admin revocation of OAuth client and all issued grants.",
+        "description": "Admin revocation of OAuth client and all issued grants, or permanent cascade deletion.",
         "operationId": "admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete",
         "parameters": [
           {
@@ -26140,6 +26754,18 @@
             "schema": {
               "title": "Client Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Whether to permanently hard-delete client and cascade tokens/grants",
+            "in": "query",
+            "name": "permanent",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Whether to permanently hard-delete client and cascade tokens/grants",
+              "title": "Permanent",
+              "type": "boolean"
             }
           }
         ],
@@ -26423,7 +27049,7 @@
     },
     "/api/v1/admin/object-links:audit": {
       "post": {
-        "description": "Scan workspace object links and return aggregated invalidity counts across 6 classes.",
+        "description": "Scan workspace object links and return aggregated invalidity counts across 7 classes.",
         "operationId": "post_audit_object_links_api_v1_admin_object_links_audit_post",
         "responses": {
           "200": {
@@ -27980,7 +28606,7 @@
     },
     "/api/v1/admin/standalone/backup": {
       "post": {
-        "description": "Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbkp file.",
+        "description": "Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbbak file.",
         "operationId": "create_standalone_backup_api_v1_admin_standalone_backup_post",
         "requestBody": {
           "content": {
@@ -29774,6 +30400,130 @@
         ]
       }
     },
+    "/api/v1/agent-definitions/{agent}/validate": {
+      "post": {
+        "description": "Run test validation on an existing agent definition visible to caller.",
+        "operationId": "validate_agent_definition_slash",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent",
+            "required": true,
+            "schema": {
+              "title": "Agent",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Validate Agent Definition",
+        "tags": [
+          "agent-definitions"
+        ]
+      }
+    },
+    "/api/v1/agent-definitions/{agent}:validate": {
+      "post": {
+        "description": "Run test validation on an existing agent definition visible to caller.",
+        "operationId": "validate_agent_definition_colon",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent",
+            "required": true,
+            "schema": {
+              "title": "Agent",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Validate Agent Definition",
+        "tags": [
+          "agent-definitions"
+        ]
+      }
+    },
     "/api/v1/agent-runners/enroll": {
       "post": {
         "description": "Consume single-use token, validate CSR, sign leaf cert, and register runner.",
@@ -30194,7 +30944,7 @@
     },
     "/api/v1/auth/aal2/touch": {
       "post": {
-        "description": "Touch and slide the AAL2 WebSudo sliding window.\n\nReturns 200 with { aal2_active: bool, aal2_expires_at: str | None } without throwing 403 when expired.",
+        "description": "Touch and slide the AAL2 WebSudo sliding window.\n\nReturns 200 with { aal2_active: bool, aal2_expires_at: str | None } without\nthrowing 403 when expired.",
         "operationId": "touch_aal2_session_api_v1_auth_aal2_touch_post",
         "responses": {
           "200": {
@@ -44636,6 +45386,105 @@
         ]
       }
     },
+    "/api/v1/users/me/preferences": {
+      "get": {
+        "description": "Retrieve per-user preferences including agent onboarding configuration under FORCE RLS.",
+        "operationId": "get_user_preferences_api_v1_users_me_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get Current User Preferences",
+        "tags": [
+          "user-settings"
+        ]
+      },
+      "patch": {
+        "description": "Update per-user preferences including agent onboarding configuration under FORCE RLS.",
+        "operationId": "update_user_preferences_api_v1_users_me_preferences_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update Current User Preferences",
+        "tags": [
+          "user-settings"
+        ]
+      }
+    },
     "/api/v1/users/{principal_id}/avatar": {
       "get": {
         "description": "Retrieve and serve user avatar image bytes.",
@@ -46637,6 +47486,23 @@
               "title": "Workspace",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
           }
         ],
         "responses": {
@@ -46756,6 +47622,1130 @@
         "summary": "Register a new agent definition",
         "tags": [
           "agent-definitions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers": {
+      "get": {
+        "description": "List AI provider configurations for workspace or project visible to caller.",
+        "operationId": "workspace_list_providers_api_v1_workspaces__workspace__ai_providers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_projects",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Projects",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderConfigPublic"
+                  },
+                  "title": "Response Workspace List Providers Api V1 Workspaces  Workspace  Ai Providers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "List workspace or project AI provider configurations",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      },
+      "post": {
+        "description": "Create an AI provider configuration enforcing residency tier, air gap, and custody.",
+        "operationId": "workspace_create_provider_api_v1_workspaces__workspace__ai_providers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderConfigCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConfigPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Create workspace or project AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/budgets": {
+      "get": {
+        "description": "List token consumption ledger records and caps for a provider configuration.",
+        "operationId": "workspace_get_budgets_api_v1_workspaces__workspace__ai_providers_budgets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider_config_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Config Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BudgetRecord"
+                  },
+                  "title": "Response Workspace Get Budgets Api V1 Workspaces  Workspace  Ai Providers Budgets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get budget records for provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      },
+      "put": {
+        "description": "Set or update token consumption limit cap for a period tier.",
+        "operationId": "workspace_set_budget_api_v1_workspaces__workspace__ai_providers_budgets_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Set or update budget cap for provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/order": {
+      "put": {
+        "description": "Atomically reorder AI provider configurations in workspace or project scope.",
+        "operationId": "workspace_reorder_providers_api_v1_workspaces__workspace__ai_providers_order_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderConfigPublic"
+                  },
+                  "title": "Response Workspace Reorder Providers Api V1 Workspaces  Workspace  Ai Providers Order Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Atomically reorder workspace or project AI providers",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/probe-models": {
+      "post": {
+        "description": "Probe models for an unsaved AI provider draft configuration.",
+        "operationId": "workspace_probe_provider_models_api_v1_workspaces__workspace__ai_providers_probe_models_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Probe upstream models for unsaved AI provider draft configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/settings": {
+      "get": {
+        "description": "Retrieve workspace AI runtime settings such as air-gap status.",
+        "operationId": "workspace_get_ai_settings_api_v1_workspaces__workspace__ai_providers_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AISettingsPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get AI workspace runtime settings",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/test-connection": {
+      "post": {
+        "description": "Test connectivity, auth, and model listing for an unsaved AI provider configuration.",
+        "operationId": "workspace_check_provider_connection_api_v1_workspaces__workspace__ai_providers_test_connection_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Test connection to unsaved AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}": {
+      "delete": {
+        "description": "Delete an AI provider configuration.",
+        "operationId": "workspace_delete_provider_api_v1_workspaces__workspace__ai_providers__provider_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Delete AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      },
+      "get": {
+        "description": "Retrieve public metadata for a specific AI provider configuration by UUID.",
+        "operationId": "workspace_get_provider_api_v1_workspaces__workspace__ai_providers__provider_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConfigPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get AI provider configuration by ID",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      },
+      "patch": {
+        "description": "Update settings, model allowlist, URL, priority, or credentials on an AI provider.",
+        "operationId": "workspace_update_provider_api_v1_workspaces__workspace__ai_providers__provider_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConfigPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Update AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/disable": {
+      "post": {
+        "description": "Disable an active AI provider configuration.",
+        "operationId": "workspace_disable_provider_slash",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConfigPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Disable AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/probe-models": {
+      "post": {
+        "description": "Probe models for a saved AI provider configuration using stored envelope key.",
+        "operationId": "workspace_probe_saved_provider_models_api_v1_workspaces__workspace__ai_providers__provider_id__probe_models_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SavedProviderProbeRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Probe upstream models for saved AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/test-connection": {
+      "post": {
+        "description": "Test connectivity, auth, and model listing for a saved AI provider configuration.",
+        "operationId": "workspace_check_saved_provider_connection_api_v1_workspaces__workspace__ai_providers__provider_id__test_connection_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SavedProviderProbeRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Test connection to saved AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}:disable": {
+      "post": {
+        "description": "Disable an active AI provider configuration.",
+        "operationId": "workspace_disable_provider_colon",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace",
+            "required": true,
+            "schema": {
+              "title": "Workspace",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderConfigPublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Disable AI provider configuration",
+        "tags": [
+          "workspace-ai-providers"
         ]
       }
     },

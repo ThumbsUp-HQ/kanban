@@ -173,6 +173,7 @@ async def serialize_project(
         skip_loaded_sequence_numbers=project.skip_loaded_sequence_numbers,
         default_module_ids=await _default_module_ids(session, project.id),
         auto_archive_days=project.auto_archive_days,
+        default_gate_timeout_ms=project.default_gate_timeout_ms,
         access_manifest=manifest,
         capabilities=cap_names,
         is_project_admin=is_project_admin,
@@ -240,6 +241,7 @@ async def create_project(
                     modules_enabled=body.modules_enabled,
                     skip_loaded_sequence_numbers=skip_seq,
                     auto_archive_days=body.auto_archive_days,
+                    default_gate_timeout_ms=body.default_gate_timeout_ms,
                 )
             )
             await session.flush()
@@ -304,7 +306,7 @@ async def _ensure_modules_can_disable(session: AsyncSession, project_id: uuid.UU
         raise _problem(code="MODULES_IN_USE", status=409, title="Modules In Use")
 
 
-async def update_project(
+async def update_project(  # noqa: C901
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
@@ -359,6 +361,16 @@ async def update_project(
             "new": body.auto_archive_days,
         }
         project.auto_archive_days = body.auto_archive_days
+
+    if (
+        "default_gate_timeout_ms" in fields
+        and body.default_gate_timeout_ms != project.default_gate_timeout_ms
+    ):
+        changes["default_gate_timeout_ms"] = {
+            "old": project.default_gate_timeout_ms,
+            "new": body.default_gate_timeout_ms,
+        }
+        project.default_gate_timeout_ms = body.default_gate_timeout_ms
 
     if changes:
         await session.flush()

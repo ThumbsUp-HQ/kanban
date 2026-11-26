@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     Date,
     ForeignKey,
@@ -40,6 +41,10 @@ class Project(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("workspace_id", "identifier", name="projects_workspace_id_identifier_key"),
+        CheckConstraint(
+            "default_gate_timeout_ms IS NULL OR default_gate_timeout_ms BETWEEN 1000 AND 600000",
+            name="chk_projects_default_gate_timeout_ms",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -64,6 +69,7 @@ class Project(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     auto_archive_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    default_gate_timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     @property
     def cycles_enabled(self) -> bool:

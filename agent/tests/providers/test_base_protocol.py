@@ -210,16 +210,16 @@ def test_completion_request_dto() -> None:
         CompletionRequest(model="m", prompt="p", max_output_tokens=0)
 
     with pytest.raises(ValidationError):
-        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=300001)
+        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=600001)
 
     with pytest.raises(ValidationError):
         CompletionRequest(model="m", prompt="p", ttft_deadline_ms=0)
 
-    # Valid deadline bounds up to 300000 ms
+    # Valid deadline bounds up to 600000 ms
     valid_c_120k = CompletionRequest(model="m", prompt="p", ttft_deadline_ms=120000)
     assert valid_c_120k.ttft_deadline_ms == 120000
-    valid_c_300k = CompletionRequest(model="m", prompt="p", ttft_deadline_ms=300000)
-    assert valid_c_300k.ttft_deadline_ms == 300000
+    valid_c_600k = CompletionRequest(model="m", prompt="p", ttft_deadline_ms=600000)
+    assert valid_c_600k.ttft_deadline_ms == 600000
 
 
 def test_stream_chunk_and_tool_call_step() -> None:
@@ -260,7 +260,7 @@ def test_structured_request_and_response() -> None:
     assert req.response_model is DummyOutput
     assert req.temperature == 0.0
 
-    # StructuredRequest boundary validations (120000, 300000 valid; 300001, 0 rejected)
+    # StructuredRequest boundary validations (120000, 600000 valid; 600001, 0 rejected)
     req_120k = StructuredRequest(
         model="nemotron-3-super:latest",
         prompt="Evaluate gate",
@@ -269,20 +269,20 @@ def test_structured_request_and_response() -> None:
     )
     assert req_120k.ttft_deadline_ms == 120000
 
-    req_300k = StructuredRequest(
+    req_600k = StructuredRequest(
         model="nemotron-3-super:latest",
         prompt="Evaluate gate",
         response_model=DummyOutput,
-        ttft_deadline_ms=300000,
+        ttft_deadline_ms=600000,
     )
-    assert req_300k.ttft_deadline_ms == 300000
+    assert req_600k.ttft_deadline_ms == 600000
 
     with pytest.raises(ValidationError):
         StructuredRequest(
             model="nemotron-3-super:latest",
             prompt="Evaluate gate",
             response_model=DummyOutput,
-            ttft_deadline_ms=300001,
+            ttft_deadline_ms=600001,
         )
 
     with pytest.raises(ValidationError):

@@ -15,6 +15,7 @@ export interface HookPipelineRowProps {
   total: number;
   projectKey: string;
   agentTimeoutMs?: number | undefined;
+  projectDefaultTimeoutMs?: number | null | undefined;
   agents?: AgentDefinitionSummary[] | undefined;
   onMove?: (hookId: string, direction: 'up' | 'down') => void;
   onToggle?: (hookId: string, isEnabled: boolean) => void;
@@ -31,6 +32,7 @@ export function HookPipelineRow({
   total,
   projectKey,
   agentTimeoutMs,
+  projectDefaultTimeoutMs,
   agents,
   onMove,
   onToggle,
@@ -137,14 +139,28 @@ export function HookPipelineRow({
 
   // Format latency or timeout
   const matchingAgent = agents?.find((a) => a.slug === hook.agent_slug);
+  const resolvedTimeoutSource =
+    hook.timeout_ms != null
+      ? 'hook override'
+      : projectDefaultTimeoutMs != null
+      ? 'project default'
+      : 'agent default';
+
   const resolvedAgentTimeout =
-    agentTimeoutMs ??
     hook.timeout_ms ??
-    matchingAgent?.timeout_ms;
+    projectDefaultTimeoutMs ??
+    matchingAgent?.timeout_ms ??
+    agentTimeoutMs;
+
+  const formatDuration = (ms: number): string => {
+    if (ms === 60000) return '60s';
+    if (ms % 60000 === 0) return `${String(ms / 60000)}m`;
+    return `${String(Math.round(ms / 1000))}s`;
+  };
 
   const latencyOrTimeout =
     hook.hook_kind === 'agent_interceptor'
-      ? (resolvedAgentTimeout ? `${String(Math.round(resolvedAgentTimeout / 1000))}s` : '')
+      ? (resolvedAgentTimeout ? formatDuration(resolvedAgentTimeout) : '')
       : (hook.target_latency_budget ?? '<25ms');
 
   const isSync = hook.hook_kind === 'sync_validator' || hook.hook_kind === 'sync_mutator';
@@ -212,7 +228,11 @@ export function HookPipelineRow({
         <div className="hook-pipeline-right">
           {/* Latency / Timeout metric pill */}
           {latencyOrTimeout && (
-            <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
+            <span
+              className="hook-metric-pill"
+              data-testid={`hook-latency-${hook.id}`}
+              title={hook.hook_kind === 'agent_interceptor' ? resolvedTimeoutSource : undefined}
+            >
               {latencyOrTimeout}
             </span>
           )}

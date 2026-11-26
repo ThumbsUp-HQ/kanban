@@ -154,7 +154,7 @@ export interface paths {
          * Admin Validate Agent Definition
          * @description Run test validation (kanban-agent validate-echo) on an existing agent definition.
          */
-        post: operations["validate_agent_definition_slash"];
+        post: operations["admin_validate_agent_definition_slash"];
         delete?: never;
         options?: never;
         head?: never;
@@ -174,7 +174,7 @@ export interface paths {
          * Admin Validate Agent Definition
          * @description Run test validation (kanban-agent validate-echo) on an existing agent definition.
          */
-        post: operations["validate_agent_definition_colon"];
+        post: operations["admin_validate_agent_definition_colon"];
         delete?: never;
         options?: never;
         head?: never;
@@ -983,6 +983,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/oauth-clients/bulk-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin bulk delete or purge OAuth clients (AAL2)
+         * @description Atomically hard-delete specific clients or purge stale DCR / revoked clients.
+         */
+        post: operations["admin_bulk_delete_oauth_clients_api_v1_admin_oauth_clients_bulk_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/oauth-clients/{client_id}": {
         parameters: {
             query?: never;
@@ -995,7 +1015,7 @@ export interface paths {
         post?: never;
         /**
          * Admin revoke or delete OAuth client (AAL2)
-         * @description Admin revocation of OAuth client and all issued grants.
+         * @description Admin revocation of OAuth client and all issued grants, or permanent cascade deletion.
          */
         delete: operations["admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete"];
         options?: never;
@@ -1058,7 +1078,7 @@ export interface paths {
         put?: never;
         /**
          * Run Universal Object Graph Link Auditor
-         * @description Scan workspace object links and return aggregated invalidity counts across 6 classes.
+         * @description Scan workspace object links and return aggregated invalidity counts across 7 classes.
          */
         post: operations["post_audit_object_links_api_v1_admin_object_links_audit_post"];
         delete?: never;
@@ -1394,7 +1414,7 @@ export interface paths {
         put?: never;
         /**
          * Generate and download encrypted database backup
-         * @description Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbkp file.
+         * @description Execute pg_dump, encrypt with AES-256-GCM, record audit event, and stream .kbbak file.
          */
         post: operations["create_standalone_backup_api_v1_admin_standalone_backup_post"];
         delete?: never;
@@ -1812,6 +1832,46 @@ export interface paths {
         patch: operations["patch_agent_definition_api_v1_agent_definitions__agent__patch"];
         trace?: never;
     };
+    "/api/v1/agent-definitions/{agent}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Agent Definition
+         * @description Run test validation on an existing agent definition visible to caller.
+         */
+        post: operations["validate_agent_definition_slash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-definitions/{agent}:validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Agent Definition
+         * @description Run test validation on an existing agent definition visible to caller.
+         */
+        post: operations["validate_agent_definition_colon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent-runners/enroll": {
         parameters: {
             query?: never;
@@ -1945,7 +2005,8 @@ export interface paths {
          * Touch Aal2 Session
          * @description Touch and slide the AAL2 WebSudo sliding window.
          *
-         *     Returns 200 with { aal2_active: bool, aal2_expires_at: str | None } without throwing 403 when expired.
+         *     Returns 200 with { aal2_active: bool, aal2_expires_at: str | None } without
+         *     throwing 403 when expired.
          */
         post: operations["touch_aal2_session_api_v1_auth_aal2_touch_post"];
         delete?: never;
@@ -5404,6 +5465,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current User Preferences
+         * @description Retrieve per-user preferences including agent onboarding configuration under FORCE RLS.
+         */
+        get: operations["get_user_preferences_api_v1_users_me_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Current User Preferences
+         * @description Update per-user preferences including agent onboarding configuration under FORCE RLS.
+         */
+        patch: operations["update_user_preferences_api_v1_users_me_preferences_patch"];
+        trace?: never;
+    };
     "/api/v1/users/{principal_id}/avatar": {
         parameters: {
             query?: never;
@@ -5854,6 +5939,242 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace}/ai-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List workspace or project AI provider configurations
+         * @description List AI provider configurations for workspace or project visible to caller.
+         */
+        get: operations["workspace_list_providers_api_v1_workspaces__workspace__ai_providers_get"];
+        put?: never;
+        /**
+         * Create workspace or project AI provider configuration
+         * @description Create an AI provider configuration enforcing residency tier, air gap, and custody.
+         */
+        post: operations["workspace_create_provider_api_v1_workspaces__workspace__ai_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get budget records for provider configuration
+         * @description List token consumption ledger records and caps for a provider configuration.
+         */
+        get: operations["workspace_get_budgets_api_v1_workspaces__workspace__ai_providers_budgets_get"];
+        /**
+         * Set or update budget cap for provider configuration
+         * @description Set or update token consumption limit cap for a period tier.
+         */
+        put: operations["workspace_set_budget_api_v1_workspaces__workspace__ai_providers_budgets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Atomically reorder workspace or project AI providers
+         * @description Atomically reorder AI provider configurations in workspace or project scope.
+         */
+        put: operations["workspace_reorder_providers_api_v1_workspaces__workspace__ai_providers_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/probe-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe upstream models for unsaved AI provider draft configuration
+         * @description Probe models for an unsaved AI provider draft configuration.
+         */
+        post: operations["workspace_probe_provider_models_api_v1_workspaces__workspace__ai_providers_probe_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI workspace runtime settings
+         * @description Retrieve workspace AI runtime settings such as air-gap status.
+         */
+        get: operations["workspace_get_ai_settings_api_v1_workspaces__workspace__ai_providers_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test connection to unsaved AI provider configuration
+         * @description Test connectivity, auth, and model listing for an unsaved AI provider configuration.
+         */
+        post: operations["workspace_check_provider_connection_api_v1_workspaces__workspace__ai_providers_test_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI provider configuration by ID
+         * @description Retrieve public metadata for a specific AI provider configuration by UUID.
+         */
+        get: operations["workspace_get_provider_api_v1_workspaces__workspace__ai_providers__provider_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete AI provider configuration
+         * @description Delete an AI provider configuration.
+         */
+        delete: operations["workspace_delete_provider_api_v1_workspaces__workspace__ai_providers__provider_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update AI provider configuration
+         * @description Update settings, model allowlist, URL, priority, or credentials on an AI provider.
+         */
+        patch: operations["workspace_update_provider_api_v1_workspaces__workspace__ai_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable AI provider configuration
+         * @description Disable an active AI provider configuration.
+         */
+        post: operations["workspace_disable_provider_slash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/probe-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe upstream models for saved AI provider configuration
+         * @description Probe models for a saved AI provider configuration using stored envelope key.
+         */
+        post: operations["workspace_probe_saved_provider_models_api_v1_workspaces__workspace__ai_providers__provider_id__probe_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test connection to saved AI provider configuration
+         * @description Test connectivity, auth, and model listing for a saved AI provider configuration.
+         */
+        post: operations["workspace_check_saved_provider_connection_api_v1_workspaces__workspace__ai_providers__provider_id__test_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/ai-providers/{provider_id}:disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable AI provider configuration
+         * @description Disable an active AI provider configuration.
+         */
+        post: operations["workspace_disable_provider_colon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/oauth/authorize": {
         parameters: {
             query?: never;
@@ -5998,6 +6319,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AISettingsPublic
+         * @description Workspace AI runtime settings including air gap policy.
+         */
+        AISettingsPublic: {
+            /**
+             * Air Gap Mode
+             * @description Whether air-gap zero-egress mode is enforced
+             */
+            air_gap_mode: boolean;
+        };
         /**
          * Aal2TouchResponse
          * @description Response payload for AAL2 WebSudo sliding window touch.
@@ -6343,6 +6675,12 @@ export interface components {
          */
         AdminOAuthClientCreateRequest: {
             /**
+             * Access Token Ttl
+             * @description Access token TTL in seconds
+             * @default 3600
+             */
+            access_token_ttl: number;
+            /**
              * Client Name
              * @description Human-readable client application name
              * @default MCP Client
@@ -6359,6 +6697,12 @@ export interface components {
              * @description Optional allowed grant types
              */
             grant_types?: string[] | null;
+            /**
+             * Pkce Enforce
+             * @description Mandate RFC 7636 PKCE S256
+             * @default true
+             */
+            pkce_enforce: boolean;
             /**
              * Redirect Uris
              * @description List of redirect URIs using HTTPS or loopback HTTP
@@ -6583,6 +6927,77 @@ export interface components {
              * @default 1000
              */
             summary_token_budget: number;
+        };
+        /**
+         * AgentOnboardingPrefs
+         * @description Per-user onboarding preferences for AI coding agents.
+         */
+        AgentOnboardingPrefs: {
+            /**
+             * Custom Notes
+             * @description Custom onboarding instructions or constraints (max 4096 bytes)
+             * @default
+             */
+            custom_notes: string;
+            /**
+             * Execution Mode
+             * @description Preferred execution topology
+             * @default swarm
+             * @enum {string}
+             */
+            execution_mode: "single_thread" | "teamwork" | "swarm";
+            /**
+             * Model Strategy
+             * @description Model tier and token allocation strategy
+             * @default quota_sipping_flash
+             * @enum {string}
+             */
+            model_strategy: "quota_sipping_flash" | "hybrid" | "unconstrained_max";
+            /**
+             * Qa Rigor
+             * @description QA verification and coverage gate rigor
+             * @default strict_forensic
+             * @enum {string}
+             */
+            qa_rigor: "standard" | "strict_forensic";
+            /**
+             * Scope
+             * @description Persistence scope boundary (defaults strictly to local project folder)
+             * @default local_only
+             * @enum {string}
+             */
+            scope: "local_only" | "global_allowed";
+        };
+        /**
+         * AgentOnboardingPrefsPatch
+         * @description Partial update payload for per-user agent onboarding preferences.
+         */
+        AgentOnboardingPrefsPatch: {
+            /**
+             * Custom Notes
+             * @description Custom onboarding instructions or constraints (max 4096 bytes)
+             */
+            custom_notes?: string | null;
+            /**
+             * Execution Mode
+             * @description Preferred execution topology
+             */
+            execution_mode?: ("single_thread" | "teamwork" | "swarm") | null;
+            /**
+             * Model Strategy
+             * @description Model tier and token allocation strategy
+             */
+            model_strategy?: ("quota_sipping_flash" | "hybrid" | "unconstrained_max") | null;
+            /**
+             * Qa Rigor
+             * @description QA verification and coverage gate rigor
+             */
+            qa_rigor?: ("standard" | "strict_forensic") | null;
+            /**
+             * Scope
+             * @description Persistence scope boundary (defaults strictly to local project folder)
+             */
+            scope?: ("local_only" | "global_allowed") | null;
         };
         /**
          * AgentValidationResponse
@@ -9729,10 +10144,30 @@ export interface components {
              */
             board_rank: string;
             /**
+             * Execution Id
+             * @description Active workflow gate execution UUID if gate is pending
+             */
+            execution_id?: string | null;
+            /**
+             * From State Id
+             * @description Source state UUID if gate is pending
+             */
+            from_state_id?: string | null;
+            /**
+             * Gate Status
+             * @description Gate status ('pending') if the move triggered an async workflow gate hold
+             */
+            gate_status?: string | null;
+            /**
              * Hard Limit
              * @description Configured hard WIP limit on target state if overridden
              */
             hard_limit?: number | null;
+            /**
+             * Hook Name
+             * @description Triggered workflow gate hook name if gate is pending
+             */
+            hook_name?: string | null;
             /**
              * Issue Key
              * @description Human-readable issue key (e.g. KAN-142)
@@ -9754,6 +10189,11 @@ export interface components {
              * @description Resulting workflow state UUID
              */
             state_id: string;
+            /**
+             * To State Id
+             * @description Target state UUID if gate is pending
+             */
+            to_state_id?: string | null;
             /** @description Non-null if the move caused the column to exceed its soft WIP limit */
             wip_warning?: components["schemas"]["WipWarning"] | null;
         };
@@ -11434,6 +11874,29 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * OAuthClientBulkDeleteRequest
+         * @description Payload for admin bulk deleting or purging OAuth clients.
+         */
+        OAuthClientBulkDeleteRequest: {
+            /**
+             * Client Ids
+             * @description Explicit client IDs to permanently delete
+             */
+            client_ids?: string[];
+            /**
+             * Purge Revoked
+             * @description Purge revoked clients with no active non-expired tokens or grants
+             * @default false
+             */
+            purge_revoked: boolean;
+            /**
+             * Purge Unused Dcr
+             * @description Purge dynamic client registration clients with no active non-expired tokens or grants
+             * @default false
+             */
+            purge_unused_dcr: boolean;
+        };
+        /**
          * OAuthClientPatchRequest
          * @description Admin patch request for client approval.
          */
@@ -11443,7 +11906,7 @@ export interface components {
             /** Redirect Uris */
             redirect_uris?: string[] | null;
             /** Status */
-            status?: ("active" | "disabled" | "suspended" | "revoked") | null;
+            status?: ("active" | "pending_admin_approval" | "disabled" | "suspended" | "revoked") | null;
         };
         /**
          * OAuthClientRegisterRequest
@@ -12397,6 +12860,11 @@ export interface components {
              */
             auto_archive_days?: number | null;
             /**
+             * Default Gate Timeout Ms
+             * @description Default workflow transition gate timeout in milliseconds (1000..600000)
+             */
+            default_gate_timeout_ms?: number | null;
+            /**
              * Description Markdown
              * @description Detailed project description in canonical Markdown
              * @default
@@ -12539,6 +13007,11 @@ export interface components {
              */
             auto_archive_days?: number | null;
             /**
+             * Default Gate Timeout Ms
+             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
+             */
+            default_gate_timeout_ms?: number | null;
+            /**
              * Description Markdown
              * @description Updated project description in canonical Markdown
              */
@@ -12581,6 +13054,11 @@ export interface components {
              * @description Effective capabilities held by the calling principal on this project
              */
             capabilities: string[];
+            /**
+             * Default Gate Timeout Ms
+             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
+             */
+            default_gate_timeout_ms?: number | null;
             /**
              * Default Module Ids
              * @description Module UUIDs assigned by default to newly created issues
@@ -12855,6 +13333,11 @@ export interface components {
              */
             base_url?: string | null;
             /**
+             * Project Id
+             * @description Optional project UUID if probing within project scope
+             */
+            project_id?: string | null;
+            /**
              * Provider Kind
              * @description Provider kind identifier (e.g. openai, gemini, ollama)
              */
@@ -12913,6 +13396,11 @@ export interface components {
              * @description List of provider UUIDs in ascending priority order
              */
             ordered_ids: string[];
+            /**
+             * Project Id
+             * @description Optional project UUID if reordering within a project scope
+             */
+            project_id?: string | null;
         };
         /**
          * ProvisionPrincipalRequest
@@ -15244,6 +15732,23 @@ export interface components {
             name?: string | null;
         };
         /**
+         * UpdateUserPreferencesRequest
+         * @description Payload for updating user preferences.
+         */
+        UpdateUserPreferencesRequest: {
+            agent_onboarding_prefs?: components["schemas"]["AgentOnboardingPrefsPatch"] | null;
+            /** Custom Notes */
+            custom_notes?: string | null;
+            /** Execution Mode */
+            execution_mode?: ("single_thread" | "teamwork" | "swarm") | null;
+            /** Model Strategy */
+            model_strategy?: ("quota_sipping_flash" | "hybrid" | "unconstrained_max") | null;
+            /** Qa Rigor */
+            qa_rigor?: ("standard" | "strict_forensic") | null;
+            /** Scope */
+            scope?: ("local_only" | "global_allowed") | null;
+        };
+        /**
          * UpdateWorkspaceRequest
          * @description Payload for updating workspace name or slug.
          */
@@ -15258,6 +15763,17 @@ export interface components {
              * @description Updated lowercase URL-safe slug
              */
             slug?: string | null;
+        };
+        /**
+         * UserPreferencesResponse
+         * @description Response containing user preferences.
+         */
+        UserPreferencesResponse: {
+            agent_onboarding_prefs: components["schemas"]["AgentOnboardingPrefs"];
+            /** Principal Id */
+            principal_id: string;
+            /** Workspace Id */
+            workspace_id: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -15755,7 +16271,7 @@ export interface components {
             name: string;
             /**
              * Timeout Ms
-             * @description Optional timeout in milliseconds
+             * @description Optional timeout in milliseconds (1000..600000)
              */
             timeout_ms?: number | null;
             /**
@@ -15804,6 +16320,11 @@ export interface components {
             cli_binary_allowlist_id?: string | null;
             /** Description */
             description?: string | null;
+            /**
+             * Effective Timeout Ms
+             * @default 60000
+             */
+            effective_timeout_ms: number;
             /** Failure Policy */
             failure_policy: string;
             /** From State */
@@ -16566,7 +17087,7 @@ export interface operations {
             };
         };
     };
-    validate_agent_definition_slash: {
+    admin_validate_agent_definition_slash: {
         parameters: {
             query?: never;
             header?: never;
@@ -16606,7 +17127,7 @@ export interface operations {
             };
         };
     };
-    validate_agent_definition_colon: {
+    admin_validate_agent_definition_colon: {
         parameters: {
             query?: never;
             header?: never;
@@ -16857,6 +17378,7 @@ export interface operations {
         parameters: {
             query?: {
                 project_id?: string | null;
+                include_projects?: boolean;
             };
             header?: never;
             path?: never;
@@ -18554,7 +19076,18 @@ export interface operations {
     };
     admin_list_oauth_clients_api_v1_admin_oauth_clients_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional filter by client status */
+                status?: ("active" | "pending_admin_approval" | "disabled" | "suspended" | "revoked") | null;
+                /** @description Case-insensitive search query across client_name, client_id, and redirect_uris */
+                q?: string | null;
+                /** @description Pagination limit (1-200) */
+                limit?: number;
+                /** @description Pagination offset */
+                offset?: number;
+                /** @description Wrap response in envelope containing items, total, limit, and offset */
+                envelope?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -18577,6 +19110,15 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -18623,9 +19165,54 @@ export interface operations {
             };
         };
     };
-    admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete: {
+    admin_bulk_delete_oauth_clients_api_v1_admin_oauth_clients_bulk_delete_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthClientBulkDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete: {
+        parameters: {
+            query?: {
+                /** @description Whether to permanently hard-delete client and cascade tokens/grants */
+                permanent?: boolean;
+            };
             header?: never;
             path: {
                 client_id: string;
@@ -20917,6 +21504,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_agent_definition_slash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentValidationResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_agent_definition_colon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentValidationResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -29907,6 +30574,77 @@ export interface operations {
             };
         };
     };
+    get_user_preferences_api_v1_users_me_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_user_preferences_api_v1_users_me_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPreferencesResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_user_avatar_api_v1_users__principal_id__avatar_get: {
         parameters: {
             query?: {
@@ -31119,7 +31857,9 @@ export interface operations {
     };
     list_agent_definitions_api_v1_workspaces__workspace__agent_definitions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                project_id?: string | null;
+            };
             header?: never;
             path: {
                 workspace: string;
@@ -31179,6 +31919,648 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_list_providers_api_v1_workspaces__workspace__ai_providers_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                include_projects?: boolean;
+            };
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_create_provider_api_v1_workspaces__workspace__ai_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderConfigCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_get_budgets_api_v1_workspaces__workspace__ai_providers_budgets_get: {
+        parameters: {
+            query: {
+                provider_config_id: string;
+            };
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetRecord"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_set_budget_api_v1_workspaces__workspace__ai_providers_budgets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetRecord"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_reorder_providers_api_v1_workspaces__workspace__ai_providers_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_probe_provider_models_api_v1_workspaces__workspace__ai_providers_probe_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_get_ai_settings_api_v1_workspaces__workspace__ai_providers_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISettingsPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_check_provider_connection_api_v1_workspaces__workspace__ai_providers_test_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_get_provider_api_v1_workspaces__workspace__ai_providers__provider_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_delete_provider_api_v1_workspaces__workspace__ai_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_update_provider_api_v1_workspaces__workspace__ai_providers__provider_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_disable_provider_slash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_probe_saved_provider_models_api_v1_workspaces__workspace__ai_providers__provider_id__probe_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavedProviderProbeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_check_saved_provider_connection_api_v1_workspaces__workspace__ai_providers__provider_id__test_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavedProviderProbeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_disable_provider_colon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"];
                 };
             };
             /** @description Unauthorized - authentication required */

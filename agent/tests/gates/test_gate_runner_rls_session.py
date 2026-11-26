@@ -691,7 +691,7 @@ async def test_negative_inference_failure_rollback(
 
 
 def test_structured_request_deadline_boundary_cases() -> None:
-    """Boundary Case: StructuredRequest validates deadlines up to 300000ms."""
+    """Boundary Case: StructuredRequest validates deadlines up to 600000ms."""
     req_120k = StructuredRequest(
         model="nemotron-3-super:latest",
         prompt="Audit gate",
@@ -700,20 +700,20 @@ def test_structured_request_deadline_boundary_cases() -> None:
     )
     assert req_120k.ttft_deadline_ms == 120000
 
-    req_300k = StructuredRequest(
+    req_600k = StructuredRequest(
         model="nemotron-3-super:latest",
         prompt="Audit gate",
         response_model=StrictVerdictSchema,
-        ttft_deadline_ms=300000,
+        ttft_deadline_ms=600000,
     )
-    assert req_300k.ttft_deadline_ms == 300000
+    assert req_600k.ttft_deadline_ms == 600000
 
     with pytest.raises(ValidationError):
         StructuredRequest(
             model="nemotron-3-super:latest",
             prompt="Audit gate",
             response_model=StrictVerdictSchema,
-            ttft_deadline_ms=300001,
+            ttft_deadline_ms=600001,
         )
 
     with pytest.raises(ValidationError):
