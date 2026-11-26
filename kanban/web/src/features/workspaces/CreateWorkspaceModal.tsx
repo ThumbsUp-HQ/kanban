@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './CreateWorkspaceModal.css';
 
 export interface CreatedWorkspace {
@@ -78,6 +79,9 @@ export function CreateWorkspaceModal({
     }, 0);
 
     const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.defaultPrevented) {
+        return;
+      }
       if (e.key === 'Escape') {
         e.preventDefault();
         resetForm();
@@ -249,9 +253,18 @@ export function CreateWorkspaceModal({
           </div>
 
           <div className="kb-create-workspace-field">
-            <label htmlFor="kb-workspace-slug" className="kb-create-workspace-label">
-              Slug <span className="kb-create-workspace-req">*</span>
-            </label>
+            <div className="kb-create-workspace-label-row">
+              <label htmlFor="kb-workspace-slug" className="kb-create-workspace-label">
+                Workspace Slug <span className="kb-create-workspace-req">*</span>
+              </label>
+              <FieldHelpHint
+                title="Workspace Slug"
+                summary="Unique lowercase alphanumeric URL slug identifying this tenant partition."
+                validValues={['2 to 64 lowercase alphanumeric chars and hyphens']}
+                docHref="/docs/studio-configuration-reference#workspaces"
+                testId="create-ws-slug-help"
+              />
+            </div>
             <input
               id="kb-workspace-slug"
               type="text"
@@ -265,9 +278,6 @@ export function CreateWorkspaceModal({
               autoComplete="off"
               disabled={isSubmitting}
             />
-            <span className="kb-create-workspace-hint">
-              Unique URL identifier (lowercase letters, numbers, and hyphens).
-            </span>
           </div>
 
           <div className="kb-create-workspace-actions">

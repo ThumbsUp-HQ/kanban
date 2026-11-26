@@ -1,0 +1,24 @@
+$ cd kanban/web && pnpm vitest run src/features/workspaces/CreateWorkspaceModal.test.tsx --coverage --coverage.include="**/CreateWorkspaceModal.tsx"
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan500-5bebfffe/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/workspaces/CreateWorkspaceModal.test.tsx (14 tests) 2064ms
+   ✓ CreateWorkspaceModal & suggestWorkspaceSlug (14)
+     ✓ handles name input, slug auto-suggestion, submission, and onCreated callback 662ms
+     ✓ validates whitespace name and rejects invalid slug formats with clear errors 333ms
+     ✓ covers missing csrf token, non-Error rejection, and nested/fallback error details 540ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:56:49
+   Duration  6.16s (environment 43%, tests 40%, import 11%, worker 3%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    97.61 |     100 |     100 |                   
+ ...spaceModal.tsx |     100 |    97.61 |     100 |     100 | 151               
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE: 0
