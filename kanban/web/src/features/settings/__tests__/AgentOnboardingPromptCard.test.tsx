@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentOnboardingPromptCard } from '../AgentOnboardingPromptCard';
 import * as personalSettingsApi from '../personalSettingsApi';
 import * as clipboardUtil from '../../../utils/clipboard';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 
 vi.mock('../personalSettingsApi', async () => {
   const actual = await vi.importActual('../personalSettingsApi');
@@ -571,6 +572,110 @@ describe('AgentOnboardingPromptCard component', () => {
       expect(css).not.toContain('.kb-mcp-copy-prompt-btn');
 
       // No forbidden unicode em-dash or en-dash
+      expect(css).not.toContain('\u2014');
+      expect(css).not.toContain('\u2013');
+    });
+  });
+
+  describe('StudioDocLink Header Integration (KAN-520)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders agent-onboarding-doc-link with correct href, label, and ARIA title in Light and Dark themes', () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = renderCard();
+
+        const docLink = screen.getByTestId('agent-onboarding-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/multi-provider-ai-engine-and-runners#agent-onboarding',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe('Agent Onboarding Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.kb-agent-onboarding-header-actions');
+        expect(headerActions).not.toBeNull();
+        expect(headerActions?.closest('.kb-agent-onboarding-card-header')).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus on StudioDocLink with appropriate accessibility attributes', () => {
+      renderCard();
+
+      const docLink = screen.getByTestId('agent-onboarding-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+      expect(docLink.tagName.toLowerCase()).toBe('a');
+      expect(docLink.getAttribute('aria-label')).toBe('Agent Onboarding Documentation');
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href} - Title: {(arg as { title?: string } | undefined)?.title}
+        </div>
+      ));
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <ShellPanelsProvider>
+              <AgentOnboardingPromptCard />
+            </ShellPanelsProvider>
+          </QueryClientProvider>,
+        );
+
+        const docLink = screen.getByTestId('agent-onboarding-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain(
+          '/docs/multi-provider-ai-engine-and-runners#agent-onboarding',
+        );
+        expect(helpPanel.textContent).toContain('Agent Onboarding Documentation');
+
+        // Card should remain rendered and interactive
+        expect(screen.getByTestId('copy-agent-onboarding-prompt-btn')).toBeDefined();
+      } finally {
+        unregister();
+      }
+    });
+
+    it('asserts AgentOnboardingPromptCard.tsx contains zero inline style attributes', () => {
+      const tsxPath = path.resolve(__dirname, '../AgentOnboardingPromptCard.tsx');
+      expect(fs.existsSync(tsxPath)).toBe(true);
+      const tsxContent = fs.readFileSync(tsxPath, 'utf8');
+
+      // Verify zero inline style={{}}
+      expect(tsxContent).not.toMatch(/style=\{\{/);
+      expect(tsxContent).not.toMatch(/style=\{/);
+    });
+
+    it('asserts AgentOnboardingPromptCard.css provides white-space nowrap and responsive flex-wrap for header action bar', () => {
+      const cssPath = path.resolve(__dirname, '../AgentOnboardingPromptCard.css');
+      expect(fs.existsSync(cssPath)).toBe(true);
+      const css = fs.readFileSync(cssPath, 'utf8');
+
+      // Header container has flex and flex-wrap
+      expect(css).toMatch(/\.kb-agent-onboarding-card-header\s*\{[^}]*display:\s*flex;/);
+      expect(css).toMatch(/\.kb-agent-onboarding-card-header\s*\{[^}]*flex-wrap:\s*wrap;/);
+
+      // Header main and actions
+      expect(css).toMatch(/\.kb-agent-onboarding-header-main\s*\{[^}]*flex:\s*1\s+1\s+280px;/);
+      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*white-space:\s*nowrap;/);
+      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*display:\s*flex;/);
+
+      // Responsive mobile query
+      expect(css).toMatch(/@media\s*\([^)]*max-width:\s*480px\)\s*\{/);
+      expect(css).toMatch(/\.kb-agent-onboarding-header-main\s*\{[^}]*flex:\s*0\s+1\s+auto;/);
+      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*flex-wrap:\s*wrap;/);
+
+      // No forbidden unicode dashes
       expect(css).not.toContain('\u2014');
       expect(css).not.toContain('\u2013');
     });
