@@ -136,13 +136,19 @@
 }
 
 .kb-agent-onboarding-btn-primary {
-  background: var(--accent-primary, #2563eb);
-  color: var(--accent-primary-fg, #ffffff);
-  border: 1px solid transparent;
+  background: var(--accent-primary);
+  color: var(--accent-primary-fg);
+  border: 1px solid var(--accent-primary);
 }
 
 .kb-agent-onboarding-btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+}
+
+.kb-agent-onboarding-btn-primary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .kb-agent-onboarding-btn-secondary {
@@ -153,6 +159,52 @@
 
 .kb-agent-onboarding-btn-secondary:hover:not(:disabled) {
   background: var(--bg-hover, #f3f4f6);
+}
+
+.kb-agent-onboarding-btn-secondary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.kb-mcp-copy-prompt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  color: var(--badge-fg, #2563eb);
+  background: var(--bg-surface-raised, #ffffff);
+  border: 1px solid var(--border-subtle, #d1d5db);
+}
+
+.kb-mcp-copy-prompt-btn:hover:not(:disabled) {
+  background: var(--bg-hover, #f3f4f6);
+}
+
+.kb-mcp-copy-prompt-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+[data-theme="dark"] .kb-agent-onboarding-btn-secondary,
+[data-theme="dark"] .kb-mcp-copy-prompt-btn {
+  color: var(--badge-fg);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .kb-agent-onboarding-btn-secondary,
+  :root:not([data-theme="light"]) .kb-mcp-copy-prompt-btn {
+    color: var(--badge-fg);
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+  }
 }
 
 .kb-agent-onboarding-btn:disabled {
@@ -170,7 +222,17 @@
 .kb-agent-onboarding-alert-success {
   background: var(--bg-success-subtle, #ecfdf5);
   border: 1px solid var(--border-success, #10b981);
-  color: var(--ok-fg, #065f46);
+  color: #047857;
+}
+
+[data-theme="dark"] .kb-agent-onboarding-alert-success {
+  color: var(--ok-fg, #34d399);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .kb-agent-onboarding-alert-success {
+    color: var(--ok-fg, #34d399);
+  }
 }
 
 .kb-agent-onboarding-alert-error {
