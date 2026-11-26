@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade`  
-**Target Commit:** `2f0f18c9` (branch `feat/KAN-408-slice1-auth-workout`, base `1bbc9981`)  
+**Target Commit:** `ccf7c7c3` (branch `feat/KAN-408-slice1-auth-workout`, base `1bbc9981`)  
 
 ---
 
@@ -21,12 +21,13 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 2. **Break-Glass Administrative Lockout Prevention (HTTP 409 `LOCKOUT_PREVENTED`)**:
    - Attempting to disable the `LOCAL_ADMIN` auth card without a verified external admin login in the preceding 15 minutes was strictly blocked with HTTP 409 Conflict (`code: "LOCKOUT_PREVENTED"`, `layer: "handshake_probe_15m"`), preventing catastrophic administrator lockout.
 3. **LDAPS / StartTLS Handshake & Nested Group RBAC Synchronization**:
-   - `POST /api/v1/admin/auth-cards/test-handshake` and draft probe endpoints (`POST /api/v1/admin/auth-cards/{id}/draft-probe`) failed closed on untrusted CA / invalid bind credentials (`ok: false, status: "FAILED:LDAPBINDERROR"`) and succeeded in 3ms with valid pinned CA PEM.
+   - `POST /api/v1/admin/auth-cards/test-handshake` and draft probe endpoints (`POST /api/v1/admin/auth-cards/{card_ref}/test-handshake`) failed closed on untrusted CA / invalid bind credentials (`ok: false, status: "FAILED:LDAPBINDERROR"`) and succeeded in 3ms with valid pinned CA PEM.
+   - `POST /api/v1/auth/ldap/{slug}/login` verified live against Active Directory fixtures.
    - Nested Active Directory group mapping correctly synchronized external group membership to the canonical `WORKSPACE_MEMBER` role.
 4. **Sliding-Window WebSudo Session Replay (HTTP 403 `AAL2_STALE` -> Step-Up -> HTTP 200)**:
    - Proved that an expired WebSudo session (`> 900s` idle) mid-edit in `AuthCardEditorDrawer` triggered HTTP 403 `AAL2_STALE`, prompted in-modal AAL2 step-up without destroying uncommitted form state, and replayed the card update successfully on first attempt (`HTTP 200 OK`).
 5. **OIDC PKCE S256 & Verified-Claim Linking (HTTP 403 `EMAIL_NOT_VERIFIED`)**:
-   - Verified full authorization code flow with PKCE S256 challenge. Verified identity claims (`email_verified: true`) auto-provisioned correctly, while unverified assertions (`email_verified: false`) were strictly denied auto-merge with HTTP 403 (`code: "EMAIL_NOT_VERIFIED"`).
+   - Verified full authorization code flow with PKCE S256 challenge via `GET /api/v1/auth/oidc/{slug}/start`. Verified identity claims (`email_verified: true`) auto-provisioned correctly, while unverified assertions (`email_verified: false`) were strictly denied auto-merge with HTTP 403 (`code: "EMAIL_NOT_VERIFIED"`).
 6. **Granular RBAC Matrix Capability Enforcement**:
    - Custom role creation with auto-slug generation (`quality-auditor-lead`) and bulk category selectors (`Select All`, `Clear All`, `Read-Only`) correctly granted granular capabilities (`issue:view`, `issue:comment`) while strictly enforcing privilege boundaries against unauthorized administrative endpoints (HTTP 403 Forbidden).
 
@@ -40,14 +41,15 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 - **Endpoints Verified:**
   - `POST /api/v1/auth/local/login`
   - `POST /api/v1/auth/webauthn/register/options`
-  - `POST /api/v1/auth/mfa/totp/setup`
-  - `POST /api/v1/auth/mfa/totp/confirm`
+  - `POST /api/v1/auth/mfa/totp/enroll`
+  - `POST /api/v1/auth/mfa/verify`
+  - `POST /api/v1/auth/aal2/drop`
   - `POST /api/v1/auth/mfa/recovery/stepup`
   - `POST /api/v1/auth/mfa/recovery/regenerate`
   - `POST /api/v1/admin/auth-cards`
   - `PATCH /api/v1/admin/auth-cards/{id}`
   - `POST /api/v1/admin/auth-cards/test-handshake`
-  - `POST /api/v1/admin/auth-cards/{id}/draft-probe`
+  - `POST /api/v1/admin/auth-cards/{card_ref}/test-handshake`
 - **Security Invariants:**
   - Mandatory AAL2 elevation (`Depends(require_admin_aal2)`) on administrative endpoints.
   - Fail-closed break-glass lockout guard enforcing active external administrator presence before permitting deactivation of local admin login.
@@ -55,8 +57,8 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 
 ### 2.2 LDAPS, OIDC & Group Synchronization
 - **Endpoints Verified:**
-  - `POST /api/v1/auth/ldap/login`
-  - `GET /api/v1/auth/oidc/{id}/authorize`
+  - `POST /api/v1/auth/ldap/{slug}/login`
+  - `GET /api/v1/auth/oidc/{slug}/start`
   - `GET /api/v1/auth/oidc/callback`
 - **Security Invariants:**
   - Mandatory TLS verification with CA PEM validation; StartTLS downgrade strictly rejected.
@@ -68,21 +70,39 @@ The workout results, verified against an isolated local PostgreSQL instance and 
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 100 tests passed in 32.81s across `test_auth_cards_admin_api.py`, `test_ldap_tls_and_bind.py`, `test_ldap_group_sync.py`, `test_oidc_flow.py`, `test_identity_linking_real_pg_e2e.py`, `test_granular_rbac_api.py`, `test_auth_cards_service_unit.py`, and `test_ldap_sync_unit.py`.
-   - 0 failures, 0 errors, 0 warnings.
-   - Module coverage: `kanban/auth/ldap/sync.py` 100%, `kanban/auth/cards/service.py` 98%, `kanban/auth/cards/handshake.py` 96%, `kanban/auth/cards/schemas.py` 100%, `kanban/auth/ldap/client.py` 97%.
+   - **106 tests passed in 33.87s** (0 failures, 0 errors, 0 warnings) across:
+     * `kanban/tests/auth/test_auth_cards_admin_api.py`
+     * `kanban/tests/auth/test_auth_cards_handshake_unit.py`
+     * `kanban/tests/auth/test_auth_cards_public_api.py`
+     * `kanban/tests/auth/test_auth_cards_service_unit.py`
+     * `kanban/tests/auth/test_ldap_tls_and_bind.py`
+     * `kanban/tests/auth/test_ldap_service_unit.py`
+     * `kanban/tests/auth/test_ldap_group_sync.py`
+     * `kanban/tests/auth/test_oidc_flow.py`
+     * `kanban/tests/auth/test_identity_linking_real_pg_e2e.py`
+     * `kanban/tests/api/test_granular_rbac_api.py`
+   - **Module-Level Coverage on Touched Modules (All >=95% Mandatory Standard):**
+     * `kanban/auth/ldap/service.py`: **99%** (147 stmts, 0 miss, 48 branches, 2 partial)
+     * `kanban/auth/ldap/sync.py`: **100%** (74 stmts, 0 miss, 32 branches, 0 partial)
+     * `kanban/auth/cards/service.py`: **98%** (328 stmts, 3 miss, 126 branches, 4 partial)
+     * `kanban/auth/cards/handshake.py`: **96%** (94 stmts, 2 miss, 28 branches, 3 partial)
+     * `kanban/auth/cards/schemas.py`: **100%** (100 stmts, 0 miss, 2 branches, 0 partial)
+     * `kanban/auth/ldap/client.py`: **97%** (233 stmts, 6 miss, 60 branches, 4 partial)
 
 2. **Frontend Test Suite (Vitest)**:
-   - 122 tests passed across `AuthStudioPage.test.tsx`, `AuthCardEditorDrawer.test.tsx`, and `RbacPolicyBuilder.test.tsx` in 8.92s.
-   - Branch coverage: **95.76%** across touched files (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%).
+   - **122 tests passed in 8.92s** across 3 test files:
+     * `AuthStudioPage.test.tsx`
+     * `AuthCardEditorDrawer.test.tsx`
+     * `RbacPolicyBuilder.test.tsx`
+   - **Branch coverage: 95.76%** across touched files (`AuthCardEditorDrawer.tsx` 95.57%, `AuthStudioPage.tsx` 95.68%, `RbacPolicyBuilder.tsx` 97.59%).
    - 0 `act(...)` stderr warnings.
 
 3. **Build & Static Analysis Pipeline**:
-   - `ruff check`: All checks passed.
-   - `mypy`: 0 issues in 680 source files.
+   - `ruff check`: All checks passed (0 errors).
+   - `mypy`: 0 issues found in 681 source files.
    - `tsc -b --noEmit`: 0 errors.
    - `eslint`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.30s.
+   - `vite build`: Succeeded in 1.28s.
    - `check_no_dashes.py`: 0 forbidden Unicode dashes found.
 
 ---
@@ -95,7 +115,7 @@ The workout results, verified against an isolated local PostgreSQL instance and 
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 100 backend and 122 frontend tests.
+  - `unit-test-results.txt`: Documents 106 backend and 122 frontend tests with >=95% coverage on all touched modules.
   - `workout-report.md`: Complete live workout log with secret sanitization.
   - `workout-results.json`: Machine-readable execution results.
   - `screenshots/`: 11 zero-mock PNG captures across 5 viewports and live workflow states.
