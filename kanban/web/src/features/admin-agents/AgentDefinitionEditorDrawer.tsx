@@ -599,19 +599,19 @@ function AgentDefinitionEditorContent({
           </div>
 
           <div className="kb-form-group">
-            <label className="kb-form-label">
+            <label id="agent-mcp-tools-label" className="kb-form-label">
               Allowed MCP Agent Tools
               <FieldHelpHint
                 title="Allowed MCP Agent Tools"
                 fieldKey="agent_mcp_allowed_tools"
                 summary="Least-privilege MCP tools this agent is permitted to invoke."
                 defaultValue="All 4 read-only tools (search_tickets, read_ticket, search_knowledge, read_doc)"
-                validValues={[
-                  'search_tickets: Search project work items',
-                  'read_ticket: Read full work item context',
-                  'search_knowledge: Search workspace docs',
-                  'read_doc: Read full doc content',
-                ]}
+                validValues={{
+                  search_tickets: 'Search project work items',
+                  read_ticket: 'Read full issue context',
+                  search_knowledge: 'Search docs and wiki',
+                  read_doc: 'Read doc markdown',
+                }}
                 docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
                 testId="agent-mcp-tools-help"
               />
@@ -619,7 +619,11 @@ function AgentDefinitionEditorContent({
             <span className="kb-form-hint">
               Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).
             </span>
-            <div className="kb-agent-tools-grid">
+            <div
+              className="kb-agent-tools-grid"
+              role="group"
+              aria-labelledby="agent-mcp-tools-label"
+            >
               {ALL_MCP_TOOLS.map((tool) => (
                 <label key={tool} className="kb-agent-tool-item">
                   <input
