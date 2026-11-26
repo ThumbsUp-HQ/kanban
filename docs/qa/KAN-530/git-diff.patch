@@ -1,5 +1,63 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 5eee52bc..2c7135ea 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -204,7 +204,7 @@
+ .field-help-hint-link {
+   font-size: var(--text-xs);
+   font-weight: var(--font-medium);
+-  color: var(--state-unstarted-fg);
++  color: var(--badge-fg);
+   text-decoration: none;
+   display: inline-flex;
+   align-items: center;
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index d094a2c0..0e3dcf2b 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -216,6 +216,7 @@ export function FieldHelpHint({
+   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>): void => {
+     if (e.key === 'Escape') {
+       e.preventDefault();
++      e.stopPropagation();
+       ctrl.escape();
+       return;
+     }
+@@ -270,6 +271,7 @@ export function FieldHelpHint({
+   const handlePopupKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+     if (e.key === 'Escape') {
+       e.preventDefault();
++      e.stopPropagation();
+       ctrl.escape();
+       return;
+     }
+diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.css b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+index b0777d4a..1a3f657b 100644
+--- a/kanban/web/src/features/standalone/StandaloneStatusPanel.css
++++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
+@@ -126,12 +126,18 @@
+ 
+ .standalone-panel__tab-btn--active {
+   background-color: var(--bg-hover, #f1f3f5);
+-  color: var(--accent-primary, #1d4ed8);
++  color: var(--badge-fg);
+   font-weight: 600;
+ }
+ 
+ [data-theme="dark"] .standalone-panel__tab-btn--active {
+-  color: #60a5fa;
++  color: var(--badge-fg);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .standalone-panel__tab-btn--active {
++    color: var(--badge-fg);
++  }
+ }
+ 
+ /* Dismissible Inline Error Alert */
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
-index 44502977..47c67b0e 100644
+index 44502977..7f5ec331 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
 +++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.tsx
 @@ -20,6 +20,7 @@ import { ApiProblem } from '../../api/problem';
@@ -10,7 +68,15 @@ index 44502977..47c67b0e 100644
  import { AdvancedSection } from '../../ui/AdvancedSection';
  import './StandaloneStatusPanel.css';
  
-@@ -738,6 +739,13 @@ export function StandaloneStatusPanel({
+@@ -189,6 +190,7 @@ export function StandaloneStatusPanel({
+ 
+     const handleKeyDown = (e: KeyboardEvent): void => {
+       if (e.key === 'Escape') {
++        if (e.defaultPrevented) return;
+         e.preventDefault();
+         onClose();
+         return;
+@@ -738,6 +740,13 @@ export function StandaloneStatusPanel({
                  >
                    <label htmlFor="backup-passphrase" className="standalone-panel__label">
                      Backup Passphrase
@@ -24,7 +90,7 @@ index 44502977..47c67b0e 100644
                    </label>
                    <input
                      id="backup-passphrase"
-@@ -792,6 +800,14 @@ export function StandaloneStatusPanel({
+@@ -792,6 +801,14 @@ export function StandaloneStatusPanel({
                    <div className="standalone-panel__field-group">
                      <label htmlFor="schedule-interval" className="standalone-panel__label">
                        Backup Interval (hours)
@@ -39,7 +105,7 @@ index 44502977..47c67b0e 100644
                      </label>
                      <input
                        id="schedule-interval"
-@@ -812,6 +828,14 @@ export function StandaloneStatusPanel({
+@@ -812,6 +829,14 @@ export function StandaloneStatusPanel({
                    <div className="standalone-panel__field-group">
                      <label htmlFor="schedule-retention" className="standalone-panel__label">
                        Keep Latest Snapshots
@@ -55,7 +121,7 @@ index 44502977..47c67b0e 100644
                      <input
                        id="schedule-retention"
 diff --git a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
-index ca0371a1..73761b9d 100644
+index ca0371a1..60c0cfb5 100644
 --- a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
 +++ b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
 @@ -221,7 +221,7 @@ describe('StandaloneStatusPanel', () => {
@@ -169,13 +235,13 @@ index ca0371a1..73761b9d 100644
      fireEvent.change(retentionInput, { target: { value: '' } });
  
      // Upload backup and trigger verify error with empty detail fallback
-@@ -2847,4 +2847,120 @@ describe('ComposeExportTab', () => {
+@@ -2847,4 +2847,257 @@ describe('ComposeExportTab', () => {
        expect(screen.getByText('File corrupted')).toBeDefined();
      });
    });
 +
 +  describe('KAN-530: Standalone Status Panel Backup & Schedule FieldHelpHints', () => {
-+    it('renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention', () => {
++    it('renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention', async () => {
 +      const testClient = new QueryClient({
 +        defaultOptions: { queries: { retry: false } },
 +      });
@@ -187,6 +253,32 @@ index ca0371a1..73761b9d 100644
 +        local_llm_endpoint_host: null,
 +      };
 +
++      global.fetch = vi.fn().mockImplementation((url: string) => {
++        if (url.includes('/backup-schedule')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                enabled: false,
++                interval_hours: 24,
++                retention_count: 7,
++                last_run_at: null,
++                next_run_at: null,
++              }),
++              { status: 200, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        if (url.includes('/backups')) {
++          return Promise.resolve(
++            new Response('[]', {
++              status: 200,
++              headers: { 'Content-Type': 'application/json' },
++            }),
++          );
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++
 +      render(
 +        <QueryClientProvider client={testClient}>
 +          <StandaloneStatusPanel
@@ -196,6 +288,10 @@ index ca0371a1..73761b9d 100644
 +          />
 +        </QueryClientProvider>,
 +      );
++
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
++      });
 +
 +      // 1. Backup Passphrase Help Hint
 +      const passphraseHelpBtn = screen.getByTestId('backup-passphrase-help');
@@ -249,7 +345,7 @@ index ca0371a1..73761b9d 100644
 +      expect(retentionDocLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook');
 +    });
 +
-+    it('renders backup and schedule FieldHelpHints without regressions in light and dark mode', () => {
++    it('renders backup and schedule FieldHelpHints without regressions in light and dark mode', async () => {
 +      const testClient = new QueryClient({
 +        defaultOptions: { queries: { retry: false } },
 +      });
@@ -261,6 +357,32 @@ index ca0371a1..73761b9d 100644
 +        local_llm_endpoint_host: null,
 +      };
 +
++      global.fetch = vi.fn().mockImplementation((url: string) => {
++        if (url.includes('/backup-schedule')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                enabled: false,
++                interval_hours: 24,
++                retention_count: 7,
++                last_run_at: null,
++                next_run_at: null,
++              }),
++              { status: 200, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        if (url.includes('/backups')) {
++          return Promise.resolve(
++            new Response('[]', {
++              status: 200,
++              headers: { 'Content-Type': 'application/json' },
++            }),
++          );
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++
 +      const { container } = render(
 +        <QueryClientProvider client={testClient}>
 +          <StandaloneStatusPanel
@@ -270,6 +392,10 @@ index ca0371a1..73761b9d 100644
 +          />
 +        </QueryClientProvider>,
 +      );
++
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
++      });
 +
 +      // Light mode verification
 +      document.documentElement.setAttribute('data-theme', 'light');
@@ -287,6 +413,83 @@ index ca0371a1..73761b9d 100644
 +
 +      // Cleanup
 +      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('closes open FieldHelpHint on Escape without invoking onClose on StandaloneStatusPanel', async () => {
++      const testClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++      const adminStatus: SystemStatus = {
++        deployment_mode: 'standalone',
++        is_server_admin: true,
++        persistent_volume: true,
++        air_gap_mode: false,
++        local_llm_endpoint_host: null,
++      };
++
++      const onClose = vi.fn();
++
++      global.fetch = vi.fn().mockImplementation((url: string) => {
++        if (url.includes('/backup-schedule')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                enabled: false,
++                interval_hours: 24,
++                retention_count: 7,
++                last_run_at: null,
++                next_run_at: null,
++              }),
++              { status: 200, headers: { 'Content-Type': 'application/json' } },
++            ),
++          );
++        }
++        if (url.includes('/backups')) {
++          return Promise.resolve(
++            new Response('[]', {
++              status: 200,
++              headers: { 'Content-Type': 'application/json' },
++            }),
++          );
++        }
++        return Promise.resolve(new Response('{}', { status: 200 }));
++      });
++
++      render(
++        <QueryClientProvider client={testClient}>
++          <StandaloneStatusPanel
++            onClose={onClose}
++            initialStatus={adminStatus}
++            initialTab="backup"
++          />
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByRole('button', { name: 'Save Schedule' })).toBeDefined();
++      });
++
++      const passphraseHelpBtn = screen.getByTestId('backup-passphrase-help');
++      act(() => {
++        passphraseHelpBtn.focus();
++      });
++
++      // Verify popover is open
++      const popover = screen.getByTestId('backup-passphrase-help-popover');
++      expect(popover).toBeDefined();
++
++      // Fire Escape while popover is open
++      fireEvent.keyDown(passphraseHelpBtn, { key: 'Escape' });
++
++      // FieldHelpHint popover closes
++      expect(screen.queryByTestId('backup-passphrase-help-popover')).toBeNull();
++
++      // StandaloneStatusPanel onClose was NOT invoked
++      expect(onClose).not.toHaveBeenCalled();
++
++      // When no popover is open, Escape closes the panel
++      fireEvent.keyDown(document, { key: 'Escape' });
++      expect(onClose).toHaveBeenCalledTimes(1);
 +    });
 +  });
  });
