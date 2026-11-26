@@ -42,6 +42,7 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   passkeys: 'webauthn-passkeys-and-totp-enrollment',
   'envelope-encryption-master-kek': 'envelope-encryption',
   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
+  'dry-run-simulation': 'the-non-persistent-dry-run-drawer',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {

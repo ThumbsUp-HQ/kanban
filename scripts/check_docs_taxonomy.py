@@ -235,6 +235,12 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
                 "agent-onboarding",
             }
         )
+    if "scripted-workflows-and-transition-helpers" in chapter_anchors:
+        chapter_anchors["scripted-workflows-and-transition-helpers"].update(
+            {
+                "dry-run-simulation",
+            }
+        )
     if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
         chapter_anchors["enterprise-whitespace-and-kanban-board"].update(
             {
