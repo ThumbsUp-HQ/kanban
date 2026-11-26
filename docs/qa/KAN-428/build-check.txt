@@ -1,0 +1,35 @@
+=== Database Migrations Check ===
+OK: All 83 migrations valid. Single head: p6_21_agent_onboarding_preferences
+
+=== Python Ruff Check ===
+All checks passed!
+
+=== Python Mypy Check ===
+Success: no issues found in 680 source files
+
+=== Check No Forbidden Dashes ===
+Notice: skipping docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit
+All markdown and text files clean of forbidden Unicode dashes (0 violations).
+
+=== TypeScript Check ===
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+=== ESLint Check ===
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+=== Frontend Build ===
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+765 modules transformed.
+dist/index.html                             0.50 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-Cddbledi.css            622.04 kB
+dist/assets/index-gtAbCBbP.js           2,948.09 kB
+built in 1.73s
+
+=== Build Check Status ===
+BUILD_CHECK_STATUS_ALL_PASSED
