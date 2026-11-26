@@ -1,14 +1,15 @@
-$ cd kanban/web && pnpm vitest run src/features/rbac/__tests__/RoleLabelPicker.test.tsx --coverage --coverage.include="src/features/rbac/RoleLabelPicker.tsx"
+$ cd kanban/web && pnpm vitest run src/components/help/FieldHelpHint.test.tsx src/features/rbac/__tests__/RoleLabelPicker.test.tsx --coverage --coverage.include="src/features/rbac/RoleLabelPicker.tsx"
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan502-226d303d/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/rbac/__tests__/RoleLabelPicker.test.tsx (9 tests) 336ms
+ ✓ src/features/rbac/__tests__/RoleLabelPicker.test.tsx (9 tests) 388ms
+ ✓ src/components/help/FieldHelpHint.test.tsx (32 tests) 389ms
 
- Test Files  1 passed (1)
-      Tests  9 passed (9)
-   Start at  16:23:10
-   Duration  1.47s (environment 56%, tests 28%, import 11%, worker 3%, transform 2%)
+ Test Files  2 passed (2)
+      Tests  41 passed (41)
+   Start at  16:34:53
+   Duration  1.56s (environment 52%, tests 32%, import 11%, worker 3%, transform 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------

@@ -12,10 +12,10 @@ index 0e3dcf2b..2f78a4af 100644
    }, [hintState.restoreFocusId, popupId]);
 diff --git a/kanban/web/src/features/rbac/RoleLabelPicker.css b/kanban/web/src/features/rbac/RoleLabelPicker.css
 new file mode 100644
-index 00000000..a03e7e44
+index 00000000..c5b45229
 --- /dev/null
 +++ b/kanban/web/src/features/rbac/RoleLabelPicker.css
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,162 @@
 +/* Copyright 2026 Kanban Platform Contributors */
 +/* Apache-2.0 License. See LICENSE for details. */
 +
@@ -26,11 +26,14 @@ index 00000000..a03e7e44
 +  flex-direction: column;
 +  gap: 6px;
 +  width: 100%;
++  min-width: 0;
++  max-width: 100%;
 +}
 +
 +.role-label-picker-header {
 +  display: inline-flex;
 +  align-items: center;
++  flex-wrap: wrap;
 +  gap: 6px;
 +}
 +
@@ -41,6 +44,7 @@ index 00000000..a03e7e44
 +.role-label-picker-label {
 +  display: inline-flex;
 +  align-items: center;
++  flex-wrap: wrap;
 +  gap: 6px;
 +  font-size: 0.8125rem;
 +  font-weight: 500;
@@ -51,6 +55,7 @@ index 00000000..a03e7e44
 +.role-label-picker-label-text {
 +  display: inline-flex;
 +  align-items: center;
++  flex-wrap: wrap;
 +  gap: 4px;
 +}
 +
@@ -174,7 +179,7 @@ index 00000000..a03e7e44
 +  }
 +}
 diff --git a/kanban/web/src/features/rbac/RoleLabelPicker.tsx b/kanban/web/src/features/rbac/RoleLabelPicker.tsx
-index e8ef84c1..c1d5f65b 100644
+index e8ef84c1..bcb3056d 100644
 --- a/kanban/web/src/features/rbac/RoleLabelPicker.tsx
 +++ b/kanban/web/src/features/rbac/RoleLabelPicker.tsx
 @@ -2,16 +2,19 @@
@@ -257,7 +262,7 @@ index e8ef84c1..c1d5f65b 100644
        setAssignedLabels(next);
        onRolesChange?.(next.map((l) => l.role_id));
      } catch (err: unknown) {
-@@ -147,63 +165,113 @@ export function RoleLabelPicker({
+@@ -147,63 +165,127 @@ export function RoleLabelPicker({
      }
    };
  
@@ -269,6 +274,7 @@ index e8ef84c1..c1d5f65b 100644
  
    const assignedRoleIds = new Set(labelsList.map((l) => l.role_id));
    const unassignedRoles = rolesList.filter((r) => Boolean(r.id) && !assignedRoleIds.has(r.id));
++  const hasSelect = !disabled && unassignedRoles.length > 0;
  
    return (
 -    <div className="role-label-picker" data-testid="role-label-picker">
@@ -291,17 +297,31 @@ index e8ef84c1..c1d5f65b 100644
 -              onClick={() => void handleRemoveRole(label)}
 +    <div className="role-label-picker-container" data-testid="role-label-picker-container">
 +      <div className="role-label-picker-header">
-+        <label htmlFor={selectId} className="role-label-picker-label">
-+          <span className="role-label-picker-label-text">
-+            {label}
-+            <span
-+              className="role-label-default-indicator"
-+              data-testid="role-label-default-indicator"
-+            >
-+              (Default: {defaultValue})
++        {hasSelect ? (
++          <label htmlFor={selectId} className="role-label-picker-label">
++            <span className="role-label-picker-label-text">
++              {label}
++              <span
++                className="role-label-default-indicator"
++                data-testid="role-label-default-indicator"
++              >
++                (Default: {defaultValue})
++              </span>
++            </span>
++          </label>
++        ) : (
++          <span className="role-label-picker-label">
++            <span className="role-label-picker-label-text">
++              {label}
++              <span
++                className="role-label-default-indicator"
++                data-testid="role-label-default-indicator"
++              >
++                (Default: {defaultValue})
++              </span>
 +            </span>
 +          </span>
-+        </label>
++        )}
 +        {showHelpHint && (
 +          <FieldHelpHint
 +            testId="role-label-help"
@@ -377,12 +397,11 @@ index e8ef84c1..c1d5f65b 100644
 +          </span>
 +        ))}
 +
-+        {!disabled && unassignedRoles.length > 0 && (
++        {hasSelect && (
 +          <select
 +            id={selectId}
 +            className="role-label-select"
 +            data-testid="add-role-label-select"
-+            aria-label="Add role"
 +            aria-describedby={`role-label-hint-${sanitizedId}`}
 +            onChange={(e) => void handleAddRole(e)}
 +            value=""
@@ -422,7 +441,7 @@ index e8ef84c1..c1d5f65b 100644
    );
  }
 diff --git a/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx b/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
-index 657faf3d..989b3c2d 100644
+index 657faf3d..d01ffaa1 100644
 --- a/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
 +++ b/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
 @@ -1,7 +1,7 @@
@@ -522,11 +541,13 @@ index 657faf3d..989b3c2d 100644
  
      vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
        if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
-@@ -112,7 +136,11 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+@@ -111,18 +135,23 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+       return Promise.resolve([] as never);
      });
  
-     const { rerender } = render(
+-    const { rerender } = render(
 -      <RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />,
++    const { container, rerender } = render(
 +      <RoleLabelPicker
 +        principalId="user-1"
 +        availableRoles={MOCK_AVAILABLE}
@@ -535,7 +556,10 @@ index 657faf3d..989b3c2d 100644
      );
  
      await waitFor(() => {
-@@ -122,7 +150,7 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+       expect(screen.getByTestId('add-role-label-select')).toBeDefined();
++      expect(container.querySelector('label[for]')).toBeDefined();
+     });
+ 
      // Error branch on POST
      postSpy.mockRejectedValueOnce(new Error('Escalation denied'));
      fireEvent.change(screen.getByTestId('add-role-label-select'), {
@@ -544,7 +568,7 @@ index 657faf3d..989b3c2d 100644
      });
      await waitFor(() => {
        expect(screen.getByRole('alert').textContent).toContain('Escalation denied');
-@@ -130,10 +158,11 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+@@ -130,25 +159,165 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
  
      // Success branch on POST
      fireEvent.change(screen.getByTestId('add-role-label-select'), {
@@ -556,8 +580,15 @@ index 657faf3d..989b3c2d 100644
 +      expect(onRolesChange).toHaveBeenCalledWith(['role-1', 'role-2', 'role-3']);
      });
  
-     // Disabled state hides remove buttons and add select
-@@ -145,10 +174,147 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+-    // Disabled state hides remove buttons and add select
++    // Disabled state hides remove buttons and add select, rendering span instead of dangling label
+     rerender(
+       <RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} disabled={true} />,
+     );
+     expect(screen.queryByTestId('add-role-label-select')).toBeNull();
++    expect(container.querySelector('label')).toBeNull();
++    expect(container.querySelector('span.role-label-picker-label')).toBeDefined();
+   });
  
    it('handles initial load error, empty principalId, and fallback error messages gracefully', async () => {
      vi.spyOn(clientModule, 'apiFetch').mockRejectedValue({});
@@ -706,3 +737,30 @@ index 657faf3d..989b3c2d 100644
 +    unmount();
    });
  });
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.css b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+index 94159480..d20bc555 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.css
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+@@ -87,6 +87,22 @@
+     flex-shrink: 0;
+   }
+ 
++  .kb-table td[data-label="Role Grant"] {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-2, 8px);
++    text-align: left;
++  }
++
++  .kb-table td[data-label="Role Grant"]::before {
++    margin-bottom: var(--space-1, 4px);
++  }
++
++  .kb-table td[data-label="Role Grant"] .kb-member-role-select {
++    width: 100%;
++    max-width: 100%;
++  }
++
+   /* Sticky / visible action buttons (KAN-344) */
+   .kb-settings-form-actions,
+   .kb-members-actions-bar {
