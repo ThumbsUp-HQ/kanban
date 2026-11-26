@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/components/help/StudioDocLink.css b/kanban/web/src/components/help/StudioDocLink.css
-index 830a5ff6..91949d7a 100644
+index 830a5ff6..7954de32 100644
 --- a/kanban/web/src/components/help/StudioDocLink.css
 +++ b/kanban/web/src/components/help/StudioDocLink.css
 @@ -14,6 +14,8 @@
@@ -11,18 +11,16 @@ index 830a5ff6..91949d7a 100644
  }
  
  .kb-studio-doc-link:hover {
-diff --git a/kanban/web/src/components/help/StudioDocLink.tsx b/kanban/web/src/components/help/StudioDocLink.tsx
-index 1bddd33b..c85df429 100644
---- a/kanban/web/src/components/help/StudioDocLink.tsx
-+++ b/kanban/web/src/components/help/StudioDocLink.tsx
-@@ -36,6 +36,7 @@ export function StudioDocLink({
-       data-testid={testId}
-       onClick={handleClick}
-       aria-label={title ?? label}
-+      tabIndex={0}
-     >
-       <span aria-hidden="true">&#128214;</span>
-       <span>{label}</span>
+@@ -26,3 +28,9 @@
+   outline: 2px solid var(--focus-ring);
+   outline-offset: 2px;
+ }
++
++@media (max-width: 767px) {
++  .kb-studio-doc-link {
++    min-height: var(--tap-min, 44px);
++  }
++}
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
 index 8b80fcc5..487f7024 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
@@ -306,19 +304,23 @@ index dd922eaa..dfb24249 100644
    .auth-card-row {
      flex-direction: column;
      align-items: flex-start;
-diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
-index 4a961e42..4a999b2c 100644
---- a/kanban/web/src/features/settings/ProjectSettingsPage.css
-+++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
-@@ -13,6 +13,22 @@
-   margin-bottom: 2rem;
-   border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
-   padding-bottom: 1rem;
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.css b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+index 94159480..4102e458 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.css
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+@@ -14,8 +14,41 @@
+   color: var(--kb-color-text-primary, #0f172a);
+ }
+ 
++.kb-settings-header:has(> .kb-settings-header-actions) {
 +  display: flex;
 +  justify-content: space-between;
 +  align-items: flex-start;
 +  flex-wrap: wrap;
 +  gap: var(--space-4, 16px);
++  margin-bottom: 2rem;
++  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++  padding-bottom: 1rem;
 +}
 +
 +.kb-settings-header-actions {
@@ -330,18 +332,11 @@ index 4a961e42..4a999b2c 100644
 +
 +.kb-settings-header-actions .kb-studio-doc-link {
 +  white-space: nowrap;
- }
- 
- .kb-settings-title {
-diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.css b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
-index 94159480..6e3ad2c5 100644
---- a/kanban/web/src/features/settings/WorkspaceSettingsPage.css
-+++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
-@@ -16,6 +16,17 @@
- 
++}
++
  /* Horizontal swipeable tabs for mobile viewports (KAN-344) */
  @media (max-width: 767px) {
-+  .kb-settings-header {
++  .kb-settings-header:has(> .kb-settings-header-actions) {
 +    flex-direction: column;
 +    align-items: flex-start;
 +    gap: var(--space-3, 12px);
@@ -483,23 +478,33 @@ index c8ce4c1b..2349bd86 100644
 +  });
  });
 diff --git a/kanban/web/src/features/standalone/ComposeExportTab.tsx b/kanban/web/src/features/standalone/ComposeExportTab.tsx
-index 831c9415..e1fdaf3c 100644
+index 831c9415..469c6484 100644
 --- a/kanban/web/src/features/standalone/ComposeExportTab.tsx
 +++ b/kanban/web/src/features/standalone/ComposeExportTab.tsx
-@@ -152,6 +152,12 @@ export function ComposeExportTab({
-       </div>
+@@ -133,6 +133,22 @@ export function ComposeExportTab({
+         </div>
+       )}
  
-       <div className="standalone-panel__btn-group">
-+        <StudioDocLink
-+          href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
-+          title="Compose Promotion Runbook"
-+          testId="compose-export-doc-link"
-+        />
++      <header className="standalone-panel__tab-header">
++        <div className="standalone-panel__tab-header-title-group">
++          <h3 className="standalone-panel__tab-header-title">Compose &amp; Promotion</h3>
++          <p className="standalone-panel__tab-header-subtitle">
++            Export container manifests and runbooks for standalone and production deployment.
++          </p>
++        </div>
++        <div className="standalone-panel__tab-header-actions">
++          <StudioDocLink
++            href="/docs/production-promotion-and-backup-runbook#standalone-to-production-promotion-workflow"
++            title="Compose Promotion Runbook"
++            testId="compose-export-doc-link"
++          />
++        </div>
++      </header>
 +
+       {/* Mode Selector */}
+       <div className="standalone-panel__compose-mode-toggle" role="group" aria-label="Compose template mode">
          <button
-           type="button"
-           onClick={() => {
-@@ -179,12 +185,6 @@ export function ComposeExportTab({
+@@ -179,12 +195,6 @@ export function ComposeExportTab({
              {copiedEnv ? 'Copied!' : 'Copy .env.example'}
            </button>
          )}
@@ -513,7 +518,7 @@ index 831c9415..e1fdaf3c 100644
  
        {composeMode === 'multi' ? (
 diff --git a/kanban/web/src/features/standalone/StandaloneStatusPanel.css b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
-index b0777d4a..10d58451 100644
+index b0777d4a..690df69d 100644
 --- a/kanban/web/src/features/standalone/StandaloneStatusPanel.css
 +++ b/kanban/web/src/features/standalone/StandaloneStatusPanel.css
 @@ -518,10 +518,15 @@
@@ -532,7 +537,59 @@ index b0777d4a..10d58451 100644
  .standalone-panel__compose-mode-toggle {
    display: flex;
    flex-wrap: wrap;
-@@ -670,4 +675,9 @@
+@@ -623,6 +628,51 @@
+   word-break: break-word;
+ }
+ 
++/* Tab Header & Doc Link Cadence (KAN-446) */
++.standalone-panel__tab-header {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: var(--space-4, 16px);
++  flex-wrap: wrap;
++  padding-bottom: var(--space-3, 12px);
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++  margin-bottom: var(--space-1, 4px);
++}
++
++.standalone-panel__tab-header-title-group {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++  flex: 1 1 auto;
++  min-width: 200px;
++}
++
++.standalone-panel__tab-header-title {
++  margin: 0;
++  font-size: 1.125rem;
++  font-weight: 600;
++  color: var(--fg-primary, #111827);
++}
++
++.standalone-panel__tab-header-subtitle {
++  margin: 0;
++  font-size: 0.875rem;
++  color: var(--fg-muted, #525866);
++  line-height: 1.4;
++}
++
++.standalone-panel__tab-header-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-shrink: 0;
++}
++
++.standalone-panel__tab-header-actions .kb-studio-doc-link {
++  white-space: nowrap;
++}
++
+ /* Mobile Responsiveness (<= 768px, KANBA-213) */
+ @media (max-width: 768px) {
+   .standalone-panel {
+@@ -670,4 +720,20 @@
      min-height: var(--tap-min, 44px);
      min-width: var(--tap-min, 44px);
    }
@@ -541,9 +598,20 @@ index b0777d4a..10d58451 100644
 +    flex-wrap: wrap;
 +    gap: var(--space-2, 8px);
 +  }
++
++  .standalone-panel__tab-header {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .standalone-panel__tab-header-actions {
++    width: 100%;
++    justify-content: flex-start;
++  }
  }
 diff --git a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
-index ca0371a1..3f7ceafa 100644
+index ca0371a1..11c03854 100644
 --- a/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
 +++ b/kanban/web/src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
 @@ -694,7 +694,6 @@ describe('StandaloneStatusPanel', () => {
@@ -566,11 +634,11 @@ index ca0371a1..3f7ceafa 100644
    });
  
    it('switches between 3 tabs and renders respective panels', async () => {
-@@ -2156,6 +2152,75 @@ describe('ComposeExportTab', () => {
+@@ -2156,6 +2152,124 @@ describe('ComposeExportTab', () => {
      /* eslint-enable @typescript-eslint/no-deprecated */
    });
  
-+  it('KAN-446: renders compose-export-doc-link positioned before primary download CTA in .standalone-panel__btn-group with ARIA, focus and Light/Dark rendering', () => {
++  it('KAN-446: renders compose-export-doc-link inside .standalone-panel__tab-header-actions positioned above mode toggle with ARIA, focus and Light/Dark rendering', () => {
 +    const mockExportData = {
 +      filename: 'docker-compose.yml',
 +      compose_yaml: 'services:\n  kanban:\n    image: kanban:latest\n',
@@ -588,15 +656,19 @@ index ca0371a1..3f7ceafa 100644
 +      expect(docLink.getAttribute('aria-label')).toBe('Compose Promotion Runbook');
 +      expect(docLink.textContent).toContain('Documentation ->');
 +
-+      const btnGroup = docLink.closest('.standalone-panel__btn-group');
-+      expect(btnGroup).not.toBeNull();
-+      if (!btnGroup) throw new Error('btnGroup is null');
++      // Placed inside .standalone-panel__tab-header-actions
++      const headerActions = docLink.closest('.standalone-panel__tab-header-actions');
++      expect(headerActions).not.toBeNull();
++      if (!headerActions) throw new Error('headerActions is null');
 +
-+      // Check placement: docLink is first child, to the left of the primary download CTA
-+      expect(btnGroup.firstElementChild).toBe(docLink);
-+      const primaryBtn = btnGroup.querySelector('.standalone-panel__btn--primary');
-+      expect(primaryBtn).not.toBeNull();
-+      expect(primaryBtn?.textContent).toContain('Download docker-compose.yml');
++      // Placed inside .standalone-panel__tab-header
++      const tabHeader = docLink.closest('.standalone-panel__tab-header');
++      expect(tabHeader).not.toBeNull();
++      if (!tabHeader) throw new Error('tabHeader is null');
++
++      // Placed above mode toggle in container DOM order
++      const modeToggle = screen.getByRole('group', { name: 'Compose template mode' });
++      expect(tabHeader.compareDocumentPosition(modeToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 +
 +      // Keyboard focus
 +      docLink.focus();
@@ -605,6 +677,51 @@ index ca0371a1..3f7ceafa 100644
 +      unmount();
 +    }
 +    document.documentElement.removeAttribute('data-theme');
++  });
++
++  it('KAN-446: handles fetchExportData non-ApiProblem Error and falls back to Error.message', async () => {
++    const mockFetch = vi.fn().mockImplementation(() => {
++      return Promise.reject(new Error('Network offline'));
++    });
++    global.fetch = mockFetch;
++
++    render(<ComposeExportTab />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('alert')).toBeDefined();
++      expect(screen.getByText('Network offline')).toBeDefined();
++    });
++  });
++
++  it('KAN-446: handles fetchExportData non-ApiProblem Error with empty message and falls back to default message', async () => {
++    const mockFetch = vi.fn().mockImplementation(() => {
++      return Promise.reject(new Error(''));
++    });
++    global.fetch = mockFetch;
++
++    render(<ComposeExportTab />);
++
++    await waitFor(() => {
++      expect(screen.getByRole('alert')).toBeDefined();
++      expect(screen.getByText('Failed to load export data')).toBeDefined();
++    });
++  });
++
++  it('KAN-446: falls back to docker-compose.yml filename when filename is empty in multi mode', async () => {
++    const mockExportData = {
++      filename: '',
++      compose_yaml: 'services:\n',
++      env_template: 'SECRET=1\n',
++      migration_steps_markdown: 'Steps',
++    };
++
++    render(<ComposeExportTab initialData={mockExportData} />);
++    const downloadBtn = screen.getByRole('button', { name: 'Download docker-compose.yml' });
++    await act(async () => {
++      fireEvent.click(downloadBtn);
++      await Promise.resolve();
++    });
++    expect(createObjectURLMock).toHaveBeenCalled();
 +  });
 +
 +  it('KAN-446: opens in-app help panel when compose-export-doc-link is clicked in ShellPanelsProvider', () => {
@@ -642,241 +759,3 @@ index ca0371a1..3f7ceafa 100644
    it('handles automated backup schedule editing and saving', async () => {
      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
      const adminStatus: SystemStatus = {
-diff --git a/scripts/capture_kan446_screenshots.mjs b/scripts/capture_kan446_screenshots.mjs
-new file mode 100644
-index 00000000..188932a3
---- /dev/null
-+++ b/scripts/capture_kan446_screenshots.mjs
-@@ -0,0 +1,232 @@
-+// Copyright 2026 Kanban Platform Contributors
-+// Apache-2.0 License. See LICENSE for details.
-+/**
-+ * Playwright screenshot capture script for KAN-446.
-+ * Captures responsive views of standardized StudioDocLink placement across:
-+ * 1. desktop-light-1440x900.png
-+ * 2. desktop-dark-1440x900.png
-+ * 3. tablet-768x1024.png
-+ * 4. tablet-dark-768x1024.png
-+ * 5. mobile-390x844.png
-+ * 6. mobile-dark-390x844.png
-+ */
-+
-+import fs from 'node:fs';
-+import path from 'node:path';
-+import { spawn } from 'node:child_process';
-+
-+let chromium;
-+try {
-+  const localPlaywright = path.resolve('kanban/web/node_modules/@playwright/test/index.mjs');
-+  ({ chromium } = await import(localPlaywright));
-+} catch {
-+  try {
-+    ({ chromium } = await import('playwright'));
-+  } catch {
-+    ({ chromium } = await import('@playwright/test'));
-+  }
-+}
-+
-+const PORT = process.env.KAN446_PORT || '18446';
-+const BASE_URL = `http://127.0.0.1:${PORT}`;
-+const OUT_DIR = path.resolve('docs/qa/KAN-446/screenshots');
-+fs.mkdirSync(OUT_DIR, { recursive: true });
-+
-+async function waitForServer(url, timeoutMs = 30000) {
-+  const start = Date.now();
-+  while (Date.now() - start < timeoutMs) {
-+    try {
-+      const res = await fetch(url);
-+      if (res.ok || res.status === 404) return;
-+    } catch {
-+      // Retry
-+    }
-+    await new Promise((r) => setTimeout(r, 400));
-+  }
-+  throw new Error(`Server did not respond at ${url} within ${timeoutMs}ms`);
-+}
-+
-+const VIEWPORTS = [
-+  { filename: 'desktop-light-1440x900.png', width: 1440, height: 900, theme: 'light' },
-+  { filename: 'desktop-dark-1440x900.png', width: 1440, height: 900, theme: 'dark' },
-+  { filename: 'tablet-768x1024.png', width: 768, height: 1024, theme: 'light' },
-+  { filename: 'tablet-dark-768x1024.png', width: 768, height: 1024, theme: 'dark' },
-+  { filename: 'mobile-390x844.png', width: 390, height: 844, theme: 'light' },
-+  { filename: 'mobile-dark-390x844.png', width: 390, height: 844, theme: 'dark' },
-+];
-+
-+async function main() {
-+  console.log(`[KAN-446] Starting preview server on port ${PORT}...`);
-+  const server = spawn('pnpm', ['--dir', 'kanban/web', 'preview', '--host', '127.0.0.1', '--port', PORT, '--strictPort'], {
-+    stdio: 'inherit',
-+  });
-+
-+  try {
-+    await waitForServer(BASE_URL);
-+    console.log(`[KAN-446] Server is ready at ${BASE_URL}. Launching Chromium...`);
-+
-+    const browser = await chromium.launch({
-+      executablePath: '/usr/bin/google-chrome',
-+      headless: true,
-+      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-+    });
-+
-+    try {
-+      for (const vp of VIEWPORTS) {
-+        console.log(`\nCapturing ${vp.filename} (${vp.width}x${vp.height}, theme=${vp.theme})...`);
-+        const context = await browser.newContext({
-+          viewport: { width: vp.width, height: vp.height },
-+          colorScheme: vp.theme,
-+          deviceScaleFactor: 1,
-+        });
-+
-+        const page = await context.newPage();
-+        page.on('console', (msg) => console.log('[Browser Console]', msg.type(), msg.text()));
-+        page.on('pageerror', (err) => console.log('[Browser Error]', err.message));
-+        page.on('response', (res) => { if (!res.ok()) console.log('[HTTP Error]', res.status(), res.url()); });
-+
-+        // Intercept API routes
-+        await page.route('**/api/v1/setup/status', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify({ initialized: true, is_initialized: true }),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/auth/session', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify({
-+              is_authenticated: true,
-+              user: {
-+                id: 'u-admin',
-+                handle: 'admin',
-+                display_name: 'Security Admin',
-+                is_server_admin: true,
-+                is_workspace_admin: true,
-+              },
-+            }),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/auth/me', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify({
-+              id: 'u-admin',
-+              handle: 'admin',
-+              display_name: 'Security Admin',
-+              is_server_admin: true,
-+              is_workspace_admin: true,
-+            }),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/admin/auth-cards', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify({
-+              cards: [
-+                {
-+                  id: 'c-okta',
-+                  provider_kind: 'OIDC',
-+                  slug: 'okta',
-+                  display_name: 'Okta Enterprise SSO',
-+                  button_subtext: 'Workforce IDP',
-+                  icon_preset: 'shield',
-+                  is_enabled: true,
-+                  sort_rank: '1',
-+                  auto_provision_users: true,
-+                  allowed_email_domains: ['example.com'],
-+                  has_secret: true,
-+                  dek_kid: 'dek-1',
-+                  last_health_status: 'HEALTHY',
-+                  last_handshake_at: '2026-11-26T15:00:00Z',
-+                  check_summary: 'Handshake healthy (42ms)',
-+                  latency_ms: 42,
-+                  public_config: { issuer_url: 'https://idp.example.com', client_id: 'client-okta' },
-+                },
-+                {
-+                  id: 'c-local',
-+                  provider_kind: 'LOCAL',
-+                  slug: 'local',
-+                  display_name: 'Local Admin Credentials',
-+                  button_subtext: 'Emergency Break-Glass',
-+                  icon_preset: 'key',
-+                  is_enabled: true,
-+                  sort_rank: '2',
-+                  auto_provision_users: false,
-+                  allowed_email_domains: [],
-+                  has_secret: false,
-+                  dek_kid: null,
-+                  last_health_status: 'HEALTHY',
-+                  last_handshake_at: null,
-+                  check_summary: 'Native Local Storage',
-+                  latency_ms: 1,
-+                  public_config: {},
-+                },
-+              ],
-+            }),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/admin/principals*', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify([]),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/admin/rbac/roles*', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify([]),
-+          });
-+        });
-+
-+        await page.route('**/api/v1/system/status', async (route) => {
-+          await route.fulfill({
-+            status: 200,
-+            contentType: 'application/json',
-+            body: JSON.stringify({ deployment_mode: 'multi_container', version: '0.1.0' }),
-+          });
-+        });
-+
-+        // Navigate to Authentication Studio
-+        await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'networkidle' });
-+
-+        // Apply theme data attribute
-+        await page.evaluate((theme) => {
-+          document.documentElement.setAttribute('data-theme', theme);
-+          localStorage.setItem('theme', theme);
-+        }, vp.theme);
-+
-+        // Wait for doc link to be visible
-+        await page.waitForSelector('[data-testid="auth-studio-doc-link"]', { state: 'visible', timeout: 10000 });
-+        await page.waitForTimeout(500);
-+
-+        const outPath = path.join(OUT_DIR, vp.filename);
-+        await page.screenshot({ path: outPath, fullPage: false });
-+        console.log(`Saved screenshot: ${outPath}`);
-+
-+        await context.close();
-+      }
-+      console.log('\nAll 6 screenshots captured successfully!');
-+    } finally {
-+      await browser.close();
-+    }
-+  } finally {
-+    server.kill();
-+  }
-+}
-+
-+main().catch((err) => {
-+  console.error('Fatal error during screenshot capture:', err);
-+  process.exit(1);
-+});
