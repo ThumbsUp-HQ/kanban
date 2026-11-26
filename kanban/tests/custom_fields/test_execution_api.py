@@ -519,6 +519,3 @@ async def test_custom_field_test_execute_api_endpoint(
             break
     assert limited_resp is not None
     assert limited_resp.status_code == 429
-
-
-

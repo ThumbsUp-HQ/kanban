@@ -1749,9 +1749,7 @@ async def test_builtin_wasm_formulas_and_seeders_coverage(
         "flush",
         side_effect=[IntegrityError("dup", {}, Exception("dup")), None],
     ):
-        await seed_builtin_wasm(
-            api_env.seed, ws_id, uid, BUILTIN_WASM_FORMULAS[1].sha256_bytes
-        )
+        await seed_builtin_wasm(api_env.seed, ws_id, uid, BUILTIN_WASM_FORMULAS[1].sha256_bytes)
 
     # ensure_approved_wasm_modules handles IntegrityError race safely
     await api_env.seed.execute(

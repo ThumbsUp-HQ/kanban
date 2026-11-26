@@ -51,6 +51,8 @@ line-length = 100
 extend-exclude = [
     "docs/tickets/publish_to_board.py",
     "scripts/run_*.py",
+    "scripts/execute_*.py",
+    "scripts/setup_*.py",
     "scripts/*_companion.py",
 ]
 
@@ -79,6 +81,8 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 packages = ["database", "kanban", "mcp", "agent", "scripts", "deploy"]
 exclude = [
     "^scripts/run_.*\\.py$",
+    "^scripts/execute_.*\\.py$",
+    "^scripts/setup_.*\\.py$",
     "^scripts/.*_companion\\.py$",
 ]
 

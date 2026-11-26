@@ -497,4 +497,3 @@ async def test_delete_repo_binding_cleans_up_existing_disk_mirror(
     r_del = await client.delete(f"/api/v1/repo-bindings/{binding_id}")
     assert r_del.status_code == 204
     assert not mirror_path.exists()
-

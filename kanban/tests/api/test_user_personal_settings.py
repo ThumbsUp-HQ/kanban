@@ -733,5 +733,3 @@ async def test_user_settings_server_admin_and_guest_roles(
     )
     me_resp_ver = await build_me_response(req, ctx_ver)
     assert json.loads(bytes(me_resp_ver.body))["aal2_active"] is True
-
-
