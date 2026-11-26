@@ -68,6 +68,10 @@ class WorkflowTransitionHook(Base):
             "sort_rank",
             postgresql_where=text("is_enabled"),
         ),
+        Index(
+            "idx_workflow_transition_hooks_inherited_from_template_id",
+            "inherited_from_template_id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
@@ -104,6 +108,9 @@ class WorkflowTransitionHook(Base):
         SmallInteger, nullable=False, default=3, server_default=text("3")
     )
     timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    inherited_from_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("default_workflow_hooks.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class WorkflowTransitionExecution(Base):
@@ -214,3 +221,112 @@ class WorkflowHookInvocation(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DefaultWorkflowHook(Base):
+    """System-wide and workspace default workflow hook template."""
+
+    __tablename__ = "default_workflow_hooks"
+    __table_args__ = (
+        CheckConstraint(
+            "scope_kind IN ('system', 'workspace')",
+            name="chk_default_workflow_hooks_scope_kind",
+        ),
+        CheckConstraint(
+            "(scope_kind = 'system' AND workspace_id IS NULL) "
+            "OR (scope_kind = 'workspace' AND workspace_id IS NOT NULL)",
+            name="chk_default_workflow_hooks_scope",
+        ),
+        CheckConstraint(
+            "char_length(name) BETWEEN 1 AND 120",
+            name="chk_default_workflow_hooks_name_len",
+        ),
+        CheckConstraint(
+            "from_state_name IS NULL OR char_length(from_state_name) BETWEEN 1 AND 80",
+            name="chk_default_workflow_hooks_from_state_len",
+        ),
+        CheckConstraint(
+            "char_length(to_state_name) BETWEEN 1 AND 80",
+            name="chk_default_workflow_hooks_to_state_len",
+        ),
+        CheckConstraint(
+            "hook_kind IN ('wasm_sync', 'agent_async', 'builtin')",
+            name="chk_default_workflow_hooks_kind",
+        ),
+        CheckConstraint("sort_rank >= 0", name="chk_default_workflow_hooks_sort_rank"),
+        CheckConstraint(
+            "agent_slug IS NULL OR char_length(agent_slug) BETWEEN 1 AND 80",
+            name="chk_default_workflow_hooks_agent_slug_len",
+        ),
+        CheckConstraint(
+            "failure_policy IN ('fail_closed', 'fail_open_warn')",
+            name="chk_default_workflow_hooks_failure_policy",
+        ),
+        CheckConstraint(
+            "timeout_ms IS NULL OR timeout_ms BETWEEN 1000 AND 600000",
+            name="chk_default_workflow_hooks_timeout_ms",
+        ),
+        CheckConstraint(
+            "scope_kind <> 'system' OR agent_definition_id IS NULL",
+            name="chk_default_workflow_hooks_system_agent_def",
+        ),
+        CheckConstraint(
+            "wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32",
+            name="chk_default_workflow_hooks_wasm_len",
+        ),
+        CheckConstraint(
+            "max_rework_attempts BETWEEN 1 AND 20",
+            name="chk_default_workflow_hooks_max_rework",
+        ),
+        Index(
+            "uq_default_workflow_hooks_scope_ws_name",
+            "scope_kind",
+            text("COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("lower(name)"),
+            unique=True,
+        ),
+        Index("idx_default_workflow_hooks_scope", "scope_kind", "workspace_id"),
+        Index("idx_default_workflow_hooks_workspace_id", "workspace_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    scope_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    from_state_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    to_state_name: Mapped[str] = mapped_column(Text, nullable=False)
+    hook_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    sort_rank: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default=text("100")
+    )
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    wasm_module_sha256: Mapped[bytes | None] = mapped_column(LargeBinary(32), nullable=True)
+    agent_definition_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=True
+    )
+    agent_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_mutable_fields: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    failure_policy: Mapped[str] = mapped_column(
+        Text, nullable=False, default="fail_closed", server_default=text("'fail_closed'")
+    )
+    timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_rework_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3, server_default=text("3")
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
