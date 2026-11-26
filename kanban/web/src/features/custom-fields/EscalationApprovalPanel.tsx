@@ -390,8 +390,10 @@ export function EscalationApprovalPanel({
               Provide justification for running this field with elevated scope or credentials.
             </p>
             <div className="custom-field-form-group">
-              <label htmlFor="approval-justification" className="custom-field-form-label">
-                Business Justification (min 10 characters)
+              <div className="custom-field-approval-label-row">
+                <label htmlFor="approval-justification" className="custom-field-form-label">
+                  Business Justification (min 10 characters)
+                </label>
                 <FieldHelpHint
                   title="Business Justification"
                   summary="Audit justification explaining why elevated scope or service-principal credentials are required."
@@ -399,7 +401,7 @@ export function EscalationApprovalPanel({
                   docHref="/docs/custom-fields#approvals"
                   testId="hint-escalation-justification"
                 />
-              </label>
+              </div>
               <textarea
                 id="approval-justification"
                 className="custom-field-textarea"
@@ -453,15 +455,17 @@ export function EscalationApprovalPanel({
             </p>
             <form onSubmit={handleAal2Submit}>
               <div className="custom-field-form-group">
-                <label htmlFor="aal2-otp" className="custom-field-form-label">
-                  Passkey or Authenticator Code
+                <div className="custom-field-approval-label-row">
+                  <label htmlFor="aal2-otp" className="custom-field-form-label">
+                    Passkey or Authenticator Code
+                  </label>
                   <FieldHelpHint
                     title="AAL2 Step-Up Verification"
                     summary="Secondary factor verification required before executing or approving administrative escalation."
                     docHref="/docs/custom-fields#aal2-stepup"
                     testId="hint-escalation-aal2"
                   />
-                </label>
+                </div>
                 <input
                   id="aal2-otp"
                   type="text"

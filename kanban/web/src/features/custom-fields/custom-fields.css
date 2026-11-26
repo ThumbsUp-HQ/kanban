@@ -752,6 +752,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.custom-field-sp-warning-banner .kb-error-help-container,
+.custom-field-sp-warning-banner .kb-error-help-doc-link {
+  white-space: nowrap;
 }
 
 .custom-field-error-banner {
@@ -844,6 +850,12 @@
   margin-top: 6px;
 }
 
+.custom-field-approval-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* --------------------------------------------------------------------------
    RESPONSIVE ADAPTATIONS (<= 768px, KANBA-213)
    -------------------------------------------------------------------------- */
@@ -859,6 +871,8 @@
     flex-direction: column;
     max-width: 100%;
     overflow-x: hidden;
+    height: auto;
+    overflow: visible;
   }
 
   .custom-fields-editor-sidebar {
@@ -866,6 +880,8 @@
     max-width: 100%;
     flex: 0 0 auto;
     max-height: 200px;
+    overflow-y: auto;
+    flex-shrink: 0;
     border-right: none;
     border-bottom: 1px solid var(--border-subtle, #e5e7eb);
   }

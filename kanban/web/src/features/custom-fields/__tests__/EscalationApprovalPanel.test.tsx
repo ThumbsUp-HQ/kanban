@@ -573,7 +573,10 @@ describe('EscalationApprovalPanel', () => {
 
     // Open request modal
     fireEvent.click(await screen.findByTestId('request-approval-btn'));
-    expect(screen.getByTestId('hint-escalation-justification')).toBeDefined();
+    const justificationHint = screen.getByTestId('hint-escalation-justification');
+    expect(justificationHint).toBeDefined();
+    const justificationLabel = screen.getByText('Business Justification (min 10 characters)');
+    expect(justificationLabel.contains(justificationHint)).toBe(false);
   });
 
   describe('StudioDocLink Header Integration (KAN-508)', () => {

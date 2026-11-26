@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
-index e3033d57..7f9096b1 100644
+index e3033d57..de4f714e 100644
 --- a/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
 +++ b/kanban/web/src/features/custom-fields/EscalationApprovalPanel.tsx
 @@ -6,6 +6,7 @@ import React, { useState } from 'react';
@@ -52,8 +52,51 @@ index e3033d57..7f9096b1 100644
        </div>
  
        {/* Scope x Principal Matrix Requirements */}
+@@ -382,8 +390,10 @@ export function EscalationApprovalPanel({
+               Provide justification for running this field with elevated scope or credentials.
+             </p>
+             <div className="custom-field-form-group">
+-              <label htmlFor="approval-justification" className="custom-field-form-label">
+-                Business Justification (min 10 characters)
++              <div className="custom-field-approval-label-row">
++                <label htmlFor="approval-justification" className="custom-field-form-label">
++                  Business Justification (min 10 characters)
++                </label>
+                 <FieldHelpHint
+                   title="Business Justification"
+                   summary="Audit justification explaining why elevated scope or service-principal credentials are required."
+@@ -391,7 +401,7 @@ export function EscalationApprovalPanel({
+                   docHref="/docs/custom-fields#approvals"
+                   testId="hint-escalation-justification"
+                 />
+-              </label>
++              </div>
+               <textarea
+                 id="approval-justification"
+                 className="custom-field-textarea"
+@@ -445,15 +455,17 @@ export function EscalationApprovalPanel({
+             </p>
+             <form onSubmit={handleAal2Submit}>
+               <div className="custom-field-form-group">
+-                <label htmlFor="aal2-otp" className="custom-field-form-label">
+-                  Passkey or Authenticator Code
++                <div className="custom-field-approval-label-row">
++                  <label htmlFor="aal2-otp" className="custom-field-form-label">
++                    Passkey or Authenticator Code
++                  </label>
+                   <FieldHelpHint
+                     title="AAL2 Step-Up Verification"
+                     summary="Secondary factor verification required before executing or approving administrative escalation."
+                     docHref="/docs/custom-fields#aal2-stepup"
+                     testId="hint-escalation-aal2"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="aal2-otp"
+                   type="text"
 diff --git a/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx b/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
-index fec637d1..f27cc34e 100644
+index fec637d1..7a906812 100644
 --- a/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
 +++ b/kanban/web/src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx
 @@ -2,9 +2,10 @@
@@ -68,10 +111,16 @@ index fec637d1..f27cc34e 100644
  import { EscalationApprovalPanel } from '../EscalationApprovalPanel';
  import * as api from '../api';
  
-@@ -574,4 +575,117 @@ describe('EscalationApprovalPanel', () => {
+@@ -572,6 +573,122 @@ describe('EscalationApprovalPanel', () => {
+ 
+     // Open request modal
      fireEvent.click(await screen.findByTestId('request-approval-btn'));
-     expect(screen.getByTestId('hint-escalation-justification')).toBeDefined();
-   });
+-    expect(screen.getByTestId('hint-escalation-justification')).toBeDefined();
++    const justificationHint = screen.getByTestId('hint-escalation-justification');
++    expect(justificationHint).toBeDefined();
++    const justificationLabel = screen.getByText('Business Justification (min 10 characters)');
++    expect(justificationLabel.contains(justificationHint)).toBe(false);
++  });
 +
 +  describe('StudioDocLink Header Integration (KAN-508)', () => {
 +    afterEach(() => {
@@ -184,10 +233,10 @@ index fec637d1..f27cc34e 100644
 +
 +      expect(await screen.findByText('PROJECT_ADMIN')).toBeDefined();
 +    });
-+  });
+   });
  });
 diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
-index db0056c4..68d63d3c 100644
+index db0056c4..15ce6477 100644
 --- a/kanban/web/src/features/custom-fields/custom-fields.css
 +++ b/kanban/web/src/features/custom-fields/custom-fields.css
 @@ -670,6 +670,16 @@
@@ -207,6 +256,50 @@ index db0056c4..68d63d3c 100644
  }
  
  .custom-field-approval-title {
+@@ -742,6 +752,12 @@
+   display: flex;
+   align-items: center;
+   gap: 8px;
++  flex-wrap: wrap;
++}
++
++.custom-field-sp-warning-banner .kb-error-help-container,
++.custom-field-sp-warning-banner .kb-error-help-doc-link {
++  white-space: nowrap;
+ }
+ 
+ .custom-field-error-banner {
+@@ -834,6 +850,12 @@
+   margin-top: 6px;
+ }
+ 
++.custom-field-approval-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++}
++
+ /* --------------------------------------------------------------------------
+    RESPONSIVE ADAPTATIONS (<= 768px, KANBA-213)
+    -------------------------------------------------------------------------- */
+@@ -849,6 +871,8 @@
+     flex-direction: column;
+     max-width: 100%;
+     overflow-x: hidden;
++    height: auto;
++    overflow: visible;
+   }
+ 
+   .custom-fields-editor-sidebar {
+@@ -856,6 +880,8 @@
+     max-width: 100%;
+     flex: 0 0 auto;
+     max-height: 200px;
++    overflow-y: auto;
++    flex-shrink: 0;
+     border-right: none;
+     border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+   }
 diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
 index c8960933..2467ee57 100644
 --- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
