@@ -1,0 +1,25 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan522-dac3d377/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (40 tests) 6502ms
+   ✓ OAuthClientGovernanceStudio (40)
+     ✓ inspects client details in modal and closes modal 673ms
+     ✓ handles action patch and delete error branches 401ms
+     ✓ opens register OAuth client modal and registers a new client successfully 349ms
+     ✓ handles row selection, select all, and bulk delete flows 325ms
+     ✓ handles search input, status filter pills, and pagination controls 416ms
+     ✓ ignores Aal2StepUpCancelledError gracefully in loadClients and actions 344ms
+
+ Test Files  1 passed (1)
+      Tests  40 passed (40)
+   Start at  15:24:14
+   Duration  8.61s (tests 80%, environment 13%, import 4%, transform 2%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.45 |    96.11 |     100 |   98.39 |                   
+ ...anceStudio.tsx |   98.45 |    96.11 |     100 |   98.39 | 97-98,210,367,436 
+-------------------|---------|----------|---------|---------|-------------------
