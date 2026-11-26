@@ -782,5 +782,142 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
       });
       expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
     });
+
+    it('creating an agent with custom system_instructions_md submits custom prompt and opening Edit displays saved custom prompt', async () => {
+      const customPrompt = '# Custom Rules\n1. Autonomous Kanban Agent.';
+      const newAgent: agentApi.AgentDefinitionResponse = {
+        id: 'agent-new-1',
+        workspace_id: 'ws-1',
+        principal_id: 'prin-new-1',
+        slug: 'custom-prompter',
+        display_name: 'Custom Prompter',
+        harness_kind: 'in_app_sdk',
+        provider_kind: 'gemini',
+        model_id: 'gemini-2.5-flash',
+        cli_binary_allowlist_id: null,
+        cli_args: [],
+        remote_runner_pool_slug: null,
+        repo_access_mode: 'none',
+        mcp_allowed_tools: ['search_tickets', 'read_ticket'],
+        system_instructions_md: customPrompt,
+        timeout_ms: 60000,
+      };
+
+      let currentAgents: agentApi.AgentDefinitionResponse[] = [];
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockImplementation(() => Promise.resolve(currentAgents));
+      const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockImplementation(() => {
+        currentAgents = [newAgent];
+        return Promise.resolve(newAgent);
+      });
+      vi.spyOn(agentApi, 'fetchAgentDefinition').mockResolvedValue(newAgent);
+
+      render(<AgentStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('register-agent-btn')).toBeDefined();
+      });
+
+      // Open register drawer
+      fireEvent.click(screen.getByTestId('register-agent-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('agent-slug-input')).toBeDefined();
+      });
+
+      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'custom-prompter' } });
+      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Custom Prompter' } });
+
+      // Native DOM value assignment + input dispatch
+      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+      textarea.value = customPrompt;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Save agent
+      fireEvent.click(screen.getByTestId('save-agent-btn'));
+
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalled();
+      });
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          slug: 'custom-prompter',
+          system_instructions_md: customPrompt,
+        }),
+      );
+
+      // Verify the saved agent appears and clicking Edit displays the saved custom prompt
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-agent-btn-agent-new-1')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('edit-agent-btn-agent-new-1'));
+
+      await waitFor(() => {
+        const editTextarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+        expect(editTextarea.value).toBe(customPrompt);
+        expect(editTextarea.value).not.toBe('You are an autonomous Kanban specialist agent.');
+      });
+    });
+
+    it('request-storm guard: mounting AgentStudioPage with active AAL2 session returning x-kb-aal2-expires-at headers and opening drawer invokes GET /api/v1/auth/session <= 2 times over 300ms', async () => {
+      let sessionCallCount = 0;
+      const expiresAt = new Date(Date.now() + 60000).toISOString();
+
+      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentCli]);
+
+      // Mock fetch to simulate /api/v1/auth/session returning x-kb-aal2-expires-at header
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockImplementation((url: RequestInfo | URL) => {
+        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+        if (urlStr.includes('/api/v1/auth/session')) {
+          sessionCallCount++;
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                authenticated: true,
+                aal2_active: true,
+                aal2_expires_at: expiresAt,
+              }),
+              {
+                status: 200,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-kb-aal2-expires-at': expiresAt,
+                },
+              },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'x-kb-aal2-expires-at': expiresAt },
+          }),
+        );
+      });
+
+      try {
+        render(<AgentStudioPage isServerAdmin={true} />);
+
+        // Wait for page to render and open drawer for CLI pipe agent
+        await waitFor(() => {
+          expect(screen.getByTestId('agent-card-agent-2')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId('edit-agent-btn-agent-2'));
+
+        await waitFor(() => {
+          expect(screen.getByTestId('agent-slug-input')).toBeDefined();
+        });
+
+        // Wait 300ms to verify zero request storms occur
+        await new Promise((r) => setTimeout(r, 300));
+
+        // Initial mount invokes /api/v1/auth/session once, and <= 2 calls
+        expect(sessionCallCount).toBeLessThanOrEqual(2);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 });

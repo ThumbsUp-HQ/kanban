@@ -271,8 +271,9 @@ async function executeRequest(
   }
 
   let response = await fetch(resolved, init);
+  const isAuthSession = path === '/api/v1/auth/session' || resolved.startsWith('/api/v1/auth/session');
   const initialExpiresAt = response.headers.get('x-kb-aal2-expires-at');
-  if (initialExpiresAt && typeof window !== 'undefined') {
+  if (initialExpiresAt && !isAuthSession && typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: initialExpiresAt } })
     );
@@ -332,7 +333,7 @@ async function executeRequest(
 
       response = await fetch(resolved, init);
       const replayExpiresAt = response.headers.get('x-kb-aal2-expires-at');
-      if (replayExpiresAt && typeof window !== 'undefined') {
+      if (replayExpiresAt && !isAuthSession && typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: replayExpiresAt } })
         );

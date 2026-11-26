@@ -1036,8 +1036,31 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
       },
     ));
 
-    await apiFetch('GET', '/api/v1/auth/session' as never);
+    await apiFetch('GET', '/api/v1/users/me' as never);
     expect(capturedExp).toBe('2026-11-25T16:00:00Z');
+    window.removeEventListener('kb:aal2-expires-at', l);
+  });
+
+  it('skips dispatching kb:aal2-expires-at on /api/v1/auth/session response header (KAN-433)', async () => {
+    let capturedExp: string | null = null;
+    const l = (e: Event): void => {
+      capturedExp = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
+    };
+    window.addEventListener('kb:aal2-expires-at', l);
+
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ authenticated: true }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-kb-aal2-expires-at': '2026-11-25T16:00:00Z',
+        },
+      },
+    ));
+
+    await apiFetch('GET', '/api/v1/auth/session' as never);
+    expect(capturedExp).toBeNull();
     window.removeEventListener('kb:aal2-expires-at', l);
   });
 

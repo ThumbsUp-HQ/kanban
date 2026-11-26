@@ -1,0 +1,1212 @@
+diff --git a/kanban/api/v1/agent_definitions.py b/kanban/api/v1/agent_definitions.py
+index 19203c11..bce9a83e 100644
+--- a/kanban/api/v1/agent_definitions.py
++++ b/kanban/api/v1/agent_definitions.py
+@@ -59,6 +59,7 @@ async def create_agent_definition(
+ ) -> AgentDefinitionResponse:
+     """Register a new agent definition and AGENT principal."""
+     result = await AgentDefinitionService.create(session, caller, workspace, body)
++    await session.commit()
+     response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
+     return result
+ 
+@@ -108,7 +109,9 @@ async def patch_agent_definition(
+ ) -> AgentDefinitionResponse:
+     """Update mutable configuration of an existing agent definition."""
+     async with timing_floor(floor_ms=25.0):
+-        return await AgentDefinitionService.patch(session, caller, agent, body)
++        result = await AgentDefinitionService.patch(session, caller, agent, body)
++        await session.commit()
++        return result
+ 
+ 
+ @router.delete(
+@@ -124,6 +127,7 @@ async def delete_agent_definition(
+     """Delete an agent definition, returning 409 if referenced by transition hooks."""
+     async with timing_floor(floor_ms=25.0):
+         await AgentDefinitionService.delete(session, caller, agent)
++        await session.commit()
+         return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+@@ -270,6 +274,7 @@ async def admin_create_agent_definition(
+ ) -> AgentDefinitionResponse:
+     """Create a new agent definition in caller's workspace under admin authority."""
+     result = await AgentDefinitionService.create(session, caller, str(caller.workspace_id), body)
++    await session.commit()
+     response.headers["Location"] = f"/api/v1/agent-definitions/{result.id}"
+     return result
+ 
+@@ -290,7 +295,9 @@ async def admin_patch_agent_definition(
+     session: Session,
+ ) -> AgentDefinitionResponse:
+     """Update an existing agent definition under admin authority."""
+-    return await AgentDefinitionService.patch(session, caller, agent, body)
++    result = await AgentDefinitionService.patch(session, caller, agent, body)
++    await session.commit()
++    return result
+ 
+ 
+ @admin_router.delete("/{agent}", status_code=status.HTTP_204_NO_CONTENT)
+@@ -299,6 +306,7 @@ async def admin_delete_agent_definition(
+ ) -> Response:
+     """Delete an agent definition under admin authority."""
+     await AgentDefinitionService.delete(session, caller, agent)
++    await session.commit()
+     return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+diff --git a/kanban/tests/api/test_agent_definitions.py b/kanban/tests/api/test_agent_definitions.py
+new file mode 100644
+index 00000000..0dfea49f
+--- /dev/null
++++ b/kanban/tests/api/test_agent_definitions.py
+@@ -0,0 +1,196 @@
++"""API tests for agent definitions persistence and durability (KAN-433)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++
++from kanban.api.deps import PrincipalContext
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _enroll_totp_and_set_aal2(api_env: ApiEnv, user: SeededUser) -> None:
++    """Enroll and confirm TOTP factor to permit AAL2 evaluation for admin."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        aal_level=2,
++    )
++
++
++async def test_create_agent_definition_persists_custom_system_instructions(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify POST agent definition persists custom system_instructions_md durably."""
++    admin = await make_user("agent-admin", workspace_role="WORKSPACE_ADMIN")
++    client = as_principal(admin)
++
++    custom_instructions = (
++        "# Security Audit Agent\n\n"
++        "- Assume hostile wire.\n"
++        "- Run passive forensic checks.\n"
++        "- Require verification packets."
++    )
++    slug = f"sec-auditor-{uuid.uuid4().hex[:8]}"
++
++    payload = {
++        "slug": slug,
++        "display_name": "Security Audit Agent",
++        "harness_kind": "in_app_sdk",
++        "provider_kind": "gemini",
++        "model_id": "gemini-2.5-flash",
++        "system_instructions_md": custom_instructions,
++        "repo_access_mode": "none",
++        "mcp_allowed_tools": ["search_tickets", "read_ticket"],
++        "timeout_ms": 45000,
++    }
++
++    # 1. POST agent definition
++    create_resp = await client.post(
++        f"/api/v1/workspaces/{api_env.workspace_id}/agent-definitions",
++        json=payload,
++    )
++    assert create_resp.status_code == 201, create_resp.text
++    created = create_resp.json()
++    agent_id = created["id"]
++    assert created["slug"] == slug
++    assert created["display_name"] == "Security Audit Agent"
++    assert created["system_instructions_md"] == custom_instructions
++    assert create_resp.headers.get("Location") == f"/api/v1/agent-definitions/{agent_id}"
++
++    # 2. GET list from workspace
++    list_resp = await client.get(f"/api/v1/workspaces/{api_env.workspace_id}/agent-definitions")
++    assert list_resp.status_code == 200, list_resp.text
++    agents_list = list_resp.json()
++    matching = [a for a in agents_list if a["id"] == agent_id]
++    assert len(matching) == 1
++    assert matching[0]["system_instructions_md"] == custom_instructions
++
++    # 3. GET detail by UUID
++    get_by_id_resp = await client.get(f"/api/v1/agent-definitions/{agent_id}")
++    assert get_by_id_resp.status_code == 200, get_by_id_resp.text
++    detail_by_id = get_by_id_resp.json()
++    assert detail_by_id["system_instructions_md"] == custom_instructions
++
++    # 4. GET detail by slug
++    get_by_slug_resp = await client.get(f"/api/v1/agent-definitions/{slug}")
++    assert get_by_slug_resp.status_code == 200, get_by_slug_resp.text
++    detail_by_slug = get_by_slug_resp.json()
++    assert detail_by_slug["system_instructions_md"] == custom_instructions
++
++    # 5. PATCH agent definition with updated custom system instructions
++    updated_instructions = (
++        "# Security Audit Agent (v2)\n\n"
++        "- Updated passive audit directives.\n"
++        "- Strict bounds checking enabled."
++    )
++    patch_resp = await client.patch(
++        f"/api/v1/agent-definitions/{agent_id}",
++        json={"system_instructions_md": updated_instructions},
++    )
++    assert patch_resp.status_code == 200, patch_resp.text
++    patched = patch_resp.json()
++    assert patched["system_instructions_md"] == updated_instructions
++
++    # 6. Verify read durability after commit
++    verify_resp = await client.get(f"/api/v1/agent-definitions/{agent_id}")
++    assert verify_resp.status_code == 200, verify_resp.text
++    assert verify_resp.json()["system_instructions_md"] == updated_instructions
++
++    # 7. DELETE agent definition and verify commit durability
++    del_resp = await client.delete(f"/api/v1/agent-definitions/{agent_id}")
++    assert del_resp.status_code == 204, del_resp.text
++
++    not_found_resp = await client.get(f"/api/v1/agent-definitions/{agent_id}")
++    assert not_found_resp.status_code == 404
++
++
++async def test_admin_agent_definitions_commit_durability(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify admin_router routes commit changes durably."""
++    admin = await make_user("server-admin", workspace_role="SERVER_ADMIN")
++    await _enroll_totp_and_set_aal2(api_env, admin)
++    client = as_principal(admin, aal_level=2)
++
++    slug = f"admin-cli-agent-{uuid.uuid4().hex[:8]}"
++    instructions = "# Admin Managed CLI Agent\n\nRun sandboxed checks."
++
++    payload = {
++        "slug": slug,
++        "display_name": "Admin CLI Agent",
++        "harness_kind": "cli_pipe",
++        "cli_binary_allowlist_id": "agy",
++        "cli_args": ["-p"],
++        "system_instructions_md": instructions,
++        "repo_access_mode": "none",
++        "timeout_ms": 60000,
++    }
++
++    # Admin create
++    create_resp = await client.post("/api/v1/admin/agent-definitions", json=payload)
++    assert create_resp.status_code == 201, create_resp.text
++    agent_id = create_resp.json()["id"]
++    assert create_resp.json()["system_instructions_md"] == instructions
++
++    # Admin list
++    list_resp = await client.get("/api/v1/admin/agent-definitions")
++    assert list_resp.status_code == 200, list_resp.text
++    matching = [a for a in list_resp.json() if a["id"] == agent_id]
++    assert len(matching) == 1
++    assert matching[0]["system_instructions_md"] == instructions
++
++    # Admin get
++    get_resp = await client.get(f"/api/v1/admin/agent-definitions/{agent_id}")
++    assert get_resp.status_code == 200, get_resp.text
++    assert get_resp.json()["system_instructions_md"] == instructions
++
++    # Admin patch
++    new_instructions = "# Admin Managed CLI Agent (Patched)\n\nUpdated rules."
++    patch_resp = await client.patch(
++        f"/api/v1/admin/agent-definitions/{agent_id}",
++        json={"system_instructions_md": new_instructions},
++    )
++    assert patch_resp.status_code == 200, patch_resp.text
++    assert patch_resp.json()["system_instructions_md"] == new_instructions
++
++    # Admin delete
++    del_resp = await client.delete(f"/api/v1/admin/agent-definitions/{agent_id}")
++    assert del_resp.status_code == 204, del_resp.text
++
++    get_after_del = await client.get(f"/api/v1/admin/agent-definitions/{agent_id}")
++    assert get_after_del.status_code == 404
+diff --git a/kanban/web/e2e/qa/kan-433-agent-instructions-screenshots.spec.ts b/kanban/web/e2e/qa/kan-433-agent-instructions-screenshots.spec.ts
+new file mode 100644
+index 00000000..aa8c04f0
+--- /dev/null
++++ b/kanban/web/e2e/qa/kan-433-agent-instructions-screenshots.spec.ts
+@@ -0,0 +1,429 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++/**
++ * Visual verification proofs for KAN-433:
++ * Persist system_instructions_md in Agent Definitions API and Stop Infinite
++ * /api/v1/auth/session Request Storm on /workspaces/settings/agents.
++ * Plain ASCII hyphens only.
++ */
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++
++process.env.QA_TICKET_ID = 'KAN-433';
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KAN-433/screenshots',
++);
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t: string) => {
++    localStorage.setItem('kb:theme', t);
++    document.documentElement.dataset.theme = t;
++    document.documentElement.setAttribute('data-theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++async function unclipForFullPage(page: Page): Promise<void> {
++  await page.evaluate(() => {
++    const applyToElements = (selector: string, styles: Record<string, string>) => {
++      document.querySelectorAll<HTMLElement>(selector).forEach((el) => {
++        for (const [prop, val] of Object.entries(styles)) {
++          el.style.setProperty(prop, val, 'important');
++        }
++      });
++    };
++    applyToElements('html', {
++      position: 'relative',
++      height: 'auto',
++      'min-height': '100%',
++    });
++    applyToElements('body', {
++      height: 'auto',
++      'min-height': '100%',
++      overflow: 'visible',
++    });
++    applyToElements('.kb-app-shell, .kb-main-canvas', {
++      height: 'auto',
++      'max-height': 'none',
++      overflow: 'visible',
++    });
++    applyToElements('.kb-topbar, header', {
++      position: 'static',
++    });
++    applyToElements(
++      '[role="dialog"], .kb-modal, .kb-modal-card, .kb-modal-body, .kb-drawer, form',
++      {
++        'max-height': 'none',
++        height: 'auto',
++        overflow: 'visible',
++      },
++    );
++    applyToElements(
++      '[class*="backdrop"], [class*="modal-backdrop"], [class*="overlay"]',
++      {
++        position: 'absolute',
++        inset: '0',
++        'min-height': '100%',
++        height: '100%',
++      },
++    );
++    // Suppress any reconnecting chip or floating toast
++    applyToElements('.realtime-status-chip, [data-state="reconnecting"]', {
++      display: 'none',
++    });
++  });
++  await page.waitForTimeout(100);
++}
++
++const customSystemPrompt =
++  '# Reality Checker Directives\n\n' +
++  '- Passive forensic audits only.\n' +
++  '- Strict verification proof packets.\n' +
++  '- Zero-tolerance quality gate.';
++
++const mockAgents = [
++  {
++    id: 'agent-01',
++    workspace_id: 'ws-kanban',
++    principal_id: 'prin-01',
++    slug: 'reality-checker',
++    display_name: 'Reality Checker QA',
++    harness_kind: 'in_app_sdk',
++    provider_kind: 'gemini',
++    model_id: 'gemini-2.5-flash',
++    cli_binary_allowlist_id: null,
++    cli_args: [],
++    remote_runner_pool_slug: null,
++    repo_access_mode: 'bare_git_tools',
++    mcp_allowed_tools: ['search_tickets', 'read_ticket'],
++    system_instructions_md: customSystemPrompt,
++    timeout_ms: 45000,
++  },
++  {
++    id: 'agent-02',
++    workspace_id: 'ws-kanban',
++    principal_id: 'prin-02',
++    slug: 'agy-reviewer',
++    display_name: 'Antigravity CLI Pipe',
++    harness_kind: 'cli_pipe',
++    provider_kind: null,
++    model_id: null,
++    cli_binary_allowlist_id: 'agy',
++    cli_args: ['-p'],
++    remote_runner_pool_slug: null,
++    repo_access_mode: 'none',
++    mcp_allowed_tools: ['search_knowledge', 'read_doc'],
++    system_instructions_md: '# Sandboxed CLI runner.',
++    timeout_ms: 60000,
++  },
++];
++
++function getMocks(): MockHandlers {
++  const me = loadFixture<Record<string, unknown>>('me-adam');
++  const projectKan = loadFixture<Record<string, unknown>>('project-kan');
++
++  const adminUser = {
++    ...me,
++    id: '01918a22-0000-7000-8000-000000000001',
++    is_server_admin: true,
++    is_workspace_admin: true,
++    workspace_role: 'WORKSPACE_ADMIN',
++    aal_level: 2,
++    auth_aal: 'aal2',
++  };
++
++  return {
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'test-csrf-token-kan-433' } },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'GET /api/v1/me': { json: adminUser },
++    'GET /api/v1/users/me': { json: adminUser },
++    'GET /api/v1/auth/me': { json: adminUser },
++    'GET /api/v1/auth/session': {
++      headers: {
++        'x-kb-aal2-expires-at': '2026-11-26T16:00:00Z',
++      },
++      json: {
++        authenticated: true,
++        aal2_active: true,
++        aal2_expires_at: '2026-11-26T16:00:00Z',
++        user: adminUser,
++      },
++    },
++    'POST /api/v1/auth/aal2/touch': { json: { ok: true } },
++    'GET /api/v1/system/status': { json: loadFixture('system-status-prod') },
++    'GET /api/v1/workspaces': {
++      json: [{ id: 'ws-kanban', name: 'kanban', slug: 'kanban', is_current: true }],
++    },
++    'GET /api/v1/workspaces/current': {
++      json: { id: 'ws-kanban', name: 'kanban', slug: 'kanban' },
++    },
++    'GET /api/v1/workspaces/kanban': {
++      json: { id: 'ws-kanban', name: 'kanban', slug: 'kanban' },
++    },
++    'GET /api/v1/workspaces/:workspace/settings': {
++      json: {
++        air_gap_mode: false,
++        token_cap_monthly: 10000000,
++      },
++    },
++    'GET /api/v1/workspaces/:workspace/ai-providers/settings': {
++      json: {
++        air_gap_mode: false,
++      },
++    },
++    'GET /api/v1/workspaces/:workspace/agent-definitions': { json: mockAgents },
++    'GET /api/v1/workspaces/:workspace/ai-providers': { json: [] },
++    'GET /api/v1/workspaces/:workspace/ai-providers/budgets': { json: [] },
++    'GET /api/v1/agent-definitions/:agent': { json: mockAgents[0] },
++    'GET /api/v1/admin/ai/providers': { json: [] },
++    'GET /api/v1/admin/ai/budgets': { json: [] },
++    'GET /api/v1/admin/agent-definitions': { json: mockAgents },
++    'GET /api/v1/admin/agents/definitions': { json: mockAgents },
++    'GET /api/v1/admin/runners': { json: [] },
++    'GET /api/v1/admin/agent-runners': { json: [] },
++    'GET /api/v1/projects': { json: [projectKan] },
++    'GET /api/v1/projects/KAN': { json: projectKan },
++    'GET /api/v1/projects/KANBA': { json: projectKan },
++    'GET /api/v1/objects/:id/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KAN/access': { json: loadFixture('access-project-kan') },
++    'GET /api/v1/objects/KANBA/access': { json: loadFixture('access-project-kan') },
++  };
++}
++
++async function setupPageMocks(page: Page): Promise<{ getSessionCallCount: () => number }> {
++  let sessionCallCount = 0;
++
++  await page.addInitScript(() => {
++    class MockWebSocket extends EventTarget {
++      readyState = 1;
++      url = '';
++      onopen: ((ev: Event) => void) | null = null;
++      onclose: ((ev: CloseEvent) => void) | null = null;
++      onerror: ((ev: Event) => void) | null = null;
++      onmessage: ((ev: MessageEvent) => void) | null = null;
++      constructor(url: string) {
++        super();
++        this.url = url;
++        setTimeout(() => {
++          this.readyState = 1;
++          if (this.onopen) this.onopen(new Event('open'));
++          this.dispatchEvent(new Event('open'));
++        }, 10);
++      }
++      send(_data?: unknown): void {
++        if (_data !== undefined) return;
++      }
++      close() {
++        this.readyState = 3;
++        if (this.onclose) this.onclose(new CloseEvent('close'));
++        this.dispatchEvent(new CloseEvent('close'));
++      }
++    }
++    // @ts-expect-error MockWebSocket replaces native window.WebSocket for tests
++    window.WebSocket = MockWebSocket;
++
++    class MockEventSource extends EventTarget {
++      readyState = 1;
++      url = '';
++      onopen: ((ev: Event) => void) | null = null;
++      onerror: ((ev: Event) => void) | null = null;
++      onmessage: ((ev: MessageEvent) => void) | null = null;
++      constructor(url: string) {
++        super();
++        this.url = url;
++        setTimeout(() => {
++          this.readyState = 1;
++          if (this.onopen) this.onopen(new Event('open'));
++          this.dispatchEvent(new Event('open'));
++        }, 10);
++      }
++      close() {
++        this.readyState = 2;
++      }
++    }
++    // @ts-expect-error MockEventSource replaces native window.EventSource for tests
++    window.EventSource = MockEventSource;
++  });
++
++  await mockApi(page, getMocks());
++
++  page.on('request', (req) => {
++    if (req.url().includes('/api/v1/auth/session')) {
++      sessionCallCount++;
++    }
++  });
++
++  return {
++    getSessionCallCount: () => sessionCallCount,
++  };
++}
++
++test.describe('KAN-433: Agent Instructions Persistence and Zero Session Storm Visual Proofs', () => {
++  test('01: 1440x900 Desktop Light - Edit Agent Drawer displays preserved custom system instructions', async ({
++    page,
++  }) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    const tracker = await setupPageMocks(page);
++
++    await page.goto('/workspaces/settings/agents');
++    await applyTheme(page, 'light');
++
++    await expect(page.getByTestId('agent-studio-page')).toBeVisible();
++
++    // Verify AdminStudioSubnav is rendered with active tab
++    await expect(page.getByTestId('tab-admin-agents')).toBeVisible();
++
++    const countBeforeDrawer = tracker.getSessionCallCount();
++
++    // Open Edit Drawer for reality-checker
++    await page.getByTestId('edit-agent-btn-agent-01').click();
++    await expect(page.getByTestId('agent-editor-drawer')).toBeVisible();
++
++    // Expand Advanced Section to show instructions textarea
++    const toggle = page.getByTestId('advanced-model-harness-config-toggle');
++    const isExpanded = await toggle.getAttribute('aria-expanded');
++    if (isExpanded !== 'true') {
++      await toggle.click();
++    }
++
++    const textarea = page.getByTestId('agent-instructions-textarea');
++    await expect(textarea).toBeVisible();
++    await expect(textarea).toHaveValue(customSystemPrompt);
++
++    // Wait 400ms to verify zero session request storm occurs
++    await page.waitForTimeout(400);
++    const countAfterDrawer = tracker.getSessionCallCount();
++    expect(countAfterDrawer - countBeforeDrawer).toBe(0);
++    expect(countAfterDrawer).toBeLessThanOrEqual(3);
++
++    await unclipForFullPage(page);
++
++    const shot = resolve(SCREENSHOT_DIR, 'desktop-light-1440x900.png');
++    await page.screenshot({ path: shot, fullPage: true });
++  });
++
++  test('02: 1440x900 Desktop Dark - Preserved instructions displayed in dark theme', async ({
++    page,
++  }) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    const tracker = await setupPageMocks(page);
++
++    await page.goto('/workspaces/settings/agents');
++    await applyTheme(page, 'dark');
++
++    await expect(page.getByTestId('agent-studio-page')).toBeVisible();
++
++    const countBeforeDrawer = tracker.getSessionCallCount();
++
++    // Open Edit Drawer for reality-checker
++    await page.getByTestId('edit-agent-btn-agent-01').click();
++    await expect(page.getByTestId('agent-editor-drawer')).toBeVisible();
++
++    // Expand Advanced Section
++    const toggle = page.getByTestId('advanced-model-harness-config-toggle');
++    const isExpanded = await toggle.getAttribute('aria-expanded');
++    if (isExpanded !== 'true') {
++      await toggle.click();
++    }
++
++    const textarea = page.getByTestId('agent-instructions-textarea');
++    await expect(textarea).toBeVisible();
++    await expect(textarea).toHaveValue(customSystemPrompt);
++
++    await page.waitForTimeout(400);
++    const countAfterDrawer = tracker.getSessionCallCount();
++    expect(countAfterDrawer - countBeforeDrawer).toBe(0);
++    expect(countAfterDrawer).toBeLessThanOrEqual(3);
++
++    await unclipForFullPage(page);
++
++    const shot = resolve(SCREENSHOT_DIR, 'desktop-dark-1440x900.png');
++    await page.screenshot({ path: shot, fullPage: true });
++  });
++
++  test('03: 768x1024 Tablet Portrait - Responsive drawer with custom instructions', async ({
++    page,
++  }) => {
++    await page.setViewportSize({ width: 768, height: 1024 });
++    const tracker = await setupPageMocks(page);
++
++    await page.goto('/workspaces/settings/agents');
++    await applyTheme(page, 'light');
++
++    await expect(page.getByTestId('agent-studio-page')).toBeVisible();
++
++    const countBeforeDrawer = tracker.getSessionCallCount();
++
++    // Open Edit Drawer for reality-checker
++    await page.getByTestId('edit-agent-btn-agent-01').click();
++    await expect(page.getByTestId('agent-editor-drawer')).toBeVisible();
++
++    // Expand Advanced Section
++    const toggle = page.getByTestId('advanced-model-harness-config-toggle');
++    const isExpanded = await toggle.getAttribute('aria-expanded');
++    if (isExpanded !== 'true') {
++      await toggle.click();
++    }
++
++    const textarea = page.getByTestId('agent-instructions-textarea');
++    await expect(textarea).toBeVisible();
++    await expect(textarea).toHaveValue(customSystemPrompt);
++
++    await page.waitForTimeout(400);
++    const countAfterDrawer = tracker.getSessionCallCount();
++    expect(countAfterDrawer - countBeforeDrawer).toBe(0);
++    expect(countAfterDrawer).toBeLessThanOrEqual(3);
++
++    await unclipForFullPage(page);
++
++    const shot = resolve(SCREENSHOT_DIR, 'tablet-768x1024.png');
++    await page.screenshot({ path: shot, fullPage: true });
++  });
++
++  test('04: 390x844 Mobile - Responsive stacked drawer with custom instructions', async ({
++    page,
++  }) => {
++    await page.setViewportSize({ width: 390, height: 844 });
++    const tracker = await setupPageMocks(page);
++
++    await page.goto('/workspaces/settings/agents');
++    await applyTheme(page, 'light');
++
++    await expect(page.getByTestId('agent-studio-page')).toBeVisible();
++
++    const countBeforeDrawer = tracker.getSessionCallCount();
++
++    // Open Edit Drawer for reality-checker
++    await page.getByTestId('edit-agent-btn-agent-01').click();
++    await expect(page.getByTestId('agent-editor-drawer')).toBeVisible();
++
++    // Expand Advanced Section
++    const toggle = page.getByTestId('advanced-model-harness-config-toggle');
++    const isExpanded = await toggle.getAttribute('aria-expanded');
++    if (isExpanded !== 'true') {
++      await toggle.click();
++    }
++
++    const textarea = page.getByTestId('agent-instructions-textarea');
++    await expect(textarea).toBeVisible();
++    await expect(textarea).toHaveValue(customSystemPrompt);
++
++    await page.waitForTimeout(400);
++    const countAfterDrawer = tracker.getSessionCallCount();
++    expect(countAfterDrawer - countBeforeDrawer).toBe(0);
++    expect(countAfterDrawer).toBeLessThanOrEqual(3);
++
++    await unclipForFullPage(page);
++
++    const shot = resolve(SCREENSHOT_DIR, 'mobile-390x844.png');
++    await page.screenshot({ path: shot, fullPage: true });
++  });
++});
+diff --git a/kanban/web/src/api/__tests__/websudoReplay.test.tsx b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
+index 034aea3c..514aa75c 100644
+--- a/kanban/web/src/api/__tests__/websudoReplay.test.tsx
++++ b/kanban/web/src/api/__tests__/websudoReplay.test.tsx
+@@ -1036,11 +1036,34 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
+       },
+     ));
+ 
+-    await apiFetch('GET', '/api/v1/auth/session' as never);
++    await apiFetch('GET', '/api/v1/users/me' as never);
+     expect(capturedExp).toBe('2026-11-25T16:00:00Z');
+     window.removeEventListener('kb:aal2-expires-at', l);
+   });
+ 
++  it('skips dispatching kb:aal2-expires-at on /api/v1/auth/session response header (KAN-433)', async () => {
++    let capturedExp: string | null = null;
++    const l = (e: Event): void => {
++      capturedExp = (e as CustomEvent<{ expiresAt?: string }>).detail.expiresAt ?? null;
++    };
++    window.addEventListener('kb:aal2-expires-at', l);
++
++    globalThis.fetch = vi.fn().mockResolvedValue(new Response(
++      JSON.stringify({ authenticated: true }),
++      {
++        status: 200,
++        headers: {
++          'Content-Type': 'application/json',
++          'x-kb-aal2-expires-at': '2026-11-25T16:00:00Z',
++        },
++      },
++    ));
++
++    await apiFetch('GET', '/api/v1/auth/session' as never);
++    expect(capturedExp).toBeNull();
++    window.removeEventListener('kb:aal2-expires-at', l);
++  });
++
+   it('throws ApiProblem when AAL2 step-up is required but no handler is registered', async () => {
+     registerAal2StepUpHandler(null);
+     globalThis.fetch = vi.fn().mockResolvedValue(new Response(
+diff --git a/kanban/web/src/api/client.ts b/kanban/web/src/api/client.ts
+index ea7039a1..2909defb 100644
+--- a/kanban/web/src/api/client.ts
++++ b/kanban/web/src/api/client.ts
+@@ -271,8 +271,9 @@ async function executeRequest(
+   }
+ 
+   let response = await fetch(resolved, init);
++  const isAuthSession = path === '/api/v1/auth/session' || resolved.startsWith('/api/v1/auth/session');
+   const initialExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+-  if (initialExpiresAt && typeof window !== 'undefined') {
++  if (initialExpiresAt && !isAuthSession && typeof window !== 'undefined') {
+     window.dispatchEvent(
+       new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: initialExpiresAt } })
+     );
+@@ -332,7 +333,7 @@ async function executeRequest(
+ 
+       response = await fetch(resolved, init);
+       const replayExpiresAt = response.headers.get('x-kb-aal2-expires-at');
+-      if (replayExpiresAt && typeof window !== 'undefined') {
++      if (replayExpiresAt && !isAuthSession && typeof window !== 'undefined') {
+         window.dispatchEvent(
+           new CustomEvent('kb:aal2-expires-at', { detail: { expiresAt: replayExpiresAt } })
+         );
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index 58ba8ad0..2bfcd45c 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -28,7 +28,7 @@ interface AgentDefinitionEditorDrawerProps {
+   isOpen: boolean;
+   onClose: () => void;
+   agent: AgentDefinitionResponse | null;
+-  onSaved: () => void;
++  onSaved: (savedAgent?: AgentDefinitionResponse) => void;
+   aiProviders?: ProviderConfigPublic[] | undefined;
+   projectId?: string | null | undefined;
+   workspaceSlug?: string | undefined;
+@@ -46,7 +46,7 @@ function AgentDefinitionEditorContent({
+ }: {
+   onClose: () => void;
+   agent: AgentDefinitionResponse | null;
+-  onSaved: () => void;
++  onSaved: (savedAgent?: AgentDefinitionResponse) => void;
+   aiProviders?: ProviderConfigPublic[] | undefined;
+   projectId?: string | null | undefined;
+   workspaceSlug?: string | undefined;
+@@ -70,7 +70,7 @@ function AgentDefinitionEditorContent({
+       : fetchAiProviders(projectId ?? undefined);
+     fetchCall
+       .then((data) => {
+-        if (isMounted) {
++        if (isMounted && Array.isArray(data)) {
+           setFetchedProviders(data);
+         }
+       })
+@@ -82,7 +82,11 @@ function AgentDefinitionEditorContent({
+     };
+   }, [aiProviders, projectId, workspaceSlug]);
+ 
+-  const providers = aiProviders ?? fetchedProviders;
++  const providers = Array.isArray(aiProviders)
++    ? aiProviders
++    : Array.isArray(fetchedProviders)
++      ? fetchedProviders
++      : [];
+   const matchingProviders = providers.filter(
+     (p) => p.provider_kind === providerKind && p.is_enabled,
+   );
+@@ -101,6 +105,24 @@ function AgentDefinitionEditorContent({
+     agent ? agent.system_instructions_md : 'You are an autonomous Kanban specialist agent.',
+   );
+   const hasUserEditedInstructions = useRef<boolean>(false);
++  const instructionsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
++
++  useEffect(() => {
++    const el = instructionsTextareaRef.current;
++    if (!el) {
++      return;
++    }
++    const handleNativeInput = (): void => {
++      hasUserEditedInstructions.current = true;
++      setSystemInstructions(el.value);
++    };
++    el.addEventListener('input', handleNativeInput);
++    el.addEventListener('change', handleNativeInput);
++    return () => {
++      el.removeEventListener('input', handleNativeInput);
++      el.removeEventListener('change', handleNativeInput);
++    };
++  }, []);
+ 
+   useEffect(() => {
+     if (!agent?.id && !agent?.slug) {
+@@ -139,12 +161,15 @@ function AgentDefinitionEditorContent({
+         systemInstructions.trim() !== 'You are an autonomous Kanban specialist agent.'
+       );
+     }
++    const providerOrModelChanged =
++      harnessKind === 'in_app_sdk' &&
++      (providerKind !== agent.provider_kind || modelId !== agent.model_id);
++
+     return (
+       displayName !== agent.display_name ||
+       slug !== agent.slug ||
+       harnessKind !== agent.harness_kind ||
+-      providerKind !== agent.provider_kind ||
+-      modelId !== agent.model_id ||
++      providerOrModelChanged ||
+       systemInstructions !== agent.system_instructions_md ||
+       timeoutMs !== agent.timeout_ms ||
+       repoAccessMode !== agent.repo_access_mode ||
+@@ -214,6 +239,11 @@ function AgentDefinitionEditorContent({
+       setIsSaving(true);
+       setError(null);
+ 
++      const liveInstructions = instructionsTextareaRef.current
++        ? instructionsTextareaRef.current.value
++        : systemInstructions;
++
++      let savedAgent: AgentDefinitionResponse;
+       if (agent) {
+         const payload: AgentDefinitionPatch = {
+           display_name: displayName.trim(),
+@@ -224,11 +254,11 @@ function AgentDefinitionEditorContent({
+           remote_runner_pool_slug: harnessKind === 'remote_runner' ? runnerPool.trim() : null,
+           repo_access_mode: repoAccessMode,
+           mcp_allowed_tools: selectedTools,
+-          system_instructions_md: systemInstructions,
++          system_instructions_md: liveInstructions,
+           timeout_ms: timeoutMs,
+         };
+ 
+-        await updateAgentDefinition(agent.id, payload);
++        savedAgent = await updateAgentDefinition(agent.id, payload);
+       } else {
+         const payload: AgentDefinitionCreate = {
+           slug: slug.trim(),
+@@ -242,19 +272,19 @@ function AgentDefinitionEditorContent({
+           remote_runner_pool_slug: harnessKind === 'remote_runner' ? runnerPool.trim() : null,
+           repo_access_mode: repoAccessMode,
+           mcp_allowed_tools: selectedTools,
+-          system_instructions_md: systemInstructions,
++          system_instructions_md: liveInstructions,
+           timeout_ms: timeoutMs,
+         };
+ 
+         if (workspaceSlug) {
+-          await createAgentDefinition(payload, workspaceSlug);
++          savedAgent = await createAgentDefinition(payload, workspaceSlug);
+         } else {
+-          await createAgentDefinition(payload);
++          savedAgent = await createAgentDefinition(payload);
+         }
+       }
+ 
+       setIsSaving(false);
+-      onSaved();
++      onSaved(savedAgent);
+       onClose();
+     } catch (err: unknown) {
+       setIsSaving(false);
+@@ -578,6 +608,7 @@ function AgentDefinitionEditorContent({
+               System Instructions (Markdown)
+             </label>
+             <textarea
++              ref={instructionsTextareaRef}
+               id="agent-instructions-textarea"
+               rows={4}
+               className="kb-form-textarea"
+@@ -586,6 +617,10 @@ function AgentDefinitionEditorContent({
+                 hasUserEditedInstructions.current = true;
+                 setSystemInstructions(e.target.value);
+               }}
++              onInput={(e) => {
++                hasUserEditedInstructions.current = true;
++                setSystemInstructions((e.target as HTMLTextAreaElement).value);
++              }}
+               placeholder="System prompt context and rules of engagement..."
+               data-testid="agent-instructions-textarea"
+             />
+diff --git a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+index 5b35b6fa..53e9840c 100644
+--- a/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
++++ b/kanban/web/src/features/admin-agents/AgentStudioPage.tsx
+@@ -69,6 +69,24 @@ export function AgentStudioPage({
+     setReloadCounter((c) => c + 1);
+   }, []);
+ 
++  const handleAgentSaved = useCallback(
++    (savedAgent?: AgentDefinitionResponse): void => {
++      if (savedAgent) {
++        setAgents((prev) => {
++          const index = prev.findIndex((a) => a.id === savedAgent.id);
++          if (index >= 0) {
++            const next = [...prev];
++            next[index] = savedAgent;
++            return next;
++          }
++          return [...prev, savedAgent];
++        });
++      }
++      refreshAgents();
++    },
++    [refreshAgents],
++  );
++
+   const handleConfirmDelete = async (): Promise<void> => {
+     if (!agentToDelete) return;
+     try {
+@@ -259,7 +277,7 @@ export function AgentStudioPage({
+           setEditingAgent(null);
+         }}
+         agent={editingAgent}
+-        onSaved={refreshAgents}
++        onSaved={handleAgentSaved}
+         projectId={projectId}
+         workspaceSlug={workspaceSlug}
+       />
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+index b24fe078..6a990d5c 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -459,5 +459,79 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       fireEvent.change(textarea, { target: { value: 'New user prompt' } });
+       expect((textarea as HTMLTextAreaElement).value).toBe('New user prompt');
+     });
++
++    it('submits custom system_instructions_md updated via native DOM input event on create', async () => {
++      const customPrompt = '# Native Input Directive\n- Zero latency.';
++      const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
++        ...existingAgentWithInstructions,
++        slug: 'native-test',
++        display_name: 'Native Test',
++        system_instructions_md: customPrompt,
++      });
++
++      const onSaved = vi.fn();
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={onSaved}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'native-test' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Native Test' } });
++
++      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
++      textarea.value = customPrompt;
++      textarea.dispatchEvent(new Event('input', { bubbles: true }));
++
++      fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalledWith(
++          expect.objectContaining({
++            slug: 'native-test',
++            system_instructions_md: customPrompt,
++          }),
++        );
++      });
++      expect(onSaved).toHaveBeenCalled();
++    });
++
++    it('cli_pipe agent in edit mode is not treated as dirty on mount', () => {
++      const cliAgent: agentApi.AgentDefinitionResponse = {
++        id: 'agent-cli-edit',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-cli',
++        slug: 'cli-worker',
++        display_name: 'CLI Worker',
++        harness_kind: 'cli_pipe',
++        provider_kind: null,
++        model_id: null,
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        remote_runner_pool_slug: null,
++        repo_access_mode: 'none',
++        mcp_allowed_tools: ['search_tickets', 'read_ticket'],
++        system_instructions_md: 'Run CLI pipe.',
++        timeout_ms: 60000,
++      };
++
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={cliAgent}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      const slugInput = screen.getByTestId<HTMLInputElement>('agent-slug-input');
++      expect(slugInput.value).toBe('cli-worker');
++      expect(screen.getByTestId('save-agent-btn')).toBeDefined();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+index f1d63f51..348604b4 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
+@@ -782,5 +782,142 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
+       });
+       expect(screen.queryByTestId('tab-admin-agents')).toBeNull();
+     });
++
++    it('creating an agent with custom system_instructions_md submits custom prompt and opening Edit displays saved custom prompt', async () => {
++      const customPrompt = '# Custom Rules\n1. Autonomous Kanban Agent.';
++      const newAgent: agentApi.AgentDefinitionResponse = {
++        id: 'agent-new-1',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-new-1',
++        slug: 'custom-prompter',
++        display_name: 'Custom Prompter',
++        harness_kind: 'in_app_sdk',
++        provider_kind: 'gemini',
++        model_id: 'gemini-2.5-flash',
++        cli_binary_allowlist_id: null,
++        cli_args: [],
++        remote_runner_pool_slug: null,
++        repo_access_mode: 'none',
++        mcp_allowed_tools: ['search_tickets', 'read_ticket'],
++        system_instructions_md: customPrompt,
++        timeout_ms: 60000,
++      };
++
++      let currentAgents: agentApi.AgentDefinitionResponse[] = [];
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockImplementation(() => Promise.resolve(currentAgents));
++      const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockImplementation(() => {
++        currentAgents = [newAgent];
++        return Promise.resolve(newAgent);
++      });
++      vi.spyOn(agentApi, 'fetchAgentDefinition').mockResolvedValue(newAgent);
++
++      render(<AgentStudioPage />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('register-agent-btn')).toBeDefined();
++      });
++
++      // Open register drawer
++      fireEvent.click(screen.getByTestId('register-agent-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-slug-input')).toBeDefined();
++      });
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'custom-prompter' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Custom Prompter' } });
++
++      // Native DOM value assignment + input dispatch
++      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
++      textarea.value = customPrompt;
++      textarea.dispatchEvent(new Event('input', { bubbles: true }));
++
++      // Save agent
++      fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalled();
++      });
++      expect(createSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          slug: 'custom-prompter',
++          system_instructions_md: customPrompt,
++        }),
++      );
++
++      // Verify the saved agent appears and clicking Edit displays the saved custom prompt
++      await waitFor(() => {
++        expect(screen.getByTestId('edit-agent-btn-agent-new-1')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('edit-agent-btn-agent-new-1'));
++
++      await waitFor(() => {
++        const editTextarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
++        expect(editTextarea.value).toBe(customPrompt);
++        expect(editTextarea.value).not.toBe('You are an autonomous Kanban specialist agent.');
++      });
++    });
++
++    it('request-storm guard: mounting AgentStudioPage with active AAL2 session returning x-kb-aal2-expires-at headers and opening drawer invokes GET /api/v1/auth/session <= 2 times over 300ms', async () => {
++      let sessionCallCount = 0;
++      const expiresAt = new Date(Date.now() + 60000).toISOString();
++
++      vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentCli]);
++
++      // Mock fetch to simulate /api/v1/auth/session returning x-kb-aal2-expires-at header
++      const originalFetch = globalThis.fetch;
++      globalThis.fetch = vi.fn().mockImplementation((url: RequestInfo | URL) => {
++        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
++        if (urlStr.includes('/api/v1/auth/session')) {
++          sessionCallCount++;
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                authenticated: true,
++                aal2_active: true,
++                aal2_expires_at: expiresAt,
++              }),
++              {
++                status: 200,
++                headers: {
++                  'Content-Type': 'application/json',
++                  'x-kb-aal2-expires-at': expiresAt,
++                },
++              },
++            ),
++          );
++        }
++        return Promise.resolve(
++          new Response(JSON.stringify([]), {
++            status: 200,
++            headers: { 'Content-Type': 'application/json', 'x-kb-aal2-expires-at': expiresAt },
++          }),
++        );
++      });
++
++      try {
++        render(<AgentStudioPage isServerAdmin={true} />);
++
++        // Wait for page to render and open drawer for CLI pipe agent
++        await waitFor(() => {
++          expect(screen.getByTestId('agent-card-agent-2')).toBeDefined();
++        });
++
++        fireEvent.click(screen.getByTestId('edit-agent-btn-agent-2'));
++
++        await waitFor(() => {
++          expect(screen.getByTestId('agent-slug-input')).toBeDefined();
++        });
++
++        // Wait 300ms to verify zero request storms occur
++        await new Promise((r) => setTimeout(r, 300));
++
++        // Initial mount invokes /api/v1/auth/session once, and <= 2 calls
++        expect(sessionCallCount).toBeLessThanOrEqual(2);
++      } finally {
++        globalThis.fetch = originalFetch;
++      }
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+index 812b3962..b4ca1d45 100644
+--- a/kanban/web/src/features/admin/AdminStudioSubnav.tsx
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+@@ -83,13 +83,17 @@ function AdminStudioSubnavInner({
+       const custom = e as CustomEvent<{ expiresAt?: string } | undefined>;
+       const expiresAt = custom.detail?.expiresAt;
+       if (expiresAt && !cancelled) {
+-        setSessionData(() => ({
+-          authenticated: true,
+-          aal2_active: true,
+-          aal2_expires_at: expiresAt,
+-        }));
++        setSessionData((prev) => {
++          if (prev?.aal2_active && prev.aal2_expires_at === expiresAt) {
++            return prev;
++          }
++          return {
++            authenticated: true,
++            aal2_active: true,
++            aal2_expires_at: expiresAt,
++          };
++        });
+       }
+-      void load();
+     };
+ 
+     window.addEventListener('kb:aal2-stepup-success', onStepupSuccess);

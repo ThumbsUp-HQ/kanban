@@ -83,13 +83,17 @@ function AdminStudioSubnavInner({
       const custom = e as CustomEvent<{ expiresAt?: string } | undefined>;
       const expiresAt = custom.detail?.expiresAt;
       if (expiresAt && !cancelled) {
-        setSessionData(() => ({
-          authenticated: true,
-          aal2_active: true,
-          aal2_expires_at: expiresAt,
-        }));
+        setSessionData((prev) => {
+          if (prev?.aal2_active && prev.aal2_expires_at === expiresAt) {
+            return prev;
+          }
+          return {
+            authenticated: true,
+            aal2_active: true,
+            aal2_expires_at: expiresAt,
+          };
+        });
       }
-      void load();
     };
 
     window.addEventListener('kb:aal2-stepup-success', onStepupSuccess);

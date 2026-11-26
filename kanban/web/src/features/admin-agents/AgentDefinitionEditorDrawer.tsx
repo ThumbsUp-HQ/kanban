@@ -28,7 +28,7 @@ interface AgentDefinitionEditorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
-  onSaved: () => void;
+  onSaved: (savedAgent?: AgentDefinitionResponse) => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
   projectId?: string | null | undefined;
   workspaceSlug?: string | undefined;
@@ -46,7 +46,7 @@ function AgentDefinitionEditorContent({
 }: {
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
-  onSaved: () => void;
+  onSaved: (savedAgent?: AgentDefinitionResponse) => void;
   aiProviders?: ProviderConfigPublic[] | undefined;
   projectId?: string | null | undefined;
   workspaceSlug?: string | undefined;
@@ -70,7 +70,7 @@ function AgentDefinitionEditorContent({
       : fetchAiProviders(projectId ?? undefined);
     fetchCall
       .then((data) => {
-        if (isMounted) {
+        if (isMounted && Array.isArray(data)) {
           setFetchedProviders(data);
         }
       })
@@ -82,7 +82,11 @@ function AgentDefinitionEditorContent({
     };
   }, [aiProviders, projectId, workspaceSlug]);
 
-  const providers = aiProviders ?? fetchedProviders;
+  const providers = Array.isArray(aiProviders)
+    ? aiProviders
+    : Array.isArray(fetchedProviders)
+      ? fetchedProviders
+      : [];
   const matchingProviders = providers.filter(
     (p) => p.provider_kind === providerKind && p.is_enabled,
   );
@@ -101,6 +105,24 @@ function AgentDefinitionEditorContent({
     agent ? agent.system_instructions_md : 'You are an autonomous Kanban specialist agent.',
   );
   const hasUserEditedInstructions = useRef<boolean>(false);
+  const instructionsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = instructionsTextareaRef.current;
+    if (!el) {
+      return;
+    }
+    const handleNativeInput = (): void => {
+      hasUserEditedInstructions.current = true;
+      setSystemInstructions(el.value);
+    };
+    el.addEventListener('input', handleNativeInput);
+    el.addEventListener('change', handleNativeInput);
+    return () => {
+      el.removeEventListener('input', handleNativeInput);
+      el.removeEventListener('change', handleNativeInput);
+    };
+  }, []);
 
   useEffect(() => {
     if (!agent?.id && !agent?.slug) {
@@ -139,12 +161,15 @@ function AgentDefinitionEditorContent({
         systemInstructions.trim() !== 'You are an autonomous Kanban specialist agent.'
       );
     }
+    const providerOrModelChanged =
+      harnessKind === 'in_app_sdk' &&
+      (providerKind !== agent.provider_kind || modelId !== agent.model_id);
+
     return (
       displayName !== agent.display_name ||
       slug !== agent.slug ||
       harnessKind !== agent.harness_kind ||
-      providerKind !== agent.provider_kind ||
-      modelId !== agent.model_id ||
+      providerOrModelChanged ||
       systemInstructions !== agent.system_instructions_md ||
       timeoutMs !== agent.timeout_ms ||
       repoAccessMode !== agent.repo_access_mode ||
@@ -214,6 +239,11 @@ function AgentDefinitionEditorContent({
       setIsSaving(true);
       setError(null);
 
+      const liveInstructions = instructionsTextareaRef.current
+        ? instructionsTextareaRef.current.value
+        : systemInstructions;
+
+      let savedAgent: AgentDefinitionResponse;
       if (agent) {
         const payload: AgentDefinitionPatch = {
           display_name: displayName.trim(),
@@ -224,11 +254,11 @@ function AgentDefinitionEditorContent({
           remote_runner_pool_slug: harnessKind === 'remote_runner' ? runnerPool.trim() : null,
           repo_access_mode: repoAccessMode,
           mcp_allowed_tools: selectedTools,
-          system_instructions_md: systemInstructions,
+          system_instructions_md: liveInstructions,
           timeout_ms: timeoutMs,
         };
 
-        await updateAgentDefinition(agent.id, payload);
+        savedAgent = await updateAgentDefinition(agent.id, payload);
       } else {
         const payload: AgentDefinitionCreate = {
           slug: slug.trim(),
@@ -242,19 +272,19 @@ function AgentDefinitionEditorContent({
           remote_runner_pool_slug: harnessKind === 'remote_runner' ? runnerPool.trim() : null,
           repo_access_mode: repoAccessMode,
           mcp_allowed_tools: selectedTools,
-          system_instructions_md: systemInstructions,
+          system_instructions_md: liveInstructions,
           timeout_ms: timeoutMs,
         };
 
         if (workspaceSlug) {
-          await createAgentDefinition(payload, workspaceSlug);
+          savedAgent = await createAgentDefinition(payload, workspaceSlug);
         } else {
-          await createAgentDefinition(payload);
+          savedAgent = await createAgentDefinition(payload);
         }
       }
 
       setIsSaving(false);
-      onSaved();
+      onSaved(savedAgent);
       onClose();
     } catch (err: unknown) {
       setIsSaving(false);
@@ -578,6 +608,7 @@ function AgentDefinitionEditorContent({
               System Instructions (Markdown)
             </label>
             <textarea
+              ref={instructionsTextareaRef}
               id="agent-instructions-textarea"
               rows={4}
               className="kb-form-textarea"
@@ -585,6 +616,10 @@ function AgentDefinitionEditorContent({
               onChange={(e) => {
                 hasUserEditedInstructions.current = true;
                 setSystemInstructions(e.target.value);
+              }}
+              onInput={(e) => {
+                hasUserEditedInstructions.current = true;
+                setSystemInstructions((e.target as HTMLTextAreaElement).value);
               }}
               placeholder="System prompt context and rules of engagement..."
               data-testid="agent-instructions-textarea"

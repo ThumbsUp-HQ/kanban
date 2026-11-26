@@ -69,6 +69,24 @@ export function AgentStudioPage({
     setReloadCounter((c) => c + 1);
   }, []);
 
+  const handleAgentSaved = useCallback(
+    (savedAgent?: AgentDefinitionResponse): void => {
+      if (savedAgent) {
+        setAgents((prev) => {
+          const index = prev.findIndex((a) => a.id === savedAgent.id);
+          if (index >= 0) {
+            const next = [...prev];
+            next[index] = savedAgent;
+            return next;
+          }
+          return [...prev, savedAgent];
+        });
+      }
+      refreshAgents();
+    },
+    [refreshAgents],
+  );
+
   const handleConfirmDelete = async (): Promise<void> => {
     if (!agentToDelete) return;
     try {
@@ -259,7 +277,7 @@ export function AgentStudioPage({
           setEditingAgent(null);
         }}
         agent={editingAgent}
-        onSaved={refreshAgents}
+        onSaved={handleAgentSaved}
         projectId={projectId}
         workspaceSlug={workspaceSlug}
       />

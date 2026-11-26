@@ -1,0 +1,89 @@
+=== PYTEST BACKEND UNIT TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan433-943bd920
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 2 items
+
+kanban/tests/api/test_agent_definitions.py ..                            [100%]
+
+============================== 2 passed in 1.13s ===============================
+
+=== VITEST FRONTEND UNIT TESTS ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan433-943bd920/kanban/web
+> vitest run src/features/admin-agents src/features/admin src/api
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan433-943bd920/kanban/web
+
+ ✓ src/features/admin-auth/adminAuthApi.test.ts (12 tests) 35ms
+ ✓ src/api/client.test.ts (33 tests) 96ms
+ ✓ src/api/RealtimeStatus.test.tsx (8 tests) 134ms
+ ✓ src/api/realtime.test.ts (48 tests) 173ms
+stdout | src/api/optimistic.test.tsx > useOptimisticMutation > 500-issue synchronous apply median is under 12ms (20 runs)
+OPTIMISTIC_BENCHMARK runs=20 median_ms=0.0230 max_ms=0.1271 min_ms=0.0216
+
+ ✓ src/api/optimistic.test.tsx (5 tests) 235ms
+ ✓ src/features/admin-auth/LockoutPreventedBanner.test.tsx (5 tests) 489ms
+   ✓ LockoutPreventedBanner (KB-P3-36) (5)
+     ✓ renders ZERO_ADMIN_CARDS reason copy and copies CLI command (Mandatory Test Case 4) 327ms
+ ✓ src/features/admin-auth/AuthCardRow.test.tsx (7 tests) 704ms
+   ✓ AuthCardRow (KB-P3-36) (7)
+     ✓ renders card row with Primary badge, latency chip, and triggers edit/toggle 418ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (14 tests) 1058ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (14 tests) 1616ms
+   ✓ PlaneImportStudio & extractEntityCounts (14)
+     ✓ handles dry-run and live import execution errors cleanly 308ms
+ ✓ src/features/admin-auth/cardRank.test.ts (11 tests) 23ms
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 19ms
+ ✓ src/api/queryKeys.test.ts (2 tests) 12ms
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (8 tests) 21ms
+ ✓ src/api/problem.test.ts (11 tests) 18ms
+ ✓ src/api/__tests__/websudoReplay.test.tsx (32 tests) 1910ms
+   ✓ AdminStudioSubnav Sudo Pill (KAN-404) (14)
+     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1126ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (32 tests) 1907ms
+   ✓ AgentStudioPage & Components (KANBA-219) (32)
+     ✓ AgentStudioPage & ValidationModal non-Error fallback coverage (13)
+       ✓ request-storm guard: mounting AgentStudioPage with active AAL2 session returning x-kb-aal2-expires-at headers and opening drawer invokes GET /api/v1/auth/session <= 2 times over 300ms 356ms
+ ✓ src/features/admin/__tests__/AdminMobileLayout.test.tsx (12 tests) 441ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 2711ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (48 tests) 2700ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (48)
+     ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 488ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 3124ms
+   ✓ RunnerStudioPage & Components (KANBA-219) (22)
+     ✓ RunnerStudioPage component (9)
+       ✓ renders runner cards, status filters, and handles revocation flow 345ms
+     ✓ MintEnrollmentTokenModal component (12)
+       ✓ resets copied state after 2 seconds 2141ms
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (14 tests) 1277ms
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (13 tests) 2306ms
+   ✓ AdminDiagnosticsStudio Component (13)
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1530ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (55 tests) 5466ms
+   ✓ AuthStudioPage (KB-P3-36) (55)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 653ms
+     ✓ opens drawer to add a new auth card and appends created card 615ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 338ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 393ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (59 tests) 5837ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (59)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 651ms
+     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 317ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 437ms
+
+ Test Files  24 passed (24)
+      Tests  523 passed (523)
+   Start at  08:52:24
+   Duration  8.38s (environment 45%, tests 37%, import 10%, transform 7%)
+
+Environment  jsdom was created 24 times · 39.04s total, 45% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
