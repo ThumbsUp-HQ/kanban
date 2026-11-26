@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select, text
@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, text
 from database.models.agent_definition import AgentDefinition
 from database.models.projects import Project, WorkflowState
 from database.models.wasm_module import ApprovedWasmModule
-from database.models.workflow import WorkflowTransitionHook
+from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
 from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
 from kanban.api.problems import ProblemException, not_found
 from kanban.services.activity import ActivityEventType, record_activity
@@ -141,6 +141,8 @@ class WorkflowHookResponse(BaseModel):
     repo_binding_slug: str | None = None
     repo_access_mode: str | None = None
     mcp_access_summary: str | None = None
+    inherited_from_template_id: uuid.UUID | None = None
+    inherited_from_scope: Literal["system", "workspace"] | None = None
 
 
 class TransitionRule(BaseModel):
@@ -383,6 +385,15 @@ class WorkflowHookService:
         wasm_hex = hook.wasm_module_sha256.hex() if hook.wasm_module_sha256 else None
         manifest_hex = hook.manifest_sha256.hex()
 
+        inherited_scope: Literal["system", "workspace"] | None = None
+        if hook.inherited_from_template_id is not None:
+            scope_stmt = select(DefaultWorkflowHook.scope_kind).where(
+                DefaultWorkflowHook.id == hook.inherited_from_template_id
+            )
+            raw_scope = (await session.execute(scope_stmt)).scalar_one_or_none()
+            if raw_scope in ("system", "workspace"):
+                inherited_scope = cast("Literal['system', 'workspace']", raw_scope)
+
         return WorkflowHookResponse(
             id=str(hook.id),
             name=hook.name,
@@ -409,6 +420,8 @@ class WorkflowHookService:
             effective_timeout_ms=effective_timeout_ms,
             repo_binding_slug=repo_binding_slug,
             repo_access_mode=repo_access_mode,
+            inherited_from_template_id=hook.inherited_from_template_id,
+            inherited_from_scope=inherited_scope,
         )
 
     @classmethod
@@ -1016,3 +1029,32 @@ class WorkflowHookService:
         for uh in updated_hooks:
             res.append(await cls.serialize_hook(session, uh))
         return res
+
+    @classmethod
+    async def materialize_default_workflow_hooks(
+        cls,
+        session: AsyncSession,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        skip_existing: bool = True,
+    ) -> list[WorkflowTransitionHook]:
+        """Copy enabled default workflow hook templates into a project (copy-on-create inheritance)."""
+        from kanban.workflows.default_hooks import (  # noqa: PLC0415
+            materialize_default_workflow_hooks as _materialize,
+        )
+
+        return await _materialize(session, workspace_id, project_id, skip_existing=skip_existing)
+
+
+async def materialize_default_workflow_hooks(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    *,
+    skip_existing: bool = True,
+) -> list[WorkflowTransitionHook]:
+    """Materialize enabled default workflow hook templates for a project."""
+    from kanban.workflows.default_hooks import materialize_default_workflow_hooks as _materialize  # noqa: PLC0415
+
+    return await _materialize(session, workspace_id, project_id, skip_existing=skip_existing)

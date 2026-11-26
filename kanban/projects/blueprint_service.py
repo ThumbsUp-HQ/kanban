@@ -46,6 +46,7 @@ from kanban.services.projects import (
     _require_project_creator,
     get_project_or_404,
 )
+from kanban.workflows.default_hooks import materialize_default_workflow_hooks
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -498,6 +499,7 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
             Project.identifier == blueprint.identifier,
         )
         project = (await session.execute(stmt)).scalar_one_or_none()
+        is_new_project = project is None
 
         project_id: uuid.UUID
         if project is None:
@@ -610,6 +612,11 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
             if st_row.name not in target_state_names:
                 await session.delete(st_row)
         await session.flush()
+
+        if is_new_project:
+            await materialize_default_workflow_hooks(
+                session, caller.workspace_id, project_id, skip_existing=True
+            )
 
         # Handle priorities
         curr_pris_q = select(ProjectPriority).where(ProjectPriority.project_id == project_id)
