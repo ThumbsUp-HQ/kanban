@@ -740,6 +740,26 @@ export function CommandPalette({
             })
           )}
         </ul>
+
+        <footer
+          className="kb-palette-footer"
+          data-testid="palette-footer-legend"
+          aria-label="Keyboard shortcuts legend"
+        >
+          <span className="kb-palette-footer-item">
+            <kbd className="kb-palette-kbd">↑</kbd>
+            <kbd className="kb-palette-kbd">↓</kbd>
+            <span className="kb-palette-footer-label">Navigate</span>
+          </span>
+          <span className="kb-palette-footer-item">
+            <kbd className="kb-palette-kbd">↵</kbd>
+            <span className="kb-palette-footer-label">Select</span>
+          </span>
+          <span className="kb-palette-footer-item">
+            <kbd className="kb-palette-kbd">Esc</kbd>
+            <span className="kb-palette-footer-label">Dismiss</span>
+          </span>
+        </footer>
       </div>
     </div>
   );

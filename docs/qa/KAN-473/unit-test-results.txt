@@ -1,0 +1,42 @@
+=== 1. CSS Tokens Audit Gate (cssTokensAudit.test.ts) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan473-7bfd817a/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 21ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  18:22:43
+   Duration  1.41s (environment 94%, import 2%, tests 2%, worker 1%, transform 1%)
+
+
+=== 2. CommandPalette Unit Tests with Coverage (CommandPalette.test.tsx) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan473-7bfd817a/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/app/CommandPalette.test.tsx (33 tests) 9176ms
+   ✓ CommandPalette (33)
+     ✓ renders dialog, combobox, and options when isOpen is true 465ms
+     ✓ executes navigation and theme commands on select 448ms
+     ✓ performs live hybrid search across issues, docs, pages, and stickies 340ms
+     ✓ covers sticky without project and issue without key in search results 347ms
+     ✓ handles live search with empty title, snippet, summary fallbacks and items null 709ms
+     ✓ covers clicking navigation and action commands and backdrop click 3232ms
+     ✓ covers search edge cases: empty items, keyless issue navigation, duplicate keys, and tab trapping 379ms
+     ✓ covers extractCachedIssues container with null/non-string items and empty search res items 316ms
+     ✓ handles live search debounce reset and deduplication with seen keys 469ms
+     ✓ covers diagnostics and about navigation clicks and issue deduplication 314ms
+
+ Test Files  1 passed (1)
+      Tests  33 passed (33)
+   Start at  18:22:45
+   Duration  10.99s (tests 87%, environment 10%, import 2%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.53 |    95.36 |     100 |     100 |                   
+ ...andPalette.tsx |   99.53 |    95.36 |     100 |     100 | ...71,532,579,638 
+-------------------|---------|----------|---------|---------|-------------------

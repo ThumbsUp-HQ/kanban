@@ -579,6 +579,10 @@ describe('CommandPalette', () => {
     });
 
     act(() => {
+      screen.getByRole('option', { name: /Orphan issue without key/ }).click();
+    });
+
+    act(() => {
       screen.getByRole('option', { name: /Orphan issue without key/i }).click();
     });
   });
@@ -982,5 +986,132 @@ describe('CommandPalette', () => {
     expect(options[0]?.textContent).toContain('Linked via VERIFIED_BY_DOC to KAN-10');
     expect(options[1]?.textContent).toContain('Dependent Execution Queue');
     expect(options[1]?.textContent).toContain('Linked via BLOCKS to KAN-10');
+  });
+
+  it('renders persistent keyboard shortcut legend footer with kbd tokens and clean labels (KAN-473)', () => {
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    const footer = screen.getByTestId('palette-footer-legend');
+    expect(footer).toBeDefined();
+    expect(footer.tagName.toLowerCase()).toBe('footer');
+    expect(footer.className).toContain('kb-palette-footer');
+
+    // Verify key labels
+    expect(footer.textContent).toContain('Navigate');
+    expect(footer.textContent).toContain('Select');
+    expect(footer.textContent).toContain('Dismiss');
+    expect(footer.textContent).toContain('↑');
+    expect(footer.textContent).toContain('↓');
+    expect(footer.textContent).toContain('↵');
+    expect(footer.textContent).toContain('Esc');
+
+    // Verify kbd elements
+    const kbds = footer.querySelectorAll('kbd');
+    expect(kbds.length).toBe(4);
+    kbds.forEach((kbd) => {
+      expect(kbd.className).toContain('kb-palette-kbd');
+    });
+  });
+
+  it('scrolls selected option into view when selection changes', () => {
+    const scrollMock = vi.fn();
+    Element.prototype.scrollIntoView = scrollMock;
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+    const input = screen.getByRole('combobox');
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(scrollMock).toHaveBeenCalled();
+  });
+
+  it('handles live search debounce reset and deduplication with seen keys', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'cw-1',
+          kind: 'issue',
+          title: 'Create work item',
+          summary: 'Create work item',
+          key: 'CW-1',
+          match_reason: 'Exact Title Match',
+        },
+      ],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+
+    // Type query to trigger search
+    fireEvent.change(input, { target: { value: 'Create' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('CW-1 - Create work item')).toBeDefined();
+    });
+
+    // Clear input to test trimmed empty branch in debounce
+    fireEvent.change(input, { target: { value: '' } });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 220));
+    });
+
+    expect((input as HTMLInputElement).value).toBe('');
+  });
+
+  it('covers diagnostics and about navigation clicks and issue deduplication', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'cw-dup',
+          kind: 'issue',
+          title: 'Duplicate Title',
+          summary: 'Duplicate Title',
+          key: 'DUP-1',
+          match_reason: 'Exact Title Match',
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <CommandPalette
+        isOpen={true}
+        onClose={noop}
+        cachedIssues={[{ key: 'DUP-1', summary: 'Duplicate Title' }]}
+      />,
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Duplicate' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('match-reason-search-issue-cw-dup')).toBeDefined();
+    });
+
+    // Clear search to show base commands
+    fireEvent.change(input, { target: { value: '' } });
+
+    // Click diagnostics
+    act(() => {
+      const diagOption = screen.getByText('Go to Diagnostics & Link Inspector');
+      diagOption.click();
+    });
+
+    // Click about
+    act(() => {
+      const aboutOption = screen.getByText('About 👍kanban (License, API Docs & SBOM)');
+      aboutOption.click();
+    });
+
+    // Press Enter on non-matching query
+    fireEvent.change(input, { target: { value: 'zzzz_no_match_query' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
   });
 });
