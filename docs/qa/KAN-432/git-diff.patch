@@ -376,10 +376,28 @@ index 0dfdd738..f0cdc81a 100644
    const computedSection =
      currentSection && currentSection !== 'Work Items'
 diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
-index 8a19422f..85871bc3 100644
+index 8a19422f..b8e5a988 100644
 --- a/kanban/web/src/features/board/BoardView.tsx
 +++ b/kanban/web/src/features/board/BoardView.tsx
-@@ -74,6 +74,8 @@ export function BoardView({
+@@ -6,7 +6,7 @@ import { apiFetch } from '../../api/client.ts';
+ import type { RealtimeClient } from '../../api/realtime.ts';
+ import { useOptimisticMutation } from '../../api/optimistic.ts';
+ import { qk } from '../../api/queryKeys.ts';
+-import { useRealtimeSubscription } from '../../realtime/index.ts';
++import { useRealtimeSubscription, useRealtimeClient } from '../../realtime/index.ts';
+ import * as gates from '../gates/index.ts';
+ import { BoardColumn } from './BoardColumn.tsx';
+ import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
+@@ -67,6 +67,8 @@ export function BoardView({
+   monitorFactory = monitorForElements,
+ }: BoardViewProps): JSX.Element {
+   const queryClient = useQueryClient();
++  const ctxClient = useRealtimeClient();
++  const effectiveRealtimeClient = realtimeClient ?? ctxClient;
+   const [localIssues, setLocalIssues] = useState<BoardIssue[] | null>(null);
+   const [draggingKey, setDraggingKey] = useState<string | null>(null);
+   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+@@ -74,6 +76,8 @@ export function BoardView({
    const [toastMessage, setToastMessage] = useState<string | null>(null);
    const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
  
@@ -388,7 +406,7 @@ index 8a19422f..85871bc3 100644
    // Fetch project details for states and capabilities when omitted
    const projectQuery = useQuery({
      queryKey: qk.project(projectKey),
-@@ -97,19 +99,6 @@ export function BoardView({
+@@ -97,19 +101,6 @@ export function BoardView({
      resolvedProjectId ? `project:${resolvedProjectId}` : null,
    ]);
  
@@ -408,12 +426,12 @@ index 8a19422f..85871bc3 100644
    const states = useMemo(() => {
      if (propStates) return propStates;
      const data = projectQuery.data;
-@@ -183,6 +172,83 @@ export function BoardView({
+@@ -183,6 +174,83 @@ export function BoardView({
      );
    }, [currentUserCapabilities]);
  
 +  gates.useGateRealtimeSync({
-+    client: realtimeClient,
++    client: effectiveRealtimeClient,
 +    queryClient,
 +    projectKey,
 +    onToast: (msg) => {
@@ -428,7 +446,7 @@ index 8a19422f..85871bc3 100644
 +        const base = prev ?? issues;
 +        return base.map((item) =>
 +          item.key === payload.issue_key
-+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload)
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload, states)
 +            : item,
 +        );
 +      });
@@ -438,7 +456,7 @@ index 8a19422f..85871bc3 100644
 +        const base = prev ?? issues;
 +        return base.map((item) =>
 +          item.key === payload.issue_key
-+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload)
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload, states)
 +            : item,
 +        );
 +      });
@@ -452,7 +470,7 @@ index 8a19422f..85871bc3 100644
 +        const base = prev ?? issues;
 +        return base.map((item) =>
 +          item.key === payload.issue_key
-+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload)
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload, states)
 +            : item,
 +        );
 +      });
@@ -474,7 +492,7 @@ index 8a19422f..85871bc3 100644
 +        const base = prev ?? issues;
 +        return base.map((item) =>
 +          item.key === payload.issue_key
-+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload)
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload, states)
 +            : item,
 +        );
 +      });
@@ -492,7 +510,7 @@ index 8a19422f..85871bc3 100644
    // Group and sort issues by state and board_rank (COLLATE "C")
    const issuesByState = useMemo(() => {
      const map: Record<string, BoardIssue[]> = {};
-@@ -190,12 +256,19 @@ export function BoardView({
+@@ -190,12 +258,19 @@ export function BoardView({
        map[st.id] = [];
      }
      for (const issue of issues) {
@@ -515,7 +533,7 @@ index 8a19422f..85871bc3 100644
      }
      return map;
    }, [states, issues]);
-@@ -210,6 +283,10 @@ export function BoardView({
+@@ -210,6 +285,10 @@ export function BoardView({
  
    const executeMove = useCallback(
      async (moveParams: IssueMoveParams) => {
@@ -526,7 +544,7 @@ index 8a19422f..85871bc3 100644
        // Optimistically update local issues synchronously (< 12ms budget)
        const previousIssues = issues;
        const updatedIssues = applyOptimisticMove(previousIssues, moveParams, states);
-@@ -217,13 +294,65 @@ export function BoardView({
+@@ -217,13 +296,65 @@ export function BoardView({
  
        try {
          const res = await moveMutation.mutateAsync(moveParams);
@@ -593,7 +611,7 @@ index 8a19422f..85871bc3 100644
    );
  
    const handlePerformMove = useCallback(
-@@ -368,7 +497,11 @@ export function BoardView({
+@@ -368,7 +499,11 @@ export function BoardView({
          return;
        }
  
@@ -608,10 +626,10 @@ index 8a19422f..85871bc3 100644
        if (direction === 'left' || direction === 'right') {
 diff --git a/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx b/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx
 new file mode 100644
-index 00000000..b3ca24ea
+index 00000000..37d9955d
 --- /dev/null
 +++ b/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx
-@@ -0,0 +1,939 @@
+@@ -0,0 +1,1030 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -629,6 +647,8 @@ index 00000000..b3ca24ea
 +import { handleGateEvent } from '../../gates/useGateRealtimeSync';
 +import { qk } from '../../../api/queryKeys';
 +import type { IssueDetail } from '../../drawer/slots';
++import { IssuesWorkspaceRoute } from '../../views/viewRegistry';
++import { RealtimeProvider } from '../../../realtime/context';
 +
 +const mockStates: BoardWorkflowState[] = [
 +  { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
@@ -1550,7 +1570,111 @@ index 00000000..b3ca24ea
 +
 +    expect(screen.getByTestId('board-column-st-progress')).toBeDefined();
 +  });
++
++  it('mounts IssuesWorkspaceRoute without realtimeClient prop, receives live RealtimeProvider context, holds ⏳🤖 and veto snaps back to In Progress', async () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++    const mockRt = createMockRealtime();
++    const testClient = new QueryClient();
++
++    testClient.setQueryData(['states', 'KAN'], mockStates);
++    testClient.setQueryData(qk.project('KAN'), {
++      id: 'proj-kan',
++      key: 'KAN',
++      name: 'Core Project',
++      states: mockStates,
++    });
++
++    const routeIssues = [
++      {
++        id: 'iss-route-1',
++        key: 'KAN-432-RT',
++        project_key: 'KAN',
++        summary: 'Routed Board Gate Issue',
++        state_id: 'st-progress',
++        state: { id: 'st-progress', name: 'In Progress', group: 'started' },
++        priority: { slug: 'high', label: 'High' },
++        board_rank: '000001',
++      },
++    ];
++
++    act(() => {
++      render(
++        <QueryClientProvider client={testClient}>
++          <RealtimeProvider client={mockRt.client} autoConnect={false} bindInvalidation={false}>
++            <IssuesWorkspaceRoute
++              projectKey="KAN"
++              modulesEnabled={false}
++              initialIssues={routeIssues as never}
++              queryClient={testClient}
++            />
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++    });
++
++    // Initial render in In Progress lane
++    expect(screen.getByTestId('board-card-KAN-432-RT')).toBeDefined();
++    const progressCol = screen.getByTestId('board-column-st-progress');
++    expect(progressCol.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
++
++    // 1. Live WebSocket pending gate event
++    act(() => {
++      mockRt.emit({
++        id: 'evt-pending-route',
++        type: 'workflow.gate.pending',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-432-RT',
++          execution_id: 'exec-route-1',
++          hook_name: 'Security Gatekeeper',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++        },
++      });
++    });
++
++    expect(screen.getByTestId('gate-pending-KAN-432-RT')).toBeDefined();
++
++    // 2. Live WebSocket veto/rejection event
++    act(() => {
++      mockRt.emit({
++        id: 'evt-rejected-route',
++        type: 'workflow.gate.rejected',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-432-RT',
++          execution_id: 'exec-route-1',
++          hook_name: 'Security Gatekeeper',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++          reason_preview: 'Automated test suite gate rejected',
++        },
++      });
++    });
++
++    // Card automatically returned/snapped back to In Progress column with veto feedback
++    await waitFor(() => {
++      const col = screen.getByTestId('board-column-st-progress');
++      expect(col.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
++      expect(screen.getByTestId('gate-vetoed-KAN-432-RT')).toBeDefined();
++    });
++  });
 +});
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index ec388f55..f1f5afc2 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -113,6 +113,10 @@
+ @media (max-width: 767px) {
+   .board-column {
+     scroll-snap-align: start;
++    flex: 0 0 calc(100% - 0px);
++    width: 100%;
++    min-width: 0;
++    max-width: 100%;
+   }
+ }
+ 
 diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
 index 21e8cbe9..7e865f67 100644
 --- a/kanban/web/src/features/board/boardApi.ts
@@ -1568,6 +1692,65 @@ index 21e8cbe9..7e865f67 100644
  }
  
  /**
+diff --git a/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx b/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
+index 15724ba3..e3e42e83 100644
+--- a/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
++++ b/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
+@@ -80,7 +80,7 @@ export function StatePriorityRows({
+           State
+         </label>
+         <div className="prop-row__value">
+-          {issue.pending_gate && (
++          {(Boolean(issue.pending_gate) || (issue as { gate_status?: string | null }).gate_status === 'pending') && (
+             <GateStatusPill
+               status="pending"
+               pendingGate={issue.pending_gate}
+@@ -89,22 +89,29 @@ export function StatePriorityRows({
+               testId="drawer-gate-pending"
+             />
+           )}
+-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'reject' && (
+-            <GateStatusPill
+-              status="rejected"
+-              latestVerdict={issue.latest_gate_verdict}
+-              issueKey={issue.key}
+-              testId="drawer-gate-vetoed"
+-            />
+-          )}
+-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'approve' && (
+-            <GateStatusPill
+-              status="approved"
+-              latestVerdict={issue.latest_gate_verdict}
+-              issueKey={issue.key}
+-              testId="drawer-gate-approved"
+-            />
+-          )}
++          {!issue.pending_gate &&
++            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
++            (issue.latest_gate_verdict?.decision === 'reject' ||
++              (issue as { gate_status?: string | null }).gate_status === 'rejected' ||
++              (issue as { gate_status?: string | null }).gate_status === 'vetoed') && (
++              <GateStatusPill
++                status="rejected"
++                latestVerdict={issue.latest_gate_verdict}
++                issueKey={issue.key}
++                testId="drawer-gate-vetoed"
++              />
++            )}
++          {!issue.pending_gate &&
++            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
++            (issue.latest_gate_verdict?.decision === 'approve' ||
++              (issue as { gate_status?: string | null }).gate_status === 'approved') && (
++              <GateStatusPill
++                status="approved"
++                latestVerdict={issue.latest_gate_verdict}
++                issueKey={issue.key}
++                testId="drawer-gate-approved"
++              />
++            )}
+           <select
+             id="prop-state-select"
+             aria-label="State"
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
 index da8b2a0d..dd14d923 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
@@ -1597,34 +1780,95 @@ index da8b2a0d..dd14d923 100644
    useEffect(() => {
      if (!issue?.key || issue.key === issueKey) {
 diff --git a/kanban/web/src/features/gates/useGateRealtimeSync.ts b/kanban/web/src/features/gates/useGateRealtimeSync.ts
-index d02fbe0d..482f079d 100644
+index d02fbe0d..42334119 100644
 --- a/kanban/web/src/features/gates/useGateRealtimeSync.ts
 +++ b/kanban/web/src/features/gates/useGateRealtimeSync.ts
-@@ -34,12 +34,12 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
+@@ -34,12 +34,58 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
    });
  }
  
 -function updateBoardIssueWithGate(
++export interface CachedStateLike {
++  id: string;
++  name?: string | undefined;
++  group?: string | undefined;
++  color_hex?: string | null | undefined;
++}
++
++function resolveSyncedState(
++  issue: BoardIssue,
++  stateId: string,
++  fallbackName?: string,
++  cachedStates?: CachedStateLike[],
++): BoardIssue['state'] {
++  if (cachedStates && cachedStates.length > 0) {
++    const matched = cachedStates.find((s) => s.id === stateId);
++    if (matched) {
++      return {
++        id: matched.id,
++        name: matched.name ?? fallbackName ?? '',
++        group: (matched.group ?? 'started') as NonNullable<BoardIssue['state']>['group'],
++        color_hex: matched.color_hex ?? null,
++      };
++    }
++  }
++  if (issue.state) {
++    return {
++      id: stateId,
++      name: fallbackName ?? (issue.state.id === stateId ? issue.state.name : ''),
++      group: issue.state.id === stateId ? issue.state.group : 'started',
++      color_hex: issue.state.id === stateId ? issue.state.color_hex : null,
++    };
++  }
++  if (fallbackName) {
++    return {
++      id: stateId,
++      name: fallbackName,
++      group: 'started' as NonNullable<BoardIssue['state']>['group'],
++      color_hex: null,
++    };
++  }
++  return undefined;
++}
++
 +export function updateBoardIssueWithGate(
    issue: BoardIssue,
    eventType: string,
    p: WorkflowGateEventPayload,
++  cachedStates?: CachedStateLike[],
  ): BoardIssue {
 -  if (eventType === 'workflow.gate.pending') {
 +  if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
++    const targetStateId = p.to_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
      const pendingGate: PendingGateInfo = {
        execution_id: p.execution_id,
        hook_name: p.hook_name,
-@@ -62,7 +62,7 @@ function updateBoardIssueWithGate(
+@@ -58,11 +104,14 @@ function updateBoardIssueWithGate(
+       ...issue,
+       gate_status: 'pending',
+       pending_gate: pendingGate,
+-      state_id: p.to_state_id ?? issue.state_id,
++      state_id: targetStateId,
++      ...(nextState ? { state: nextState } : {}),
      };
    }
  
 -  if (eventType === 'workflow.gate.approved') {
 +  if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
++    const targetStateId = p.to_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
      const verdict: LatestGateVerdict = {
        decision: 'approve',
        hook_name: p.hook_name,
-@@ -79,7 +79,17 @@ function updateBoardIssueWithGate(
+@@ -74,12 +123,24 @@ function updateBoardIssueWithGate(
+       ...issue,
+       gate_status: 'approved',
+       pending_gate: null,
+-      state_id: p.to_state_id ?? issue.state_id,
++      state_id: targetStateId,
+       latest_gate_verdict: verdict,
++      ...(nextState ? { state: nextState } : {}),
      };
    }
  
@@ -1640,32 +1884,36 @@ index d02fbe0d..482f079d 100644
 +    eventType === 'gate.timed_out'
 +  ) {
 +    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
      const verdict: LatestGateVerdict = {
        decision: 'reject',
        hook_name: p.hook_name,
-@@ -92,17 +102,18 @@ function updateBoardIssueWithGate(
+@@ -92,17 +153,21 @@ function updateBoardIssueWithGate(
        ...issue,
        gate_status: 'rejected',
        pending_gate: null,
 -      state_id: p.from_state_id ?? issue.state_id,
 +      state_id: fromStateId,
        latest_gate_verdict: verdict,
++      ...(nextState ? { state: nextState } : {}),
      };
    }
  
 -  if (eventType === 'workflow.gate.cancelled') {
 +  if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
 +    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
      return {
        ...issue,
        gate_status: null,
        pending_gate: null,
 -      state_id: p.from_state_id ?? issue.state_id,
 +      state_id: fromStateId,
++      ...(nextState ? { state: nextState } : {}),
      };
    }
  
-@@ -155,7 +166,7 @@ export function handleGateEvent(
+@@ -155,7 +220,7 @@ export function handleGateEvent(
    // 2. Update single issue detail cache
    queryClient.setQueryData<IssueDetail>(qk.issue(issue_key), (oldIssue) => {
      if (!oldIssue) return oldIssue;
@@ -1674,7 +1922,7 @@ index d02fbe0d..482f079d 100644
        const pendingGate: PendingGateInfo = {
          execution_id: payload.execution_id,
          hook_name: payload.hook_name,
-@@ -173,19 +184,21 @@ export function handleGateEvent(
+@@ -173,19 +238,21 @@ export function handleGateEvent(
        return {
          ...oldIssue,
          pending_gate: pendingGate,
@@ -1698,7 +1946,7 @@ index d02fbe0d..482f079d 100644
          latest_gate_verdict: {
            decision: 'approve',
            hook_name: payload.hook_name,
-@@ -195,17 +208,31 @@ export function handleGateEvent(
+@@ -195,17 +262,31 @@ export function handleGateEvent(
          },
          state: payload.to_state
            ? {
@@ -1732,7 +1980,7 @@ index d02fbe0d..482f079d 100644
          latest_gate_verdict: {
            decision: 'reject',
            hook_name: payload.hook_name,
-@@ -214,23 +241,28 @@ export function handleGateEvent(
+@@ -214,23 +295,28 @@ export function handleGateEvent(
            audit_comment_id: payload.audit_comment_id,
            completed_at: payload.completed_at ?? new Date().toISOString(),
          },
@@ -1768,7 +2016,7 @@ index d02fbe0d..482f079d 100644
                group: 'started',
              }
            : oldIssue.state,
-@@ -242,10 +274,19 @@ export function handleGateEvent(
+@@ -242,10 +328,19 @@ export function handleGateEvent(
    // 3. Update Activity Feed Cache (idempotent injection)
    const activityEventMap: Record<string, GateActivityItem['event_type']> = {
      'workflow.gate.approved': 'GATE_APPROVED',
@@ -1788,7 +2036,7 @@ index d02fbe0d..482f079d 100644
    };
  
    const activityEventType = activityEventMap[eventType];
-@@ -309,11 +350,22 @@ export function handleGateEvent(
+@@ -309,11 +404,22 @@ export function handleGateEvent(
    }
  
    // 4. Notifications & Callbacks
@@ -1814,7 +2062,7 @@ index d02fbe0d..482f079d 100644
    ) {
      void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
      void queryClient.invalidateQueries({
-@@ -321,15 +373,15 @@ export function handleGateEvent(
+@@ -321,15 +427,15 @@ export function handleGateEvent(
      });
    }
  
@@ -1834,7 +2082,7 @@ index d02fbe0d..482f079d 100644
      if (payload.reason === 'STALE_SNAPSHOT') {
        const msg = 'Transition cancelled (ticket changed while gate was running)';
        options.onToast?.(msg);
-@@ -358,15 +410,25 @@ export function useGateRealtimeSync({
+@@ -358,15 +464,25 @@ export function useGateRealtimeSync({
      if (!client) return undefined;
  
      const handler = (event: RealtimeEvent): void => {
@@ -1921,10 +2169,37 @@ index 52372bb4..f72acd7f 100644
    const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
      modulesEnabled ? defaultModuleIds : [],
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 7016e585..faabe209 100644
+index 7016e585..f631dd56 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
-@@ -622,6 +622,7 @@ export function IssuesWorkspaceRoute({
+@@ -57,6 +57,7 @@ import {
+   type SavedView,
+ } from './viewsApi';
+ import { IssueSurfaceRoot } from '../drawer/IssueSurface';
++import type { PendingGateInfo, LatestGateVerdict } from '../gates/types.ts';
+ import './filterBulk.css';
+ 
+ // Export all KB-P3-40 and KAN-308 components per Scoped Definition of Done
+@@ -195,12 +196,17 @@ function resolveIssueStateSummary(
+ ): { id?: string; name?: string; group?: string; color_hex?: string | null } | undefined {
+   const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string | null } }).state;
+   const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+-  if (rawState?.name && rawState.group) {
++  if (explicitStateId && projectStates.length > 0) {
++    const found = projectStates.find((s) => s.id === explicitStateId);
++    if (found) return found;
++  }
++  if (rawState?.name && rawState.group && (!explicitStateId || rawState.id === explicitStateId)) {
+     return rawState;
+   }
+   if (explicitStateId) {
+     const found = projectStates.find((s) => s.id === explicitStateId);
+     if (found) return found;
++    return { id: explicitStateId, name: rawState?.name ?? '', group: rawState?.group ?? 'unstarted' };
+   }
+   return rawState;
+ }
+@@ -622,6 +628,7 @@ export function IssuesWorkspaceRoute({
    );
  
    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -1932,7 +2207,7 @@ index 7016e585..faabe209 100644
    const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
    const [isFilterOpen, setIsFilterOpen] = useState(false);
    const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
-@@ -633,15 +634,20 @@ export function IssuesWorkspaceRoute({
+@@ -633,15 +640,20 @@ export function IssuesWorkspaceRoute({
      setCsvModalTab('export');
    }, []);
  
@@ -1956,7 +2231,32 @@ index 7016e585..faabe209 100644
      };
    }, [canEdit, handleOpenCreateModal]);
    const [popoverState, setPopoverState] = useState<{
-@@ -1600,10 +1606,14 @@ export function IssuesWorkspaceRoute({
+@@ -1170,7 +1182,14 @@ export function IssuesWorkspaceRoute({
+       const gateStatus: BoardIssue['gate_status'] =
+         issue.gate_status === 'vetoed'
+           ? 'rejected'
+-          : issue.gate_status ?? null;
++          : issue.gate_status ??
++            ((issue as { pending_gate?: PendingGateInfo | null }).pending_gate
++              ? 'pending'
++              : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'reject'
++                ? 'rejected'
++                : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'approve'
++                  ? 'approved'
++                  : null);
+ 
+       const rawPriority = (issue as { priority?: { slug?: string; label?: string } }).priority;
+       const pSlug = rawPriority?.slug ?? 'none';
+@@ -1198,6 +1217,8 @@ export function IssuesWorkspaceRoute({
+         assignees: boardAssignees,
+         due_date: issue.due_date ?? null,
+         gate_status: gateStatus,
++        pending_gate: (issue as { pending_gate?: PendingGateInfo | null }).pending_gate ?? null,
++        latest_gate_verdict: (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict ?? null,
+         has_explicit_acl: Boolean(issue.has_explicit_acl),
+       };
+     });
+@@ -1600,10 +1621,14 @@ export function IssuesWorkspaceRoute({
        {canEdit && (
          <QuickCreateIssueModal
            isOpen={isCreateModalOpen}
@@ -2005,32 +2305,77 @@ index 85d07e05..4ded79cc 100644
                  "latency_ms": decision.latency_ms,
 diff --git a/scripts/capture_kan432_screenshots.mjs b/scripts/capture_kan432_screenshots.mjs
 new file mode 100644
-index 00000000..3593cfbe
+index 00000000..ea15f97c
 --- /dev/null
 +++ b/scripts/capture_kan432_screenshots.mjs
-@@ -0,0 +1,613 @@
+@@ -0,0 +1,258 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
++/**
++ * Zero-Mock Playwright screenshot capture script for KAN-432.
++ * Connects directly to the live FastAPI/Uvicorn backend running on http://127.0.0.1:18432 with
++ * real session cookies and strictly ZERO mocked routes (0 page.route / 0 context.route / 0 mockApi).
++ */
 +
 +import fs from 'node:fs';
 +import path from 'node:path';
-+import { spawn } from 'node:child_process';
 +
 +let chromium;
 +try {
-+  ({ chromium } = await import('@playwright/test'));
++  const localPlaywright = path.resolve('kanban/web/node_modules/@playwright/test/index.mjs');
++  ({ chromium } = await import(localPlaywright));
 +} catch {
 +  try {
 +    ({ chromium } = await import('playwright'));
 +  } catch {
-+    const localPlaywright = path.resolve(import.meta.dirname, '../kanban/web/node_modules/@playwright/test/index.mjs');
-+    ({ chromium } = await import(localPlaywright));
++    ({ chromium } = await import('@playwright/test'));
 +  }
 +}
 +
-+const PORT = 18432;
++const PORT = process.env.KAN432_PORT || '18432';
 +const BASE_URL = `http://127.0.0.1:${PORT}`;
++const COOKIE_VAL = process.env.KAN432_COOKIE || '';
++const CSRF_TOKEN = process.env.KAN432_CSRF || '';
++
 +const OUT_DIR = path.resolve('docs/qa/KAN-432/screenshots');
++fs.mkdirSync(OUT_DIR, { recursive: true });
++
++async function preparePageForScreenshot(page, theme) {
++  await page.evaluate((t) => {
++    document.documentElement.dataset.theme = t;
++    localStorage.setItem('theme', t);
++  }, theme);
++  await page.waitForTimeout(300);
++}
++
++async function createContext(browser, width, height, theme) {
++  const context = await browser.newContext({
++    viewport: { width, height },
++    colorScheme: theme,
++    bypassCSP: false, // Strict CSP enforcement!
++  });
++
++  if (COOKIE_VAL) {
++    await context.addCookies([
++      {
++        name: 'kb_session',
++        value: COOKIE_VAL,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++      {
++        name: 'kb_csrf',
++        value: CSRF_TOKEN,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: false,
++        sameSite: 'Lax',
++      },
++    ]);
++  }
++
++  return context;
++}
 +
 +const VIEWPORTS = [
 +  {
@@ -2065,560 +2410,676 @@ index 00000000..3593cfbe
 +  },
 +];
 +
-+const MOCK_STATES = [
-+  { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
-+  { id: 'st-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
-+  { id: 'st-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 5 },
-+  { id: 'st-done', name: 'Done', group: 'completed', sort_order: 4 },
-+];
-+
-+const MOCK_ISSUES = [
-+  {
-+    id: 'iss-1',
-+    key: 'KAN-1',
-+    project_key: 'KAN',
-+    summary: 'Sliding window rate limiter with lone-surrogate validation',
-+    state_id: 'st-progress',
-+    board_rank: '01',
-+    gate_status: 'pending',
-+    pending_gate: {
-+      execution_id: 'exec-101',
-+      hook_name: 'Security Gate',
-+      agent_slug: 'security-reviewer',
-+      harness_label: 'cli: agy -p',
-+      started_at: '2026-11-25T18:00:00Z',
-+      from_state_id: 'st-progress',
-+      to_state_id: 'st-done',
-+    },
-+    priority: { id: 'p-high', slug: 'high', name: 'High' },
-+    created_at: '2026-11-25T12:00:00Z',
-+    updated_at: '2026-11-25T18:00:00Z',
-+  },
-+  {
-+    id: 'iss-2',
-+    key: 'KAN-2',
-+    project_key: 'KAN',
-+    summary: 'Universal Object Graph link auditor and integrity checker',
-+    state_id: 'st-progress',
-+    board_rank: '02',
-+    gate_status: 'rejected',
-+    latest_gate_verdict: {
-+      decision: 'reject',
-+      hook_name: 'Reality Checker QA Gate',
-+      agent_slug: 'reality-checker',
-+      reason_preview: 'Unit test branch coverage dropped below 95%',
-+      completed_at: '2026-11-25T18:30:00Z',
-+    },
-+    priority: { id: 'p-urgent', slug: 'urgent', name: 'Urgent' },
-+    created_at: '2026-11-25T13:00:00Z',
-+    updated_at: '2026-11-25T18:30:00Z',
-+  },
-+  {
-+    id: 'iss-3',
-+    key: 'KAN-3',
-+    project_key: 'KAN',
-+    summary: 'Content-Security-Policy manifest-src self directive header',
-+    state_id: 'st-done',
-+    board_rank: '03',
-+    gate_status: 'approved',
-+    latest_gate_verdict: {
-+      decision: 'approve',
-+      hook_name: 'Security Gate',
-+      agent_slug: 'security-reviewer',
-+      completed_at: '2026-11-25T17:45:00Z',
-+    },
-+    priority: { id: 'p-medium', slug: 'medium', name: 'Medium' },
-+    created_at: '2026-11-25T10:00:00Z',
-+    updated_at: '2026-11-25T17:45:00Z',
-+  },
-+  {
-+    id: 'iss-4',
-+    key: 'KAN-4',
-+    project_key: 'KAN',
-+    summary: 'Hardware token WebAuthn multi-card authenticator',
-+    state_id: 'st-todo',
-+    board_rank: '04',
-+    priority: { id: 'p-low', slug: 'low', name: 'Low' },
-+    created_at: '2026-11-25T09:00:00Z',
-+    updated_at: '2026-11-25T09:00:00Z',
-+  },
-+];
-+
-+async function waitForServer(url, timeoutMs = 30000) {
-+  const start = Date.now();
-+  while (Date.now() - start < timeoutMs) {
-+    try {
-+      const res = await fetch(url);
-+      if (res.ok || res.status === 200 || res.status === 404) {
-+        return;
-+      }
-+    } catch {
-+      // Retry
-+    }
-+    await new Promise((r) => setTimeout(r, 400));
-+  }
-+  throw new Error(`Timeout waiting for preview server at ${url}`);
-+}
-+
-+async function setupInterceptions(page) {
-+  await page.addInitScript(() => {
-+    class MockWS extends EventTarget {
-+      constructor(url, protocols) {
-+        super();
-+        this.url = url;
-+        this.protocols = protocols;
-+        this.readyState = 1;
-+        setTimeout(() => {
-+          this.dispatchEvent(new Event('open'));
-+        }, 10);
-+      }
-+      send() {}
-+      close() {
-+        this.readyState = 3;
-+        this.dispatchEvent(new Event('close'));
-+      }
-+    }
-+    window.WebSocket = MockWS;
-+  });
-+
-+  await page.route('**/*', async (route) => {
-+    const url = route.request().url();
-+    const method = route.request().method();
-+
-+    if (!url.includes('/api/')) {
-+      const response = await route.fetch();
-+      const headers = { ...response.headers() };
-+      delete headers['content-security-policy'];
-+      delete headers['Content-Security-Policy'];
-+      return route.fulfill({ response, headers });
-+    }
-+
-+    if (url.includes('/api/v1/setup/status')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ initialized: true, is_initialized: true, requires_setup: false }),
-+      });
-+    }
-+
-+    if (url.includes('/custom-fields')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([]),
-+      });
-+    }
-+
-+    if (url.includes('/priorities') || url.includes('/labels') || url.includes('/cycles') || url.includes('/modules') || url.includes('/members')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([]),
-+      });
-+    }
-+
-+    if (url.includes('/comments')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0, has_more: false }),
-+      });
-+    }
-+
-+    if (url.includes('/activity')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          items: [],
-+          total: 0,
-+          has_more: false,
-+          counts: { all: 0, comments: 0, history: 0, gates: 0 },
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/links') || url.includes('/relations')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0 }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/notifications')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0, unread_count: 0 }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/auth/session')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          authenticated: true,
-+          mfa_pending: false,
-+          csrf_token: 'mock-csrf-token-12345',
-+          principal_id: 'usr_admin_1',
-+          workspace_id: 'ws_default',
-+          aal_level: 2,
-+          aal2_active: true,
-+          aal2_expires_at: new Date(Date.now() + 890_000).toISOString(),
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/users/me') || url.includes('/api/v1/auth/me')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'usr_admin_1',
-+          email: 'admin@kanban.local',
-+          username: 'admin',
-+          display_name: 'Security Architect',
-+          is_server_admin: true,
-+          is_workspace_admin: true,
-+          is_project_admin: true,
-+          workspace_role: 'WORKSPACE_ADMIN',
-+          aal_level: 2,
-+          auth_aal: 'aal2',
-+          aal2_active: true,
-+          timezone: 'America/New_York',
-+          agent_onboarding_prefs: { hide_onboarding_prompt: true },
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'ws_default', slug: 'default', name: 'Default Workspace', is_default: true },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN/states') || url.endsWith('/states')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify(MOCK_STATES),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN/members')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN/modules')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN/views')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([]),
-+      });
-+    }
-+
-+    if (url.includes('/issues/KAN-1')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          ...MOCK_ISSUES[0],
-+          state: { id: 'st-progress', name: 'In Progress', group: 'started' },
-+          description_markdown: 'Hardened sliding window rate limiter implementation.',
-+          capabilities: ['ADMIN', 'EDIT', 'VIEW', 'TRANSITION', 'DELETE'],
-+          editable_fields: ['summary', 'description', 'state', 'priority'],
-+          issue_permissions: ['EDIT', 'TRANSITION'],
-+          custom_fields: [],
-+          attachments: [],
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/issues/KAN-2')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          ...MOCK_ISSUES[1],
-+          state: { id: 'st-progress', name: 'In Progress', group: 'started' },
-+          description_markdown: 'Auditor and automatic sanitizer for broken graph edges.',
-+          capabilities: ['ADMIN', 'EDIT', 'VIEW', 'TRANSITION', 'DELETE'],
-+          editable_fields: ['summary', 'description', 'state', 'priority'],
-+          issue_permissions: ['EDIT', 'TRANSITION'],
-+          custom_fields: [],
-+          attachments: [],
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/issues/KAN-3')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          ...MOCK_ISSUES[2],
-+          state: { id: 'st-done', name: 'Done', group: 'completed' },
-+          description_markdown: 'Content-Security-Policy header directive manifest-src self.',
-+          capabilities: ['ADMIN', 'EDIT', 'VIEW', 'TRANSITION', 'DELETE'],
-+          editable_fields: ['summary', 'description', 'state', 'priority'],
-+          issue_permissions: ['EDIT', 'TRANSITION'],
-+          custom_fields: [],
-+          attachments: [],
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN/issues')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify(MOCK_ISSUES),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects/KAN')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'proj-kan',
-+          key: 'KAN',
-+          name: 'Core Platform',
-+          states: MOCK_STATES,
-+          capabilities: ['ADMIN', 'PROJECT_ADMIN'],
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          {
-+            id: 'proj-kan',
-+            key: 'KAN',
-+            name: 'Core Platform',
-+            states: MOCK_STATES,
-+          },
-+        ]),
-+      });
-+    }
-+
-+    // Default 200 empty
-+    return route.fulfill({
-+      status: 200,
-+      contentType: 'application/json',
-+      body: JSON.stringify({}),
-+    });
-+  });
-+}
-+
-+async function preparePageForScreenshot(page, vp, theme) {
-+  await page.evaluate((t) => {
-+    document.documentElement.dataset.theme = t;
-+    localStorage.setItem('theme', t);
-+  }, theme);
-+
-+  await page.addStyleTag({
-+    content: `
-+      .kb-app-shell, .kb-main-canvas {
-+        height: auto !important;
-+        max-height: none !important;
-+        overflow: visible !important;
-+      }
-+      .kb-topbar, header {
-+        position: static !important;
-+      }
-+      .realtime-status-chip {
-+        display: inline-flex !important;
-+        visibility: visible !important;
-+      }
-+    `,
-+  });
-+
-+  await page.waitForTimeout(300);
-+}
-+
 +async function main() {
-+  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`[Playwright] Launching browser connecting to ${BASE_URL} (ZERO-MOCK)...`);
++  const browser = await chromium.launch({
++    executablePath: '/usr/bin/google-chrome',
++    headless: true,
++    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
++  });
 +
-+  console.log(`Starting preview server on port ${PORT}...`);
-+  const previewProc = spawn(
-+    'pnpm',
-+    ['--dir', 'kanban/web', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
-+    { stdio: 'inherit' }
-+  );
-+
-+  const consoleLogs = [];
++  const capturedConsoleLogs = [];
 +
 +  try {
-+    await waitForServer(BASE_URL);
-+    console.log(`Preview server ready at ${BASE_URL}`);
-+
-+    const browser = await chromium.launch({
-+      executablePath: '/usr/bin/google-chrome',
-+      headless: true,
-+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-+    });
-+
-+    // --- VIEWPORT PASS: BOARD VIEW (Showing ⏳🤖 Pending Gate & 🛑🤖 Veto Snap-Back) ---
++    // --- 1. VIEWPORT PASS: BOARD VIEW (Showing ⏳🤖 Pending Gate & 🛑🤖 Veto Snap-Back) ---
 +    for (const vp of VIEWPORTS) {
-+      console.log(`=== Processing Board View: ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme}) ===`);
-+      const context = await browser.newContext({
-+        viewport: { width: vp.width, height: vp.height },
-+        colorScheme: vp.theme,
-+      });
++      console.log(`\n=== Processing Board View: ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme}) ===`);
++      const context = await createContext(browser, vp.width, vp.height, vp.theme);
 +      const page = await context.newPage();
 +
 +      page.on('console', (msg) => {
-+        const text = msg.text();
-+        consoleLogs.push({ type: msg.type(), text });
++        capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() });
 +      });
 +
-+      await setupInterceptions(page);
 +      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
 +
 +      try {
-+        await page.waitForSelector('[data-testid="board-column-st-progress"]', { timeout: 8000 });
-+        await page.waitForSelector('[data-testid="board-card-KAN-1"]', { timeout: 5000 });
-+        await page.waitForSelector('[data-testid="board-card-KAN-2"]', { timeout: 5000 });
++        await page.waitForSelector('.board-column', { timeout: 10000 });
++        await page.waitForSelector('.board-card', { timeout: 10000 });
++        // Wait a brief moment for animations/render
++        await page.waitForTimeout(500);
 +      } catch (e) {
 +        console.warn('board wait warning:', e.message);
 +      }
 +
-+      await preparePageForScreenshot(page, vp, vp.theme);
++      await preparePageForScreenshot(page, vp.theme);
 +      const filename = `${vp.name}-board-gate-indicators.png`;
 +      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
-+      console.log(`Captured ${filename}`);
++      console.log(`[Captured] ${filename}`);
 +      await context.close();
 +    }
 +
-+    // --- INTERACTIVE SCREENSHOT 1: Lane State Default (+ New work item in In Progress) ---
++    // --- 2. INTERACTIVE SCREENSHOT 1: Lane State Default (+ New work item in In Progress) ---
 +    {
-+      console.log('=== Processing Interactive: Lane State Default in In Progress ===');
-+      const context = await browser.newContext({
-+        viewport: { width: 1024, height: 768 },
-+        colorScheme: 'light',
-+      });
++      console.log('\n=== Processing Interactive: Lane State Default in In Progress ===');
++      const context = await createContext(browser, 1024, 768, 'light');
 +      const page = await context.newPage();
-+      page.on('console', (msg) => consoleLogs.push({ type: msg.type(), text: msg.text() }));
-+      await setupInterceptions(page);
++      page.on('console', (msg) => capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() }));
++
 +      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++      await page.waitForSelector('.board-column', { timeout: 10000 });
 +
 +      try {
-+        await page.waitForSelector('[data-testid="new-item-st-progress"]', { timeout: 8000 });
-+        const newBtn = page.locator('[data-testid="new-item-st-progress"]');
++        // Locate the "+ New work item" button inside the In Progress column
++        const inProgressCol = page.locator('.board-column:has-text("In Progress")').first();
++        const newBtn = inProgressCol.locator('button:has-text("New work item"), button:has-text("+ New")').first();
++        await newBtn.waitFor({ state: 'visible', timeout: 8000 });
 +        await newBtn.click();
-+        await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-+        await page.waitForTimeout(400);
++        await page.waitForSelector('[role="dialog"], .modal, .issue-create-modal', { timeout: 8000 });
++        await page.waitForTimeout(500);
 +      } catch (e) {
-+        console.warn('lane new item warning:', e.message);
++        console.warn('lane new item click warning:', e.message);
 +      }
 +
-+      await preparePageForScreenshot(page, { width: 1024, height: 768 }, 'light');
++      await preparePageForScreenshot(page, 'light');
 +      const filename = '06-lane-new-item-modal-state-default.png';
 +      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
-+      console.log(`Captured ${filename}`);
++      console.log(`[Captured] ${filename}`);
 +      await context.close();
 +    }
 +
-+    // --- INTERACTIVE SCREENSHOT 2: Issue Detail View Gate Vetoed (KAN-2) ---
++    // --- 3. INTERACTIVE SCREENSHOT 2: Issue Detail View Gate Vetoed (KAN-2) ---
 +    {
-+      console.log('=== Processing Interactive: Issue Detail View Gate Vetoed ===');
-+      const context = await browser.newContext({
-+        viewport: { width: 1440, height: 900 },
-+        colorScheme: 'light',
-+      });
++      console.log('\n=== Processing Interactive: Issue Detail View Gate Vetoed (KAN-2) ===');
++      const context = await createContext(browser, 1440, 900, 'light');
 +      const page = await context.newPage();
-+      page.on('console', (msg) => consoleLogs.push({ type: msg.type(), text: msg.text() }));
-+      await setupInterceptions(page);
-+      await page.goto(`${BASE_URL}/projects/KAN/issues/KAN-2`, { waitUntil: 'networkidle' });
++      page.on('console', (msg) => capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() }));
++
++      // Navigate to project board first then click KAN-2 to open drawer, or navigate to issue URL
++      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++      await page.waitForSelector('.board-card', { timeout: 10000 });
 +
 +      try {
-+        await page.waitForSelector('[data-testid="drawer-gate-vetoed"], .gate-vetoed-badge, [data-testid="state-select"]', { timeout: 8000 });
-+        await page.waitForTimeout(300);
++        const kan2Card = page.locator('.board-card:has-text("KAN-2")').first();
++        await kan2Card.waitFor({ state: 'visible', timeout: 8000 });
++        await kan2Card.click();
++        await page.waitForSelector('[data-testid="drawer-gate-vetoed"], .prop-row[data-prop="state"]', { timeout: 8000 });
++        await page.waitForTimeout(500);
 +      } catch (e) {
-+        console.warn('issue detail gate veto warning:', e.message);
++        console.warn('kan2 open drawer warning:', e.message);
 +      }
 +
-+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
++      await preparePageForScreenshot(page, 'light');
 +      const filename = '07-issue-detail-gate-vetoed-state.png';
 +      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
-+      console.log(`Captured ${filename}`);
++      console.log(`[Captured] ${filename}`);
 +      await context.close();
 +    }
 +
-+    // --- CSP CHECK: Inspect Console Errors across setup, login, and board ---
++    // --- 4. CSP VERIFICATION: Check console output across /setup, /login, /manifest.json, /board ---
 +    {
-+      console.log('=== Checking CSP Console Output across Routes ===');
-+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
++      console.log('\n=== Checking CSP Console Output across Routes ===');
++      const context = await createContext(browser, 1440, 900, 'light');
 +      const page = await context.newPage();
-+      const routeCspErrors = [];
++      const cspErrors = [];
++
 +      page.on('console', (msg) => {
 +        const text = msg.text();
++        capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text });
 +        if (text.includes('Content Security Policy') || text.includes('manifest.json') || text.includes('manifest-src')) {
-+          routeCspErrors.push({ url: page.url(), text });
++          cspErrors.push({ url: page.url(), text });
 +        }
 +      });
-+      await setupInterceptions(page);
 +
++      console.log('Navigating to /setup...');
 +      await page.goto(`${BASE_URL}/setup`, { waitUntil: 'networkidle' });
-+      await page.waitForTimeout(400);
++      await page.waitForTimeout(300);
 +
++      console.log('Navigating to /login...');
 +      await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
-+      await page.waitForTimeout(400);
++      await page.waitForTimeout(300);
 +
++      console.log('Navigating to /manifest.json directly...');
++      const manifestResp = await page.goto(`${BASE_URL}/manifest.json`);
++      console.log(`manifest.json status: ${manifestResp.status()}`);
++
++      console.log('Navigating to /projects/KAN/issues?layout=board...');
 +      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
-+      await page.waitForTimeout(400);
++      await page.waitForTimeout(300);
 +
-+      await context.close();
-+
-+      console.log(`CSP Violation Console Errors Count: ${routeCspErrors.length}`);
-+      if (routeCspErrors.length > 0) {
-+        console.error('CSP Errors Found:', JSON.stringify(routeCspErrors, null, 2));
++      console.log(`CSP Directive Violations Detected: ${cspErrors.length}`);
++      if (cspErrors.length > 0) {
++        console.error('CSP Errors Found:', JSON.stringify(cspErrors, null, 2));
 +      }
 +
-+      // Append CSP verification log to unit-test-results.txt
++      // Append CSP verification report to unit-test-results.txt
 +      const cspReport = [
 +        '',
 +        '=== PLAYWRIGHT ZERO-MOCK BROWSER CSP & LOG REPORT ===',
-+        `Console messages inspected across /setup, /login, /projects/KAN/board: ${consoleLogs.length}`,
-+        `CSP Directive Violations Detected: ${routeCspErrors.length}`,
-+        'Sample Console Logs:',
-+        ...consoleLogs.slice(0, 15).map((l) => `[${l.type}] ${l.text}`),
++        `Console messages inspected across /setup, /login, /manifest.json, /projects/KAN/board: ${capturedConsoleLogs.length}`,
++        `CSP Directive Violations Detected: ${cspErrors.length}`,
++        'Console Log Sample (First 20 entries):',
++        ...capturedConsoleLogs.slice(0, 20).map((l) => `[${l.type}] (${l.url}) ${l.text}`),
 +        '=== END PLAYWRIGHT REPORT ===',
 +        '',
 +      ].join('\n');
 +      fs.appendFileSync('docs/qa/KAN-432/unit-test-results.txt', cspReport, 'utf8');
++      await context.close();
 +    }
 +
-+    await browser.close();
-+    console.log(`All zero-mock screenshots captured successfully into ${OUT_DIR}`);
++    console.log(`\nAll zero-mock screenshots captured successfully into ${OUT_DIR}`);
 +  } finally {
-+    previewProc.kill('SIGTERM');
++    await browser.close();
 +  }
 +}
 +
 +main().catch((err) => {
-+  console.error('Fatal error during screenshot capture:', err);
++  console.error('Fatal error during zero-mock screenshot capture:', err);
 +  process.exit(1);
 +});
+diff --git a/scripts/run_kan432_screenshot_flow.py b/scripts/run_kan432_screenshot_flow.py
+new file mode 100644
+index 00000000..3c2b581f
+--- /dev/null
++++ b/scripts/run_kan432_screenshot_flow.py
+@@ -0,0 +1,510 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Zero-Mock Screenshot Orchestrator for KAN-432.
++
++Binds temporary test server strictly to 127.0.0.1:18432.
++Seeds hermetic test database kanban_live432 from kanban_template.
++Tears down server cleanly after capture.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import json
++import os
++import subprocess
++import time
++import uuid
++from typing import Any
++
++import asyncpg
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
++from sqlalchemy.orm import sessionmaker
++
++from kanban.auth.sessions.service import SessionService
++from database.models.workflow import WorkflowTransitionHook
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++SOCKET_DIR = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-kan431")
++PORT = 18432
++DB_NAME = "kanban_live432"
++SUPERUSER_DSN = f"postgresql://kanban_test@/{DB_NAME}?host={SOCKET_DIR}"
++MIGRATOR_URL = f"postgresql+asyncpg://kanban_migrator@/{DB_NAME}?host={SOCKET_DIR}"
++APP_URL = f"postgresql+asyncpg://kanban_app@/{DB_NAME}?host={SOCKET_DIR}"
++
++SESSION_HMAC_KEY = b"s" * 32
++MASTER_KEK = b"k" * 32
++AUTH_PEPPER = b"p" * 32
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++async def prepare_database() -> dict[str, Any]:
++    print("[KAN-432 Prep] Creating pristine database from kanban_template...")
++    conn = await asyncpg.connect(user="kanban_test", database="postgres", host=SOCKET_DIR)
++    try:
++        await conn.execute(f'DROP DATABASE IF EXISTS "{DB_NAME}" WITH (FORCE)')
++        await conn.execute(f'CREATE DATABASE "{DB_NAME}" TEMPLATE kanban_template')
++    finally:
++        await conn.close()
++
++    print("[KAN-432 Prep] Seeding workspace, project KAN, states, priorities, agent, hooks, and issues...")
++    engine = create_async_engine(MIGRATOR_URL)
++    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++
++    async with async_session() as s:
++        # 1. Workspace
++        ws_id = uuid.uuid4()
++        await s.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'engineering', 'Engineering')"),
++            {"id": ws_id},
++        )
++
++        # 2. Server Admin Principal & User
++        p_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO principals (id, workspace_id, principal_type, status, display_name) "
++                "VALUES (:id, :ws_id, 'USER', 'ACTIVE', 'Admin User')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await s.execute(
++            text(
++                "SELECT register_object('user'::object_kind, :ws_id, NULL, 'server_admin', 'Admin User', :p_id, :p_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++                "VALUES (:id, 'user', 'USER', :ws_id, 'admin@kanban.local')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++
++        # 3. Project KAN
++        reg_row = await s.execute(
++            text("SELECT register_object('project'::object_kind, :ws_id, NULL, 'KAN', 'Core Platform', :p_id)"),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        proj_id = reg_row.scalar_one()
++        await s.execute(
++            text(
++                "INSERT INTO projects (id, workspace_id, identifier, name, modules_enabled) "
++                "VALUES (:id, :ws_id, 'KAN', 'Core Platform', false)"
++            ),
++            {"id": proj_id, "ws_id": ws_id},
++        )
++
++        # 4. Workflow States
++        existing_states = (
++            await s.execute(
++                text("SELECT id, name FROM workflow_states WHERE project_id = :p_id"),
++                {"p_id": proj_id},
++            )
++        ).fetchall()
++        state_ids = {row[1]: row[0] for row in existing_states}
++
++        states_to_seed = [
++            ("Backlog", "backlog", "#94a3b8", 10, True),
++            ("To Do", "unstarted", "#64748b", 20, False),
++            ("In Progress", "started", "#3b82f6", 30, False),
++            ("Done", "completed", "#22c55e", 40, False),
++        ]
++        for sname, sgroup, scolor, sorder, is_def in states_to_seed:
++            if sname not in state_ids:
++                sid = uuid.uuid4()
++                state_ids[sname] = sid
++                await s.execute(
++                    text(
++                        "INSERT INTO workflow_states (id, workspace_id, project_id, name, state_group, color_hex, sort_order, is_default, wip_soft_limit) "
++                        "VALUES (:id, :ws_id, :p_id, :name, :sgroup, :scolor, :sorder, :is_def, :wip)"
++                    ),
++                    {
++                        "id": sid,
++                        "ws_id": ws_id,
++                        "p_id": proj_id,
++                        "name": sname,
++                        "sgroup": sgroup,
++                        "scolor": scolor,
++                        "sorder": sorder,
++                        "is_def": is_def,
++                        "wip": 5 if sname == "In Progress" else None,
++                    },
++                )
++
++        # 5. Fetch project priorities
++        prio_rows = (
++            await s.execute(
++                text("SELECT id, slug FROM project_priorities WHERE project_id = :p"),
++                {"p": proj_id},
++            )
++        ).fetchall()
++        prio_map = {row[1]: row[0] for row in prio_rows}
++
++        # 6. Role Bindings
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
++                "VALUES (:ws_id, :p_id, 'SERVER_ADMIN', 'server'), (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:ws_id, :p_id, 'PROJECT_ADMIN', 'project', :proj_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id, "proj_id": proj_id},
++        )
++
++        # 7. Agent Definition
++        agent1_id = uuid.uuid4()
++        instructions = (
++            "# Mandatory QA Gatekeeper Instructions\n\n"
++            "1. Verify all test evidence before transitioning to Done.\n"
++            "2. Ensure zero mock data in production.\n"
++            "3. Validate test coverage >= 95%."
++        )
++        await s.execute(
++            text(
++                "INSERT INTO agent_definitions (id, workspace_id, principal_id, slug, display_name, harness_kind, provider_kind, model_id, cli_binary_allowlist_id, cli_args_json, repo_access_mode, mcp_allowed_tools, system_instructions_md, timeout_ms) "
++                "VALUES (:id, :ws_id, :p_id, 'qa-gatekeeper', 'QA Gatekeeper', 'cli_pipe', NULL, NULL, 'agy', '[\"-p\"]'::jsonb, 'ro_vfs_mount', '{\"search_tickets\",\"read_ticket\"}', :instructions, 180000)"
++            ),
++            {"id": agent1_id, "ws_id": ws_id, "p_id": p_id, "instructions": instructions},
++        )
++
++        # 8. Workflow Transition Hook: In Progress -> Done
++        msha1 = compute_hook_manifest_sha256(
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            wasm_module_sha256=None,
++            agent_definition_id=agent1_id,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        hook1 = WorkflowTransitionHook(
++            workspace_id=ws_id,
++            project_id=proj_id,
++            name="QA Gatekeeper",
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            sort_rank="0|hzzzzz:",
++            is_enabled=True,
++            agent_definition_id=agent1_id,
++            manifest_sha256=msha1,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        s.add(hook1)
++        await s.flush()
++
++        # 9. Seed 5 Real Issues
++        issue_specs = [
++            (
++                "KAN-1",
++                "Sliding window rate limiter with lone-surrogate validation",
++                "In Progress",
++                "high",
++                "0|hzzzz1:",
++            ),
++            (
++                "KAN-2",
++                "Universal Object Graph link auditor and integrity checker",
++                "In Progress",
++                "urgent",
++                "0|hzzzz2:",
++            ),
++            (
++                "KAN-3",
++                "Content-Security-Policy manifest-src self directive header",
++                "Done",
++                "medium",
++                "0|hzzzz3:",
++            ),
++            (
++                "KAN-4",
++                "Hardware token WebAuthn multi-card authenticator",
++                "To Do",
++                "low",
++                "0|hzzzz4:",
++            ),
++            (
++                "KAN-5",
++                "Async agent interceptor gate lifecycle",
++                "Backlog",
++                "none",
++                "0|hzzzz5:",
++            ),
++        ]
++
++        created_issues: dict[str, uuid.UUID] = {}
++        for key, summary, sname, prio_slug, rank in issue_specs:
++            seq = await s.scalar(
++                text("SELECT allocate_issue_sequence(:p)"),
++                {"p": proj_id},
++            )
++            iss_id = await s.scalar(
++                text(
++                    "SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :name, :creator)"
++                ),
++                {
++                    "ws": ws_id,
++                    "proj": proj_id,
++                    "ckey": key,
++                    "name": summary,
++                    "creator": p_id,
++                },
++            )
++            created_issues[key] = iss_id
++            await s.execute(
++                text(
++                    "INSERT INTO issues ("
++                    "  id, workspace_id, project_id, sequence_id, summary, state_id, "
++                    "  priority_id, board_rank, created_by_id, original_created_by_id"
++                    ") VALUES ("
++                    "  :id, :ws, :proj, :seq, :summary, :state, :prio, :rank, :creator, :creator"
++                    ")"
++                ),
++                {
++                    "id": iss_id,
++                    "ws": ws_id,
++                    "proj": proj_id,
++                    "seq": seq,
++                    "summary": summary,
++                    "state": state_ids[sname],
++                    "prio": prio_map.get(prio_slug, prio_map.get("none")),
++                    "rank": rank,
++                    "creator": p_id,
++                },
++            )
++
++        # 10. Execution records for KAN-1, KAN-2, and KAN-3:
++        # KAN-1: Pending gate execution
++        exec1_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'pending_async', 0, :snap"
++                ")"
++            ),
++            {
++                "id": exec1_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-1"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_hook_invocations ("
++                "  id, workspace_id, execution_id, hook_id, hook_kind, status, started_at"
++                ") VALUES ("
++                "  :id, :ws, :exec_id, :hook_id, 'agent_interceptor', 'running', clock_timestamp()"
++                ")"
++            ),
++            {
++                "id": uuid.uuid4(),
++                "ws": ws_id,
++                "exec_id": exec1_id,
++                "hook_id": hook1.id,
++            },
++        )
++        await s.execute(
++            text("UPDATE issues SET pending_transition_exec_id = :exec_id WHERE id = :iss_id"),
++            {"exec_id": exec1_id, "iss_id": created_issues["KAN-1"]},
++        )
++
++        # KAN-2: Vetoed / rejected gate execution
++        exec2_id = uuid.uuid4()
++        verdict2 = json.dumps(
++            {
++                "decision": "reject",
++                "hook_name": "Reality Checker QA Gate",
++                "latency_ms": 320,
++                "verdict_sha256": "432abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
++            }
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot, completed_at, verdict_json"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'rejected', 0, :snap, clock_timestamp(), CAST(:vjson AS jsonb)"
++                ")"
++            ),
++            {
++                "id": exec2_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-2"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++                "vjson": verdict2,
++            },
++        )
++
++        # KAN-3: Approved gate execution
++        exec3_id = uuid.uuid4()
++        verdict3 = json.dumps(
++            {
++                "decision": "approve",
++                "hook_name": "Security Gate",
++                "latency_ms": 150,
++                "verdict_sha256": "432fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
++            }
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot, completed_at, verdict_json"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'approved', 0, :snap, clock_timestamp(), CAST(:vjson AS jsonb)"
++                ")"
++            ),
++            {
++                "id": exec3_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-3"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++                "vjson": verdict3,
++            },
++        )
++
++        # 11. TOTP Setup
++        with contextlib.suppress(Exception):
++            await s.execute(
++                text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++                {"p_id": p_id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
++            )
++            res_totp = await s.execute(
++                text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++                {"p_id": p_id},
++            )
++            totp_row = res_totp.first()
++            if totp_row:
++                await s.execute(
++                    text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++                    {"p_fid": totp_row[0]},
++                )
++
++        # 12. Issue AAL2 Session
++        svc = SessionService(session_hmac_key=SESSION_HMAC_KEY)
++        issued = await svc.create_after_login(
++            s,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            remember_me=True,
++        )
++        await s.commit()
++
++    await engine.dispose()
++    print("[KAN-432 Prep] Database preparation complete.")
++    return {
++        "cookie_val": issued.cookie_val,
++        "csrf_token": issued.csrf_token,
++    }
++
++
++def main() -> None:
++    seed_info = asyncio.run(prepare_database())
++    env = os.environ.copy()
++    env["KANBAN_DEPLOYMENT_MODE"] = "standalone"
++    env["KB_BIND_HOST"] = "127.0.0.1"
++    env["KB_BIND_PORT"] = str(PORT)
++    env["KB_PUBLIC_ORIGIN"] = f"http://127.0.0.1:{PORT}"
++    env["KANBAN_DATABASE_URL"] = APP_URL
++    env["KANBAN_MASTER_KEK"] = _b64(MASTER_KEK)
++    env["KANBAN_AUTH_PEPPER"] = _b64(AUTH_PEPPER)
++    env["KANBAN_SESSION_HMAC_KEY"] = _b64(SESSION_HMAC_KEY)
++    env["KANBAN_MASTER_KEK_KID"] = "test-kid-1"
++    env["KAN432_PORT"] = str(PORT)
++    env["KAN432_COOKIE"] = seed_info["cookie_val"]
++    env["KAN432_CSRF"] = seed_info["csrf_token"]
++
++    uv_log = open("/tmp/uvicorn_kan432.log", "w")
++    print(f"[KAN-432] Spawning temporary Kanban server on 127.0.0.1:{PORT}...")
++    python_bin = "/home/adamoutler/kanban/.venv/bin/python"
++    if not os.path.exists(python_bin):
++        python_bin = "python3"
++
++    proc = subprocess.Popen(
++        [
++            python_bin,
++            "-m",
++            "uvicorn",
++            "kanban.app:create_app",
++            "--factory",
++            "--host",
++            "127.0.0.1",
++            "--port",
++            str(PORT),
++            "--log-level",
++            "info",
++        ],
++        env=env,
++        stdout=uv_log,
++        stderr=uv_log,
++    )
++
++    try:
++        import urllib.request
++
++        print(f"[KAN-432] Waiting for server on http://127.0.0.1:{PORT} to be ready...")
++        ready = False
++        for _ in range(40):
++            try:
++                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=1) as resp:
++                    if resp.status in (200, 302, 404):
++                        ready = True
++                        break
++            except Exception:
++                time.sleep(0.5)
++
++        if not ready:
++            raise RuntimeError(f"Server on port {PORT} failed to become ready.")
++
++        print(f"[KAN-432] Server is ready! Executing Playwright screenshot capture...")
++        subprocess.run(
++            ["node", "scripts/capture_kan432_screenshots.mjs"],
++            env=env,
++            check=True,
++        )
++        print("[KAN-432] Screenshots captured successfully!")
++    finally:
++        print("[KAN-432] Terminating temporary server cleanly...")
++        proc.terminate()
++        try:
++            proc.wait(timeout=5)
++        except subprocess.TimeoutExpired:
++            proc.kill()
++        uv_log.close()
++        print("[KAN-432] Teardown complete.")
++
++
++if __name__ == "__main__":
++    main()
