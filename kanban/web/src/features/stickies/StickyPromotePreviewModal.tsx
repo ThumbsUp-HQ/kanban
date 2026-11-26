@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, type JSX, type SyntheticEvent } from 'react';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import {
   previewStickyPromotion,
   type StickyItem,
@@ -24,7 +25,8 @@ export interface StickyPromotePreviewModalProps {
 function getInitialTitle(sticky: StickyItem): string {
   const lines = sticky.body_markdown.split('\n');
   const firstHeading = lines.find((l) => l.startsWith('#'))?.replace(/^#+\s*/, '').trim();
-  return firstHeading ?? lines[0]?.trim().slice(0, 80) ?? 'Promoted Specification';
+  const firstLine = lines[0]?.trim().slice(0, 80);
+  return firstHeading ?? (firstLine && firstLine.length > 0 ? firstLine : 'Promoted Specification');
 }
 
 export function StickyPromotePreviewModal({
@@ -132,15 +134,22 @@ export function StickyPromotePreviewModal({
           <h2 id="promote-modal-heading" className="sticky-promote-modal__title">
             <span aria-hidden="true">📄</span> Promote Sticky to Document
           </h2>
-          <button
-            type="button"
-            className="sticky-promote-modal__close-btn"
-            onClick={onClose}
-            aria-label="Close promotion preview"
-            data-testid="close-promote-modal-btn"
-          >
-            ✕
-          </button>
+          <div className="sticky-promote-modal__header-actions">
+            <StudioDocLink
+              href="/docs/hierarchical-docs-and-stickies-with-smart-promotion"
+              label="Promotion Guide ->"
+              testId="sticky-promote-doc-link"
+            />
+            <button
+              type="button"
+              className="sticky-promote-modal__close-btn"
+              onClick={onClose}
+              aria-label="Close promotion preview"
+              data-testid="close-promote-modal-btn"
+            >
+              ✕
+            </button>
+          </div>
         </header>
 
         {isLoading ? (

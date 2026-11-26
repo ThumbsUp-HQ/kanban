@@ -572,6 +572,7 @@
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  gap: var(--space-3, 12px);
 }
 
 .sticky-promote-modal__title {
@@ -581,6 +582,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.sticky-promote-modal__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+.sticky-promote-modal__header-actions .kb-studio-doc-link {
+  white-space: nowrap;
 }
 
 .sticky-promote-modal__close-btn {
@@ -589,8 +602,19 @@
   font-size: 1.125rem;
   color: var(--fg-muted, #64748b);
   cursor: pointer;
-  padding: 4px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-min, 44px);
+  min-height: var(--tap-min, 44px);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.sticky-promote-modal__close-btn:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--fg-primary, #1e293b);
 }
 
 .sticky-promote-modal__loading {
@@ -728,6 +752,44 @@
 
 [data-theme="dark"] .sticky-promote-modal__footer {
   border-top-color: var(--border-subtle, #333a47);
+}
+
+[data-theme="dark"] .sticky-promote-modal__close-btn:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--fg-primary, #f1f5f9);
+}
+
+@media (max-width: 640px) {
+  .sticky-promote-modal-backdrop {
+    padding: var(--space-2, 8px);
+  }
+
+  .sticky-promote-modal {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .sticky-promote-modal__header {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
+
+  .sticky-promote-modal__header-actions {
+    margin-left: auto;
+  }
+
+  .sticky-promote-modal__form {
+    padding: var(--space-4, 16px);
+  }
+
+  .sticky-promote-modal__footer {
+    flex-wrap: wrap;
+  }
+
+  .sticky-promote-modal__cancel-btn,
+  .sticky-promote-modal__confirm-btn {
+    min-height: var(--tap-min, 44px);
+  }
 }
 
 /* Mobile Touch Actions & Long-Press Lift (KAN-342) */
