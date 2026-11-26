@@ -1,8 +1,16 @@
 diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
-index cb75cc68..b046ba40 100644
+index cb75cc68..93709546 100644
 --- a/kanban/web/src/features/about/AboutPage.css
 +++ b/kanban/web/src/features/about/AboutPage.css
-@@ -99,10 +99,10 @@
+@@ -72,6 +72,7 @@
+ .kb-about-badges {
+   display: flex;
+   align-items: center;
++  flex-wrap: wrap;
+   gap: var(--space-2);
+ }
+ 
+@@ -99,10 +100,10 @@
  }
  
  .kb-about-badge-commit {
@@ -11,13 +19,13 @@ index cb75cc68..b046ba40 100644
 -  border: 1px solid var(--border-subtle, #333842);
 -  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 +  background: var(--bg-surface-raised);
-+  color: var(--accent-primary);
++  color: var(--badge-fg);
 +  border: 1px solid var(--border-subtle);
 +  font-family: var(--font-mono);
  }
  
  .kb-about-metadata-grid {
-@@ -146,15 +146,24 @@
+@@ -146,15 +147,24 @@
  .kb-about-hero-actions {
    display: flex;
    align-items: center;
@@ -42,7 +50,7 @@ index cb75cc68..b046ba40 100644
    background: var(--accent-primary);
    color: var(--accent-primary-fg);
    border: 1px solid transparent;
-@@ -163,6 +172,8 @@
+@@ -163,6 +173,8 @@
    font-weight: 600;
    cursor: pointer;
    text-decoration: none;
@@ -51,7 +59,7 @@ index cb75cc68..b046ba40 100644
    transition: opacity 0.15s ease;
  }
  
-@@ -170,6 +181,14 @@
+@@ -170,6 +182,14 @@
    opacity: 0.9;
  }
  
@@ -66,7 +74,7 @@ index cb75cc68..b046ba40 100644
  .kb-about-btn-secondary {
    display: inline-flex;
    align-items: center;
-@@ -525,3 +544,22 @@
+@@ -525,3 +545,22 @@
    background: var(--bg-surface);
    border-color: var(--brand-primary);
  }
@@ -130,7 +138,7 @@ index 85448984..c5dd8c42 100644
                  <div className="kb-about-meta-item">
                    <span className="kb-about-meta-label">Build Timestamp:</span>
 diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
-index a1c1c0a3..21385090 100644
+index a1c1c0a3..089235a0 100644
 --- a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
 +++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
 @@ -1,7 +1,10 @@
@@ -160,7 +168,7 @@ index a1c1c0a3..21385090 100644
      // Test copy error fallback without crashing
      Object.assign(navigator, {
        clipboard: {
-@@ -386,4 +397,172 @@ describe('AboutPage', () => {
+@@ -386,4 +397,176 @@ describe('AboutPage', () => {
        mockAboutData.build_timestamp,
      );
    });
@@ -330,6 +338,10 @@ index a1c1c0a3..21385090 100644
 +      // Mobile media query with 44px tap target height
 +      expect(cssContent).toContain('@media (max-width: 767px)');
 +      expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
++
++      // Badge commit WCAG AA contrast token and badge wrapping
++      expect(cssContent).toMatch(/\.kb-about-badge-commit\s*\{[^}]*color:\s*var\(--badge-fg\)/);
++      expect(cssContent).toMatch(/\.kb-about-badges\s*\{[^}]*flex-wrap:\s*wrap/);
 +    });
 +  });
  });

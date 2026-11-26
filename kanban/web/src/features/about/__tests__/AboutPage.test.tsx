@@ -563,6 +563,10 @@ describe('AboutPage', () => {
       // Mobile media query with 44px tap target height
       expect(cssContent).toContain('@media (max-width: 767px)');
       expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
+
+      // Badge commit WCAG AA contrast token and badge wrapping
+      expect(cssContent).toMatch(/\.kb-about-badge-commit\s*\{[^}]*color:\s*var\(--badge-fg\)/);
+      expect(cssContent).toMatch(/\.kb-about-badges\s*\{[^}]*flex-wrap:\s*wrap/);
     });
   });
 });
