@@ -1,0 +1,35 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan474-40b3c961/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 29ms
+ ✓ src/components/help/WebSudoModalHost.test.tsx (8 tests) 177ms
+ ✓ src/api/__tests__/websudoReplay.test.tsx (32 tests) 1911ms
+   ✓ AdminStudioSubnav Sudo Pill (KAN-404) (14)
+     ✓ formats remaining seconds under 1 minute as seconds and handles inactive session 1125ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (55 tests) 14731ms
+   ✓ DocsCenter & Help System (KAN-16) (55)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 426ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (22)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 413ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 2689ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 721ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 600ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 2029ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 401ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 3728ms
+
+ Test Files  4 passed (4)
+      Tests  102 passed (102)
+   Start at  18:34:01
+   Duration  16.65s (tests 76%, environment 18%, import 4%, worker 1%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |      100 |     100 |     100 |                   
+ ...oModalHost.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
