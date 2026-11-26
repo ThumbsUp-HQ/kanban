@@ -357,7 +357,7 @@ function AiBudgetModalContent({
                 onClick={onClose}
                 data-testid="budget-cancel-btn"
               >
-                Close
+                Cancel
               </button>
               <button
                 type="submit"
@@ -382,6 +382,19 @@ export function AiBudgetModal({
   onBudgetUpdated,
   workspaceSlug,
 }: AiBudgetModalProps): JSX.Element | null {
+  useEffect(() => {
+    if (!isOpen || !provider) return;
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, provider, onClose]);
+
   if (!isOpen || !provider) return null;
 
   return (
