@@ -495,11 +495,14 @@ class _MockGeminiProvider(FixtureLLMProvider):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("provider_cls", "kind_str"), [
-    (_MockOllamaProvider, "ollama"),
-    (_MockOpenAIProvider, "openai"),
-    (_MockGeminiProvider, "gemini"),
-])
+@pytest.mark.parametrize(
+    ("provider_cls", "kind_str"),
+    [
+        (_MockOllamaProvider, "ollama"),
+        (_MockOpenAIProvider, "openai"),
+        (_MockGeminiProvider, "gemini"),
+    ],
+)
 async def test_sparkle_pipeline_resolve_provider_by_kind(provider_cls: type, kind_str: str) -> None:
     """Test resolution of provider_config_id by candidate provider kind."""
     del kind_str
@@ -609,5 +612,3 @@ async def test_sparkle_pipeline_timeout_with_reservation_release() -> None:
     )
     assert res.status == "timeout"
     assert session.release_called is True
-
-
