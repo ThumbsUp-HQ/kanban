@@ -216,6 +216,7 @@ export function FieldHelpHint({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>): void => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       ctrl.escape();
       return;
     }
@@ -270,6 +271,7 @@ export function FieldHelpHint({
   const handlePopupKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       ctrl.escape();
       return;
     }

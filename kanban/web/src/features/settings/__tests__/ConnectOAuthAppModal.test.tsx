@@ -647,4 +647,194 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
 
     vi.unstubAllGlobals();
   });
+
+  describe('FieldHelpHint and StudioDocLink (KAN-518)', () => {
+    it('renders connect-oauth-doc-link in modal header with documentation href and title', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="kanban"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const docLink = screen.getByTestId('connect-oauth-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe('/docs/three-surface-mcp-server-architecture#oauth-21--pkce');
+      expect(docLink.getAttribute('aria-label')).toBe('MCP OAuth 2.1 and PKCE Documentation');
+      expect(docLink.textContent).toContain('Documentation ->');
+    });
+
+    it('renders Target Scope FieldHelpHint popover with scope boundary descriptions and doc link', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="corp-eng"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const scopeHelpBtn = screen.getByTestId('target-scope-help');
+      expect(scopeHelpBtn).toBeDefined();
+      expect(scopeHelpBtn.getAttribute('aria-label')).toBe('Help for Target Scope');
+
+      act(() => {
+        scopeHelpBtn.focus();
+      });
+
+      const popover = screen.getByTestId('target-scope-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Target Scope');
+      expect(popover.textContent).toContain('Security boundary defining whether OAuth client tokens access');
+      expect(popover.textContent).toContain('Workspace');
+      expect(popover.textContent).toContain('Single Project');
+      expect(popover.textContent).toContain('Server (Global)');
+
+      const docLink = screen.getByTestId('target-scope-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/three-surface-mcp-server-architecture#oauth-21--pkce');
+    });
+
+    it('renders Target MCP Surface FieldHelpHint popover with surfaces and doc link', async () => {
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            user={{ is_server_admin: true }}
+            workspaceSlug="corp-eng"
+            onClose={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const surfaceHelpBtn = screen.getByTestId('target-surface-help');
+      expect(surfaceHelpBtn).toBeDefined();
+      expect(surfaceHelpBtn.getAttribute('aria-label')).toBe('Help for Target MCP Surface');
+
+      act(() => {
+        surfaceHelpBtn.focus();
+      });
+
+      const popover = screen.getByTestId('target-surface-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Target MCP Surface');
+      expect(popover.textContent).toContain('/mcp/agent');
+      expect(popover.textContent).toContain('/mcp/docs');
+      expect(popover.textContent).toContain('/mcp/admin');
+
+      const docLink = screen.getByTestId('target-surface-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/three-surface-mcp-server-architecture#oauth-21--pkce');
+    });
+
+    it('verifies light and dark modal non-regression including copy and close interactions', async () => {
+      const handleClose = vi.fn();
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, {
+        clipboard: { writeText: writeTextMock },
+      });
+
+      // Test under light mode
+      document.documentElement.setAttribute('data-theme', 'light');
+      const { unmount } = render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="light-ws"
+            onClose={handleClose}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
+      expect(screen.getByTestId('connect-oauth-doc-link')).toBeDefined();
+      expect(screen.getByTestId('target-scope-help')).toBeDefined();
+      expect(screen.getByTestId('target-surface-help')).toBeDefined();
+
+      // Copy snippet button works in light mode
+      const copySnippetBtn = screen.getByTestId('copy-snippet-btn');
+      await act(async () => {
+        fireEvent.click(copySnippetBtn);
+        await Promise.resolve();
+      });
+      expect(writeTextMock).toHaveBeenCalled();
+
+      // Bottom close button works
+      const bottomCloseBtn = screen.getByTestId('close-modal-bottom-btn');
+      fireEvent.click(bottomCloseBtn);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+      unmount();
+
+      // Test under dark mode
+      document.documentElement.setAttribute('data-theme', 'dark');
+      const handleCloseDark = vi.fn();
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal
+            workspaceSlug="dark-ws"
+            onClose={handleCloseDark}
+          />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByTestId('connect-oauth-app-modal')).toBeDefined();
+      expect(screen.getByTestId('connect-oauth-doc-link')).toBeDefined();
+      expect(screen.getByTestId('target-scope-help')).toBeDefined();
+      expect(screen.getByTestId('target-surface-help')).toBeDefined();
+
+      // Switching client tab in dark mode
+      fireEvent.click(screen.getByTestId('tab-cursor'));
+      expect(screen.getByTestId('command-snippet').textContent).toContain('"url": "http://localhost:3000/mcp/agent/w/dark-ws"');
+
+      // Top close button works
+      fireEvent.click(screen.getByTestId('close-connect-oauth-modal-btn'));
+      expect(handleCloseDark).toHaveBeenCalledTimes(1);
+
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('verifies header actions styling and responsive wrap rules in ConnectOAuthAppModal.css', async () => {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const cssPath = path.resolve(__dirname, '../ConnectOAuthAppModal.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      expect(cssContent).toContain('.kb-connect-oauth-header-actions');
+      expect(cssContent).toContain('white-space: nowrap;');
+      expect(cssContent).toContain('flex-wrap: wrap;');
+
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const headerActions = screen.getByTestId('connect-oauth-doc-link').parentElement;
+      expect(headerActions).toBeDefined();
+      expect(headerActions?.className).toBe('kb-connect-oauth-header-actions');
+      expect(headerActions?.getAttribute('style')).toBeNull();
+    });
+  });
 });
