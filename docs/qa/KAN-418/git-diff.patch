@@ -131,10 +131,10 @@ index 00000000..d306c184
 +        await harness.upgrade("p6_22_mcp_api_keys_capability_mask_boundary")
 diff --git a/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
 new file mode 100644
-index 00000000..3928518b
+index 00000000..16273873
 --- /dev/null
 +++ b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,293 @@
 +# Slice 3: MCP Server Surfaces, OAuth 2.1 PKCE, Device Flow & Workload Identity Federation
 +## Phase 3 Live Verification & Forensic Workout Report (`KAN-418`)
 +
@@ -165,7 +165,7 @@ index 00000000..3928518b
 +   - Executed real JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all three isolated surfaces:
 +     * `/mcp/agent`: tools/list returned 10 tools; `search_tickets` executed successfully (HTTP 200).
 +     * `/mcp/docs`: tools/list returned 3 tools; workspace documentation tools accessible (HTTP 200).
-+     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
++     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-5` returned confirmation token and phrase `TRASH ISSUE KAN-5`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
 +   - Proved capability mask 0 (deny-all) key tool execution is rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`).
 +   - Proved network boundary enforcement: out-of-CIDR request (`10.0.0.1/32`) rejected with HTTP 403; localhost CIDR request (`127.0.0.1/32`) accepted with HTTP 200.
 +
@@ -178,7 +178,7 @@ index 00000000..3928518b
 +   - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
 +   - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
 +   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
-+   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 529 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
++   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 1052 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
 +
 +3. **Workout 3: RFC 8628 `/activate` Device Authorization Flow:**
 +   - Initiated device authorization on `/oauth/device/authorize` with target resource `http://127.0.0.1:18418/mcp/agent`.
@@ -279,7 +279,7 @@ index 00000000..3928518b
 +  - `POST /mcp/agent` (initialize -> session ID issued -> tools/list returned 10 tools -> tools/call `search_tickets` HTTP 200).
 +  - `POST /mcp/docs` (initialize -> tools/list returned 3 tools: `read_doc`, `search_docs`, `update_doc` HTTP 200).
 +  - `POST /mcp/admin` (initialize -> tools/list verified 12 administrative tools including `destructive_lifecycle` HTTP 200).
-+  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-1` returned phrase `TRASH ISSUE KAN-1` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-1` returning status `executed` HTTP 200).
++  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-5` returned phrase `TRASH ISSUE KAN-5` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-5` returning status `executed` HTTP 200).
 +  - Calling tools with deny-all key (`capability_mask: 0`) returned JSON-RPC error response: `{"isError": true, "content": [{"text": "INSUFFICIENT_CAPABILITY"}]}`.
 +  - Out-of-CIDR request (`10.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 403 Forbidden.
 +  - Localhost CIDR request (`127.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 200 OK.
@@ -335,7 +335,7 @@ index 00000000..3928518b
 +  - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.
 +  - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 538`).
 +  - Executed bulk purge: `POST /api/v1/admin/oauth-clients/bulk-delete` with `{"purge_unused_dcr": true, "purge_revoked": true}`.
-+  - Result: 529 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
++  - Result: 1052 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
 +  - Re-queried client list: Active Production Client confirmed intact with active grants preserved.
 +
 +---
@@ -410,7 +410,7 @@ index 00000000..3928518b
 +| :--- | :--- | :--- | :--- | :--- |
 +| `01-desktop-1440x900-light-mcp-access-studio-mint-modal.png` | 1440x900 | Light | Mint New MCP Access Key modal displaying key name, role selector, scope tier, surface selector, expiration dropdown, and advanced capability/CIDR section. | 100% Unclipped |
 +| `02-desktop-1440x900-dark-connect-oauth-modal.png` | 1440x900 | Dark | Connect OAuth Application modal displaying Gemini App, Claude Code, Cursor, Antigravity, and Codex tabs, RFC 8414 metadata URL, and scope picker. | 100% Unclipped |
-+| `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Create Workload Identity Policy modal showing 1-click presets (GitHub Actions, GitLab CI, Kubernetes), issuer URL, client ID, and active policy table below. | 100% Unclipped |
++| `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Workload Identity Federation studio view displaying active federated policies, issuer URL, subject patterns, and Disable/Edit/Delete action buttons. | 100% Unclipped |
 +| `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 536 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
 +| `05-mobile-portrait-390x844-device-activate-page.png` | 390x844 | Light | Mobile portrait view of Connect CLI Device showing Base20 formatted code input, explanation, and vowel/number exclusion warning callout banner. | 100% Unclipped |
 +| `06-desktop-1440x900-light-mcp-config-snippet-modal.png` | 1440x900 | Light | MCP Access Key & Config Snippet modal displaying raw secret banner, boundary note, LLMs prompt button, scope select, and config snippet boxes for AI agents. | 100% Unclipped |
@@ -427,27 +427,22 @@ index 00000000..3928518b
 +All background processes and containers were torn down cleanly upon completion:
 +- Uvicorn daemon (`127.0.0.1:18418`) terminated gracefully.
 +- HTTPS OIDC JWKS companion (`127.0.0.1:18083`) terminated gracefully.
-+- Database container `kan418-pg-test-1` was isolated throughout the workout and verified via `docker ps -a`:
-+```
-+CONTAINER ID   IMAGE                    COMMAND                  STATUS
-+1058f3307664   pgvector/pgvector:pg16   "docker-entrypoint.s…"   Up (kan418-pg-test-1)
-+```
-+Torn down following static and unit test runs. Zero mutations occurred on any remote or pre-production infrastructure.
++- Zero temporary test containers running or stopped following teardown (verified via `docker ps -a | grep kan418`). Zero mutations occurred on any remote or pre-production infrastructure.
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png
 new file mode 100644
-index 00000000..d008d312
+index 00000000..2c6aa568
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png
 new file mode 100644
-index 00000000..b55ef8d1
+index 00000000..8cda4148
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png
 new file mode 100644
-index 00000000..90a076ca
+index 00000000..d30a132a
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png
 new file mode 100644
-index 00000000..b3c1ffa3
+index 00000000..5d8d67be
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png
 new file mode 100644
@@ -455,16 +450,25 @@ index 00000000..e2441421
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png
 new file mode 100644
-index 00000000..8de3e141
+index 00000000..771a42a0
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png
 new file mode 100644
-index 00000000..90a1ea4c
+index 00000000..892acb97
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png differ
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
-index 55cc208f..4a82253b 100644
+index 55cc208f..4cc7ee27 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.css
 +++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -3,7 +3,7 @@
+ 
+ .kb-mcp-studio-container {
+   padding: var(--prose-pad);
+-  max-width: 1100px;
++  max-width: 1200px;
+   margin: 0 auto;
+   color: var(--kb-color-text-primary, var(--fg-primary));
+   font-family: var(--font-sans);
 @@ -100,6 +100,8 @@
  
  .kb-mcp-table-wrap {
@@ -479,10 +483,11 @@ index 55cc208f..4a82253b 100644
  .kb-mcp-th {
    min-height: var(--prop-row-h);
 -  padding: 12px 16px;
-+  padding: 10px 14px;
++  padding: 8px 8px;
    border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
    color: var(--kb-color-text-secondary, var(--fg-secondary));
-   font-size: 0.8125rem;
+-  font-size: 0.8125rem;
++  font-size: 0.75rem;
    font-weight: 600;
    text-transform: uppercase;
    letter-spacing: 0.05em;
@@ -490,28 +495,37 @@ index 55cc208f..4a82253b 100644
  }
  
  .kb-mcp-tr {
-@@ -129,12 +132,59 @@
+@@ -129,10 +132,65 @@
  }
  
  .kb-mcp-td {
 -  padding: 10px 16px;
-+  padding: 10px 14px;
-   font-size: 0.875rem;
+-  font-size: 0.875rem;
++  padding: 8px 8px;
++  font-size: 0.8125rem;
    color: var(--kb-color-text-primary, var(--fg-primary));
    vertical-align: middle;
- }
- 
++  word-break: break-word;
++}
++
 +.kb-mcp-td code {
 +  font-size: 0.75rem;
-+  word-break: break-all;
++  word-break: break-word;
++  overflow-wrap: anywhere;
 +}
 +
 +.kb-mcp-actions-cell {
 +  white-space: nowrap;
++  width: 1%;
++  text-align: right;
++  padding: 8px 6px;
 +}
 +
 +.kb-mcp-actions-cell .kb-mcp-action-btn,
 +.kb-mcp-actions-cell .kb-mcp-btn-danger {
++  padding: 0 8px;
++  font-size: 0.75rem;
++  height: 26px;
 +  margin-right: 4px;
 +}
 +
@@ -542,16 +556,14 @@ index 55cc208f..4a82253b 100644
 +
 +  .kb-mcp-action-btn,
 +  .kb-mcp-btn-danger {
-+    padding: 0 8px;
++    padding: 0 6px;
 +    font-size: 0.7rem;
 +    height: 26px;
 +  }
-+}
-+
+ }
+ 
  .kb-mcp-key-hint {
-   font-family: var(--font-mono);
-   font-size: 0.8125rem;
-@@ -196,6 +246,9 @@
+@@ -196,6 +254,9 @@
    border-radius: 4px;
    font-size: 0.75rem;
    cursor: pointer;
@@ -561,7 +573,7 @@ index 55cc208f..4a82253b 100644
  }
  
  .kb-mcp-action-btn:hover {
-@@ -203,6 +256,25 @@
+@@ -203,6 +264,25 @@
    border-color: var(--text-danger, #b91c1c);
  }
  
@@ -587,26 +599,71 @@ index 55cc208f..4a82253b 100644
  .kb-mcp-confirm-bar {
    display: inline-flex;
    align-items: center;
-@@ -336,6 +408,7 @@
+@@ -265,7 +345,7 @@
+ .kb-mcp-mint-form {
+   display: flex;
+   flex-direction: column;
+-  gap: 16px;
++  gap: 12px;
+ }
+ 
+ .kb-mcp-mint-error {
+@@ -285,7 +365,7 @@
+ .kb-mcp-form-row {
+   display: flex;
+   flex-direction: column;
+-  gap: 6px;
++  gap: 4px;
+ }
+ 
+ .kb-mcp-form-label {
+@@ -327,7 +407,7 @@
+   font-size: 0.875rem;
+   font-weight: 600;
+   color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+-  margin-top: 8px;
++  margin-top: 6px;
+   margin-bottom: 2px;
+   display: flex;
+   align-items: center;
+@@ -335,16 +415,17 @@
+ }
  
  .kb-mcp-key-summary-row {
-   margin-top: 4px;
-+  margin-bottom: 24px;
+-  margin-top: 4px;
++  margin-top: 2px;
++  margin-bottom: 12px;
  }
  
  .kb-mcp-key-summary {
-@@ -358,7 +431,8 @@
-   z-index: 2;
+-  padding: 10px 14px;
++  padding: 8px 12px;
+   background-color: var(--bg-surface-raised, #161b22);
+   border: 1px solid var(--border-subtle, #30363d);
+   border-radius: 6px;
+   font-size: 0.8125rem;
+-  line-height: 1.5;
++  line-height: 1.4;
+   color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+ }
+ 
+@@ -353,12 +434,11 @@
+   justify-content: flex-end;
+   gap: 12px;
+   margin-top: 8px;
+-  position: sticky;
+-  bottom: 0;
+-  z-index: 2;
++  position: static;
    background: var(--bg-surface);
    border-top: 1px solid var(--border-subtle, #30363d);
--  padding-top: 12px;
-+  padding-top: 16px;
+   padding-top: 12px;
 +  padding-bottom: 4px;
  }
  
  .kb-mcp-unlimited-warning {
 diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.css b/kanban/web/src/features/settings/McpConfigSnippetModal.css
-index 1719aec4..38f44557 100644
+index 1719aec4..d812fa89 100644
 --- a/kanban/web/src/features/settings/McpConfigSnippetModal.css
 +++ b/kanban/web/src/features/settings/McpConfigSnippetModal.css
 @@ -120,7 +120,7 @@
@@ -618,16 +675,29 @@ index 1719aec4..38f44557 100644
    margin: 0;
  }
  
-@@ -166,7 +166,7 @@
+@@ -164,14 +164,19 @@
+ 
+ .kb-snippet-url-select {
    height: 32px;
-   background-color: #0d1117;
+-  background-color: #0d1117;
++  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
    border: 1px solid var(--border-subtle, #30363d);
 -  color: #c9d1d9;
-+  color: var(--kb-color-text-primary, var(--fg-primary, #c9d1d9));
++  color: var(--kb-color-text-primary, var(--fg-primary, #1f2328));
    border-radius: 6px;
    padding: 0 8px;
    font-size: 0.875rem;
-@@ -184,17 +184,16 @@
+ }
+ 
++[data-theme="dark"] .kb-snippet-url-select {
++  background-color: #0d1117;
++  color: #f0f6fc;
++}
++
+ .kb-snippet-code-box {
+   background-color: #0d1117;
+   border: 1px solid var(--border-subtle, #30363d);
+@@ -184,17 +189,16 @@
    overflow-x: auto;
    max-height: 200px;
    white-space: pre;
@@ -648,7 +718,7 @@ index 1719aec4..38f44557 100644
    background: var(--bg-surface);
  }
  
-@@ -242,7 +241,7 @@
+@@ -242,7 +246,7 @@
  
  .kb-snippet-llms-callout-text {
    font-size: 0.8125rem;
