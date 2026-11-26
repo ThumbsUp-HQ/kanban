@@ -1,0 +1,35 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan475-980bf5ac/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 32ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/DocsCenter.test.tsx (56 tests) 21870ms
+   ✓ DocsCenter & Help System (KAN-16) (56)
+     ✓ DocMarkdownViewer Component (8)
+       ✓ renders headings with generated anchor IDs and handles anchor navigation 307ms
+     ✓ DocsCenterPage Component (11)
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 436ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 537ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (22)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 623ms
+       ✓ manages WAI-ARIA modal dialog focus, traps Tab/Shift+Tab, restores trigger focus on close, and resyncs on arg change 352ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 3575ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 1120ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 883ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 3909ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 636ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 5758ms
+
+ Test Files  2 passed (2)
+      Tests  63 passed (63)
+   Start at  18:22:50
+   Duration  24.27s (tests 88%, environment 9%, import 2%, worker 1%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    95.12 |     100 |     100 |                   
+ ...CenterPage.tsx |     100 |    95.12 |     100 |     100 | 52-55,100         
+-------------------|---------|----------|---------|---------|-------------------

@@ -527,6 +527,34 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
     });
 
+    it('de-clutters header layout: keeps brand logo and offline center badge on the left, and moves secondary agent tools to the right (KAN-475)', () => {
+      render(
+        <MemoryRouter initialEntries={['/docs']}>
+          <Routes>
+            <Route path="/docs" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const header = screen.getByTestId('docs-center-page').querySelector('.kb-docs-header');
+      expect(header).toBeDefined();
+
+      const headerLeft = header?.querySelector('.kb-docs-header-left');
+      expect(headerLeft).toBeDefined();
+      expect(headerLeft?.textContent).toContain('Kanban Docs');
+      expect(headerLeft?.textContent).toContain('Offline Center');
+      // Secondary tools must be removed from the left group
+      expect(headerLeft?.querySelector('[data-testid="docs-llms-txt-link"]')).toBeNull();
+      expect(headerLeft?.querySelector('[data-testid="docs-copy-agent-prompt-btn"]')).toBeNull();
+
+      // Dedicated right-side tools container
+      const headerTools = screen.getByTestId('docs-header-tools');
+      expect(headerTools).toBeDefined();
+      expect(headerTools.classList.contains('kb-docs-header-tools')).toBe(true);
+      expect(headerTools.querySelector('[data-testid="docs-llms-txt-link"]')).toBeDefined();
+      expect(headerTools.querySelector('[data-testid="docs-copy-agent-prompt-btn"]')).toBeDefined();
+    });
+
     it('copies agent onboarding prompt when clicking copy prompt button', async () => {
       render(
         <MemoryRouter initialEntries={['/docs']}>

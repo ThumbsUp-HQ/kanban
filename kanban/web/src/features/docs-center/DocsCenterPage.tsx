@@ -296,26 +296,6 @@ export function DocsCenterPage(): JSX.Element {
               Kanban Docs
             </Link>
             <span className="kb-docs-badge">Offline Center</span>
-            <a
-              href="/llms.txt"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="kb-docs-llms-txt-link"
-              data-testid="docs-llms-txt-link"
-            >
-              <span aria-hidden="true">&#129302;</span> /llms.txt
-            </a>
-            <button
-              type="button"
-              className="kb-docs-copy-prompt-btn"
-              data-testid="docs-copy-agent-prompt-btn"
-              title="Copy Agent Onboarding Prompt"
-              onClick={() => {
-                void handleCopyAgentPrompt();
-              }}
-            >
-              <span aria-hidden="true">&#128203;</span> {isCopiedPrompt ? 'Copied!' : 'Copy Agent Prompt'}
-            </button>
           </div>
 
           <button
@@ -387,6 +367,29 @@ export function DocsCenterPage(): JSX.Element {
               })}
             </div>
           )}
+        </div>
+
+        <div className="kb-docs-header-tools" data-testid="docs-header-tools">
+          <a
+            href="/llms.txt"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="kb-docs-llms-txt-link"
+            data-testid="docs-llms-txt-link"
+          >
+            <span aria-hidden="true">&#129302;</span> /llms.txt
+          </a>
+          <button
+            type="button"
+            className="kb-docs-copy-prompt-btn"
+            data-testid="docs-copy-agent-prompt-btn"
+            title="Copy Agent Onboarding Prompt"
+            onClick={() => {
+              void handleCopyAgentPrompt();
+            }}
+          >
+            <span aria-hidden="true">&#128203;</span> {isCopiedPrompt ? 'Copied!' : 'Copy Agent Prompt'}
+          </button>
         </div>
       </header>
 
