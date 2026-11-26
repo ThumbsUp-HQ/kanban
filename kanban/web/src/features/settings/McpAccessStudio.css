@@ -35,16 +35,18 @@
 .kb-mcp-studio-mint-btn {
   height: var(--prop-row-h);
   padding: 0 18px;
-  background-color: var(--ok-bg, #238636);
-  border: 1px solid rgba(240, 246, 252, 0.1);
-  color: #ffffff;
+  background-color: #047857;
+  border: 1px solid #047857;
+  color: var(--accent-primary-fg, #ffffff);
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.kb-mcp-studio-mint-btn:hover {
-  background-color: var(--ok-hover, #2ea043);
+.kb-mcp-studio-mint-btn:hover:not(:disabled) {
+  background-color: #065f46;
+  border-color: #065f46;
 }
 
 .kb-mcp-admin-subnav {
@@ -75,8 +77,8 @@
 }
 
 .kb-mcp-admin-subnav-active {
-  color: var(--accent-primary, #58a6ff) !important;
-  border-bottom-color: var(--accent-primary, #58a6ff) !important;
+  color: var(--badge-fg) !important;
+  border-bottom-color: var(--badge-fg) !important;
   font-weight: 600;
 }
 
@@ -625,20 +627,21 @@
   height: var(--prop-row-h);
   padding: 0 14px;
   min-height: 36px;
-  background-color: var(--brand-primary, #238636);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background-color: #047857;
+  border: 1px solid #047857;
+  color: var(--accent-primary-fg, #ffffff);
   border-radius: 6px;
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
-.kb-mcp-connect-btn:hover {
-  background-color: #2ea043;
+.kb-mcp-connect-btn:hover:not(:disabled) {
+  background-color: #065f46;
+  border-color: #065f46;
 }
 
 .kb-mcp-enter-device-code-btn {
