@@ -720,4 +720,20 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
       expect(screen.getByText('20 items')).toBeDefined();
     });
   });
+
+  it('renders StudioDocLink in header left and header actions (KAN-461)', () => {
+    renderWithProviders(<FlowAnalyticsPage />);
+
+    const docLink = screen.getByTestId('flow-analytics-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/statistical-flow-telemetry-and-lean-analytics');
+    expect(docLink.textContent).toContain('Flow Telemetry Guide ->');
+
+    // Verify placement inside .kb-flow-header-left and .kb-flow-header-actions
+    const headerLeft = docLink.closest('.kb-flow-header-left');
+    expect(headerLeft).not.toBeNull();
+    const headerActions = docLink.closest('.kb-flow-header-actions');
+    expect(headerActions).not.toBeNull();
+    expect(headerLeft?.querySelector('.kb-flow-title-group')).not.toBeNull();
+  });
 });

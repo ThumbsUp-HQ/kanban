@@ -10,6 +10,7 @@ import { MonteCarloForecastCard } from './charts/MonteCarloForecastCard';
 import { CycleBurndownChart } from './charts/CycleBurndownChart';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './FlowAnalyticsPage.css';
 
 export type ProjectFlowMetricsResponse = components['schemas']['ProjectFlowMetricsResponse'];
@@ -92,14 +93,23 @@ export function FlowAnalyticsPage(): JSX.Element {
   return (
     <div className="kb-flow-analytics" data-testid="flow-analytics-page">
       <header className="kb-flow-header">
-        <div className="kb-flow-title-group">
-          <h1>
-            <span role="img" aria-hidden="true">📊</span>
-            Flow Telemetry Studio
-          </h1>
-          <p>
-            Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
-          </p>
+        <div className="kb-flow-header-left">
+          <div className="kb-flow-title-group">
+            <h1>
+              <span role="img" aria-hidden="true">📊</span>
+              Flow Telemetry Studio
+            </h1>
+            <p>
+              Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
+            </p>
+          </div>
+          <div className="kb-flow-header-actions">
+            <StudioDocLink
+              href="/docs/statistical-flow-telemetry-and-lean-analytics"
+              label="Flow Telemetry Guide ->"
+              testId="flow-analytics-doc-link"
+            />
+          </div>
         </div>
 
         <div className="kb-flow-controls">

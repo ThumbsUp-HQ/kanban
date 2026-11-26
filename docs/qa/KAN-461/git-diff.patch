@@ -1,0 +1,111 @@
+diff --git a/kanban/web/src/features/analytics/FlowAnalyticsPage.css b/kanban/web/src/features/analytics/FlowAnalyticsPage.css
+index 3344a306..40ed26b8 100644
+--- a/kanban/web/src/features/analytics/FlowAnalyticsPage.css
++++ b/kanban/web/src/features/analytics/FlowAnalyticsPage.css
+@@ -19,6 +19,19 @@
+   border-bottom: 1px solid var(--border-subtle, #e5e7eb);
+ }
+ 
++.kb-flow-header-left {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 16px;
++}
++
++.kb-flow-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
+ .kb-flow-title-group h1 {
+   margin: 0 0 6px 0;
+   font-size: 1.5rem;
+@@ -371,6 +384,17 @@
+ }
+ 
+ @media (max-width: 640px) {
++  .kb-flow-header-left {
++    width: 100%;
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .kb-flow-header-actions {
++    width: 100%;
++  }
++
+   .kb-flow-controls {
+     width: 100%;
+     flex-direction: column;
+diff --git a/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx b/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
+index 7a6201d2..c1634b39 100644
+--- a/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
++++ b/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
+@@ -10,6 +10,7 @@ import { MonteCarloForecastCard } from './charts/MonteCarloForecastCard';
+ import { CycleBurndownChart } from './charts/CycleBurndownChart';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import './FlowAnalyticsPage.css';
+ 
+ export type ProjectFlowMetricsResponse = components['schemas']['ProjectFlowMetricsResponse'];
+@@ -92,14 +93,23 @@ export function FlowAnalyticsPage(): JSX.Element {
+   return (
+     <div className="kb-flow-analytics" data-testid="flow-analytics-page">
+       <header className="kb-flow-header">
+-        <div className="kb-flow-title-group">
+-          <h1>
+-            <span role="img" aria-hidden="true">📊</span>
+-            Flow Telemetry Studio
+-          </h1>
+-          <p>
+-            Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
+-          </p>
++        <div className="kb-flow-header-left">
++          <div className="kb-flow-title-group">
++            <h1>
++              <span role="img" aria-hidden="true">📊</span>
++              Flow Telemetry Studio
++            </h1>
++            <p>
++              Statistical flow intelligence: Cumulative Flow, Cycle Time Percentiles, Aging WIP, and Monte Carlo Forecasting
++            </p>
++          </div>
++          <div className="kb-flow-header-actions">
++            <StudioDocLink
++              href="/docs/statistical-flow-telemetry-and-lean-analytics"
++              label="Flow Telemetry Guide ->"
++              testId="flow-analytics-doc-link"
++            />
++          </div>
+         </div>
+ 
+         <div className="kb-flow-controls">
+diff --git a/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx b/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
+index 47fae421..37abc072 100644
+--- a/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
++++ b/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
+@@ -720,4 +720,20 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
+       expect(screen.getByText('20 items')).toBeDefined();
+     });
+   });
++
++  it('renders StudioDocLink in header left and header actions (KAN-461)', () => {
++    renderWithProviders(<FlowAnalyticsPage />);
++
++    const docLink = screen.getByTestId('flow-analytics-doc-link');
++    expect(docLink).toBeDefined();
++    expect(docLink.getAttribute('href')).toBe('/docs/statistical-flow-telemetry-and-lean-analytics');
++    expect(docLink.textContent).toContain('Flow Telemetry Guide ->');
++
++    // Verify placement inside .kb-flow-header-left and .kb-flow-header-actions
++    const headerLeft = docLink.closest('.kb-flow-header-left');
++    expect(headerLeft).not.toBeNull();
++    const headerActions = docLink.closest('.kb-flow-header-actions');
++    expect(headerActions).not.toBeNull();
++    expect(headerLeft?.querySelector('.kb-flow-title-group')).not.toBeNull();
++  });
+ });
