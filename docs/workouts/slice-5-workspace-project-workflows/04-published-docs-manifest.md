@@ -209,8 +209,8 @@ The following configuration parameters and backend contracts are documented with
 - **Visual Assets:** All 43 verified screenshots copied to `thumbs-up-kanban.wiki/images/slice5-*.png` and `kanban/web/public/docs-images/`. Zero duplicate prefix collisions and zero unreferenced orphan images.
 - **In-App Help Resolution:** 29/29 `StudioDocLink` and `FieldHelpHint` `docHref` targets across all 10 Slice-5 UI components verified to resolve against `wikiManifest.ts` with zero broken links.
 - **Automated Test Evidence:**
-  * Pytest: 11/11 passed in 0.20s (`test_wiki_bundle_sync.py` and `test_docs_custom_fields_guide.py`).
-  * Vitest: 70/70 passed across 2 suites in 6.77s (`DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`) with 96.44% branch coverage.
-  * Static Linters: Ruff clean, Mypy clean, check_no_dashes clean (0 Unicode dashes), tsc clean (0 errors), eslint clean (0 warnings), Vite build clean in 1.54s.
+  * Pytest: 11/11 passed in 0.19s (`test_wiki_bundle_sync.py` and `test_docs_custom_fields_guide.py`).
+  * Vitest: 71/71 passed across 2 suites in 7.12s (`DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`) with 96.15% branch coverage.
+  * Static Linters: Ruff clean, Mypy clean, check_no_dashes clean (0 Unicode dashes), tsc clean (0 errors), eslint clean (0 warnings), Vite build clean in 1.24s.
 - **Zero-Mock Playwright Verification:** 5 viewports captured across `/docs` chapters on isolated port 18429 with 0 console errors, 0 page errors, and clean server shutdown.
 ```
