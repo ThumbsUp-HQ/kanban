@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd`  
 **Target Branch:** `fix/KAN-432-board-gate-snapback-and-csp`  
-**Target Commit:** `949bca18`  
+**Target Commit:** `e4eecb2c`  
 
 ---
 
