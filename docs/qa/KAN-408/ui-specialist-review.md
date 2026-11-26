@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade`  
 **Target Branch:** `feat/KAN-408-slice1-auth-workout`  
-**Target Commit:** `2f0f18c9`  
+**Target Commit:** `ccf7c7c3`  
 
 ---
 
@@ -17,7 +17,7 @@ This UI Specialist Review audits the re-tested zero-mock visual artifacts, multi
 
 All 11 re-captured visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key interactive workout states were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience under real companion services (LDAPS, OIDC, WebAuthn, TOTP, Recovery Codes, WebSudo dirty-drawer replay, and RBAC policy assignment) is robust, unclipped, and fully aligned with 👍kanban UX standards.
 
-Automated test metrics verify 122/122 Vitest tests passed across 3 test files in 8.70s with 0 `act(...)` warnings and 95.76% branch coverage with full V8 coverage table recorded (`AuthStudioPage.tsx` 95.68%, `AuthCardEditorDrawer.tsx` 95.57%, `RbacPolicyBuilder.tsx` 97.59%), and 100/100 Pytest tests passed in 32.81s with >=95% coverage on touched backend modules.
+Automated test metrics verify 122/122 Vitest tests passed across 3 test files in 8.70s with 0 `act(...)` warnings and 95.76% branch coverage with full V8 coverage table recorded (`AuthStudioPage.tsx` 95.68%, `AuthCardEditorDrawer.tsx` 95.57%, `RbacPolicyBuilder.tsx` 97.59%), and 106/106 Pytest tests passed in 33.87s with >=95% coverage on touched backend modules.
 
 Key findings:
 1. **Re-Captured Passkey Registration (Screenshot 06)**: `06-passkey-webauthn-registered.png` displays the successfully registered WebAuthn passkey row (`Workout Admin Passkey`, created and last used dates, expandable advanced security details, and 1 Enrolled Passkey in 2FA status card), completely replacing the previous empty placeholder.
