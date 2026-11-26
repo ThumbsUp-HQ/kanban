@@ -351,7 +351,7 @@ class TestWikiMediaAndLinkAudit:
         )
 
     def test_mcp_surface_tool_counts_canonical(self) -> None:
-        """Assert MCP docs reference 24 tools total (9 agent, 3 docs, 12 admin) and no 27 tools."""
+        """Assert MCP docs reference 25 tools total (10 agent, 3 docs, 12 admin) and no 27 tools."""
         if self.wiki_dir is not None:
             pages = [
                 (f.name, f.read_text(encoding="utf-8")) for f in sorted(self.wiki_dir.glob("*.md"))
@@ -374,9 +374,9 @@ class TestWikiMediaAndLinkAudit:
         )
         assert mcp_doc, "Could not find Three-Surface MCP architecture doc"
         assert bool(
-            re.search(r"24\s+(?:cohesive\s+)?tools", mcp_doc, re.IGNORECASE) or "24-tool" in mcp_doc
+            re.search(r"25\s+(?:cohesive\s+)?tools", mcp_doc, re.IGNORECASE) or "25-tool" in mcp_doc
         )
-        assert "9" in mcp_doc  # 9 agent tools
+        assert "10" in mcp_doc  # 10 agent tools
         assert "3" in mcp_doc  # 3 docs tools
         assert "12" in mcp_doc  # 12 admin tools
 

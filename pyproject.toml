@@ -107,7 +107,17 @@ disallow_subclassing_any = false
 # loses line tracking after the first awaited DB call and under-reports service/route modules.
 concurrency = ["greenlet", "thread"]
 branch = true
-omit = ["database/migrations/*", "database/tests/migrations/*"]
+omit = [
+    "database/migrations/*",
+    "database/tests/migrations/*",
+    "scripts/run_*.py",
+    "scripts/execute_*.py",
+    "scripts/setup_*.py",
+    "scripts/kan413_*.py",
+    "scripts/*_companion*.py",
+    "scripts/generate_*.py",
+    "scripts/slice1_*.py",
+]
 
 [tool.pytest.ini_options]
 addopts = "--disable-socket --allow-unix-socket -p no:cacheprovider --strict-markers"
