@@ -750,7 +750,7 @@ export function PersonalSettingsPage(): JSX.Element {
                 summary="IANA timezone identifier governing all localized timestamps across the interface."
                 defaultValue="UTC"
                 validValues={['IANA Timezone database identifier']}
-                docHref="/docs/user-profile-and-personal-settings"
+                docHref="/docs/studio-configuration-reference#workspace-studio"
                 testId="personal-timezone-help"
               />
             </label>
@@ -848,7 +848,7 @@ export function PersonalSettingsPage(): JSX.Element {
                 summary="Account password conforming to minimum entropy length requirements."
                 defaultValue="Minimum 12 characters (14 for Server Admins)"
                 validValues={['Minimum 12 characters (14 for Server Admins)']}
-                docHref="/docs/zero-trust-security-and-access-visibility#authentication"
+                docHref="/docs/multi-card-authentication-studio#password-security"
                 testId="personal-new-password-help"
               />
             </label>

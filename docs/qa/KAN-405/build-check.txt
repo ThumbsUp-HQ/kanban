@@ -1,0 +1,57 @@
+=== CHECK-MIGRATIONS (STATIC ONLY) ===
+$ uv run --no-sync kanban-ctl db check-migrations --static-only
+OK: All 84 migrations valid. Single head: p6_22_mcp_api_keys_capability_mask_boundary
+
+=== RUFF CHECK ===
+$ uv run --no-sync ruff check kanban/
+All checks passed!
+
+=== MYPY TYPE CHECK ===
+$ uv run --no-sync mypy kanban/
+Success: no issues found in 682 source files
+
+=== NO DASHES CHECK: Main Repo ===
+$ python3 scripts/check_no_dashes.py --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit code: 0 (0 Unicode dashes found)
+
+=== NO DASHES CHECK: Wiki Files ===
+$ python3 scripts/check_no_dashes.py thumbs-up-kanban.wiki/Multi-Card-Authentication-Studio.md thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md thumbs-up-kanban.wiki/Studio-Configuration-Reference.md
+Exit code: 0 (0 Unicode dashes found)
+
+=== SYNC WIKI BUNDLE CHECK ===
+$ PYTHONPATH=. python3 -m scripts.sync_wiki_bundle
+Successfully synchronized 34 wiki chapters into kanban/web/src/features/docs-center/wikiManifest.ts (612452 bytes, 106 images copied to kanban/web/public/docs-images).
+
+=== PNPM TYPECHECK ===
+$ pnpm --dir kanban/web typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d/kanban/web
+> tsc -b --noEmit
+Exit code: 0 (0 type errors)
+
+=== PNPM LINT ===
+$ pnpm --dir kanban/web lint
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d/kanban/web
+> eslint . --max-warnings 0
+Exit code: 0 (0 warnings)
+
+=== PNPM BUILD ===
+$ pnpm --dir kanban/web build
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+✓ 765 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-RojNK2Lp.css            638.15 kB │ gzip:  89.52 kB
+dist/assets/index-BaRq-sbz.js           2,994.85 kB │ gzip: 831.16 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.25s
