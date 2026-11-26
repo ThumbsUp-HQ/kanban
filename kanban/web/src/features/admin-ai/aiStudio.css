@@ -286,6 +286,20 @@
   font-size: var(--text-xl, 18px);
   font-weight: 700;
   margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-modal-header > button,
+.kb-modal-header-actions {
+  flex-shrink: 0;
+}
+
+.kb-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .kb-modal-header-actions {
@@ -340,12 +354,34 @@
   color: var(--fg-secondary);
 }
 
+.kb-drawer-footer,
 .kb-modal-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-3, 12px);
   margin-top: var(--space-6, 24px);
   flex-wrap: wrap;
+}
+
+.kb-drawer-footer-actions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.kb-drawer-footer-actions-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  margin-left: auto;
+}
+
+.kb-drawer-footer button,
+.kb-drawer-footer-actions-left button,
+.kb-drawer-footer-actions-right button {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Ledger and Progress Bar */
@@ -423,15 +459,6 @@
     flex-direction: column;
     align-items: stretch;
   }
-
-  .kb-modal-footer {
-    flex-direction: column-reverse;
-  }
-
-  .kb-modal-footer button {
-    width: 100%;
-    min-height: 44px;
-  }
 }
 
 @media (max-width: 767px) {
@@ -473,21 +500,38 @@
     max-width: 100%;
   }
 
+  .kb-modal-card {
+    padding-bottom: 0;
+  }
+
   .kb-modal-footer,
+  .kb-drawer-footer,
   .kb-ai-drawer-footer {
     position: sticky;
     bottom: 0;
     background: var(--bg-surface);
     border-top: 1px solid var(--border-subtle);
-    padding: var(--space-3, 12px);
+    padding: var(--space-3, 12px) 0 calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
     z-index: 5;
     flex-direction: column-reverse;
   }
 
   .kb-modal-footer button,
+  .kb-drawer-footer button,
+  .kb-drawer-footer-actions-left,
+  .kb-drawer-footer-actions-right,
+  .kb-drawer-footer-actions-left button,
+  .kb-drawer-footer-actions-right button,
   .kb-ai-drawer-footer button {
     width: 100%;
     min-height: var(--tap-min, 44px);
+    white-space: normal;
+  }
+
+  .kb-drawer-footer-actions-right {
+    margin-left: 0;
+    flex-direction: column-reverse;
+    gap: var(--space-3, 12px);
   }
 }
 
@@ -944,10 +988,11 @@
 @media (max-width: 640px) {
   .kb-modal-card {
     padding: var(--space-4, 16px);
+    padding-bottom: 0;
   }
 
   .kb-modal-header {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--space-2, 8px);
   }
 

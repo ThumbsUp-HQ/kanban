@@ -2133,6 +2133,8 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
         const residencyHelp = screen.getByTestId('provider-residency-help');
         expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
 
+        expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+
         // Verify popover interaction on provider-name-help
         act(() => {
           nameHelp.focus();
@@ -2203,6 +2205,71 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
         await waitFor(() => {
           expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
         });
+      });
+    });
+
+    describe('KAN-451: Standardized Drawer Footer Action Button Order and Cadence', () => {
+      it('verifies standardized button cadence: [Test Connection] (left) -> [Cancel] -> [Save Provider] (right)', () => {
+        const { container } = render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        const footer = container.querySelector('.kb-modal-footer.kb-drawer-footer');
+        expect(footer).not.toBeNull();
+        expect(footer?.getAttribute('style')).toBeNull();
+
+        const leftGroup = container.querySelector('.kb-drawer-footer-actions-left');
+        const rightGroup = container.querySelector('.kb-drawer-footer-actions-right');
+        expect(leftGroup).not.toBeNull();
+        expect(rightGroup).not.toBeNull();
+
+        const testBtn = screen.getByTestId('drawer-test-connection-btn');
+        const cancelBtn = screen.getByTestId('cancel-provider-drawer-btn');
+        const saveBtn = screen.getByTestId('save-provider-btn');
+
+        expect(leftGroup?.contains(testBtn)).toBe(true);
+        expect(rightGroup?.contains(cancelBtn)).toBe(true);
+        expect(rightGroup?.contains(saveBtn)).toBe(true);
+
+        // Verify order in right group: Cancel before Save
+        if (!rightGroup) throw new Error('rightGroup not found');
+        const rightButtons = Array.from(rightGroup.querySelectorAll('button'));
+        expect(rightButtons[0]).toBe(cancelBtn);
+        expect(rightButtons[1]).toBe(saveBtn);
+
+        // Overall DOM order
+        if (!footer) throw new Error('footer not found');
+        const allButtons: HTMLElement[] = Array.from(footer.querySelectorAll('button'));
+        const testIdx = allButtons.indexOf(testBtn);
+        const cancelIdx = allButtons.indexOf(cancelBtn);
+        const saveIdx = allButtons.indexOf(saveBtn);
+        expect(testIdx).toBeLessThan(cancelIdx);
+        expect(cancelIdx).toBeLessThan(saveIdx);
+      });
+
+      it('verifies action button clicks and onClose callbacks', () => {
+        const onClose = vi.fn();
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={onClose}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        fireEvent.click(screen.getByTestId('cancel-provider-drawer-btn'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(screen.getByTestId('close-provider-drawer-btn'));
+        expect(onClose).toHaveBeenCalledTimes(2);
       });
     });
   });

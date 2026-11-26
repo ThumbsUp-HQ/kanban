@@ -1,0 +1,1379 @@
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index 90f4de03..9d038b39 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -329,8 +329,10 @@ function AgentDefinitionEditorContent({
+ 
+       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
+         <div className="kb-form-group">
+-          <label htmlFor="agent-slug-input" className="kb-form-label">
+-            Agent Slug (Permanent Handle)
++          <div className="kb-form-label-row">
++            <label htmlFor="agent-slug-input" className="kb-form-label">
++              Agent Slug (Permanent Handle)
++            </label>
+             <FieldHelpHint
+               title="Agent Slug (Permanent Handle)"
+               fieldKey="agent_slug"
+@@ -341,7 +343,7 @@ function AgentDefinitionEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+               testId="agent-slug-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="agent-slug-input"
+             type="text"
+@@ -373,8 +375,10 @@ function AgentDefinitionEditorContent({
+         </div>
+ 
+         <div className="kb-form-group">
+-          <label htmlFor="agent-harness-select" className="kb-form-label">
+-            Autonomous Execution Harness
++          <div className="kb-form-label-row">
++            <label htmlFor="agent-harness-select" className="kb-form-label">
++              Autonomous Execution Harness
++            </label>
+             <FieldHelpHint
+               title="Autonomous Execution Harness"
+               fieldKey="agent_harness_kind"
+@@ -383,7 +387,7 @@ function AgentDefinitionEditorContent({
+               validValues={['in_app_sdk', 'cli_pipe', 'remote_runner']}
+               defaultValue="in_app_sdk"
+             />
+-          </label>
++          </div>
+           <select
+             id="agent-harness-select"
+             className="kb-form-select"
+@@ -546,8 +550,10 @@ function AgentDefinitionEditorContent({
+           )}
+ 
+           <div className="kb-form-group">
+-            <label htmlFor="agent-timeout-input" className="kb-form-label">
+-              Timeout (milliseconds, 1000 to 600000)
++            <div className="kb-form-label-row">
++              <label htmlFor="agent-timeout-input" className="kb-form-label">
++                Timeout (milliseconds, 1000 to 600000)
++              </label>
+               <FieldHelpHint
+                 title="Agent Timeout"
+                 summary="Execution deadline in milliseconds before aborting agent harness invocation."
+@@ -556,7 +562,7 @@ function AgentDefinitionEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners"
+                 testId="agent-timeout-help"
+               />
+-            </label>
++            </div>
+             <input
+               id="agent-timeout-input"
+               type="number"
+@@ -574,8 +580,10 @@ function AgentDefinitionEditorContent({
+           </div>
+ 
+           <div className="kb-form-group">
+-            <label htmlFor="agent-repo-mode-select" className="kb-form-label">
+-              Repository Access Mode
++            <div className="kb-form-label-row">
++              <label htmlFor="agent-repo-mode-select" className="kb-form-label">
++                Repository Access Mode
++              </label>
+               <FieldHelpHint
+                 title="Repository Access Mode"
+                 fieldKey="agent_repo_access_mode"
+@@ -584,7 +592,7 @@ function AgentDefinitionEditorContent({
+                 validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
+                 defaultValue="none"
+               />
+-            </label>
++            </div>
+             <select
+               id="agent-repo-mode-select"
+               className="kb-form-select"
+@@ -599,8 +607,10 @@ function AgentDefinitionEditorContent({
+           </div>
+ 
+           <div className="kb-form-group">
+-            <label id="agent-mcp-tools-label" className="kb-form-label">
+-              Allowed MCP Agent Tools
++            <div className="kb-form-label-row">
++              <span id="agent-mcp-tools-label" className="kb-form-label">
++                Allowed MCP Agent Tools
++              </span>
+               <FieldHelpHint
+                 title="Allowed MCP Agent Tools"
+                 fieldKey="agent_mcp_allowed_tools"
+@@ -615,7 +625,7 @@ function AgentDefinitionEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+                 testId="agent-mcp-tools-help"
+               />
+-            </label>
++            </div>
+             <span className="kb-form-hint">
+               Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).
+             </span>
+@@ -668,23 +678,25 @@ function AgentDefinitionEditorContent({
+           </div>
+         </AdvancedSection>
+ 
+-        <div className="kb-modal-footer">
+-          <button
+-            type="button"
+-            className="kb-btn kb-btn-secondary"
+-            onClick={onClose}
+-            data-testid="cancel-agent-drawer-btn"
+-          >
+-            Cancel
+-          </button>
+-          <button
+-            type="submit"
+-            className="kb-btn kb-btn-primary"
+-            disabled={isSaving || (harnessKind === 'cli_pipe' && !cliValidation.valid)}
+-            data-testid="save-agent-btn"
+-          >
+-            {isSaving ? 'Saving...' : isEditing ? 'Save Agent' : 'Register Agent'}
+-          </button>
++        <div className="kb-modal-footer kb-drawer-footer">
++          <div className="kb-drawer-footer-actions-right">
++            <button
++              type="button"
++              className="kb-btn kb-btn-secondary"
++              onClick={onClose}
++              data-testid="cancel-agent-drawer-btn"
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="kb-btn kb-btn-primary"
++              disabled={isSaving || (harnessKind === 'cli_pipe' && !cliValidation.valid)}
++              data-testid="save-agent-btn"
++            >
++              {isSaving ? 'Saving...' : isEditing ? 'Save Agent' : 'Register Agent'}
++            </button>
++          </div>
+         </div>
+       </form>
+     </div>
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+index 1d897c5b..2e5da993 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -2,7 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
+ import * as aiApi from '../../admin-ai/aiAdminApi';
+@@ -484,8 +484,10 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Native Test' } });
+ 
+       const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
+-      textarea.value = customPrompt;
+-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
++      act(() => {
++        textarea.value = customPrompt;
++        textarea.dispatchEvent(new Event('input', { bubbles: true }));
++      });
+ 
+       fireEvent.click(screen.getByTestId('save-agent-btn'));
+ 
+@@ -551,6 +553,8 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       expect(slugHelp).toBeDefined();
+       expect(slugHelp.getAttribute('aria-label')).toBe('Help for Agent Slug (Permanent Handle)');
+ 
++      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++
+       const mcpHelp = screen.getByTestId('agent-mcp-tools-help');
+       expect(mcpHelp).toBeDefined();
+       expect(mcpHelp.getAttribute('aria-label')).toBe('Help for Allowed MCP Agent Tools');
+@@ -672,4 +676,372 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       document.documentElement.removeAttribute('data-theme');
+     });
+   });
++
++  describe('KAN-451: Standardized Drawer Footer Action Button Order and Cadence', () => {
++    it('verifies drawer footer action buttons follow standardized cadence: right-aligned [Cancel] -> [Save Agent]', () => {
++      const { container } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      const footer = container.querySelector('.kb-modal-footer.kb-drawer-footer');
++      expect(footer).not.toBeNull();
++      expect(footer?.getAttribute('style')).toBeNull();
++      if (!footer) throw new Error('footer not found');
++
++      const rightActions = container.querySelector('.kb-drawer-footer-actions-right');
++      expect(rightActions).not.toBeNull();
++
++      const cancelBtn = screen.getByTestId('cancel-agent-drawer-btn');
++      const saveBtn = screen.getByTestId('save-agent-btn');
++      expect(rightActions?.contains(cancelBtn)).toBe(true);
++      expect(rightActions?.contains(saveBtn)).toBe(true);
++
++      // Verify DOM order: Cancel is before Save Agent
++      const buttons: HTMLElement[] = Array.from(footer.querySelectorAll('button'));
++      const cancelIdx = buttons.indexOf(cancelBtn);
++      const saveIdx = buttons.indexOf(saveBtn);
++      expect(cancelIdx).toBeLessThan(saveIdx);
++      expect(cancelBtn.textContent.trim()).toBe('Cancel');
++      expect(saveBtn.textContent.trim()).toBe('Register Agent');
++    });
++
++    it('returns null when isOpen is false', () => {
++      const { container } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={false}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++      expect(container.firstChild).toBeNull();
++    });
++
++    it('covers client-side form validation errors on submit', async () => {
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      // 1. Empty slug
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: '   ' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Slug is required');
++      });
++
++      // 2. Invalid slug regex
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'INVALID_CAPS!' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain("Slug must match '^[a-z0-9][a-z0-9-]{1,62}$'");
++      });
++
++      // 3. Valid slug, empty display name
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'valid-slug' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: '   ' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Display name is required');
++      });
++
++      // 4. Valid display name, invalid timeout bounds
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Valid Agent Name' } });
++      fireEvent.change(screen.getByTestId('agent-timeout-input'), { target: { value: '500' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Timeout must be between 1,000 and 600,000 ms');
++      });
++
++      fireEvent.change(screen.getByTestId('agent-timeout-input'), { target: { value: '700000' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Timeout must be between 1,000 and 600,000 ms');
++      });
++    });
++
++    it('covers input changes across model, CLI binary, runner pool, CLI args, repo mode, and MCP tool checkboxes', () => {
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      // Model input change
++      const modelInput = screen.getByTestId('agent-model-input');
++      fireEvent.change(modelInput, { target: { value: 'custom-model-id' } });
++      expect((modelInput as HTMLInputElement).value).toBe('custom-model-id');
++
++      // Repo mode change
++      const repoModeSelect = screen.getByTestId('agent-repo-mode-select');
++      fireEvent.change(repoModeSelect, { target: { value: 'bare_git_tools' } });
++      expect((repoModeSelect as HTMLSelectElement).value).toBe('bare_git_tools');
++
++      fireEvent.change(repoModeSelect, { target: { value: 'ro_vfs_mount' } });
++      expect((repoModeSelect as HTMLSelectElement).value).toBe('ro_vfs_mount');
++
++      // Toggle MCP tool checkbox
++      const searchTicketsCheckbox = screen.getByTestId('tool-checkbox-search_tickets');
++      expect((searchTicketsCheckbox as HTMLInputElement).checked).toBe(true);
++      fireEvent.click(searchTicketsCheckbox);
++      expect((searchTicketsCheckbox as HTMLInputElement).checked).toBe(false);
++      fireEvent.click(searchTicketsCheckbox);
++      expect((searchTicketsCheckbox as HTMLInputElement).checked).toBe(true);
++
++      // Harness switch to cli_pipe
++      const harnessSelect = screen.getByTestId('agent-harness-select');
++      fireEvent.change(harnessSelect, { target: { value: 'cli_pipe' } });
++
++      const cliBinarySelect = screen.getByTestId('agent-cli-binary-select');
++      fireEvent.change(cliBinarySelect, { target: { value: 'codex' } });
++      expect((cliBinarySelect as HTMLSelectElement).value).toBe('codex');
++
++      const cliArgsInput = screen.getByTestId('agent-cli-args-input');
++      fireEvent.change(cliArgsInput, { target: { value: 'exec -s read-only -' } });
++      expect((cliArgsInput as HTMLInputElement).value).toBe('exec -s read-only -');
++
++      // Harness switch to remote_runner
++      fireEvent.change(harnessSelect, { target: { value: 'remote_runner' } });
++      const runnerPoolInput = screen.getByTestId('agent-runner-pool-input');
++      fireEvent.change(runnerPoolInput, { target: { value: 'security-runners' } });
++      expect((runnerPoolInput as HTMLInputElement).value).toBe('security-runners');
++    });
++
++    it('submits successfully with cli_pipe and remote_runner harness kinds in create and edit modes', async () => {
++      const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
++        id: 'agent-new-cli',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-1',
++        slug: 'cli-agent',
++        display_name: 'CLI Agent',
++        harness_kind: 'cli_pipe',
++        provider_kind: null,
++        model_id: null,
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        remote_runner_pool_slug: null,
++        repo_access_mode: 'none',
++        mcp_allowed_tools: ['search_tickets'],
++        system_instructions_md: 'System prompt',
++        timeout_ms: 60000,
++      });
++
++      const updateSpy = vi.spyOn(agentApi, 'updateAgentDefinition').mockResolvedValue({
++        id: 'agent-edit-runner',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-1',
++        slug: 'runner-agent',
++        display_name: 'Updated Runner Agent',
++        harness_kind: 'remote_runner',
++        provider_kind: null,
++        model_id: null,
++        cli_binary_allowlist_id: null,
++        cli_args: [],
++        remote_runner_pool_slug: 'dedicated-pool',
++        repo_access_mode: 'ro_vfs_mount',
++        mcp_allowed_tools: ['search_tickets'],
++        system_instructions_md: 'System prompt',
++        timeout_ms: 60000,
++      });
++
++      // 1. Create with cli_pipe
++      const { unmount: u1 } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'cli-agent' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'CLI Agent' } });
++      fireEvent.change(screen.getByTestId('agent-harness-select'), { target: { value: 'cli_pipe' } });
++      fireEvent.change(screen.getByTestId('agent-cli-binary-select'), { target: { value: 'agy' } });
++
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalled();
++      });
++      u1();
++
++      // 2. Edit with remote_runner
++      const existingRunnerAgent: agentApi.AgentDefinitionResponse = {
++        id: 'agent-edit-runner',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-1',
++        slug: 'runner-agent',
++        display_name: 'Runner Agent',
++        harness_kind: 'remote_runner',
++        provider_kind: null,
++        model_id: null,
++        cli_binary_allowlist_id: null,
++        cli_args: [],
++        remote_runner_pool_slug: 'default-pool',
++        repo_access_mode: 'none',
++        mcp_allowed_tools: ['search_tickets'],
++        system_instructions_md: 'System prompt',
++        timeout_ms: 60000,
++      };
++
++      const { unmount: u2 } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={existingRunnerAgent}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Updated Runner Agent' } });
++      fireEvent.change(screen.getByTestId('agent-runner-pool-input'), { target: { value: 'dedicated-pool' } });
++      fireEvent.change(screen.getByTestId('agent-repo-mode-select'), { target: { value: 'ro_vfs_mount' } });
++
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalled();
++      });
++      u2();
++
++      // 3. Create with remote_runner
++      const { unmount: u3 } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'remote-agent' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Remote Agent' } });
++      fireEvent.change(screen.getByTestId('agent-harness-select'), { target: { value: 'remote_runner' } });
++      fireEvent.change(screen.getByTestId('agent-runner-pool-input'), { target: { value: 'remote-pool-1' } });
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(createSpy).toHaveBeenCalled();
++      });
++      u3();
++
++      // 4. Edit with cli_pipe
++      const existingCliAgent: agentApi.AgentDefinitionResponse = {
++        id: 'agent-edit-cli',
++        workspace_id: 'ws-1',
++        principal_id: 'prin-1',
++        slug: 'cli-agent',
++        display_name: 'Existing CLI Agent',
++        harness_kind: 'cli_pipe',
++        provider_kind: null,
++        model_id: null,
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        remote_runner_pool_slug: null,
++        repo_access_mode: 'none',
++        mcp_allowed_tools: ['search_tickets'],
++        system_instructions_md: 'System prompt',
++        timeout_ms: 60000,
++      };
++
++      const { unmount: u4 } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={existingCliAgent}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-cli-args-input'), { target: { value: '-p --custom' } });
++      // Also clear timeout to exercise NaN fallback
++      fireEvent.change(screen.getByTestId('agent-timeout-input'), { target: { value: '' } });
++
++      fireEvent.submit(screen.getByTestId('save-agent-btn'));
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalled();
++      });
++      u4();
++
++      // 5. Mount with slug-only agent
++      const slugOnlyAgent = {
++        ...existingCliAgent,
++        id: '',
++        slug: 'slug-only-agent',
++      };
++      const { unmount: u5 } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={slugOnlyAgent}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++      u5();
++    });
++
++    it('surfaces CLI arguments validation error when banned flag is entered in cli_pipe harness', () => {
++      const { container } = render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'cli-agent-err' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'CLI Agent Err' } });
++      fireEvent.change(screen.getByTestId('agent-harness-select'), { target: { value: 'cli_pipe' } });
++      fireEvent.change(screen.getByTestId('agent-cli-args-input'), { target: { value: '--yolo' } });
++
++      expect(screen.getByTestId('cli-validation-error-hint')).toBeDefined();
++      expect(screen.getByTestId('save-agent-btn').hasAttribute('disabled')).toBe(true);
++
++      const form = container.querySelector('form');
++      expect(form).not.toBeNull();
++      if (!form) throw new Error('form not found');
++      fireEvent.submit(form);
++      expect(screen.getByTestId('agent-editor-error').textContent).toContain('banned CLI flag policy');
++    });
++
++    it('invokes onClose when clicking cancel button or close button', () => {
++      const onClose = vi.fn();
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={onClose}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('cancel-agent-drawer-btn'));
++      expect(onClose).toHaveBeenCalledTimes(1);
++
++      fireEvent.click(screen.getByTestId('close-agent-drawer-btn'));
++      expect(onClose).toHaveBeenCalledTimes(2);
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-agents/agentStudio.css b/kanban/web/src/features/admin-agents/agentStudio.css
+index ef049ca7..f5451030 100644
+--- a/kanban/web/src/features/admin-agents/agentStudio.css
++++ b/kanban/web/src/features/admin-agents/agentStudio.css
+@@ -460,3 +460,76 @@
+     align-items: stretch;
+   }
+ }
++
++/* Drawer and Modal Footers (KAN-451) */
++.kb-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  max-width: 100%;
++}
++
++.kb-drawer-footer,
++.kb-modal-footer {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: var(--space-3, 12px);
++  margin-top: var(--space-6, 24px);
++  flex-wrap: wrap;
++}
++
++.kb-drawer-footer-actions-left {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++}
++
++.kb-drawer-footer-actions-right {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++  margin-left: auto;
++}
++
++.kb-drawer-footer button,
++.kb-drawer-footer-actions-left button,
++.kb-drawer-footer-actions-right button {
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
++@media (max-width: 767px) {
++  .kb-modal-card {
++    padding-bottom: 0;
++  }
++
++  .kb-modal-footer,
++  .kb-drawer-footer {
++    position: sticky;
++    bottom: 0;
++    background: var(--bg-surface);
++    border-top: 1px solid var(--border-subtle);
++    padding: var(--space-3, 12px) 0 calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
++    z-index: 5;
++    flex-direction: column-reverse;
++  }
++
++  .kb-modal-footer button,
++  .kb-drawer-footer button,
++  .kb-drawer-footer-actions-left,
++  .kb-drawer-footer-actions-right,
++  .kb-drawer-footer-actions-left button,
++  .kb-drawer-footer-actions-right button {
++    width: 100%;
++    min-height: var(--tap-min, 44px);
++    white-space: normal;
++  }
++
++  .kb-drawer-footer-actions-right {
++    margin-left: 0;
++    flex-direction: column-reverse;
++    gap: var(--space-3, 12px);
++  }
++}
++
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index 5e2be665..a93e4aa3 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -589,8 +589,10 @@ function AiProviderEditorContent({
+       >
+         {/* 1. Protocol & Provider Engine */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-kind-select" className="kb-form-label">
+-            <span>Protocol & Provider Engine</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-kind-select" className="kb-form-label">
++              <span>Protocol & Provider Engine</span>
++            </label>
+             <FieldHelpHint
+               title="AI Provider Engine"
+               summary="The underlying runtime and API protocol for AI completions and evaluations."
+@@ -602,7 +604,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+               testId="provider-kind-help"
+             />
+-          </label>
++          </div>
+           <select
+             id="provider-kind-select"
+             className="kb-form-select"
+@@ -664,8 +666,10 @@ function AiProviderEditorContent({
+ 
+         {/* 2. Display Name */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-name-input" className="kb-form-label">
+-            <span>Display Name</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-name-input" className="kb-form-label">
++              <span>Display Name</span>
++            </label>
+             <FieldHelpHint
+               title="Display Name"
+               summary="Human-readable label for this AI provider instance."
+@@ -674,7 +678,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+               testId="provider-name-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-name-input"
+             type="text"
+@@ -694,8 +698,10 @@ function AiProviderEditorContent({
+ 
+         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-key-input" className="kb-form-label">
+-            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-key-input" className="kb-form-label">
++              <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
++            </label>
+             <FieldHelpHint
+               title="API Secret Key"
+               summary="Authentication secret for upstream LLM provider API requests."
+@@ -703,7 +709,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+               testId="provider-key-help"
+             />
+-          </label>
++          </div>
+           <div className="kb-api-key-row">
+             <input
+               id="provider-key-input"
+@@ -769,15 +775,17 @@ function AiProviderEditorContent({
+ 
+         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            <span>
+-              HTTP Base URL{' '}
+-              {providerKind === 'ollama'
+-                ? '(Default: http://127.0.0.1:11434)'
+-                : providerKind === 'gemini'
+-                  ? '(Default: https://generativelanguage.googleapis.com)'
+-                  : '(Default: https://api.openai.com/v1)'}
+-            </span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-base-url-input" className="kb-form-label">
++              <span>
++                HTTP Base URL{' '}
++                {providerKind === 'ollama'
++                  ? '(Default: http://127.0.0.1:11434)'
++                  : providerKind === 'gemini'
++                    ? '(Default: https://generativelanguage.googleapis.com)'
++                    : '(Default: https://api.openai.com/v1)'}
++              </span>
++            </label>
+             <FieldHelpHint
+               title="HTTP Base URL"
+               summary="Base endpoint URL for outbound LLM API requests."
+@@ -796,7 +804,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+               testId="provider-base-url-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-base-url-input"
+             type="url"
+@@ -828,8 +836,10 @@ function AiProviderEditorContent({
+ 
+         {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+-          <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+-            <span>Cutoff Timeout (ms)</span>
++          <div className="kb-form-label-row">
++            <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
++              <span>Cutoff Timeout (ms)</span>
++            </label>
+             <FieldHelpHint
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+@@ -838,7 +848,7 @@ function AiProviderEditorContent({
+               docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
+               testId="provider-timeout-help"
+             />
+-          </label>
++          </div>
+           <input
+             id="provider-timeout-ms-input"
+             type="number"
+@@ -862,8 +872,10 @@ function AiProviderEditorContent({
+         {/* 6. Model Allowlist & Probing */}
+         <div className="kb-form-group">
+           <div className="kb-model-allowlist-header">
+-            <label htmlFor="provider-models-input" className="kb-form-label">
+-              <span>Model Allowlist (comma separated)</span>
++            <div className="kb-form-label-row">
++              <label htmlFor="provider-models-input" className="kb-form-label">
++                <span>Model Allowlist (comma separated)</span>
++              </label>
+               <FieldHelpHint
+                 title="Model Allowlist"
+                 summary="Comma-separated model names permitted for inference or probed from the endpoint."
+@@ -871,7 +883,7 @@ function AiProviderEditorContent({
+                 docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+                 testId="provider-models-help"
+               />
+-            </label>
++            </div>
+             <button
+               type="button"
+               className="kb-btn kb-btn-secondary kb-probe-btn"
+@@ -983,8 +995,10 @@ function AiProviderEditorContent({
+           <div data-testid="advanced-model-harness-config">
+             <div className="kb-model-params-grid">
+               <div className="kb-form-group">
+-                <label htmlFor="provider-temperature-input" className="kb-form-label">
+-                  <span>Temperature</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-temperature-input" className="kb-form-label">
++                    <span>Temperature</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Temperature"
+                     summary="Sampling randomness governing creative variance versus deterministic predictability."
+@@ -993,7 +1007,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-temperature-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-temperature-input"
+                   type="number"
+@@ -1012,8 +1026,10 @@ function AiProviderEditorContent({
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="provider-top-p-input" className="kb-form-label">
+-                  <span>Top-P (Nucleus)</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-top-p-input" className="kb-form-label">
++                    <span>Top-P (Nucleus)</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Top-P (Nucleus)"
+                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
+@@ -1022,7 +1038,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-top-p-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-top-p-input"
+                   type="number"
+@@ -1041,8 +1057,10 @@ function AiProviderEditorContent({
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+-                  <span>Max Tokens</span>
++                <div className="kb-form-label-row">
++                  <label htmlFor="provider-max-tokens-input" className="kb-form-label">
++                    <span>Max Tokens</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Max Tokens"
+                     summary="Maximum generation token ceiling for completion and reasoning generation."
+@@ -1051,7 +1069,7 @@ function AiProviderEditorContent({
+                     docHref="/docs/multi-provider-ai-engine-and-runners#sampling-parameters"
+                     testId="provider-max-tokens-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="provider-max-tokens-input"
+                   type="number"
+@@ -1071,15 +1089,17 @@ function AiProviderEditorContent({
+             </div>
+ 
+             <div className="kb-form-group kb-form-group--mt12">
+-              <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
+-                <span>mTLS Client Certificate PEM (Optional)</span>
++              <div className="kb-form-label-row">
++                <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
++                  <span>mTLS Client Certificate PEM (Optional)</span>
++                </label>
+                 <FieldHelpHint
+                   title="mTLS Client Certificate PEM"
+                   summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
+                   docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+                   testId="provider-mtls-cert-help"
+                 />
+-              </label>
++              </div>
+               <textarea
+                 id="provider-mtls-cert-input"
+                 className="kb-form-input kb-form-textarea--mono"
+@@ -1096,8 +1116,10 @@ function AiProviderEditorContent({
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="provider-residency-select" className="kb-form-label">
+-                <span>Data Residency Tier (Override)</span>
++              <div className="kb-form-label-row">
++                <label htmlFor="provider-residency-select" className="kb-form-label">
++                  <span>Data Residency Tier (Override)</span>
++                </label>
+                 <FieldHelpHint
+                   title="Data Residency Tier"
+                   summary="Enforces data locality boundaries preventing external data egress."
+@@ -1106,7 +1128,7 @@ function AiProviderEditorContent({
+                   docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
+                   testId="provider-residency-help"
+                 />
+-              </label>
++              </div>
+               <select
+                 id="provider-residency-select"
+                 className="kb-form-select"
+@@ -1141,32 +1163,36 @@ function AiProviderEditorContent({
+           </div>
+         )}
+ 
+-        <div className="kb-modal-footer">
+-          <button
+-            type="button"
+-            className="kb-btn kb-btn-secondary"
+-            onClick={onClose}
+-            data-testid="cancel-provider-drawer-btn"
+-          >
+-            Cancel
+-          </button>
+-          <button
+-            type="button"
+-            className="kb-btn kb-btn-secondary"
+-            onClick={() => { void handleTestConnection(); }}
+-            disabled={isTestingConnection}
+-            data-testid="drawer-test-connection-btn"
+-          >
+-            {isTestingConnection ? 'Testing...' : 'Test Connection'}
+-          </button>
+-          <button
+-            type="submit"
+-            className="kb-btn kb-btn-primary"
+-            disabled={isSaving}
+-            data-testid="save-provider-btn"
+-          >
+-            {isSaving ? 'Saving...' : isEditing ? 'Save Provider' : 'Register Provider'}
+-          </button>
++        <div className="kb-modal-footer kb-drawer-footer">
++          <div className="kb-drawer-footer-actions-left">
++            <button
++              type="button"
++              className="kb-btn kb-btn-secondary"
++              onClick={() => { void handleTestConnection(); }}
++              disabled={isTestingConnection}
++              data-testid="drawer-test-connection-btn"
++            >
++              {isTestingConnection ? 'Testing...' : 'Test Connection'}
++            </button>
++          </div>
++          <div className="kb-drawer-footer-actions-right">
++            <button
++              type="button"
++              className="kb-btn kb-btn-secondary"
++              onClick={onClose}
++              data-testid="cancel-provider-drawer-btn"
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="kb-btn kb-btn-primary"
++              disabled={isSaving}
++              data-testid="save-provider-btn"
++            >
++              {isSaving ? 'Saving...' : isEditing ? 'Save Provider' : 'Register Provider'}
++            </button>
++          </div>
+         </div>
+       </form>
+     </div>
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+index 3aaa5353..ea95a07a 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -2133,6 +2133,8 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+         const residencyHelp = screen.getByTestId('provider-residency-help');
+         expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
+ 
++        expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++
+         // Verify popover interaction on provider-name-help
+         act(() => {
+           nameHelp.focus();
+@@ -2205,5 +2207,70 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+         });
+       });
+     });
++
++    describe('KAN-451: Standardized Drawer Footer Action Button Order and Cadence', () => {
++      it('verifies standardized button cadence: [Test Connection] (left) -> [Cancel] -> [Save Provider] (right)', () => {
++        const { container } = render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={vi.fn()}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        const footer = container.querySelector('.kb-modal-footer.kb-drawer-footer');
++        expect(footer).not.toBeNull();
++        expect(footer?.getAttribute('style')).toBeNull();
++
++        const leftGroup = container.querySelector('.kb-drawer-footer-actions-left');
++        const rightGroup = container.querySelector('.kb-drawer-footer-actions-right');
++        expect(leftGroup).not.toBeNull();
++        expect(rightGroup).not.toBeNull();
++
++        const testBtn = screen.getByTestId('drawer-test-connection-btn');
++        const cancelBtn = screen.getByTestId('cancel-provider-drawer-btn');
++        const saveBtn = screen.getByTestId('save-provider-btn');
++
++        expect(leftGroup?.contains(testBtn)).toBe(true);
++        expect(rightGroup?.contains(cancelBtn)).toBe(true);
++        expect(rightGroup?.contains(saveBtn)).toBe(true);
++
++        // Verify order in right group: Cancel before Save
++        if (!rightGroup) throw new Error('rightGroup not found');
++        const rightButtons = Array.from(rightGroup.querySelectorAll('button'));
++        expect(rightButtons[0]).toBe(cancelBtn);
++        expect(rightButtons[1]).toBe(saveBtn);
++
++        // Overall DOM order
++        if (!footer) throw new Error('footer not found');
++        const allButtons: HTMLElement[] = Array.from(footer.querySelectorAll('button'));
++        const testIdx = allButtons.indexOf(testBtn);
++        const cancelIdx = allButtons.indexOf(cancelBtn);
++        const saveIdx = allButtons.indexOf(saveBtn);
++        expect(testIdx).toBeLessThan(cancelIdx);
++        expect(cancelIdx).toBeLessThan(saveIdx);
++      });
++
++      it('verifies action button clicks and onClose callbacks', () => {
++        const onClose = vi.fn();
++        render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={onClose}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        fireEvent.click(screen.getByTestId('cancel-provider-drawer-btn'));
++        expect(onClose).toHaveBeenCalledTimes(1);
++
++        fireEvent.click(screen.getByTestId('close-provider-drawer-btn'));
++        expect(onClose).toHaveBeenCalledTimes(2);
++      });
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index 9dbeb4f3..d978f882 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -286,6 +286,20 @@
+   font-size: var(--text-xl, 18px);
+   font-weight: 700;
+   margin: 0;
++  flex: 1;
++  min-width: 0;
++}
++
++.kb-modal-header > button,
++.kb-modal-header-actions {
++  flex-shrink: 0;
++}
++
++.kb-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  max-width: 100%;
+ }
+ 
+ .kb-modal-header-actions {
+@@ -340,14 +354,36 @@
+   color: var(--fg-secondary);
+ }
+ 
++.kb-drawer-footer,
+ .kb-modal-footer {
+   display: flex;
+-  justify-content: flex-end;
++  align-items: center;
++  justify-content: space-between;
+   gap: var(--space-3, 12px);
+   margin-top: var(--space-6, 24px);
+   flex-wrap: wrap;
+ }
+ 
++.kb-drawer-footer-actions-left {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++}
++
++.kb-drawer-footer-actions-right {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++  margin-left: auto;
++}
++
++.kb-drawer-footer button,
++.kb-drawer-footer-actions-left button,
++.kb-drawer-footer-actions-right button {
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
+ /* Ledger and Progress Bar */
+ .kb-budget-progress-container {
+   margin: var(--space-3, 12px) 0;
+@@ -423,15 +459,6 @@
+     flex-direction: column;
+     align-items: stretch;
+   }
+-
+-  .kb-modal-footer {
+-    flex-direction: column-reverse;
+-  }
+-
+-  .kb-modal-footer button {
+-    width: 100%;
+-    min-height: 44px;
+-  }
+ }
+ 
+ @media (max-width: 767px) {
+@@ -473,21 +500,38 @@
+     max-width: 100%;
+   }
+ 
++  .kb-modal-card {
++    padding-bottom: 0;
++  }
++
+   .kb-modal-footer,
++  .kb-drawer-footer,
+   .kb-ai-drawer-footer {
+     position: sticky;
+     bottom: 0;
+     background: var(--bg-surface);
+     border-top: 1px solid var(--border-subtle);
+-    padding: var(--space-3, 12px);
++    padding: var(--space-3, 12px) 0 calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
+     z-index: 5;
+     flex-direction: column-reverse;
+   }
+ 
+   .kb-modal-footer button,
++  .kb-drawer-footer button,
++  .kb-drawer-footer-actions-left,
++  .kb-drawer-footer-actions-right,
++  .kb-drawer-footer-actions-left button,
++  .kb-drawer-footer-actions-right button,
+   .kb-ai-drawer-footer button {
+     width: 100%;
+     min-height: var(--tap-min, 44px);
++    white-space: normal;
++  }
++
++  .kb-drawer-footer-actions-right {
++    margin-left: 0;
++    flex-direction: column-reverse;
++    gap: var(--space-3, 12px);
+   }
+ }
+ 
+@@ -944,10 +988,11 @@
+ @media (max-width: 640px) {
+   .kb-modal-card {
+     padding: var(--space-4, 16px);
++    padding-bottom: 0;
+   }
+ 
+   .kb-modal-header {
+-    flex-wrap: wrap;
++    flex-wrap: nowrap;
+     gap: var(--space-2, 8px);
+   }
+ 
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+index e1cbdc0a..0393c4c3 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+@@ -2957,4 +2957,66 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       expect(replaceSecretHelp.getAttribute('aria-label')).toBe('Help for Replace Stored Secret');
+     });
+   });
++
++  describe('Standardized Drawer Footer Cadence and HTML 4.10.4 (KAN-451)', () => {
++    it('standardizes footer action cadence with Test Handshake left and Cancel then Save Changes right', () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={existingOidcCard}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const footer = document.querySelector('.auth-editor-actions');
++      expect(footer).not.toBeNull();
++
++      const leftActions = footer?.querySelector('.auth-editor-actions-left');
++      const rightActions = footer?.querySelector('.auth-editor-actions-right');
++      expect(leftActions).not.toBeNull();
++      expect(rightActions).not.toBeNull();
++
++      const leftButtons = leftActions?.querySelectorAll('button') ?? [];
++      expect(leftButtons.length).toBe(1);
++      expect(leftButtons[0]?.textContent).toContain('Test Handshake');
++
++      const rightButtons = rightActions?.querySelectorAll('button') ?? [];
++      expect(rightButtons.length).toBe(2);
++      expect(rightButtons[0]?.textContent).toContain('Cancel');
++      expect(rightButtons[1]?.textContent).toContain('Save Changes');
++
++      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++    });
++
++    it('standardizes footer action cadence for new card creation with Create Card primary action', () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const footer = document.querySelector('.auth-editor-actions');
++      expect(footer).not.toBeNull();
++
++      const leftActions = footer?.querySelector('.auth-editor-actions-left');
++      const rightActions = footer?.querySelector('.auth-editor-actions-right');
++      expect(leftActions).not.toBeNull();
++      expect(rightActions).not.toBeNull();
++
++      const leftButtons = leftActions?.querySelectorAll('button') ?? [];
++      expect(leftButtons.length).toBe(1);
++      expect(leftButtons[0]?.textContent).toContain('Test Handshake');
++
++      const rightButtons = rightActions?.querySelectorAll('button') ?? [];
++      expect(rightButtons.length).toBe(2);
++      expect(rightButtons[0]?.textContent).toContain('Cancel');
++      expect(rightButtons[1]?.textContent).toContain('Create Card');
++
++      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+index c8c49de8..ce1fdb38 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+@@ -2024,31 +2024,35 @@ export function AuthCardEditorDrawer({
+           )}
+ 
+           <div className="auth-editor-actions">
+-            <button
+-              type="button"
+-              className="auth-btn-secondary"
+-              onClick={() => { void handleTestHandshake(); }}
+-              disabled={isSubmitting || isTestingHandshake}
+-              data-testid="drawer-test-handshake-btn"
+-            >
+-              {isTestingHandshake ? 'Testing Handshake...' : 'Test Handshake'}
+-            </button>
+-            <button
+-              type="button"
+-              className="auth-btn-secondary"
+-              onClick={onClose}
+-              disabled={isSubmitting}
+-            >
+-              Cancel
+-            </button>
+-            <button
+-              type="submit"
+-              className="auth-studio-add-btn"
+-              disabled={isSubmitting}
+-              data-testid="drawer-save-btn"
+-            >
+-              {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
+-            </button>
++            <div className="auth-editor-actions-left">
++              <button
++                type="button"
++                className="auth-btn-secondary"
++                onClick={() => { void handleTestHandshake(); }}
++                disabled={isSubmitting || isTestingHandshake}
++                data-testid="drawer-test-handshake-btn"
++              >
++                {isTestingHandshake ? 'Testing Handshake...' : 'Test Handshake'}
++              </button>
++            </div>
++            <div className="auth-editor-actions-right">
++              <button
++                type="button"
++                className="auth-btn-secondary"
++                onClick={onClose}
++                disabled={isSubmitting}
++              >
++                Cancel
++              </button>
++              <button
++                type="submit"
++                className="auth-studio-add-btn"
++                disabled={isSubmitting}
++                data-testid="drawer-save-btn"
++              >
++                {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
++              </button>
++            </div>
+           </div>
+         </form>
+       </div>
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index c9f718e2..b6634c79 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -570,7 +570,7 @@
+ .auth-editor-actions {
+   display: flex;
+   align-items: center;
+-  justify-content: flex-end;
++  justify-content: space-between;
+   gap: 12px;
+   margin-top: 24px;
+   position: sticky;
+@@ -579,6 +579,20 @@
+   z-index: 10;
+   padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+   border-top: 1px solid var(--border-subtle);
++  flex-wrap: wrap;
++}
++
++.auth-editor-actions-left {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++}
++
++.auth-editor-actions-right {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  margin-left: auto;
+ }
+ 
+ /* 1-Click Presets Bar */
+@@ -988,6 +1002,24 @@
+     z-index: 10;
+   }
+ 
++  .auth-editor-actions {
++    flex-direction: column-reverse;
++  }
++
++  .auth-editor-actions-left,
++  .auth-editor-actions-right,
++  .auth-editor-actions-left button,
++  .auth-editor-actions-right button {
++    width: 100%;
++    min-height: var(--tap-min, 44px);
++  }
++
++  .auth-editor-actions-right {
++    margin-left: 0;
++    flex-direction: column-reverse;
++    gap: 12px;
++  }
++
+   .auth-editor-drawer {
+     width: 100vw;
+     padding: var(--space-6, 24px) var(--space-5, 20px) 0;
