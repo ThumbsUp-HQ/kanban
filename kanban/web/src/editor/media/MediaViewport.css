@@ -10,9 +10,10 @@
   width: 100%;
   max-height: 520px;
   min-height: 180px;
-  border: 1px solid var(--border-subtle, #e2e8f0);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg, 8px);
-  background-color: var(--bg-surface, #ffffff);
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
   overflow: hidden;
   user-select: none;
   touch-action: none;
@@ -70,8 +71,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-surface-raised, #f8fafc);
-  color: var(--fg-muted, #64748b);
+  background: var(--bg-surface-raised);
+  color: var(--fg-muted);
   font-family: var(--font-sans, sans-serif);
   font-size: var(--text-sm, 13px);
   animation: media-skeleton-pulse 1.5s ease-in-out infinite;
@@ -84,20 +85,24 @@
 
 /* Contrast Backdrop Canvas Classes (S5.4, S6.2) */
 .media-bg--theme {
-  background-color: var(--bg-surface, #ffffff);
+  background-color: var(--bg-surface);
+  color: var(--fg-primary);
 }
 
 .media-bg--light {
   background-color: #ffffff;
+  color: #111827;
 }
 
 .media-bg--dark {
   background-color: #0f172a;
+  color: #f8fafc;
 }
 
 .media-bg--checkerboard {
-  background-color: #f1f5f9;
-  background-image: repeating-conic-gradient(#cbd5e1 0% 25%, #f1f5f9 0% 50%);
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+  background-image: repeating-conic-gradient(var(--border-subtle) 0% 25%, var(--bg-hover) 0% 50%);
   background-position: 0 0;
   background-size: 20px 20px;
 }
@@ -115,13 +120,13 @@
   max-width: calc(100% - 24px);
   gap: 6px;
   padding: 4px 8px;
-  background-color: var(--bg-surface-raised, rgba(15, 23, 42, 0.85));
+  background-color: var(--bg-surface-raised);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full, 9999px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 10;
-  color: var(--fg-primary, #ffffff);
+  color: var(--fg-primary);
 }
 
 @media (max-width: 640px) {
@@ -134,7 +139,7 @@
     bottom: auto;
     justify-content: center;
     border-radius: 0;
-    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
+    border-top: 1px solid var(--border-subtle);
     border-left: none;
     border-right: none;
     border-bottom: none;
@@ -160,11 +165,12 @@
   text-decoration: none;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .media-btn:hover {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
 }
 
 .media-btn:focus-visible {
@@ -187,12 +193,13 @@
   top: 12px;
   left: 12px;
   padding: 2px 8px;
-  background: rgba(15, 23, 42, 0.75);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   font-family: var(--font-sans, sans-serif);
   font-size: 11px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--fg-primary);
   z-index: 5;
   cursor: default;
 }
@@ -206,11 +213,11 @@
   gap: 12px;
   width: 100%;
   padding: 32px 24px;
-  background-color: var(--bg-surface-raised, #f8fafc);
-  border: 1px dashed var(--border-subtle, #cbd5e1);
+  background-color: var(--bg-surface-raised);
+  border: 1px dashed var(--border-subtle);
   border-radius: var(--radius-lg, 8px);
   text-align: center;
-  color: var(--fg-muted, #64748b);
+  color: var(--fg-muted);
   font-family: var(--font-sans, sans-serif);
 }
 
@@ -219,18 +226,18 @@
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background-color: var(--bg-surface, #ffffff);
-  border: 1px solid var(--border-subtle, #e2e8f0);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full, 9999px);
   font-size: 13px;
   font-weight: 500;
-  color: var(--fg-primary, #0f172a);
+  color: var(--fg-primary);
 }
 
 .media-airgap-placeholder__host {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-  color: var(--fg-secondary, #475569);
+  color: var(--fg-secondary);
 }
 
 /* Lightbox Dialog Scrim */
