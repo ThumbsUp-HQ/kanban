@@ -9,11 +9,11 @@
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-[data-theme='dark'] .kb-advanced-section {
+:where([data-theme='dark']) .kb-advanced-section {
   border-color: var(--border-subtle, #2d333f);
 }
 
-.kb-advanced-section--open {
+.kb-advanced-section.kb-advanced-section--open {
   border-color: var(--border-color-focus);
   background-color: var(--bg-surface);
 }
@@ -98,6 +98,6 @@
   gap: var(--space-3, 12px);
 }
 
-[data-theme='dark'] .kb-advanced-content {
+:where([data-theme='dark']) .kb-advanced-content {
   border-top-color: var(--border-subtle, #2d333f);
 }

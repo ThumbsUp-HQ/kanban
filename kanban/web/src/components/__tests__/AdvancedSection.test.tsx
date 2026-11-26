@@ -332,7 +332,7 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
         /\.kb-advanced-content\s*\{[^}]*gap:\s*var\(--space-3,\s*12px\);/,
       );
       expect(cssContent).toMatch(
-        /\[data-theme=['"]dark['"]\]\s+\.kb-advanced-content\s*\{[^}]*border-top-color:\s*var\(--border-subtle,\s*#2d333f\);/,
+        /:where\(\[data-theme=['"]dark['"]\]\)\s+\.kb-advanced-content\s*\{[^}]*border-top-color:\s*var\(--border-subtle,\s*#2d333f\);/,
       );
     });
 
@@ -343,6 +343,15 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
       expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-desc");
       expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-badge");
       expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-section--open");
+    });
+
+    it('guards open state specificity over dark theme border-color', () => {
+      // Must use compound class to ensure higher specificity than dark theme base rule
+      expect(cssContent).toContain('.kb-advanced-section.kb-advanced-section--open');
+      expect(cssContent).toContain(":where([data-theme='dark']) .kb-advanced-section");
+      expect(cssContent).toMatch(
+        /\.kb-advanced-section\.kb-advanced-section--open\s*\{[^}]*border-color:\s*var\(--border-color-focus\);/,
+      );
     });
   });
 });
