@@ -9,25 +9,22 @@ $ cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build
 
 vite v8.3.8 building client environment for production...
 transforming...
-✓ 765 modules transformed.
+✓ 766 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-mTEXqdoK.css            633.20 kB │ gzip:  89.09 kB
-dist/assets/index-jIQpc_im.js           3,110.75 kB │ gzip: 865.86 kB
+dist/assets/index-Dc7hbPDZ.css            636.11 kB │ gzip:  89.42 kB
+dist/assets/index-d9i6F0Ot.js           3,134.75 kB │ gzip: 871.33 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 2.24s
+✓ built in 1.57s
 Exit code: 0
 
 $ uv run python -m scripts.check_no_dashes --all
-Using CPython 3.12.7
-Creating virtual environment at: .venv
-Installed 121 packages in 36ms
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan518-36bbf11c/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 Exit code: 0

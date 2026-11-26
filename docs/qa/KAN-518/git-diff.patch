@@ -1,5 +1,36 @@
+diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.css b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
+index acc35987..70bf35ec 100644
+--- a/kanban/web/src/features/settings/ConnectOAuthAppModal.css
++++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
+@@ -32,6 +32,18 @@
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
++  gap: 8px;
++}
++
++.kb-connect-oauth-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex-shrink: 0;
++}
++
++.kb-connect-oauth-header-actions .kb-studio-doc-link {
++  white-space: nowrap;
+ }
+ 
+ .kb-connect-oauth-title {
+@@ -344,6 +356,7 @@
+ 
+   .kb-connect-oauth-header {
+     padding: 8px 12px;
++    flex-wrap: wrap;
+   }
+ 
+   .kb-connect-oauth-body {
 diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
-index 2cd6fb78..253b204b 100644
+index 2cd6fb78..b49698ae 100644
 --- a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
 +++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
 @@ -4,6 +4,8 @@
@@ -24,7 +55,7 @@ index 2cd6fb78..253b204b 100644
 -          >
 -            ✕
 -          </button>
-+          <div className="kb-connect-oauth-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
++          <div className="kb-connect-oauth-header-actions">
 +            <StudioDocLink
 +              href="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
 +              title="MCP OAuth 2.1 and PKCE Documentation"
@@ -82,10 +113,10 @@ index 2cd6fb78..253b204b 100644
              <select
                id="surface-select"
 diff --git a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
-index 5d3592ec..3ce6a009 100644
+index 5d3592ec..351821e3 100644
 --- a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
-@@ -647,4 +647,168 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
+@@ -647,4 +647,194 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
  
      vi.unstubAllGlobals();
    });
@@ -251,6 +282,32 @@ index 5d3592ec..3ce6a009 100644
 +      expect(handleCloseDark).toHaveBeenCalledTimes(1);
 +
 +      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('verifies header actions styling and responsive wrap rules in ConnectOAuthAppModal.css', async () => {
++      const fs = await import('node:fs');
++      const path = await import('node:path');
++      const cssPath = path.resolve(__dirname, '../ConnectOAuthAppModal.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf-8');
++
++      expect(cssContent).toContain('.kb-connect-oauth-header-actions');
++      expect(cssContent).toContain('white-space: nowrap;');
++      expect(cssContent).toContain('flex-wrap: wrap;');
++
++      render(
++        <MemoryRouter>
++          <ConnectOAuthAppModal onClose={vi.fn()} />
++        </MemoryRouter>,
++      );
++
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      const headerActions = screen.getByTestId('connect-oauth-doc-link').parentElement;
++      expect(headerActions).toBeDefined();
++      expect(headerActions?.className).toBe('kb-connect-oauth-header-actions');
++      expect(headerActions?.getAttribute('style')).toBeNull();
 +    });
 +  });
  });

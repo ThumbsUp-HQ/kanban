@@ -238,7 +238,7 @@ ${resourceUrl}
           <h2 id="connect-oauth-modal-title" className="kb-connect-oauth-title">
             Connect OAuth Application
           </h2>
-          <div className="kb-connect-oauth-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="kb-connect-oauth-header-actions">
             <StudioDocLink
               href="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
               title="MCP OAuth 2.1 and PKCE Documentation"

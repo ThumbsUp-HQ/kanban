@@ -810,5 +810,31 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
 
       document.documentElement.removeAttribute('data-theme');
     });
+
+    it('verifies header actions styling and responsive wrap rules in ConnectOAuthAppModal.css', async () => {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const cssPath = path.resolve(__dirname, '../ConnectOAuthAppModal.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      expect(cssContent).toContain('.kb-connect-oauth-header-actions');
+      expect(cssContent).toContain('white-space: nowrap;');
+      expect(cssContent).toContain('flex-wrap: wrap;');
+
+      render(
+        <MemoryRouter>
+          <ConnectOAuthAppModal onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const headerActions = screen.getByTestId('connect-oauth-doc-link').parentElement;
+      expect(headerActions).toBeDefined();
+      expect(headerActions?.className).toBe('kb-connect-oauth-header-actions');
+      expect(headerActions?.getAttribute('style')).toBeNull();
+    });
   });
 });
