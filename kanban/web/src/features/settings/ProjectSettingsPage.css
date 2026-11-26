@@ -228,6 +228,76 @@
   flex-wrap: wrap;
 }
 
+.kb-form-row-advanced {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.kb-state-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 140px;
+  min-width: 120px;
+}
+
+.kb-settings-label-row,
+.kb-state-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.kb-settings-label-row .field-help-hint,
+.kb-state-label-row .field-help-hint {
+  margin: 0;
+}
+
+.kb-settings-label-row label,
+.kb-settings-label-row .kb-label,
+.kb-state-label-row label,
+.kb-state-label-row .kb-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
+  white-space: nowrap;
+}
+
+.kb-settings-label-row .kb-checkbox-label {
+  width: auto;
+  white-space: normal;
+}
+
+.kb-form-group-spaced {
+  margin-top: 1rem;
+}
+
+.kb-gate-timeout-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.kb-gate-timeout-input {
+  flex: 1;
+}
+
+.kb-gate-timeout-presets-row {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.kb-project-agents-container {
+  margin-top: 2rem;
+}
+
 .kb-table-scroll-container,
 .kb-members-table-wrapper,
 .kb-group-members-table-wrapper {
@@ -590,6 +660,17 @@
   .kb-add-member-form .kb-form-row > * {
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .kb-form-row-advanced {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kb-state-field-group {
+    width: 100%;
+    min-width: 100%;
+    flex: 1 1 100%;
   }
 }
 

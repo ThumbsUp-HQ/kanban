@@ -3827,5 +3827,229 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       fireEvent.change(wipHardInput, { target: { value: '10' } });
       expect((sortInput as HTMLInputElement).value).toBe('25');
     });
+
+    it('renders unhidden FieldHelpHints for Sort Order, Soft WIP, and Hard WIP as adjacent label siblings (KAN-504)', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url = path;
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN/states')) {
+          return [{ id: 'st-1', name: 'Backlog', key: 'backlog', category: 'BACKLOG', sort_order: 10 }];
+        }
+        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
+        if (url.includes('/api/v1/projects/KAN/modules')) return [];
+        if (url.includes('/api/v1/projects/KAN/labels')) return [];
+        if (url.includes('/api/v1/projects/KAN/members')) return [];
+        if (url.includes('/api/v1/projects/KAN')) {
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      fireEvent.click(await screen.findByTestId('tab-states'));
+
+      // Toggle open the Add Workflow State advanced section
+      const advToggle = await screen.findByTestId('state-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      // Verify unhidden labels and FieldHelpHints are adjacent siblings inside .kb-state-label-row
+      const sortHelp = await screen.findByTestId('state-sort-order-help');
+      const softHelp = await screen.findByTestId('state-wip-soft-help');
+      const hardHelp = await screen.findByTestId('state-wip-hard-help');
+
+      expect(sortHelp).toBeDefined();
+      expect(softHelp).toBeDefined();
+      expect(hardHelp).toBeDefined();
+
+      // Ensure FieldHelpHint buttons are not nested inside label elements (HTML A11y invariant)
+      expect(sortHelp.closest('label')).toBeNull();
+      expect(softHelp.closest('label')).toBeNull();
+      expect(hardHelp.closest('label')).toBeNull();
+
+      // Verify parent container is .kb-state-label-row
+      expect(sortHelp.closest('.kb-state-label-row')).not.toBeNull();
+      expect(softHelp.closest('.kb-state-label-row')).not.toBeNull();
+      expect(hardHelp.closest('.kb-state-label-row')).not.toBeNull();
+
+      // Open Soft WIP Help popover
+      fireEvent.focus(softHelp);
+      const softPopover = await screen.findByTestId('state-wip-soft-help-popover');
+      expect(softPopover.textContent).toContain('Soft WIP Limit');
+      expect(softPopover.textContent).toContain('visual warning');
+      expect(softPopover.textContent).toContain('0 (unconstrained / unlimited)');
+      fireEvent.blur(softHelp);
+
+      // Open Hard WIP Help popover
+      fireEvent.focus(hardHelp);
+      const hardPopover = await screen.findByTestId('state-wip-hard-help-popover');
+      expect(hardPopover.textContent).toContain('Hard WIP Limit');
+      expect(hardPopover.textContent).toContain('blocks transitions');
+      expect(hardPopover.textContent).toContain('0 (unconstrained / unlimited)');
+      fireEvent.blur(hardHelp);
+
+      // Open Sort Order Help popover
+      fireEvent.focus(sortHelp);
+      const sortPopover = await screen.findByTestId('state-sort-order-help-popover');
+      expect(sortPopover.textContent).toContain('Sort Order');
+      expect(sortPopover.textContent).toContain('0');
+      fireEvent.blur(sortHelp);
+    });
+
+    it('covers default workflow gate timeout boundaries and presets', async () => {
+      let patchPayload: Record<string, unknown> | null = null;
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+        await Promise.resolve();
+        const url = path;
+        const m = method.toUpperCase();
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
+          const bodyStr = (options as { body?: string }).body;
+          patchPayload = bodyStr ? (JSON.parse(bodyStr) as Record<string, unknown>) : null;
+          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN')) {
+          return {
+            id: 'p1',
+            identifier: 'KAN',
+            name: 'My Project',
+            is_project_admin: true,
+            default_gate_timeout_ms: 120000,
+          };
+        }
+        return {};
+      });
+
+      renderComponent('KAN');
+      fireEvent.click(await screen.findByTestId('project-general-advanced-section-toggle'));
+
+      const timeoutInput = await screen.findByTestId('project-default-gate-timeout-input');
+      expect(timeoutInput).toBeDefined();
+
+      // Test preset button: 60s
+      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-60s'));
+      expect((timeoutInput as HTMLInputElement).value).toBe('60000');
+
+      // Test preset button: 3m
+      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-3m'));
+      expect((timeoutInput as HTMLInputElement).value).toBe('180000');
+
+      // Test preset button: 5m
+      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-5m'));
+      expect((timeoutInput as HTMLInputElement).value).toBe('300000');
+
+      // Test preset button: 10m
+      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-10m'));
+      expect((timeoutInput as HTMLInputElement).value).toBe('600000');
+
+      // Test clear/inherit button
+      fireEvent.click(screen.getByTestId('project-gate-timeout-clear-btn'));
+      expect((timeoutInput as HTMLInputElement).value).toBe('');
+
+      // Test invalid timeout < 1000 triggers inline error and blocks save in handleSaveGeneral
+      fireEvent.change(timeoutInput, { target: { value: '500' } });
+      expect(await screen.findByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeDefined();
+      fireEvent.click(screen.getByTestId('save-general-btn'));
+      expect(patchPayload).toBeNull();
+
+      // Test clearing invalid input via onChange clears the error (hits line 1725)
+      fireEvent.change(timeoutInput, { target: { value: '' } });
+      await waitFor(() => {
+        expect(screen.queryByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeNull();
+      });
+
+      // Test invalid timeout > 600000
+      fireEvent.change(timeoutInput, { target: { value: '700000' } });
+      expect(await screen.findByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeDefined();
+      fireEvent.click(screen.getByTestId('save-general-btn'));
+      expect(patchPayload).toBeNull();
+
+      // Fix timeout and save
+      fireEvent.change(timeoutInput, { target: { value: '60000' } });
+      fireEvent.click(screen.getByTestId('save-general-btn'));
+      await waitFor(() => {
+        expect(patchPayload).not.toBeNull();
+      });
+      expect((patchPayload as Record<string, unknown> | null)?.default_gate_timeout_ms).toBe(60000);
+    });
+
+    it('enforces HTML 4.10.4 label-trigger sibling compliance across all FieldHelpHint components', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        const url = path;
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN/states')) {
+          return [
+            { id: 's1', name: 'Backlog', color: '#64748b', sort_order: 1, is_closed: false },
+          ];
+        }
+        if (url.includes('/api/v1/projects/KAN/labels')) {
+          return [
+            { id: 'l1', name: 'bug', color: '#ef4444' },
+          ];
+        }
+        if (url.includes('/api/v1/projects/KAN')) {
+          return {
+            id: 'p1',
+            identifier: 'KAN',
+            name: 'My Project',
+            is_project_admin: true,
+          };
+        }
+        return {};
+      });
+
+      const { container } = renderComponent('KAN');
+
+      // 1. General Tab
+      fireEvent.click(await screen.findByTestId('project-general-advanced-section-toggle'));
+      const generalHints = [
+        'proj-name-help',
+        'proj-desc-help',
+        'proj-modules-help',
+        'proj-skip-seq-help',
+        'proj-auto-archive-help',
+        'proj-default-gate-timeout-help',
+      ];
+      for (const testId of generalHints) {
+        const hintEl = await screen.findByTestId(testId);
+        expect(hintEl).toBeDefined();
+        expect(hintEl.closest('label')).toBeNull();
+        expect(hintEl.closest('.kb-settings-label-row')).not.toBeNull();
+      }
+
+      // 2. Workflow States Tab
+      fireEvent.click(screen.getByTestId('tab-states'));
+      fireEvent.click(await screen.findByTestId('state-advanced-section-toggle'));
+      const stateHints = [
+        'state-sort-order-help',
+        'state-wip-soft-help',
+        'state-wip-hard-help',
+      ];
+      for (const testId of stateHints) {
+        const hintEl = await screen.findByTestId(testId);
+        expect(hintEl).toBeDefined();
+        expect(hintEl.closest('label')).toBeNull();
+        expect(hintEl.closest('.kb-state-label-row')).not.toBeNull();
+      }
+
+      // 3. Labels Tab
+      fireEvent.click(screen.getByTestId('tab-labels'));
+      fireEvent.click(await screen.findByTestId('label-advanced-section-toggle'));
+      const labelHint = await screen.findByTestId('proj-exclusive-group-help');
+      expect(labelHint).toBeDefined();
+      expect(labelHint.closest('label')).toBeNull();
+      expect(labelHint.closest('.kb-settings-label-row')).not.toBeNull();
+
+      // Zero button or interactive elements nested inside any label
+      const nestedButtons = container.querySelectorAll('label button, label .kb-field-help-trigger');
+      expect(nestedButtons.length).toBe(0);
+    });
   });
 });
