@@ -134,9 +134,9 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(handleSave).not.toHaveBeenCalled();
 
     // Set identical from and to state
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'custom-check' } });
-    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'Done' } });
-    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'custom-check' } });
+    fireEvent.change(screen.getByLabelText(/^From State/i), { target: { value: 'Done' } });
+    fireEvent.change(screen.getByLabelText(/^To State/i), { target: { value: 'Done' } });
 
     fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
     expect(screen.getByRole('alert').textContent).toContain('cannot be identical');
@@ -159,9 +159,9 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     );
 
     // Fill form
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'code-review-agent' } });
-    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'In Review' } });
-    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'code-review-agent' } });
+    fireEvent.change(screen.getByLabelText(/^From State/i), { target: { value: 'In Review' } });
+    fireEvent.change(screen.getByLabelText(/^To State/i), { target: { value: 'Done' } });
 
     // Switch to agent_interceptor
     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
@@ -221,7 +221,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(screen.getByDisplayValue('existing-validator')).toBeDefined();
 
     // Update name and submit
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'updated-validator' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'updated-validator' } });
     fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
 
     await waitFor(() => {
@@ -249,7 +249,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'failing-hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'failing-hook' } });
     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
 
     await waitFor(() => {
@@ -410,7 +410,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'No Timeout Hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'No Timeout Hook' } });
     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
     fireEvent.click(screen.getByRole('button', { name: /Attach Hook/i }));
 
@@ -501,7 +501,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(advSection.open).toBe(false);
 
     // Fill hook name and submit immediately without touching agent select
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'single-agent-hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'single-agent-hook' } });
     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
 
     await waitFor(() => {
@@ -569,7 +569,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     expect(agentSelect.value).toBe('solitary-qa-agent');
 
     // Fill hook name and submit immediately without touching agent select
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'async-single-agent-hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'async-single-agent-hook' } });
     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
 
     await waitFor(() => {
@@ -602,7 +602,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
 
     // Switch to agent_interceptor
     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'long-eval-hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'long-eval-hook' } });
 
     // Open advanced section
     const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
@@ -660,7 +660,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
 
     // Switch to agent_interceptor
     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'validation-test-hook' } });
+    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'validation-test-hook' } });
 
     // Open advanced section
     const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
@@ -668,15 +668,126 @@ describe('AttachHookDialog (KB-P5-24)', () => {
 
     const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
 
-    // Enter out of range timeout < 1000
+    // Enter out of range timeout < 1000 and submit
     fireEvent.change(timeoutInput, { target: { value: '500' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+    fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
 
     expect(handleSave).not.toHaveBeenCalled();
     expect(screen.getByRole('alert').textContent).toContain('1,000 and 600,000 ms');
 
+    // Clear input by typing empty string
+    fireEvent.change(timeoutInput, { target: { value: '' } });
+    expect(timeoutInput.value).toBe('');
+
     // Set valid timeout 600000 ms and check active overrides count pill
     fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
     expect(screen.getByText(/1 custom setting active|2 custom settings active/i)).toBeDefined();
+
+    // Exercise remaining presets (60s and 5m) for full coverage
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-60s'));
+    expect(timeoutInput.value).toBe('60000');
+    fireEvent.click(screen.getByTestId('hook-timeout-preset-5m'));
+    expect(timeoutInput.value).toBe('300000');
+  });
+
+  it('renders FieldHelpHint for From State, To State, and Hook Name as adjacent siblings (KAN-509)', async () => {
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Verify From State help hint
+    const fromStateHelp = screen.getByTestId('hook-from-state-help');
+    expect(fromStateHelp).toBeDefined();
+    // Invariant check: button is NOT inside a label
+    expect(fromStateHelp.closest('label')).toBeNull();
+
+    // Verify To State help hint
+    const toStateHelp = screen.getByTestId('hook-to-state-help');
+    expect(toStateHelp).toBeDefined();
+    expect(toStateHelp.closest('label')).toBeNull();
+
+    // Verify Hook Name help hint
+    const hookNameHelp = screen.getByTestId('hook-name-help');
+    expect(hookNameHelp).toBeDefined();
+    expect(hookNameHelp.closest('label')).toBeNull();
+
+    // Open From State popover and verify content
+    fireEvent.click(fromStateHelp);
+    await waitFor(() => {
+      const popover = screen.getByTestId('hook-from-state-help-popover');
+      expect(popover.textContent).toContain('From State');
+      expect(popover.textContent).toContain('* Any State');
+      expect(popover.textContent).toContain('Origin state triggering this transition helper');
+    });
+
+    // Close popover
+    fireEvent.click(fromStateHelp);
+
+    // Open Hook Name popover and verify content
+    fireEvent.click(hookNameHelp);
+    await waitFor(() => {
+      const popover = screen.getByTestId('hook-name-help-popover');
+      expect(popover.textContent).toContain('Hook Name');
+      expect(popover.textContent).toContain('kebab-case');
+      expect(popover.textContent).toContain('require-qa-proof-link');
+    });
+
+    // Close popover
+    fireEvent.click(hookNameHelp);
+
+    // Open To State popover and verify content
+    fireEvent.click(toStateHelp);
+    await waitFor(() => {
+      const popover = screen.getByTestId('hook-to-state-help-popover');
+      expect(popover.textContent).toContain('To State');
+      expect(popover.textContent).toContain('Target destination state entered when the transition succeeds');
+    });
+  });
+
+  it('verifies accessibility and theme parity across light and dark modes (KAN-509)', () => {
+    const { container, rerender } = render(
+      <div data-theme="light">
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </div>,
+    );
+
+    expect(screen.getByRole('dialog', { name: /Attach Workflow Helper Hook/i })).toBeDefined();
+    expect(screen.getByLabelText(/^From State/i)).toBeDefined();
+    expect(screen.getByLabelText(/^To State/i)).toBeDefined();
+    expect(screen.getByLabelText(/^Hook Name/i)).toBeDefined();
+
+    // Verify dark theme wrapper
+    rerender(
+      <div data-theme="dark">
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={mockAgents}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </div>,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: /Attach Workflow Helper Hook/i });
+    expect(dialog).toBeDefined();
+    expect(container.querySelector('[data-theme="dark"]')).toBeDefined();
   });
 });

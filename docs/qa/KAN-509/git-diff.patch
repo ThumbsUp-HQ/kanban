@@ -1,0 +1,437 @@
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.css b/kanban/web/src/features/workflows/AttachHookDialog.css
+index 5c5e8d44..c0baee1b 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.css
++++ b/kanban/web/src/features/workflows/AttachHookDialog.css
+@@ -1,6 +1,52 @@
+ /* Copyright 2026 Kanban Platform Contributors */
+ /* Apache-2.0 License. See LICENSE for details. */
+ 
++:root {
++  color-scheme: light;
++}
++
++[data-theme="dark"] {
++  color-scheme: dark;
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) {
++    color-scheme: dark;
++  }
++}
++
+ .workflow-dialog-body {
+-  padding-bottom: 16px;
++  padding-bottom: var(--space-4, 16px);
++}
++
++.workflow-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  margin: 0;
++}
++
++.workflow-timeout-input-row {
++  display: flex;
++  gap: var(--space-2, 8px);
++  align-items: center;
++  margin-bottom: var(--space-2, 8px);
++}
++
++.workflow-timeout-input-control {
++  flex: 1;
++}
++
++.workflow-timeout-presets-row {
++  display: flex;
++  gap: var(--space-1, 4px);
++  flex-wrap: wrap;
++}
++
++@media (max-width: 640px) {
++  .workflow-dialog {
++    max-height: calc(100dvh - 32px);
++    width: 95vw;
++    margin: 8px;
++  }
+ }
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 2d29f90d..8f6eeeb8 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -189,9 +189,17 @@ function AttachHookDialogInner({
+ 
+             {/* Transition states */}
+             <div className="workflow-form-group">
+-              <label htmlFor="from-state-select" className="workflow-form-label">
+-                From State
+-              </label>
++              <div className="workflow-form-label-row">
++                <label htmlFor="from-state-select" className="workflow-form-label">
++                  From State
++                </label>
++                <FieldHelpHint
++                  title="From State"
++                  summary="Origin state triggering this transition helper. Select '* Any State' to execute on transitions entering the target state from any column."
++                  defaultValue="* Any State"
++                  testId="hook-from-state-help"
++                />
++              </div>
+               <select
+                 id="from-state-select"
+                 className="workflow-form-control"
+@@ -208,9 +216,16 @@ function AttachHookDialogInner({
+             </div>
+ 
+             <div className="workflow-form-group">
+-              <label htmlFor="to-state-select" className="workflow-form-label">
+-                To State (Required)
+-              </label>
++              <div className="workflow-form-label-row">
++                <label htmlFor="to-state-select" className="workflow-form-label">
++                  To State (Required)
++                </label>
++                <FieldHelpHint
++                  title="To State"
++                  summary="Target destination state entered when the transition succeeds. The transition helper executes when entering this state."
++                  testId="hook-to-state-help"
++                />
++              </div>
+               <select
+                 id="to-state-select"
+                 className="workflow-form-control"
+@@ -228,9 +243,17 @@ function AttachHookDialogInner({
+ 
+             {/* Hook Name */}
+             <div className="workflow-form-group">
+-              <label htmlFor="hook-name-input" className="workflow-form-label">
+-                Hook Name
+-              </label>
++              <div className="workflow-form-label-row">
++                <label htmlFor="hook-name-input" className="workflow-form-label">
++                  Hook Name
++                </label>
++                <FieldHelpHint
++                  title="Hook Name"
++                  summary="Unique identifier for this workflow transition helper hook. Use kebab-case naming (e.g. require-qa-proof-link)."
++                  example="require-qa-proof-link"
++                  testId="hook-name-help"
++                />
++              </div>
+               <input
+                 id="hook-name-input"
+                 type="text"
+@@ -244,8 +267,8 @@ function AttachHookDialogInner({
+ 
+             {/* Hook Kind RadioGroup */}
+             <div className="workflow-form-group">
+-              <label className="workflow-form-label">
+-                Hook Kind
++              <div className="workflow-form-label-row">
++                <span className="workflow-form-label">Hook Kind</span>
+                 <FieldHelpHint
+                   title="Workflow Hook Kind"
+                   summary="The execution tier for this transition helper rule."
+@@ -257,7 +280,7 @@ function AttachHookDialogInner({
+                   docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
+                   testId="hook-kind-help"
+                 />
+-              </label>
++              </div>
+               <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
+                 <label className="workflow-radio-label">
+                   <input
+@@ -404,8 +427,10 @@ function AttachHookDialogInner({
+             >
+               {/* Failure Policy */}
+               <div className="workflow-form-group">
+-                <label htmlFor="failure-policy-select" className="workflow-form-label">
+-                  Failure Policy
++                <div className="workflow-form-label-row">
++                  <label htmlFor="failure-policy-select" className="workflow-form-label">
++                    Failure Policy
++                  </label>
+                   <FieldHelpHint
+                     title="Failure Policy"
+                     summary="Specifies behavior when helper times out, returns an error, or crashes."
+@@ -416,7 +441,7 @@ function AttachHookDialogInner({
+                     docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
+                     testId="failure-policy-help"
+                   />
+-                </label>
++                </div>
+                 <select
+                   id="failure-policy-select"
+                   className="workflow-form-control"
+@@ -452,8 +477,10 @@ function AttachHookDialogInner({
+               {/* Per-Hook Timeout Override (ms) for agent_interceptor */}
+               {hookKind === 'agent_interceptor' && (
+                 <div className="workflow-form-group" data-testid="hook-timeout-override-group">
+-                  <label htmlFor="hook-timeout-override-input" className="workflow-form-label">
+-                    Per-Hook Timeout Override (ms)
++                  <div className="workflow-form-label-row">
++                    <label htmlFor="hook-timeout-override-input" className="workflow-form-label">
++                      Per-Hook Timeout Override (ms)
++                    </label>
+                     <FieldHelpHint
+                       title="Per-Hook Timeout Override"
+                       summary="Optional execution deadline override in milliseconds (1000..600000). Leave blank to inherit project or agent default."
+@@ -462,15 +489,15 @@ function AttachHookDialogInner({
+                       example="120000"
+                       testId="hook-timeout-help"
+                     />
+-                  </label>
+-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
++                  </div>
++                  <div className="workflow-timeout-input-row">
+                     <input
+                       id="hook-timeout-override-input"
+                       type="number"
+                       min="1000"
+                       max="600000"
+                       step="1000"
+-                      className="workflow-form-control"
++                      className="workflow-form-control workflow-timeout-input-control"
+                       placeholder="Inherit project/agent default"
+                       value={timeoutMs ?? ''}
+                       onChange={(e) => {
+@@ -489,7 +516,6 @@ function AttachHookDialogInner({
+                         }
+                       }}
+                       data-testid="hook-timeout-input"
+-                      style={{ flex: 1 }}
+                     />
+                     <button
+                       type="button"
+@@ -503,7 +529,7 @@ function AttachHookDialogInner({
+                       Inherit
+                     </button>
+                   </div>
+-                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
++                  <div className="workflow-timeout-presets-row">
+                     <button
+                       type="button"
+                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+index 31cef7f1..50d0ecff 100644
+--- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -134,9 +134,9 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     expect(handleSave).not.toHaveBeenCalled();
+ 
+     // Set identical from and to state
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'custom-check' } });
+-    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'Done' } });
+-    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'custom-check' } });
++    fireEvent.change(screen.getByLabelText(/^From State/i), { target: { value: 'Done' } });
++    fireEvent.change(screen.getByLabelText(/^To State/i), { target: { value: 'Done' } });
+ 
+     fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
+     expect(screen.getByRole('alert').textContent).toContain('cannot be identical');
+@@ -159,9 +159,9 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     );
+ 
+     // Fill form
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'code-review-agent' } });
+-    fireEvent.change(screen.getByLabelText(/From State/i), { target: { value: 'In Review' } });
+-    fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Done' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'code-review-agent' } });
++    fireEvent.change(screen.getByLabelText(/^From State/i), { target: { value: 'In Review' } });
++    fireEvent.change(screen.getByLabelText(/^To State/i), { target: { value: 'Done' } });
+ 
+     // Switch to agent_interceptor
+     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+@@ -221,7 +221,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     expect(screen.getByDisplayValue('existing-validator')).toBeDefined();
+ 
+     // Update name and submit
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'updated-validator' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'updated-validator' } });
+     fireEvent.click(screen.getByRole('button', { name: 'Update Hook' }));
+ 
+     await waitFor(() => {
+@@ -249,7 +249,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'failing-hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'failing-hook' } });
+     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+ 
+     await waitFor(() => {
+@@ -410,7 +410,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'No Timeout Hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'No Timeout Hook' } });
+     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+     fireEvent.click(screen.getByRole('button', { name: /Attach Hook/i }));
+ 
+@@ -501,7 +501,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     expect(advSection.open).toBe(false);
+ 
+     // Fill hook name and submit immediately without touching agent select
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'single-agent-hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'single-agent-hook' } });
+     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+ 
+     await waitFor(() => {
+@@ -569,7 +569,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     expect(agentSelect.value).toBe('solitary-qa-agent');
+ 
+     // Fill hook name and submit immediately without touching agent select
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'async-single-agent-hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'async-single-agent-hook' } });
+     fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+ 
+     await waitFor(() => {
+@@ -602,7 +602,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+ 
+     // Switch to agent_interceptor
+     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'long-eval-hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'long-eval-hook' } });
+ 
+     // Open advanced section
+     const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
+@@ -660,7 +660,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+ 
+     // Switch to agent_interceptor
+     fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+-    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'validation-test-hook' } });
++    fireEvent.change(screen.getByLabelText(/^Hook Name/i), { target: { value: 'validation-test-hook' } });
+ 
+     // Open advanced section
+     const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
+@@ -668,15 +668,126 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+ 
+     const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
+ 
+-    // Enter out of range timeout < 1000
++    // Enter out of range timeout < 1000 and submit
+     fireEvent.change(timeoutInput, { target: { value: '500' } });
+-    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++    fireEvent.submit(screen.getByRole('button', { name: 'Attach Hook' }));
+ 
+     expect(handleSave).not.toHaveBeenCalled();
+     expect(screen.getByRole('alert').textContent).toContain('1,000 and 600,000 ms');
+ 
++    // Clear input by typing empty string
++    fireEvent.change(timeoutInput, { target: { value: '' } });
++    expect(timeoutInput.value).toBe('');
++
+     // Set valid timeout 600000 ms and check active overrides count pill
+     fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
+     expect(screen.getByText(/1 custom setting active|2 custom settings active/i)).toBeDefined();
++
++    // Exercise remaining presets (60s and 5m) for full coverage
++    fireEvent.click(screen.getByTestId('hook-timeout-preset-60s'));
++    expect(timeoutInput.value).toBe('60000');
++    fireEvent.click(screen.getByTestId('hook-timeout-preset-5m'));
++    expect(timeoutInput.value).toBe('300000');
++  });
++
++  it('renders FieldHelpHint for From State, To State, and Hook Name as adjacent siblings (KAN-509)', async () => {
++    render(
++      <MemoryRouter>
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={mockAgents}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Verify From State help hint
++    const fromStateHelp = screen.getByTestId('hook-from-state-help');
++    expect(fromStateHelp).toBeDefined();
++    // Invariant check: button is NOT inside a label
++    expect(fromStateHelp.closest('label')).toBeNull();
++
++    // Verify To State help hint
++    const toStateHelp = screen.getByTestId('hook-to-state-help');
++    expect(toStateHelp).toBeDefined();
++    expect(toStateHelp.closest('label')).toBeNull();
++
++    // Verify Hook Name help hint
++    const hookNameHelp = screen.getByTestId('hook-name-help');
++    expect(hookNameHelp).toBeDefined();
++    expect(hookNameHelp.closest('label')).toBeNull();
++
++    // Open From State popover and verify content
++    fireEvent.click(fromStateHelp);
++    await waitFor(() => {
++      const popover = screen.getByTestId('hook-from-state-help-popover');
++      expect(popover.textContent).toContain('From State');
++      expect(popover.textContent).toContain('* Any State');
++      expect(popover.textContent).toContain('Origin state triggering this transition helper');
++    });
++
++    // Close popover
++    fireEvent.click(fromStateHelp);
++
++    // Open Hook Name popover and verify content
++    fireEvent.click(hookNameHelp);
++    await waitFor(() => {
++      const popover = screen.getByTestId('hook-name-help-popover');
++      expect(popover.textContent).toContain('Hook Name');
++      expect(popover.textContent).toContain('kebab-case');
++      expect(popover.textContent).toContain('require-qa-proof-link');
++    });
++
++    // Close popover
++    fireEvent.click(hookNameHelp);
++
++    // Open To State popover and verify content
++    fireEvent.click(toStateHelp);
++    await waitFor(() => {
++      const popover = screen.getByTestId('hook-to-state-help-popover');
++      expect(popover.textContent).toContain('To State');
++      expect(popover.textContent).toContain('Target destination state entered when the transition succeeds');
++    });
++  });
++
++  it('verifies accessibility and theme parity across light and dark modes (KAN-509)', () => {
++    const { container, rerender } = render(
++      <div data-theme="light">
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={mockAgents}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />
++      </div>,
++    );
++
++    expect(screen.getByRole('dialog', { name: /Attach Workflow Helper Hook/i })).toBeDefined();
++    expect(screen.getByLabelText(/^From State/i)).toBeDefined();
++    expect(screen.getByLabelText(/^To State/i)).toBeDefined();
++    expect(screen.getByLabelText(/^Hook Name/i)).toBeDefined();
++
++    // Verify dark theme wrapper
++    rerender(
++      <div data-theme="dark">
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={mockAgents}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />
++      </div>,
++    );
++
++    const dialog = screen.getByRole('dialog', { name: /Attach Workflow Helper Hook/i });
++    expect(dialog).toBeDefined();
++    expect(container.querySelector('[data-theme="dark"]')).toBeDefined();
+   });
+ });

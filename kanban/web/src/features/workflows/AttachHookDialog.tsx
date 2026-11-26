@@ -189,9 +189,17 @@ function AttachHookDialogInner({
 
             {/* Transition states */}
             <div className="workflow-form-group">
-              <label htmlFor="from-state-select" className="workflow-form-label">
-                From State
-              </label>
+              <div className="workflow-form-label-row">
+                <label htmlFor="from-state-select" className="workflow-form-label">
+                  From State
+                </label>
+                <FieldHelpHint
+                  title="From State"
+                  summary="Origin state triggering this transition helper. Select '* Any State' to execute on transitions entering the target state from any column."
+                  defaultValue="* Any State"
+                  testId="hook-from-state-help"
+                />
+              </div>
               <select
                 id="from-state-select"
                 className="workflow-form-control"
@@ -208,9 +216,16 @@ function AttachHookDialogInner({
             </div>
 
             <div className="workflow-form-group">
-              <label htmlFor="to-state-select" className="workflow-form-label">
-                To State (Required)
-              </label>
+              <div className="workflow-form-label-row">
+                <label htmlFor="to-state-select" className="workflow-form-label">
+                  To State (Required)
+                </label>
+                <FieldHelpHint
+                  title="To State"
+                  summary="Target destination state entered when the transition succeeds. The transition helper executes when entering this state."
+                  testId="hook-to-state-help"
+                />
+              </div>
               <select
                 id="to-state-select"
                 className="workflow-form-control"
@@ -228,9 +243,17 @@ function AttachHookDialogInner({
 
             {/* Hook Name */}
             <div className="workflow-form-group">
-              <label htmlFor="hook-name-input" className="workflow-form-label">
-                Hook Name
-              </label>
+              <div className="workflow-form-label-row">
+                <label htmlFor="hook-name-input" className="workflow-form-label">
+                  Hook Name
+                </label>
+                <FieldHelpHint
+                  title="Hook Name"
+                  summary="Unique identifier for this workflow transition helper hook. Use kebab-case naming (e.g. require-qa-proof-link)."
+                  example="require-qa-proof-link"
+                  testId="hook-name-help"
+                />
+              </div>
               <input
                 id="hook-name-input"
                 type="text"
@@ -244,8 +267,8 @@ function AttachHookDialogInner({
 
             {/* Hook Kind RadioGroup */}
             <div className="workflow-form-group">
-              <label className="workflow-form-label">
-                Hook Kind
+              <div className="workflow-form-label-row">
+                <span className="workflow-form-label">Hook Kind</span>
                 <FieldHelpHint
                   title="Workflow Hook Kind"
                   summary="The execution tier for this transition helper rule."
@@ -257,7 +280,7 @@ function AttachHookDialogInner({
                   docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
                   testId="hook-kind-help"
                 />
-              </label>
+              </div>
               <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
                 <label className="workflow-radio-label">
                   <input
@@ -404,8 +427,10 @@ function AttachHookDialogInner({
             >
               {/* Failure Policy */}
               <div className="workflow-form-group">
-                <label htmlFor="failure-policy-select" className="workflow-form-label">
-                  Failure Policy
+                <div className="workflow-form-label-row">
+                  <label htmlFor="failure-policy-select" className="workflow-form-label">
+                    Failure Policy
+                  </label>
                   <FieldHelpHint
                     title="Failure Policy"
                     summary="Specifies behavior when helper times out, returns an error, or crashes."
@@ -416,7 +441,7 @@ function AttachHookDialogInner({
                     docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
                     testId="failure-policy-help"
                   />
-                </label>
+                </div>
                 <select
                   id="failure-policy-select"
                   className="workflow-form-control"
@@ -452,8 +477,10 @@ function AttachHookDialogInner({
               {/* Per-Hook Timeout Override (ms) for agent_interceptor */}
               {hookKind === 'agent_interceptor' && (
                 <div className="workflow-form-group" data-testid="hook-timeout-override-group">
-                  <label htmlFor="hook-timeout-override-input" className="workflow-form-label">
-                    Per-Hook Timeout Override (ms)
+                  <div className="workflow-form-label-row">
+                    <label htmlFor="hook-timeout-override-input" className="workflow-form-label">
+                      Per-Hook Timeout Override (ms)
+                    </label>
                     <FieldHelpHint
                       title="Per-Hook Timeout Override"
                       summary="Optional execution deadline override in milliseconds (1000..600000). Leave blank to inherit project or agent default."
@@ -462,15 +489,15 @@ function AttachHookDialogInner({
                       example="120000"
                       testId="hook-timeout-help"
                     />
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  </div>
+                  <div className="workflow-timeout-input-row">
                     <input
                       id="hook-timeout-override-input"
                       type="number"
                       min="1000"
                       max="600000"
                       step="1000"
-                      className="workflow-form-control"
+                      className="workflow-form-control workflow-timeout-input-control"
                       placeholder="Inherit project/agent default"
                       value={timeoutMs ?? ''}
                       onChange={(e) => {
@@ -489,7 +516,6 @@ function AttachHookDialogInner({
                         }
                       }}
                       data-testid="hook-timeout-input"
-                      style={{ flex: 1 }}
                     />
                     <button
                       type="button"
@@ -503,7 +529,7 @@ function AttachHookDialogInner({
                       Inherit
                     </button>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  <div className="workflow-timeout-presets-row">
                     <button
                       type="button"
                       className="workflow-btn workflow-btn-secondary workflow-btn-xs"
