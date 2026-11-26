@@ -1,0 +1,215 @@
+diff --git a/kanban/web/src/features/settings/AgentOnboardingPromptCard.css b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
+index 69766ecd..3f354728 100644
+--- a/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
++++ b/kanban/web/src/features/settings/AgentOnboardingPromptCard.css
+@@ -12,9 +12,47 @@
+ }
+ 
+ .kb-agent-onboarding-card-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: flex-start;
++  gap: 1rem;
++  flex-wrap: wrap;
+   margin-bottom: 1.25rem;
+ }
+ 
++.kb-agent-onboarding-header-main {
++  flex: 1 1 280px;
++  min-width: 0;
++}
++
++.kb-agent-onboarding-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++  flex-shrink: 0;
++  white-space: nowrap;
++}
++
++@media (max-width: 480px) {
++  .kb-agent-onboarding-card-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 0.75rem;
++  }
++
++  .kb-agent-onboarding-header-main {
++    flex: 0 1 auto;
++    width: 100%;
++  }
++
++  .kb-agent-onboarding-header-actions {
++    width: 100%;
++    max-width: 100%;
++    justify-content: flex-start;
++    flex-wrap: wrap;
++  }
++}
++
+ .kb-agent-onboarding-title {
+   font-size: 1.25rem;
+   font-weight: 600;
+diff --git a/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx b/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
+index f431a3b7..95e2f189 100644
+--- a/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
++++ b/kanban/web/src/features/settings/AgentOnboardingPromptCard.tsx
+@@ -16,6 +16,7 @@ import {
+   type AgentOnboardingPrefs,
+ } from './personalSettingsApi';
+ import { buildAgentOnboardingPrompt } from './agentOnboardingPrompt';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { copyToClipboard } from '../../utils/clipboard';
+ import './AgentOnboardingPromptCard.css';
+ 
+@@ -113,13 +114,22 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
+   return (
+     <div className="kb-agent-onboarding-card" data-testid="agent-onboarding-prompt-card">
+       <div className="kb-agent-onboarding-card-header">
+-        <h3 className="kb-agent-onboarding-title">
+-          <span>🤖</span> Agent Onboarding Prompt (/llms.txt)
+-        </h3>
+-        <p className="kb-agent-onboarding-subtitle">
+-          Configure how autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI / Antigravity)
+-          interact with your codebase. Persistence defaults strictly to your local project folder.
+-        </p>
++        <div className="kb-agent-onboarding-header-main">
++          <h3 className="kb-agent-onboarding-title">
++            <span>🤖</span> Agent Onboarding Prompt (/llms.txt)
++          </h3>
++          <p className="kb-agent-onboarding-subtitle">
++            Configure how autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI / Antigravity)
++            interact with your codebase. Persistence defaults strictly to your local project folder.
++          </p>
++        </div>
++        <div className="kb-agent-onboarding-header-actions">
++          <StudioDocLink
++            href="/docs/multi-provider-ai-engine-and-runners#agent-onboarding"
++            title="Agent Onboarding Documentation"
++            testId="agent-onboarding-doc-link"
++          />
++        </div>
+       </div>
+ 
+       <div className="kb-agent-onboarding-grid">
+diff --git a/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
+index 2c80b496..c46a8dd1 100644
+--- a/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx
+@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AgentOnboardingPromptCard } from '../AgentOnboardingPromptCard';
+ import * as personalSettingsApi from '../personalSettingsApi';
+ import * as clipboardUtil from '../../../utils/clipboard';
++import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
+ 
+ vi.mock('../personalSettingsApi', async () => {
+   const actual = await vi.importActual('../personalSettingsApi');
+@@ -575,4 +576,108 @@ describe('AgentOnboardingPromptCard component', () => {
+       expect(css).not.toContain('\u2013');
+     });
+   });
++
++  describe('StudioDocLink Header Integration (KAN-520)', () => {
++    afterEach(() => {
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it('renders agent-onboarding-doc-link with correct href, label, and ARIA title in Light and Dark themes', () => {
++      for (const theme of ['light', 'dark'] as const) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = renderCard();
++
++        const docLink = screen.getByTestId('agent-onboarding-doc-link');
++        expect(docLink).toBeDefined();
++        expect(docLink.getAttribute('href')).toBe(
++          '/docs/multi-provider-ai-engine-and-runners#agent-onboarding',
++        );
++        expect(docLink.getAttribute('aria-label')).toBe('Agent Onboarding Documentation');
++        expect(docLink.textContent).toContain('Documentation ->');
++
++        const headerActions = docLink.closest('.kb-agent-onboarding-header-actions');
++        expect(headerActions).not.toBeNull();
++        expect(headerActions?.closest('.kb-agent-onboarding-card-header')).not.toBeNull();
++
++        unmount();
++      }
++    });
++
++    it('supports keyboard focus on StudioDocLink with appropriate accessibility attributes', () => {
++      renderCard();
++
++      const docLink = screen.getByTestId('agent-onboarding-doc-link');
++      docLink.focus();
++      expect(document.activeElement).toBe(docLink);
++      expect(docLink.tagName.toLowerCase()).toBe('a');
++      expect(docLink.getAttribute('aria-label')).toBe('Agent Onboarding Documentation');
++    });
++
++    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', () => {
++      const unregister = registerShellPanel('help', ({ arg }) => (
++        <div data-testid="in-app-help-panel">
++          Help Drawer for {(arg as { href?: string } | undefined)?.href} - Title: {(arg as { title?: string } | undefined)?.title}
++        </div>
++      ));
++
++      try {
++        render(
++          <QueryClientProvider client={queryClient}>
++            <ShellPanelsProvider>
++              <AgentOnboardingPromptCard />
++            </ShellPanelsProvider>
++          </QueryClientProvider>,
++        );
++
++        const docLink = screen.getByTestId('agent-onboarding-doc-link');
++        fireEvent.click(docLink);
++
++        const helpPanel = screen.getByTestId('in-app-help-panel');
++        expect(helpPanel).toBeDefined();
++        expect(helpPanel.textContent).toContain(
++          '/docs/multi-provider-ai-engine-and-runners#agent-onboarding',
++        );
++        expect(helpPanel.textContent).toContain('Agent Onboarding Documentation');
++
++        // Card should remain rendered and interactive
++        expect(screen.getByTestId('copy-agent-onboarding-prompt-btn')).toBeDefined();
++      } finally {
++        unregister();
++      }
++    });
++
++    it('asserts AgentOnboardingPromptCard.tsx contains zero inline style attributes', () => {
++      const tsxPath = path.resolve(__dirname, '../AgentOnboardingPromptCard.tsx');
++      expect(fs.existsSync(tsxPath)).toBe(true);
++      const tsxContent = fs.readFileSync(tsxPath, 'utf8');
++
++      // Verify zero inline style={{}}
++      expect(tsxContent).not.toMatch(/style=\{\{/);
++      expect(tsxContent).not.toMatch(/style=\{/);
++    });
++
++    it('asserts AgentOnboardingPromptCard.css provides white-space nowrap and responsive flex-wrap for header action bar', () => {
++      const cssPath = path.resolve(__dirname, '../AgentOnboardingPromptCard.css');
++      expect(fs.existsSync(cssPath)).toBe(true);
++      const css = fs.readFileSync(cssPath, 'utf8');
++
++      // Header container has flex and flex-wrap
++      expect(css).toMatch(/\.kb-agent-onboarding-card-header\s*\{[^}]*display:\s*flex;/);
++      expect(css).toMatch(/\.kb-agent-onboarding-card-header\s*\{[^}]*flex-wrap:\s*wrap;/);
++
++      // Header main and actions
++      expect(css).toMatch(/\.kb-agent-onboarding-header-main\s*\{[^}]*flex:\s*1\s+1\s+280px;/);
++      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*white-space:\s*nowrap;/);
++      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*display:\s*flex;/);
++
++      // Responsive mobile query
++      expect(css).toMatch(/@media\s*\([^)]*max-width:\s*480px\)\s*\{/);
++      expect(css).toMatch(/\.kb-agent-onboarding-header-main\s*\{[^}]*flex:\s*0\s+1\s+auto;/);
++      expect(css).toMatch(/\.kb-agent-onboarding-header-actions\s*\{[^}]*flex-wrap:\s*wrap;/);
++
++      // No forbidden unicode dashes
++      expect(css).not.toContain('\u2014');
++      expect(css).not.toContain('\u2013');
++    });
++  });
+ });

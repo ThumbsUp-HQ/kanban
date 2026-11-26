@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
@@ -11,6 +11,7 @@ import * as api from '../personalSettingsApi';
 import * as authApi from '../../auth/authApi';
 import { ApiProblem } from '../../../api/problem';
 import { Aal2StepUpCancelledError } from '../../../api/client';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 
 vi.mock('../personalSettingsApi');
 vi.mock('../../auth/authApi');
@@ -2579,6 +2580,114 @@ describe('PersonalSettingsPage', () => {
         expect(screen.getByTestId('personal-settings-page')).toBeDefined();
       });
       expect(screen.getByDisplayValue('Custom/Non_Standard_Timezone')).toBeDefined();
+    });
+  });
+
+  describe('StudioDocLink Header Integration (KAN-496)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders personal-settings-doc-link with correct href, label, and title in header actions row in Light and Dark themes', async () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+              <PersonalSettingsPage />
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('personal-settings-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('personal-settings-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/user-profile-and-personal-settings');
+        expect(docLink.getAttribute('aria-label')).toBe('Personal Settings Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.kb-personal-settings-header-actions');
+        expect(headerActions).not.toBeNull();
+
+        const headerRow = docLink.closest('.kb-personal-settings-header-row');
+        expect(headerRow).not.toBeNull();
+        expect(headerRow?.querySelector('.kb-personal-settings-title')?.textContent).toBe('Personal Settings');
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus navigation on personal-settings-doc-link', async () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <PersonalSettingsPage />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-settings-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('personal-settings-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+    });
+
+    it('activates in-app help panel via ShellPanelsProvider when doc link is clicked', async () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <MemoryRouter>
+              <QueryClientProvider client={queryClient}>
+                <PersonalSettingsPage />
+              </QueryClientProvider>
+            </MemoryRouter>
+          </ShellPanelsProvider>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('personal-settings-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('personal-settings-doc-link');
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-panel')).toBeDefined();
+        });
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel.textContent).toContain('/docs/user-profile-and-personal-settings');
+      } finally {
+        unregister();
+      }
+    });
+
+    it('renders normal link href when rendered outside ShellPanelsProvider', async () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <PersonalSettingsPage />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-settings-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('personal-settings-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/user-profile-and-personal-settings');
     });
   });
 });
