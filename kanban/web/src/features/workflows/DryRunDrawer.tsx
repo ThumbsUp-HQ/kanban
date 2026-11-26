@@ -9,6 +9,8 @@ import {
   type DryRunStepResult,
   type DryRunSampleTicket,
 } from './api';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 
 export interface DryRunDrawerProps {
   isOpen: boolean;
@@ -240,14 +242,21 @@ function DryRunDrawerInner({
           <h3 id="dry-run-drawer-title">
             ▶ Dry-Run: [{fromLabel}] ➔ [{toLabel}]
           </h3>
-          <button
-            type="button"
-            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
-            onClick={onClose}
-            aria-label="Close Dry-Run Drawer"
-          >
-            ✕ Close
-          </button>
+          <div className="dry-run-header-actions">
+            <StudioDocLink
+              href="/docs/scripted-workflows-and-transition-helpers#dry-run-simulation"
+              title="Workflow Dry-Run Documentation"
+              testId="dry-run-doc-link"
+            />
+            <button
+              type="button"
+              className="workflow-btn workflow-btn-secondary workflow-btn-sm"
+              onClick={onClose}
+              aria-label="Close Dry-Run Drawer"
+            >
+              ✕ Close
+            </button>
+          </div>
         </div>
 
         <div
@@ -295,9 +304,18 @@ function DryRunDrawerInner({
         >
           {mode === 'issue' ? (
             <div className="workflow-form-group">
-              <label htmlFor="dry-run-issue-key" className="workflow-form-label">
-                Issue Key
-              </label>
+              <div className="dry-run-label-row">
+                <label htmlFor="dry-run-issue-key" className="workflow-form-label">
+                  Issue Key
+                </label>
+                <FieldHelpHint
+                  title="Issue Key"
+                  summary="Simulates workflow transition execution against an existing issue's live state without committing changes to the database, whereas sample ticket mode executes against an ephemeral synthetic payload."
+                  example="KAN-142"
+                  docHref="/docs/scripted-workflows-and-transition-helpers#dry-run-simulation"
+                  testId="dry-run-issue-key-help"
+                />
+              </div>
               <input
                 id="dry-run-issue-key"
                 type="text"

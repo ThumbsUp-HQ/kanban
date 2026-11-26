@@ -782,6 +782,24 @@
   font-size: 1.125rem;
 }
 
+.dry-run-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+.dry-run-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.dry-run-label-row .field-help-hint {
+  margin: 0;
+}
+
 .dry-run-mode-tabs {
   display: flex;
   gap: 8px;
@@ -952,6 +970,18 @@
 
   .workflow-form-control {
     min-height: 44px;
+  }
+
+  .dry-run-drawer {
+    width: 100vw;
+    max-width: 100vw;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+
+  .dry-run-header {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 }
 

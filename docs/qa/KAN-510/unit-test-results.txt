@@ -1,0 +1,22 @@
+$ pnpm --dir kanban/web exec vitest run --coverage.enabled --coverage.include='src/features/workflows/DryRunDrawer.tsx' src/features/workflows/__tests__/DryRunDrawer.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan510-7de68f87/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (11 tests) 801ms
+   ✓ DryRunDrawer (KB-P5-24) (11)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 349ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  17:43:58
+   Duration  2.23s (tests 43%, environment 42%, import 10%, worker 3%, transform 3%)
+
+ % Coverage report from v8
+------------------|---------|----------|---------|---------|-------------------
+File              | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+------------------|---------|----------|---------|---------|-------------------
+All files         |     100 |    98.38 |     100 |     100 |                   
+ DryRunDrawer.tsx |     100 |    98.38 |     100 |     100 | 190               
+------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0

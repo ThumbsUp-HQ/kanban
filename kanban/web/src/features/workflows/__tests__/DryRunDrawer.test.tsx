@@ -1,11 +1,12 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import React, { act } from 'react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DryRunDrawer } from '../DryRunDrawer';
 import type { DryRunResponse, DryRunPayload } from '../api';
+import { ShellPanelsProvider, registerShellPanel } from '../../../app/shellPanels';
 
 describe('DryRunDrawer (KB-P5-24)', () => {
   let writeTextSpy: ReturnType<typeof vi.fn>;
@@ -144,7 +145,7 @@ describe('DryRunDrawer (KB-P5-24)', () => {
 
     // Switch to existing issue
     fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
-    expect(screen.getByLabelText(/Issue Key/i)).toBeDefined();
+    expect(screen.getByLabelText('Issue Key')).toBeDefined();
 
     // Switch back to sample
     fireEvent.click(screen.getByRole('tab', { name: 'Sample ticket' }));
@@ -152,7 +153,7 @@ describe('DryRunDrawer (KB-P5-24)', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
 
     // Trigger run with issue key
-    fireEvent.change(screen.getByLabelText(/Issue Key/i), { target: { value: 'KAN-99' } });
+    fireEvent.change(screen.getByLabelText('Issue Key'), { target: { value: 'KAN-99' } });
     fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
 
     await waitFor(() => {
@@ -184,7 +185,7 @@ describe('DryRunDrawer (KB-P5-24)', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
-    fireEvent.change(screen.getByLabelText(/Issue Key/i), { target: { value: '   ' } });
+    fireEvent.change(screen.getByLabelText('Issue Key'), { target: { value: '   ' } });
     fireEvent.submit(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
 
     expect(screen.getByRole('alert').textContent).toContain('Issue key is required');
@@ -303,5 +304,179 @@ describe('DryRunDrawer (KB-P5-24)', () => {
       fireEvent.click(backdrop);
       expect(handleClose).toHaveBeenCalled();
     }
+  });
+
+  it('handles non-Error thrown during dry-run runner execution gracefully', async () => {
+    const mockRunner = vi.fn().mockRejectedValue('String error failure');
+
+    render(
+      <DryRunDrawer
+        isOpen={true}
+        projectKey="KAN"
+        transition={{ from_state: 'In Review', to_state: 'Done' }}
+        onClose={vi.fn()}
+        dryRunRunner={mockRunner}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '▶ Run Dry-Run' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Dry-run request failed.');
+    });
+  });
+
+  describe('StudioDocLink and FieldHelpHint Integrations (KAN-510)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders StudioDocLink in dry-run header with correct href, title, and label in Light and Dark themes', () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <DryRunDrawer
+            isOpen={true}
+            projectKey="KAN"
+            transition={{ from_state: 'In Review', to_state: 'Done' }}
+            onClose={vi.fn()}
+          />,
+        );
+
+        const docLink = screen.getByTestId('dry-run-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/scripted-workflows-and-transition-helpers#dry-run-simulation',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe('Workflow Dry-Run Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.dry-run-header-actions');
+        expect(headerActions).not.toBeNull();
+
+        const header = docLink.closest('.dry-run-header');
+        expect(header).not.toBeNull();
+        expect(header?.querySelector('#dry-run-drawer-title')?.textContent).toContain('Dry-Run:');
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus and opens in-app help panel via ShellPanelsProvider on click', async () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <DryRunDrawer
+              isOpen={true}
+              projectKey="KAN"
+              transition={{ from_state: 'In Review', to_state: 'Done' }}
+              onClose={vi.fn()}
+            />
+          </ShellPanelsProvider>,
+        );
+
+        const docLink = screen.getByTestId('dry-run-doc-link');
+        docLink.focus();
+        expect(document.activeElement).toBe(docLink);
+
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-panel')).toBeDefined();
+        });
+
+        const panel = screen.getByTestId('in-app-help-panel');
+        expect(panel.textContent).toContain(
+          '/docs/scripted-workflows-and-transition-helpers#dry-run-simulation',
+        );
+      } finally {
+        unregister();
+      }
+    });
+
+    it('renders FieldHelpHint for Issue Key explaining simulated execution vs ephemeral synthetic payload', () => {
+      render(
+        <DryRunDrawer
+          isOpen={true}
+          projectKey="KAN"
+          transition={{ from_state: 'In Review', to_state: 'Done' }}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Switch to existing issue mode
+      fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
+
+      // Locate label and trigger
+      const label = screen.getByText('Issue Key');
+      const trigger = screen.getByTestId('dry-run-issue-key-help');
+      expect(trigger).toBeDefined();
+      expect(trigger.getAttribute('aria-label')).toBe('Help for Issue Key');
+
+      // MANDATORY INVARIANT: never nest FieldHelpHint inside label!
+      expect(label.contains(trigger)).toBe(false);
+
+      // They must be adjacent siblings inside .dry-run-label-row
+      const labelRow = trigger.closest('.dry-run-label-row');
+      expect(labelRow).not.toBeNull();
+      expect(labelRow?.contains(label)).toBe(true);
+      expect(labelRow?.contains(trigger)).toBe(true);
+
+      // Focus opens the popover
+      act(() => {
+        trigger.focus();
+      });
+
+      const popover = screen.getByTestId('dry-run-issue-key-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Issue Key');
+      expect(popover.textContent).toContain(
+        'Simulates workflow transition execution against an existing issue',
+      );
+      expect(popover.textContent).toContain('ephemeral synthetic payload');
+      expect(popover.textContent).toContain('Example:');
+      expect(popover.textContent).toContain('KAN-142');
+
+      const docLink = popover.querySelector('a');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe(
+        '/docs/scripted-workflows-and-transition-helpers#dry-run-simulation',
+      );
+    });
+
+    it('dismisses FieldHelpHint popover on Escape key and restores focus to trigger without closing drawer', () => {
+      const handleClose = vi.fn();
+      render(
+        <DryRunDrawer
+          isOpen={true}
+          projectKey="KAN"
+          transition={{ from_state: 'In Review', to_state: 'Done' }}
+          onClose={handleClose}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Pick existing issue' }));
+
+      const trigger = screen.getByTestId('dry-run-issue-key-help');
+      act(() => {
+        trigger.focus();
+      });
+
+      expect(screen.getByTestId('dry-run-issue-key-help-popover')).toBeDefined();
+
+      // Escape dismisses popover without closing drawer
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape' });
+      });
+      expect(handleClose).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('dry-run-issue-key-help-popover')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
   });
 });
