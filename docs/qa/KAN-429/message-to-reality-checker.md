@@ -22,7 +22,7 @@ All requirements of `KAN-429` have been fulfilled and verified:
 6. **Zero Unicode Dashes:** Checked repository-wide and across all wiki chapters via `scripts/check_no_dashes.py` (exit code 0).
 7. **Offline In-App Docs Center Bundle:** Synchronized 34 wiki chapters (617,018 bytes, 145 images) into `kanban/web/src/features/docs-center/wikiManifest.ts`.
 8. **Automated Unit Testing & Coverage:** 11/11 Pytest tests passed in 0.19s; 71/71 Vitest tests passed in 7.12s across 2 test suites with 96.15% branch coverage.
-9. **Multi-Viewport Visual Verification:** 30 zero-mock Playwright screenshots captured across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-429/screenshots/`, visually inspected via `read_file`, with port 18429 cleanly released.
+9. **Multi-Viewport Visual Verification:** 30 Playwright screenshots captured across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-429/screenshots/` (rendering real offline `wikiManifest.ts` and `public/docs-images/` bundle; app-shell routes stubbed via `mockApi(page, getDocsMocks())`), visually inspected via `read_file`, with port 18429 cleanly released.
 
 ---
 
@@ -40,7 +40,7 @@ All requirements of `KAN-429` have been fulfilled and verified:
 | **8** | **Phase 4 Completion Packet Comment on KAN-425**<br>Coordinate completion packet comment onto parent epic `KAN-425`. | MCP completion packet in `04-published-docs-manifest.md` | **PASS**<br>Exact markdown prepared and requested for coordinator post. Zero unauthorized ticket transitions. |
 | **9** | **Docs Center Automated Unit Test Coverage (>=95%)**<br>Execute DocsCenter unit test suites with coverage threshold >=95%. | `docs/qa/KAN-429/unit-test-results.txt` | **PASS**<br>71 passed across 2 suites. 99.6% statements, 96.15% branches, 100% lines. |
 | **10** | **DoD Build-Check Pipeline Execution**<br>Execute full build check: `sync_wiki_bundle && check_no_dashes --all && check_no_dashes <wiki-files> && pnpm typecheck && pnpm lint && pnpm build`. | `docs/qa/KAN-429/build-check.txt` | **PASS**<br>Exit code 0. Zero linter warnings, zero type errors, zero Unicode dashes, production build verified in 1.24s. |
-| **11** | **Multi-Viewport Playwright Visual Verification**<br>Capture unclipped screenshots across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-429/screenshots/`. Visually inspect every PNG via `read_file`. | `docs/qa/KAN-429/screenshots/*.png`<br>`kanban/web/e2e/qa/kan-429-slice5-docs-screenshots.spec.ts` | **PASS**<br>30 screenshots captured and visually verified. Flawless layout and typography. Port 18429 cleanly released. |
+| **11** | **Multi-Viewport Playwright Visual Verification**<br>Capture unclipped screenshots across 5 viewports (`1440x900` light/dark, `1024x768`, `768x1024`, `390x844`) in `docs/qa/KAN-429/screenshots/`. Visually inspect every PNG via `read_file`. | `docs/qa/KAN-429/screenshots/*.png`<br>`kanban/web/e2e/qa/kan-429-slice5-docs-screenshots.spec.ts` | **PASS**<br>30 screenshots captured and visually verified (rendering real offline `wikiManifest.ts` and `public/docs-images/` bundle; app-shell routes stubbed via `mockApi(page, getDocsMocks())`). Flawless layout and typography. Port 18429 cleanly released. |
 | **12** | **Strict Plain ASCII Directives (Zero Unicode Dashes)**<br>Enforce zero Unicode em-dashes (`U+2014`) or en-dashes (`U+2013`) in all documentation, code, and QA artifacts. | `scripts/check_no_dashes.py --all`<br>`docs/qa/KAN-429/build-check.txt` | **PASS**<br>Zero Unicode dashes detected across repository and wiki chapters. |
 
 ---
@@ -65,6 +65,7 @@ All requirements of `KAN-429` have been fulfilled and verified:
 - **Command**: `E2E_PORT=18429 pnpm --dir kanban/web exec playwright test e2e/qa/kan-429-slice5-docs-screenshots.spec.ts --project=desktop`
 - **Results**: **1 passed (48.4s)**
 - **Checks**:
+  - Rendered live offline `wikiManifest.ts` and `public/docs-images/` bundle with app-shell routes stubbed via `mockApi(page, getDocsMocks())`.
   - Verified 0 horizontal overflow at 390px, 768px, 1024px, 1440px.
   - Verified non-zero `naturalWidth` on embedded Slice-5 images.
   - Verified unclipped configuration tables for Custom Fields Studio and Workflow Transition Studio.

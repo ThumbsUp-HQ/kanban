@@ -247,9 +247,9 @@ test.describe('KAN-429: Slice-5 Published Docs Visual Verification', () => {
     });
 
     // Dedicated Scrolled-in-View Verification 07: Slice-5 Studio Configuration Reference Tables
-    await page.goto('/docs/studio-configuration-reference#custom-fields-studio');
+    await page.goto('/docs/studio-configuration-reference#custom-fields-studio-configuration-table');
     await applyTheme(page, 'light');
-    const slice5Heading = page.locator('h2', { hasText: 'Custom Fields Studio' }).first();
+    const slice5Heading = page.locator('h3', { hasText: 'Custom Fields Studio Configuration Table' }).first();
     await expect(slice5Heading).toBeVisible();
     await slice5Heading.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);

@@ -139,10 +139,11 @@ The following configuration parameters and backend contracts are documented with
 - **`name` & `slug`:** Database tenant root and URL-safe ASCII slug identifying the tenant in REST routes (`/api/v1/workspaces/{slug}`) and browser URL routes.
 - **`display_name`:** User-facing workspace title displayed across topbars, page titles, and notification cards.
 - **`default_project_visibility`:** Privacy tier assigned to newly created projects (`"workspace"` or `"private"`).
-- **`session_idle_timeout_min` & `session_absolute_timeout_min`:** Idle session freshness challenge window (5 to 720 min, default 60) and absolute cookie lifetime cap (60 to 10080 min, default 1440).
+- **`session_idle_timeout_min` & `session_absolute_timeout_min`:** Idle session freshness challenge window (5 to 720 min, default 60) and absolute cookie lifetime cap (60 to 10080 min, default 720).
 - **`trash_retention_days`:** Retention duration for soft-deleted items before automated purge (7 to 365 days, default 30).
 - **`mcp_key_max_ttl_days`:** Maximum lifetime permitted when minting MCP API keys (1 to 365 days, default 90).
 - **`air_gap_mode`:** Zero-external-egress enforcement flag blocking external AI providers and remote webhooks.
+- **`default_skip_loaded_sequence_numbers`:** Agent-Safe Sequence Numbering policy toggle (skips culturally and technically loaded sequence numbers `13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488` during issue sequence allocation; DB/API default `false`).
 - **`issue_export_enabled` & `issue_import_enabled`:** Master data exfiltration and bulk ingestion prevention toggles.
 - **`issue_export_allowed_roles` & `report_export_allowed_roles`:** Granular role allowlists governing work item and statistical telemetry exports.
 - **`destructive_lifecycle`:** Two-stage deletion protocol (`POST /api/v1/admin/destructive:request` returning blast-radius summary, followed by `POST /api/v1/admin/destructive:execute` with confirmation token and AAL2 verification).
@@ -212,5 +213,5 @@ The following configuration parameters and backend contracts are documented with
   * Pytest: 11/11 passed in 0.19s (`test_wiki_bundle_sync.py` and `test_docs_custom_fields_guide.py`).
   * Vitest: 71/71 passed across 2 suites in 7.12s (`DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`) with 96.15% branch coverage.
   * Static Linters: Ruff clean, Mypy clean, check_no_dashes clean (0 Unicode dashes), tsc clean (0 errors), eslint clean (0 warnings), Vite build clean in 1.24s.
-- **Zero-Mock Playwright Verification:** 5 viewports captured across `/docs` chapters on isolated port 18429 with 0 console errors, 0 page errors, and clean server shutdown.
+- **Docs Center App-Shell & Playwright Verification:** 5 viewports captured across `/docs` chapters on isolated port 18429 with 0 console errors, 0 page errors, and clean server shutdown (rendered with live offline `wikiManifest.ts` and `public/docs-images/` bundle; app-shell routes stubbed via `mockApi(page, getDocsMocks())`).
 ```
