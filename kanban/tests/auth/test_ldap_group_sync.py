@@ -361,3 +361,79 @@ async def test_group_sync_nested_group_parent_map(db_session: AsyncSession) -> N
     )
     assert matched2 == ["Subteam Group"]
 
+
+async def test_sync_ldap_groups_parent_map_defensive_branches(
+    db_session: AsyncSession,
+) -> None:
+    """Test defensive branches in group nesting edge reconciliation (lines 35, 43, 47)."""
+    ws_id, _ = await _setup_workspace_and_admin(db_session)
+    user_id = await _create_test_user(db_session, ws_id)
+
+    child_dn = "cn=subteam,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    group_map = {
+        child_dn: "Subteam Group",
+        parent_dn: "Parent Group",
+    }
+    # Include:
+    # 1. Unmapped child DN (line 35)
+    # 2. Unmapped parent DN (line 43)
+    # 3. Self-referential parent DN (child == parent, line 47)
+    parent_map = {
+        "cn=unmapped_child,ou=groups,dc=example,dc=com": [parent_dn],
+        child_dn: [
+            "cn=unmapped_parent,ou=groups,dc=example,dc=com",
+            child_dn,
+            parent_dn,
+        ],
+    }
+
+    matched = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched == ["Subteam Group"]
+
+
+async def test_reconcile_group_nesting_edges_missing_group_records(
+    db_session: AsyncSession,
+) -> None:
+    """Directly test _reconcile_group_nesting_edges when groups are missing in group_by_name (lines 39, 47)."""
+    from kanban.auth.ldap.sync import _reconcile_group_nesting_edges
+
+    ws_id = uuid.uuid4()
+    child_dn = "cn=child,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    canonical_map = {
+        child_dn: "Child Group",
+        parent_dn: "Parent Group",
+    }
+
+    # Case 1: c_name not in group_by_name (line 39)
+    await _reconcile_group_nesting_edges(
+        db_session,
+        ws_id,
+        group_parent_map={child_dn: [parent_dn]},
+        canonical_map=canonical_map,
+        group_by_name={},
+    )
+
+    # Case 2: p_name not in group_by_name (line 47: not p_grp)
+    mock_child = Group(
+        id=uuid.uuid4(),
+        workspace_id=ws_id,
+        name="Child Group",
+    )
+    await _reconcile_group_nesting_edges(
+        db_session,
+        ws_id,
+        group_parent_map={child_dn: [parent_dn]},
+        canonical_map=canonical_map,
+        group_by_name={"Child Group": mock_child},
+    )
+
+
