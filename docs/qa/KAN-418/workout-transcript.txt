@@ -1,0 +1,121 @@
+=== KAN-418 Live Workout Execution Transcript ===
+
+--- 1. Live Workout Execution Output ---
+=== Starting KAN-418 Live Workout Orchestrator ===
+[Step 1] Launching HTTPS OIDC JWKS companion on port 18083...
+[Step 2] Seeding database kanban_workout via kanban_migrator...
+  Workspace ID: 3c371a53-1d63-4c11-9968-4283a3e407e8
+  Principal ID: 119039cb-f72a-4cc4-a940-c8b31410d25e
+  Project ID:   01a21557-f751-76ad-a846-09c9417cd77d
+[Step 3] Launching Uvicorn backend on port 18418...
+  Backend verified healthy: caller=Server Administrator, AAL=2
+  Created test issues: KAN-5 and KAN-6
+
+--- Running Workout 1: Scoped kb_* MCP Keys, CIDR & 2-Stage Confirm ---
+  [1.1] Minted project key: kb_agt_zh5... (mask=7)
+  [1.2] Minted workspace docs key: kb_doc_d_q... (mask=15)
+  [1.3] Minted server admin key: kb_adm__Fw... (mask=255)
+  [1.4] Minted deny-all key (mask=0): kb_agt_A9r...
+  [1.5] Minted CIDR-restricted keys (10.0.0.1/32 and 127.0.0.1/32)
+  [1.6] /mcp/agent tools/list returned 10 tools
+  [1.6] /mcp/agent search_tickets executed successfully (HTTP 200)
+  [1.7] /mcp/docs tools/list returned 3 tools
+  [1.8] /mcp/admin tools/list verified: 12 tools including destructive_lifecycle
+  [1.8] destructive_lifecycle Stage 1 (request_delete) verified: token=kb_del_XPGMn..., phrase='TRASH ISSUE KAN-5'
+  [1.8] destructive_lifecycle Stage 2 (execute_delete) verified: status=executed
+  [1.9] capability_mask 0 tool execution rejected immediately as expected
+  [1.10] Out-of-CIDR 10.0.0.1/32 rejected with HTTP 403
+  [1.10] Localhost 127.0.0.1/32 CIDR accepted with HTTP 200
+
+--- Running Workout 2: OAuth 2.1 DCR, PKCE S256 & 500+ Bulk DCR Purge ---
+  [2.1] RFC 8414 OAuth AS discovery verified (HTTP 200, S256 supported)
+  [2.2] DCR registered public client: client_3JAMIQKfi6vaqBJTiWSQOw
+  [2.3] PKCE S256 authorization issued code (state len=1200)
+  [2.3] Token exchange succeeded (access_token=eyJ0eXAiOi..., refresh_token=True)
+  [2.4] State length boundary validated: 4096 accepted (HTTP 200), 4097 rejected (HTTP 400/422)
+  [2.5] Confidential clients registered (client_secret_post & client_secret_basic)
+  [2.5] Full PKCE exchange verified for client_secret_post (HTTP 200)
+  [2.5] Full PKCE exchange verified for client_secret_basic (HTTP 200)
+  [2.5] Suspended OAuth client rejected with HTTP 400/401/403
+  [2.5] Revoked OAuth client rejected with HTTP 400/401/403
+  [2.6] Seeding 525 stale DCR rows in oauth_clients...
+  [2.6] Seeded 525 stale DCR clients + 1 active client with active grant
+  [2.6] Pagination verified: page 1 returned 25 items (total >= 1059)
+  [2.6] Bulk purge executed successfully: 1052 stale DCR clients hard-deleted in 1 transaction
+  [2.6] Active client with active grant confirmed preserved intact!
+
+--- Running Workout 3: RFC 8628 Device Authorization Flow ---
+  [3.1] Device code issued: user_code=GNRW-BCCN, verification_uri=http://127.0.0.1:18418/activate
+  [3.1] Verified user_code Base20 format (XXXX-XXXX)
+  [3.2] Device activation approved by authenticated user
+  [3.3] Device code exchanged for MCP access token: eyJ0eXAiOi... (HTTP 200)
+
+--- Running Workout 4: RFC 8693 Workload OIDC JWT Exchange ---
+  [4.1] Workload Identity Policy created: id=c11ecc60-f66f-4eff-9840-1ee3ce1cba20, issuer=https://127.0.0.1:18083
+  [4.2] Companion minted signed RS256 JWT: eyJ0eXAiOiJKV1Q...
+  [4.3] Workload JWT exchanged for MCP token: eyJ0eXAiOi... (HTTP 200)
+  [4.4] /mcp/agent called successfully with federated workload token (HTTP 200)
+  [4.5] Mismatched subject rejected with HTTP 400
+  [4.5] Mismatched issuer rejected with HTTP 400
+
+--- Preparing Data & Capturing Zero-Mock Playwright Screenshots ---
+  Re-seeded 525 DCR clients for paginated governance studio screenshot
+Connecting to live Kanban application at http://127.0.0.1:18418...
+[Captured] 01-desktop-1440x900-light-mcp-access-studio-mint-modal.png
+[Captured] 02-desktop-1440x900-dark-connect-oauth-modal.png
+[Captured] 03-desktop-1024x768-workload-oidc-studio.png
+[Captured] 04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png
+[Captured] 05-mobile-portrait-390x844-device-activate-page.png
+[Captured] 06-desktop-1440x900-light-mcp-config-snippet-modal.png
+[Captured] 07-desktop-1440x900-dark-oauth-governance-paginated-500.png
+All 7 zero-mock Playwright screenshots captured successfully!
+
+  Zero-mock Playwright screenshots captured successfully across all 5 viewports!
+
+=== ALL 4 LIVE WORKOUTS PASSED 100% SUCCESSFULLY! ===
+[Teardown] Shutting down Uvicorn and companion processes...
+[Teardown] Clean shutdown complete.
+
+
+--- 2. Uvicorn Server Log Verification ---
+Total Uvicorn requests logged: 635
+Total 5xx Server Errors: 0 (0 5xx errors verified!)
+
+Recent Uvicorn Access Log Tail:
+👍 2026-11-25 19:58:46,204 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=118081a74e6f48ba81ffa84a52d7024f] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,210 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=44f22a71b1ce4c418c85ed2a2774a3ec] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,216 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=5edac39af3aa4e4293f4ee6dec1dbafd] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,222 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=818abb63eaff4a4191c558bc208ff3c7] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,229 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=a169c99dbab548b598e103112fd8e6c1] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,234 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=c1702a2e3a524a6c89025541b18b1b82] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,240 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=f8d32e57d29a4f6f8f9261f7228d1c20] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,246 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=62c532f59f56419c9afedb92f8033e4f] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,254 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=5c7582f3fa924b9d8bccbe326758168e] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,259 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=6cfe3cc5ecd940a38f9098cce88011d2] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,264 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=df32be876cfd40c596f5800a61fd9731] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,270 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=38c0bf3e570f41c69337799b3ee3b6e7] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,274 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=f7da0c5e612b497490ac47c28380ad16] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,279 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=9f0333f57558454c9d7027c272b081f9] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,285 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=a2e12b84feca40ec8aff3459d610f4dc] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,289 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=2923c1bea30d4ef4b31dd2ac623d994c] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,292 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=9337a4821dcf48c69cc72e933329d2a7] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,296 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=7348caa1f57e4e03af0c0b6a2eb7e495] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,300 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=4584ea7c9e644c72b037d1aea0297d62] 127.0.0.1:42014 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,303 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=787443a2aa354f6facba40167875694d] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,491 [INFO] [user=119039cb-f72a-4cc4-a940-c8b31410d25e] [uvicorn.access] [req=2d33a2c192874a90a6269014eafae61b] 127.0.0.1:42022 - "GET /api/v1/auth/session HTTP/1.1" 200
+👍 2026-11-25 19:58:46,626 [INFO] [user=-] [uvicorn.error] [req=-] Shutting down
+👍 2026-11-25 19:58:46,727 [INFO] [user=-] [uvicorn.error] [req=-] Waiting for application shutdown.
+👍 2026-11-25 19:58:46,759 [INFO] [user=-] [uvicorn.error] [req=-] Application shutdown complete.
+👍 2026-11-25 19:58:46,759 [INFO] [user=-] [uvicorn.error] [req=-] Finished server process [3471069]
+
+
+--- 3. Playwright Browser Console Log Verification ---
+Playwright console errors encountered during zero-mock capture: 0
+Browser page errors encountered during zero-mock capture: 0
+
+--- 4. Post-Workout Resource Teardown Proof ---
+Docker Teardown Verification:
+kan418 containers running or stopped: 0
+(All temporary containers cleanly destroyed after live workout execution)
+
+=== End of KAN-418 Workout Transcript ===

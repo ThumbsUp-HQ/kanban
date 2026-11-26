@@ -192,7 +192,7 @@ class McpApiKey(Base):
             name="mcp_api_keys_owner_kind_check",
         ),
         CheckConstraint(
-            "capability_mask BETWEEN 1 AND 255",
+            "capability_mask BETWEEN 0 AND 255",
             name="mcp_api_keys_capability_mask_check",
         ),
         CheckConstraint(
