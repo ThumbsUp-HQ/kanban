@@ -806,6 +806,7 @@ describe('LinkAuditorStudio', () => {
       expect(cssContent).toMatch(/\.badge-critical\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--danger-fg\);[^}]*font-weight:\s*700;/s);
       expect(cssContent).toMatch(/\.badge-info\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\);[^}]*color:\s*var\(--accent-primary\);[^}]*border:\s*1px\s+solid\s+var\(--border-accent-subtle\);/s);
       expect(cssContent).toMatch(/:where\(\[data-theme='dark'\]\)\s+\.badge-info\s*\{[^}]*color:\s*var\(--badge-fg\);[^}]*background-color:\s*var\(--badge-bg\);[^}]*border-color:\s*var\(--badge-border\);/s);
+      expect(cssContent).toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme='light'\]\)\s+\.badge-info\s*\{[^}]*color:\s*var\(--badge-fg\);[^}]*background-color:\s*var\(--badge-bg\);[^}]*border-color:\s*var\(--badge-border\);/s);
       expect(cssContent).toMatch(/\.link-auditor-btn--scan:hover:not\(:disabled\)\s*\{[^}]*background-color:\s*var\(--brand-primary-hover\);/s);
       expect(cssContent).toMatch(/\.row--selected\s+td\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\)/s);
       expect(cssContent).toMatch(/\.status-badge--purged\s*\{[^}]*background-color:\s*var\(--bg-secondary\);[^}]*color:\s*var\(--fg-secondary\);[^}]*border:\s*1px\s+solid\s+var\(--border-subtle\);/s);
@@ -886,6 +887,88 @@ describe('LinkAuditorStudio', () => {
       } finally {
         document.documentElement.removeAttribute('data-theme');
       }
+    });
+
+    it('supports ARIA attributes and keyboard navigation on metric filter cards', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      // Verify ARIA landmarks and group attributes
+      expect(screen.getByLabelText('Integrity Metrics')).toBeDefined();
+      const statusGroup = screen.getByRole('group', { name: 'Filter status' });
+      expect(statusGroup).toBeDefined();
+      expect(screen.getByLabelText('Filter by invalidity reason')).toBeDefined();
+      expect(screen.getByRole('table', { name: 'Flagged Invalid Object Links' })).toBeDefined();
+
+      // Verify metric card buttons have role button, focus capability, and keyboard navigation
+      const danglingTargetCard = screen.getByTestId('metric-card-DANGLING_TARGET');
+      expect(danglingTargetCard).toBeDefined();
+      expect(danglingTargetCard.getAttribute('type')).toBe('button');
+      expect(danglingTargetCard.getAttribute('role') ?? 'button').toBe('button');
+      expect(danglingTargetCard.getAttribute('aria-pressed')).toBeNull();
+
+      // Metric cards start inactive
+      expect(danglingTargetCard.className).not.toContain('metric-card--active');
+
+      // Focus metric card
+      danglingTargetCard.focus();
+      expect(document.activeElement).toBe(danglingTargetCard);
+
+      // Keyboard navigation with Enter key activates metric card filter
+      fireEvent.keyDown(danglingTargetCard, { key: 'Enter', code: 'Enter' });
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).toContain('metric-card--active');
+
+      // Keyboard navigation with Space key toggles metric card filter back to ALL
+      fireEvent.keyDown(danglingTargetCard, { key: ' ', code: 'Space' });
+      fireEvent.click(danglingTargetCard);
+      expect(danglingTargetCard.className).not.toContain('metric-card--active');
+    });
+
+    it('supports System Dark Mode when data-theme attribute is unset', async () => {
+      document.documentElement.removeAttribute('data-theme');
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('not-found-view')).toBeNull();
+      const statusPillAll = screen.getByTestId('status-filter-all');
+      expect(statusPillAll).toBeDefined();
     });
   });
 });

@@ -239,6 +239,14 @@
   border-color: var(--badge-border);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .badge-info {
+    color: var(--badge-fg);
+    background-color: var(--badge-bg);
+    border-color: var(--badge-border);
+  }
+}
+
 .status-badge {
   font-size: 0.75rem;
   font-weight: 600;
