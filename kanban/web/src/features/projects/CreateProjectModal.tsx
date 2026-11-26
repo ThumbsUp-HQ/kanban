@@ -312,12 +312,27 @@ export function CreateProjectModal({
           </div>
 
           <div className="kb-create-project-field">
-            <label
-              htmlFor="create-project-identifier"
-              className="kb-create-project-label"
-            >
-              Identifier (Key)
-            </label>
+            <div className="kb-create-project-label-row">
+              <label
+                htmlFor="create-project-identifier"
+                className="kb-create-project-label"
+              >
+                Project Key
+              </label>
+              <label
+                htmlFor="create-project-identifier"
+                className="kb-visually-hidden"
+              >
+                Identifier (Key)
+              </label>
+              <FieldHelpHint
+                title="Project Key"
+                summary="Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123)."
+                validValues={['2 to 10 uppercase characters starting with a letter']}
+                docHref="/docs/studio-configuration-reference#projects"
+                testId="create-project-key-help"
+              />
+            </div>
             <input
               id="create-project-identifier"
               type="text"
@@ -330,9 +345,6 @@ export function CreateProjectModal({
               }}
               className="kb-create-project-input kb-create-project-input-mono"
             />
-            <span className="kb-create-project-hint">
-              2-10 uppercase characters starting with a letter (used for issue keys like {identifier || 'SEC'}-1).
-            </span>
           </div>
 
           <div className="kb-create-project-field">
