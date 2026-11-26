@@ -61,7 +61,9 @@ async def create_workflow_hook(
 ) -> WorkflowHookResponse:
     """Create and attach a workflow hook. Requires PROJECT_ADMIN and AAL2."""
     async with timing_floor(floor_ms=25.0):
-        return await WorkflowHookService.create_hook(session, caller, project, body)
+        result = await WorkflowHookService.create_hook(session, caller, project, body)
+        await session.commit()
+        return result
 
 
 @router.patch(
@@ -77,7 +79,9 @@ async def update_workflow_hook(
 ) -> WorkflowHookResponse:
     """Update hook parameters and recompute manifest_sha256. Requires PROJECT_ADMIN and AAL2."""
     async with timing_floor(floor_ms=25.0):
-        return await WorkflowHookService.update_hook(session, caller, hook_id, body)
+        result = await WorkflowHookService.update_hook(session, caller, hook_id, body)
+        await session.commit()
+        return result
 
 
 @router.post(
@@ -95,7 +99,9 @@ async def enable_workflow_hook(
     Requires project admin and AAL2.
     """
     async with timing_floor(floor_ms=25.0):
-        return await WorkflowHookService.set_enabled(session, caller, hook_id, is_enabled=True)
+        result = await WorkflowHookService.set_enabled(session, caller, hook_id, is_enabled=True)
+        await session.commit()
+        return result
 
 
 @router.post(
@@ -113,7 +119,9 @@ async def disable_workflow_hook(
     Does not detach the hook. Requires project admin and AAL2.
     """
     async with timing_floor(floor_ms=25.0):
-        return await WorkflowHookService.set_enabled(session, caller, hook_id, is_enabled=False)
+        result = await WorkflowHookService.set_enabled(session, caller, hook_id, is_enabled=False)
+        await session.commit()
+        return result
 
 
 @router.delete(
@@ -132,6 +140,7 @@ async def delete_workflow_hook(
     """
     async with timing_floor(floor_ms=25.0):
         await WorkflowHookService.delete_hook(session, caller, hook_id)
+        await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -148,7 +157,9 @@ async def reorder_workflow_hooks(
 ) -> list[WorkflowHookResponse]:
     """Atomically rewrite sort_rank for hooks in transition. Requires PROJECT_ADMIN and AAL2."""
     async with timing_floor(floor_ms=25.0):
-        return await WorkflowHookService.reorder_hooks(session, caller, project, body)
+        result = await WorkflowHookService.reorder_hooks(session, caller, project, body)
+        await session.commit()
+        return result
 
 
 @router.post(
@@ -181,6 +192,8 @@ async def list_approved_wasm_modules(
     async with timing_floor(floor_ms=25.0):
         project_obj = await get_project_or_404(session, caller, project)
         await WorkflowHookService.require_admin(session, caller, project_obj.id)
-        return await ensure_approved_wasm_modules(
+        modules = await ensure_approved_wasm_modules(
             session, caller.workspace_id, caller.principal_id, project_id=project_obj.id
         )
+        await session.commit()
+        return modules

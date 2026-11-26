@@ -1007,3 +1007,121 @@ async def test_approved_wasm_modules_list_and_builtin_auto_seed(
     )
     assert resp_hook.status_code == 201
     assert resp_hook.json()["wasm_module_sha256"] == qa_sha
+
+
+async def test_workflow_hooks_explicit_commit_durability(
+    workflow_api_setup: dict[str, Any],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify explicit session.commit() durability across all mutating workflow_hooks endpoints."""
+    admin = workflow_api_setup["admin"]
+    client = as_principal(admin, aal_level=2)
+
+    # 1. POST /api/v1/projects/{project}/workflow-hooks creates hook
+    create_resp = await client.post(
+        "/api/v1/projects/WFAPI/workflow-hooks",
+        json={
+            "name": "Commit Durability Hook 1",
+            "from_state": "In Progress",
+            "to_state": "In QA",
+            "hook_kind": "sync_validator",
+            "wasm_module_sha256": workflow_api_setup["wasm_sha_hex"],
+            "description": "Initial description before patch",
+        },
+    )
+    assert create_resp.status_code == 201
+    hook_1 = create_resp.json()
+    hook_1_id = hook_1["id"]
+
+    # Immediate GET verifies committed durability
+    list_resp = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    assert list_resp.status_code == 200
+    groups = list_resp.json()
+    hook_ids = [h["id"] for g in groups for h in g["hooks"]]
+    assert hook_1_id in hook_ids
+
+    # 2. PATCH /api/v1/workflow-hooks/{hook_id} updates hook
+    patch_resp = await client.patch(
+        f"/api/v1/workflow-hooks/{hook_1_id}",
+        json={
+            "name": "Commit Durability Hook 1 Updated",
+            "failure_policy": "fail_open_warn",
+        },
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["name"] == "Commit Durability Hook 1 Updated"
+    assert patch_resp.json()["failure_policy"] == "fail_open_warn"
+
+    # Immediate GET verifies updated state committed
+    list_resp2 = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    assert list_resp2.status_code == 200
+    all_hooks = {h["id"]: h for g in list_resp2.json() for h in g["hooks"]}
+    assert all_hooks[hook_1_id]["name"] == "Commit Durability Hook 1 Updated"
+    assert all_hooks[hook_1_id]["failure_policy"] == "fail_open_warn"
+
+    # 3. POST /api/v1/workflow-hooks/{hook_id}/disable
+    disable_resp = await client.post(f"/api/v1/workflow-hooks/{hook_1_id}/disable")
+    assert disable_resp.status_code == 200
+    assert disable_resp.json()["is_enabled"] is False
+
+    # Immediate GET verifies disabled state committed
+    list_resp3 = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    all_hooks3 = {h["id"]: h for g in list_resp3.json() for h in g["hooks"]}
+    assert all_hooks3[hook_1_id]["is_enabled"] is False
+
+    # 4. POST /api/v1/workflow-hooks/{hook_id}/enable
+    enable_resp = await client.post(f"/api/v1/workflow-hooks/{hook_1_id}/enable")
+    assert enable_resp.status_code == 200
+    assert enable_resp.json()["is_enabled"] is True
+
+    # Immediate GET verifies enabled state committed
+    list_resp4 = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    all_hooks4 = {h["id"]: h for g in list_resp4.json() for h in g["hooks"]}
+    assert all_hooks4[hook_1_id]["is_enabled"] is True
+
+    # 5. Create second hook on same transition and test reorder durability
+    create_resp2 = await client.post(
+        "/api/v1/projects/WFAPI/workflow-hooks",
+        json={
+            "name": "Commit Durability Hook 2",
+            "from_state": "In Progress",
+            "to_state": "In QA",
+            "hook_kind": "sync_validator",
+            "wasm_module_sha256": workflow_api_setup["wasm_sha_hex"],
+        },
+    )
+    assert create_resp2.status_code == 201
+    hook_2_id = create_resp2.json()["id"]
+
+    reorder_resp = await client.post(
+        "/api/v1/projects/WFAPI/workflow-hooks/reorder",
+        json={
+            "transition": {"from_state": "In Progress", "to_state": "In QA"},
+            "ordered_hook_ids": [hook_2_id, hook_1_id],
+        },
+    )
+    assert reorder_resp.status_code == 200
+    reordered_ids = [h["id"] for h in reorder_resp.json()]
+    assert reordered_ids == [hook_2_id, hook_1_id]
+
+    # Immediate GET verifies reordered ranks committed
+    list_resp5 = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    target_group = next(
+        g
+        for g in list_resp5.json()
+        if g["from_state"] == "In Progress" and g["to_state"] == "In QA"
+    )
+    assert [h["id"] for h in target_group["hooks"]] == [hook_2_id, hook_1_id]
+
+    # 6. DELETE /api/v1/workflow-hooks/{hook_id} durability
+    delete_resp = await client.delete(f"/api/v1/workflow-hooks/{hook_1_id}")
+    assert delete_resp.status_code == 204
+
+    # Immediate GET verifies deletion committed
+    list_resp6 = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+    remaining_ids = [h["id"] for g in list_resp6.json() for h in g["hooks"]]
+    assert hook_1_id not in remaining_ids
+    assert hook_2_id in remaining_ids
+
+    # Clean up second hook
+    await client.delete(f"/api/v1/workflow-hooks/{hook_2_id}")
