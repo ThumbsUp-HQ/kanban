@@ -210,7 +210,16 @@ def test_completion_request_dto() -> None:
         CompletionRequest(model="m", prompt="p", max_output_tokens=0)
 
     with pytest.raises(ValidationError):
-        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=70000)
+        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=300001)
+
+    with pytest.raises(ValidationError):
+        CompletionRequest(model="m", prompt="p", ttft_deadline_ms=0)
+
+    # Valid deadline bounds up to 300000 ms
+    valid_c_120k = CompletionRequest(model="m", prompt="p", ttft_deadline_ms=120000)
+    assert valid_c_120k.ttft_deadline_ms == 120000
+    valid_c_300k = CompletionRequest(model="m", prompt="p", ttft_deadline_ms=300000)
+    assert valid_c_300k.ttft_deadline_ms == 300000
 
 
 def test_stream_chunk_and_tool_call_step() -> None:
@@ -250,6 +259,39 @@ def test_structured_request_and_response() -> None:
     )
     assert req.response_model is DummyOutput
     assert req.temperature == 0.0
+
+    # StructuredRequest boundary validations (120000, 300000 valid; 300001, 0 rejected)
+    req_120k = StructuredRequest(
+        model="nemotron-3-super:latest",
+        prompt="Evaluate gate",
+        response_model=DummyOutput,
+        ttft_deadline_ms=120000,
+    )
+    assert req_120k.ttft_deadline_ms == 120000
+
+    req_300k = StructuredRequest(
+        model="nemotron-3-super:latest",
+        prompt="Evaluate gate",
+        response_model=DummyOutput,
+        ttft_deadline_ms=300000,
+    )
+    assert req_300k.ttft_deadline_ms == 300000
+
+    with pytest.raises(ValidationError):
+        StructuredRequest(
+            model="nemotron-3-super:latest",
+            prompt="Evaluate gate",
+            response_model=DummyOutput,
+            ttft_deadline_ms=300001,
+        )
+
+    with pytest.raises(ValidationError):
+        StructuredRequest(
+            model="nemotron-3-super:latest",
+            prompt="Evaluate gate",
+            response_model=DummyOutput,
+            ttft_deadline_ms=0,
+        )
 
     parsed = DummyOutput(decision="approve", confidence=0.99)
     resp = StructuredResponse(

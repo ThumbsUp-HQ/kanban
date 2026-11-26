@@ -6,13 +6,18 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
+from database.session import RLSContext
+
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("agent.budget")
@@ -66,10 +71,33 @@ class BudgetEnforcer:
         session: AsyncSession | None = None,
         *,
         session_factory: object | None = None,
+        rls_context: object | None = None,
     ) -> None:
-        """Initialize enforcer with an optional session or session factory."""
+        """Initialize enforcer with an optional session, session factory, or RLS context."""
         self._session = session
         self._session_factory = session_factory
+        self._rls_context = rls_context
+
+    @property
+    def session_factory(self) -> object | None:
+        """Return the configured session factory, if any."""
+        return self._session_factory
+
+    @property
+    def rls_context(self) -> object | None:
+        """Return the configured RLS context, if any."""
+        return self._rls_context
+
+    def attach_session_factory(
+        self,
+        session_factory: object | None,
+        rls_context: object | None = None,
+    ) -> None:
+        """Attach a session factory and RLS context when unassigned."""
+        if self._session_factory is None and session_factory is not None:
+            self._session_factory = session_factory
+        if self._rls_context is None and rls_context is not None:
+            self._rls_context = rls_context
 
     def _resolve_session(self, session: AsyncSession | None) -> AsyncSession:
         """Resolve database session from arguments, instance attribute, or raise error."""
@@ -77,6 +105,33 @@ class BudgetEnforcer:
             return session
         if self._session is not None:
             return self._session
+        msg = "BudgetEnforcer requires an active AsyncSession to execute database operations"
+        raise ValueError(msg)
+
+    @asynccontextmanager
+    async def _scoped_session(
+        self,
+        session: AsyncSession | None,
+        workspace_id: uuid.UUID,
+    ) -> AsyncIterator[AsyncSession]:
+        """Provide an active session, either passed directly or opened via session_factory."""
+        if session is not None or self._session is not None:
+            yield self._resolve_session(session)
+            return
+        if self._session_factory is not None:
+            ctx = self._rls_context
+            if ctx is None:
+                ctx = RLSContext(
+                    principal_id=uuid.UUID(int=0),
+                    workspace_id=workspace_id,
+                    token_scopes=("admin",),
+                    aal_level=2,
+                )
+            session_cm = getattr(self._session_factory, "session", None)
+            if callable(session_cm):
+                async with session_cm(ctx) as sess:
+                    yield sess
+                return
         msg = "BudgetEnforcer requires an active AsyncSession to execute database operations"
         raise ValueError(msg)
 
@@ -95,7 +150,6 @@ class BudgetEnforcer:
             msg = f"estimate_tokens must be greater than zero (got {estimate_tokens})"
             raise ValueError(msg)
 
-        sess = self._resolve_session(session)
         daily_start, monthly_start = get_current_period_dates(now_dt)
 
         # Query active ledger rows matching the provider and period windows
@@ -120,60 +174,62 @@ class BudgetEnforcer:
             "monthly_start": monthly_start,
         }
 
-        res = await sess.execute(query_sql, params)
-        rows = res.mappings().all()
+        async with self._scoped_session(session, workspace_id) as sess:
+            res = await sess.execute(query_sql, params)
+            rows = res.mappings().all()
 
-        if not rows:
-            # Missing ledger rows for both periods explicitly indicate no caps configured
+            if not rows:
+                # Missing ledger rows for both periods explicitly indicate no caps configured
+                return Reservation(
+                    id=uuid.uuid4(),
+                    workspace_id=workspace_id,
+                    project_id=project_id,
+                    provider_config_id=provider_config_id,
+                    estimate_tokens=estimate_tokens,
+                    reserved_ledger_ids=(),
+                )
+
+            # Execute atomic updates within a savepoint/transaction to ensure
+            # all-or-nothing rollback
+            reserved_ids: list[uuid.UUID] = []
+
+            async with sess.begin_nested() if sess.in_transaction() else sess.begin():
+                for row in rows:
+                    ledger_id = row["id"]
+                    p_kind = row["period_kind"]
+
+                    # Atomic single-statement reservation update
+                    update_sql = text(
+                        "UPDATE ai_token_ledgers "
+                        "SET tokens_reserved = tokens_reserved + :tokens "
+                        "WHERE id = :lid "
+                        "  AND tokens_used + tokens_reserved + :tokens <= token_cap "
+                        "RETURNING id"
+                    )
+                    up_res = await sess.execute(
+                        update_sql,
+                        {"lid": ledger_id, "tokens": estimate_tokens},
+                    )
+                    matched = up_res.first()
+
+                    if matched is None:
+                        # Cap exceeded for this period -> rolls back savepoint/transaction
+                        msg = (
+                            f"AI token budget exceeded for period '{p_kind}': "
+                            f"estimate={estimate_tokens} tokens cannot be reserved under cap"
+                        )
+                        raise BudgetExceeded(period=p_kind, message=msg)
+
+                    reserved_ids.append(ledger_id)
+
             return Reservation(
                 id=uuid.uuid4(),
                 workspace_id=workspace_id,
                 project_id=project_id,
                 provider_config_id=provider_config_id,
                 estimate_tokens=estimate_tokens,
-                reserved_ledger_ids=(),
+                reserved_ledger_ids=tuple(reserved_ids),
             )
-
-        # Execute atomic updates within a savepoint/transaction to ensure all-or-nothing rollback
-        reserved_ids: list[uuid.UUID] = []
-
-        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
-            for row in rows:
-                ledger_id = row["id"]
-                p_kind = row["period_kind"]
-
-                # Atomic single-statement reservation update
-                update_sql = text(
-                    "UPDATE ai_token_ledgers "
-                    "SET tokens_reserved = tokens_reserved + :tokens "
-                    "WHERE id = :lid "
-                    "  AND tokens_used + tokens_reserved + :tokens <= token_cap "
-                    "RETURNING id"
-                )
-                up_res = await sess.execute(
-                    update_sql,
-                    {"lid": ledger_id, "tokens": estimate_tokens},
-                )
-                matched = up_res.first()
-
-                if matched is None:
-                    # Cap exceeded for this period -> rolls back savepoint/transaction
-                    msg = (
-                        f"AI token budget exceeded for period '{p_kind}': "
-                        f"estimate={estimate_tokens} tokens cannot be reserved under cap"
-                    )
-                    raise BudgetExceeded(period=p_kind, message=msg)
-
-                reserved_ids.append(ledger_id)
-
-        return Reservation(
-            id=uuid.uuid4(),
-            workspace_id=workspace_id,
-            project_id=project_id,
-            provider_config_id=provider_config_id,
-            estimate_tokens=estimate_tokens,
-            reserved_ledger_ids=tuple(reserved_ids),
-        )
 
     async def settle(
         self,
@@ -190,7 +246,6 @@ class BudgetEnforcer:
         if not reservation.reserved_ledger_ids:
             return
 
-        sess = self._resolve_session(session)
         estimate = reservation.estimate_tokens
 
         if actual_tokens > estimate:
@@ -204,23 +259,24 @@ class BudgetEnforcer:
                 overage,
             )
 
-        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
-            for ledger_id in reservation.reserved_ledger_ids:
-                # Deduct estimate from reserved and add actual to used.
-                settle_sql = text(
-                    "UPDATE ai_token_ledgers "
-                    "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate), "
-                    "    tokens_used = LEAST(token_cap, tokens_used + :actual) "
-                    "WHERE id = :lid"
-                )
-                await sess.execute(
-                    settle_sql,
-                    {
-                        "lid": ledger_id,
-                        "estimate": estimate,
-                        "actual": actual_tokens,
-                    },
-                )
+        async with self._scoped_session(session, reservation.workspace_id) as sess:  # noqa: SIM117
+            async with sess.begin_nested() if sess.in_transaction() else sess.begin():
+                for ledger_id in reservation.reserved_ledger_ids:
+                    # Deduct estimate from reserved and add actual to used.
+                    settle_sql = text(
+                        "UPDATE ai_token_ledgers "
+                        "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate), "
+                        "    tokens_used = LEAST(token_cap, tokens_used + :actual) "
+                        "WHERE id = :lid"
+                    )
+                    await sess.execute(
+                        settle_sql,
+                        {
+                            "lid": ledger_id,
+                            "estimate": estimate,
+                            "actual": actual_tokens,
+                        },
+                    )
 
     async def release(
         self,
@@ -232,17 +288,17 @@ class BudgetEnforcer:
         if not reservation.reserved_ledger_ids:
             return
 
-        sess = self._resolve_session(session)
         estimate = reservation.estimate_tokens
 
-        async with sess.begin_nested() if sess.in_transaction() else sess.begin():
-            for ledger_id in reservation.reserved_ledger_ids:
-                release_sql = text(
-                    "UPDATE ai_token_ledgers "
-                    "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate) "
-                    "WHERE id = :lid"
-                )
-                await sess.execute(
-                    release_sql,
-                    {"lid": ledger_id, "estimate": estimate},
-                )
+        async with self._scoped_session(session, reservation.workspace_id) as sess:  # noqa: SIM117
+            async with sess.begin_nested() if sess.in_transaction() else sess.begin():
+                for ledger_id in reservation.reserved_ledger_ids:
+                    release_sql = text(
+                        "UPDATE ai_token_ledgers "
+                        "SET tokens_reserved = GREATEST(0, tokens_reserved - :estimate) "
+                        "WHERE id = :lid"
+                    )
+                    await sess.execute(
+                        release_sql,
+                        {"lid": ledger_id, "estimate": estimate},
+                    )

@@ -140,6 +140,8 @@ class InAppSdkHarness:
         budget_enforcer: BudgetEnforcer | None = None,
         session: AsyncSession | None = None,
         *,
+        session_factory: object | None = None,
+        rls_context: object | None = None,
         max_turns: int = MAX_TURNS_LIMIT,
         max_total_tool_calls: int = MAX_TOOL_CALLS_LIMIT,
         mcp_transport: object = None,
@@ -148,6 +150,12 @@ class InAppSdkHarness:
         self.provider = provider
         self.budget_enforcer = budget_enforcer
         self.session = session
+        self.session_factory = session_factory
+        self.rls_context = rls_context
+        if self.budget_enforcer is not None and hasattr(
+            self.budget_enforcer, "attach_session_factory"
+        ):
+            self.budget_enforcer.attach_session_factory(session_factory, rls_context)
         self.max_turns = max_turns
         self.max_total_tool_calls = max_total_tool_calls
         self.mcp_transport = mcp_transport
@@ -351,7 +359,7 @@ class InAppSdkHarness:
                 system_prompt=system_prompt,
                 response_model=StrictVerdictSchema,
                 metadata={"agent_slug": agent_slug, "transition_to": "Done"},
-                ttft_deadline_ms=min(cutoff_ms, 60000),
+                ttft_deadline_ms=cutoff_ms,
             )
             resp = await provider.generate_structured(req)
 

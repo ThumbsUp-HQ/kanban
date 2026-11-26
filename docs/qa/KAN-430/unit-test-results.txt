@@ -1,0 +1,92 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan430-2812030e
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 606 items
+
+agent/tests/cli/test_cli_skeleton.py ...........                         [  1%]
+agent/tests/cli/test_validate_qa_packet.py ............                  [  3%]
+agent/tests/cli/test_validate_sparkle.py ..................              [  6%]
+agent/tests/cli/test_validate_sticky_promo.py .............              [  8%]
+agent/tests/cli/test_validate_transition.py .........                    [ 10%]
+agent/tests/cli/test_validate_verdict.py ..............                  [ 12%]
+agent/tests/context/test_repo_context.py .....                           [ 13%]
+agent/tests/context/test_transition_context.py ........                  [ 14%]
+agent/tests/context/test_transition_context_spotlighting.py ...          [ 15%]
+agent/tests/context/test_verdict.py ...............                      [ 17%]
+agent/tests/embeddings/test_base.py .....                                [ 18%]
+agent/tests/embeddings/test_indexer.py ............                      [ 20%]
+agent/tests/embeddings/test_matryoshka_quantizer.py ...................  [ 23%]
+agent/tests/embeddings/test_onnx_embedder.py ...........                 [ 25%]
+agent/tests/gates/test_gate_runner.py .................                  [ 28%]
+agent/tests/gates/test_gate_runner_rls_session.py ......                 [ 29%]
+agent/tests/gates/test_runner_skip_locked.py .                           [ 29%]
+agent/tests/gates/test_worker.py ...........                             [ 31%]
+agent/tests/harnesses/test_in_app_sdk.py ........                        [ 32%]
+agent/tests/harnesses/test_remote_runner_harness.py .......              [ 33%]
+agent/tests/integration/test_async_gate_fixture.py ....                  [ 34%]
+agent/tests/providers/test_air_gap.py .....                              [ 35%]
+agent/tests/providers/test_base_protocol.py .........                    [ 36%]
+agent/tests/providers/test_circuit_breaker.py .......                    [ 37%]
+agent/tests/providers/test_gemini.py ..............................      [ 42%]
+agent/tests/providers/test_net_guard.py ................................ [ 48%]
+.......                                                                  [ 49%]
+agent/tests/providers/test_ollama.py ................................... [ 55%]
+........                                                                 [ 56%]
+agent/tests/providers/test_openai_provider.py ......................     [ 60%]
+agent/tests/providers/test_router.py .....................               [ 63%]
+agent/tests/providers/test_schema_utils.py .......                       [ 64%]
+agent/tests/qa_validator/test_auditor.py .....                           [ 65%]
+agent/tests/qa_validator/test_bundle_inspector.py ...................... [ 69%]
+...                                                                      [ 69%]
+agent/tests/remote_runner/test_config_and_enroll.py ..........           [ 71%]
+agent/tests/remote_runner/test_daemon_e2e.py ........                    [ 72%]
+agent/tests/remote_runner/test_executor.py .....                         [ 73%]
+agent/tests/runners/test_cli_pipe.py .............                       [ 75%]
+agent/tests/runners/test_repo_snapshot.py ........                       [ 76%]
+agent/tests/sparkle/test_latency_budget.py .                             [ 77%]
+agent/tests/sparkle/test_output_filter.py ..............                 [ 79%]
+agent/tests/sparkle/test_pipeline.py ...........                         [ 81%]
+agent/tests/sparkle/test_retrieval.py ......                             [ 82%]
+agent/tests/sparkle/test_router_endpoint.py ...........                  [ 83%]
+agent/tests/sticky_promo/test_structurer.py ................             [ 86%]
+agent/tests/test_budget.py ......                                        [ 87%]
+agent/tests/test_budget_real_wiring.py ..                                [ 87%]
+agent/tests/test_remote_runner.py ..........                             [ 89%]
+agent/tests/test_smoke.py .                                              [ 89%]
+agent/tests/testing/test_fixtures.py ....................                [ 93%]
+agent/tests/testing/test_http_cassette.py ...................            [ 96%]
+agent/tests/tools/test_mcp_read_tools.py ......                          [ 97%]
+agent/tests/tools/test_repo_path_guard.py .........                      [ 98%]
+agent/tests/tools/test_repo_tools.py ......                              [ 99%]
+agent/tests/tools/test_repo_tools_signatures.py ..                       [100%]
+
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan430-2812030e/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+agent/tests/remote_runner/test_daemon_e2e.py::test_daemon_server_revocation_4003_halts_with_exit_code_78
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan430-2812030e/.venv/lib/python3.12/site-packages/websockets/exceptions.py:139: DeprecationWarning: ConnectionClosed.code is deprecated; use Protocol.close_code or ConnectionClosed.rcvd.code
+    warnings.warn(  # deprecated in 13.1 - 2024-09-21
+
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan430-2812030e/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                            Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------
+agent/budget.py                   120      0     36      0   100%
+agent/gates/runner.py             272      2     80     14    95%   91->94, 94->104, 99->104, 335->461, 417->440, 458->461, 510->513, 517->549, 520->549, 523->549, 525->527, 527->549, 541->549, 546-547, 575->513
+agent/harnesses/in_app_sdk.py     184      0     44      3    99%   332->344, 374->376, 376->378
+agent/providers/base.py           119      1     14      0    99%   105
+---------------------------------------------------------------------------
+TOTAL                             695      3    174     17    98%
+======================= 606 passed, 4 warnings in 53.47s =======================
