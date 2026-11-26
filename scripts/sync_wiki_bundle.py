@@ -722,7 +722,6 @@ def sync_wiki(
         "push-protection": "agent-lease-fencing-workpads-and-push-protection",
         "rbac": "role-and-permission-matrix",
         "auth-studio": "multi-card-authentication-studio",
-        "user-profile-and-personal-settings": "studio-configuration-reference",
     }
 
     copied_images = sync_wiki_images(wiki_path, public_path)

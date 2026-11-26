@@ -1757,8 +1757,6 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(hashHref.anchor).toBe('some-anchor');
     });
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     it('asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM', () => {
       const slice1Links = [
         '/docs/multi-card-authentication-studio',
@@ -1939,8 +1937,6 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         const targetElement = resolveSectionElement(container, anchor);
         expect(targetElement).not.toBeNull();
         unmount();
-      }
-    });
       }
     });
   });
