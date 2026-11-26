@@ -234,13 +234,21 @@ describe('RoleLabelPicker Component (KAN-83, KAN-502)', () => {
       helpTrigger.focus();
     });
 
-    expect(screen.getByTestId('role-label-help-popover')).toBeDefined();
+    const popover = screen.getByTestId('role-label-help-popover');
+    expect(popover).toBeDefined();
+
+    const docLink = screen.getByTestId<HTMLAnchorElement>('role-label-help-doc-link');
+    act(() => {
+      docLink.focus();
+    });
+    expect(document.activeElement).toBe(docLink);
 
     act(() => {
-      fireEvent.keyDown(helpTrigger, { key: 'Escape' });
+      fireEvent.keyDown(docLink, { key: 'Escape', bubbles: true });
     });
 
     expect(screen.queryByTestId('role-label-help-popover')).toBeNull();
+    expect(document.activeElement).toBe(helpTrigger);
   });
 
   it('supports custom props: label, defaultValue, helpTitle, helpSummary, docHref, and showHelpHint=false', async () => {

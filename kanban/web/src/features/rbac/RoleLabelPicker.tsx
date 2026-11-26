@@ -184,29 +184,29 @@ export function RoleLabelPicker({
               (Default: {defaultValue})
             </span>
           </span>
-          {showHelpHint && (
-            <FieldHelpHint
-              testId="role-label-help"
-              title={helpTitle}
-              summary={helpSummary}
-              defaultValue={defaultValue}
-              validValues={[
-                {
-                  label: 'Member',
-                  description:
-                    'Default base role assigned to invited users with standard read and write permissions.',
-                },
-                {
-                  label: 'Custom Role',
-                  description:
-                    'Supplemental role label granting scoped domain privileges (e.g., Lead Dev, QA Tester) alongside base permissions.',
-                },
-              ]}
-              docHref={docHref}
-              ariaLabel="Help for Role Labels"
-            />
-          )}
         </label>
+        {showHelpHint && (
+          <FieldHelpHint
+            testId="role-label-help"
+            title={helpTitle}
+            summary={helpSummary}
+            defaultValue={defaultValue}
+            validValues={[
+              {
+                label: 'Member',
+                description:
+                  'Default base role assigned to invited users with standard read and write permissions.',
+              },
+              {
+                label: 'Custom Role',
+                description:
+                  'Supplemental role label granting scoped domain privileges (e.g., Lead Dev, QA Tester) alongside base permissions.',
+              },
+            ]}
+            docHref={docHref}
+            ariaLabel="Help for Role Labels"
+          />
+        )}
       </div>
 
       <div className="role-label-picker" data-testid="role-label-picker">
@@ -216,7 +216,13 @@ export function RoleLabelPicker({
             className="rbac-role-chip"
             data-testid={`role-chip-${lItem.role_slug}`}
           >
-            <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
+            <svg
+              className="rbac-chip-dot"
+              width="10"
+              height="10"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+            >
               <circle cx="6" cy="6" r="5" fill={lItem.role_color_hex ?? '#3b82f6'} />
             </svg>
             <span>{lItem.role_name}</span>
