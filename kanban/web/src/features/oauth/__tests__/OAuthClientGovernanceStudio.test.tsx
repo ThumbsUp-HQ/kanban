@@ -1486,4 +1486,296 @@ describe('OAuthClientGovernanceStudio', () => {
       expect(bulkDeleteRule).toContain('color: var(--danger-fg);');
     });
   });
+
+  describe('KAN-522: OAuth Client Registration Form FieldHelpHint and Default Indicators', () => {
+    it('renders triggers, ARIA attributes, explicit default indicators, and helper texts', async () => {
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      render(
+        <MemoryRouter initialEntries={['/admin/oauth']}>
+          <OAuthClientGovernanceStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('register-client-btn')).toBeDefined();
+      });
+
+      // Open Register Client modal
+      fireEvent.click(screen.getByTestId('register-client-btn'));
+
+      // 1. Client Type FieldHelpHint & Default Indicator
+      const clientTypeHelp = screen.getByTestId('reg-client-type-help');
+      expect(clientTypeHelp).toBeDefined();
+      expect(clientTypeHelp.getAttribute('aria-label')).toBe('Help for Client Type');
+      expect(clientTypeHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(clientTypeHelp.getAttribute('aria-expanded')).toBe('false');
+
+      const clientTypeIndicator = screen.getByTestId('reg-client-type-default-indicator');
+      expect(clientTypeIndicator).toBeDefined();
+      expect(clientTypeIndicator.textContent).toBe('(Default: Public (PKCE only))');
+
+      const clientTypeSelect = screen.getByTestId<HTMLSelectElement>('select-client-type');
+      expect(clientTypeSelect.value).toBe('public');
+      expect(clientTypeSelect.getAttribute('aria-describedby')).toBe('reg-client-type-hint');
+
+      const clientTypeHint = document.getElementById('reg-client-type-hint');
+      expect(clientTypeHint?.textContent).toContain('Default: Public (PKCE only)');
+
+      // 2. Token Endpoint Auth Method FieldHelpHint & Default Indicator
+      const authMethodHelp = screen.getByTestId('reg-auth-method-help');
+      expect(authMethodHelp).toBeDefined();
+      expect(authMethodHelp.getAttribute('aria-label')).toBe(
+        'Help for Token Endpoint Authentication Method',
+      );
+      expect(authMethodHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(authMethodHelp.getAttribute('aria-expanded')).toBe('false');
+
+      const authMethodIndicator = screen.getByTestId('reg-auth-method-default-indicator');
+      expect(authMethodIndicator).toBeDefined();
+      expect(authMethodIndicator.textContent).toBe('(Default: none)');
+
+      const authMethodSelect = screen.getByTestId<HTMLSelectElement>('select-auth-method');
+      expect(authMethodSelect.value).toBe('none');
+      expect(authMethodSelect.getAttribute('aria-describedby')).toBe('reg-auth-method-hint');
+
+      const authMethodHint = document.getElementById('reg-auth-method-hint');
+      expect(authMethodHint?.textContent).toContain('Default: none');
+    });
+
+    it('opens Client Type popover on focus, verifies ARIA dialog and content, closes on Escape', async () => {
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      render(
+        <MemoryRouter initialEntries={['/admin/oauth']}>
+          <OAuthClientGovernanceStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('register-client-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('register-client-btn'));
+
+      const clientTypeHelp = screen.getByTestId('reg-client-type-help');
+
+      // Focus opens popover
+      act(() => {
+        clientTypeHelp.focus();
+      });
+
+      expect(clientTypeHelp.getAttribute('aria-expanded')).toBe('true');
+
+      const popover = screen.getByTestId('reg-client-type-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.getAttribute('role')).toBe('dialog');
+      expect(popover.getAttribute('aria-label')).toBe('Client Type');
+
+      // Verify explanation of RFC 9700 Public vs Confidential
+      expect(popover.textContent).toContain('RFC 9700');
+      expect(popover.textContent).toContain('Public');
+      expect(popover.textContent).toContain('Confidential');
+      expect(popover.textContent).toContain('PKCE');
+
+      // Verify default value in popover
+      const defaultVal = screen.getByTestId('reg-client-type-help-default');
+      expect(defaultVal.textContent).toContain('Default:');
+      expect(defaultVal.textContent).toContain('Public (PKCE only)');
+
+      // Verify documentation link
+      const docLink = screen.getByTestId('reg-client-type-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/three-surface-mcp-server-architecture#oauth-21--pkce',
+      );
+
+      // Escape closes popover
+      act(() => {
+        fireEvent.keyDown(clientTypeHelp, { key: 'Escape' });
+      });
+
+      expect(clientTypeHelp.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('reg-client-type-help-popover')).toBeNull();
+    });
+
+    it('opens Auth Method popover on focus, verifies ARIA dialog and content, closes on Escape', async () => {
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      render(
+        <MemoryRouter initialEntries={['/admin/oauth']}>
+          <OAuthClientGovernanceStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('register-client-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('register-client-btn'));
+
+      const authMethodHelp = screen.getByTestId('reg-auth-method-help');
+
+      // Focus opens popover
+      act(() => {
+        authMethodHelp.focus();
+      });
+
+      expect(authMethodHelp.getAttribute('aria-expanded')).toBe('true');
+
+      const popover = screen.getByTestId('reg-auth-method-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.getAttribute('role')).toBe('dialog');
+      expect(popover.getAttribute('aria-label')).toBe('Token Endpoint Authentication Method');
+
+      // Verify explanation of RFC 9700 and OAuth 2.1
+      expect(popover.textContent).toContain('RFC 9700');
+      expect(popover.textContent).toContain('/oauth/token');
+      expect(popover.textContent).toContain('PKCE S256');
+
+      // Verify default value in popover
+      const defaultVal = screen.getByTestId('reg-auth-method-help-default');
+      expect(defaultVal.textContent).toContain('Default:');
+      expect(defaultVal.textContent).toContain('none');
+
+      // Verify documentation link
+      const docLink = screen.getByTestId('reg-auth-method-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/three-surface-mcp-server-architecture#oauth-21--pkce',
+      );
+
+      // Escape closes popover
+      act(() => {
+        fireEvent.keyDown(authMethodHelp, { key: 'Escape' });
+      });
+
+      expect(authMethodHelp.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('reg-auth-method-help-popover')).toBeNull();
+    });
+
+    it('renders cleanly in Light theme (data-theme="light") with zero inline style violations', async () => {
+      document.documentElement.setAttribute('data-theme', 'light');
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      try {
+        render(
+          <MemoryRouter initialEntries={['/admin/oauth']}>
+            <OAuthClientGovernanceStudio />
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('register-client-btn')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId('register-client-btn'));
+
+        const clientTypeHelp = screen.getByTestId('reg-client-type-help');
+        const authMethodHelp = screen.getByTestId('reg-auth-method-help');
+        const clientTypeIndicator = screen.getByTestId('reg-client-type-default-indicator');
+        const authMethodIndicator = screen.getByTestId('reg-auth-method-default-indicator');
+
+        // Zero inline style props
+        expect(clientTypeHelp.style.length).toBe(0);
+        expect(authMethodHelp.style.length).toBe(0);
+        expect(clientTypeIndicator.style.length).toBe(0);
+        expect(authMethodIndicator.style.length).toBe(0);
+
+        // Open popovers in Light theme without crash
+        act(() => {
+          clientTypeHelp.focus();
+        });
+        const clientPopover = screen.getByTestId('reg-client-type-help-popover');
+        expect(clientPopover).toBeDefined();
+        // Zero color or background inline style overrides (positioning managed by positionHint)
+        expect(clientPopover.style.color).toBe('');
+        expect(clientPopover.style.backgroundColor).toBe('');
+
+        act(() => {
+          fireEvent.keyDown(clientTypeHelp, { key: 'Escape' });
+        });
+
+        act(() => {
+          authMethodHelp.focus();
+        });
+        const authPopover = screen.getByTestId('reg-auth-method-help-popover');
+        expect(authPopover).toBeDefined();
+        expect(authPopover.style.color).toBe('');
+        expect(authPopover.style.backgroundColor).toBe('');
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('renders cleanly in Dark theme (data-theme="dark") with zero inline style violations', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
+
+      try {
+        render(
+          <MemoryRouter initialEntries={['/admin/oauth']}>
+            <OAuthClientGovernanceStudio />
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('register-client-btn')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByTestId('register-client-btn'));
+
+        const clientTypeHelp = screen.getByTestId('reg-client-type-help');
+        const authMethodHelp = screen.getByTestId('reg-auth-method-help');
+        const clientTypeIndicator = screen.getByTestId('reg-client-type-default-indicator');
+        const authMethodIndicator = screen.getByTestId('reg-auth-method-default-indicator');
+
+        // Zero inline style props
+        expect(clientTypeHelp.style.length).toBe(0);
+        expect(authMethodHelp.style.length).toBe(0);
+        expect(clientTypeIndicator.style.length).toBe(0);
+        expect(authMethodIndicator.style.length).toBe(0);
+
+        // Open popovers in Dark theme without crash
+        act(() => {
+          clientTypeHelp.focus();
+        });
+        const clientPopover = screen.getByTestId('reg-client-type-help-popover');
+        expect(clientPopover).toBeDefined();
+        // Zero color or background inline style overrides (positioning managed by positionHint)
+        expect(clientPopover.style.color).toBe('');
+        expect(clientPopover.style.backgroundColor).toBe('');
+
+        act(() => {
+          fireEvent.keyDown(clientTypeHelp, { key: 'Escape' });
+        });
+
+        act(() => {
+          authMethodHelp.focus();
+        });
+        const authPopover = screen.getByTestId('reg-auth-method-help-popover');
+        expect(authPopover).toBeDefined();
+        expect(authPopover.style.color).toBe('');
+        expect(authPopover.style.backgroundColor).toBe('');
+      } finally {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+
+    it('asserts CSS rules for .kb-oauth-form-label, .kb-oauth-default-indicator, and 480px responsive media query', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../OAuthClientGovernanceStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Label and flex alignment
+      expect(cssContent).toContain('.kb-oauth-form-label');
+      expect(cssContent).toContain('display: flex;');
+      expect(cssContent).toContain('justify-content: space-between;');
+
+      // Default indicator styling
+      expect(cssContent).toContain('.kb-oauth-default-indicator');
+      expect(cssContent).toContain('var(--kb-color-text-secondary, var(--fg-secondary, #8b949e))');
+
+      // Mobile 480px responsiveness for zero clipping
+      expect(cssContent).toContain('@media (max-width: 480px)');
+      expect(cssContent).toContain('.kb-oauth-modal-card');
+    });
+  });
 });

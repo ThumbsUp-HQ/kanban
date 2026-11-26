@@ -1169,10 +1169,39 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
 
                   <div className="kb-oauth-form-field">
                     <label htmlFor="reg-client-type" className="kb-oauth-form-label">
-                      Client Type
+                      <span className="kb-oauth-label-text">
+                        Client Type{' '}
+                        <span
+                          className="kb-oauth-default-indicator"
+                          data-testid="reg-client-type-default-indicator"
+                        >
+                          (Default: Public (PKCE only))
+                        </span>
+                      </span>
+                      <FieldHelpHint
+                        title="Client Type"
+                        summary="Client classification under RFC 9700 and OAuth 2.1. Public clients (desktop apps, SPAs, CLI tools) cannot securely hold client credentials and must use PKCE S256. Confidential clients execute on protected backend servers and authenticate using client secrets or private key JWTs."
+                        defaultValue="Public (PKCE only)"
+                        validValues={[
+                          {
+                            label: 'public',
+                            description:
+                              'Public (PKCE only) - Native apps, single-page apps, and CLI agents unable to protect client credentials (RFC 9700)',
+                          },
+                          {
+                            label: 'confidential',
+                            description:
+                              'Confidential (Client Secret + PKCE) - Secure backend workloads and daemon services holding protected secrets',
+                          },
+                        ]}
+                        docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                        testId="reg-client-type-help"
+                        ariaLabel="Help for Client Type"
+                      />
                     </label>
                     <select
                       id="reg-client-type"
+                      aria-describedby="reg-client-type-hint"
                       className="kb-oauth-form-select"
                       data-testid="select-client-type"
                       value={registerClientType}
@@ -1190,14 +1219,56 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                       <option value="public">Public (PKCE only)</option>
                       <option value="confidential">Confidential (Client Secret + PKCE)</option>
                     </select>
+                    <span id="reg-client-type-hint" className="kb-oauth-help-text">
+                      Default: Public (PKCE only) - RFC 9700 OAuth 2.1 public client
+                    </span>
                   </div>
 
                   <div className="kb-oauth-form-field">
                     <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
-                      Token Endpoint Authentication Method
+                      <span className="kb-oauth-label-text">
+                        Token Endpoint Authentication Method{' '}
+                        <span
+                          className="kb-oauth-default-indicator"
+                          data-testid="reg-auth-method-default-indicator"
+                        >
+                          (Default: none)
+                        </span>
+                      </span>
+                      <FieldHelpHint
+                        title="Token Endpoint Authentication Method"
+                        summary="Authentication mechanism used by the client when communicating with the token endpoint (/oauth/token) under RFC 9700 and OAuth 2.1. Public clients default to none (relying on PKCE S256 proof of possession)."
+                        defaultValue="none"
+                        validValues={[
+                          {
+                            label: 'none',
+                            description:
+                              'none - Public client authentication with PKCE S256 proof of possession (RFC 7636, RFC 9700)',
+                          },
+                          {
+                            label: 'client_secret_basic',
+                            description:
+                              'client_secret_basic - HTTP Basic Authorization header with client ID and secret (Confidential clients)',
+                          },
+                          {
+                            label: 'client_secret_post',
+                            description:
+                              'client_secret_post - Client credentials included in application/x-www-form-urlencoded request body',
+                          },
+                          {
+                            label: 'private_key_jwt',
+                            description:
+                              'private_key_jwt - Asymmetric client assertion signed with an RSA or EC private key (RFC 7523)',
+                          },
+                        ]}
+                        docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                        testId="reg-auth-method-help"
+                        ariaLabel="Help for Token Endpoint Authentication Method"
+                      />
                     </label>
                     <select
                       id="reg-auth-method"
+                      aria-describedby="reg-auth-method-hint"
                       className="kb-oauth-form-select"
                       data-testid="select-auth-method"
                       value={registerAuthMethod}
@@ -1233,6 +1304,9 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                         </>
                       )}
                     </select>
+                    <span id="reg-auth-method-hint" className="kb-oauth-help-text">
+                      Default: none - PKCE S256 code challenge
+                    </span>
                   </div>
 
                   <div className="kb-oauth-form-field">
