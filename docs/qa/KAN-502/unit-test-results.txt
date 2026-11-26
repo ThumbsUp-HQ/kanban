@@ -1,16 +1,14 @@
-=== UNIT TEST RESULTS ===
-Command: cd kanban/web && pnpm vitest run src/features/rbac/__tests__/RoleLabelPicker.test.tsx --coverage --coverage.include='src/features/rbac/RoleLabelPicker.tsx'
-
+$ cd kanban/web && pnpm vitest run src/features/rbac/__tests__/RoleLabelPicker.test.tsx --coverage --coverage.include="src/features/rbac/RoleLabelPicker.tsx"
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan502-226d303d/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/rbac/__tests__/RoleLabelPicker.test.tsx (9 tests) 585ms
+ ✓ src/features/rbac/__tests__/RoleLabelPicker.test.tsx (9 tests) 336ms
 
  Test Files  1 passed (1)
       Tests  9 passed (9)
-   Start at  15:51:18
-   Duration  2.64s (environment 57%, tests 27%, import 11%, worker 3%, transform 3%)
+   Start at  16:23:10
+   Duration  1.47s (environment 56%, tests 28%, import 11%, worker 3%, transform 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -19,5 +17,4 @@ File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 All files          |     100 |      100 |     100 |     100 |                   
  ...abelPicker.tsx |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
-
 Exit code: 0
