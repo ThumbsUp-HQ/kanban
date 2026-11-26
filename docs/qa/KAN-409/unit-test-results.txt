@@ -1,0 +1,53 @@
+=== PYTEST: Wiki Bundle Sync Tests ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 7 items
+
+kanban/tests/test_wiki_bundle_sync.py::test_wiki_and_public_images_sha256_parity PASSED [ 14%]
+kanban/tests/test_wiki_bundle_sync.py::test_zero_duplicate_numeric_prefix_collisions PASSED [ 28%]
+kanban/tests/test_wiki_bundle_sync.py::test_every_markdown_image_reference_resolves PASSED [ 42%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_external_image_links_in_wiki PASSED [ 57%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_unreferenced_orphan_images PASSED [ 71%]
+kanban/tests/test_wiki_bundle_sync.py::test_sync_wiki_bundle_execution PASSED [ 85%]
+kanban/tests/test_wiki_bundle_sync.py::test_feature_comparison_day2_clean_and_synced PASSED [100%]
+
+============================== 7 passed in 0.13s ===============================
+
+=== VITEST: DocsCenter & DocsCenterImages Coverage Suite ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 173ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 6708ms
+   ✓ DocsCenter & Help System (KAN-16) (50)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 335ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (17)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 317ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1607ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 513ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 458ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 1126ms
+
+ Test Files  2 passed (2)
+      Tests  71 passed (71)
+   Start at  22:52:22
+   Duration  8.06s (tests 79%, environment 16%, import 4%, worker 1%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.6 |    96.15 |     100 |     100 |                   
+ ...downViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+ ...CenterPage.tsx |     100 |    95.12 |     100 |     100 | 52-55,100         
+ HelpDrawer.tsx    |     100 |    97.72 |     100 |     100 | 69                
+ docsService.ts    |     100 |    97.14 |     100 |     100 | 46                
+ wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

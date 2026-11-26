@@ -1756,5 +1756,50 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(hashHref.slug).toBe('guide-custom-fields');
       expect(hashHref.anchor).toBe('some-anchor');
     });
+
+    it('asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM', () => {
+      const slice1Links = [
+        '/docs/multi-card-authentication-studio',
+        '/docs/multi-card-authentication-studio#first-boot-setup-wizard',
+        '/docs/multi-card-authentication-studio#multi-card-login-experience',
+        '/docs/multi-card-authentication-studio#admin-authentication-studio',
+        '/docs/multi-card-authentication-studio#lockout-prevention',
+        '/docs/multi-card-authentication-studio#aal2-step-up',
+        '/docs/multi-card-authentication-studio#mfa-enrollment',
+        '/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration',
+        '/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso',
+        '/docs/multi-card-authentication-studio#webauthn-passkeys-and-totp-enrollment',
+        '/docs/multi-card-authentication-studio#password-security',
+        '/docs/role-and-permission-matrix',
+        '/docs/role-and-permission-matrix#system-roles',
+        '/docs/role-and-permission-matrix#workspace-level-roles',
+        '/docs/role-and-permission-matrix#granular-rbac-policy-builder',
+        '/docs/role-and-permission-matrix#30-permission-granular-engine',
+        '/docs/role-and-permission-matrix#capability-bitmask-and-deny-precedence',
+        '/docs/role-and-permission-matrix#master-capability-matrix',
+        '/docs/role-and-permission-matrix#detailed-condition-notes',
+        '/docs/role-and-permission-matrix#architectural-security-invariants',
+        '/docs/studio-configuration-reference#authentication-studio',
+        '/docs/studio-configuration-reference#active-directory-and-ldaps-configuration-table',
+        '/docs/studio-configuration-reference#openid-connect-oidc-and-google-oauth-configuration-table',
+        '/docs/studio-configuration-reference#personal-security-and-multi-factor-authentication-configuration-table',
+        '/docs/studio-configuration-reference#granular-rbac-policy-builder-configuration-table',
+      ];
+
+      for (const href of slice1Links) {
+        const { slug, anchor } = parseDocHref(href);
+        const chapter = getChapter(slug);
+        expect(chapter).toBeDefined();
+        if (anchor && chapter) {
+          const container = document.createElement('div');
+          render(
+            <DocMarkdownViewer content={chapter.content} />,
+            { container },
+          );
+          const targetEl = resolveSectionElement(container, anchor);
+          expect(targetEl).not.toBeNull();
+        }
+      }
+    });
   });
 });
