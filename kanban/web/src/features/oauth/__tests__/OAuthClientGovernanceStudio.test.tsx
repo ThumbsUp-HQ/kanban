@@ -1777,5 +1777,24 @@ describe('OAuthClientGovernanceStudio', () => {
       expect(cssContent).toContain('@media (max-width: 480px)');
       expect(cssContent).toContain('.kb-oauth-modal-card');
     });
+
+    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/oauth']}>
+          <OAuthClientGovernanceStudio />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('oauth-client-governance-studio')).toBeDefined();
+      });
+
+      const headerActions = document.querySelector('.kb-oauth-header-actions');
+      expect(headerActions).not.toBeNull();
+      const children = Array.from(headerActions!.children);
+      expect(children.length).toBe(2);
+      expect(children[0]?.getAttribute('data-testid')).toBe('refresh-clients-btn');
+      expect(children[1]?.getAttribute('data-testid')).toBe('oauth-studio-doc-link');
+    });
   });
 });

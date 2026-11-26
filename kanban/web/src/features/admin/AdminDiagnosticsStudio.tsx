@@ -384,12 +384,6 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         </div>
 
         <div className="admin-diag-header-actions">
-          <StudioDocLink
-            href="/docs/admin-diagnostics-and-link-inspector-studio"
-            title="Admin Diagnostics and Link Inspector Documentation"
-            testId="diagnostics-doc-link"
-          />
-
           <span
             className={`admin-diag-badge ${
               wsProbeState === 'connected'
@@ -430,6 +424,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             <span aria-hidden="true">🔄</span>
             {isFetching ? 'Refreshing...' : 'Refresh Diagnostics'}
           </button>
+
+          <StudioDocLink
+            href="/docs/admin-diagnostics-and-link-inspector-studio"
+            title="Admin Diagnostics and Link Inspector Documentation"
+            testId="diagnostics-doc-link"
+          />
         </div>
       </header>
 
@@ -503,7 +503,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             <span className="admin-diag-badge admin-diag-badge--ok">Sanitized</span>
           </div>
           <div className="admin-diag-summary-card-body">
-            {diag?.config.length ?? 0} Settings
+            {diag?.config?.length ?? 0} Settings
           </div>
           <div className="admin-diag-summary-card-footer">
             Zero secret leakage | CSP connect-src strict
@@ -871,24 +871,16 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             </table>
           </div>
 
-          <div style={{ marginTop: '16px' }}>
+          <div className="admin-diag-advanced-wrap">
             <AdvancedSection
               title="Advanced Technical Details"
               summary="Raw sanitized JSON configuration dump and internal runtime subsystem metadata"
               testId="admin-diag-advanced-technical-details"
             >
-              <div style={{ marginTop: '12px' }}>
+              <div className="admin-diag-raw-dump-wrap">
                 <pre
                   data-testid="admin-diag-raw-config-dump"
-                  style={{
-                    maxHeight: '300px',
-                    overflow: 'auto',
-                    background: 'var(--kb-color-bg-subtle, #1e293b)',
-                    padding: '12px',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontFamily: 'monospace',
-                  }}
+                  className="admin-diag-raw-dump"
                 >
                   {JSON.stringify(diag?.config, null, 2)}
                 </pre>

@@ -2831,5 +2831,24 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       expect(css).not.toContain('\u2014');
       expect(css).not.toContain('\u2013');
     });
+
+    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} tier="global" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mcp-access-studio')).toBeDefined();
+      });
+
+      const headerActions = document.querySelector('.kb-mcp-header-actions');
+      expect(headerActions).not.toBeNull();
+      const children = Array.from(headerActions!.children);
+      expect(children.length).toBe(2);
+      expect(children[0]?.getAttribute('data-testid')).toBe('mint-key-button');
+      expect(children[1]?.getAttribute('data-testid')).toBe('mcp-studio-doc-link');
+    });
   });
 });

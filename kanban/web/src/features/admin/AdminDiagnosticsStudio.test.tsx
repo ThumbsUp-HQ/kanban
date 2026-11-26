@@ -1108,5 +1108,33 @@ describe('AdminDiagnosticsStudio Component', () => {
         expect(screen.getByTestId('refresh-diagnostics-btn').textContent).toContain('Refresh Diagnostics');
       });
     });
+
+    it('standardizes header action cadence: status badge -> secondary action -> primary action CTA -> studio doc link (KAN-532)', async () => {
+      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
+        const p = extractPath(args);
+        if (p.includes('/api/v1/auth/session/me') || p.includes('/api/v1/auth/me')) {
+          return Promise.resolve(mockAdminUser);
+        }
+        if (p.includes('/api/v1/admin/diagnostics')) {
+          return Promise.resolve(mockDiagnosticsData);
+        }
+        return Promise.resolve({});
+      });
+
+      renderStudio('/admin/diagnostics', 'health');
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
+      });
+
+      const headerActions = document.querySelector('.admin-diag-header-actions');
+      expect(headerActions).not.toBeNull();
+      const children = Array.from(headerActions!.children);
+      expect(children.length).toBe(4);
+      expect(children[0]?.getAttribute('data-testid')).toBe('ws-probe-badge');
+      expect(children[1]?.getAttribute('data-testid')).toBe('run-ws-ping-btn');
+      expect(children[2]?.getAttribute('data-testid')).toBe('refresh-diagnostics-btn');
+      expect(children[3]?.getAttribute('data-testid')).toBe('diagnostics-doc-link');
+    });
   });
 });

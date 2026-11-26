@@ -1,0 +1,1087 @@
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+index 0097deee..6a1815ac 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+@@ -47,10 +47,32 @@
+   gap: 12px;
+   align-items: center;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.admin-diag-header-actions .admin-diag-badge {
++  height: 38px;
++  min-height: 38px;
++  padding: 0 12px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  line-height: 1;
++}
++
++.admin-diag-header-actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .admin-diag-btn {
+   height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
+   padding: 0 16px;
+   font-size: 0.875rem;
+   font-weight: 600;
+@@ -61,6 +83,7 @@
+   cursor: pointer;
+   display: inline-flex;
+   align-items: center;
++  justify-content: center;
+   gap: 8px;
+   transition: background-color 0.15s ease, border-color 0.15s ease;
+ }
+@@ -276,6 +299,26 @@
+   font-family: var(--font-mono);
+ }
+ 
++.admin-diag-advanced-wrap {
++  margin-top: 16px;
++}
++
++.admin-diag-raw-dump-wrap {
++  margin-top: 12px;
++}
++
++.admin-diag-raw-dump {
++  max-height: 300px;
++  overflow: auto;
++  background: var(--bg-canvas);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
++  padding: 12px;
++  border-radius: 6px;
++  font-size: 0.75rem;
++  font-family: var(--font-mono);
++}
++
+ /* Detailed Panels */
+ .admin-diag-panel {
+   background: var(--bg-surface);
+@@ -386,11 +429,13 @@
+     display: flex;
+     flex-wrap: wrap;
+     width: 100%;
++    max-width: 100%;
+     gap: var(--space-2, 8px);
+   }
+ 
+   .admin-diag-btn {
+     min-height: var(--tap-min, 44px);
++    height: 44px;
+     min-width: var(--tap-min, 44px);
+     white-space: nowrap;
+     padding: 0 var(--space-3, 12px);
+@@ -398,6 +443,17 @@
+     justify-content: center;
+   }
+ 
++  .admin-diag-header-actions .admin-diag-badge {
++    height: 44px;
++    min-height: 44px;
++    padding: 0 var(--space-3, 12px);
++  }
++
++  .admin-diag-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .admin-diag-tabs {
+     overflow-x: auto;
+     -webkit-overflow-scrolling: touch;
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+index a8798174..3f9f55af 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+@@ -1108,5 +1108,33 @@ describe('AdminDiagnosticsStudio Component', () => {
+         expect(screen.getByTestId('refresh-diagnostics-btn').textContent).toContain('Refresh Diagnostics');
+       });
+     });
++
++    it('standardizes header action cadence: status badge -> secondary action -> primary action CTA -> studio doc link (KAN-532)', async () => {
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const p = extractPath(args);
++        if (p.includes('/api/v1/auth/session/me') || p.includes('/api/v1/auth/me')) {
++          return Promise.resolve(mockAdminUser);
++        }
++        if (p.includes('/api/v1/admin/diagnostics')) {
++          return Promise.resolve(mockDiagnosticsData);
++        }
++        return Promise.resolve({});
++      });
++
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.admin-diag-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(4);
++      expect(children[0]?.getAttribute('data-testid')).toBe('ws-probe-badge');
++      expect(children[1]?.getAttribute('data-testid')).toBe('run-ws-ping-btn');
++      expect(children[2]?.getAttribute('data-testid')).toBe('refresh-diagnostics-btn');
++      expect(children[3]?.getAttribute('data-testid')).toBe('diagnostics-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index e70dc7ea..b6323e02 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -384,12 +384,6 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+         </div>
+ 
+         <div className="admin-diag-header-actions">
+-          <StudioDocLink
+-            href="/docs/admin-diagnostics-and-link-inspector-studio"
+-            title="Admin Diagnostics and Link Inspector Documentation"
+-            testId="diagnostics-doc-link"
+-          />
+-
+           <span
+             className={`admin-diag-badge ${
+               wsProbeState === 'connected'
+@@ -430,6 +424,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             <span aria-hidden="true">🔄</span>
+             {isFetching ? 'Refreshing...' : 'Refresh Diagnostics'}
+           </button>
++
++          <StudioDocLink
++            href="/docs/admin-diagnostics-and-link-inspector-studio"
++            title="Admin Diagnostics and Link Inspector Documentation"
++            testId="diagnostics-doc-link"
++          />
+         </div>
+       </header>
+ 
+@@ -503,7 +503,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             <span className="admin-diag-badge admin-diag-badge--ok">Sanitized</span>
+           </div>
+           <div className="admin-diag-summary-card-body">
+-            {diag?.config.length ?? 0} Settings
++            {diag?.config?.length ?? 0} Settings
+           </div>
+           <div className="admin-diag-summary-card-footer">
+             Zero secret leakage | CSP connect-src strict
+@@ -871,24 +871,16 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             </table>
+           </div>
+ 
+-          <div style={{ marginTop: '16px' }}>
++          <div className="admin-diag-advanced-wrap">
+             <AdvancedSection
+               title="Advanced Technical Details"
+               summary="Raw sanitized JSON configuration dump and internal runtime subsystem metadata"
+               testId="admin-diag-advanced-technical-details"
+             >
+-              <div style={{ marginTop: '12px' }}>
++              <div className="admin-diag-raw-dump-wrap">
+                 <pre
+                   data-testid="admin-diag-raw-config-dump"
+-                  style={{
+-                    maxHeight: '300px',
+-                    overflow: 'auto',
+-                    background: 'var(--kb-color-bg-subtle, #1e293b)',
+-                    padding: '12px',
+-                    borderRadius: '6px',
+-                    fontSize: '0.75rem',
+-                    fontFamily: 'monospace',
+-                  }}
++                  className="admin-diag-raw-dump"
+                 >
+                   {JSON.stringify(diag?.config, null, 2)}
+                 </pre>
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
+index 59ed269d..25fdc3bf 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.css
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.css
+@@ -47,6 +47,22 @@
+   gap: 12px;
+   align-items: center;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.link-auditor-header__actions .link-auditor-btn {
++  height: 38px;
++  min-height: 38px;
++  padding: 0 16px;
++  box-sizing: border-box;
++}
++
++.link-auditor-header__actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .link-auditor-btn {
+@@ -737,22 +753,29 @@
+ 
+   .link-auditor-header__actions {
+     width: 100%;
++    max-width: 100%;
+     display: flex;
+     flex-wrap: wrap;
+     gap: var(--space-2, 8px);
+-    justify-content: stretch;
++    justify-content: flex-start;
+   }
+ 
+   .link-auditor-header__actions .link-auditor-btn {
+-    flex: 1 1 100%;
++    flex: 0 1 auto;
+     min-height: var(--tap-min, 44px);
+-    height: auto;
+-    padding: 8px 14px;
++    height: 44px;
++    padding: 0 var(--space-3, 12px);
+     line-height: 1.25;
+     white-space: nowrap;
+     justify-content: center;
+   }
+ 
++  .link-auditor-header__actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++    flex: 0 1 auto;
++  }
++
+   .link-auditor-metrics {
+     grid-template-columns: 1fr;
+     gap: var(--space-3, 12px);
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+index bd82cc1d..ca6e845b 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+@@ -1219,5 +1219,35 @@ describe('LinkAuditorStudio', () => {
+       expect(screen.getByRole('heading', { name: 'Integrity Metrics' })).toBeDefined();
+       expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (path === '/api/v1/auth/me') return mockAdminUser;
++        if (path === '/api/v1/admin/object-links/audits') {
++          return { items: mockAuditItems, has_more: false };
++        }
++        return [];
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/admin/link-auditor']}>
++            <LinkAuditorStudio />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.link-auditor-header__actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('run-scan-btn');
++      expect(children[1]?.getAttribute('data-testid')).toBe('link-auditor-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+index 8d1b2fe5..0c44e83f 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+@@ -342,11 +342,6 @@ export function LinkAuditorStudio(): JSX.Element {
+         </div>
+ 
+         <div className="link-auditor-header__actions">
+-          <StudioDocLink
+-            href="/docs/universal-object-graph-and-link-auditor"
+-            title="Link Auditor Documentation"
+-            testId="link-auditor-doc-link"
+-          />
+           <button
+             type="button"
+             className="link-auditor-btn link-auditor-btn--scan"
+@@ -358,6 +353,11 @@ export function LinkAuditorStudio(): JSX.Element {
+           >
+             {scanMutation.isPending ? '⏳ Scanning...' : '🔍 Run Integrity Scan'}
+           </button>
++          <StudioDocLink
++            href="/docs/universal-object-graph-and-link-auditor"
++            title="Link Auditor Documentation"
++            testId="link-auditor-doc-link"
++          />
+         </div>
+       </header>
+ 
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+index ce589e44..753a7dd0 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+@@ -46,6 +46,15 @@
+   align-items: center;
+   gap: 12px;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.kb-oauth-header-actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .kb-oauth-gov-title {
+@@ -63,9 +72,11 @@
+ }
+ 
+ .kb-oauth-gov-refresh-btn {
+-  height: var(--prop-row-h);
++  height: 38px;
++  min-height: 38px;
+   padding: 0 16px;
+-  min-height: 40px;
++  box-sizing: border-box;
++  font-size: 0.875rem;
+   background-color: var(--kb-color-bg-surface-raised, #21262d);
+   border: 1px solid var(--kb-color-border-subtle, #30363d);
+   color: var(--kb-color-text-primary, #f0f6fc);
+@@ -74,7 +85,8 @@
+   cursor: pointer;
+   display: inline-flex;
+   align-items: center;
+-  gap: 6px;
++  justify-content: center;
++  gap: 8px;
+   transition: all 0.15s ease-in-out;
+ }
+ 
+@@ -390,33 +402,33 @@
+ }
+ 
+ .kb-oauth-gov-badge-active {
+-  background-color: rgba(35, 134, 54, 0.2);
+-  color: #3fb950;
+-  border: 1px solid rgba(63, 185, 80, 0.3);
++  background-color: var(--bg-success-subtle);
++  color: var(--ok-fg);
++  border: 1px solid var(--border-success);
+ }
+ 
+ .kb-oauth-gov-badge-suspended {
+-  background-color: rgba(210, 153, 34, 0.2);
+-  color: #d29922;
+-  border: 1px solid rgba(210, 153, 34, 0.3);
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++  border: 1px solid var(--border-warning);
+ }
+ 
+ .kb-oauth-gov-badge-disabled {
+-  background-color: rgba(139, 148, 158, 0.2);
+-  color: #8b949e;
+-  border: 1px solid rgba(139, 148, 158, 0.3);
++  background-color: var(--bg-canvas);
++  color: var(--fg-muted);
++  border: 1px solid var(--border-subtle);
+ }
+ 
+ .kb-oauth-gov-badge-revoked {
+-  background-color: rgba(248, 81, 73, 0.2);
+-  color: #f85149;
+-  border: 1px solid rgba(248, 81, 73, 0.3);
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--border-danger);
+ }
+ 
+ .kb-oauth-gov-badge-pending {
+-  background-color: rgba(56, 139, 253, 0.2);
+-  color: #58a6ff;
+-  border: 1px solid rgba(56, 139, 253, 0.3);
++  background-color: var(--badge-bg);
++  color: var(--badge-fg);
++  border: 1px solid var(--badge-fg);
+ }
+ 
+ .kb-oauth-gov-uri-list {
+@@ -468,39 +480,39 @@
+ }
+ 
+ .kb-oauth-gov-btn-approve {
+-  border-color: rgba(63, 185, 80, 0.4);
+-  color: #3fb950;
++  border-color: var(--border-success);
++  color: var(--ok-fg);
+ }
+ 
+ .kb-oauth-gov-btn-approve:hover {
+-  background-color: rgba(35, 134, 54, 0.2);
++  background-color: var(--bg-success-subtle);
+ }
+ 
+ .kb-oauth-gov-btn-suspend {
+-  border-color: rgba(210, 153, 34, 0.4);
+-  color: #d29922;
++  border-color: var(--border-warning);
++  color: var(--warn-fg);
+ }
+ 
+ .kb-oauth-gov-btn-suspend:hover {
+-  background-color: rgba(210, 153, 34, 0.2);
++  background-color: var(--warn-bg);
+ }
+ 
+ .kb-oauth-gov-btn-revoke {
+-  border-color: rgba(248, 81, 73, 0.4);
+-  color: #f85149;
++  border-color: var(--border-danger);
++  color: var(--danger-fg);
+ }
+ 
+ .kb-oauth-gov-btn-revoke:hover {
+-  background-color: rgba(248, 81, 73, 0.2);
++  background-color: var(--danger-bg);
+ }
+ 
+ .kb-oauth-gov-btn-delete {
+-  border-color: rgba(248, 81, 73, 0.4);
+-  color: #f85149;
++  border-color: var(--border-danger);
++  color: var(--danger-fg);
+ }
+ 
+ .kb-oauth-gov-btn-delete:hover {
+-  background-color: rgba(248, 81, 73, 0.25);
++  background-color: var(--danger-bg);
+ }
+ 
+ .kb-oauth-gov-confirm-bar {
+@@ -514,8 +526,8 @@
+ .kb-oauth-gov-confirm-revoke-btn {
+   padding: 4px 8px;
+   min-height: 36px;
+-  background-color: #da3633;
+-  color: #ffffff;
++  background-color: var(--bg-danger);
++  color: var(--accent-primary-fg, #ffffff);
+   border: 1px solid transparent;
+   border-radius: 6px;
+   font-size: 0.75rem;
+@@ -525,14 +537,15 @@
+ }
+ 
+ .kb-oauth-gov-confirm-revoke-btn:hover {
+-  background-color: #b62324;
++  background-color: var(--bg-danger-hover);
++  color: var(--accent-primary-fg, #ffffff);
+ }
+ 
+ .kb-oauth-gov-confirm-delete-btn {
+   padding: 4px 8px;
+   min-height: 36px;
+-  background-color: #da3633;
+-  color: #ffffff;
++  background-color: var(--bg-danger);
++  color: var(--accent-primary-fg, #ffffff);
+   border: 1px solid transparent;
+   border-radius: 6px;
+   font-size: 0.75rem;
+@@ -542,7 +555,8 @@
+ }
+ 
+ .kb-oauth-gov-confirm-delete-btn:hover {
+-  background-color: #b62324;
++  background-color: var(--bg-danger-hover);
++  color: var(--accent-primary-fg, #ffffff);
+ }
+ 
+ .kb-oauth-gov-cancel-btn {
+@@ -574,15 +588,15 @@
+ }
+ 
+ .kb-oauth-gov-alert-error {
+-  background-color: rgba(248, 81, 73, 0.15);
+-  border: 1px solid rgba(248, 81, 73, 0.4);
+-  color: #f85149;
++  background-color: var(--danger-bg);
++  border: 1px solid var(--border-danger);
++  color: var(--danger-fg);
+ }
+ 
+ .kb-oauth-gov-alert-success {
+-  background-color: rgba(35, 134, 54, 0.15);
+-  border: 1px solid rgba(63, 185, 80, 0.4);
+-  color: #3fb950;
++  background-color: var(--bg-success-subtle);
++  border: 1px solid var(--border-success);
++  color: var(--ok-fg);
+ }
+ 
+ .kb-oauth-gov-empty-state {
+@@ -792,7 +806,7 @@
+ }
+ 
+ .kb-oauth-secret-warning {
+-  color: var(--text-warning, #d29922);
++  color: var(--warn-fg);
+   font-size: 0.875rem;
+   margin-bottom: 12px;
+   line-height: 1.4;
+@@ -804,7 +818,7 @@
+   padding: 8px 12px;
+   border-radius: 6px;
+   border: 1px solid var(--kb-color-border-subtle, #30363d);
+-  color: #3fb950;
++  color: var(--ok-fg);
+   font-size: 0.875rem;
+   user-select: all;
+   word-break: break-all;
+@@ -833,6 +847,26 @@
+     min-width: 0;
+   }
+ 
++  .kb-oauth-header-actions {
++    display: flex;
++    flex-wrap: wrap;
++    width: 100%;
++    max-width: 100%;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-oauth-gov-refresh-btn {
++    height: 44px;
++    min-height: 44px;
++    min-width: 44px;
++    padding: 0 16px;
++  }
++
++  .kb-oauth-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .kb-oauth-gov-section {
+     padding: 16px 12px;
+     width: 100%;
+@@ -986,6 +1020,24 @@
+   }
+ }
+ 
++.kb-oauth-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++
++.kb-oauth-pkce-checkbox {
++  margin-right: 8px;
++}
++
++.kb-oauth-form-hint {
++  font-size: 0.8rem;
++  color: var(--fg-secondary);
++  line-height: 1.4;
++  display: block;
++}
++
+ /* QA Full-Content Capture Modifier for CSP-Compliant Screenshots */
+ html.qa-fullpage-capture,
+ html.qa-fullpage-capture body,
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index 5eeb235a..69f66aec 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -471,11 +471,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+           </p>
+         </div>
+         <div className="kb-oauth-header-actions">
+-          <StudioDocLink
+-            href="/docs/three-surface-mcp-server-architecture"
+-            title="OAuth 2.1 Governance Documentation"
+-            testId="oauth-studio-doc-link"
+-          />
+           <button
+             type="button"
+             className="kb-oauth-gov-refresh-btn"
+@@ -486,6 +481,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+           >
+             <span aria-hidden="true">🔄</span> Refresh
+           </button>
++          <StudioDocLink
++            href="/docs/three-surface-mcp-server-architecture"
++            title="OAuth 2.1 Governance Documentation"
++            testId="oauth-studio-doc-link"
++          />
+         </div>
+       </header>
+ 
+@@ -1168,16 +1168,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                   </div>
+ 
+                   <div className="kb-oauth-form-field">
+-                    <label htmlFor="reg-client-type" className="kb-oauth-form-label">
+-                      <span className="kb-oauth-label-text">
+-                        Client Type{' '}
+-                        <span
+-                          className="kb-oauth-default-indicator"
+-                          data-testid="reg-client-type-default-indicator"
+-                        >
+-                          (Default: Public (PKCE only))
++                    <div className="kb-oauth-form-label-row">
++                      <label htmlFor="reg-client-type" className="kb-oauth-form-label">
++                        <span className="kb-oauth-label-text">
++                          Client Type{' '}
++                          <span
++                            className="kb-oauth-default-indicator"
++                            data-testid="reg-client-type-default-indicator"
++                          >
++                            (Default: Public (PKCE only))
++                          </span>
+                         </span>
+-                      </span>
++                      </label>
+                       <FieldHelpHint
+                         title="Client Type"
+                         summary="Client classification under RFC 9700 and OAuth 2.1. Public clients (desktop apps, SPAs, CLI tools) cannot securely hold client credentials and must use PKCE S256. Confidential clients execute on protected backend servers and authenticate using client secrets or private key JWTs."
+@@ -1198,7 +1200,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                         testId="reg-client-type-help"
+                         ariaLabel="Help for Client Type"
+                       />
+-                    </label>
++                    </div>
+                     <select
+                       id="reg-client-type"
+                       aria-describedby="reg-client-type-hint"
+@@ -1225,16 +1227,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                   </div>
+ 
+                   <div className="kb-oauth-form-field">
+-                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+-                      <span className="kb-oauth-label-text">
+-                        Token Endpoint Authentication Method{' '}
+-                        <span
+-                          className="kb-oauth-default-indicator"
+-                          data-testid="reg-auth-method-default-indicator"
+-                        >
+-                          (Default: none)
++                    <div className="kb-oauth-form-label-row">
++                      <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
++                        <span className="kb-oauth-label-text">
++                          Token Endpoint Authentication Method{' '}
++                          <span
++                            className="kb-oauth-default-indicator"
++                            data-testid="reg-auth-method-default-indicator"
++                          >
++                            (Default: none)
++                          </span>
+                         </span>
+-                      </span>
++                      </label>
+                       <FieldHelpHint
+                         title="Token Endpoint Authentication Method"
+                         summary="Authentication mechanism used by the client when communicating with the token endpoint (/oauth/token) under RFC 9700 and OAuth 2.1. Public clients default to none (relying on PKCE S256 proof of possession)."
+@@ -1265,7 +1269,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                         testId="reg-auth-method-help"
+                         ariaLabel="Help for Token Endpoint Authentication Method"
+                       />
+-                    </label>
++                    </div>
+                     <select
+                       id="reg-auth-method"
+                       aria-describedby="reg-auth-method-hint"
+@@ -1310,8 +1314,10 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                   </div>
+ 
+                   <div className="kb-oauth-form-field">
+-                    <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
+-                      Redirect URIs (one per line, HTTPS or loopback HTTP)
++                    <div className="kb-oauth-form-label-row">
++                      <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
++                        Redirect URIs (one per line, HTTPS or loopback HTTP)
++                      </label>
+                       <FieldHelpHint
+                         title="Redirect URIs"
+                         summary="Strict allowlist of OAuth redirect destinations. RFC 8252 requires HTTPS for web or 127.0.0.1 loopback for native clients."
+@@ -1319,7 +1325,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                         docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                         testId="reg-redirect-uris-help"
+                       />
+-                    </label>
++                    </div>
+                     <textarea
+                       id="reg-redirect-uris"
+                       className="kb-oauth-form-textarea"
+@@ -1351,11 +1357,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+                             setRegisterPkceEnforce(e.target.checked);
+                           }}
+                           disabled={registerSubmitting}
+-                          style={{ marginRight: '8px' }}
++                          className="kb-oauth-pkce-checkbox"
+                         />
+                         Enforce PKCE S256 (RFC 9700 Mandatory)
+                       </label>
+-                      <span className="kb-form-hint" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
++                      <span className="kb-oauth-form-hint">
+                         Enforces SHA-256 code challenge for authorization code exchange. Plain code verifiers are strictly prohibited.
+                       </span>
+                     </div>
+diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+index ad931ff5..00364dd4 100644
+--- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
++++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+@@ -1777,5 +1777,24 @@ describe('OAuthClientGovernanceStudio', () => {
+       expect(cssContent).toContain('@media (max-width: 480px)');
+       expect(cssContent).toContain('.kb-oauth-modal-card');
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/oauth']}>
++          <OAuthClientGovernanceStudio />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('oauth-client-governance-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.kb-oauth-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('refresh-clients-btn');
++      expect(children[1]?.getAttribute('data-testid')).toBe('oauth-studio-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 82aae560..d19f694d 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -38,14 +38,21 @@
+ }
+ 
+ .kb-mcp-studio-mint-btn {
+-  height: var(--prop-row-h);
+-  padding: 0 18px;
++  height: 38px;
++  min-height: 38px;
++  padding: 0 16px;
++  box-sizing: border-box;
++  font-size: 0.875rem;
+   background-color: #047857;
+   border: 1px solid #047857;
+   color: var(--accent-primary-fg, #ffffff);
+   border-radius: 6px;
+   font-weight: 600;
+   cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
+   transition: background-color 0.15s, border-color 0.15s;
+ }
+ 
+@@ -640,15 +647,18 @@
+ .kb-mcp-header-actions {
+   display: flex;
+   align-items: center;
+-  gap: 8px;
++  gap: 12px;
+   flex-wrap: wrap;
+   flex-shrink: 0;
+   max-width: 100%;
+ }
+ 
+ .kb-mcp-header-actions .kb-studio-doc-link {
++  height: 38px;
+   min-height: 38px;
+   box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .kb-mcp-connect-btn {
+@@ -779,6 +789,37 @@
+     overflow-x: hidden;
+   }
+ 
++  .kb-mcp-studio-header {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .kb-mcp-studio-header > div:first-child {
++    flex: 0 0 auto;
++    width: 100%;
++  }
++
++  .kb-mcp-header-actions {
++    display: flex;
++    flex-wrap: wrap;
++    width: 100%;
++    max-width: 100%;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-mcp-studio-mint-btn {
++    height: 44px;
++    min-height: 44px;
++    min-width: 44px;
++    padding: 0 16px;
++  }
++
++  .kb-mcp-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .kb-mcp-studio-section {
+     padding: 16px 12px;
+     max-width: 100%;
+@@ -858,4 +899,42 @@
+   }
+ }
+ 
++.kb-mcp-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++
++.kb-mcp-segmented-group {
++  display: flex;
++  gap: 8px;
++  margin-bottom: 8px;
++  flex-wrap: wrap;
++}
++
++.kb-mcp-policy-badge {
++  margin-left: 8px;
++  font-size: 0.8rem;
++  color: var(--fg-secondary);
++}
++
++.kb-mcp-warning-text {
++  color: var(--danger-fg);
++  margin-top: 4px;
++}
++
++.kb-mcp-key-meta-badges {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 4px;
++  margin-top: 4px;
++}
++
++.kb-mcp-unlimited-pill-small {
++  font-size: 0.75rem;
++  padding: 2px 6px;
++}
++
++
+ 
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index a74fe637..e381e321 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -751,11 +751,6 @@ export function McpAccessStudio({
+           </p>
+         </div>
+         <div className="kb-mcp-header-actions">
+-          <StudioDocLink
+-            href="/docs/three-surface-mcp-server-architecture"
+-            title="MCP Architecture & Tool Reference"
+-            testId="mcp-studio-doc-link"
+-          />
+           <button
+             type="button"
+             className="kb-mcp-studio-mint-btn"
+@@ -764,6 +759,11 @@ export function McpAccessStudio({
+           >
+             + Mint MCP Key
+           </button>
++          <StudioDocLink
++            href="/docs/three-surface-mcp-server-architecture"
++            title="MCP Architecture & Tool Reference"
++            testId="mcp-studio-doc-link"
++          />
+         </div>
+       </header>
+ 
+@@ -951,23 +951,21 @@ export function McpAccessStudio({
+                     </td>
+                     <td className="kb-mcp-td">
+                       <div>{getTierBadge(k.scope_tier, k.allowed_projects)}</div>
+-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
++                      <div className="kb-mcp-key-meta-badges">
+                         {k.capability_mask !== undefined && (
+                           <span
+-                            className="kb-mcp-unlimited-pill"
++                            className="kb-mcp-unlimited-pill kb-mcp-unlimited-pill-small"
+                             data-testid={`key-cap-mask-${k.id}`}
+                             title={`Capability Mask: ${String(k.capability_mask)}`}
+-                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
+                           >
+                             Mask: {k.capability_mask}
+                           </span>
+                         )}
+                         {k.allowed_cidrs && k.allowed_cidrs.length > 0 && (
+                           <span
+-                            className="kb-mcp-unlimited-pill"
++                            className="kb-mcp-unlimited-pill kb-mcp-unlimited-pill-small"
+                             data-testid={`key-cidr-badge-${k.id}`}
+                             title={`Allowed CIDRs: ${k.allowed_cidrs.join(', ')}`}
+-                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
+                           >
+                             CIDR: {k.allowed_cidrs.join(', ')}
+                           </span>
+@@ -1240,8 +1238,10 @@ export function McpAccessStudio({
+ 
+               {/* Question 2: Unified Key Type & Scope Tier Selector */}
+               <div className="kb-mcp-form-row">
+-                <label htmlFor="mint-key-scope-type-select" className="kb-mcp-form-label">
+-                  <span className="kb-mcp-question-num">2.</span> Who is this key for & what can it access?
++                <div className="kb-mcp-form-label-row">
++                  <label htmlFor="mint-key-scope-type-select" className="kb-mcp-form-label">
++                    <span className="kb-mcp-question-num">2.</span> Who is this key for & what can it access?
++                  </label>
+                   <FieldHelpHint
+                     title="Key Type & Scope"
+                     summary="Security boundary and ownership model governing whether this token belongs to your personal account or an automated service bot, and which workspace or project resources it can access."
+@@ -1255,10 +1255,10 @@ export function McpAccessStudio({
+                     docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                     testId="mint-scope-help"
+                   />
+-                </label>
++                </div>
+ 
+                 {/* Streamlined Segmented Role & Scope Selectors */}
+-                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
++                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector">
+                   <button
+                     type="button"
+                     className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'personal_user' ? 'kb-mcp-filter-pill-active' : ''}`}
+@@ -1284,7 +1284,7 @@ export function McpAccessStudio({
+                   </button>
+                 </div>
+ 
+-                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
++                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector">
+                   <button
+                     type="button"
+                     className={`kb-mcp-filter-pill ${newKeyScopeTier === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
+@@ -1402,8 +1402,10 @@ export function McpAccessStudio({
+               </div>
+ 
+               <div className="kb-mcp-form-row">
+-                <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
+-                  Expiration:
++                <div className="kb-mcp-form-label-row">
++                  <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
++                    Expiration:
++                  </label>
+                   <FieldHelpHint
+                     title="Token Expiration"
+                     summary="Lifetime duration before newly minted MCP access key expires."
+@@ -1415,12 +1417,11 @@ export function McpAccessStudio({
+                     <span
+                       className="kb-mcp-policy-badge"
+                       data-testid="policy-ttl-badge"
+-                      style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--kb-color-text-secondary, #8b949e)' }}
+                     >
+                       Workspace policy enforces maximum {maxKeyTtlDays}-day TTL
+                     </span>
+                   )}
+-                </label>
++                </div>
+                 <select
+                   id="mint-expiry-select"
+                   className="kb-mcp-form-select"
+@@ -1488,8 +1489,10 @@ export function McpAccessStudio({
+                 }
+               >
+                 <div className="kb-mcp-form-row">
+-                  <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
+-                    Capability Ceiling:
++                  <div className="kb-mcp-form-label-row">
++                    <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
++                      Capability Ceiling:
++                    </label>
+                     <FieldHelpHint
+                       title="Capability Ceiling"
+                       summary="Maximum permission ceiling bitmask allocated to the client."
+@@ -1497,7 +1500,7 @@ export function McpAccessStudio({
+                       docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                       testId="mcp-capability-ceiling-help"
+                     />
+-                  </label>
++                  </div>
+                   <select
+                     id="capability-preset-select"
+                     className="kb-mcp-form-select"
+@@ -1583,7 +1586,6 @@ export function McpAccessStudio({
+                       className="kb-mcp-warning-text"
+                       role="alert"
+                       data-testid="cidr-error-message"
+-                      style={{ color: '#ef4444', marginTop: '4px' }}
+                     >
+                       {cidrError}
+                     </div>
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index 584fa9bb..143979da 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -2831,5 +2831,24 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       expect(css).not.toContain('\u2014');
+       expect(css).not.toContain('\u2013');
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} tier="global" />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mcp-access-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.kb-mcp-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('mint-key-button');
++      expect(children[1]?.getAttribute('data-testid')).toBe('mcp-studio-doc-link');
++    });
+   });
+ });

@@ -1219,5 +1219,35 @@ describe('LinkAuditorStudio', () => {
       expect(screen.getByRole('heading', { name: 'Integrity Metrics' })).toBeDefined();
       expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
     });
+
+    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
+      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        if (path === '/api/v1/auth/me') return mockAdminUser;
+        if (path === '/api/v1/admin/object-links/audits') {
+          return { items: mockAuditItems, has_more: false };
+        }
+        return [];
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/admin/link-auditor']}>
+            <LinkAuditorStudio />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
+      });
+
+      const headerActions = document.querySelector('.link-auditor-header__actions');
+      expect(headerActions).not.toBeNull();
+      const children = Array.from(headerActions!.children);
+      expect(children.length).toBe(2);
+      expect(children[0]?.getAttribute('data-testid')).toBe('run-scan-btn');
+      expect(children[1]?.getAttribute('data-testid')).toBe('link-auditor-doc-link');
+    });
   });
 });

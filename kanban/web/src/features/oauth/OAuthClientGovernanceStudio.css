@@ -46,6 +46,15 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.kb-oauth-header-actions .kb-studio-doc-link {
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 
 .kb-oauth-gov-title {
@@ -63,9 +72,11 @@
 }
 
 .kb-oauth-gov-refresh-btn {
-  height: var(--prop-row-h);
+  height: 38px;
+  min-height: 38px;
   padding: 0 16px;
-  min-height: 40px;
+  box-sizing: border-box;
+  font-size: 0.875rem;
   background-color: var(--kb-color-bg-surface-raised, #21262d);
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   color: var(--kb-color-text-primary, #f0f6fc);
@@ -74,7 +85,8 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   transition: all 0.15s ease-in-out;
 }
 
@@ -390,33 +402,33 @@
 }
 
 .kb-oauth-gov-badge-active {
-  background-color: rgba(35, 134, 54, 0.2);
-  color: #3fb950;
-  border: 1px solid rgba(63, 185, 80, 0.3);
+  background-color: var(--bg-success-subtle);
+  color: var(--ok-fg);
+  border: 1px solid var(--border-success);
 }
 
 .kb-oauth-gov-badge-suspended {
-  background-color: rgba(210, 153, 34, 0.2);
-  color: #d29922;
-  border: 1px solid rgba(210, 153, 34, 0.3);
+  background-color: var(--warn-bg);
+  color: var(--warn-fg);
+  border: 1px solid var(--border-warning);
 }
 
 .kb-oauth-gov-badge-disabled {
-  background-color: rgba(139, 148, 158, 0.2);
-  color: #8b949e;
-  border: 1px solid rgba(139, 148, 158, 0.3);
+  background-color: var(--bg-canvas);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-subtle);
 }
 
 .kb-oauth-gov-badge-revoked {
-  background-color: rgba(248, 81, 73, 0.2);
-  color: #f85149;
-  border: 1px solid rgba(248, 81, 73, 0.3);
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--border-danger);
 }
 
 .kb-oauth-gov-badge-pending {
-  background-color: rgba(56, 139, 253, 0.2);
-  color: #58a6ff;
-  border: 1px solid rgba(56, 139, 253, 0.3);
+  background-color: var(--badge-bg);
+  color: var(--badge-fg);
+  border: 1px solid var(--badge-fg);
 }
 
 .kb-oauth-gov-uri-list {
@@ -468,39 +480,39 @@
 }
 
 .kb-oauth-gov-btn-approve {
-  border-color: rgba(63, 185, 80, 0.4);
-  color: #3fb950;
+  border-color: var(--border-success);
+  color: var(--ok-fg);
 }
 
 .kb-oauth-gov-btn-approve:hover {
-  background-color: rgba(35, 134, 54, 0.2);
+  background-color: var(--bg-success-subtle);
 }
 
 .kb-oauth-gov-btn-suspend {
-  border-color: rgba(210, 153, 34, 0.4);
-  color: #d29922;
+  border-color: var(--border-warning);
+  color: var(--warn-fg);
 }
 
 .kb-oauth-gov-btn-suspend:hover {
-  background-color: rgba(210, 153, 34, 0.2);
+  background-color: var(--warn-bg);
 }
 
 .kb-oauth-gov-btn-revoke {
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #f85149;
+  border-color: var(--border-danger);
+  color: var(--danger-fg);
 }
 
 .kb-oauth-gov-btn-revoke:hover {
-  background-color: rgba(248, 81, 73, 0.2);
+  background-color: var(--danger-bg);
 }
 
 .kb-oauth-gov-btn-delete {
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #f85149;
+  border-color: var(--border-danger);
+  color: var(--danger-fg);
 }
 
 .kb-oauth-gov-btn-delete:hover {
-  background-color: rgba(248, 81, 73, 0.25);
+  background-color: var(--danger-bg);
 }
 
 .kb-oauth-gov-confirm-bar {
@@ -514,8 +526,8 @@
 .kb-oauth-gov-confirm-revoke-btn {
   padding: 4px 8px;
   min-height: 36px;
-  background-color: #da3633;
-  color: #ffffff;
+  background-color: var(--bg-danger);
+  color: var(--accent-primary-fg, #ffffff);
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 0.75rem;
@@ -525,14 +537,15 @@
 }
 
 .kb-oauth-gov-confirm-revoke-btn:hover {
-  background-color: #b62324;
+  background-color: var(--bg-danger-hover);
+  color: var(--accent-primary-fg, #ffffff);
 }
 
 .kb-oauth-gov-confirm-delete-btn {
   padding: 4px 8px;
   min-height: 36px;
-  background-color: #da3633;
-  color: #ffffff;
+  background-color: var(--bg-danger);
+  color: var(--accent-primary-fg, #ffffff);
   border: 1px solid transparent;
   border-radius: 6px;
   font-size: 0.75rem;
@@ -542,7 +555,8 @@
 }
 
 .kb-oauth-gov-confirm-delete-btn:hover {
-  background-color: #b62324;
+  background-color: var(--bg-danger-hover);
+  color: var(--accent-primary-fg, #ffffff);
 }
 
 .kb-oauth-gov-cancel-btn {
@@ -574,15 +588,15 @@
 }
 
 .kb-oauth-gov-alert-error {
-  background-color: rgba(248, 81, 73, 0.15);
-  border: 1px solid rgba(248, 81, 73, 0.4);
-  color: #f85149;
+  background-color: var(--danger-bg);
+  border: 1px solid var(--border-danger);
+  color: var(--danger-fg);
 }
 
 .kb-oauth-gov-alert-success {
-  background-color: rgba(35, 134, 54, 0.15);
-  border: 1px solid rgba(63, 185, 80, 0.4);
-  color: #3fb950;
+  background-color: var(--bg-success-subtle);
+  border: 1px solid var(--border-success);
+  color: var(--ok-fg);
 }
 
 .kb-oauth-gov-empty-state {
@@ -792,7 +806,7 @@
 }
 
 .kb-oauth-secret-warning {
-  color: var(--text-warning, #d29922);
+  color: var(--warn-fg);
   font-size: 0.875rem;
   margin-bottom: 12px;
   line-height: 1.4;
@@ -804,7 +818,7 @@
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid var(--kb-color-border-subtle, #30363d);
-  color: #3fb950;
+  color: var(--ok-fg);
   font-size: 0.875rem;
   user-select: all;
   word-break: break-all;
@@ -831,6 +845,26 @@
   .kb-oauth-gov-header > div {
     width: 100%;
     min-width: 0;
+  }
+
+  .kb-oauth-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-oauth-gov-refresh-btn {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 16px;
+  }
+
+  .kb-oauth-header-actions .kb-studio-doc-link {
+    height: 44px;
+    min-height: 44px;
   }
 
   .kb-oauth-gov-section {
@@ -984,6 +1018,24 @@
   .kb-oauth-default-indicator {
     font-size: 0.75rem;
   }
+}
+
+.kb-oauth-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kb-oauth-pkce-checkbox {
+  margin-right: 8px;
+}
+
+.kb-oauth-form-hint {
+  font-size: 0.8rem;
+  color: var(--fg-secondary);
+  line-height: 1.4;
+  display: block;
 }
 
 /* QA Full-Content Capture Modifier for CSP-Compliant Screenshots */

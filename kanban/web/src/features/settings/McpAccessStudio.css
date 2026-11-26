@@ -38,14 +38,21 @@
 }
 
 .kb-mcp-studio-mint-btn {
-  height: var(--prop-row-h);
-  padding: 0 18px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  font-size: 0.875rem;
   background-color: #047857;
   border: 1px solid #047857;
   color: var(--accent-primary-fg, #ffffff);
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: background-color 0.15s, border-color 0.15s;
 }
 
@@ -640,15 +647,18 @@
 .kb-mcp-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
   flex-shrink: 0;
   max-width: 100%;
 }
 
 .kb-mcp-header-actions .kb-studio-doc-link {
+  height: 38px;
   min-height: 38px;
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 
 .kb-mcp-connect-btn {
@@ -779,6 +789,37 @@
     overflow-x: hidden;
   }
 
+  .kb-mcp-studio-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3, 12px);
+  }
+
+  .kb-mcp-studio-header > div:first-child {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .kb-mcp-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-mcp-studio-mint-btn {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 16px;
+  }
+
+  .kb-mcp-header-actions .kb-studio-doc-link {
+    height: 44px;
+    min-height: 44px;
+  }
+
   .kb-mcp-studio-section {
     padding: 16px 12px;
     max-width: 100%;
@@ -857,5 +898,43 @@
     gap: 4px;
   }
 }
+
+.kb-mcp-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kb-mcp-segmented-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-mcp-policy-badge {
+  margin-left: 8px;
+  font-size: 0.8rem;
+  color: var(--fg-secondary);
+}
+
+.kb-mcp-warning-text {
+  color: var(--danger-fg);
+  margin-top: 4px;
+}
+
+.kb-mcp-key-meta-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.kb-mcp-unlimited-pill-small {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+}
+
 
 

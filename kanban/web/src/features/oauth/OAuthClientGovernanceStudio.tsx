@@ -471,11 +471,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
           </p>
         </div>
         <div className="kb-oauth-header-actions">
-          <StudioDocLink
-            href="/docs/three-surface-mcp-server-architecture"
-            title="OAuth 2.1 Governance Documentation"
-            testId="oauth-studio-doc-link"
-          />
           <button
             type="button"
             className="kb-oauth-gov-refresh-btn"
@@ -486,6 +481,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
           >
             <span aria-hidden="true">🔄</span> Refresh
           </button>
+          <StudioDocLink
+            href="/docs/three-surface-mcp-server-architecture"
+            title="OAuth 2.1 Governance Documentation"
+            testId="oauth-studio-doc-link"
+          />
         </div>
       </header>
 
@@ -1168,16 +1168,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                   </div>
 
                   <div className="kb-oauth-form-field">
-                    <label htmlFor="reg-client-type" className="kb-oauth-form-label">
-                      <span className="kb-oauth-label-text">
-                        Client Type{' '}
-                        <span
-                          className="kb-oauth-default-indicator"
-                          data-testid="reg-client-type-default-indicator"
-                        >
-                          (Default: Public (PKCE only))
+                    <div className="kb-oauth-form-label-row">
+                      <label htmlFor="reg-client-type" className="kb-oauth-form-label">
+                        <span className="kb-oauth-label-text">
+                          Client Type{' '}
+                          <span
+                            className="kb-oauth-default-indicator"
+                            data-testid="reg-client-type-default-indicator"
+                          >
+                            (Default: Public (PKCE only))
+                          </span>
                         </span>
-                      </span>
+                      </label>
                       <FieldHelpHint
                         title="Client Type"
                         summary="Client classification under RFC 9700 and OAuth 2.1. Public clients (desktop apps, SPAs, CLI tools) cannot securely hold client credentials and must use PKCE S256. Confidential clients execute on protected backend servers and authenticate using client secrets or private key JWTs."
@@ -1198,7 +1200,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                         testId="reg-client-type-help"
                         ariaLabel="Help for Client Type"
                       />
-                    </label>
+                    </div>
                     <select
                       id="reg-client-type"
                       aria-describedby="reg-client-type-hint"
@@ -1225,16 +1227,18 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                   </div>
 
                   <div className="kb-oauth-form-field">
-                    <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
-                      <span className="kb-oauth-label-text">
-                        Token Endpoint Authentication Method{' '}
-                        <span
-                          className="kb-oauth-default-indicator"
-                          data-testid="reg-auth-method-default-indicator"
-                        >
-                          (Default: none)
+                    <div className="kb-oauth-form-label-row">
+                      <label htmlFor="reg-auth-method" className="kb-oauth-form-label">
+                        <span className="kb-oauth-label-text">
+                          Token Endpoint Authentication Method{' '}
+                          <span
+                            className="kb-oauth-default-indicator"
+                            data-testid="reg-auth-method-default-indicator"
+                          >
+                            (Default: none)
+                          </span>
                         </span>
-                      </span>
+                      </label>
                       <FieldHelpHint
                         title="Token Endpoint Authentication Method"
                         summary="Authentication mechanism used by the client when communicating with the token endpoint (/oauth/token) under RFC 9700 and OAuth 2.1. Public clients default to none (relying on PKCE S256 proof of possession)."
@@ -1265,7 +1269,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                         testId="reg-auth-method-help"
                         ariaLabel="Help for Token Endpoint Authentication Method"
                       />
-                    </label>
+                    </div>
                     <select
                       id="reg-auth-method"
                       aria-describedby="reg-auth-method-hint"
@@ -1310,8 +1314,10 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                   </div>
 
                   <div className="kb-oauth-form-field">
-                    <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
-                      Redirect URIs (one per line, HTTPS or loopback HTTP)
+                    <div className="kb-oauth-form-label-row">
+                      <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
+                        Redirect URIs (one per line, HTTPS or loopback HTTP)
+                      </label>
                       <FieldHelpHint
                         title="Redirect URIs"
                         summary="Strict allowlist of OAuth redirect destinations. RFC 8252 requires HTTPS for web or 127.0.0.1 loopback for native clients."
@@ -1319,7 +1325,7 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                         docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
                         testId="reg-redirect-uris-help"
                       />
-                    </label>
+                    </div>
                     <textarea
                       id="reg-redirect-uris"
                       className="kb-oauth-form-textarea"
@@ -1351,11 +1357,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
                             setRegisterPkceEnforce(e.target.checked);
                           }}
                           disabled={registerSubmitting}
-                          style={{ marginRight: '8px' }}
+                          className="kb-oauth-pkce-checkbox"
                         />
                         Enforce PKCE S256 (RFC 9700 Mandatory)
                       </label>
-                      <span className="kb-form-hint" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                      <span className="kb-oauth-form-hint">
                         Enforces SHA-256 code challenge for authorization code exchange. Plain code verifiers are strictly prohibited.
                       </span>
                     </div>

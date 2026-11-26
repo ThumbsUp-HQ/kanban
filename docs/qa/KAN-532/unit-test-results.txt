@@ -1,0 +1,40 @@
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan532-ef916714/kanban/web
+> vitest run --coverage src/features/admin/AdminDiagnosticsStudio.test.tsx src/features/admin/LinkAuditorStudio.test.tsx src/features/settings/__tests__/McpAccessStudio.test.tsx src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan532-ef916714/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 30ms
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (25 tests) 2463ms
+   ✓ LinkAuditorStudio (25)
+     ✓ handles inspect drawer view with JSON snapshots 399ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 571ms
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (21 tests) 2918ms
+   ✓ AdminDiagnosticsStudio Component (21)
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1549ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (41 tests) 4301ms
+   ✓ OAuthClientGovernanceStudio (41)
+     ✓ inspects client details in modal and closes modal 406ms
+     ✓ handles search input, status filter pills, and pagination controls 380ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (57 tests) 4041ms
+
+ Test Files  5 passed (5)
+      Tests  151 passed (151)
+   Start at  18:02:02
+   Duration  6.65s (tests 62%, environment 17%, import 14%, transform 6%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.03 |    95.79 |     100 |    99.2 |                   
+ admin             |   99.44 |    96.28 |     100 |   99.44 |                   
+  ...icsStudio.tsx |     100 |     96.5 |     100 |     100 | ...56,367,399,506 
+  ...torStudio.tsx |   99.04 |    95.95 |     100 |   99.03 | 227               
+ oauth             |   98.45 |    96.11 |     100 |   98.39 |                   
+  ...nceStudio.tsx |   98.45 |    96.11 |     100 |   98.39 | 97-98,210,367,436 
+ settings          |   99.29 |    95.41 |     100 |   99.74 |                   
+  ...essStudio.tsx |   99.29 |    95.41 |     100 |   99.74 | 536               
+-------------------|---------|----------|---------|---------|-------------------
