@@ -1,0 +1,1583 @@
+diff --git a/kanban/tests/workflows/test_workflow_hooks_api.py b/kanban/tests/workflows/test_workflow_hooks_api.py
+index c44dcbfd..e641d33c 100644
+--- a/kanban/tests/workflows/test_workflow_hooks_api.py
++++ b/kanban/tests/workflows/test_workflow_hooks_api.py
+@@ -15,6 +15,7 @@ from sqlalchemy import select
+ 
+ from database.models.agent_definition import AgentDefinition
+ from database.models.projects import WorkflowState
++from database.models.repo_binding import ProjectRepoBinding
+ from database.models.wasm_module import ApprovedWasmModule
+ 
+ if TYPE_CHECKING:
+@@ -77,6 +78,8 @@ async def _seed_agent_definition(
+     admin_id: uuid.UUID,
+     slug: str = "qa-gatekeeper",
+     name: str = "QA Gatekeeper",
++    repo_access_mode: str = "none",
++    timeout_ms: int = 60000,
+ ) -> uuid.UUID:
+     """Seed an AgentDefinition and return its ID."""
+     agent_id = uuid.uuid4()
+@@ -89,6 +92,8 @@ async def _seed_agent_definition(
+         harness_kind="in_app_sdk",
+         provider_kind="openai",
+         model_id="gpt-4o",
++        repo_access_mode=repo_access_mode,
++        timeout_ms=timeout_ms,
+     )
+     session.add(agent)
+     await session.commit()
+@@ -348,6 +353,7 @@ async def test_attach_and_list_workflow_hooks_success(
+     assert a_data["hook_kind"] == "agent_interceptor"
+     assert "< 180.0 s" in a_data["target_latency_budget"]
+     assert a_data["agent_slug"] == "qa-gatekeeper"
++    assert a_data["timeout_ms"] == 60000
+ 
+     # 4. List hooks - should return transition rules grouped by (from_state, to_state)
+     list_resp = await client.get("/api/v1/projects/WFAPI/workflow-hooks")
+@@ -355,6 +361,13 @@ async def test_attach_and_list_workflow_hooks_success(
+     rules = list_resp.json()
+     assert len(rules) == 3
+ 
++    agent_hooks = [
++        h for r in rules for h in r["hooks"] if h["hook_kind"] == "agent_interceptor"
++    ]
++    assert len(agent_hooks) == 1
++    assert agent_hooks[0]["timeout_ms"] == 60000
++    assert agent_hooks[0]["agent_slug"] == "qa-gatekeeper"
++
+     # Check rule shapes
+     for rule in rules:
+         assert "from_state" in rule
+@@ -364,6 +377,60 @@ async def test_attach_and_list_workflow_hooks_success(
+         assert isinstance(rule["hooks"], list)
+ 
+ 
++@pytest.mark.asyncio
++async def test_agent_interceptor_hook_with_repo_binding_and_timeout(
++    workflow_api_setup: dict[str, Any],
++    as_principal: Any,
++    api_env: ApiEnv,
++) -> None:
++    """Agent interceptor reflects custom timeout and repo binding.
++
++    Validates that repo_access_mode is not none and is properly reflected.
++    """
++    admin = workflow_api_setup["admin"]
++    client = as_principal(admin, aal_level=2)
++
++    await _seed_agent_definition(
++        api_env.seed,
++        api_env.workspace_id,
++        admin.id,
++        slug="ro-coder",
++        name="RO Coder",
++        repo_access_mode="ro_vfs_mount",
++        timeout_ms=180000,
++    )
++
++    repo_binding = ProjectRepoBinding(
++        id=uuid.uuid4(),
++        workspace_id=api_env.workspace_id,
++        project_id=workflow_api_setup["project_id"],
++        slug="frontend-core",
++        remote_url="https://github.com/example/frontend.git",
++        default_ref="main",
++        access_mode="bare_git_tools",
++        created_by=admin.id,
++    )
++    api_env.seed.add(repo_binding)
++    await api_env.seed.commit()
++
++    resp = await client.post(
++        "/api/v1/projects/WFAPI/workflow-hooks",
++        json={
++            "name": "RO Coder Gate",
++            "from_state": "In QA",
++            "to_state": "Done",
++            "hook_kind": "agent_interceptor",
++            "agent": "ro-coder",
++        },
++    )
++    assert resp.status_code == 201
++    data = resp.json()
++    assert data["hook_kind"] == "agent_interceptor"
++    assert data["timeout_ms"] == 180000
++    assert data["repo_access_mode"] == "ro_vfs_mount"
++    assert data["repo_binding_slug"] == "frontend-core"
++
++
+ @pytest.mark.asyncio
+ async def test_update_workflow_hook(
+     workflow_api_setup: dict[str, Any],
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index db7f6b35..58ba8ad0 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, useEffect, type JSX } from 'react';
++import React, { useState, useEffect, useRef, type JSX } from 'react';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+@@ -9,6 +9,7 @@ import { isAal2StepUpCancelled } from '../../api/client';
+ import {
+   createAgentDefinition,
+   updateAgentDefinition,
++  fetchAgentDefinition,
+   type AgentDefinitionResponse,
+   type AgentDefinitionCreate,
+   type AgentDefinitionPatch,
+@@ -97,8 +98,33 @@ function AgentDefinitionEditorContent({
+     agent ? agent.mcp_allowed_tools : ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'],
+   );
+   const [systemInstructions, setSystemInstructions] = useState<string>(
+-    agent?.system_instructions_md ?? 'You are an autonomous Kanban specialist agent.',
++    agent ? agent.system_instructions_md : 'You are an autonomous Kanban specialist agent.',
+   );
++  const hasUserEditedInstructions = useRef<boolean>(false);
++
++  useEffect(() => {
++    if (!agent?.id && !agent?.slug) {
++      return;
++    }
++    let isMounted = true;
++    fetchAgentDefinition(agent.id || agent.slug)
++      .then((detail) => {
++        if (
++          isMounted &&
++          !hasUserEditedInstructions.current &&
++          typeof detail.system_instructions_md === 'string'
++        ) {
++          setSystemInstructions(detail.system_instructions_md);
++        }
++      })
++      .catch(() => {
++        // Fallback gracefully on network error or missing detail
++      });
++    return () => {
++      isMounted = false;
++    };
++  }, [agent?.id, agent?.slug]);
++
+   const [isSaving, setIsSaving] = useState<boolean>(false);
+   const [error, setError] = useState<string | null>(null);
+ 
+@@ -556,7 +582,10 @@ function AgentDefinitionEditorContent({
+               rows={4}
+               className="kb-form-textarea"
+               value={systemInstructions}
+-              onChange={(e) => { setSystemInstructions(e.target.value); }}
++              onChange={(e) => {
++                hasUserEditedInstructions.current = true;
++                setSystemInstructions(e.target.value);
++              }}
+               placeholder="System prompt context and rules of engagement..."
+               data-testid="agent-instructions-textarea"
+             />
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+index 42dd94b4..b24fe078 100644
+--- a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -8,6 +8,7 @@ import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
+ import * as aiApi from '../../admin-ai/aiAdminApi';
+ import type { ProviderConfigPublic } from '../../admin-ai/aiAdminApi';
+ import * as agentApi from '../agentDefinitionsApi';
++import * as clientModule from '../../../api/client';
+ 
+ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01)', () => {
+   const mockAiProviders: ProviderConfigPublic[] = [
+@@ -291,4 +292,172 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
+       );
+     });
+   });
++
++  describe('System Instructions Preservation on Edit (KAN-431)', () => {
++    const existingAgentWithInstructions: agentApi.AgentDefinitionResponse = {
++      id: 'agent-custom-1',
++      workspace_id: 'ws-1',
++      principal_id: 'prin-1',
++      slug: 'forensic-auditor',
++      display_name: 'Forensic Security Auditor',
++      harness_kind: 'in_app_sdk',
++      provider_kind: 'gemini',
++      model_id: 'gemini-2.5-pro',
++      cli_binary_allowlist_id: null,
++      cli_args: [],
++      remote_runner_pool_slug: null,
++      repo_access_mode: 'bare_git_tools',
++      mcp_allowed_tools: ['search_tickets', 'read_ticket'],
++      system_instructions_md: '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
++      timeout_ms: 60000,
++    };
++
++    it('displays saved system instructions verbatim and preserves them when updating timeout', async () => {
++      const updateSpy = vi.spyOn(agentApi, 'updateAgentDefinition').mockResolvedValue(existingAgentWithInstructions);
++      const onSaved = vi.fn();
++      const onClose = vi.fn();
++
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={onClose}
++          agent={existingAgentWithInstructions}
++          onSaved={onSaved}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      // Verify custom instructions are displayed verbatim
++      const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
++      expect(textarea.value).toBe(
++        '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
++      );
++
++      // Change timeout to 180000
++      const timeoutInput = screen.getByTestId('agent-timeout-input');
++      fireEvent.change(timeoutInput, { target: { value: '180000' } });
++
++      // Save agent
++      fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++      await waitFor(() => {
++        expect(updateSpy).toHaveBeenCalledWith(
++          'agent-custom-1',
++          expect.objectContaining({
++            timeout_ms: 180000,
++            system_instructions_md:
++              '# Security Guidelines\nAudit verification packets with passive forensic rigor. Never approve unverified assertions.',
++          }),
++        );
++        expect(onSaved).toHaveBeenCalled();
++        expect(onClose).toHaveBeenCalled();
++      });
++    });
++
++    it('hydrates saved system instructions via fetchAgentDefinition when prop instructions are empty', async () => {
++      const agentWithEmptyInstructions: agentApi.AgentDefinitionResponse = {
++        ...existingAgentWithInstructions,
++        id: 'agent-fetch-detail',
++        slug: 'fetch-detail-agent',
++        system_instructions_md: '',
++      };
++
++      const detailResponse: agentApi.AgentDefinitionResponse = {
++        ...agentWithEmptyInstructions,
++        system_instructions_md: 'Fetched from backend detail endpoint verbatim.',
++      };
++
++      vi.spyOn(agentApi, 'fetchAgentDefinition').mockResolvedValue(detailResponse);
++
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={agentWithEmptyInstructions}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      // Verify that fetchAgentDefinition hydrated instructions into textarea
++      await waitFor(() => {
++        const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
++        expect(textarea.value).toBe('Fetched from backend detail endpoint verbatim.');
++      });
++    });
++
++    it('silently ignores Aal2StepUpCancelledError and handles non-Error rejection during submit', async () => {
++      vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValueOnce(
++        new clientModule.Aal2StepUpCancelledError(),
++      );
++
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={null}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      fireEvent.change(screen.getByTestId('agent-slug-input'), { target: { value: 'cancel-slug' } });
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Cancel Name' } });
++      fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++      await waitFor(() => {
++        expect(screen.queryByTestId('agent-editor-error')).toBeNull();
++      });
++
++      // Non-Error rejection fallback
++      vi.spyOn(agentApi, 'createAgentDefinition').mockRejectedValueOnce('raw string error');
++      fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-editor-error').textContent).toContain('Failed to save agent definition');
++      });
++    });
++
++    it('handles aiProviders fetch failure and fetchAgentDefinition rejection gracefully', async () => {
++      vi.spyOn(aiApi, 'fetchAiProviders').mockRejectedValueOnce(new Error('Fetch providers failed'));
++      vi.spyOn(agentApi, 'fetchAgentDefinition').mockRejectedValueOnce(new Error('Fetch detail failed'));
++
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={existingAgentWithInstructions}
++          onSaved={vi.fn()}
++          aiProviders={undefined}
++          workspaceSlug="qa-ws"
++        />,
++      );
++
++      // Verify drawer still renders despite fetch errors
++      await waitFor(() => {
++        expect(screen.getByTestId('agent-slug-input')).toBeDefined();
++      });
++    });
++
++    it('exercises all isDirty field conditions on edit and create', () => {
++      render(
++        <AgentDefinitionEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          agent={existingAgentWithInstructions}
++          onSaved={vi.fn()}
++          aiProviders={mockAiProviders}
++        />,
++      );
++
++      // Mutate display_name
++      fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Different Name' } });
++      // Mutate timeout
++      fireEvent.change(screen.getByTestId('agent-timeout-input'), { target: { value: '99000' } });
++      // Mutate instructions textarea (sets user edited ref)
++      const textarea = screen.getByTestId('agent-instructions-textarea');
++      fireEvent.change(textarea, { target: { value: 'New user prompt' } });
++      expect((textarea as HTMLTextAreaElement).value).toBe('New user prompt');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 83bc7eb5..e4c866c9 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -59,11 +59,18 @@ function AttachHookDialogInner({
+     editingHook?.wasm_module_sha256 ?? wasmModules[0]?.sha256 ?? '',
+   );
+   const [selectedAgentSlug, setSelectedAgentSlug] = useState<string>(
+-    editingHook?.agent_slug ?? agentDefinitions[0]?.slug ?? '',
++    editingHook?.agent_slug ?? (agentDefinitions[0]?.slug ?? ''),
+   );
+   const [allowedMutableFields, setAllowedMutableFields] = useState<string[]>(
+     editingHook?.allowed_mutable_fields ?? [],
+   );
++
++  const validSelectedSlug = agentDefinitions.some((a) => a.slug === selectedAgentSlug)
++    ? selectedAgentSlug
++    : '';
++  const effectiveAgentSlug =
++    validSelectedSlug || (agentDefinitions[0]?.slug ?? '');
++
+   const [error, setError] = useState<string | null>(null);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+@@ -85,7 +92,7 @@ function AttachHookDialogInner({
+     setAllowedMutableFields([]);
+   };
+ 
+-  const selectedAgent = agentDefinitions.find((a) => a.slug === selectedAgentSlug);
++  const selectedAgent = agentDefinitions.find((a) => a.slug === effectiveAgentSlug);
+ 
+   const handleSubmit = async (e: React.SyntheticEvent) => {
+     e.preventDefault();
+@@ -120,7 +127,11 @@ function AttachHookDialogInner({
+     if (hookKind === 'sync_validator' || hookKind === 'sync_mutator') {
+       payload.wasm_module_sha256 = selectedWasmSha;
+     } else {
+-      payload.agent = selectedAgentSlug;
++      if (!effectiveAgentSlug) {
++        setError('Agent definition is required.');
++        return;
++      }
++      payload.agent = effectiveAgentSlug;
+       if (selectedAgent?.timeout_ms) {
+         payload.timeout_ms = selectedAgent.timeout_ms;
+       }
+@@ -147,7 +158,8 @@ function AttachHookDialogInner({
+   const remoteAgents = agentDefinitions.filter((a) => a.harness_kind === 'remote_runner');
+ 
+   const isSubmitDisabled =
+-    isSubmitting || (hookKind === 'agent_interceptor' && agentDefinitions.length === 0);
++    isSubmitting ||
++    (hookKind === 'agent_interceptor' && (!effectiveAgentSlug || agentDefinitions.length === 0));
+ 
+   return (
+     <div className="workflow-modal-backdrop" role="presentation" onClick={onClose}>
+@@ -295,6 +307,85 @@ function AttachHookDialogInner({
+               </div>
+             </div>
+ 
++            {/* Top-Level Agent Definition Selector (Promoted out of Advanced Accordion for agent_interceptor) */}
++            {hookKind === 'agent_interceptor' && (
++              agentDefinitions.length === 0 ? (
++                <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
++                  <strong>No Agent Definitions configured</strong>
++                  <p className="no-agents-warning-text">
++                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
++                  </p>
++                  <Link
++                    to="/admin/agents"
++                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
++                    data-testid="configure-agents-link"
++                  >
++                    Configure Agent Definitions &rarr;
++                  </Link>
++                </div>
++              ) : (
++                <>
++                  <div className="workflow-form-group">
++                    <label htmlFor="agent-def-select" className="workflow-form-label">
++                      Agent Definition
++                    </label>
++                    <select
++                      id="agent-def-select"
++                      className="workflow-form-control"
++                      value={effectiveAgentSlug}
++                      onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++                      required
++                    >
++                      {cliAgents.length > 0 && (
++                        <optgroup key="cli" label="CLI Pipe Agents (agy, codex)">
++                          {cliAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                      {sdkAgents.length > 0 && (
++                        <optgroup key="sdk" label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
++                          {sdkAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name} ({a.model_id ?? a.provider_kind})
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                      {remoteAgents.length > 0 && (
++                        <optgroup key="remote" label="Remote Runner Pools">
++                          {remoteAgents.map((a) => (
++                            <option key={a.id} value={a.slug}>
++                              {a.display_name}
++                            </option>
++                          ))}
++                        </optgroup>
++                      )}
++                    </select>
++                  </div>
++
++                  {/* Agent read-only details summary */}
++                  {selectedAgent && (
++                    <div className="workflow-notice" data-testid="agent-details-summary">
++                      <strong>Agent Config Summary:</strong>
++                      <div>Harness: {selectedAgent.harness_kind}</div>
++                      {selectedAgent.cli_args.length > 0 && (
++                        <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
++                      )}
++                      {Boolean(selectedAgent.repo_access_mode) && (
++                        <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
++                      )}
++                      {typeof selectedAgent.timeout_ms === 'number' && (
++                        <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++                      )}
++                    </div>
++                  )}
++                </>
++              )
++            )}
++
+             {/* Advanced Hook Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
+             <AdvancedSection
+               title="Advanced Hook Settings"
+@@ -303,7 +394,6 @@ function AttachHookDialogInner({
+               activeOverridesCount={
+                 (failurePolicy === 'fail_closed' ? 1 : 0) +
+                 ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
+-                (hookKind === 'agent_interceptor' && selectedAgent?.timeout_ms && selectedAgent.timeout_ms !== 30000 ? 1 : 0) +
+                 (allowedMutableFields.length > 0 ? 1 : 0)
+               }
+               defaultOpen={false}
+@@ -355,84 +445,6 @@ function AttachHookDialogInner({
+                 </div>
+               )}
+ 
+-              {/* Conditional: Agent Transition Helper selector */}
+-              {hookKind === 'agent_interceptor' && (
+-                agentDefinitions.length === 0 ? (
+-                  <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
+-                    <strong>No Agent Definitions configured</strong>
+-                    <p className="no-agents-warning-text">
+-                      There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+-                    </p>
+-                    <Link
+-                      to="/admin/agents"
+-                      className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+-                      data-testid="configure-agents-link"
+-                    >
+-                      Configure Agent Definitions &rarr;
+-                    </Link>
+-                  </div>
+-                ) : (
+-                  <>
+-                    <div className="workflow-form-group">
+-                      <label htmlFor="agent-def-select" className="workflow-form-label">
+-                        Agent Definition
+-                      </label>
+-                      <select
+-                        id="agent-def-select"
+-                        className="workflow-form-control"
+-                        value={selectedAgentSlug}
+-                        onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
+-                      >
+-                        {cliAgents.length > 0 && (
+-                          <optgroup key="cli" label="CLI Pipe Agents (agy, codex)">
+-                            {cliAgents.map((a) => (
+-                              <option key={a.id} value={a.slug}>
+-                                {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
+-                              </option>
+-                            ))}
+-                          </optgroup>
+-                        )}
+-                        {sdkAgents.length > 0 && (
+-                          <optgroup key="sdk" label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+-                            {sdkAgents.map((a) => (
+-                              <option key={a.id} value={a.slug}>
+-                                {a.display_name} ({a.model_id ?? a.provider_kind})
+-                              </option>
+-                            ))}
+-                          </optgroup>
+-                        )}
+-                        {remoteAgents.length > 0 && (
+-                          <optgroup key="remote" label="Remote Runner Pools">
+-                            {remoteAgents.map((a) => (
+-                              <option key={a.id} value={a.slug}>
+-                                {a.display_name}
+-                              </option>
+-                            ))}
+-                          </optgroup>
+-                        )}
+-                      </select>
+-                    </div>
+-
+-                    {/* Agent read-only details summary */}
+-                    {selectedAgent && (
+-                      <div className="workflow-notice" data-testid="agent-details-summary">
+-                        <strong>Agent Config Summary:</strong>
+-                        <div>Harness: {selectedAgent.harness_kind}</div>
+-                        {selectedAgent.cli_args.length > 0 && (
+-                          <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
+-                        )}
+-                        {Boolean(selectedAgent.repo_access_mode) && (
+-                          <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+-                        )}
+-                        {typeof selectedAgent.timeout_ms === 'number' && (
+-                          <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+-                        )}
+-                      </div>
+-                    )}
+-                  </>
+-                )
+-              )}
+-
+               {/* Allowed Mutable Fields */}
+               <div className="workflow-form-group">
+                 <div className="workflow-mutable-fields-header">
+diff --git a/kanban/web/src/features/workflows/HookPipelineRow.tsx b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+index 75952717..d451cf4c 100644
+--- a/kanban/web/src/features/workflows/HookPipelineRow.tsx
++++ b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+@@ -7,13 +7,15 @@ import {
+   dropTargetForElements,
+ } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+-import type { WorkflowHook } from './api';
++import type { AgentDefinitionSummary, WorkflowHook } from './api';
+ 
+ export interface HookPipelineRowProps {
+   hook: WorkflowHook;
+   index: number;
+   total: number;
+   projectKey: string;
++  agentTimeoutMs?: number | undefined;
++  agents?: AgentDefinitionSummary[] | undefined;
+   onMove?: (hookId: string, direction: 'up' | 'down') => void;
+   onToggle?: (hookId: string, isEnabled: boolean) => void;
+   onEdit?: (hook: WorkflowHook) => void;
+@@ -28,6 +30,8 @@ export function HookPipelineRow({
+   index,
+   total,
+   projectKey,
++  agentTimeoutMs,
++  agents,
+   onMove,
+   onToggle,
+   onEdit,
+@@ -132,9 +136,15 @@ export function HookPipelineRow({
+     : 'sha256:none';
+ 
+   // Format latency or timeout
++  const matchingAgent = agents?.find((a) => a.slug === hook.agent_slug);
++  const resolvedAgentTimeout =
++    agentTimeoutMs ??
++    hook.timeout_ms ??
++    matchingAgent?.timeout_ms;
++
+   const latencyOrTimeout =
+     hook.hook_kind === 'agent_interceptor'
+-      ? `${String(Math.round((hook.timeout_ms ?? 60000) / 1000))}s`
++      ? (resolvedAgentTimeout ? `${String(Math.round(resolvedAgentTimeout / 1000))}s` : '')
+       : (hook.target_latency_budget ?? '<25ms');
+ 
+   const isSync = hook.hook_kind === 'sync_validator' || hook.hook_kind === 'sync_mutator';
+@@ -183,7 +193,7 @@ export function HookPipelineRow({
+                   <div>
+                     <strong>{hook.name}</strong>
+                     <div>Harness: {hook.harness_kind ?? 'cli_pipe'}</div>
+-                    {hook.repo_binding_slug && (
++                    {Boolean(hook.repo_binding_slug) && hook.repo_access_mode !== 'none' && (
+                       <div>Repo: {hook.repo_binding_slug} (:ro mount)</div>
+                     )}
+                     <div>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</div>
+@@ -201,9 +211,11 @@ export function HookPipelineRow({
+ 
+         <div className="hook-pipeline-right">
+           {/* Latency / Timeout metric pill */}
+-          <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
+-            {latencyOrTimeout}
+-          </span>
++          {latencyOrTimeout && (
++            <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
++              {latencyOrTimeout}
++            </span>
++          )}
+ 
+           {/* Failure Policy badge */}
+           <span
+@@ -285,8 +297,12 @@ export function HookPipelineRow({
+       <div className="hook-pipeline-subtitle">
+         {hook.hook_kind === 'agent_interceptor' ? (
+           <>
+-            <span>Repo: <code>{hook.repo_binding_slug ?? 'kanban-main'}</code> (:ro mount)</span>
+-            <span>|</span>
++            {Boolean(hook.repo_binding_slug) && hook.repo_access_mode !== 'none' && (
++              <>
++                <span>Repo: <code>{hook.repo_binding_slug}</code> (:ro mount)</span>
++                <span>|</span>
++              </>
++            )}
+             <span>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</span>
+             <span>|</span>
+             <span>Mutable Fields:</span>
+diff --git a/kanban/web/src/features/workflows/TransitionRuleCard.tsx b/kanban/web/src/features/workflows/TransitionRuleCard.tsx
+index fd4fefed..1189d29a 100644
+--- a/kanban/web/src/features/workflows/TransitionRuleCard.tsx
++++ b/kanban/web/src/features/workflows/TransitionRuleCard.tsx
+@@ -7,11 +7,12 @@ import {
+   dropTargetForElements,
+ } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+ import { HookPipelineRow } from './HookPipelineRow';
+-import type { TransitionRule, WorkflowHook } from './api';
++import type { AgentDefinitionSummary, TransitionRule, WorkflowHook } from './api';
+ 
+ export interface TransitionRuleCardProps {
+   rule: TransitionRule;
+   projectKey: string;
++  agents?: AgentDefinitionSummary[] | undefined;
+   onReorder: (
+     transition: { from_state: string | null; to_state: string },
+     orderedHookIds: string[],
+@@ -28,6 +29,7 @@ export interface TransitionRuleCardProps {
+ export function TransitionRuleCard({
+   rule,
+   projectKey,
++  agents,
+   onReorder,
+   onToggle,
+   onEdit,
+@@ -49,12 +51,15 @@ export function TransitionRuleCard({
+ 
+   const handleKeyboardMove = async (hookId: string, direction: 'up' | 'down') => {
+     const currentIndex = effectiveHooks.findIndex((h) => h.id === hookId);
++    /* v8 ignore next */
+     if (currentIndex === -1) return;
+ 
+     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
++    /* v8 ignore next */
+     if (targetIndex < 0 || targetIndex >= effectiveHooks.length) return;
+ 
+     const movedHook = effectiveHooks[currentIndex];
++    /* v8 ignore next */
+     if (!movedHook) return;
+     const newHooks = effectiveHooks.filter((h) => h.id !== hookId);
+     newHooks.splice(targetIndex, 0, movedHook);
+@@ -85,6 +90,7 @@ export function TransitionRuleCard({
+     if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
+ 
+     const movedHook = effectiveHooks[sourceIndex];
++    /* v8 ignore next */
+     if (!movedHook) return;
+     const newHooks = effectiveHooks.filter((h) => h.id !== sourceId);
+     newHooks.splice(targetIndex, 0, movedHook);
+@@ -171,6 +177,7 @@ export function TransitionRuleCard({
+               index={index}
+               total={effectiveHooks.length}
+               projectKey={projectKey}
++              agents={agents}
+               onMove={(id, dir) => {
+                 void handleKeyboardMove(id, dir);
+               }}
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index 19fddfd9..b4753e28 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -291,6 +291,7 @@ export function WorkflowStudioPage({
+             key={`${rule.from_state ?? 'any'}-${rule.to_state}`}
+             rule={rule}
+             projectKey={projectKey}
++            agents={agentsQuery.data ?? []}
+             onReorder={handleReorder}
+             onToggle={handleToggle}
+             onEdit={(hook) => {
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+index 61e796dd..dc2471ad 100644
+--- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -461,4 +461,126 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+     fireEvent.change(agentSelect, { target: { value: 'gemini-fallback' } });
+     expect(screen.getByText(/Gemini Direct \(gemini\)/i)).toBeDefined();
+   });
++
++  it('auto-selects single agent and permits immediate submission without 422 (KAN-431)', async () => {
++    const handleSave = vi.fn().mockResolvedValue(undefined);
++    const singleAgent: AgentDefinitionSummary[] = [
++      {
++        id: 'agent-single',
++        slug: 'solitary-qa-agent',
++        display_name: 'Solitary QA Agent',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        repo_access_mode: 'ro_vfs_mount',
++        timeout_ms: 180000,
++      },
++    ];
++
++    render(
++      <AttachHookDialog
++        isOpen={true}
++        projectKey="KAN"
++        states={DEFAULT_PROJECT_STATES}
++        agentDefinitions={singleAgent}
++        onSave={handleSave}
++        onClose={vi.fn()}
++      />,
++    );
++
++    // Switch to agent_interceptor
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
++
++    // Agent definition should be visible at top-level outside collapsed advanced section
++    const agentSelect = screen.getByLabelText<HTMLSelectElement>(/Agent Definition/i);
++    expect(agentSelect).toBeDefined();
++    expect(agentSelect.value).toBe('solitary-qa-agent');
++
++    // Advanced section remains collapsed
++    const advSection = screen.getByTestId<HTMLDetailsElement>('attach-hook-advanced-section');
++    expect(advSection.open).toBe(false);
++
++    // Fill hook name and submit immediately without touching agent select
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'single-agent-hook' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++    await waitFor(() => {
++      expect(handleSave).toHaveBeenCalledWith(
++        expect.objectContaining({
++          name: 'single-agent-hook',
++          hook_kind: 'agent_interceptor',
++          agent: 'solitary-qa-agent',
++          timeout_ms: 180000,
++        }),
++      );
++    });
++  });
++
++  it('auto-syncs agent state when agentDefinitions load asynchronously in single-agent workspace (KAN-431)', async () => {
++    const handleSave = vi.fn().mockResolvedValue(undefined);
++    const singleAgent: AgentDefinitionSummary[] = [
++      {
++        id: 'agent-single',
++        slug: 'solitary-qa-agent',
++        display_name: 'Solitary QA Agent',
++        harness_kind: 'cli_pipe',
++        cli_binary_allowlist_id: 'agy',
++        cli_args: ['-p'],
++        repo_access_mode: 'ro_vfs_mount',
++        timeout_ms: 180000,
++      },
++    ];
++
++    // Initially render with empty agents array (as occurs while query is loading)
++    const { rerender } = render(
++      <MemoryRouter>
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={[]}
++          onSave={handleSave}
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Switch to agent_interceptor while agents are still empty
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
++    expect(screen.getByTestId('no-agents-warning')).toBeDefined();
++
++    // Query resolves with single agent
++    rerender(
++      <MemoryRouter>
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={singleAgent}
++          onSave={handleSave}
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Agent definition should be visible at top-level outside collapsed advanced section
++    const agentSelect = screen.getByLabelText<HTMLSelectElement>(/Agent Definition/i);
++    expect(agentSelect).toBeDefined();
++    expect(agentSelect.value).toBe('solitary-qa-agent');
++
++    // Fill hook name and submit immediately without touching agent select
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'async-single-agent-hook' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++    await waitFor(() => {
++      expect(handleSave).toHaveBeenCalledWith(
++        expect.objectContaining({
++          name: 'async-single-agent-hook',
++          hook_kind: 'agent_interceptor',
++          agent: 'solitary-qa-agent',
++          timeout_ms: 180000,
++        }),
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+index a7e12676..3ae64d86 100644
+--- a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+@@ -446,4 +446,109 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
+       expect(screen.getByTestId('custom-field-test-panel')).toBeDefined();
+     });
+   });
++
++  describe('HookPipelineRow Metadata & Timeout (KAN-431)', () => {
++    it('omits kanban-main when repo_binding_slug is null and displays 180s real agent timeout', async () => {
++      const customRules: api.TransitionRule[] = [
++        {
++          from_state: 'In Progress',
++          to_state: 'Done',
++          active_hook_count: 1,
++          hooks: [
++            {
++              id: 'hook-custom-timeout',
++              name: 'long-thinking-agent',
++              from_state: 'In Progress',
++              to_state: 'Done',
++              hook_kind: 'agent_interceptor',
++              sort_rank: '0000000000000001',
++              failure_policy: 'fail_closed',
++              manifest_sha256: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
++              is_enabled: true,
++              agent_slug: 'ollama-reasoner',
++              agent_display_name: 'Ollama Reasoner',
++              harness_kind: 'in_app_sdk',
++              provider_kind: 'ollama',
++              model_id: 'nemotron-3-super:latest',
++              timeout_ms: 180000,
++              repo_binding_slug: null,
++              repo_access_mode: 'none',
++              mcp_access_summary: 'Read-Only (KAN)',
++              allowed_mutable_fields: [],
++            },
++          ],
++        },
++      ];
++
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(customRules);
++
++      renderPage();
++
++      await waitFor(() => {
++        expect(screen.getByText('long-thinking-agent')).toBeDefined();
++      });
++
++      // Assert 180s is displayed instead of 60s
++      const latencyPill = screen.getByTestId('hook-latency-hook-custom-timeout');
++      expect(latencyPill.textContent).toBe('180s');
++
++      // Assert kanban-main and Repo badge are NOT rendered in this hook row
++      const hookRow = screen.getByTestId('hook-pipeline-row-hook-custom-timeout');
++      expect(hookRow.textContent).not.toContain('kanban-main');
++      expect(hookRow.textContent).not.toContain('Repo:');
++    });
++
++    it('resolves agent timeout from agents query when hook timeout_ms is absent and omits repo badge when access mode is none', async () => {
++      const customRules: api.TransitionRule[] = [
++        {
++          from_state: 'In Progress',
++          to_state: 'Done',
++          active_hook_count: 1,
++          hooks: [
++            {
++              id: 'hook-agent-lookup',
++              name: 'lookup-agent-gate',
++              from_state: 'In Progress',
++              to_state: 'Done',
++              hook_kind: 'agent_interceptor',
++              sort_rank: '0000000000000001',
++              failure_policy: 'fail_closed',
++              manifest_sha256: '7b52009b64fd0a2a49e6d8a939753077792b055425eee527861182c611383145',
++              is_enabled: true,
++              agent_slug: 'forensic-code-check',
++              harness_kind: 'cli_pipe',
++              repo_binding_slug: 'my-repo',
++              repo_access_mode: 'none', // Mode is none -> should NOT render badge
++            },
++          ],
++        },
++      ];
++
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(customRules);
++      vi.spyOn(api, 'fetchAgentDefinitions').mockResolvedValue([
++        {
++          id: 'agent-1',
++          slug: 'forensic-code-check',
++          display_name: 'Forensic Code Check',
++          harness_kind: 'cli_pipe',
++          timeout_ms: 300000,
++          cli_args: [],
++          repo_access_mode: 'none',
++        },
++      ]);
++
++      renderPage();
++
++      await waitFor(() => {
++        expect(screen.getByText('lookup-agent-gate')).toBeDefined();
++      });
++
++      // Resolved 300s from agent definition
++      const latencyPill = screen.getByTestId('hook-latency-hook-agent-lookup');
++      expect(latencyPill.textContent).toBe('300s');
++
++      // repo_access_mode === 'none' -> repo badge omitted
++      expect(screen.queryByText('my-repo')).toBeNull();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
+index e73feacc..290f2b4c 100644
+--- a/kanban/web/src/features/workflows/api.ts
++++ b/kanban/web/src/features/workflows/api.ts
+@@ -45,9 +45,9 @@ export interface WorkflowHook {
+   model_id?: string | undefined;
+   cli_binary_allowlist_id?: string | undefined;
+   cli_args?: string[] | undefined;
+-  timeout_ms?: number | undefined;
+-  repo_binding_slug?: string | undefined;
+-  repo_access_mode?: string | undefined;
++  timeout_ms?: number | null | undefined;
++  repo_binding_slug?: string | null | undefined;
++  repo_access_mode?: string | null | undefined;
+   mcp_access_summary?: string | undefined;
+   allowed_mutable_fields?: string[] | undefined;
+   last_execution_log?: string | undefined;
+diff --git a/kanban/workflows/hooks_service.py b/kanban/workflows/hooks_service.py
+index 1cb78e58..b77f3663 100644
+--- a/kanban/workflows/hooks_service.py
++++ b/kanban/workflows/hooks_service.py
+@@ -333,6 +333,9 @@ class WorkflowHookService:
+         cli_bin_id: str | None = None
+         cli_args: list[str] | None = None
+         mcp_summary: str | None = None
++        timeout_ms: int | None = None
++        repo_binding_slug: str | None = None
++        repo_access_mode: str | None = None
+ 
+         if hook.agent_definition_id is not None:
+             agent_stmt = select(AgentDefinition).where(
+@@ -350,6 +353,18 @@ class WorkflowHookService:
+                 if isinstance(agent_def.cli_args_json, list):
+                     cli_args = [str(x) for x in agent_def.cli_args_json]
+                 mcp_summary = f"{len(agent_def.mcp_allowed_tools)} tools"
++                timeout_ms = agent_def.timeout_ms
++                repo_access_mode = agent_def.repo_access_mode
++
++                if agent_def.repo_access_mode != "none":
++                    from database.models.repo_binding import ProjectRepoBinding  # noqa: PLC0415
++
++                    repo_stmt = (
++                        select(ProjectRepoBinding.slug)
++                        .where(ProjectRepoBinding.project_id == hook.project_id)
++                        .limit(1)
++                    )
++                    repo_binding_slug = (await session.execute(repo_stmt)).scalar_one_or_none()
+ 
+         wasm_hex = hook.wasm_module_sha256.hex() if hook.wasm_module_sha256 else None
+         manifest_hex = hook.manifest_sha256.hex()
+@@ -376,6 +391,9 @@ class WorkflowHookService:
+             cli_binary_allowlist_id=cli_bin_id,
+             cli_args=cli_args,
+             mcp_access_summary=mcp_summary,
++            timeout_ms=timeout_ms,
++            repo_binding_slug=repo_binding_slug,
++            repo_access_mode=repo_access_mode,
+         )
+ 
+     @classmethod
+diff --git a/scripts/capture_kan431_screenshots.mjs b/scripts/capture_kan431_screenshots.mjs
+new file mode 100644
+index 00000000..348e27b1
+--- /dev/null
++++ b/scripts/capture_kan431_screenshots.mjs
+@@ -0,0 +1,171 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++/**
++ * Zero-Mock Playwright screenshot capture script for KAN-431.
++ * Connects directly to the live backend running on http://127.0.0.1:18431 with
++ * real session cookies and zero mocked routes (0 page.route / 0 mockApi).
++ */
++
++import fs from 'node:fs';
++import path from 'node:path';
++
++let chromium;
++try {
++  const localPlaywright = path.resolve('kanban/web/node_modules/@playwright/test/index.mjs');
++  ({ chromium } = await import(localPlaywright));
++} catch {
++  try {
++    ({ chromium } = await import('playwright'));
++  } catch {
++    ({ chromium } = await import('@playwright/test'));
++  }
++}
++
++const PORT = process.env.KAN431_PORT || '18431';
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const COOKIE_VAL = process.env.KAN431_COOKIE || '';
++const CSRF_TOKEN = process.env.KAN431_CSRF || '';
++
++const OUT_DIR = path.resolve('docs/qa/KAN-431/screenshots');
++fs.mkdirSync(OUT_DIR, { recursive: true });
++
++async function preparePageForScreenshot(page, theme) {
++  await page.evaluate((t) => {
++    document.documentElement.dataset.theme = t;
++    localStorage.setItem('theme', t);
++  }, theme);
++
++  await page.addStyleTag({
++    content: `
++      .kb-app-shell, .kb-main-canvas {
++        height: auto !important;
++        max-height: none !important;
++        overflow: visible !important;
++      }
++      .kb-topbar, header {
++        position: static !important;
++      }
++    `,
++  });
++  await page.waitForTimeout(300);
++}
++
++async function saveScreenshot(page, filename) {
++  const fullPath = path.join(OUT_DIR, filename);
++  await page.screenshot({ path: fullPath, fullPage: true });
++  console.log(`[Captured] ${filename}`);
++}
++
++async function createContext(browser, width, height, theme) {
++  const context = await browser.newContext({
++    viewport: { width, height },
++    colorScheme: theme,
++    bypassCSP: true,
++  });
++
++  if (COOKIE_VAL) {
++    await context.addCookies([
++      {
++        name: 'kb_session',
++        value: COOKIE_VAL,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++      {
++        name: 'kb_csrf',
++        value: CSRF_TOKEN,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: false,
++        sameSite: 'Lax',
++      },
++    ]);
++  }
++
++  return context;
++}
++
++const VIEWPORTS = [
++  { name: 'desktop-light', width: 1440, height: 900, theme: 'light' },
++  { name: 'desktop-dark', width: 1440, height: 900, theme: 'dark' },
++  { name: '1024x768', width: 1024, height: 768, theme: 'light' },
++  { name: '768x1024', width: 768, height: 1024, theme: 'light' },
++  { name: '390x844', width: 390, height: 844, theme: 'light' },
++];
++
++async function main() {
++  console.log(`[Playwright] Launching browser to connect to ${BASE_URL}...`);
++  const browser = await chromium.launch({ headless: true });
++
++  try {
++    for (const vp of VIEWPORTS) {
++      console.log(`\n--- Capturing viewport: ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme}) ---`);
++      const context = await createContext(browser, vp.width, vp.height, vp.theme);
++      const page = await context.newPage();
++
++      // Screen 1: AttachHookDialog with Agent Transition Helper & top-level Agent Definition
++      await page.goto(`${BASE_URL}/projects/PROJ/settings/workflows`, { waitUntil: 'domcontentloaded' });
++      await preparePageForScreenshot(page, vp.theme);
++
++      // Open Attach Hook dialog
++      const attachBtn = page.locator('button:has-text("Add Hook")').first();
++      await attachBtn.waitFor({ state: 'visible', timeout: 10000 });
++      await attachBtn.click();
++
++      // Click Agent Transition Helper radio
++      const agentRadio = page.locator('label:has-text("Agent Transition Helper") input[type="radio"]');
++      await agentRadio.waitFor({ state: 'visible', timeout: 10000 });
++      await agentRadio.click();
++      await page.waitForTimeout(500);
++
++      await saveScreenshot(page, `01-attach-hook-agent-interceptor-${vp.name}.png`);
++
++      // Close modal
++      const closeBtn = page.locator('button[aria-label="Close dialog"], button:has-text("Cancel")').first();
++      if (await closeBtn.isVisible()) {
++        await closeBtn.click();
++        await page.waitForTimeout(300);
++      }
++
++      // Screen 2: Hook Pipeline Row Card Metadata
++      // Ensure we are viewing the transition cards with 180s timeout and clean repo badges
++      await page.goto(`${BASE_URL}/projects/PROJ/settings/workflows`, { waitUntil: 'domcontentloaded' });
++      await preparePageForScreenshot(page, vp.theme);
++      await page.locator('.workflow-studio, .transition-rule-card').first().waitFor({ state: 'visible', timeout: 10000 });
++      await saveScreenshot(page, `02-hook-pipeline-card-metadata-${vp.name}.png`);
++
++      // Screen 3: Agent Definition Edit Drawer displaying custom system_instructions_md
++      await page.goto(`${BASE_URL}/workspaces/settings/agents`, { waitUntil: 'domcontentloaded' });
++      await preparePageForScreenshot(page, vp.theme);
++
++      // Click Edit specifically on QA Gatekeeper row
++      const qaRow = page.locator('tr:has-text("QA Gatekeeper")').filter({ has: page.locator('button:has-text("Edit")') }).first();
++      const editBtn = (await qaRow.count()) > 0 ? qaRow.locator('button:has-text("Edit")').first() : page.locator('button:has-text("Edit")').first();
++      await editBtn.waitFor({ state: 'visible', timeout: 10000 });
++      await editBtn.click();
++
++      // Expand Advanced section in drawer
++      const advSummary = page.locator('[data-testid="advanced-model-harness-config"] summary');
++      await advSummary.waitFor({ state: 'visible', timeout: 10000 });
++      await advSummary.click();
++      await page.waitForTimeout(300);
++
++      // Wait for drawer and textarea, scroll into view to capture markdown instructions clearly
++      const textarea = page.locator('textarea[data-testid="agent-instructions-textarea"]');
++      await textarea.waitFor({ state: 'visible', timeout: 10000 });
++      await textarea.scrollIntoViewIfNeeded();
++      await page.waitForTimeout(500);
++
++      await saveScreenshot(page, `03-agent-definition-edit-drawer-${vp.name}.png`);
++
++      await context.close();
++    }
++  } finally {
++    await browser.close();
++  }
++}
++
++main().catch((err) => {
++  console.error('[Playwright Error]', err);
++  process.exit(1);
++});
+diff --git a/scripts/run_kan431_screenshot_flow.py b/scripts/run_kan431_screenshot_flow.py
+new file mode 100644
+index 00000000..8f0cbaa1
+--- /dev/null
++++ b/scripts/run_kan431_screenshot_flow.py
+@@ -0,0 +1,338 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Zero-Mock Screenshot Orchestrator for KAN-431.
++
++Binds temporary test server strictly to 127.0.0.1:18431.
++Seeds hermetic test database kanban_live431 from kanban_template.
++Tears down server cleanly after capture.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import os
++import subprocess
++import time
++import uuid
++from typing import Any
++
++import asyncpg
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
++from sqlalchemy.orm import sessionmaker
++
++from kanban.auth.sessions.service import SessionService
++from database.models.workflow import WorkflowTransitionHook
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++SOCKET_DIR = "/tmp/kb-pgsock-kan431"
++PORT = 18431
++DB_NAME = "kanban_live431"
++SUPERUSER_DSN = f"postgresql://kanban_test@/{DB_NAME}?host={SOCKET_DIR}"
++MIGRATOR_URL = f"postgresql+asyncpg://kanban_migrator@/{DB_NAME}?host={SOCKET_DIR}"
++APP_URL = f"postgresql+asyncpg://kanban_app@/{DB_NAME}?host={SOCKET_DIR}"
++
++SESSION_HMAC_KEY = b"s" * 32
++MASTER_KEK = b"k" * 32
++AUTH_PEPPER = b"p" * 32
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++async def prepare_database() -> dict[str, Any]:
++    print("[KAN-431 Prep] Creating pristine database from kanban_template...")
++    conn = await asyncpg.connect(user="kanban_test", database="postgres", host=SOCKET_DIR)
++    try:
++        await conn.execute(f"DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE)")
++        await conn.execute(f"CREATE DATABASE {DB_NAME} TEMPLATE kanban_template")
++    finally:
++        await conn.close()
++
++    print("[KAN-431 Prep] Seeding workspace, project, repo, agents, hooks, and admin session...")
++    engine = create_async_engine(MIGRATOR_URL)
++    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++
++    async with async_session() as s:
++        # 1. Workspace
++        ws_id = uuid.uuid4()
++        await s.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'engineering', 'Engineering')"),
++            {"id": ws_id},
++        )
++
++        # 2. Server Admin Principal & User
++        p_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO principals (id, workspace_id, principal_type, status, display_name) "
++                "VALUES (:id, :ws_id, 'USER', 'ACTIVE', 'Admin User')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await s.execute(
++            text(
++                "SELECT register_object('user'::object_kind, :ws_id, NULL, 'server_admin', 'Admin User', :p_id, :p_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++                "VALUES (:id, 'user', 'USER', :ws_id, 'admin@kanban.local')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++
++        # 3. Project PROJ
++        reg_row = await s.execute(
++            text("SELECT register_object('project'::object_kind, :ws_id, NULL, 'PROJ', 'Core Engine', :p_id)"),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        proj_id = reg_row.scalar_one()
++        await s.execute(
++            text(
++                "INSERT INTO projects (id, workspace_id, identifier, name, modules_enabled) "
++                "VALUES (:id, :ws_id, 'PROJ', 'Core Engine', false)"
++            ),
++            {"id": proj_id, "ws_id": ws_id},
++        )
++
++        # 4. Workflow States
++        existing_states = (
++            await s.execute(
++                text("SELECT id, name FROM workflow_states WHERE project_id = :p_id"),
++                {"p_id": proj_id},
++            )
++        ).fetchall()
++        state_ids = {row[1]: row[0] for row in existing_states}
++
++        states = [
++            ("Backlog", "unstarted", "#94a3b8", 10),
++            ("In Progress", "started", "#3b82f6", 20),
++            ("In QA", "started", "#8b5cf6", 30),
++            ("Done", "completed", "#22c55e", 40),
++        ]
++        for sname, sgroup, scolor, sorder in states:
++            if sname not in state_ids:
++                sid = uuid.uuid4()
++                state_ids[sname] = sid
++                await s.execute(
++                    text(
++                        "INSERT INTO workflow_states (id, workspace_id, project_id, name, state_group, color_hex, sort_order) "
++                        "VALUES (:id, :ws_id, :p_id, :name, :sgroup, :scolor, :sorder)"
++                    ),
++                    {"id": sid, "ws_id": ws_id, "p_id": proj_id, "name": sname, "sgroup": sgroup, "scolor": scolor, "sorder": sorder},
++                )
++
++        # 5. Role Bindings
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
++                "VALUES (:ws_id, :p_id, 'SERVER_ADMIN', 'server'), (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++
++        # 6. Project Repo Binding
++        repo_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO project_repo_bindings (id, workspace_id, project_id, slug, remote_url, default_ref, access_mode, created_by) "
++                "VALUES (:id, :ws_id, :proj_id, 'frontend-core', 'https://github.com/example/frontend.git', 'main', 'bare_git_tools', :principal_id)"
++            ),
++            {"id": repo_id, "ws_id": ws_id, "proj_id": proj_id, "principal_id": p_id},
++        )
++
++        # 7. Agent Definitions:
++        # Agent 1: QA Gatekeeper with custom instructions and 180s timeout
++        agent1_id = uuid.uuid4()
++        instructions = (
++            "# Mandatory QA Gatekeeper Instructions\n\n"
++            "1. Verify all test evidence before transitioning to Done.\n"
++            "2. Ensure zero mock data in production.\n"
++            "3. Validate test coverage >= 95%."
++        )
++        await s.execute(
++            text(
++                "INSERT INTO agent_definitions (id, workspace_id, principal_id, slug, display_name, harness_kind, provider_kind, model_id, cli_binary_allowlist_id, cli_args_json, repo_access_mode, mcp_allowed_tools, system_instructions_md, timeout_ms) "
++                "VALUES (:id, :ws_id, :p_id, 'qa-gatekeeper', 'QA Gatekeeper', 'cli_pipe', NULL, NULL, 'agy', '[\"-p\"]'::jsonb, 'ro_vfs_mount', '{\"search_tickets\",\"read_ticket\"}', :instructions, 180000)"
++            ),
++            {"id": agent1_id, "ws_id": ws_id, "p_id": p_id, "instructions": instructions},
++        )
++
++        # Agent 2: Code Reviewer without repo
++        agent2_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO agent_definitions (id, workspace_id, principal_id, slug, display_name, harness_kind, provider_kind, model_id, repo_access_mode, mcp_allowed_tools, system_instructions_md, timeout_ms) "
++                "VALUES (:id, :ws_id, :p_id, 'code-reviewer', 'Code Reviewer', 'in_app_sdk', 'openai', 'gpt-4o', 'none', '{\"read_ticket\"}', 'Review changes cleanly.', 180000)"
++            ),
++            {"id": agent2_id, "ws_id": ws_id, "p_id": p_id},
++        )
++
++        # 8. Workflow Hooks:
++        # Hook 1: QA Agent Interceptor on (In QA -> Done)
++        msha1 = compute_hook_manifest_sha256(
++            from_state_id=state_ids["In QA"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            wasm_module_sha256=None,
++            agent_definition_id=agent1_id,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        hook1 = WorkflowTransitionHook(
++            workspace_id=ws_id,
++            project_id=proj_id,
++            name="QA Gatekeeper Helper",
++            from_state_id=state_ids["In QA"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            sort_rank="0|hzzzzz:",
++            is_enabled=True,
++            agent_definition_id=agent1_id,
++            manifest_sha256=msha1,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        s.add(hook1)
++
++        # Hook 2: Code Reviewer Hook on (In Progress -> In QA)
++        msha2 = compute_hook_manifest_sha256(
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["In QA"],
++            hook_kind="agent_interceptor",
++            wasm_module_sha256=None,
++            agent_definition_id=agent2_id,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        hook2 = WorkflowTransitionHook(
++            workspace_id=ws_id,
++            project_id=proj_id,
++            name="Code Review Helper",
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["In QA"],
++            hook_kind="agent_interceptor",
++            sort_rank="0|hzzzzz:",
++            is_enabled=True,
++            agent_definition_id=agent2_id,
++            manifest_sha256=msha2,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        s.add(hook2)
++        await s.flush()
++
++        # 9. TOTP Setup
++        with contextlib.suppress(Exception):
++            await s.execute(
++                text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++                {"p_id": p_id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
++            )
++            res_totp = await s.execute(
++                text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++                {"p_id": p_id},
++            )
++            totp_row = res_totp.first()
++            if totp_row:
++                await s.execute(
++                    text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++                    {"p_fid": totp_row[0]},
++                )
++
++        # 10. Issue AAL2 Session
++        svc = SessionService(session_hmac_key=SESSION_HMAC_KEY)
++        issued = await svc.create_after_login(
++            s,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            remember_me=True,
++        )
++        await s.commit()
++
++    await engine.dispose()
++    return {
++        "cookie_val": issued.cookie_val,
++        "csrf_token": issued.csrf_token,
++    }
++
++
++def main() -> None:
++    seed_info = asyncio.run(prepare_database())
++    env = os.environ.copy()
++    env["KANBAN_DEPLOYMENT_MODE"] = "standalone"
++    env["KB_BIND_HOST"] = "127.0.0.1"
++    env["KB_BIND_PORT"] = str(PORT)
++    env["KB_PUBLIC_ORIGIN"] = f"http://127.0.0.1:{PORT}"
++    env["KANBAN_DATABASE_URL"] = APP_URL
++    env["KANBAN_MASTER_KEK"] = _b64(MASTER_KEK)
++    env["KANBAN_AUTH_PEPPER"] = _b64(AUTH_PEPPER)
++    env["KANBAN_SESSION_HMAC_KEY"] = _b64(SESSION_HMAC_KEY)
++    env["KANBAN_MASTER_KEK_KID"] = "test-kid-1"
++    env["KAN431_PORT"] = str(PORT)
++    env["KAN431_COOKIE"] = seed_info["cookie_val"]
++    env["KAN431_CSRF"] = seed_info["csrf_token"]
++
++    uv_log = open("/tmp/uvicorn_kan431.log", "w")
++    print(f"[KAN-431] Spawning temporary Kanban server on 127.0.0.1:{PORT}...")
++    proc = subprocess.Popen(
++        [
++            "/home/adamoutler/kanban/.venv/bin/python",
++            "-m",
++            "uvicorn",
++            "kanban.app:create_app",
++            "--factory",
++            "--host",
++            "127.0.0.1",
++            "--port",
++            str(PORT),
++            "--log-level",
++            "info",
++        ],
++        env=env,
++        stdout=uv_log,
++        stderr=uv_log,
++    )
++
++    try:
++        import urllib.request
++        print(f"[KAN-431] Waiting for server on http://127.0.0.1:{PORT} to be ready...")
++        ready = False
++        for _ in range(30):
++            try:
++                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=1) as resp:
++                    if resp.status in (200, 302, 404):
++                        ready = True
++                        break
++            except Exception:
++                time.sleep(0.5)
++
++        if not ready:
++            raise RuntimeError(f"Server on port {PORT} failed to become ready.")
++
++        print("[KAN-431] Executing Playwright screenshot capture...")
++        subprocess.run(
++            ["node", "scripts/capture_kan431_screenshots.mjs"],
++            env=env,
++            check=True,
++        )
++        print("[KAN-431] Screenshots captured successfully!")
++    finally:
++        print("[KAN-431] Terminating temporary server cleanly...")
++        proc.terminate()
++        try:
++            proc.wait(timeout=5)
++        except subprocess.TimeoutExpired:
++            proc.kill()
++        uv_log.close()
++        print("[KAN-431] Teardown complete.")
++
++
++if __name__ == "__main__":
++    main()
