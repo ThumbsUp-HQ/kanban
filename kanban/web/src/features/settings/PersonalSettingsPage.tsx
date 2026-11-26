@@ -45,6 +45,7 @@ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AvatarCropModal } from './AvatarCropModal';
 import { AvatarLightboxModal } from './AvatarLightboxModal';
 import { AgentOnboardingPromptCard } from './AgentOnboardingPromptCard';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './PersonalSettingsPage.css';
 
 // IANA Timezones list
@@ -629,10 +630,21 @@ export function PersonalSettingsPage(): JSX.Element {
   return (
     <div className="kb-personal-settings-container" data-testid="personal-settings-page">
       <header className="kb-personal-settings-header">
-        <h1 className="kb-personal-settings-title">Personal Settings</h1>
-        <p className="kb-personal-settings-subtitle">
-          Manage your user profile, timezone, avatar, authentication credentials, and security keys.
-        </p>
+        <div className="kb-personal-settings-header-row">
+          <div className="kb-personal-settings-header-content">
+            <h1 className="kb-personal-settings-title">Personal Settings</h1>
+            <p className="kb-personal-settings-subtitle">
+              Manage your user profile, timezone, avatar, authentication credentials, and security keys.
+            </p>
+          </div>
+          <div className="kb-personal-settings-header-actions">
+            <StudioDocLink
+              href="/docs/user-profile-and-personal-settings"
+              title="Personal Settings Documentation"
+              testId="personal-settings-doc-link"
+            />
+          </div>
+        </div>
       </header>
 
       {successMsg && (
