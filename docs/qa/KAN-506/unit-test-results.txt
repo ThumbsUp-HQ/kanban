@@ -2,17 +2,34 @@
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan506-545760b2/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (14 tests) 520ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 32ms
+ ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (14 tests) 397ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (55 tests) 10646ms
+   ✓ DocsCenter & Help System (KAN-16) (55)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 359ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (22)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 442ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1905ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 568ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 456ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 1919ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 356ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 1703ms
 
- Test Files  1 passed (1)
-      Tests  14 passed (14)
-   Start at  17:34:44
-   Duration  2.76s (environment 60%, tests 23%, import 12%, worker 4%, transform 2%)
+ Test Files  3 passed (3)
+      Tests  76 passed (76)
+   Start at  17:51:47
+   Duration  12.41s (tests 76%, environment 16%, transform 4%, import 3%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   98.88 |    97.24 |     100 |     100 |                   
- ...AuditModal.tsx |   98.88 |    97.24 |     100 |     100 | 104,124,133       
+All files          |   99.42 |    95.65 |     100 |     100 |                   
+ docs-center       |     100 |     92.3 |     100 |     100 |                   
+  HelpDrawer.tsx   |     100 |     92.3 |     100 |     100 | 69,117-118,134    
+ settings          |   98.88 |    97.24 |     100 |     100 |                   
+  ...uditModal.tsx |   98.88 |    97.24 |     100 |     100 | 104,124,133       
 -------------------|---------|----------|---------|---------|-------------------

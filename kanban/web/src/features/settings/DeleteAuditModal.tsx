@@ -206,7 +206,7 @@ export function DeleteAuditModal({
           <div className="kb-modal-header-actions">
             <StudioDocLink
               href="/docs/universal-object-graph-and-link-auditor#state-deletion"
-              title="State Deletion and Dependency Remapping Documentation"
+              title="State & Label Deletion and Dependency Remapping Documentation"
               testId="delete-audit-doc-link"
             />
             <button

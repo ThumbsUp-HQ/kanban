@@ -545,7 +545,7 @@ describe('DeleteAuditModal', () => {
           '/docs/universal-object-graph-and-link-auditor#state-deletion'
         );
         expect(docLink.getAttribute('aria-label')).toBe(
-          'State Deletion and Dependency Remapping Documentation'
+          'State & Label Deletion and Dependency Remapping Documentation'
         );
         expect(docLink.textContent).toContain('Documentation ->');
 

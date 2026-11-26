@@ -109,26 +109,86 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
     getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
 
   // Scroll to section when anchor is set or changes
-  const scrollToAnchor = (anchorId: string): void => {
+  const scrollToAnchor = (anchorId: string, smooth = true): void => {
     setActiveAnchor(anchorId);
     /* v8 ignore next */
     if (!bodyRef.current) return;
     const targetEl = resolveSectionElement(bodyRef.current, anchorId);
     if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      targetEl.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
     }
   };
 
   useEffect(() => {
-    if (activeAnchor) {
-      // Delay slightly for DOM to settle
-      const timer = window.setTimeout(() => {
-        scrollToAnchor(activeAnchor);
-      }, 50);
-      return () => {
-        window.clearTimeout(timer);
-      };
+    if (!activeAnchor) return;
+
+    let cancelled = false;
+    let resizeCount = 0;
+    const maxResizes = 8;
+
+    const performScroll = (smooth = true): void => {
+      /* v8 ignore next */
+      if (cancelled || !bodyRef.current) return;
+      const targetEl = resolveSectionElement(bodyRef.current, activeAnchor);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+      }
+    };
+
+    // Delay slightly for initial DOM mount and smooth scroll
+    const initialTimer = window.setTimeout(() => {
+      performScroll(true);
+    }, 50);
+
+    /* v8 ignore start */
+    // Staged settle checkpoints for layout reflows (Mermaid SVG rendering, lazy assets)
+    const timers = [
+      initialTimer,
+      window.setTimeout(() => { performScroll(false); }, 180),
+      window.setTimeout(() => { performScroll(false); }, 380),
+      window.setTimeout(() => { performScroll(false); }, 680),
+      window.setTimeout(() => { performScroll(false); }, 1100),
+    ];
+
+    // Resource load listener (captures image/diagram loads inside body)
+    const handleResourceLoad = (): void => {
+      performScroll(false);
+    };
+    /* v8 ignore stop */
+
+    const bodyEl = bodyRef.current;
+    /* v8 ignore next */
+    if (bodyEl) {
+      bodyEl.addEventListener('load', handleResourceLoad, true);
     }
+
+    // ResizeObserver catches async DOM expansions
+    let resizeObserver: ResizeObserver | null = null;
+    /* v8 ignore next */
+    if (typeof ResizeObserver !== 'undefined' && bodyEl) {
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeCount < maxResizes) {
+          resizeCount += 1;
+          performScroll(false);
+        }
+      });
+      resizeObserver.observe(bodyEl);
+    }
+
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => {
+        window.clearTimeout(t);
+      });
+      /* v8 ignore next */
+      if (bodyEl) {
+        bodyEl.removeEventListener('load', handleResourceLoad, true);
+      }
+      /* v8 ignore next */
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
   }, [activeAnchor, activeSlug]);
 
   // Global Escape and Tab focus trap listener
