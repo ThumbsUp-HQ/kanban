@@ -292,4 +292,92 @@ describe('AvatarLightboxModal', () => {
       expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
     });
   });
+
+  it('handles image loading error gracefully in AvatarLightboxModal', async () => {
+    class FailingImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      crossOrigin = '';
+      private _src = '';
+      get src(): string {
+        return this._src;
+      }
+      set src(val: string) {
+        this._src = val;
+        setTimeout(() => {
+          if (this.onerror) this.onerror();
+        }, 0);
+      }
+    }
+    global.Image = FailingImage as unknown as typeof Image;
+
+    const onClose = vi.fn();
+    render(
+      <AvatarLightboxModal
+        avatarUrl="/api/v1/users/user-fail/avatar"
+        displayName="Failed User"
+        onClose={onClose}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-lightbox-modal')).toBeDefined();
+    });
+  });
+
+  describe('StudioDocLink Header Integration (KAN-499)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders avatar-lightbox-doc-link with correct href, label, and ARIA title in Light and Dark themes', () => {
+      const onClose = vi.fn();
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <AvatarLightboxModal
+            avatarUrl="/api/v1/users/user-123/avatar"
+            displayName="Bob Builder"
+            onClose={onClose}
+          />,
+        );
+
+        const docLink = screen.getByTestId('avatar-lightbox-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/studio-configuration-reference#user-avatars-profile-media',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe(
+          'User Avatars & Profile Media Documentation',
+        );
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.kb-avatar-lightbox-header-actions');
+        expect(headerActions).not.toBeNull();
+        expect(headerActions?.closest('.kb-avatar-lightbox-header')).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus and interaction on StudioDocLink', () => {
+      const onClose = vi.fn();
+
+      render(
+        <AvatarLightboxModal
+          avatarUrl="/api/v1/users/user-123/avatar"
+          displayName="Bob Builder"
+          onClose={onClose}
+        />,
+      );
+
+      const docLink = screen.getByTestId('avatar-lightbox-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+      expect(docLink.tagName.toLowerCase()).toBe('a');
+      expect(docLink.getAttribute('aria-label')).toBe(
+        'User Avatars & Profile Media Documentation',
+      );
+    });
+  });
 });

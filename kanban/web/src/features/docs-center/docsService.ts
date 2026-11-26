@@ -44,6 +44,11 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
   'dry-run-simulation': 'the-non-persistent-dry-run-drawer',
   'state-deletion': 'state-deletion-and-dependency-remapping',
+  avatars: 'user-avatars-profile-media',
+  'user-avatars': 'user-avatars-profile-media',
+  'profile-media': 'user-avatars-profile-media',
+  'avatar-crop': 'user-avatars-profile-media',
+  'avatar-lightbox': 'user-avatars-profile-media',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {

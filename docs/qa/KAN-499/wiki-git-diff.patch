@@ -1,0 +1,21 @@
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+index 83f759c..365d90d 100644
+--- a/Studio-Configuration-Reference.md
++++ b/Studio-Configuration-Reference.md
+@@ -161,6 +161,16 @@ The Personal Settings Studio (`/settings` or `/profile`) provides comprehensive
+ - **recovery_codes:** A set of 10 single-use emergency recovery codes generated when two-factor authentication is configured. Each code can be used exactly once to regain account access if hardware tokens or authenticator apps are lost.
+ - **linked_identities:** Manages connected third-party enterprise identity cards (Google Workspace, GitHub, GitLab, Okta, Active Directory LDAP). Users can link multiple external accounts to a single local identity or unlink secondary providers after completing AAL2 step-up verification.
+ 
++### User Avatars & Profile Media
++
++User profile pictures and avatar assets provide visual identity across team boards, issue assignments, activity ledgers, and comment threads. The platform enforces strict client-side validation and server-side sanitization on all uploaded avatar media:
++
++- **Supported MIME Types:** `image/png`, `image/jpeg`, and `image/webp`. Untrusted vector image formats (such as SVG) and active media payloads are rejected fail-closed to prevent Cross-Site Scripting (XSS) and remote content injection.
++- **Maximum File Size:** The client and reverse proxy permit file uploads up to 5 MB (5,242,880 bytes). Files exceeding this limit are blocked immediately on the client before processing.
++- **Client-Side Zoom and Crop Bounds:** The interactive `AvatarCropModal` renders an interactive square viewport (320x320 display dimensions) with bounded zoom from 1.0x (full frame) to 4.0x magnification. Users can pan the image smoothly with pointer drag, mouse wheel, or keyboard arrow keys, while touch devices support two-finger pinch-to-zoom. When saved, the canvas exports a normalized 512x512 raster PNG blob.
++- **Avatar Lightbox Inspection:** The `AvatarLightboxModal` enables full-resolution inspection of user profile images (440x440 display viewport) with zoom inspection up to 4.0x, directional panning, and instant zoom reset.
++- **Server-Side Media Sanitization:** Uploaded image blobs submitted via `PUT /api/v1/auth/me/avatar` are re-encoded server-side using secure image decoders to strip EXIF metadata, GPS coordinates, embedded color profiles, and trailing payload markers before storing in isolated media volumes.
++
+ ---
+ 
+ ## 3. Workflow Transition Studio & Git Repo Bindings

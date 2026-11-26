@@ -394,4 +394,86 @@ describe('AvatarCropModal', () => {
       expect(screen.getByTestId('avatar-crop-modal')).toBeDefined();
     });
   });
+
+  it('handles toBlob returning null and fallback when toBlob is undefined', async () => {
+    const file = new File(['image-content'], 'test.png', { type: 'image/png' });
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+
+    // 1. toBlob returns null
+    HTMLCanvasElement.prototype.toBlob = vi.fn().mockImplementation((cb: (blob: Blob | null) => void) => {
+      cb(null);
+    });
+    const { unmount } = render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
+    });
+    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
+    expect(onSave).toHaveBeenCalledWith(file);
+    unmount();
+
+    // 2. toBlob is undefined
+    const onSave2 = vi.fn();
+    const origDescriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    // @ts-expect-error testing missing toBlob
+    delete HTMLCanvasElement.prototype.toBlob;
+    render(<AvatarCropModal file={file} onSave={onSave2} onClose={onClose} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-crop-zoom-value').textContent).toBe('1.0x');
+    });
+    fireEvent.click(screen.getByTestId('avatar-crop-save-btn'));
+    expect(onSave2).toHaveBeenCalledWith(file);
+    if (origDescriptor) {
+      Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', origDescriptor);
+    }
+  });
+
+  describe('StudioDocLink Header Integration (KAN-499)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders avatar-crop-doc-link with correct href, label, and ARIA title in Light and Dark themes', () => {
+      const file = new File(['image-content'], 'test.png', { type: 'image/png' });
+      const onSave = vi.fn();
+      const onClose = vi.fn();
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
+
+        const docLink = screen.getByTestId('avatar-crop-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/studio-configuration-reference#user-avatars-profile-media',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe(
+          'User Avatars & Profile Media Documentation',
+        );
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.kb-avatar-crop-header-actions');
+        expect(headerActions).not.toBeNull();
+        expect(headerActions?.closest('.kb-avatar-crop-header')).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus and interaction on StudioDocLink', () => {
+      const file = new File(['image-content'], 'test.png', { type: 'image/png' });
+      const onSave = vi.fn();
+      const onClose = vi.fn();
+
+      render(<AvatarCropModal file={file} onSave={onSave} onClose={onClose} />);
+
+      const docLink = screen.getByTestId('avatar-crop-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+      expect(docLink.tagName.toLowerCase()).toBe('a');
+      expect(docLink.getAttribute('aria-label')).toBe(
+        'User Avatars & Profile Media Documentation',
+      );
+    });
+  });
 });

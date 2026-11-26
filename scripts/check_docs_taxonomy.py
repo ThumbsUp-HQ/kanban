@@ -221,6 +221,12 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
             {
                 "workspaces",
                 "projects",
+                "avatars",
+                "user-avatars",
+                "profile-media",
+                "avatar-crop",
+                "avatar-lightbox",
+                "user-avatars-profile-media",
             }
         )
     if "production-promotion-and-backup-runbook" in chapter_anchors:
