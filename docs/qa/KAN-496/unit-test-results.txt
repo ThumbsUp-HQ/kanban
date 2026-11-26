@@ -1,0 +1,33 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan496-41c33572/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (75 tests) 17312ms
+   ✓ PersonalSettingsPage (75)
+     ✓ renders personal settings sections with loaded profile data 371ms
+     ✓ validates password length and matching confirmation 347ms
+     ✓ regenerates recovery codes and displays modal 2318ms
+     ✓ toggles password visibility and handles successful password update 501ms
+     ✓ cancels passkey rename modal when clicking cancel 667ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 591ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 725ms
+     ✓ covers non-Error fallback branches for TOTP, recovery codes, and passkey operations 308ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 430ms
+     ✓ handles Test Key cancellation and error conditions 414ms
+     ✓ External Identity Linking (KAN-27) (16)
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 545ms
+       ✓ displays inline role="alert" ldap-modal-error on failed LDAP link and prevents backdrop error bleed 317ms
+
+ Test Files  1 passed (1)
+      Tests  75 passed (75)
+   Start at  15:13:10
+   Duration  19.07s (tests 93%, environment 5%, import 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.48 |    96.57 |   99.04 |     100 |                   
+ ...ttingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...70,392,485,581 
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0
