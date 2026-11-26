@@ -401,11 +401,14 @@ export function PlaneImportStudio(): JSX.Element {
         className="kb-plane-mode-row"
         style={{ margin: '1rem 0' }}
         data-testid="source-selector-bar"
+        role="group"
+        aria-label="Import source"
       >
         <button
           type="button"
           className={`kb-plane-mode-btn ${source === 'plane' ? 'kb-plane-mode-active' : ''}`}
           data-testid="source-plane-btn"
+          aria-pressed={source === 'plane'}
           onClick={() => {
             setSource('plane');
             setBundleData(null);
@@ -418,6 +421,7 @@ export function PlaneImportStudio(): JSX.Element {
           type="button"
           className={`kb-plane-mode-btn ${source === 'jira' ? 'kb-plane-mode-active' : ''}`}
           data-testid="source-jira-btn"
+          aria-pressed={source === 'jira'}
           onClick={() => {
             setSource('jira');
             setBundleData(null);
@@ -430,6 +434,7 @@ export function PlaneImportStudio(): JSX.Element {
           type="button"
           className={`kb-plane-mode-btn ${source === 'github' ? 'kb-plane-mode-active' : ''}`}
           data-testid="source-github-btn"
+          aria-pressed={source === 'github'}
           onClick={() => {
             setSource('github');
             setBundleData(null);
@@ -442,6 +447,7 @@ export function PlaneImportStudio(): JSX.Element {
           type="button"
           className={`kb-plane-mode-btn ${source === 'linear' ? 'kb-plane-mode-active' : ''}`}
           data-testid="source-linear-btn"
+          aria-pressed={source === 'linear'}
           onClick={() => {
             setSource('linear');
             setBundleData(null);
@@ -469,11 +475,12 @@ export function PlaneImportStudio(): JSX.Element {
             <EmojiHint kind="rawMarkdown" /> Step 1: Select {sourceName} Export Bundle
           </h2>
 
-          <div className="kb-plane-mode-row">
+          <div className="kb-plane-mode-row" role="group" aria-label="Input mode">
             <button
               type="button"
               className={`kb-plane-mode-btn ${inputMode === 'upload' ? 'kb-plane-mode-active' : ''}`}
               data-testid="mode-upload-btn"
+              aria-pressed={inputMode === 'upload'}
               onClick={() => {
                 setInputMode('upload');
               }}
@@ -484,6 +491,7 @@ export function PlaneImportStudio(): JSX.Element {
               type="button"
               className={`kb-plane-mode-btn ${inputMode === 'paste' ? 'kb-plane-mode-active' : ''}`}
               data-testid="mode-paste-btn"
+              aria-pressed={inputMode === 'paste'}
               onClick={() => {
                 setInputMode('paste');
               }}

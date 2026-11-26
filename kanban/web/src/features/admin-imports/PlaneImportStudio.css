@@ -35,7 +35,7 @@
 .kb-plane-section {
   margin-bottom: var(--section-gap);
   background-color: var(--kb-color-bg-surface, var(--bg-surface));
-  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 24px 32px;
 }
@@ -60,9 +60,9 @@
   padding: 8px 16px;
   min-height: 44px;
   border-radius: 6px;
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
-  color: var(--kb-color-text-secondary, #8b949e);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface-raised);
+  color: var(--fg-secondary);
   cursor: pointer;
   font-weight: 500;
   font-size: 0.875rem;
@@ -70,7 +70,7 @@
 }
 
 .kb-plane-mode-btn:hover {
-  color: var(--kb-color-text-primary, #f0f6fc);
+  color: var(--fg-primary);
   background-color: var(--bg-hover);
 }
 
@@ -88,30 +88,30 @@
 }
 
 .kb-plane-dropzone {
-  border: 2px dashed var(--kb-color-border-subtle, #30363d);
+  border: 2px dashed var(--border-subtle);
   border-radius: 8px;
   padding: 36px 20px;
   text-align: center;
-  background-color: rgba(110, 118, 129, 0.04);
+  background-color: var(--bg-surface);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .kb-plane-dropzone:hover,
 .kb-plane-dropzone-active {
-  border-color: #58a6ff;
-  background-color: rgba(56, 139, 253, 0.08);
+  border-color: var(--badge-fg);
+  background-color: var(--bg-accent-subtle);
 }
 
 .kb-plane-dropzone-text {
   font-size: 0.95rem;
-  color: var(--kb-color-text-primary, #f0f6fc);
+  color: var(--fg-primary);
   margin-bottom: 8px;
 }
 
 .kb-plane-dropzone-hint {
   font-size: 0.8rem;
-  color: var(--kb-color-text-secondary, #8b949e);
+  color: var(--fg-secondary);
 }
 
 .kb-plane-file-input {
@@ -126,18 +126,18 @@
   font-family: var(--font-mono);
   font-size: 0.825rem;
   padding: 12px;
-  background-color: var(--kb-color-bg-surface-raised, #0d1117);
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  color: var(--kb-color-text-primary, #f0f6fc);
+  color: var(--fg-primary);
   resize: vertical;
   line-height: 1.4;
 }
 
 .kb-plane-textarea:focus {
   outline: none;
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
+  border-color: var(--badge-fg);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .kb-plane-stats-grid {
@@ -148,8 +148,8 @@
 }
 
 .kb-plane-stat-card {
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px;
   text-align: center;
@@ -158,7 +158,7 @@
 .kb-plane-stat-val {
   font-size: 1.35rem;
   font-weight: 700;
-  color: var(--kb-color-text-primary, #f0f6fc);
+  color: var(--fg-primary);
   margin-bottom: 4px;
 }
 
@@ -166,7 +166,7 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   font-weight: 600;
-  color: var(--kb-color-text-secondary, #8b949e);
+  color: var(--fg-secondary);
 }
 
 .kb-plane-diff-grid {
@@ -177,39 +177,39 @@
 }
 
 .kb-plane-diff-card {
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 16px;
 }
 
 .kb-plane-diff-card-create {
-  border-left: 4px solid #3fb950;
+  border-left: 4px solid var(--text-success);
 }
 
 .kb-plane-diff-card-update {
-  border-left: 4px solid #58a6ff;
+  border-left: 4px solid var(--badge-fg);
 }
 
 .kb-plane-diff-card-unchanged {
-  border-left: 4px solid #8b949e;
+  border-left: 4px solid var(--fg-secondary);
 }
 
 .kb-plane-diff-card-sequence {
-  border-left: 4px solid #bc8cff;
+  border-left: 4px solid var(--accent-primary);
 }
 
 .kb-plane-diff-val {
   font-size: 1.6rem;
   font-weight: 700;
-  color: var(--kb-color-text-primary, #f0f6fc);
+  color: var(--fg-primary);
   margin-bottom: 4px;
 }
 
 .kb-plane-diff-label {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--kb-color-text-secondary, #8b949e);
+  color: var(--fg-secondary);
 }
 
 .kb-plane-warnings-box {
@@ -297,9 +297,9 @@
 }
 
 .kb-plane-btn-secondary {
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
-  border: 1px solid var(--kb-color-border-subtle, #30363d);
-  color: var(--kb-color-text-primary, #f0f6fc);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--fg-primary);
 }
 
 .kb-plane-btn-secondary:hover:not(:disabled) {
@@ -314,7 +314,7 @@
 .kb-plane-progress-wrap {
   width: 100%;
   height: 8px;
-  background-color: var(--kb-color-bg-surface-raised, #21262d);
+  background-color: var(--bg-surface-raised);
   border-radius: 4px;
   overflow: hidden;
   margin: 16px 0;
@@ -323,7 +323,7 @@
 .kb-plane-progress-bar {
   height: 100%;
   width: 100%;
-  background: linear-gradient(90deg, #1f6feb, #388bfd, #58a6ff);
+  background: var(--accent-primary);
   background-size: 200% 100%;
   animation: kb-plane-pulse 1.5s infinite linear;
 }
