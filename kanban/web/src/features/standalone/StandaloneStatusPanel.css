@@ -677,3 +677,28 @@
     min-width: var(--tap-min, 44px);
   }
 }
+
+/* Pre-Restore Safety Snapshot Confirmation Label (KAN-531) */
+.standalone-restore-confirm-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  color: var(--danger-fg, #881337);
+}
+
+.standalone-restore-confirm-label .field-help-hint {
+  margin-left: 0;
+}
+
+[data-theme="dark"] .standalone-restore-confirm-label {
+  color: var(--danger-fg, #fecdd3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .standalone-restore-confirm-label {
+    color: var(--danger-fg, #fecdd3);
+  }
+}
+

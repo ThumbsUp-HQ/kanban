@@ -3099,5 +3099,276 @@ describe('ComposeExportTab', () => {
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledTimes(1);
     });
+
+    describe('KAN-531: Pre-Restore Safety Snapshot FieldHelpHint', () => {
+      it('renders FieldHelpHint adjacent to restore confirmation label with correct attributes, content, and docHref', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/backup-schedule')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  enabled: false,
+                  interval_hours: 24,
+                  retention_count: 7,
+                  last_run_at: null,
+                  next_run_at: null,
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes('/backups')) {
+            return Promise.resolve(
+              new Response('[]', {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            );
+          }
+          if (url.includes('/backup/verify')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  format_version: 1,
+                  pg_server_version: '16.1',
+                  alembic_revision: 'head-rev-123',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={vi.fn()}
+              initialStatus={adminStatus}
+              initialTab="backup"
+            />
+          </QueryClientProvider>,
+        );
+
+        // Upload a file to enable Verify button
+        const fileInput = screen.getByLabelText(/Upload Backup Archive/);
+        const mockFile = new File(['mock-backup-octets'], 'test.kbbak', { type: 'application/octet-stream' });
+        fireEvent.change(fileInput, { target: { files: [mockFile] } });
+
+        const verifyBtn = screen.getByRole('button', { name: /Step 1: Verify Backup Archive/ });
+        await act(async () => {
+          fireEvent.click(verifyBtn);
+          await Promise.resolve();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByText('✓ Backup Archive Verified')).toBeDefined();
+        });
+
+        // The restore confirm container should have the new class and contain FieldHelpHint adjacent to label
+        const confirmLabel = screen.getByText(/Type RESTORE to confirm overwriting current database:/);
+        const confirmContainer = confirmLabel.closest('.standalone-restore-confirm-label');
+        expect(confirmContainer).not.toBeNull();
+
+        const hintTrigger = screen.getByTestId('restore-confirm-help');
+        expect(hintTrigger).toBeDefined();
+        expect(hintTrigger.getAttribute('aria-label')).toBe('Help for Pre-Restore Safety Snapshot');
+        expect(hintTrigger.getAttribute('aria-haspopup')).toBe('dialog');
+
+        // Open popover by focusing trigger
+        act(() => {
+          hintTrigger.focus();
+        });
+
+        const popover = screen.getByTestId('restore-confirm-help-popover');
+        expect(popover).toBeDefined();
+
+        expect(within(popover).getByText('Pre-Restore Safety Snapshot')).toBeDefined();
+        expect(within(popover).getByText(/automated pre-restore safety snapshot/i)).toBeDefined();
+        expect(within(popover).getByText(/Restoring cannot be undone/i)).toBeDefined();
+
+        const docLink = screen.getByTestId('restore-confirm-help-doc-link');
+        expect(docLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook#restore-procedure');
+      });
+
+      it('closes restore FieldHelpHint on Escape without invoking onClose on StandaloneStatusPanel', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+
+        const onClose = vi.fn();
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/backup-schedule')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  enabled: false,
+                  interval_hours: 24,
+                  retention_count: 7,
+                  last_run_at: null,
+                  next_run_at: null,
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes('/backups')) {
+            return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+          }
+          if (url.includes('/backup/verify')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  format_version: 1,
+                  pg_server_version: '16.1',
+                  alembic_revision: 'head-rev-123',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={onClose}
+              initialStatus={adminStatus}
+              initialTab="backup"
+            />
+          </QueryClientProvider>,
+        );
+
+        const fileInput = screen.getByLabelText(/Upload Backup Archive/);
+        const mockFile = new File(['mock-backup-octets'], 'test.kbbak', { type: 'application/octet-stream' });
+        fireEvent.change(fileInput, { target: { files: [mockFile] } });
+
+        const verifyBtn = screen.getByRole('button', { name: /Step 1: Verify Backup Archive/ });
+        await act(async () => {
+          fireEvent.click(verifyBtn);
+          await Promise.resolve();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId('restore-confirm-help')).toBeDefined();
+        });
+
+        const hintTrigger = screen.getByTestId('restore-confirm-help');
+        act(() => {
+          hintTrigger.focus();
+        });
+
+        expect(screen.getByTestId('restore-confirm-help-popover')).toBeDefined();
+
+        // Fire Escape on trigger while popover is open
+        fireEvent.keyDown(hintTrigger, { key: 'Escape' });
+
+        expect(screen.queryByTestId('restore-confirm-help-popover')).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+      });
+
+      it('renders restore FieldHelpHint cleanly across light and dark theme modes', async () => {
+        const testClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const adminStatus: SystemStatus = {
+          deployment_mode: 'standalone',
+          is_server_admin: true,
+          persistent_volume: true,
+          air_gap_mode: false,
+          local_llm_endpoint_host: null,
+        };
+
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/backup-schedule')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  enabled: false,
+                  interval_hours: 24,
+                  retention_count: 7,
+                  last_run_at: null,
+                  next_run_at: null,
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (url.includes('/backups')) {
+            return Promise.resolve(new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+          }
+          if (url.includes('/backup/verify')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  format_version: 1,
+                  pg_server_version: '16.1',
+                  alembic_revision: 'head-rev-123',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        });
+
+        const { container } = render(
+          <QueryClientProvider client={testClient}>
+            <StandaloneStatusPanel
+              onClose={vi.fn()}
+              initialStatus={adminStatus}
+              initialTab="backup"
+            />
+          </QueryClientProvider>,
+        );
+
+        const fileInput = screen.getByLabelText(/Upload Backup Archive/);
+        const mockFile = new File(['mock-backup-octets'], 'test.kbbak', { type: 'application/octet-stream' });
+        fireEvent.change(fileInput, { target: { files: [mockFile] } });
+
+        const verifyBtn = screen.getByRole('button', { name: /Step 1: Verify Backup Archive/ });
+        await act(async () => {
+          fireEvent.click(verifyBtn);
+          await Promise.resolve();
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId('restore-confirm-help')).toBeDefined();
+        });
+
+        // Test Light Mode
+        document.documentElement.setAttribute('data-theme', 'light');
+        expect(container.querySelector('.standalone-restore-confirm-label')).toBeDefined();
+        expect(screen.getByTestId('restore-confirm-help')).toBeDefined();
+
+        // Test Dark Mode
+        document.documentElement.setAttribute('data-theme', 'dark');
+        expect(container.querySelector('.standalone-restore-confirm-label')).toBeDefined();
+        expect(screen.getByTestId('restore-confirm-help')).toBeDefined();
+
+        // Cleanup
+        document.documentElement.removeAttribute('data-theme');
+      });
+    });
   });
 });

@@ -998,9 +998,21 @@ export function StandaloneStatusPanel({
                         onSubmit={(e) => { void handleRestoreSubmit(e); }}
                         className="standalone-panel__destructive-form"
                       >
-                        <label htmlFor="restore-confirm" className="standalone-panel__label standalone-panel__label--danger">
-                          Type RESTORE to confirm overwriting current database:
-                        </label>
+                        <div className="standalone-restore-confirm-label">
+                          <label
+                            htmlFor="restore-confirm"
+                            className="standalone-panel__label standalone-panel__label--danger"
+                          >
+                            Type RESTORE to confirm overwriting current database:
+                          </label>
+                          <FieldHelpHint
+                            title="Pre-Restore Safety Snapshot"
+                            summary="Restoring overwrites database contents with the verified archive. An automated pre-restore safety snapshot is taken before database teardown begins so rollback remains possible."
+                            caution="Restoring cannot be undone without reverting to the pre-restore safety snapshot. Active sessions will be terminated."
+                            docHref="/docs/production-promotion-and-backup-runbook#restore-procedure"
+                            testId="restore-confirm-help"
+                          />
+                        </div>
                         <input
                           id="restore-confirm"
                           type="text"
