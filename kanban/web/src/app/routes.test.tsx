@@ -1172,6 +1172,9 @@ describe('IssuesWorkspaceRoute', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('drafts-empty')).toBeDefined();
+      expect(screen.getByTestId('drafts-empty-guidance')).toBeDefined();
+      expect(screen.getByRole('button', { name: /Local Browser Drafts/i })).toBeDefined();
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
     });
 
     uDrafts();

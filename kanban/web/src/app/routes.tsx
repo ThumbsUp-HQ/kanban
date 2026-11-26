@@ -634,13 +634,24 @@ export function DraftsWorkspaceView(): JSX.Element {
   return (
     <section data-testid="drafts-view" className="kb-workspace-section">
       <div className="kb-workspace-section-header">
-        <h1>Drafts</h1>
+        <div className="kb-drafts-header-title-row">
+          <h1>Drafts</h1>
+          <FieldHelpHint
+            title="Local Browser Drafts"
+            summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
+            defaultValue="Saved locally"
+            docHref="/docs/scripted-workflows-and-transition-helpers"
+          />
+        </div>
         <p>Work item drafts saved before publishing to a project.</p>
       </div>
 
       {drafts.length === 0 ? (
         <div data-testid="drafts-empty" className="drafts-empty-notice">
           <p>No work item drafts found.</p>
+          <p className="kb-drafts-empty-guidance" data-testid="drafts-empty-guidance">
+            Drafts automatically save your in-progress work items in this browser so you can safely recover them across sessions or offline without publishing unfinished items.
+          </p>
           <Link to={emptyStateCtaLink}>Create a new work item →</Link>
         </div>
       ) : (
