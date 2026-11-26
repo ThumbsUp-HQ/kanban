@@ -292,3 +292,72 @@ async def test_ldap_group_mapping_table_model(db_session: AsyncSession) -> None:
     loaded = res.scalars().one()
     assert loaded.group_name == "Security Auditors"
     assert loaded.ldap_dn == "cn=security-auditors,ou=groups,dc=example,dc=com"
+
+
+@pytest.mark.asyncio
+async def test_group_sync_nested_group_parent_map(db_session: AsyncSession) -> None:
+    """Test group sync reconciles inter-group nesting edges and closure triggers."""
+    ws_id, _ = await _setup_workspace_and_admin(db_session)
+    user_id = await _create_test_user(db_session, ws_id)
+
+    child_dn = "cn=subteam,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    group_map = {
+        child_dn: "Subteam Group",
+        parent_dn: "Parent Group",
+    }
+    parent_map = {
+        child_dn: [parent_dn],
+    }
+
+    # User is only member of child group directly
+    matched = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched == ["Subteam Group"]
+
+    # Verify inter-group edge was created
+    child_stmt = select(Group).where(Group.name == "Subteam Group", Group.workspace_id == ws_id)
+    parent_stmt = select(Group).where(Group.name == "Parent Group", Group.workspace_id == ws_id)
+    child_grp = await db_session.scalar(child_stmt)
+    parent_grp = await db_session.scalar(parent_stmt)
+    assert child_grp is not None
+    assert parent_grp is not None
+
+    edge = await db_session.scalar(
+        select(PrincipalGroupEdge).where(
+            PrincipalGroupEdge.member_id == child_grp.id,
+            PrincipalGroupEdge.group_id == parent_grp.id,
+            PrincipalGroupEdge.workspace_id == ws_id,
+        )
+    )
+    assert edge is not None
+
+    # Verify closure depth in principal_group_closure
+    closure_depth = await db_session.scalar(
+        text(
+            "SELECT depth FROM principal_group_closure "
+            "WHERE member_id = :u_id AND ancestor_group_id = :p_id "
+            "ORDER BY depth DESC LIMIT 1"
+        ),
+        {"u_id": user_id, "p_id": parent_grp.id},
+    )
+    assert closure_depth is not None
+    assert closure_depth >= 2
+
+    # Second sync: idempotent, doesn't duplicate
+    matched2 = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched2 == ["Subteam Group"]
+

@@ -275,7 +275,6 @@ class LiveLdapCompanion:
             "displayName": [b"Hermes Conrad"],
             "memberOf": [
                 b"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com",
-                b"cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com",
             ],
             "entryUUID": [b"01a21408-0001-7000-8000-000000000001"],
         }

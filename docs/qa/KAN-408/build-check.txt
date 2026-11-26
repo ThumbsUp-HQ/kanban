@@ -1,22 +1,22 @@
 === STATIC LINTERS AND BUILD CHECK RESULTS ===
 --- 1. Ruff ---
 All checks passed!
+
 --- 2. Mypy ---
 Success: no issues found in 680 source files
---- 3. check_no_dashes ---
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
---- 4. Web Typecheck ---
 
+--- 3. check_no_dashes ---
+
+
+--- 4. Web Typecheck ---
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade/kanban/web
 > tsc -b --noEmit
 
 --- 5. Web ESLint ---
-
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade/kanban/web
 > eslint . --max-warnings 0
 
 --- 6. Web Vite Build ---
-
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan408-7b120ade/kanban/web
 > tsc -b && vite build
 
@@ -30,9 +30,4 @@ dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-Cddbledi.css            622.04 kB │ gzip:  87.83 kB
 dist/assets/index-gtAbCBbP.js           2,948.09 kB │ gzip: 816.78 kB
 
-[plugin builtin:vite-reporter] 
-(!) Some chunks are larger than 500 kB after minification. Consider:
-- Using dynamic import() to code-split the application
-- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.34s
+✓ built in 1.30s

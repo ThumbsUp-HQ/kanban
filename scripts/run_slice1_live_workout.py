@@ -38,6 +38,7 @@ from kanban.auth.local.hashing import hash_password
 from kanban.auth.mfa.totp import totp_at
 from kanban.security.envelope import StaticKekProvider
 from kanban.security.keys import KeyMaterial
+from kanban.security.scrubber import scrub_text
 from kanban.settings import Settings
 from kanban.tests.helpers.soft_authenticator import SoftAuthenticator
 from cryptography import x509
@@ -66,6 +67,86 @@ WORKSPACE_ID = uuid.UUID("01931000-0000-7000-8000-000000000001")
 PROJECT_ID = uuid.UUID("01931000-0001-7000-8000-000000000001")
 ADMIN_USER_ID = uuid.UUID("01931000-0002-7000-8000-000000000001")
 FRY_USER_ID = uuid.UUID("01931000-0003-7000-8000-000000000001")
+
+
+class WireLogger:
+    """Captures real verbatim HTTP wire exchanges and scrubs secrets."""
+
+    def __init__(self) -> None:
+        self.logs: list[str] = []
+
+    async def log_request(self, request: httpx.Request) -> None:
+        body = ""
+        try:
+            content = await request.aread()
+            if content:
+                body = content.decode("utf-8", errors="replace")
+        except Exception:
+            try:
+                if request.content:
+                    body = request.content.decode("utf-8", errors="replace")
+            except Exception:
+                body = ""
+        request.extensions["wire_log"] = {
+            "method": request.method,
+            "url": str(request.url),
+            "headers": dict(request.headers),
+            "body": body,
+        }
+
+    async def log_response(self, response: httpx.Response) -> None:
+        req_info = response.request.extensions.get("wire_log", {})
+        res_body = ""
+        try:
+            await response.aread()
+            res_body = response.text
+        except Exception:
+            try:
+                res_body = response.text
+            except Exception:
+                res_body = ""
+
+        raw_path = response.request.url.raw_path
+        path_and_query = raw_path.decode("ascii") if isinstance(raw_path, bytes) else str(raw_path)
+        raw_netloc = response.request.url.netloc
+        netloc_str = raw_netloc.decode("ascii") if isinstance(raw_netloc, bytes) else str(raw_netloc)
+        req_lines = [
+            f"{req_info.get('method', response.request.method)} {path_and_query} HTTP/1.1",
+            f"Host: {netloc_str}",
+        ]
+        for h in ("content-type", "x-csrf-token", "kb-blast-hash"):
+            val = response.request.headers.get(h)
+            if val:
+                req_lines.append(f"{h.title()}: {val}")
+        req_str = "\n".join(req_lines)
+        if req_info.get("body"):
+            req_str += f"\n\n{req_info['body']}"
+
+        res_lines = [
+            f"HTTP/1.1 {response.status_code} {response.reason_phrase}",
+        ]
+        for h in ("content-type", "location", "set-cookie"):
+            val = response.headers.get(h)
+            if val:
+                res_lines.append(f"{h.title()}: {val}")
+        res_str = "\n".join(res_lines)
+        if res_body:
+            res_str += f"\n\n{res_body}"
+
+        exchange = f"{req_str}\n\n{res_str}"
+        scrubbed = scrub_text(exchange)
+        self.logs.append(scrubbed)
+
+
+wire_logger = WireLogger()
+
+
+def make_http_client(**kwargs: Any) -> httpx.AsyncClient:
+    """Create httpx.AsyncClient with automatic wire logging hook attached."""
+    hooks = kwargs.pop("event_hooks", {})
+    req_hooks = list(hooks.get("request", [])) + [wire_logger.log_request]
+    res_hooks = list(hooks.get("response", [])) + [wire_logger.log_response]
+    return httpx.AsyncClient(event_hooks={"request": req_hooks, "response": res_hooks}, **kwargs)
 
 
 async def reset_and_seed_database(key_material: KeyMaterial, certs: Any) -> None:
@@ -293,7 +374,7 @@ async def main() -> None:
 
     try:
         base_url = f"http://127.0.0.1:{PORT_KANBAN}"
-        async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as client:
+        async with make_http_client(base_url=base_url, timeout=15.0) as client:
             # -------------------------------------------------------------------
             # WORKOUT 1: Local Admin + Passkey + TOTP + Recovery Codes + Break-Glass Lockout Guard (409)
             # -------------------------------------------------------------------
@@ -607,7 +688,7 @@ async def main() -> None:
             }
 
             # 2.3 Nested AD Group Sync (Hermes on isolated client)
-            async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as ldap_client:
+            async with make_http_client(base_url=base_url, timeout=15.0) as ldap_client:
                 ldap_init = await ldap_client.get("/api/v1/auth/session")
                 ldap_csrf = ldap_init.json().get("csrf_token")
                 ldap_client.cookies.set("kb_csrf", ldap_init.cookies.get("kb_csrf") or ldap_csrf)
@@ -625,17 +706,18 @@ async def main() -> None:
                 parent_gid = await db_conn.fetchval("SELECT id FROM groups WHERE name = 'Bureaucrats Parent'")
                 assert subteam_gid and parent_gid, "Groups Delivery Subteam and Bureaucrats Parent must exist"
 
-                # Link Delivery Subteam -> Bureaucrats Parent (2-hop nest)
-                await db_conn.execute(
+                # Verify organic inter-group nesting edge was created by sync_ldap_groups
+                edge_exists = await db_conn.fetchval(
                     """
-                    INSERT INTO principal_group_edges (member_id, group_id, workspace_id)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT DO NOTHING
+                    SELECT 1 FROM principal_group_edges
+                    WHERE member_id = $1 AND group_id = $2 AND workspace_id = $3
                     """,
                     subteam_gid,
                     parent_gid,
                     WORKSPACE_ID,
                 )
+                assert edge_exists == 1, "Expected organic principal_group_edges nesting edge Delivery Subteam -> Bureaucrats Parent"
+
                 # Bind Bureaucrats Parent to WORKSPACE_MEMBER
                 await db_conn.execute(
                     """
@@ -657,14 +739,14 @@ async def main() -> None:
                     hermes_pid,
                     parent_gid,
                 )
-                assert closure_depth is not None and closure_depth >= 1, "Expected 2-hop closure depth >= 1"
+                assert closure_depth is not None and closure_depth >= 2, f"Expected 2-hop closure depth >= 2, got {closure_depth}"
             finally:
                 await db_conn.close()
 
             results["workout_2"]["group_sync"] = {
                 "ldap_login_status": ldap_login_resp.status_code,
                 "principal_id": ldap_login_resp.json().get("principal_id"),
-                "group_edge_created": bool(closure_depth >= 1),
+                "group_edge_created": bool(edge_exists),
                 "closure_depth": closure_depth,
             }
 
@@ -748,13 +830,13 @@ async def main() -> None:
 
             # 3.1 Verified Email Login (on isolated oidc_client)
             oidc_companion.email_verified = True
-            async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as oidc_client:
+            async with make_http_client(base_url=base_url, timeout=15.0) as oidc_client:
                 start_resp = await oidc_client.get("/api/v1/auth/oidc/test-oidc/start", follow_redirects=False)
                 assert start_resp.status_code == 302, f"OIDC start failed: {start_resp.status_code}"
                 auth_url = start_resp.headers.get("location", "")
 
                 # Follow authorization redirect at IdP
-                async with httpx.AsyncClient(verify=certs.ca_file, follow_redirects=False) as idp_client:
+                async with make_http_client(verify=certs.ca_file, follow_redirects=False) as idp_client:
                     idp_resp = await idp_client.get(auth_url)
                     callback_url = idp_resp.headers.get("location", "")
 
@@ -776,11 +858,11 @@ async def main() -> None:
 
             # 3.2 Unverified Email Block (403)
             oidc_companion.email_verified = False
-            async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as oidc_client2:
+            async with make_http_client(base_url=base_url, timeout=15.0) as oidc_client2:
                 start_resp2 = await oidc_client2.get("/api/v1/auth/oidc/test-oidc/start", follow_redirects=False)
                 auth_url2 = start_resp2.headers.get("location", "")
 
-                async with httpx.AsyncClient(verify=certs.ca_file, follow_redirects=False) as idp_client:
+                async with make_http_client(verify=certs.ca_file, follow_redirects=False) as idp_client:
                     idp_resp2 = await idp_client.get(auth_url2)
                     callback_url2 = idp_resp2.headers.get("location", "")
 
@@ -850,7 +932,7 @@ async def main() -> None:
             issue_key = create_issue_resp.json()["key"]
 
             # 4.4 Test Fry capability enforcement
-            async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as fry_client:
+            async with make_http_client(base_url=base_url, timeout=15.0) as fry_client:
                 fry_init = await fry_client.get("/api/v1/auth/session")
                 fry_csrf = fry_init.json().get("csrf_token")
                 for c in fry_init.cookies.jar:
@@ -971,15 +1053,38 @@ async def main() -> None:
         await ldap_companion.stop()
         await oidc_companion.stop()
 
-    duration = time.monotonic() - start_time
-    results["metrics"]["total_duration_seconds"] = round(duration, 2)
-    results["metrics"]["timestamp"] = datetime.datetime.now(datetime.UTC).isoformat()
+        duration = time.monotonic() - start_time
+        results["metrics"]["total_duration_seconds"] = round(duration, 2)
+        results["metrics"]["timestamp"] = datetime.datetime.now(datetime.UTC).isoformat()
 
-    os.makedirs("docs/qa/KAN-408", exist_ok=True)
-    with open("docs/qa/KAN-408/workout-results.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+        telemetry_path = "docs/qa/KAN-408/screenshot-telemetry.json"
+        if os.path.exists(telemetry_path):
+            try:
+                with open(telemetry_path, "r", encoding="utf-8") as tf:
+                    s_tel = json.load(tf)
+                    results["screenshots"] = {
+                        "count": 11,
+                        "telemetry": {
+                            "console_errors_count": len(s_tel.get("consoleErrors", [])),
+                            "page_errors_count": len(s_tel.get("pageErrors", [])),
+                            "server_5xx_count": len(s_tel.get("serverErrors", [])),
+                        },
+                    }
+            except Exception as e:
+                logger.warning("Could not read screenshot telemetry: %s", e)
 
-    logger.info("Slice 1 Phase 3 Live Workout successfully completed in %.2fs!", duration)
+        os.makedirs("docs/qa/KAN-408", exist_ok=True)
+        with open("docs/qa/KAN-408/workout-results.json", "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
+
+        if wire_logger.logs:
+            transcript_path = "docs/qa/KAN-408/workout-transcript.txt"
+            separator = "\n\n" + ("=" * 80) + "\n\n"
+            with open(transcript_path, "w", encoding="utf-8") as f:
+                f.write(separator.join(wire_logger.logs))
+            logger.info("Saved %d wire exchanges to %s", len(wire_logger.logs), transcript_path)
+
+        logger.info("Slice 1 Phase 3 Live Workout completed in %.2fs!", duration)
 
 
 if __name__ == "__main__":

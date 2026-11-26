@@ -1,14 +1,15 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: S106, SLF001, PLC0415, PLR0915
+# ruff: noqa: S106, SLF001, PLC0415, PLR0915, E501, TRY003, EM101, ANN401
 """Unit tests for AuthCardAdminService, lockout mapping, and schemas (KB-P2-10)."""
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
-from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -694,3 +695,423 @@ async def test_admin_api_enable_and_lockout_handlers(db_session: AsyncSession) -
         )
         assert r_del.status_code == 409
         assert r_del.json()["code"] == "LOCKOUT_PREVENTED"
+
+
+@pytest.mark.asyncio
+async def test_draft_handshake_ldap_and_google_json() -> None:
+    """Test test_draft_handshake handling of LDAP plaintext vs JSON secrets and Google OAuth JSON."""
+    from kanban.auth.cards.schemas import HandshakeProbeResult
+    from kanban.security.envelope import SealedSecret, open_card_secret
+
+    kek = StaticKekProvider({"kek-v1": os.urandom(32)}, "kek-v1")
+    service = AuthCardAdminService(kek_provider=kek)
+    actor_id = uuid.uuid4()
+
+    mock_probe = HandshakeProbeResult(ok=True, status="OK", latency_ms=10)
+
+    # 1. LDAP draft with plaintext password (not starting with '{')
+    draft_ldap_plain = AuthCardCreate(
+        provider_kind="LDAP",
+        slug="draft-ldap-plain",
+        display_name="Draft LDAP Plain",
+        public_config={
+            "kind": "LDAP",
+            "url": "ldaps://127.0.0.1:10636",
+            "base_dn": "dc=example,dc=com",
+        },
+        secret="plaintext-secret-123",
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_ldap_plain, actor_id=actor_id)
+        assert res.ok is True
+        assert mock_p.call_count == 1
+        probed_card = mock_p.call_args[0][0]
+        assert probed_card.encrypted_secret_blob is not None
+        sealed = SealedSecret(
+            encrypted_secret_blob=probed_card.encrypted_secret_blob,
+            wrapped_dek=probed_card.wrapped_dek,
+            dek_kid=probed_card.dek_kid,
+        )
+        unsealed = open_card_secret(probed_card.id, probed_card.provider_kind, sealed, kek)
+        payload = json.loads(bytes(unsealed).decode("utf-8"))
+        assert payload == {"bind_dn_password": "plaintext-secret-123"}
+
+    # 2. LDAP draft with JSON secret already formatted
+    draft_ldap_json = AuthCardCreate(
+        provider_kind="LDAP",
+        slug="draft-ldap-json",
+        display_name="Draft LDAP JSON",
+        public_config={
+            "kind": "LDAP",
+            "url": "ldaps://127.0.0.1:10636",
+            "base_dn": "dc=example,dc=com",
+        },
+        secret='{"bind_dn_password": "existing-json-secret"}',
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_ldap_json, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        sealed = SealedSecret(
+            encrypted_secret_blob=probed_card.encrypted_secret_blob,
+            wrapped_dek=probed_card.wrapped_dek,
+            dek_kid=probed_card.dek_kid,
+        )
+        unsealed = open_card_secret(probed_card.id, probed_card.provider_kind, sealed, kek)
+        payload = json.loads(bytes(unsealed).decode("utf-8"))
+        assert payload == {"bind_dn_password": "existing-json-secret"}
+
+    # 3. OIDC draft with google_oauth_json (web format)
+    draft_google_web = AuthCardCreate(
+        provider_kind="OIDC",
+        slug="draft-google-web",
+        display_name="Draft Google Web",
+        public_config={
+            "kind": "OIDC",
+            "issuer": "https://accounts.google.com",
+            "client_id": "google-client-id",
+        },
+        google_oauth_json=json.dumps({
+            "web": {
+                "client_id": "google-client-id",
+                "client_secret": "web-extracted-secret",
+            }
+        }),
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_google_web, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        sealed = SealedSecret(
+            encrypted_secret_blob=probed_card.encrypted_secret_blob,
+            wrapped_dek=probed_card.wrapped_dek,
+            dek_kid=probed_card.dek_kid,
+        )
+        unsealed = open_card_secret(probed_card.id, probed_card.provider_kind, sealed, kek)
+        assert bytes(unsealed).decode("utf-8") == "web-extracted-secret"
+
+    # 4. OAUTH2 draft with google_oauth_json (installed format)
+    draft_google_installed = AuthCardCreate(
+        provider_kind="OAUTH2",
+        slug="draft-google-inst",
+        display_name="Draft Google Installed",
+        public_config={
+            "kind": "OAUTH2",
+            "authorization_endpoint": "https://accounts.google.com/o/oauth2/auth",
+            "token_endpoint": "https://oauth2.googleapis.com/token",
+            "client_id": "google-client-id-inst",
+        },
+        google_oauth_json=json.dumps({
+            "installed": {
+                "client_id": "google-client-id-inst",
+                "client_secret": "installed-extracted-secret",
+            }
+        }),
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_google_installed, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        sealed = SealedSecret(
+            encrypted_secret_blob=probed_card.encrypted_secret_blob,
+            wrapped_dek=probed_card.wrapped_dek,
+            dek_kid=probed_card.dek_kid,
+        )
+        unsealed = open_card_secret(probed_card.id, probed_card.provider_kind, sealed, kek)
+        assert bytes(unsealed).decode("utf-8") == "installed-extracted-secret"
+
+    # 5. Malformed google_oauth_json with fallback secret
+    draft_google_malformed = AuthCardCreate(
+        provider_kind="OIDC",
+        slug="draft-google-bad",
+        display_name="Draft Google Bad",
+        public_config={
+            "kind": "OIDC",
+            "issuer": "https://accounts.google.com",
+            "client_id": "google-client-id",
+        },
+        google_oauth_json="{malformed-json-here",
+        secret="fallback-secret-value",
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_google_malformed, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        sealed = SealedSecret(
+            encrypted_secret_blob=probed_card.encrypted_secret_blob,
+            wrapped_dek=probed_card.wrapped_dek,
+            dek_kid=probed_card.dek_kid,
+        )
+        unsealed = open_card_secret(probed_card.id, probed_card.provider_kind, sealed, kek)
+        assert bytes(unsealed).decode("utf-8") == "fallback-secret-value"
+
+    # 5b. google_oauth_json with web block missing client_secret
+    draft_google_no_secret = AuthCardCreate(
+        provider_kind="OIDC",
+        slug="draft-google-nosec",
+        display_name="Draft Google No Secret",
+        public_config={
+            "kind": "OIDC",
+            "issuer": "https://accounts.google.com",
+            "client_id": "google-client-id",
+        },
+        google_oauth_json=json.dumps({"web": {"client_id": "cid"}}),
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service.test_draft_handshake(draft_google_no_secret, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        assert probed_card.encrypted_secret_blob is None
+
+    # 6. Service without KEK provider and no secret
+    service_no_kek = AuthCardAdminService(kek_provider=None)
+    draft_no_secret = AuthCardCreate(
+        provider_kind="OIDC",
+        slug="draft-no-sec",
+        display_name="Draft No Secret",
+        public_config={
+            "kind": "OIDC",
+            "issuer": "https://accounts.example.com",
+            "client_id": "cid",
+        },
+    )
+    with patch(
+        "kanban.auth.cards.service.probe_auth_card_handshake",
+        new_callable=AsyncMock,
+        return_value=mock_probe,
+    ) as mock_p:
+        res = await service_no_kek.test_draft_handshake(draft_no_secret, actor_id=actor_id)
+        assert res.ok is True
+        probed_card = mock_p.call_args[0][0]
+        assert probed_card.encrypted_secret_blob is None
+
+
+@pytest.mark.asyncio
+async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSession) -> None:
+    """Test service error branches: email limits, invalid configs, missing cards, and db errors."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    ws_id, admin_id, _ = await _setup_workspace_and_principals(db_session)
+    factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+
+    kek = StaticKekProvider({"kek-v1": os.urandom(32)}, "kek-v1")
+    service = AuthCardAdminService(kek_provider=kek)
+    admin_ctx = RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=2)
+
+    google_json = json.dumps({
+        "web": {
+            "client_id": "1234567890-test.apps.googleusercontent.com",
+            "client_secret": "GOCSPX-testsecret12345",
+            "redirect_uris": ["https://kanban.example.com/api/v1/auth/oidc/google/callback"],
+        }
+    })
+
+    async with factory.session(admin_ctx) as sess:
+        # 1. create_card with plaintext LDAP secret
+        ldap_data = AuthCardCreate(
+            provider_kind="LDAP",
+            slug="ldap-plain-create",
+            display_name="LDAP Plain Create",
+            is_enabled=False,
+            sort_rank="A0",
+            public_config={
+                "kind": "LDAP",
+                "url": "ldaps://ldap.example.com:636",
+                "transport_mode": "ldaps",
+                "base_dn": "dc=example,dc=com",
+            },
+            secret="plaintext-password",
+        )
+        created_ldap = await service.create_card(sess, ldap_data, actor_id=admin_id, workspace_id=ws_id)
+        assert created_ldap.has_secret is True
+
+        # 2. create_card with google_oauth_json and sort_rank=None (tests rank ending with 0 branch)
+        create_google = AuthCardCreate(
+            provider_kind="OIDC",
+            slug="google-created-card",
+            display_name="Google Created Card",
+            public_config={},
+            google_oauth_json=google_json,
+        )
+        created_g = await service.create_card(sess, create_google, actor_id=admin_id, workspace_id=ws_id)
+        assert created_g.provider_kind == "OIDC"
+        assert created_g.has_secret is True
+
+        # create_card with existing slug and sort_rank=None (line 195)
+        create_same_slug = AuthCardCreate(
+            provider_kind="OIDC",
+            slug="google-created-card",
+            display_name="Google Same Slug",
+            public_config={},
+            google_oauth_json=google_json,
+        )
+        created_same = await service.create_card(sess, create_same_slug, actor_id=admin_id, workspace_id=ws_id)
+        assert created_same.slug == "google-created-card"
+
+        # 3. update_card with valid LDAP config (line 357-360)
+        up_valid_ldap = AuthCardUpdate(
+            public_config={
+                "kind": "LDAP",
+                "url": "ldaps://ldap2.example.com:636",
+                "transport_mode": "ldaps",
+                "base_dn": "dc=example,dc=com",
+            }
+        )
+        updated_ldap = await service.update_card(sess, created_ldap.id, up_valid_ldap, actor_id=admin_id)
+        assert updated_ldap.public_config.get("url") == "ldaps://ldap2.example.com:636"
+
+        # update_card with google_oauth_json and clean public_config
+        up_google = AuthCardUpdate(public_config={}, google_oauth_json=google_json)
+        updated_google = await service.update_card(sess, created_ldap.id, up_google, actor_id=admin_id)
+        assert updated_google.provider_kind == "OIDC"
+        assert updated_google.public_config.get("client_id") == "1234567890-test.apps.googleusercontent.com"
+
+        # 4. update_card disabling sole LOCAL_ADMIN -> LockoutPreventedError (lines 417-424)
+        local_admin_card = await service.create_card(
+            sess,
+            AuthCardCreate(
+                provider_kind="LOCAL_ADMIN",
+                slug="sole-local-admin-unit",
+                display_name="Sole Local Admin",
+                is_enabled=True,
+                public_config={},
+            ),
+            actor_id=admin_id,
+            workspace_id=ws_id,
+        )
+        with pytest.raises(LockoutPreventedError):
+            await service.update_card(
+                sess, local_admin_card.id, AuthCardUpdate(is_enabled=False), actor_id=admin_id
+            )
+
+        # 4. update_card with invalid email domains (> 50) using model_construct to test service-level check
+        up_bad_domains = AuthCardUpdate.model_construct(allowed_email_domains=[f"d{i}.com" for i in range(55)])
+        with pytest.raises(ProblemException) as exc_domains:
+            await service.update_card(sess, created_ldap.id, up_bad_domains, actor_id=admin_id)
+        assert exc_domains.value.status == 422
+        assert exc_domains.value.code == "INVALID_EMAIL_DOMAINS"
+
+        # 5. update_card with invalid OIDC config
+        up_bad_oidc = AuthCardUpdate(public_config={"kind": "OIDC", "issuer": "ftp://not-https"})
+        with pytest.raises(ProblemException) as exc_oidc:
+            await service.update_card(sess, created_ldap.id, up_bad_oidc, actor_id=admin_id)
+        assert exc_oidc.value.status == 422
+        assert exc_oidc.value.code == "INVALID_CARD_CONFIG"
+
+        # 6. update_card with invalid LDAP config
+        up_bad_ldap = AuthCardUpdate(public_config={"kind": "LDAP", "url": "ftp://not-ldap"})
+        with pytest.raises(ProblemException) as exc_ldap:
+            await service.update_card(sess, created_ldap.id, up_bad_ldap, actor_id=admin_id)
+        assert exc_ldap.value.status == 422
+        assert exc_ldap.value.code == "INVALID_CARD_CONFIG"
+
+        # 7. set_enabled when state is already matching -> returns immediately
+        res_already = await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+        assert res_already.is_enabled is False
+
+        # 8. test_handshake on nonexistent card -> 404 ProblemException
+        with pytest.raises(ProblemException) as exc_handshake_404:
+            await service.test_handshake(sess, "nonexistent-card-slug", actor_id=admin_id)
+        assert exc_handshake_404.value.status == 404
+
+        # 9. reorder_card on nonexistent card -> 404 ProblemException
+        with pytest.raises(ProblemException) as exc_reorder_404:
+            await service.reorder_card(sess, "nonexistent-card-slug", after=None, actor_id=admin_id)
+        assert exc_reorder_404.value.status == 404
+
+        # 10. Test DB trigger LOCKOUT_PREVENTED mapping in update_card, set_enabled, delete_card
+        class _LockoutDbError(Exception):
+            sqlstate = "P0001"
+
+        # Enable card first so update_card with is_enabled=False triggers disable execution
+        await service.set_enabled(sess, created_ldap.id, is_enabled=True, actor_id=admin_id)
+
+        orig_execute = sess.execute
+
+        async def _mock_lockout_execute(stmt: Any, *args: Any, **kwargs: Any) -> Any:
+            stmt_text = str(getattr(stmt, "text", stmt))
+            if "card_admin_set_enabled" in stmt_text or "card_admin_delete" in stmt_text:
+                raise _LockoutDbError("LOCKOUT_PREVENTED: (layer=db_trigger)")
+            return await orig_execute(stmt, *args, **kwargs)
+
+        with patch.object(sess, "execute", side_effect=_mock_lockout_execute):
+            with pytest.raises(LockoutPreventedError) as exc_up_lockout:
+                await service.update_card(
+                    sess, created_ldap.id, AuthCardUpdate(is_enabled=False), actor_id=admin_id
+                )
+            assert exc_up_lockout.value.layer == "db_trigger"
+
+            with pytest.raises(LockoutPreventedError) as exc_set_lockout:
+                await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+            assert exc_set_lockout.value.layer == "db_trigger"
+
+            with pytest.raises(LockoutPreventedError) as exc_del_lockout:
+                await service.delete_card(sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id)
+            assert exc_del_lockout.value.layer == "db_trigger"
+
+        # 11. Test admin_get returning None in create, update, set_enabled, reorder (lines 274, 461, 521, 613)
+        with patch("kanban.auth.cards.service.admin_get", new_callable=AsyncMock, return_value=None):
+            with pytest.raises(ProblemException) as exc_cg:
+                await service.create_card(sess, ldap_data, actor_id=admin_id, workspace_id=ws_id)
+            assert exc_cg.value.status == 404
+
+            with pytest.raises(ProblemException) as exc_ug:
+                await service.update_card(sess, created_ldap.id, AuthCardUpdate(display_name="New"), actor_id=admin_id)
+            assert exc_ug.value.status == 404
+
+            with pytest.raises(ProblemException) as exc_sg:
+                await service.set_enabled(sess, created_ldap.id, is_enabled=True, actor_id=admin_id)
+            assert exc_sg.value.status == 404
+
+            with pytest.raises(ProblemException) as exc_rg:
+                await service.reorder_card(sess, created_ldap.id, after=None, actor_id=admin_id)
+            assert exc_rg.value.status == 404
+
+        # 12. update_card / set_enabled / delete_card DB error propagation when not LOCKOUT_PREVENTED
+        class _UnexpectedDbError(Exception):
+            pass
+
+        # Re-enable card so disabling it triggers card_admin_set_enabled execution
+        await service.set_enabled(sess, created_ldap.id, is_enabled=True, actor_id=admin_id)
+
+        async def _mock_unexpected_execute(stmt: Any, *args: Any, **kwargs: Any) -> Any:
+            stmt_text = str(getattr(stmt, "text", stmt))
+            if "card_admin_set_enabled" in stmt_text or "card_admin_delete" in stmt_text:
+                raise _UnexpectedDbError("connection terminated")
+            return await orig_execute(stmt, *args, **kwargs)
+
+        with patch.object(sess, "execute", side_effect=_mock_unexpected_execute):
+            with pytest.raises(_UnexpectedDbError):
+                await service.update_card(
+                    sess, created_ldap.id, AuthCardUpdate(is_enabled=False), actor_id=admin_id
+                )
+            with pytest.raises(_UnexpectedDbError):
+                await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+            with pytest.raises(_UnexpectedDbError):
+                await service.delete_card(sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id)
+

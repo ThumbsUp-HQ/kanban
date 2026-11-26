@@ -58,12 +58,40 @@ async function saveScreenshot(page, filename) {
 async function main() {
   const sessionCookie = process.env.KANBAN_SESSION_COOKIE;
   const csrfCookie = process.env.KANBAN_CSRF_COOKIE;
+  const recoveryCode = process.env.KANBAN_RECOVERY_CODE || '';
+  const dbName = process.env.KANBAN_DB_NAME || 'kanban_workout';
+
+  const telemetry = {
+    consoleErrors: [],
+    pageErrors: [],
+    serverErrors: [],
+  };
 
   const browser = await chromium.launch({
     headless: true,
     executablePath: '/home/adamoutler/.cache/ms-playwright/chromium-1255/chrome-linux64/chrome',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
   });
+
+  function attachTelemetry(page) {
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        const txt = msg.text();
+        // Ignore benign favicon/font 404s and expected 4xx HTTP responses logged by Chromium
+        if (!txt.includes('favicon.ico') && !txt.startsWith('Failed to load resource:')) {
+          telemetry.consoleErrors.push(txt);
+        }
+      }
+    });
+    page.on('pageerror', (err) => {
+      telemetry.pageErrors.push(err.message);
+    });
+    page.on('response', (res) => {
+      if (res.status() >= 500) {
+        telemetry.serverErrors.push(`${res.request().method()} ${res.url()} -> ${res.status()}`);
+      }
+    });
+  }
 
   async function createContext(options = {}) {
     const context = await browser.newContext(options);
@@ -73,6 +101,12 @@ async function main() {
         { name: 'kb_csrf', value: csrfCookie || 'workout-csrf', domain: '127.0.0.1', path: '/' },
       ]);
     }
+    const origNewPage = context.newPage.bind(context);
+    context.newPage = async (...args) => {
+      const page = await origNewPage(...args);
+      attachTelemetry(page);
+      return page;
+    };
     return context;
   }
 
@@ -393,22 +427,47 @@ async function main() {
         const urlInput = page.locator('#card-server-url');
         if (await urlInput.count()) await urlInput.fill('ldaps://127.0.0.1:10636');
 
-        // Open WebSudo stepup modal over the open dirty drawer
-        await page.evaluate(() => {
-          window.dispatchEvent(
-            new CustomEvent('kb:open-aal2-stepup', {
-              detail: { challengeId: 'dirty-drawer-websudo', methods: ['webauthn', 'totp', 'recovery'] },
-            })
+        // 1. Expire AAL2 in PostgreSQL
+        try {
+          execSync(
+            `docker exec swarm-b-kan408-7b120ade-pg-test-1 psql -U kanban_test -d ${dbName} -c "UPDATE sessions SET aal2_verified_at = now() - interval '20 minutes', aal2_last_active_at = now() - interval '20 minutes';"`
           );
-        });
+          console.log('Expired AAL2 in sessions table via PostgreSQL.');
+        } catch (e) {
+          console.warn('PostgreSQL session AAL2 expiration warning:', e.message);
+        }
 
-        // Wait for WebSudo step-up modal to appear
+        // 2. Click Save card in drawer -> triggers real HTTP 403 AAL2_STALE on /api/v1/admin/auth-cards
+        const saveBtn = drawer.locator('[data-testid="drawer-save-btn"], button[type="submit"]:has-text("Create Card")').first();
+        if (await saveBtn.count() && await saveBtn.isVisible()) {
+          await saveBtn.click();
+        }
+
+        // 3. Wait for organic WebSudo step-up modal to appear
         const wsModal = page.locator('[data-testid="websudo-stepup-modal"]');
-        await wsModal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        await wsModal.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
         await page.waitForTimeout(400);
 
         await applyUnclippedStyle(page);
         await saveScreenshot(page, '09-websudo-replay-active.png');
+
+        // 4. Enter recovery code in the organic modal to verify first-replay 200 OK
+        if (recoveryCode && await wsModal.isVisible()) {
+          const recTab = wsModal.locator('button[role="tab"]:has-text("Recovery")').first();
+          if (await recTab.count() && await recTab.isVisible()) {
+            await recTab.click();
+            await page.waitForTimeout(200);
+          }
+          const recInput = wsModal.locator('#recovery-code-input, input[placeholder*="xxxx"]').first();
+          if (await recInput.count() && await recInput.isVisible()) {
+            await recInput.fill(recoveryCode);
+            const submitRecBtn = wsModal.locator('button[type="submit"]:has-text("Verify recovery code")').first();
+            if (await submitRecBtn.count() && await submitRecBtn.isVisible()) {
+              await submitRecBtn.click();
+              await page.waitForTimeout(1000);
+            }
+          }
+        }
       }
 
       await context.close();
@@ -479,6 +538,46 @@ async function main() {
 
   } finally {
     await browser.close();
+
+    console.log('Telemetry summary:');
+    console.log(`  Console errors: ${telemetry.consoleErrors.length}`);
+    console.log(`  Page errors: ${telemetry.pageErrors.length}`);
+    console.log(`  5xx server errors: ${telemetry.serverErrors.length}`);
+
+    // Write screenshot-telemetry.json
+    const telemetryPath = path.resolve('docs/qa/KAN-408/screenshot-telemetry.json');
+    fs.mkdirSync(path.dirname(telemetryPath), { recursive: true });
+    fs.writeFileSync(telemetryPath, JSON.stringify(telemetry, null, 2), 'utf-8');
+
+    // Update workout-results.json with screenshot telemetry if it exists
+    const resultsPath = path.resolve('docs/qa/KAN-408/workout-results.json');
+    if (fs.existsSync(resultsPath)) {
+      try {
+        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8'));
+        results.screenshots = results.screenshots || {};
+        results.screenshots.telemetry = {
+          console_errors_count: telemetry.consoleErrors.length,
+          page_errors_count: telemetry.pageErrors.length,
+          server_5xx_count: telemetry.serverErrors.length,
+        };
+        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2), 'utf-8');
+      } catch (err) {
+        console.warn('Failed updating workout-results.json telemetry:', err.message);
+      }
+    }
+
+    if (telemetry.consoleErrors.length > 0) {
+      console.error('Console errors logged:', telemetry.consoleErrors);
+      throw new Error(`Browser console errors detected: ${telemetry.consoleErrors.length}`);
+    }
+    if (telemetry.pageErrors.length > 0) {
+      console.error('Page errors logged:', telemetry.pageErrors);
+      throw new Error(`Browser page errors detected: ${telemetry.pageErrors.length}`);
+    }
+    if (telemetry.serverErrors.length > 0) {
+      console.error('Server 5xx errors logged:', telemetry.serverErrors);
+      throw new Error(`Server 5xx errors detected: ${telemetry.serverErrors.length}`);
+    }
   }
 }
 
