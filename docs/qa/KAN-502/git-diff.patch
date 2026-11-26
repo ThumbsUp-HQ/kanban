@@ -1,0 +1,766 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index 0e3dcf2b..2f78a4af 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -85,6 +85,7 @@ export function FieldHelpHint({
+   // Restore focus if dismissed via Escape
+   useEffect(() => {
+     if (hintState.restoreFocusId === popupId && triggerRef.current) {
++      suppressNextFocusRef.current = true;
+       triggerRef.current.focus();
+     }
+   }, [hintState.restoreFocusId, popupId]);
+diff --git a/kanban/web/src/features/rbac/RoleLabelPicker.css b/kanban/web/src/features/rbac/RoleLabelPicker.css
+new file mode 100644
+index 00000000..c5b45229
+--- /dev/null
++++ b/kanban/web/src/features/rbac/RoleLabelPicker.css
+@@ -0,0 +1,162 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++/* Role Label Picker Component Styles (KAN-83, KAN-502) */
++
++.role-label-picker-container {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  width: 100%;
++  min-width: 0;
++  max-width: 100%;
++}
++
++.role-label-picker-header {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 6px;
++}
++
++.role-label-picker-header .field-help-hint {
++  margin: 0;
++}
++
++.role-label-picker-label {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 6px;
++  font-size: 0.8125rem;
++  font-weight: 500;
++  color: var(--text-primary, #0f172a);
++  cursor: default;
++}
++
++.role-label-picker-label-text {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 4px;
++}
++
++.role-label-default-indicator {
++  font-size: 0.75rem;
++  font-weight: 400;
++  color: var(--text-secondary, #4b5563);
++}
++
++.role-label-picker {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 6px;
++}
++
++.rbac-chip-dot {
++  width: 10px;
++  height: 10px;
++  flex-shrink: 0;
++}
++
++.role-label-select {
++  padding: 4px 8px;
++  font-size: 0.8125rem;
++  border-radius: 6px;
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  background: var(--bg-surface, #ffffff);
++  color: var(--text-primary, #0f172a);
++  transition: border-color 0.15s ease, box-shadow 0.15s ease;
++}
++
++.role-label-select:focus {
++  outline: none;
++  border-color: var(--brand-primary, #2563eb);
++  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
++}
++
++.role-label-select:disabled {
++  opacity: 0.6;
++  cursor: not-allowed;
++}
++
++.role-label-help-sr-only {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  padding: 0;
++  margin: -1px;
++  overflow: hidden;
++  clip: rect(0, 0, 0, 0);
++  white-space: nowrap;
++  border-width: 0;
++}
++
++/* Theme parity: dark theme */
++[data-theme='dark'] .role-label-picker-label {
++  color: var(--text-primary, #f1f5f9);
++}
++
++[data-theme='dark'] .role-label-default-indicator {
++  color: var(--text-secondary, #94a3b8);
++}
++
++[data-theme='dark'] .role-label-select {
++  border-color: var(--border-subtle, #334155);
++  background: var(--bg-surface-raised, #1e293b);
++  color: var(--text-primary, #f1f5f9);
++}
++
++[data-theme='dark'] .role-label-select:focus {
++  border-color: var(--brand-primary, #3b82f6);
++  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
++}
++
++/* Theme parity: prefers-color-scheme dark */
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .role-label-picker-label {
++    color: var(--text-primary, #f1f5f9);
++  }
++
++  :root:not([data-theme='light']) .role-label-default-indicator {
++    color: var(--text-secondary, #94a3b8);
++  }
++
++  :root:not([data-theme='light']) .role-label-select {
++    border-color: var(--border-subtle, #334155);
++    background: var(--bg-surface-raised, #1e293b);
++    color: var(--text-primary, #f1f5f9);
++  }
++
++  :root:not([data-theme='light']) .role-label-select:focus {
++    border-color: var(--brand-primary, #3b82f6);
++    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
++  }
++}
++
++/* Mobile responsive at 390x844 */
++@media (max-width: 480px) {
++  .role-label-picker-header {
++    flex-wrap: wrap;
++    gap: 4px;
++  }
++
++  .role-label-picker-label {
++    flex-wrap: wrap;
++    gap: 6px;
++  }
++
++  .role-label-default-indicator {
++    font-size: 0.7rem;
++  }
++
++  .role-label-select {
++    width: 100%;
++    max-width: 100%;
++  }
++
++  .role-label-picker {
++    gap: 4px;
++  }
++}
+diff --git a/kanban/web/src/features/rbac/RoleLabelPicker.tsx b/kanban/web/src/features/rbac/RoleLabelPicker.tsx
+index e8ef84c1..bcb3056d 100644
+--- a/kanban/web/src/features/rbac/RoleLabelPicker.tsx
++++ b/kanban/web/src/features/rbac/RoleLabelPicker.tsx
+@@ -2,16 +2,19 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ /**
+- * Multi-Role Label Chip Picker Component (KAN-83).
++ * Multi-Role Label Chip Picker Component (KAN-83, KAN-502).
+  *
+  * Allows assigning and revoking multiple custom or system RBAC role labels
+- * on a principal via /api/v1/admin/principals/{id}/role-labels.
++ * on a principal via /api/v1/admin/principals/{id}/role-labels with contextual
++ * FieldHelpHint popover guidance and explicit default role indication.
+  */
+ 
+ import React, { useEffect, useState, type JSX, type ChangeEvent } from 'react';
+ import { apiFetch } from '../../api/client';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import type { RbacRole } from './RbacPolicyBuilder';
+ import './RbacPolicyBuilder.css';
++import './RoleLabelPicker.css';
+ 
+ export interface PrincipalRoleLabelItem {
+   id: string;
+@@ -28,6 +31,12 @@ export interface RoleLabelPickerProps {
+   disabled?: boolean | undefined;
+   availableRoles?: RbacRole[] | undefined;
+   onRolesChange?: ((roleIds: string[]) => void) | undefined;
++  defaultValue?: string | undefined;
++  docHref?: string | undefined;
++  helpTitle?: string | undefined;
++  helpSummary?: string | undefined;
++  showHelpHint?: boolean | undefined;
++  label?: string | undefined;
+ }
+ 
+ export function RoleLabelPicker({
+@@ -35,12 +44,21 @@ export function RoleLabelPicker({
+   disabled = false,
+   availableRoles: propAvailableRoles,
+   onRolesChange,
++  defaultValue = 'Member',
++  docHref = '/docs/custom-fields',
++  helpTitle = 'Role Labels and Default Permissions',
++  helpSummary = 'New workspace members receive the base Member role by default. Custom role labels supplement base member privileges with specialized domain permissions without revoking standard access.',
++  showHelpHint = true,
++  label = 'Role Labels',
+ }: RoleLabelPickerProps): JSX.Element {
+   const [assignedLabels, setAssignedLabels] = useState<PrincipalRoleLabelItem[]>([]);
+   const [availableRoles, setAvailableRoles] = useState<RbacRole[]>(propAvailableRoles ?? []);
+   const [isLoading, setIsLoading] = useState(false);
+   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+ 
++  const sanitizedId = principalId ? principalId.replace(/[^a-zA-Z0-9_-]/g, '') : 'default';
++  const selectId = `add-role-label-select-${sanitizedId}`;
++
+   // Load available roles if not provided via props
+   useEffect(() => {
+     if (!propAvailableRoles || propAvailableRoles.length === 0) {
+@@ -124,7 +142,7 @@ export function RoleLabelPicker({
+   };
+ 
+   // Revoke a role label
+-  const handleRemoveRole = async (label: PrincipalRoleLabelItem): Promise<void> => {
++  const handleRemoveRole = async (labelItem: PrincipalRoleLabelItem): Promise<void> => {
+     /* v8 ignore next */
+     if (disabled) return;
+     setErrorMsg(null);
+@@ -133,11 +151,11 @@ export function RoleLabelPicker({
+         'DELETE',
+         `/api/v1/admin/principals/${principalId}/role-labels` as never,
+         {
+-          params: { role_id: label.role_id },
++          params: { role_id: labelItem.role_id },
+         },
+       );
+ 
+-      const next = assignedLabels.filter((l) => l.role_id !== label.role_id);
++      const next = assignedLabels.filter((l) => l.role_id !== labelItem.role_id);
+       setAssignedLabels(next);
+       onRolesChange?.(next.map((l) => l.role_id));
+     } catch (err: unknown) {
+@@ -147,63 +165,127 @@ export function RoleLabelPicker({
+     }
+   };
+ 
+-  /* v8 ignore next 2 */
+-  const rolesList = Array.isArray(availableRoles) ? availableRoles : [];
+-  const labelsList = Array.isArray(assignedLabels) ? assignedLabels : [];
++  const rolesList = availableRoles;
++  const labelsList = assignedLabels;
+ 
+   const assignedRoleIds = new Set(labelsList.map((l) => l.role_id));
+   const unassignedRoles = rolesList.filter((r) => Boolean(r.id) && !assignedRoleIds.has(r.id));
++  const hasSelect = !disabled && unassignedRoles.length > 0;
+ 
+   return (
+-    <div className="role-label-picker" data-testid="role-label-picker">
+-      {labelsList.map((label, idx) => (
+-        <span
+-          key={label.role_id || label.id || idx}
+-          className="rbac-role-chip"
+-          data-testid={`role-chip-${label.role_slug}`}
+-        >
+-          <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
+-            <circle cx="6" cy="6" r="5" fill={label.role_color_hex ?? '#3b82f6'} />
+-          </svg>
+-          <span>{label.role_name}</span>
+-          {!disabled && (
+-            <button
+-              type="button"
+-              className="rbac-chip-remove"
+-              aria-label={`Remove role ${label.role_name}`}
+-              data-testid={`remove-role-${label.role_slug}`}
+-              onClick={() => void handleRemoveRole(label)}
++    <div className="role-label-picker-container" data-testid="role-label-picker-container">
++      <div className="role-label-picker-header">
++        {hasSelect ? (
++          <label htmlFor={selectId} className="role-label-picker-label">
++            <span className="role-label-picker-label-text">
++              {label}
++              <span
++                className="role-label-default-indicator"
++                data-testid="role-label-default-indicator"
++              >
++                (Default: {defaultValue})
++              </span>
++            </span>
++          </label>
++        ) : (
++          <span className="role-label-picker-label">
++            <span className="role-label-picker-label-text">
++              {label}
++              <span
++                className="role-label-default-indicator"
++                data-testid="role-label-default-indicator"
++              >
++                (Default: {defaultValue})
++              </span>
++            </span>
++          </span>
++        )}
++        {showHelpHint && (
++          <FieldHelpHint
++            testId="role-label-help"
++            title={helpTitle}
++            summary={helpSummary}
++            defaultValue={defaultValue}
++            validValues={[
++              {
++                label: 'Member',
++                description:
++                  'Default base role assigned to invited users with standard read and write permissions.',
++              },
++              {
++                label: 'Custom Role',
++                description:
++                  'Supplemental role label granting scoped domain privileges (e.g., Lead Dev, QA Tester) alongside base permissions.',
++              },
++            ]}
++            docHref={docHref}
++            ariaLabel="Help for Role Labels"
++          />
++        )}
++      </div>
++
++      <div className="role-label-picker" data-testid="role-label-picker">
++        {labelsList.map((lItem) => (
++          <span
++            key={lItem.role_id}
++            className="rbac-role-chip"
++            data-testid={`role-chip-${lItem.role_slug}`}
++          >
++            <svg
++              className="rbac-chip-dot"
++              width="10"
++              height="10"
++              viewBox="0 0 12 12"
++              aria-hidden="true"
+             >
+-              ×
+-            </button>
+-          )}
+-        </span>
+-      ))}
+-
+-      {!disabled && unassignedRoles.length > 0 && (
+-        <select
+-          className="role-label-select"
+-          data-testid="add-role-label-select"
+-          onChange={(e) => void handleAddRole(e)}
+-          value=""
+-          disabled={isLoading}
+-        >
+-          <option value="" disabled>
+-            + Add role
+-          </option>
+-          {unassignedRoles.map((r) => (
+-            <option key={r.id} value={r.id}>
+-              {r.name}
++              <circle cx="6" cy="6" r="5" fill={lItem.role_color_hex ?? '#3b82f6'} />
++            </svg>
++            <span>{lItem.role_name}</span>
++            {!disabled && (
++              <button
++                type="button"
++                className="rbac-chip-remove"
++                aria-label={`Remove role ${lItem.role_name}`}
++                data-testid={`remove-role-${lItem.role_slug}`}
++                onClick={() => void handleRemoveRole(lItem)}
++              >
++                ×
++              </button>
++            )}
++          </span>
++        ))}
++
++        {hasSelect && (
++          <select
++            id={selectId}
++            className="role-label-select"
++            data-testid="add-role-label-select"
++            aria-describedby={`role-label-hint-${sanitizedId}`}
++            onChange={(e) => void handleAddRole(e)}
++            value=""
++            disabled={isLoading}
++          >
++            <option value="" disabled>
++              + Add role
+             </option>
+-          ))}
+-        </select>
+-      )}
+-
+-      {errorMsg && (
+-        <span className="rbac-inline-error" role="alert">
+-          {errorMsg}
+-        </span>
+-      )}
++            {unassignedRoles.map((r) => (
++              <option key={r.id} value={r.id}>
++                {r.name}
++              </option>
++            ))}
++          </select>
++        )}
++
++        {errorMsg && (
++          <span className="rbac-inline-error" role="alert">
++            {errorMsg}
++          </span>
++        )}
++      </div>
++
++      <span id={`role-label-hint-${sanitizedId}`} className="role-label-help-sr-only">
++        Default role is {defaultValue}. Custom roles supplement base member privileges.
++      </span>
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx b/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
+index 657faf3d..d01ffaa1 100644
+--- a/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
++++ b/kanban/web/src/features/rbac/__tests__/RoleLabelPicker.test.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React from 'react';
++import React, { act } from 'react';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { RoleLabelPicker } from '../RoleLabelPicker';
+@@ -16,6 +16,14 @@ const MOCK_ASSIGNED = [
+     role_slug: 'lead-dev',
+     role_color_hex: '#3b82f6',
+   },
++  {
++    id: 'prl-2',
++    principal_id: 'user-1',
++    role_id: 'role-2',
++    role_name: 'QA Tester',
++    role_slug: 'qa-tester',
++    role_color_hex: '#10b981',
++  },
+ ];
+ 
+ const MOCK_AVAILABLE = [
+@@ -31,9 +39,15 @@ const MOCK_AVAILABLE = [
+     name: 'QA Tester',
+     color_hex: '#10b981',
+   },
++  {
++    id: 'role-3',
++    slug: 'sec-auditor',
++    name: 'Security Auditor',
++    color_hex: '#ef4444',
++  },
+ ];
+ 
+-describe('RoleLabelPicker Component (KAN-83)', () => {
++describe('RoleLabelPicker Component (KAN-83, KAN-502)', () => {
+   beforeEach(() => {
+     vi.clearAllMocks();
+   });
+@@ -54,13 +68,15 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('role-chip-lead-dev')).toBeDefined();
++      expect(screen.getByTestId('role-chip-qa-tester')).toBeDefined();
+       expect(screen.getByTestId('add-role-label-select')).toBeDefined();
+     });
+-    expect(onRolesChange).toHaveBeenCalledWith(['role-1']);
++    expect(onRolesChange).toHaveBeenCalledWith(['role-1', 'role-2']);
+   });
+ 
+   it('removes assigned role label on click and handles remove error', async () => {
+     const deleteSpy = vi.fn().mockResolvedValue({ status: 'deleted' });
++    const onRolesChange = vi.fn();
+     vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+       if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
+         if (method === 'DELETE') {
+@@ -71,7 +87,13 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+       return Promise.resolve([] as never);
+     });
+ 
+-    render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
++    render(
++      <RoleLabelPicker
++        principalId="user-1"
++        availableRoles={MOCK_AVAILABLE}
++        onRolesChange={onRolesChange}
++      />,
++    );
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('remove-role-lead-dev')).toBeDefined();
+@@ -89,17 +111,19 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+     fireEvent.click(screen.getByTestId('remove-role-lead-dev'));
+     await waitFor(() => {
+       expect(deleteSpy).toHaveBeenCalledTimes(2);
++      expect(onRolesChange).toHaveBeenCalledWith(['role-2']);
+     });
+   });
+ 
+   it('adds new role label from select dropdown and handles add/fetch errors and disabled state', async () => {
+     const postSpy = vi.fn().mockResolvedValue({
+-      id: 'prl-2',
++      id: 'prl-3',
+       principal_id: 'user-1',
+-      role_id: 'role-2',
+-      role_name: 'QA Tester',
+-      role_slug: 'qa-tester',
++      role_id: 'role-3',
++      role_name: 'Security Auditor',
++      role_slug: 'sec-auditor',
+     });
++    const onRolesChange = vi.fn();
+ 
+     vi.spyOn(clientModule, 'apiFetch').mockImplementation((method, path, opts) => {
+       if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
+@@ -111,18 +135,23 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+       return Promise.resolve([] as never);
+     });
+ 
+-    const { rerender } = render(
+-      <RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />,
++    const { container, rerender } = render(
++      <RoleLabelPicker
++        principalId="user-1"
++        availableRoles={MOCK_AVAILABLE}
++        onRolesChange={onRolesChange}
++      />,
+     );
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('add-role-label-select')).toBeDefined();
++      expect(container.querySelector('label[for]')).toBeDefined();
+     });
+ 
+     // Error branch on POST
+     postSpy.mockRejectedValueOnce(new Error('Escalation denied'));
+     fireEvent.change(screen.getByTestId('add-role-label-select'), {
+-      target: { value: 'role-2' },
++      target: { value: 'role-3' },
+     });
+     await waitFor(() => {
+       expect(screen.getByRole('alert').textContent).toContain('Escalation denied');
+@@ -130,25 +159,165 @@ describe('RoleLabelPicker Component (KAN-83)', () => {
+ 
+     // Success branch on POST
+     fireEvent.change(screen.getByTestId('add-role-label-select'), {
+-      target: { value: 'role-2' },
++      target: { value: 'role-3' },
+     });
+     await waitFor(() => {
+       expect(postSpy).toHaveBeenCalledTimes(2);
++      expect(onRolesChange).toHaveBeenCalledWith(['role-1', 'role-2', 'role-3']);
+     });
+ 
+-    // Disabled state hides remove buttons and add select
++    // Disabled state hides remove buttons and add select, rendering span instead of dangling label
+     rerender(
+       <RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} disabled={true} />,
+     );
+     expect(screen.queryByTestId('add-role-label-select')).toBeNull();
++    expect(container.querySelector('label')).toBeNull();
++    expect(container.querySelector('span.role-label-picker-label')).toBeDefined();
+   });
+ 
+   it('handles initial load error, empty principalId, and fallback error messages gracefully', async () => {
+     vi.spyOn(clientModule, 'apiFetch').mockRejectedValue({});
+-    const { rerender } = render(<RoleLabelPicker principalId="" />);
++    const { rerender, unmount } = render(<RoleLabelPicker principalId="" />);
+     rerender(<RoleLabelPicker principalId="user-1" />);
+     await waitFor(() => {
+       expect(screen.getByRole('alert').textContent).toContain('Failed to load assigned role labels.');
+     });
++    unmount();
++  });
++
++  it('renders FieldHelpHint and default indicator "(Default: Member)" adjacent to label with ARIA attributes', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([] as never);
++    render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('role-label-default-indicator').textContent).toContain('(Default: Member)');
++    });
++    const helpTrigger = screen.getByTestId('role-label-help');
++    expect(helpTrigger).toBeDefined();
++    expect(helpTrigger.getAttribute('aria-label')).toBe('Help for Role Labels');
++
++    const selectEl = screen.getByTestId('add-role-label-select');
++    expect(selectEl.getAttribute('aria-describedby')).toBe('role-label-hint-user-1');
++  });
++
++  it('opens FieldHelpHint popover on focus, shows default value, valid values list, and doc link', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([] as never);
++    render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('role-label-help')).toBeDefined();
++    });
++
++    const helpTrigger = screen.getByTestId('role-label-help');
++    act(() => {
++      helpTrigger.focus();
++    });
++
++    const popover = screen.getByTestId('role-label-help-popover');
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('Role Labels and Default Permissions');
++    expect(popover.textContent).toContain('New workspace members receive the base Member role by default.');
++    expect(popover.textContent).toContain('Member');
++    expect(popover.textContent).toContain('Custom Role');
++
++    const docLink = screen.getByTestId<HTMLAnchorElement>('role-label-help-doc-link');
++    expect(docLink.getAttribute('href')).toBe('/docs/custom-fields');
++  });
++
++  it('dismisses popover on Escape key and restores focus to trigger button', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([] as never);
++    render(<RoleLabelPicker principalId="user-1" availableRoles={MOCK_AVAILABLE} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('role-label-help')).toBeDefined();
++    });
++
++    const helpTrigger = screen.getByTestId('role-label-help');
++    act(() => {
++      helpTrigger.focus();
++    });
++
++    const popover = screen.getByTestId('role-label-help-popover');
++    expect(popover).toBeDefined();
++
++    const docLink = screen.getByTestId<HTMLAnchorElement>('role-label-help-doc-link');
++    act(() => {
++      docLink.focus();
++    });
++    expect(document.activeElement).toBe(docLink);
++
++    act(() => {
++      fireEvent.keyDown(docLink, { key: 'Escape', bubbles: true });
++    });
++
++    expect(screen.queryByTestId('role-label-help-popover')).toBeNull();
++    expect(document.activeElement).toBe(helpTrigger);
++  });
++
++  it('supports custom props: label, defaultValue, helpTitle, helpSummary, docHref, and showHelpHint=false', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([] as never);
++    const { rerender } = render(
++      <RoleLabelPicker
++        principalId="user-1"
++        availableRoles={MOCK_AVAILABLE}
++        label="Assigned Roles"
++        defaultValue="Guest"
++        helpTitle="Role Guidance"
++        helpSummary="Custom roles help summary."
++        docHref="/docs/roles"
++        showHelpHint={true}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('role-label-default-indicator').textContent).toContain('(Default: Guest)');
++    });
++    const helpTrigger = screen.getByTestId('role-label-help');
++
++    act(() => {
++      helpTrigger.focus();
++    });
++
++    const popover = screen.getByTestId('role-label-help-popover');
++    expect(popover.textContent).toContain('Role Guidance');
++    expect(popover.textContent).toContain('Custom roles help summary.');
++    const docLink = screen.getByTestId<HTMLAnchorElement>('role-label-help-doc-link');
++    expect(docLink.getAttribute('href')).toBe('/docs/roles');
++
++    // Hide help hint when showHelpHint is false
++    rerender(
++      <RoleLabelPicker
++        principalId="user-1"
++        availableRoles={MOCK_AVAILABLE}
++        showHelpHint={false}
++      />,
++    );
++    expect(screen.queryByTestId('role-label-help')).toBeNull();
++  });
++
++  it('maintains parity under light and dark theme attributes and handles unmount cleanup', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
++      if (path.endsWith('/api/v1/admin/rbac/roles')) {
++        return Promise.resolve(MOCK_AVAILABLE as never);
++      }
++      if (path.includes('/api/v1/admin/principals/user-1/role-labels')) {
++        return Promise.resolve(MOCK_ASSIGNED as never);
++      }
++      return Promise.resolve([] as never);
++    });
++    document.documentElement.setAttribute('data-theme', 'light');
++
++    const { unmount, rerender } = render(<RoleLabelPicker principalId="user-1" />);
++    await waitFor(() => {
++      expect(screen.getByTestId('role-label-picker-container')).toBeDefined();
++      expect(screen.getByTestId('role-chip-lead-dev')).toBeDefined();
++    });
++
++    document.documentElement.setAttribute('data-theme', 'dark');
++    rerender(<RoleLabelPicker principalId="user-1" />);
++    expect(screen.getByTestId('role-label-picker-container')).toBeDefined();
++
++    document.documentElement.removeAttribute('data-theme');
++    unmount();
+   });
+ });
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.css b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+index 94159480..d20bc555 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.css
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+@@ -87,6 +87,22 @@
+     flex-shrink: 0;
+   }
+ 
++  .kb-table td[data-label="Role Grant"] {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-2, 8px);
++    text-align: left;
++  }
++
++  .kb-table td[data-label="Role Grant"]::before {
++    margin-bottom: var(--space-1, 4px);
++  }
++
++  .kb-table td[data-label="Role Grant"] .kb-member-role-select {
++    width: 100%;
++    max-width: 100%;
++  }
++
+   /* Sticky / visible action buttons (KAN-344) */
+   .kb-settings-form-actions,
+   .kb-members-actions-bar {

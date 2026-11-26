@@ -1,0 +1,162 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+/* Role Label Picker Component Styles (KAN-83, KAN-502) */
+
+.role-label-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.role-label-picker-header {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.role-label-picker-header .field-help-hint {
+  margin: 0;
+}
+
+.role-label-picker-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary, #0f172a);
+  cursor: default;
+}
+
+.role-label-picker-label-text {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.role-label-default-indicator {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-secondary, #4b5563);
+}
+
+.role-label-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rbac-chip-dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.role-label-select {
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  background: var(--bg-surface, #ffffff);
+  color: var(--text-primary, #0f172a);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.role-label-select:focus {
+  outline: none;
+  border-color: var(--brand-primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.role-label-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.role-label-help-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Theme parity: dark theme */
+[data-theme='dark'] .role-label-picker-label {
+  color: var(--text-primary, #f1f5f9);
+}
+
+[data-theme='dark'] .role-label-default-indicator {
+  color: var(--text-secondary, #94a3b8);
+}
+
+[data-theme='dark'] .role-label-select {
+  border-color: var(--border-subtle, #334155);
+  background: var(--bg-surface-raised, #1e293b);
+  color: var(--text-primary, #f1f5f9);
+}
+
+[data-theme='dark'] .role-label-select:focus {
+  border-color: var(--brand-primary, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+/* Theme parity: prefers-color-scheme dark */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .role-label-picker-label {
+    color: var(--text-primary, #f1f5f9);
+  }
+
+  :root:not([data-theme='light']) .role-label-default-indicator {
+    color: var(--text-secondary, #94a3b8);
+  }
+
+  :root:not([data-theme='light']) .role-label-select {
+    border-color: var(--border-subtle, #334155);
+    background: var(--bg-surface-raised, #1e293b);
+    color: var(--text-primary, #f1f5f9);
+  }
+
+  :root:not([data-theme='light']) .role-label-select:focus {
+    border-color: var(--brand-primary, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+}
+
+/* Mobile responsive at 390x844 */
+@media (max-width: 480px) {
+  .role-label-picker-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .role-label-picker-label {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .role-label-default-indicator {
+    font-size: 0.7rem;
+  }
+
+  .role-label-select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .role-label-picker {
+    gap: 4px;
+  }
+}
