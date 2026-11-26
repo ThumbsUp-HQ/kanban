@@ -3,17 +3,17 @@ $ pnpm --dir kanban/web exec vitest run --coverage.enabled --coverage.include='s
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan515-7d6b8438/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (27 tests) 2769ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (27 tests) 3544ms
    ✓ Unified MCP Studio (KAN-31) (16)
-     ✓ handles AAL2 cancellation on minting and retries without error banners 541ms
-     ✓ handles MFA cancellation on minting without error banners 334ms
-     ✓ handles mint error reporting on generic failure 332ms
-     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 336ms
+     ✓ handles AAL2 cancellation on minting and retries without error banners 703ms
+     ✓ handles MFA cancellation on minting without error banners 389ms
+     ✓ handles mint error reporting on generic failure 418ms
+     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 439ms
 
  Test Files  1 passed (1)
       Tests  27 passed (27)
-   Start at  15:02:54
-   Duration  5.06s (tests 59%, import 17%, environment 15%, transform 8%, worker 1%)
+   Start at  15:11:31
+   Duration  6.46s (tests 59%, import 17%, environment 14%, transform 9%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------

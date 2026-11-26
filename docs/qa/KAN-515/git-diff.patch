@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
-index 1ff8320e..98820ebf 100644
+index 1ff8320e..0c4a6816 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.css
 +++ b/kanban/web/src/features/settings/McpAccessStudio.css
 @@ -18,6 +18,11 @@
@@ -31,11 +31,12 @@ index 1ff8320e..98820ebf 100644
  .kb-mcp-table-wrap {
    overflow-x: auto;
    width: 100%;
-@@ -621,6 +631,12 @@
+@@ -621,6 +631,13 @@
    align-items: center;
    gap: 8px;
    flex-wrap: wrap;
 +  flex-shrink: 0;
++  max-width: 100%;
 +}
 +
 +.kb-mcp-header-actions .kb-studio-doc-link {
