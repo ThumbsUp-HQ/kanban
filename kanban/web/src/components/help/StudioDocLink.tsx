@@ -36,7 +36,6 @@ export function StudioDocLink({
       data-testid={testId}
       onClick={handleClick}
       aria-label={title ?? label}
-      tabIndex={0}
     >
       <span aria-hidden="true">&#128214;</span>
       <span>{label}</span>

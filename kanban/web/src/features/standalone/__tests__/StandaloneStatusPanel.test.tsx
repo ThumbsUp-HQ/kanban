@@ -2152,7 +2152,7 @@ describe('ComposeExportTab', () => {
     /* eslint-enable @typescript-eslint/no-deprecated */
   });
 
-  it('KAN-446: renders compose-export-doc-link positioned before primary download CTA in .standalone-panel__btn-group with ARIA, focus and Light/Dark rendering', () => {
+  it('KAN-446: renders compose-export-doc-link inside .standalone-panel__tab-header-actions positioned above mode toggle with ARIA, focus and Light/Dark rendering', () => {
     const mockExportData = {
       filename: 'docker-compose.yml',
       compose_yaml: 'services:\n  kanban:\n    image: kanban:latest\n',
@@ -2170,15 +2170,19 @@ describe('ComposeExportTab', () => {
       expect(docLink.getAttribute('aria-label')).toBe('Compose Promotion Runbook');
       expect(docLink.textContent).toContain('Documentation ->');
 
-      const btnGroup = docLink.closest('.standalone-panel__btn-group');
-      expect(btnGroup).not.toBeNull();
-      if (!btnGroup) throw new Error('btnGroup is null');
+      // Placed inside .standalone-panel__tab-header-actions
+      const headerActions = docLink.closest('.standalone-panel__tab-header-actions');
+      expect(headerActions).not.toBeNull();
+      if (!headerActions) throw new Error('headerActions is null');
 
-      // Check placement: docLink is first child, to the left of the primary download CTA
-      expect(btnGroup.firstElementChild).toBe(docLink);
-      const primaryBtn = btnGroup.querySelector('.standalone-panel__btn--primary');
-      expect(primaryBtn).not.toBeNull();
-      expect(primaryBtn?.textContent).toContain('Download docker-compose.yml');
+      // Placed inside .standalone-panel__tab-header
+      const tabHeader = docLink.closest('.standalone-panel__tab-header');
+      expect(tabHeader).not.toBeNull();
+      if (!tabHeader) throw new Error('tabHeader is null');
+
+      // Placed above mode toggle in container DOM order
+      const modeToggle = screen.getByRole('group', { name: 'Compose template mode' });
+      expect(tabHeader.compareDocumentPosition(modeToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
       // Keyboard focus
       docLink.focus();
@@ -2187,6 +2191,51 @@ describe('ComposeExportTab', () => {
       unmount();
     }
     document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('KAN-446: handles fetchExportData non-ApiProblem Error and falls back to Error.message', async () => {
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.reject(new Error('Network offline'));
+    });
+    global.fetch = mockFetch;
+
+    render(<ComposeExportTab />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+      expect(screen.getByText('Network offline')).toBeDefined();
+    });
+  });
+
+  it('KAN-446: handles fetchExportData non-ApiProblem Error with empty message and falls back to default message', async () => {
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.reject(new Error(''));
+    });
+    global.fetch = mockFetch;
+
+    render(<ComposeExportTab />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+      expect(screen.getByText('Failed to load export data')).toBeDefined();
+    });
+  });
+
+  it('KAN-446: falls back to docker-compose.yml filename when filename is empty in multi mode', async () => {
+    const mockExportData = {
+      filename: '',
+      compose_yaml: 'services:\n',
+      env_template: 'SECRET=1\n',
+      migration_steps_markdown: 'Steps',
+    };
+
+    render(<ComposeExportTab initialData={mockExportData} />);
+    const downloadBtn = screen.getByRole('button', { name: 'Download docker-compose.yml' });
+    await act(async () => {
+      fireEvent.click(downloadBtn);
+      await Promise.resolve();
+    });
+    expect(createObjectURLMock).toHaveBeenCalled();
   });
 
   it('KAN-446: opens in-app help panel when compose-export-doc-link is clicked in ShellPanelsProvider', () => {
