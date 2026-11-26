@@ -390,7 +390,7 @@ export function PasskeyEnrollModal({
               data-testid="passkey-enroll-submit-btn"
               disabled={isSubmitting || !nickname.trim()}
             >
-              {isSubmitting ? 'Registering...' : 'Register'}
+              {isSubmitting ? 'Registering...' : 'Continue'}
             </button>
           </div>
         </form>

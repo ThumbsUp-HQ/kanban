@@ -4,20 +4,17 @@
 :root {
   --kb-passkey-enroll-bg: var(--bg-surface, #ffffff);
   --kb-passkey-enroll-border: var(--border-subtle, #e2e8f0);
-  --kb-passkey-enroll-fg: var(--fg-primary, #0f172a);
 }
 
 [data-theme='dark'] {
   --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
   --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
-  --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
     --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
-    --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
   }
 }
 
@@ -140,12 +137,6 @@
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg-primary);
-  line-height: 1.4;
-}
-
-.kb-passkey-enroll-label-text {
-  display: inline-flex;
-  align-items: center;
   line-height: 1.4;
 }
 
