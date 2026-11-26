@@ -5,7 +5,7 @@
 **Parent Epic:** `KAN-410` (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`) (Grade-A `READY` Certified on Round 1)  
 **Upstream Phase Tickets:** `KAN-411` (Audit & Foundation), `KAN-412` (UI Workflows & Drawer Wiring), `KAN-413` (Live Workouts)  
 **Branch:** `docs/KAN-414-slice2-ai-docs` (branched from `main` and merged with main `342bfdb6`)  
-**Target Commit:** `3e215f87` (HEAD of `docs/KAN-414-slice2-ai-docs`)  
+**Target Commit:** `a8fb3b70` (HEAD of `docs/KAN-414-slice2-ai-docs`)  
 **Wiki Branch:** `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki` (Commit: `ab0fd22`) and fetched into `/home/adamoutler/kanban/thumbs-up-kanban.wiki`  
 **Zero Schema Mutations:** No database migrations added or modified in Phase 4.  
 **Pre-Prod Safety Invariant:** Absolute zero-mutation on protected pre-production (`192.168.1.101` / `k.hackedyour.info`).  
