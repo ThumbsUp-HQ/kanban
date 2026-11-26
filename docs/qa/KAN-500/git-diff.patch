@@ -1,0 +1,588 @@
+diff --git a/kanban/web/src/features/workspaces/CreateWorkspaceModal.css b/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
+index 5261a140..36746255 100644
+--- a/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
++++ b/kanban/web/src/features/workspaces/CreateWorkspaceModal.css
+@@ -1,4 +1,45 @@
+-/* Create Workspace Modal Styles (KB-UX-05, S1.1, S3.3, KANBA-175) */
++/* Create Workspace Modal Styles (KB-UX-05, S1.1, S3.3, KANBA-175, KAN-500) */
++
++:root {
++  --kb-create-ws-bg: var(--bg-surface-raised, #ffffff);
++  --kb-create-ws-fg: var(--fg-primary, #111827);
++  --kb-create-ws-border: var(--border-subtle, #e5e7eb);
++  --kb-create-ws-label: var(--fg-secondary, #4b5563);
++  --kb-create-ws-input-bg: var(--bg-surface, #ffffff);
++  --kb-create-ws-input-border: var(--border-subtle, #e5e7eb);
++  --kb-create-ws-input-fg: var(--fg-primary, #111827);
++  --kb-create-ws-cancel-border: var(--border-subtle, #e5e7eb);
++  --kb-create-ws-cancel-fg: var(--fg-secondary, #4b5563);
++  --kb-create-ws-cancel-hover-bg: var(--bg-hover, #f1f3f5);
++}
++
++[data-theme="dark"] {
++  --kb-create-ws-bg: var(--bg-surface-raised, #24272f);
++  --kb-create-ws-fg: var(--fg-primary, #f8fafc);
++  --kb-create-ws-border: var(--border-subtle, #333842);
++  --kb-create-ws-label: var(--fg-secondary, #cbd5e1);
++  --kb-create-ws-input-bg: var(--bg-surface, #1e2025);
++  --kb-create-ws-input-border: var(--border-subtle, #333842);
++  --kb-create-ws-input-fg: var(--fg-primary, #f8fafc);
++  --kb-create-ws-cancel-border: var(--border-subtle, #333842);
++  --kb-create-ws-cancel-fg: var(--fg-secondary, #cbd5e1);
++  --kb-create-ws-cancel-hover-bg: var(--bg-hover, #2c313a);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme="light"]) {
++    --kb-create-ws-bg: var(--bg-surface-raised, #24272f);
++    --kb-create-ws-fg: var(--fg-primary, #f8fafc);
++    --kb-create-ws-border: var(--border-subtle, #333842);
++    --kb-create-ws-label: var(--fg-secondary, #cbd5e1);
++    --kb-create-ws-input-bg: var(--bg-surface, #1e2025);
++    --kb-create-ws-input-border: var(--border-subtle, #333842);
++    --kb-create-ws-input-fg: var(--fg-primary, #f8fafc);
++    --kb-create-ws-cancel-border: var(--border-subtle, #333842);
++    --kb-create-ws-cancel-fg: var(--fg-secondary, #cbd5e1);
++    --kb-create-ws-cancel-hover-bg: var(--bg-hover, #2c313a);
++  }
++}
+ 
+ .kb-create-workspace-scrim {
+   position: fixed;
+@@ -15,13 +56,16 @@
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+-  background: var(--bg-surface-raised, #24272f);
+-  border: 1px solid var(--border-subtle, #333842);
++  background: var(--kb-create-ws-bg, var(--bg-surface-raised, #24272f));
++  border: 1px solid var(--kb-create-ws-border, var(--border-subtle, #333842));
+   border-radius: var(--radius-lg, 8px);
+   width: calc(100% - 32px);
+   max-width: 480px;
++  max-height: calc(100vh - 32px);
++  max-height: calc(100dvh - 32px);
++  overflow-y: auto;
+   padding: 24px;
+-  color: var(--fg-primary, #f8fafc);
++  color: var(--kb-create-ws-fg, var(--fg-primary, #f8fafc));
+   box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
+   box-sizing: border-box;
+   z-index: 1201;
+@@ -38,7 +82,7 @@
+   margin: 0;
+   font-size: 18px;
+   font-weight: 600;
+-  color: var(--fg-primary, #f8fafc);
++  color: var(--kb-create-ws-fg, var(--fg-primary, #f8fafc));
+ }
+ 
+ .kb-create-workspace-close {
+@@ -55,8 +99,8 @@
+ }
+ 
+ .kb-create-workspace-close:hover {
+-  background: var(--bg-hover, #2c313a);
+-  color: var(--fg-primary, #f8fafc);
++  background: var(--kb-create-ws-cancel-hover-bg, var(--bg-hover, #2c313a));
++  color: var(--kb-create-ws-fg, var(--fg-primary, #f8fafc));
+ }
+ 
+ .kb-create-workspace-form {
+@@ -71,22 +115,44 @@
+   gap: 6px;
+ }
+ 
++.kb-create-workspace-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  width: 100%;
++}
++
++.kb-create-workspace-label-row .field-help-hint {
++  margin: 0;
++}
++
+ .kb-create-workspace-label {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
+   font-size: 13px;
+   font-weight: 600;
+-  color: var(--fg-secondary, #cbd5e1);
++  color: var(--kb-create-ws-label, var(--fg-secondary, #cbd5e1));
++}
++
++.kb-create-workspace-label:has(> .field-help-hint) {
++  gap: 6px;
++}
++
++.kb-create-workspace-label .field-help-hint {
++  margin: 0;
+ }
+ 
+ .kb-create-workspace-req {
+-  color: var(--danger-fg);
++  color: var(--danger-fg, #ef4444);
+ }
+ 
+ .kb-create-workspace-input {
+   padding: 8px 12px;
+   border-radius: 6px;
+-  border: 1px solid var(--border-subtle, #333842);
+-  background: var(--bg-surface, #1e2025);
+-  color: var(--fg-primary, #f8fafc);
++  border: 1px solid var(--kb-create-ws-input-border, var(--border-subtle, #333842));
++  background: var(--kb-create-ws-input-bg, var(--bg-surface, #1e2025));
++  color: var(--kb-create-ws-input-fg, var(--fg-primary, #f8fafc));
+   font-size: 14px;
+   box-sizing: border-box;
+   width: 100%;
+@@ -94,7 +160,7 @@
+ 
+ .kb-create-workspace-input:focus {
+   outline: none;
+-  border-color: var(--accent-primary);
++  border-color: var(--accent-primary, #1d4ed8);
+ }
+ 
+ .kb-create-workspace-slug {
+@@ -102,11 +168,6 @@
+   font-size: 13px;
+ }
+ 
+-.kb-create-workspace-hint {
+-  font-size: 11px;
+-  color: var(--fg-muted, #94a3b8);
+-}
+-
+ .kb-create-workspace-error {
+   padding: 8px 12px;
+   border-radius: 6px;
+@@ -126,24 +187,24 @@
+ .kb-create-workspace-cancel-btn {
+   padding: 8px 14px;
+   border-radius: 6px;
+-  border: 1px solid var(--border-subtle, #333842);
++  border: 1px solid var(--kb-create-ws-cancel-border, var(--border-subtle, #333842));
+   background: transparent;
+-  color: var(--fg-secondary, #cbd5e1);
++  color: var(--kb-create-ws-cancel-fg, var(--fg-secondary, #cbd5e1));
+   font-size: 13px;
+   font-weight: 500;
+   cursor: pointer;
+ }
+ 
+ .kb-create-workspace-cancel-btn:hover {
+-  background: var(--bg-hover, #2c313a);
+-  color: var(--fg-primary, #f8fafc);
++  background: var(--kb-create-ws-cancel-hover-bg, var(--bg-hover, #2c313a));
++  color: var(--kb-create-ws-fg, var(--fg-primary, #f8fafc));
+ }
+ 
+ .kb-create-workspace-submit-btn {
+   padding: 8px 16px;
+   border-radius: 6px;
+   border: none;
+-  background: var(--accent-primary);
++  background: var(--accent-primary, #1d4ed8);
+   color: #ffffff;
+   font-size: 13px;
+   font-weight: 600;
+@@ -152,10 +213,23 @@
+ }
+ 
+ .kb-create-workspace-submit-btn:hover:not(:disabled) {
+-  background: var(--accent-primary);
++  background: var(--brand-primary-hover, #1e40af);
+ }
+ 
+ .kb-create-workspace-submit-btn:disabled {
+   opacity: 0.6;
+   cursor: not-allowed;
+ }
++
++@media (max-width: 480px) {
++  .kb-create-workspace-dialog {
++    width: calc(100% - 24px);
++    max-height: calc(100vh - 24px);
++    max-height: calc(100dvh - 24px);
++    padding: 20px 16px;
++  }
++
++  .kb-create-workspace-actions {
++    flex-wrap: wrap;
++  }
++}
+diff --git a/kanban/web/src/features/workspaces/CreateWorkspaceModal.test.tsx b/kanban/web/src/features/workspaces/CreateWorkspaceModal.test.tsx
+index 5731e422..417c45e7 100644
+--- a/kanban/web/src/features/workspaces/CreateWorkspaceModal.test.tsx
++++ b/kanban/web/src/features/workspaces/CreateWorkspaceModal.test.tsx
+@@ -1,6 +1,8 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import {
+   CreateWorkspaceModal,
+   suggestWorkspaceSlug,
+@@ -10,6 +12,7 @@ import {
+ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+   beforeEach(() => {
+     vi.restoreAllMocks();
++    document.documentElement.removeAttribute('data-theme');
+   });
+ 
+   it('suggestWorkspaceSlug derives kebab-case slugs properly', () => {
+@@ -80,7 +83,7 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+     );
+ 
+     const nameInput = screen.getByLabelText(/Workspace Name/);
+-    const slugInput = screen.getByLabelText(/Slug/);
++    const slugInput = screen.getByLabelText(/Slug/, { selector: 'input' });
+ 
+     fireEvent.change(nameInput, { target: { value: 'Acme Global' } });
+     expect((slugInput as HTMLInputElement).value).toBe('acme-global');
+@@ -98,6 +101,48 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+     });
+   });
+ 
++  it('validates whitespace name and rejects invalid slug formats with clear errors', () => {
++    render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++
++    const nameInput = screen.getByLabelText(/Workspace Name/);
++    const slugInput = screen.getByLabelText(/Slug/, { selector: 'input' });
++    const submitBtn = screen.getByRole('button', { name: 'Create Workspace' });
++
++    // 1. Manually type invalid slug (2 chars, pattern requires min 3 chars)
++    fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
++    fireEvent.change(slugInput, { target: { value: 'ab' } });
++    fireEvent.click(submitBtn);
++
++    expect(screen.getByRole('alert')).toBeDefined();
++    expect(
++      screen.getByText(
++        'Workspace slug must be 3-64 lowercase alphanumeric characters or hyphens, starting and ending with alphanumeric characters.',
++      ),
++    ).toBeDefined();
++
++    // 2. Clear error on typing into slug
++    fireEvent.change(slugInput, { target: { value: 'ab-cd' } });
++    expect(screen.queryByRole('alert')).toBeNull();
++
++    // 3. Clear error on typing into name
++    fireEvent.change(slugInput, { target: { value: 'ab' } });
++    fireEvent.click(submitBtn);
++    expect(screen.getByRole('alert')).toBeDefined();
++    fireEvent.change(nameInput, { target: { value: 'New Name' } });
++    expect(screen.queryByRole('alert')).toBeNull();
++
++    // 4. Manually trigger submit with whitespace-only name
++    fireEvent.change(nameInput, { target: { value: '   ' } });
++    fireEvent.change(slugInput, { target: { value: 'valid-slug' } });
++    const form = screen.getByRole('dialog').querySelector('form');
++    expect(form).not.toBeNull();
++    if (form) {
++      fireEvent.submit(form);
++    }
++    expect(screen.getByRole('alert')).toBeDefined();
++    expect(screen.getByText('Workspace name is required.')).toBeDefined();
++  });
++
+   it('displays error message when server returns an error', async () => {
+     vi.spyOn(window, 'fetch').mockResolvedValue(
+       new Response(
+@@ -140,6 +185,10 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+     const scrim = screen.getByTestId('create-workspace-scrim');
+     fireEvent.click(scrim);
+     expect(onClose).toHaveBeenCalledTimes(2);
++
++    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
++    fireEvent.click(cancelBtn);
++    expect(onClose).toHaveBeenCalledTimes(3);
+   });
+ 
+   it('covers missing csrf token, non-Error rejection, and nested/fallback error details', async () => {
+@@ -174,7 +223,7 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+       );
+     });
+ 
+-    render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++    const { unmount: unmount2 } = render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
+     const nameInput2 = screen.getByLabelText(/Workspace Name/);
+     fireEvent.change(nameInput2, { target: { value: 'Nested Error WS' } });
+     fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
+@@ -182,5 +231,216 @@ describe('CreateWorkspaceModal & suggestWorkspaceSlug', () => {
+     await waitFor(() => {
+       expect(screen.getByText('Deep nested failure')).toBeDefined();
+     });
++    unmount2();
++
++    // 3. Fallback error status when detail is not string/object
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : (input as Request).url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'valid' }), { status: 200 }));
++      }
++      return Promise.resolve(
++        new Response(JSON.stringify({ detail: 12345 }), {
++          status: 502,
++          headers: { 'Content-Type': 'application/json' },
++        }),
++      );
++    });
++
++    const { unmount: unmount3 } = render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++    const nameInput3 = screen.getByLabelText(/Workspace Name/);
++    fireEvent.change(nameInput3, { target: { value: 'Fallback Status WS' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
++
++    await waitFor(() => {
++      expect(screen.getByText('Server returned 502')).toBeDefined();
++    });
++    unmount3();
++
++    // 4. Server returns unparseable HTML error (triggers catch block in json parser)
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : (input as Request).url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'valid' }), { status: 200 }));
++      }
++      return Promise.resolve(
++        new Response('<html>Bad Gateway</html>', {
++          status: 502,
++          headers: { 'Content-Type': 'text/html' },
++        }),
++      );
++    });
++
++    const { unmount: unmount4 } = render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++    const nameInput4 = screen.getByLabelText(/Workspace Name/);
++    fireEvent.change(nameInput4, { target: { value: 'Bad Gateway WS' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
++
++    await waitFor(() => {
++      expect(screen.getByText('Server returned 502')).toBeDefined();
++    });
++    unmount4();
++
++    // 5. Error instance thrown (covers err instanceof Error ? err.message)
++    vi.spyOn(window, 'fetch').mockImplementation((input) => {
++      const url = typeof input === 'string' ? input : (input as Request).url;
++      if (url.includes('/api/v1/auth/session')) {
++        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
++      }
++      return Promise.reject(new Error('Explicit network fault'));
++    });
++
++    const { unmount: unmount5 } = render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++    const nameInput5 = screen.getByLabelText(/Workspace Name/);
++    fireEvent.change(nameInput5, { target: { value: 'Fault Error WS' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Create Workspace' }));
++
++    await waitFor(() => {
++      expect(screen.getByText('Explicit network fault')).toBeDefined();
++    });
++    unmount5();
++  });
++
++  describe('FieldHelpHint & Responsive Theme Parity (KAN-500)', () => {
++    it('renders FieldHelpHint adjacent to Workspace Slug label with exact ticket spec and zero inline styles', () => {
++      render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++
++      const helpBtn = screen.getByTestId('create-ws-slug-help');
++      expect(helpBtn).toBeDefined();
++      expect(helpBtn.getAttribute('aria-label')).toBe('Help for Workspace Slug');
++
++      // Strict CSP invariant: zero inline style props
++      expect(helpBtn.style.length).toBe(0);
++
++      // Verify label structure and text
++      const labelRow = helpBtn.closest('.kb-create-workspace-label-row');
++      expect(labelRow).not.toBeNull();
++      expect(labelRow?.textContent).toContain('Workspace Slug');
++    });
++
++    it('opens FieldHelpHint popover displaying summary, validValues, and docHref wiki link', async () => {
++      render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++
++      const helpBtn = screen.getByTestId('create-ws-slug-help');
++
++      act(() => {
++        helpBtn.focus();
++      });
++
++      const popover = await screen.findByTestId('create-ws-slug-help-popover');
++      expect(popover).toBeDefined();
++
++      // Verify title & summary
++      expect(popover.textContent).toContain('Workspace Slug');
++      expect(popover.textContent).toContain(
++        'Unique lowercase alphanumeric URL slug identifying this tenant partition.',
++      );
++
++      // Verify valid values guidance
++      expect(popover.textContent).toContain('2 to 64 lowercase alphanumeric chars and hyphens');
++
++      // Verify documentation deep-link
++      const docLink = popover.querySelector('a.field-help-hint-link');
++      expect(docLink).not.toBeNull();
++      expect(docLink?.getAttribute('href')).toBe('/docs/studio-configuration-reference#workspaces');
++    });
++
++    it('dismisses FieldHelpHint popover on Escape without closing parent CreateWorkspaceModal dialog', async () => {
++      const onClose = vi.fn();
++      render(<CreateWorkspaceModal isOpen={true} onClose={onClose} />);
++
++      const helpBtn = screen.getByTestId('create-ws-slug-help');
++
++      act(() => {
++        helpBtn.focus();
++      });
++
++      const popover = await screen.findByTestId('create-ws-slug-help-popover');
++      expect(popover).toBeDefined();
++
++      // Press Escape on the popover / trigger button
++      act(() => {
++        fireEvent.keyDown(helpBtn, { key: 'Escape' });
++      });
++
++      // Popover should close
++      expect(screen.queryByTestId('create-ws-slug-help-popover')).toBeNull();
++
++      // Parent modal must remain open (onClose was NOT called)
++      expect(onClose).not.toHaveBeenCalled();
++
++      // Non-escape key branch on window
++      fireEvent.keyDown(window, { key: 'Tab' });
++      expect(onClose).not.toHaveBeenCalled();
++
++      // Pressing Escape again now that popover is closed will close the modal
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(onClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('focuses name input on open timer and ignores defaultPrevented keydown events', () => {
++      vi.useFakeTimers();
++      const onClose = vi.fn();
++      render(<CreateWorkspaceModal isOpen={true} onClose={onClose} />);
++
++      act(() => {
++        vi.runAllTimers();
++      });
++
++      const event = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
++      event.preventDefault();
++      window.dispatchEvent(event);
++
++      expect(onClose).not.toHaveBeenCalled();
++      vi.useRealTimers();
++    });
++
++    it('renders cleanly in Dark mode (data-theme="dark") with zero inline style violations', async () => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++
++      try {
++        render(<CreateWorkspaceModal isOpen={true} onClose={vi.fn()} />);
++
++        const helpBtn = screen.getByTestId('create-ws-slug-help');
++        expect(helpBtn).toBeDefined();
++        expect(helpBtn.style.length).toBe(0);
++
++        act(() => {
++          helpBtn.focus();
++        });
++
++        const popover = await screen.findByTestId('create-ws-slug-help-popover');
++        expect(popover).toBeDefined();
++        expect(popover.style.color).toBe('');
++        expect(popover.style.backgroundColor).toBe('');
++      } finally {
++        document.documentElement.removeAttribute('data-theme');
++      }
++    });
++
++    it('asserts CSS rules for :root, [data-theme="dark"], prefers-color-scheme, gap 6px, and 480px responsive media query', () => {
++      const cssPath = path.resolve(import.meta.dirname, './CreateWorkspaceModal.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++      // 1. All 3 theme modes
++      expect(cssContent).toContain(':root');
++      expect(cssContent).toContain('[data-theme="dark"]');
++      expect(cssContent).toContain('@media (prefers-color-scheme: dark)');
++
++      // 2. Adjacent gap: 6px and margin: 0 for FieldHelpHint
++      expect(cssContent).toContain('.kb-create-workspace-label-row');
++      expect(cssContent).toContain('gap: 6px;');
++      expect(cssContent).toContain('.kb-create-workspace-label-row .field-help-hint');
++      expect(cssContent).toContain('margin: 0;');
++
++      // 3. Mobile responsiveness (390x844 unclipped)
++      expect(cssContent).toContain('@media (max-width: 480px)');
++      expect(cssContent).toContain('max-height: calc(100vh - 24px);');
++      expect(cssContent).toContain('overflow-y: auto;');
++
++      // 4. Zero forbidden dashes (en-dash / em-dash)
++      expect(cssContent).not.toContain('\u2014');
++      expect(cssContent).not.toContain('\u2013');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/workspaces/CreateWorkspaceModal.tsx b/kanban/web/src/features/workspaces/CreateWorkspaceModal.tsx
+index 3e60565a..6c92882e 100644
+--- a/kanban/web/src/features/workspaces/CreateWorkspaceModal.tsx
++++ b/kanban/web/src/features/workspaces/CreateWorkspaceModal.tsx
+@@ -7,6 +7,7 @@
+ 
+ import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
+ import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import './CreateWorkspaceModal.css';
+ 
+ export interface CreatedWorkspace {
+@@ -78,6 +79,9 @@ export function CreateWorkspaceModal({
+     }, 0);
+ 
+     const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.defaultPrevented) {
++        return;
++      }
+       if (e.key === 'Escape') {
+         e.preventDefault();
+         resetForm();
+@@ -249,9 +253,18 @@ export function CreateWorkspaceModal({
+           </div>
+ 
+           <div className="kb-create-workspace-field">
+-            <label htmlFor="kb-workspace-slug" className="kb-create-workspace-label">
+-              Slug <span className="kb-create-workspace-req">*</span>
+-            </label>
++            <div className="kb-create-workspace-label-row">
++              <label htmlFor="kb-workspace-slug" className="kb-create-workspace-label">
++                Workspace Slug <span className="kb-create-workspace-req">*</span>
++              </label>
++              <FieldHelpHint
++                title="Workspace Slug"
++                summary="Unique lowercase alphanumeric URL slug identifying this tenant partition."
++                validValues={['2 to 64 lowercase alphanumeric chars and hyphens']}
++                docHref="/docs/studio-configuration-reference#workspaces"
++                testId="create-ws-slug-help"
++              />
++            </div>
+             <input
+               id="kb-workspace-slug"
+               type="text"
+@@ -265,9 +278,6 @@ export function CreateWorkspaceModal({
+               autoComplete="off"
+               disabled={isSubmitting}
+             />
+-            <span className="kb-create-workspace-hint">
+-              Unique URL identifier (lowercase letters, numbers, and hyphens).
+-            </span>
+           </div>
+ 
+           <div className="kb-create-workspace-actions">
