@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3`  
 **Target Branch:** `feat/KAN-428-slice5-governance-workout`  
-**Target Commit:** `7cc71c75` (base: `1bbc9981`)  
+**Target Commit:** `68919c8b` (base: `1bbc9981`)  
 
 ---
 
@@ -48,17 +48,17 @@ Key Governance & Security Invariants Audited:
 
 ## 2. Test Verification & Code Quality Metrics
 
-- **Backend Pytest**: 105 passed in 129.54s (0 failures, 0 errors, 0 warnings).
-  - High-coverage audit: `database/models/destructive_lifecycle.py` 95%, `kanban/api/v1/approval_requests.py` 100%, `kanban/api/v1/custom_fields.py` 100%, `kanban/api/v1/project_config.py` 100%, `kanban/api/v1/repo_bindings.py` 94%, `kanban/api/v1/workflow_hooks.py` 100%.
-- **Frontend Vitest**: 310 passed across 11 test files in 17.83s (0 act warnings, 96.22% branch coverage with all tested components >=95%).
+- **Backend Pytest**: 116 passed in 156.95s (0 failures, 0 errors, 0 warnings).
+  - High-coverage audit (all 9 touched modules >=95%): `database/models/destructive_lifecycle.py` 95%, `kanban/api/v1/admin/destructive.py` 95%, `kanban/api/v1/admin/workspace_settings.py` 96%, `kanban/api/v1/approval_requests.py` 100%, `kanban/api/v1/custom_field_execution.py` 95%, `kanban/api/v1/custom_fields.py` 100%, `kanban/api/v1/project_config.py` 100%, `kanban/api/v1/repo_bindings.py` 95%, `kanban/api/v1/user_settings.py` 95%, `kanban/api/v1/workflow_hooks.py` 100%.
+- **Frontend Vitest**: 310 passed across 11 test files in 18.75s (0 act warnings, 96.51% branch coverage with all tested components >=95%).
 - **Static Analysis & Build**:
   - Alembic: 83 migrations valid, single head (`p6_21_agent_onboarding_preferences`).
   - Ruff: Clean (0 errors).
   - Mypy: Clean across 680 source files (0 type errors).
   - TypeScript & ESLint: Clean (0 errors, 0 warnings).
-  - Vite: Production build clean (1.73s).
+  - Vite: Production build clean (1.28s).
   - Unicode Dash Audit: Clean (0 em/en-dashes).
-- **Process Teardown**: Cleanly verified ports `18428` and `18085` free, all test containers removed.
+- **Process Teardown**: Cleanly verified ports `18428` and `18085` free, container `kan428-pg-test-1` removed (docker ps -a verified).
 
 ---
 
