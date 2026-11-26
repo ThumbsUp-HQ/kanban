@@ -5,8 +5,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af`  
-**Target Commit:** `4ce26a82` (branch `docs/KAN-419-slice3-mcp-docs`, base `685b9edf`)  
-**Wiki Commit:** `758f9b2` (branch `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `f9fd15a3` (branch `docs/KAN-419-slice3-mcp-docs`, base `685b9edf`)  
+**Wiki Commit:** `18f9dc9` (branch `docs/KAN-419-slice3-mcp-docs` inside `./thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -21,10 +21,12 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 ### Key Architectural Invariants Verified
 1. **Three-Surface MCP Protocol & Tool Boundaries**:
    - Total of 25 MCP tools strictly partitioned across `/mcp/agent` (10 tools), `/mcp/docs` (3 tools), and `/mcp/admin` (12 tools).
-   - Capability mask bitflags (`0..255`) fully enforced, including deny-all (`mask=0`) handled gracefully.
+   - Exact 12 `/mcp/admin` tool names match `mcp/surfaces/admin/__init__.py`: `configure_workspace`, `manage_auth_cards`, `manage_principals_and_groups`, `manage_access_policies`, `architect_project`, `manage_cycles_and_modules`, `manage_custom_fields_and_scripts`, `manage_workflow_interceptors`, `manage_ai_and_agent_runners`, `override_ticket_provenance`, `audit_and_purge_object_links`, and `destructive_lifecycle` (2-stage confirmation).
+   - Capability mask bitflags match `kanban/security/permissions.py`: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`, including deny-all (`mask=0`) handled gracefully.
    - Destructive operations (`destructive_lifecycle`) require verified 2-stage cryptographic confirmation tokens.
 2. **Robust OAuth 2.1 & Headless CLI Activation**:
    - RFC 8414 Authorization Server discovery and RFC 9728 Protected Resource discovery live and certified.
+   - Client properties: prefix `client_`, `auth_method` (`none`, `client_secret_post`, `client_secret_basic`, `private_key_jwt`), mandatory PKCE S256 (`pkce_enforce`), scopes strictly matching `SURFACE_SCOPES` (`agent:read`, `agent:write`, `docs:read`, `docs:write`, `admin:read`, `admin:write`, `admin:destructive`), and `access_token_ttl` (`60..86400`).
    - Support for Gemini 1,200+ char state strings with strict upper limit `MAX_STATE_LEN = 4096`.
    - Device Authorization Flow (RFC 8628) using Base20 user codes `BCDFGHJKLMNPQRSTVWXZ`.
 3. **Workload Identity Federation (RFC 8693)**:
@@ -106,7 +108,7 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 - QA Directories: `docs/qa/KAN-415/` and `docs/qa/KAN-419/`
 - Specialist Reviews:
   - `api-specialist-review.md`: **APPROVED** (`api-spec`)
-  - `ui-specialist-review.md`: (dual review pending sign-off)
+  - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Visual Artifacts:
   - 27 consolidated screenshots in `docs/qa/KAN-415/screenshots/` (7 live workout captures + 20 responsive docs captures).
   - 100% SHA-256 parity on all embedded images.
