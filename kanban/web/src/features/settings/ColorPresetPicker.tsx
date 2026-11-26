@@ -1,12 +1,13 @@
 /**
- * Color Preset Picker and Palette Components (KB-P3-AUDIT-23).
+ * Color Preset Picker and Palette Components (KB-P3-AUDIT-23, KAN-505).
  *
  * Implements 12 WCAG-contrast preset colors, live SVG circle swatches,
- * and advanced color picker synchronization with strict CSP style-src 'self'
- * compliance (zero inline style props).
+ * FieldHelpHint popover guidance, and advanced color picker synchronization
+ * with strict CSP style-src 'self' compliance (zero inline style props).
  */
 
 import React, { type JSX } from 'react';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './ColorPresetPicker.css';
 
 export interface ColorPreset {
@@ -46,6 +47,11 @@ export interface ColorPresetPickerProps {
   label?: string;
   testId?: string;
   disabled?: boolean;
+  defaultValue?: string;
+  docHref?: string;
+  helpTitle?: string;
+  helpSummary?: string;
+  showHelpHint?: boolean;
 }
 
 export function ColorPresetPicker({
@@ -54,6 +60,11 @@ export function ColorPresetPicker({
   label,
   testId,
   disabled = false,
+  defaultValue = '#4f46e5 (Indigo)',
+  docHref = '/docs/enterprise-whitespace-and-kanban-board#color-presets-and-contrast-standards',
+  helpTitle,
+  helpSummary,
+  showHelpHint = true,
 }: ColorPresetPickerProps): JSX.Element {
   const safeHex = sanitizeHexColor(value);
   const matchedPreset = findPresetByHex(value);
@@ -68,6 +79,7 @@ export function ColorPresetPicker({
   const selectId = `${baseId}-preset-select`;
   const colorPickerId = `${baseId}-color-picker`;
   const swatchId = `${baseId}-swatch`;
+  const helpHintId = `${baseId}-help-hint`;
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value;
@@ -81,9 +93,35 @@ export function ColorPresetPicker({
     }
   };
 
+  const defaultTitle = helpTitle ?? (label ? `${label} Color` : 'Color Preset & Hex Code');
+  const defaultSummary =
+    helpSummary ??
+    'Select from 12 WCAG-contrast preset colors or enter a custom 7-character #RRGGBB hex code. When unset, defaults to #4f46e5 (Indigo).';
+
   return (
     <div className="kb-color-picker-wrapper" data-testid={`${baseId}-picker`}>
       {label && <span className="kb-input-label">{label}</span>}
+      {showHelpHint && (
+        <FieldHelpHint
+          testId={helpHintId}
+          title={defaultTitle}
+          summary={defaultSummary}
+          defaultValue={defaultValue}
+          validValues={[
+            {
+              label: '12 WCAG-contrast preset hexes',
+              description:
+                'Curated accessible presets (Slate, Indigo, Blue, Cyan, Teal, Emerald, Amber, Orange, Rose, Red, Purple, Pink)',
+            },
+            {
+              label: 'Custom #RRGGBB hex',
+              description: '7-character hexadecimal color code (e.g. #4f46e5)',
+            },
+          ]}
+          example="#4f46e5"
+          docHref={docHref}
+        />
+      )}
       <span className="kb-color-swatch-badge" data-testid={swatchId} title={`Color: ${safeHex}`}>
         <svg
           className="kb-swatch-circle"
