@@ -132,6 +132,15 @@ async function main() {
       }
 
       await preparePageForScreenshot(page, vp.theme);
+
+      if (vp.width === 390) {
+        const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+        console.log(`[Mobile Viewport Check] document.documentElement.scrollWidth = ${scrollWidth}px (max allowed: 390px)`);
+        if (scrollWidth > 390) {
+          throw new Error(`Mobile horizontal overflow detected: document.documentElement.scrollWidth (${scrollWidth}px) > 390px`);
+        }
+      }
+
       const filename = `${vp.name}-board-gate-indicators.png`;
       await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
       console.log(`[Captured] ${filename}`);
@@ -195,17 +204,31 @@ async function main() {
       await context.close();
     }
 
-    // --- 4. CSP VERIFICATION: Check console output across /setup, /login, /manifest.json, /board ---
+    // --- 4. CSP & CONSOLE LOG VERIFICATION: Check console/pageerror across 5 routes ---
     {
-      console.log('\n=== Checking CSP Console Output across Routes ===');
+      console.log('\n=== Checking CSP & Console Output across 5 Routes ===');
       const context = await createContext(browser, 1440, 900, 'light');
       const page = await context.newPage();
       const cspErrors = [];
+      const pageErrors = [];
+      const consoleErrors = [];
+
+      page.on('pageerror', (err) => {
+        pageErrors.push({ url: page.url(), text: err.message || String(err) });
+      });
 
       page.on('console', (msg) => {
         const text = msg.text();
         capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text });
-        if (text.includes('Content Security Policy') || text.includes('manifest.json') || text.includes('manifest-src')) {
+        if (msg.type() === 'error') {
+          consoleErrors.push({ url: page.url(), text });
+        }
+        if (
+          text.includes('Content Security Policy') ||
+          text.includes('manifest.json') ||
+          text.includes('manifest-src') ||
+          text.includes('violates directive')
+        ) {
           cspErrors.push({ url: page.url(), text });
         }
       });
@@ -226,7 +249,13 @@ async function main() {
       await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(300);
 
+      console.log('Navigating to /projects/KAN/issues/KAN-2...');
+      await page.goto(`${BASE_URL}/projects/KAN/issues/KAN-2`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(300);
+
       console.log(`CSP Directive Violations Detected: ${cspErrors.length}`);
+      console.log(`Page Errors Detected: ${pageErrors.length}`);
+      console.log(`Console Errors Detected: ${consoleErrors.length}`);
       if (cspErrors.length > 0) {
         console.error('CSP Errors Found:', JSON.stringify(cspErrors, null, 2));
       }
@@ -235,8 +264,11 @@ async function main() {
       const cspReport = [
         '',
         '=== PLAYWRIGHT ZERO-MOCK BROWSER CSP & LOG REPORT ===',
-        `Console messages inspected across /setup, /login, /manifest.json, /projects/KAN/board: ${capturedConsoleLogs.length}`,
+        'Routes Inspected: /setup, /login, /manifest.json, /projects/KAN/issues?layout=board, /projects/KAN/issues/KAN-2',
+        `Total Console Messages Captured: ${capturedConsoleLogs.length}`,
         `CSP Directive Violations Detected: ${cspErrors.length}`,
+        `Page Errors (uncaught exceptions) Detected: ${pageErrors.length}`,
+        `Console Errors Detected: ${consoleErrors.length}`,
         'Console Log Sample (First 20 entries):',
         ...capturedConsoleLogs.slice(0, 20).map((l) => `[${l.type}] (${l.url}) ${l.text}`),
         '=== END PLAYWRIGHT REPORT ===',

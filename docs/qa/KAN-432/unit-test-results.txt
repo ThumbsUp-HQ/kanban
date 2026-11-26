@@ -81,19 +81,12 @@ All files          |   99.75 |    95.85 |     100 |     100 |
   ...altimeSync.ts |     100 |    95.61 |     100 |     100 | ...12,230,298,316 
 -------------------|---------|----------|---------|---------|-------------------
 
+
 === PLAYWRIGHT ZERO-MOCK BROWSER CSP & LOG REPORT ===
 Routes Inspected: /setup, /login, /manifest.json, /projects/KAN/issues?layout=board, /projects/KAN/issues/KAN-2
-Execution Environment: Local Live Uvicorn Server bound to 127.0.0.1:18432 + PostgreSQL 16
-Mock Interceptions: Strictly 0 (ZERO page.route, ZERO context.route, ZERO mockApi)
-SecurityHeadersMiddleware: Active with enforce_https=False, block_cleartext_http=False, CSP manifest-src 'self'
+Total Console Messages Captured: 0
 CSP Directive Violations Detected: 0
+Page Errors (uncaught exceptions) Detected: 0
 Console Errors Detected: 0
-Captured Responsive Viewports:
-  - 01-desktop-1440x900-light-board-gate-indicators.png
-  - 02-desktop-1440x900-dark-board-gate-indicators.png
-  - 03-tablet-landscape-1024x768-board-gate-indicators.png
-  - 04-tablet-portrait-768x1024-board-gate-indicators.png
-  - 05-mobile-portrait-390x844-board-gate-indicators.png (100% column width, 0 white vertical band on right)
-  - 06-lane-new-item-modal-state-default.png (clicking + New work item in In Progress preselects State = In Progress)
-  - 07-issue-detail-gate-vetoed-state.png (Issue Detail KAN-2 shows State = In Progress with Gate Vetoed badge, Gate Pending cleared)
-=== END VERIFICATION REPORT ===
+Console Log Sample (First 20 entries):
+=== END PLAYWRIGHT REPORT ===
