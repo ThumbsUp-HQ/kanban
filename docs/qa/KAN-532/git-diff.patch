@@ -1,0 +1,549 @@
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+index 0097deee..593849cb 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+@@ -47,10 +47,32 @@
+   gap: 12px;
+   align-items: center;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.admin-diag-header-actions .admin-diag-badge {
++  height: 38px;
++  min-height: 38px;
++  padding: 0 12px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  line-height: 1;
++}
++
++.admin-diag-header-actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .admin-diag-btn {
+   height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
+   padding: 0 16px;
+   font-size: 0.875rem;
+   font-weight: 600;
+@@ -61,6 +83,7 @@
+   cursor: pointer;
+   display: inline-flex;
+   align-items: center;
++  justify-content: center;
+   gap: 8px;
+   transition: background-color 0.15s ease, border-color 0.15s ease;
+ }
+@@ -386,11 +409,13 @@
+     display: flex;
+     flex-wrap: wrap;
+     width: 100%;
++    max-width: 100%;
+     gap: var(--space-2, 8px);
+   }
+ 
+   .admin-diag-btn {
+     min-height: var(--tap-min, 44px);
++    height: 44px;
+     min-width: var(--tap-min, 44px);
+     white-space: nowrap;
+     padding: 0 var(--space-3, 12px);
+@@ -398,6 +423,17 @@
+     justify-content: center;
+   }
+ 
++  .admin-diag-header-actions .admin-diag-badge {
++    height: 44px;
++    min-height: 44px;
++    padding: 0 var(--space-3, 12px);
++  }
++
++  .admin-diag-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .admin-diag-tabs {
+     overflow-x: auto;
+     -webkit-overflow-scrolling: touch;
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+index a8798174..3f9f55af 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
+@@ -1108,5 +1108,33 @@ describe('AdminDiagnosticsStudio Component', () => {
+         expect(screen.getByTestId('refresh-diagnostics-btn').textContent).toContain('Refresh Diagnostics');
+       });
+     });
++
++    it('standardizes header action cadence: status badge -> secondary action -> primary action CTA -> studio doc link (KAN-532)', async () => {
++      vi.mocked(apiFetch).mockImplementation((...args: unknown[]) => {
++        const p = extractPath(args);
++        if (p.includes('/api/v1/auth/session/me') || p.includes('/api/v1/auth/me')) {
++          return Promise.resolve(mockAdminUser);
++        }
++        if (p.includes('/api/v1/admin/diagnostics')) {
++          return Promise.resolve(mockDiagnosticsData);
++        }
++        return Promise.resolve({});
++      });
++
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.admin-diag-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(4);
++      expect(children[0]?.getAttribute('data-testid')).toBe('ws-probe-badge');
++      expect(children[1]?.getAttribute('data-testid')).toBe('run-ws-ping-btn');
++      expect(children[2]?.getAttribute('data-testid')).toBe('refresh-diagnostics-btn');
++      expect(children[3]?.getAttribute('data-testid')).toBe('diagnostics-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index e70dc7ea..64c2ba8e 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -384,12 +384,6 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+         </div>
+ 
+         <div className="admin-diag-header-actions">
+-          <StudioDocLink
+-            href="/docs/admin-diagnostics-and-link-inspector-studio"
+-            title="Admin Diagnostics and Link Inspector Documentation"
+-            testId="diagnostics-doc-link"
+-          />
+-
+           <span
+             className={`admin-diag-badge ${
+               wsProbeState === 'connected'
+@@ -430,6 +424,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             <span aria-hidden="true">🔄</span>
+             {isFetching ? 'Refreshing...' : 'Refresh Diagnostics'}
+           </button>
++
++          <StudioDocLink
++            href="/docs/admin-diagnostics-and-link-inspector-studio"
++            title="Admin Diagnostics and Link Inspector Documentation"
++            testId="diagnostics-doc-link"
++          />
+         </div>
+       </header>
+ 
+@@ -503,7 +503,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             <span className="admin-diag-badge admin-diag-badge--ok">Sanitized</span>
+           </div>
+           <div className="admin-diag-summary-card-body">
+-            {diag?.config.length ?? 0} Settings
++            {diag?.config?.length ?? 0} Settings
+           </div>
+           <div className="admin-diag-summary-card-footer">
+             Zero secret leakage | CSP connect-src strict
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
+index 59ed269d..25fdc3bf 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.css
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.css
+@@ -47,6 +47,22 @@
+   gap: 12px;
+   align-items: center;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.link-auditor-header__actions .link-auditor-btn {
++  height: 38px;
++  min-height: 38px;
++  padding: 0 16px;
++  box-sizing: border-box;
++}
++
++.link-auditor-header__actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .link-auditor-btn {
+@@ -737,22 +753,29 @@
+ 
+   .link-auditor-header__actions {
+     width: 100%;
++    max-width: 100%;
+     display: flex;
+     flex-wrap: wrap;
+     gap: var(--space-2, 8px);
+-    justify-content: stretch;
++    justify-content: flex-start;
+   }
+ 
+   .link-auditor-header__actions .link-auditor-btn {
+-    flex: 1 1 100%;
++    flex: 0 1 auto;
+     min-height: var(--tap-min, 44px);
+-    height: auto;
+-    padding: 8px 14px;
++    height: 44px;
++    padding: 0 var(--space-3, 12px);
+     line-height: 1.25;
+     white-space: nowrap;
+     justify-content: center;
+   }
+ 
++  .link-auditor-header__actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++    flex: 0 1 auto;
++  }
++
+   .link-auditor-metrics {
+     grid-template-columns: 1fr;
+     gap: var(--space-3, 12px);
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+index bd82cc1d..ca6e845b 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+@@ -1219,5 +1219,35 @@ describe('LinkAuditorStudio', () => {
+       expect(screen.getByRole('heading', { name: 'Integrity Metrics' })).toBeDefined();
+       expect(screen.getByTestId('integrity-metrics-help')).toBeDefined();
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (path === '/api/v1/auth/me') return mockAdminUser;
++        if (path === '/api/v1/admin/object-links/audits') {
++          return { items: mockAuditItems, has_more: false };
++        }
++        return [];
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/admin/link-auditor']}>
++            <LinkAuditorStudio />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.link-auditor-header__actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('run-scan-btn');
++      expect(children[1]?.getAttribute('data-testid')).toBe('link-auditor-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+index 8d1b2fe5..0c44e83f 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+@@ -342,11 +342,6 @@ export function LinkAuditorStudio(): JSX.Element {
+         </div>
+ 
+         <div className="link-auditor-header__actions">
+-          <StudioDocLink
+-            href="/docs/universal-object-graph-and-link-auditor"
+-            title="Link Auditor Documentation"
+-            testId="link-auditor-doc-link"
+-          />
+           <button
+             type="button"
+             className="link-auditor-btn link-auditor-btn--scan"
+@@ -358,6 +353,11 @@ export function LinkAuditorStudio(): JSX.Element {
+           >
+             {scanMutation.isPending ? '⏳ Scanning...' : '🔍 Run Integrity Scan'}
+           </button>
++          <StudioDocLink
++            href="/docs/universal-object-graph-and-link-auditor"
++            title="Link Auditor Documentation"
++            testId="link-auditor-doc-link"
++          />
+         </div>
+       </header>
+ 
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+index ce589e44..8356879d 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
+@@ -46,6 +46,15 @@
+   align-items: center;
+   gap: 12px;
+   flex-wrap: wrap;
++  max-width: 100%;
++}
++
++.kb-oauth-header-actions .kb-studio-doc-link {
++  height: 38px;
++  min-height: 38px;
++  box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .kb-oauth-gov-title {
+@@ -63,9 +72,11 @@
+ }
+ 
+ .kb-oauth-gov-refresh-btn {
+-  height: var(--prop-row-h);
++  height: 38px;
++  min-height: 38px;
+   padding: 0 16px;
+-  min-height: 40px;
++  box-sizing: border-box;
++  font-size: 0.875rem;
+   background-color: var(--kb-color-bg-surface-raised, #21262d);
+   border: 1px solid var(--kb-color-border-subtle, #30363d);
+   color: var(--kb-color-text-primary, #f0f6fc);
+@@ -74,7 +85,8 @@
+   cursor: pointer;
+   display: inline-flex;
+   align-items: center;
+-  gap: 6px;
++  justify-content: center;
++  gap: 8px;
+   transition: all 0.15s ease-in-out;
+ }
+ 
+@@ -833,6 +845,26 @@
+     min-width: 0;
+   }
+ 
++  .kb-oauth-header-actions {
++    display: flex;
++    flex-wrap: wrap;
++    width: 100%;
++    max-width: 100%;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-oauth-gov-refresh-btn {
++    height: 44px;
++    min-height: 44px;
++    min-width: 44px;
++    padding: 0 16px;
++  }
++
++  .kb-oauth-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .kb-oauth-gov-section {
+     padding: 16px 12px;
+     width: 100%;
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index 5eeb235a..44d07647 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -471,11 +471,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+           </p>
+         </div>
+         <div className="kb-oauth-header-actions">
+-          <StudioDocLink
+-            href="/docs/three-surface-mcp-server-architecture"
+-            title="OAuth 2.1 Governance Documentation"
+-            testId="oauth-studio-doc-link"
+-          />
+           <button
+             type="button"
+             className="kb-oauth-gov-refresh-btn"
+@@ -486,6 +481,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
+           >
+             <span aria-hidden="true">🔄</span> Refresh
+           </button>
++          <StudioDocLink
++            href="/docs/three-surface-mcp-server-architecture"
++            title="OAuth 2.1 Governance Documentation"
++            testId="oauth-studio-doc-link"
++          />
+         </div>
+       </header>
+ 
+diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+index ad931ff5..00364dd4 100644
+--- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
++++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
+@@ -1777,5 +1777,24 @@ describe('OAuthClientGovernanceStudio', () => {
+       expect(cssContent).toContain('@media (max-width: 480px)');
+       expect(cssContent).toContain('.kb-oauth-modal-card');
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/oauth']}>
++          <OAuthClientGovernanceStudio />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('oauth-client-governance-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.kb-oauth-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('refresh-clients-btn');
++      expect(children[1]?.getAttribute('data-testid')).toBe('oauth-studio-doc-link');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 82aae560..d99e2ab4 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -38,14 +38,21 @@
+ }
+ 
+ .kb-mcp-studio-mint-btn {
+-  height: var(--prop-row-h);
+-  padding: 0 18px;
++  height: 38px;
++  min-height: 38px;
++  padding: 0 16px;
++  box-sizing: border-box;
++  font-size: 0.875rem;
+   background-color: #047857;
+   border: 1px solid #047857;
+   color: var(--accent-primary-fg, #ffffff);
+   border-radius: 6px;
+   font-weight: 600;
+   cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
+   transition: background-color 0.15s, border-color 0.15s;
+ }
+ 
+@@ -640,15 +647,18 @@
+ .kb-mcp-header-actions {
+   display: flex;
+   align-items: center;
+-  gap: 8px;
++  gap: 12px;
+   flex-wrap: wrap;
+   flex-shrink: 0;
+   max-width: 100%;
+ }
+ 
+ .kb-mcp-header-actions .kb-studio-doc-link {
++  height: 38px;
+   min-height: 38px;
+   box-sizing: border-box;
++  display: inline-flex;
++  align-items: center;
+ }
+ 
+ .kb-mcp-connect-btn {
+@@ -779,6 +789,32 @@
+     overflow-x: hidden;
+   }
+ 
++  .kb-mcp-studio-header {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .kb-mcp-header-actions {
++    display: flex;
++    flex-wrap: wrap;
++    width: 100%;
++    max-width: 100%;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-mcp-studio-mint-btn {
++    height: 44px;
++    min-height: 44px;
++    min-width: 44px;
++    padding: 0 16px;
++  }
++
++  .kb-mcp-header-actions .kb-studio-doc-link {
++    height: 44px;
++    min-height: 44px;
++  }
++
+   .kb-mcp-studio-section {
+     padding: 16px 12px;
+     max-width: 100%;
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index a74fe637..0b306252 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -751,11 +751,6 @@ export function McpAccessStudio({
+           </p>
+         </div>
+         <div className="kb-mcp-header-actions">
+-          <StudioDocLink
+-            href="/docs/three-surface-mcp-server-architecture"
+-            title="MCP Architecture & Tool Reference"
+-            testId="mcp-studio-doc-link"
+-          />
+           <button
+             type="button"
+             className="kb-mcp-studio-mint-btn"
+@@ -764,6 +759,11 @@ export function McpAccessStudio({
+           >
+             + Mint MCP Key
+           </button>
++          <StudioDocLink
++            href="/docs/three-surface-mcp-server-architecture"
++            title="MCP Architecture & Tool Reference"
++            testId="mcp-studio-doc-link"
++          />
+         </div>
+       </header>
+ 
+diff --git a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+index 584fa9bb..143979da 100644
+--- a/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpAccessStudio.test.tsx
+@@ -2831,5 +2831,24 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
+       expect(css).not.toContain('\u2014');
+       expect(css).not.toContain('\u2013');
+     });
++
++    it('standardizes header action cadence: primary action CTA -> studio doc link (KAN-532)', async () => {
++      render(
++        <MemoryRouter initialEntries={['/settings/mcp']}>
++          <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} tier="global" />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('mcp-access-studio')).toBeDefined();
++      });
++
++      const headerActions = document.querySelector('.kb-mcp-header-actions');
++      expect(headerActions).not.toBeNull();
++      const children = Array.from(headerActions!.children);
++      expect(children.length).toBe(2);
++      expect(children[0]?.getAttribute('data-testid')).toBe('mint-key-button');
++      expect(children[1]?.getAttribute('data-testid')).toBe('mcp-studio-doc-link');
++    });
+   });
+ });

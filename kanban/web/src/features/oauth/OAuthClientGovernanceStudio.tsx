@@ -471,11 +471,6 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
           </p>
         </div>
         <div className="kb-oauth-header-actions">
-          <StudioDocLink
-            href="/docs/three-surface-mcp-server-architecture"
-            title="OAuth 2.1 Governance Documentation"
-            testId="oauth-studio-doc-link"
-          />
           <button
             type="button"
             className="kb-oauth-gov-refresh-btn"
@@ -486,6 +481,11 @@ export function OAuthClientGovernanceStudio({ isServerAdmin = true }: OAuthClien
           >
             <span aria-hidden="true">🔄</span> Refresh
           </button>
+          <StudioDocLink
+            href="/docs/three-surface-mcp-server-architecture"
+            title="OAuth 2.1 Governance Documentation"
+            testId="oauth-studio-doc-link"
+          />
         </div>
       </header>
 

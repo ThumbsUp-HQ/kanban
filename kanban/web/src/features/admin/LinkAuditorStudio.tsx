@@ -342,11 +342,6 @@ export function LinkAuditorStudio(): JSX.Element {
         </div>
 
         <div className="link-auditor-header__actions">
-          <StudioDocLink
-            href="/docs/universal-object-graph-and-link-auditor"
-            title="Link Auditor Documentation"
-            testId="link-auditor-doc-link"
-          />
           <button
             type="button"
             className="link-auditor-btn link-auditor-btn--scan"
@@ -358,6 +353,11 @@ export function LinkAuditorStudio(): JSX.Element {
           >
             {scanMutation.isPending ? '⏳ Scanning...' : '🔍 Run Integrity Scan'}
           </button>
+          <StudioDocLink
+            href="/docs/universal-object-graph-and-link-auditor"
+            title="Link Auditor Documentation"
+            testId="link-auditor-doc-link"
+          />
         </div>
       </header>
 

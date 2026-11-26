@@ -384,12 +384,6 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
         </div>
 
         <div className="admin-diag-header-actions">
-          <StudioDocLink
-            href="/docs/admin-diagnostics-and-link-inspector-studio"
-            title="Admin Diagnostics and Link Inspector Documentation"
-            testId="diagnostics-doc-link"
-          />
-
           <span
             className={`admin-diag-badge ${
               wsProbeState === 'connected'
@@ -430,6 +424,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             <span aria-hidden="true">🔄</span>
             {isFetching ? 'Refreshing...' : 'Refresh Diagnostics'}
           </button>
+
+          <StudioDocLink
+            href="/docs/admin-diagnostics-and-link-inspector-studio"
+            title="Admin Diagnostics and Link Inspector Documentation"
+            testId="diagnostics-doc-link"
+          />
         </div>
       </header>
 
@@ -503,7 +503,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             <span className="admin-diag-badge admin-diag-badge--ok">Sanitized</span>
           </div>
           <div className="admin-diag-summary-card-body">
-            {diag?.config.length ?? 0} Settings
+            {diag?.config?.length ?? 0} Settings
           </div>
           <div className="admin-diag-summary-card-footer">
             Zero secret leakage | CSP connect-src strict

@@ -751,11 +751,6 @@ export function McpAccessStudio({
           </p>
         </div>
         <div className="kb-mcp-header-actions">
-          <StudioDocLink
-            href="/docs/three-surface-mcp-server-architecture"
-            title="MCP Architecture & Tool Reference"
-            testId="mcp-studio-doc-link"
-          />
           <button
             type="button"
             className="kb-mcp-studio-mint-btn"
@@ -764,6 +759,11 @@ export function McpAccessStudio({
           >
             + Mint MCP Key
           </button>
+          <StudioDocLink
+            href="/docs/three-surface-mcp-server-architecture"
+            title="MCP Architecture & Tool Reference"
+            testId="mcp-studio-doc-link"
+          />
         </div>
       </header>
 

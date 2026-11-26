@@ -46,6 +46,15 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.kb-oauth-header-actions .kb-studio-doc-link {
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 
 .kb-oauth-gov-title {
@@ -63,9 +72,11 @@
 }
 
 .kb-oauth-gov-refresh-btn {
-  height: var(--prop-row-h);
+  height: 38px;
+  min-height: 38px;
   padding: 0 16px;
-  min-height: 40px;
+  box-sizing: border-box;
+  font-size: 0.875rem;
   background-color: var(--kb-color-bg-surface-raised, #21262d);
   border: 1px solid var(--kb-color-border-subtle, #30363d);
   color: var(--kb-color-text-primary, #f0f6fc);
@@ -74,7 +85,8 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   transition: all 0.15s ease-in-out;
 }
 
@@ -831,6 +843,26 @@
   .kb-oauth-gov-header > div {
     width: 100%;
     min-width: 0;
+  }
+
+  .kb-oauth-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-oauth-gov-refresh-btn {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 16px;
+  }
+
+  .kb-oauth-header-actions .kb-studio-doc-link {
+    height: 44px;
+    min-height: 44px;
   }
 
   .kb-oauth-gov-section {
