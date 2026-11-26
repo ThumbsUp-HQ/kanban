@@ -10,6 +10,7 @@ import {
 import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
 import { isAal2StepUpCancelled } from '../../api/client';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './runnerStudio.css';
@@ -108,21 +109,14 @@ export function RunnerStudioPage(): JSX.Element {
       <div
         className="kb-runner-rotation-guidance"
         data-testid="runner-rotation-guidance"
-        style={{
-          padding: '12px 16px',
-          background: 'rgba(56, 189, 248, 0.08)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          borderRadius: '8px',
-          marginBottom: '16px',
-        }}
       >
-        <h3 style={{ margin: '0 0 6px 0', fontSize: '0.95rem', fontWeight: 600, color: '#38bdf8' }}>
+        <h3 className="kb-runner-guidance-title">
           🔄 Certificate Rotation & Runner Lifecycle Guidance
         </h3>
-        <p style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: 'var(--text-secondary, #94a3b8)' }}>
+        <p>
           Remote runner mTLS client certificates are cryptographically bound to the daemon instance and cannot be modified in place. To rotate expired or compromised certificates:
         </p>
-        <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'var(--text-secondary, #94a3b8)' }}>
+        <ol>
           <li>Revoke the target runner using 1-Click Revoke (AAL2 verification required).</li>
           <li>Mint a fresh single-use enrollment token for the designated runner pool.</li>
           <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --server-url {typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com'} --token-stdin --pool &lt;pool&gt;</code></li>
@@ -210,12 +204,30 @@ export function RunnerStudioPage(): JSX.Element {
                   <h3 className="kb-runner-hostname">{r.hostname}</h3>
 
                   <div className="kb-runner-meta-row">
-                    <span>Cert Expires:</span>
+                    <span className="kb-runner-meta-label">
+                      Cert Expires:
+                      <FieldHelpHint
+                        title="Certificate Expiration"
+                        summary="Cryptographic mTLS certificate lifetime for daemon authentication."
+                        defaultValue="90 days from enrollment"
+                        docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
+                        testId={`runner-cert-expires-help-${r.id}`}
+                      />
+                    </span>
                     <span>{new Date(r.cert_expires_at).toLocaleDateString()}</span>
                   </div>
 
                   <div className="kb-runner-meta-row">
-                    <span>Heartbeat:</span>
+                    <span className="kb-runner-meta-label">
+                      Heartbeat:
+                      <FieldHelpHint
+                        title="Heartbeat Telemetry"
+                        summary="Runner daemons emit a 15s heartbeat ping. If no heartbeat is received within the DEAD_EVICTION_S = 45.0s eviction window, the runner is marked offline."
+                        defaultValue="15s heartbeat ping (DEAD_EVICTION_S = 45.0s)"
+                        docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
+                        testId={`runner-heartbeat-help-${r.id}`}
+                      />
+                    </span>
                     <span>
                       {r.last_heartbeat_at
                         ? new Date(r.last_heartbeat_at).toLocaleTimeString()
@@ -228,9 +240,18 @@ export function RunnerStudioPage(): JSX.Element {
                     summary="mTLS client certificate fingerprint and cryptographic parameters"
                     testId={`runner-advanced-details-${r.id}`}
                   >
-                    <div className="kb-runner-meta-row" style={{ marginTop: '8px' }}>
-                      <span>Full Cert SHA-256:</span>
-                      <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>{r.client_cert_sha256_hex}</code>
+                    <div className="kb-runner-meta-row kb-runner-meta-row--advanced">
+                      <span className="kb-runner-meta-label">
+                        Full Cert SHA-256:
+                        <FieldHelpHint
+                          title="Full Certificate SHA-256"
+                          summary="Cryptographic SHA-256 digest of the client public certificate used for mutual TLS authentication."
+                          defaultValue="Unique per-enrollment SHA-256 fingerprint"
+                          docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
+                          testId={`runner-cert-sha256-help-${r.id}`}
+                        />
+                      </span>
+                      <code className="kb-runner-cert-sha256">{r.client_cert_sha256_hex}</code>
                     </div>
                     <div className="kb-runner-meta-row">
                       <span>Cert Fingerprint:</span>
@@ -303,7 +324,7 @@ export function RunnerStudioPage(): JSX.Element {
                 Revocation will immediately terminate active WebSocket connections, cancel any in-flight execution jobs, and permanently invalidate the runner client certificate.
               </div>
             </div>
-            <p className="kb-revoke-runner-rotation-note" data-testid="revoke-rotation-note" style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '8px' }}>
+            <p className="kb-revoke-runner-rotation-note" data-testid="revoke-rotation-note">
               <strong>Rotation Procedure:</strong> Confirming revocation terminates active connections and invalidates client certificates. To complete rotation, mint a fresh enrollment token to re-enroll this runner daemon.
             </p>
             <div className="kb-modal-footer">
