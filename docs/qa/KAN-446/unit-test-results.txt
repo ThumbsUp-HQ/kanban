@@ -1,0 +1,103 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan446-067f8d0c/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (44 tests) 8656ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (44)
+     ✓ renders workspace settings page and updates workspace name and slug 675ms
+     ✓ supports Groups tab, creating groups, listing members, adding nested groups and cycle rejection (KANBA-210) 346ms
+     ✓ KAN-14: sends bound role in DELETE /api/v1/admin/role-bindings and validates required email before creating user 316ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 929ms
+     ✓ supports Trash & Retention tab navigation, retention policy update, and filterable table (KAN-30) 318ms
+     ✓ handles item restoration and 2-stage permanent purge in Workspace Trash Studio (KAN-30) 345ms
+     ✓ handles trash error states, empty search results, and purge cancellation (KAN-30) 854ms
+     ✓ covers remaining defensive branches in WorkspaceSettingsPage (KAN-30) 322ms
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (42 tests) 10642ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 571ms
+     ✓ KANBA-208: handles verify and restore using selectedSnapshotFilename and network exception branches 859ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 1943ms
+   ✓ ComposeExportTab (18)
+     ✓ triggers manual backup run and verifies snapshot restoration 575ms
+     ✓ handles backup verification failure and invalid restore confirmation text 400ms
+     ✓ covers restore from uploaded file with passphrase and manifest fallback 438ms
+     ✓ handles restore failure with server error detail and string rejection 508ms
+     ✓ covers tier_b_sandbox_available false, empty input schedule fallbacks, and verification status fallback 339ms
+stderr | src/features/admin-auth/AuthStudioPage.test.tsx > AuthStudioPage (KB-P3-36) > StudioDocLink Header Integration (KAN-446) > renders auth-studio-doc-link in .auth-studio-header-actions when rbac tab is active without CTA button
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to RbacPolicyBuilder inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (59 tests) 22766ms
+   ✓ AuthStudioPage (KB-P3-36) (59)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 567ms
+     ✓ opens drawer to add a new auth card and appends created card 1060ms
+     ✓ opens drawer to edit an existing card and updates it 542ms
+     ✓ handles LOCKOUT_PREVENTED when deleting a card 403ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 1069ms
+     ✓ handles AAL2 cancellation 384ms
+     ✓ handles Aal2StepUpCancelledError during user create or role change 1254ms
+     ✓ handles moving cards to top and bottom boundaries 376ms
+     ✓ handles non-Error rejection on handshake, delete, and lockout without reason_code 460ms
+     ✓ covers all defensive branches: boundary moves, local admin delete, and update error 1574ms
+     ✓ Users & Permissions Tab (KANBA-176) (16)
+       ✓ switches to Users & Permissions tab and renders principals table with badges 342ms
+       ✓ opens + Add Local User modal and creates user successfully 1227ms
+       ✓ opens Reset Password modal and resets user password 1172ms
+       ✓ filters principals by kind and displays provider badges 544ms
+       ✓ covers user role update error handling for Error and string rejection 397ms
+       ✓ covers principal creation for AGENT type, handle validation, and creation errors 653ms
+       ✓ covers reset password error handling for mismatch, Error instance, and string rejection 803ms
+       ✓ tests handshake from inside drawer for existing card 380ms
+       ✓ covers role change in add user modal and cancelling reset password modal 1149ms
+       ✓ renders Reset Password action strictly for USER and hides it for GROUP and AGENT principals, and displays group @slug 402ms
+       ✓ dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close 2988ms
+     ✓ MFA Enrollment Required Banner (KAN-398) (12)
+       ✓ triggers client-side break-glass warning when disabling sole active card and cancels or confirms (KAN-407) 342ms
+     ✓ StudioDocLink Header Integration (KAN-446) (4)
+       ✓ renders auth-studio-doc-link inside .auth-studio-header-actions to the left of + Add auth card in cards tab 322ms
+
+ Test Files  3 passed (3)
+      Tests  145 passed (145)
+   Start at  15:25:16
+   Duration  25.97s (tests 90%, environment 6%, import 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.96 |    95.29 |    98.1 |   99.88 |                   
+ admin-auth        |   98.14 |    95.68 |     100 |     100 |                   
+  ...tudioPage.tsx |   98.14 |    95.68 |     100 |     100 | ...22,613,619,644 
+ settings          |   99.59 |    95.26 |   95.91 |   99.77 |                   
+  ...tingsPage.tsx |   99.59 |    95.26 |   95.91 |   99.77 | 939               
+ standalone        |     100 |    91.89 |     100 |     100 |                   
+  ...ExportTab.tsx |     100 |    91.89 |     100 |     100 | 46-48             
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0
