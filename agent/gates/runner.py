@@ -441,11 +441,15 @@ class GateWorkerRunner:
                             from agent.budget import BudgetEnforcer  # noqa: PLC0415
                             from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
 
-                            budget_enforcer = BudgetEnforcer(session=session)
+                            budget_enforcer = BudgetEnforcer(
+                                session_factory=self.session_factory,
+                                rls_context=admin_ctx,
+                            )
                             live_harness = InAppSdkHarness(
                                 provider=live_provider,
                                 budget_enforcer=budget_enforcer,
-                                session=session,
+                                session_factory=self.session_factory,
+                                rls_context=admin_ctx,
                             )
                             self.registry.register("in_app_sdk", live_harness)
                             agent_dict["provider"] = live_provider

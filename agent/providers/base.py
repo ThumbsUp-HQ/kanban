@@ -96,7 +96,7 @@ class CompletionRequest(BaseModel):
         le=32768,
         validation_alias=AliasChoices("max_output_tokens", "max_tokens"),
     )
-    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=60000)
+    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=300000)
     metadata: dict[str, str] = Field(default_factory=dict)
 
     @property
@@ -139,7 +139,7 @@ class StructuredRequest[TModel: BaseModel](BaseModel):
     system_prompt: str | None = None
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_output_tokens: int = Field(default=1024, ge=1, le=32768)
-    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=60000)
+    ttft_deadline_ms: int | None = Field(default=None, ge=1, le=300000)
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
