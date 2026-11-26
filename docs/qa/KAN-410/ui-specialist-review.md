@@ -7,7 +7,8 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
 **Target Branch:** `docs/KAN-414-slice2-ai-docs`  
-**Target Commit:** `3e02ef08`  
+**Target Commit:** `d3eff3cc`  
+**Wiki Commit:** `ab0fd22`  
 
 ---
 
@@ -15,15 +16,16 @@
 
 This UI Specialist Review audits the comprehensive Epic Rollup visual artifacts, multi-viewport ergonomics, accessibility (WCAG 2.2 AA), and live workout states of **KAN-410: Slice 2 Epic Rollup (Multi-Provider AI Engine, Autonomous Agent Studio, Remote Runners & /llms.txt Onboarding)** across all four phases (KAN-411 Audit, KAN-412 UI Simplification, KAN-413 Live Workouts, KAN-414 Wiki & In-App Docs).
 
-All 34 rollup visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) combining the live AI studios (`AiStudioPage`, `AiProviderEditorDrawer`, `AiBudgetModal`, `AgentStudioPage`, `AgentValidationModal`, `RunnerStudioPage`, `MintEnrollmentTokenModal`) and the in-app Docs Center chapters were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience across all Slice-2 AI management surfaces and documentation is polished, unclipped, responsive, and fully compliant with 👍kanban UX standards.
+All 37 rollup visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) combining the live AI studios (`AiStudioPage`, `AiProviderEditorDrawer`, `AiBudgetModal`, `AgentStudioPage`, `AgentValidationModal`, `RunnerStudioPage`, `MintEnrollmentTokenModal`) and the in-app Docs Center chapters were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience across all Slice-2 AI management surfaces and documentation is polished, unclipped, responsive, and fully compliant with 👍kanban UX standards.
 
-Automated test metrics verify 236 passed Vitest tests (165 in Slice-2 suites + 71 in DocsCenter) with 0 `act(...)` warnings and 96.60% branch coverage with full V8 coverage table recorded, and 112 passed Pytest tests with >=95% coverage on all touched Slice-2 modules.
+Automated test metrics verify 237 passed Vitest tests (165 in Slice-2 suites + 72 in DocsCenter) with 0 `act(...)` warnings and 96.65% branch coverage with full V8 coverage table recorded, and 112 passed Pytest tests with >=95% coverage on all touched Slice-2 modules.
 
 Key findings:
 1. **Live Studio Surfaces (Screenshots from KAN-413)**:
    - All 22 visual artifacts in `docs/workouts/slice-2-ai-agents-runners/screenshots/` verify unclipped forms, high-contrast dark theme secondary buttons (> 7.5:1), single-line mobile priority pills, single-reveal token modals with DOM masking, and zero password input elements.
 2. **Docs Center Surfaces (Screenshots from KAN-414)**:
    - Chapters render embedded screenshots with high visual fidelity, zero broken links, and crisp Mermaid sequence diagrams without `<br/>` glitches.
+   - All 15 captured visual artifacts (`01` through `07`, including `05`, `06`, `07`) reflect responsive table reflow via card cells at `<= 640px`, row 7 visibility in Section 10 (`last_heartbeat_at`), and clean centering of architecture diagrams.
 3. **Responsive Reflow & Contrast**:
    - Zero horizontal overflow across all 5 responsive widths (`scrollWidth <= viewportWidth`).
    - Color contrast exceeds WCAG 2.2 AA (>4.5:1 light, >7.5:1 dark).
@@ -47,6 +49,8 @@ Key findings:
 | `01-multi-provider-ai-engine-1440x900-desktop-light.png` | DocsCenter 1440x900 Light | Multi-provider AI engine chapter; lead paragraphs and track badges legible. | PASS (WCAG AA > 4.5:1) |
 | `02-studio-config-ref-slice2-1440x900-desktop-dark.png` | DocsCenter 1440x900 Dark | Studio configuration reference; dark theme typography sharp. | PASS (WCAG AA > 7.5:1) |
 | `03-slice2-mermaid-diagram-rendered-1440x900.png` | DocsCenter 1440x900 Light | Mermaid architecture diagram; zero <br/> tags; SVG sequence flow renders clearly. | PASS (Diagram sharp) |
+| `06-studio-config-ref-section10-1440x900.png` | DocsCenter 1440x900 Light | Remote Runner Fleet configuration table; row 7 visible. | PASS (Row 7 visible) |
+| `07-multi-provider-ai-repo-access-table-1440x900.png` | DocsCenter 1440x900 Light | Repository Access table with none, ro_vfs_mount, bare_git_tools and sequence diagram. | PASS (Table unclipped) |
 
 ---
 
@@ -62,6 +66,6 @@ Key findings:
 
 ## 4. Verification Sign-Off
 
-- **Audit Tooling:** Direct visual inspection via `read_file` binary PNG viewer on all 34 captures.
+- **Audit Tooling:** Direct visual inspection via `read_file` binary PNG viewer on all 37 captures.
 - **Dashes Enforcement:** Verified 0 Unicode em/en-dashes in this review document via `python3 scripts/check_no_dashes.py`.
 - **Verdict:** **APPROVED** without conditions.
