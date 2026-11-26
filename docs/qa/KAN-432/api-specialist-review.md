@@ -6,7 +6,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd`  
 **Target Branch:** `fix/KAN-432-board-gate-snapback-and-csp`  
-**Target Commit:** `b5560fe8` (base: `1bbc9981`)  
+**Target Commit:** `949bca18` (base: `1bbc9981`)  
 
 ---
 
@@ -56,24 +56,24 @@ All defects have been remediated with strict protocol rigor, complete schema par
 
 ### 3.1 Unit Testing & Coverage
 - **Backend Pytest**:
-  - 40 tests passed in 2.51s (0 failures, 0 warnings).
+  - 285 tests passed in 41.76s (0 failures, 0 warnings).
   - `kanban/security/headers.py`: **98%** coverage.
 - **Frontend Vitest**:
-  - 58 tests passed across 4 test suites in 2.56s (0 `act(...)` warnings).
-  - Overall branch coverage: **96.69%**.
+  - 59 tests passed across 4 test suites in 2.78s (0 `act(...)` warnings).
+  - Overall branch coverage: **95.85%**.
   - All touched files exceed 95% branch coverage:
     * `BoardColumn.tsx`: **100.00%**
-    * `useGateRealtimeSync.ts`: **97.43%**
-    * `BoardView.tsx`: **95.13%**
+    * `useGateRealtimeSync.ts`: **95.61%**
+    * `BoardView.tsx`: **95.18%**
 
 ### 3.2 Static Linters, Build & Security
 - **Ruff:** Clean (0 errors).
 - **Mypy:** Clean across 4 source files (0 type errors).
 - **TypeScript Typecheck:** Clean (0 errors).
-- **ESLint:** Clean (0 warnings).
-- **Vite Build:** Clean, completed in 1.26s.
+- **ESLint:** Clean (0 warnings on touched files).
+- **Vite Build:** Clean, completed in 1.25s.
 - **Unicode Dash Audit:** 0 Unicode em/en-dashes (`python3 scripts/check_no_dashes.py`).
-- **Browser CSP & Console Audit:** 0 CSP directive violations detected across all routes.
+- **Browser CSP & Console Audit:** 0 CSP directive violations detected across all routes (`/setup`, `/login`, `/manifest.json`, `/projects/KAN/issues?layout=board`). Zero-mock evidence captured against live FastAPI + PostgreSQL 16 server on `127.0.0.1:18432`.
 
 ---
 
