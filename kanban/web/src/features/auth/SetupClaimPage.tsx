@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   submitSetupClaim,
   fetchSessionInfo,
@@ -489,9 +490,18 @@ export function SetupClaimPage({
             <div className="auth-field">
               <label className="auth-label" htmlFor="setup-password">
                 Master Password
+                <FieldHelpHint
+                  title="Master Password"
+                  summary="Primary break-glass local administrator password."
+                  defaultValue="None (Minimum 14 characters required)"
+                  validValues={['Minimum 14 characters', 'Maximum 1024 characters']}
+                  docHref="/docs/multi-card-authentication-studio#local-admin-break-glass"
+                  testId="setup-password-help"
+                />
               </label>
               <input
                 id="setup-password"
+                aria-describedby="setup-password-helper"
                 className="auth-input"
                 type="password"
                 value={password}
@@ -502,8 +512,8 @@ export function SetupClaimPage({
                 required
                 disabled={isSubmitting}
               />
-              <span className="auth-password-hint">
-                Minimum 14 characters. Used for break-glass local administrative access.
+              <span id="setup-password-helper" className="auth-field-helper">
+                Minimum 14 characters required for break-glass local administrative access.
               </span>
             </div>
 
@@ -582,10 +592,20 @@ export function SetupClaimPage({
             <div className="auth-field">
               <label className="auth-label" htmlFor="setup-project-key">
                 Initial Project Key
+                <FieldHelpHint
+                  title="Initial Project Key"
+                  summary="Short uppercase prefix used for issue identifiers in your starter project."
+                  defaultValue="KANBA"
+                  validValues={['2 to 10 uppercase alphanumeric characters', 'Must start with A-Z']}
+                  example="KANBA"
+                  docHref="/docs/multi-card-authentication-studio#initial-setup"
+                  testId="setup-project-key-help"
+                />
               </label>
               <input
                 id="setup-project-key"
                 data-testid="setup-project-key"
+                aria-describedby="setup-project-key-helper"
                 className="auth-input auth-mono"
                 type="text"
                 value={projectKey}
@@ -599,8 +619,8 @@ export function SetupClaimPage({
                 required
                 disabled={isSubmitting}
               />
-              <span className="auth-password-hint">
-                2-10 uppercase alphanumeric characters starting with a letter (e.g. KANBA).
+              <span id="setup-project-key-helper" className="auth-field-helper">
+                2 to 10 uppercase alphanumeric characters (Default: KANBA).
               </span>
             </div>
 

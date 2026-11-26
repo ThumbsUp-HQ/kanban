@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { isAal2StepUpCancelled } from '../../api/client';
 import {
@@ -778,14 +779,21 @@ export function AuthCardEditorDrawer({
           <h2 id="drawer-title" className="auth-editor-title">
             {card ? `Edit ${card.display_name}` : 'Add Authentication Card'}
           </h2>
-          <button
-            type="button"
-            className="auth-btn-secondary"
-            onClick={onClose}
-            aria-label="Close drawer"
-          >
-            ×
-          </button>
+          <div className="auth-editor-header-actions">
+            <StudioDocLink
+              href="/docs/multi-card-authentication-studio"
+              title="Multi-Card Authentication Studio Documentation"
+              testId="auth-drawer-doc-link"
+            />
+            <button
+              type="button"
+              className="auth-btn-secondary"
+              onClick={onClose}
+              aria-label="Close drawer"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {formError ? (

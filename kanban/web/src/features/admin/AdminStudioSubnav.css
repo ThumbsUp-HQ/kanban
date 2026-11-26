@@ -48,14 +48,18 @@
   border-bottom-color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
 }
 
-.admin-studio-subnav__item--active {
-  color: var(--accent-primary, #58a6ff) !important;
-  border-bottom-color: var(--accent-primary, #58a6ff) !important;
+.admin-studio-subnav__item--active,
+.admin-studio-subnav__tab--active,
+.admin-studio-subnav__item--active.kb-mcp-admin-subnav-active {
+  color: var(--badge-fg) !important;
+  border-bottom-color: var(--badge-fg) !important;
+  background-color: var(--bg-accent-subtle);
   font-weight: 600;
 }
 
 .admin-studio-subnav__icon {
   font-size: 1rem;
+  color: inherit;
 }
 
 /* Mobile responsive swipe tabs (KAN-344) */
@@ -113,15 +117,15 @@
 }
 
 .admin-sudo-pill--active {
-  border-color: rgba(46, 160, 67, 0.4);
-  background-color: rgba(46, 160, 67, 0.1);
-  color: #3fb950;
+  background-color: var(--bg-success-subtle);
+  border-color: var(--border-success);
+  color: var(--text-success);
 }
 
 .admin-sudo-pill--locked {
-  border-color: rgba(248, 81, 73, 0.3);
-  background-color: rgba(248, 81, 73, 0.08);
-  color: #f85149;
+  background-color: var(--danger-bg);
+  border-color: var(--border-danger);
+  color: var(--danger-fg);
 }
 
 .admin-sudo-pill__status {
@@ -131,7 +135,6 @@
 }
 
 .admin-sudo-pill__drop-btn {
-  background: none;
   border: none;
   color: inherit;
   font-size: 0.75rem;
@@ -139,11 +142,11 @@
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-hover);
   transition: background 0.15s ease-in-out;
 }
 
 .admin-sudo-pill__drop-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--bg-secondary-hover);
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { SetupClaimPage } from './SetupClaimPage';
 import * as authApi from './authApi';
@@ -62,7 +62,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/setup');
 
     // Submit Step 1 form
-    const pwdInput = screen.getByLabelText(/^Master Password/i);
+    const pwdInput = screen.getByLabelText(/^Master Password/i, { selector: 'input' });
     const confirmPwdInput = screen.getByLabelText(/^Confirm Password/i);
 
     fireEvent.change(pwdInput, { target: { value: 'MasterPassword14CharsLong!' } });
@@ -127,7 +127,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     fireEvent.change(screen.getByTestId('setup-project-key'), {
       target: { value: 'CUSTOM' },
     });
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'ValidMasterPassword123!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -190,7 +190,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     render(<SetupClaimPage initialToken={validToken43} />);
 
     // Password too short (<14)
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'short' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -203,7 +203,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     ).toBeDefined();
 
     // Password mismatch
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'LongEnoughPassword12345!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -221,7 +221,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     fireEvent.change(screen.getByLabelText(/Server Administrator Username/i), {
       target: { value: 'Admin' },
     });
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'ValidPassword14Chars!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -298,7 +298,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     render(<SetupClaimPage initialToken={validToken43} />);
 
     // Step 1: Submit claim
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -363,7 +363,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     render(<SetupClaimPage initialToken={validToken43} />);
 
     // Step 1: Submit claim
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -411,7 +411,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     render(<SetupClaimPage initialToken={validToken43} />);
 
     // Step 1
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -468,7 +468,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     render(<SetupClaimPage initialToken={validToken43} />);
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -508,7 +508,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     render(<SetupClaimPage initialToken={validToken43} />);
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -541,7 +541,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     render(<SetupClaimPage initialToken={validToken43} />);
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -570,7 +570,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     render(<SetupClaimPage initialToken={validToken43} />);
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -609,7 +609,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     render(<SetupClaimPage initialToken={validToken43} />);
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -654,7 +654,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     fireEvent.change(screen.getByLabelText(/Administrator Email/i), {
       target: { value: 'admin@kanban.local' },
     });
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'MasterPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -684,13 +684,13 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     };
 
     // Short password
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'short' } });
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), { target: { value: 'short' } });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'short' } });
     submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
     expect(screen.getByText(/Password must be at least 14 characters long/i)).toBeDefined();
 
     // Password mismatch
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), { target: { value: 'ValidPassword14Long!' } });
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), { target: { value: 'ValidPassword14Long!' } });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), { target: { value: 'MismatchPassword14!' } });
     submitForm(screen.getByRole('button', { name: /Claim Instance & Continue/i }));
     expect(screen.getByText(/Passwords do not match/i)).toBeDefined();
@@ -753,7 +753,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
       if (form) fireEvent.submit(form);
     };
 
-    fireEvent.change(screen.getByLabelText(/^Master Password/i), {
+    fireEvent.change(screen.getByLabelText(/^Master Password/i, { selector: 'input' }), {
       target: { value: 'ValidPassword14Long!' },
     });
     fireEvent.change(screen.getByLabelText(/^Confirm Password/i), {
@@ -873,7 +873,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     // Fix display name, invalidate project key
     fireEvent.change(displayInput, { target: { value: 'Admin' } });
-    const projectKeyInput = screen.getByLabelText(/Initial Project Key/i);
+    const projectKeyInput = screen.getByLabelText(/Initial Project Key/i, { selector: 'input' });
     fireEvent.change(projectKeyInput, { target: { value: '1INVALID' } });
     const passInput = document.getElementById('setup-password') as HTMLInputElement;
     const confirmInput = document.getElementById('setup-confirm-password') as HTMLInputElement;
@@ -964,6 +964,133 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Sign-in is unavailable right now.')).toBeDefined();
+    });
+  });
+
+  describe('KAN-455: FieldHelpHint and Sane Defaults in SetupClaimPage', () => {
+    const submitForm = (el: Element) => {
+      const form = el.closest('form');
+      if (form) fireEvent.submit(form);
+    };
+
+    it('renders FieldHelpHint triggers, helper copy, and aria-describedby associations', () => {
+      render(<SetupClaimPage initialToken={validToken43} />);
+
+      // Password help hint and helper
+      const passwordHelp = screen.getByTestId('setup-password-help');
+      expect(passwordHelp).toBeDefined();
+      expect(passwordHelp.getAttribute('aria-label')).toBe('Help for Master Password');
+
+      const passwordInput = screen.getByLabelText(/^Master Password/i, { selector: 'input' });
+      expect(passwordInput.getAttribute('aria-describedby')).toBe('setup-password-helper');
+
+      const passwordHelper = document.getElementById('setup-password-helper');
+      expect(passwordHelper).not.toBeNull();
+      expect(passwordHelper?.className).toBe('auth-field-helper');
+      expect(passwordHelper?.textContent).toBe(
+        'Minimum 14 characters required for break-glass local administrative access.',
+      );
+
+      // Project key help hint and helper
+      const projectKeyHelp = screen.getByTestId('setup-project-key-help');
+      expect(projectKeyHelp).toBeDefined();
+      expect(projectKeyHelp.getAttribute('aria-label')).toBe('Help for Initial Project Key');
+
+      const projectKeyInput = screen.getByTestId('setup-project-key');
+      expect(projectKeyInput.getAttribute('aria-describedby')).toBe('setup-project-key-helper');
+      expect(projectKeyInput.getAttribute('value')).toBe('KANBA');
+
+      const projectKeyHelper = document.getElementById('setup-project-key-helper');
+      expect(projectKeyHelper).not.toBeNull();
+      expect(projectKeyHelper?.className).toBe('auth-field-helper');
+      expect(projectKeyHelper?.textContent).toBe(
+        '2 to 10 uppercase alphanumeric characters (Default: KANBA).',
+      );
+
+      // Focus help hints to ensure popover triggers without crash
+      act(() => {
+        passwordHelp.focus();
+      });
+      expect(screen.getByTestId('setup-password-help-popover')).toBeDefined();
+      expect(screen.getByTestId('setup-password-help-popover').textContent).toContain(
+        'Primary break-glass local administrator password.',
+      );
+
+      act(() => {
+        projectKeyHelp.focus();
+      });
+      expect(screen.getByTestId('setup-project-key-help-popover')).toBeDefined();
+      expect(screen.getByTestId('setup-project-key-help-popover').textContent).toContain(
+        'Short uppercase prefix used for issue identifiers in your starter project.',
+      );
+    });
+
+    it('submits form successfully under Light theme (data-theme="light")', async () => {
+      document.documentElement.dataset.theme = 'light';
+      const submitClaimSpy = vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
+        status: 'enrollment_required',
+        enrollment_id: 'enr-light-455',
+      });
+
+      render(<SetupClaimPage initialToken={validToken43} />);
+
+      const pwdInput = screen.getByLabelText(/^Master Password/i, { selector: 'input' });
+      const confirmPwdInput = screen.getByLabelText(/^Confirm Password/i);
+
+      fireEvent.change(pwdInput, { target: { value: 'ValidBreakGlassMaster14!' } });
+      fireEvent.change(confirmPwdInput, { target: { value: 'ValidBreakGlassMaster14!' } });
+
+      const submitBtn = screen.getByRole('button', { name: /Claim Instance & Continue/i });
+      submitForm(submitBtn);
+
+      await waitFor(() => {
+        expect(submitClaimSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            project_key: 'KANBA',
+            password: 'ValidBreakGlassMaster14!',
+          }),
+        );
+        expect(screen.getByText('Step 2 of 3')).toBeDefined();
+      });
+    });
+
+    it('submits form successfully under Dark theme (data-theme="dark") and catches invalid project key', async () => {
+      document.documentElement.dataset.theme = 'dark';
+      const submitClaimSpy = vi.spyOn(authApi, 'submitSetupClaim').mockResolvedValue({
+        status: 'enrollment_required',
+        enrollment_id: 'enr-dark-455',
+      });
+
+      render(<SetupClaimPage initialToken={validToken43} />);
+
+      const pwdInput = screen.getByLabelText(/^Master Password/i, { selector: 'input' });
+      const confirmPwdInput = screen.getByLabelText(/^Confirm Password/i);
+      const projectKeyInput = screen.getByTestId('setup-project-key');
+
+      // Test validation error on invalid project key
+      fireEvent.change(projectKeyInput, { target: { value: '1INVALID' } });
+      fireEvent.change(pwdInput, { target: { value: 'ValidBreakGlassMaster14!' } });
+      fireEvent.change(confirmPwdInput, { target: { value: 'ValidBreakGlassMaster14!' } });
+
+      const submitBtn = screen.getByRole('button', { name: /Claim Instance & Continue/i });
+      submitForm(submitBtn);
+
+      expect(screen.getByText(/Project key must be 2-10 uppercase alphanumeric/i)).toBeDefined();
+      expect(submitClaimSpy).not.toHaveBeenCalled();
+
+      // Fix project key and submit successfully
+      fireEvent.change(projectKeyInput, { target: { value: 'PROJ' } });
+      submitForm(submitBtn);
+
+      await waitFor(() => {
+        expect(submitClaimSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            project_key: 'PROJ',
+            password: 'ValidBreakGlassMaster14!',
+          }),
+        );
+        expect(screen.getByText('Step 2 of 3')).toBeDefined();
+      });
     });
   });
 });

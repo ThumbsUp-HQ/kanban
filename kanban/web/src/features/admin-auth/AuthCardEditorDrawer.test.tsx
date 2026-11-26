@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { AuthCardEditorDrawer, type AuthCardEditorDrawerProps } from './AuthCardEditorDrawer';
 import type { AdminAuthCard, CreateAuthCardPayload } from './adminAuthApi';
 import * as adminAuthApi from './adminAuthApi';
+import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 
 describe('AuthCardEditorDrawer (KB-P3-36)', () => {
   beforeEach(() => {
@@ -2648,6 +2649,111 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       const lastPayload = saveSpy.mock.calls[0]?.[0] as CreateAuthCardPayload;
       expect(String(lastPayload.public_config.ca_cert_pem)).toContain('-----BEGIN CERTIFICATE-----');
       expect(saveSpy.mock.calls[0]?.[1]).toBe(false);
+    });
+  });
+
+  describe('StudioDocLink Header Integration (KAN-450)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders auth-drawer-doc-link with correct href and title in drawer header in Light and Dark themes', () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <AuthCardEditorDrawer
+            isOpen={true}
+            card={null}
+            onClose={vi.fn()}
+            onSave={vi.fn()}
+          />,
+        );
+
+        const docLink = screen.getByTestId('auth-drawer-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe('/docs/multi-card-authentication-studio');
+        expect(docLink.getAttribute('aria-label')).toBe('Multi-Card Authentication Studio Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.auth-editor-header-actions');
+        expect(headerActions).not.toBeNull();
+        if (!headerActions) {
+          throw new Error('headerActions is null');
+        }
+        const closeBtn = headerActions.querySelector('button[aria-label="Close drawer"]');
+        expect(closeBtn).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <AuthCardEditorDrawer
+              isOpen={true}
+              card={null}
+              onClose={vi.fn()}
+              onSave={vi.fn()}
+            />
+          </ShellPanelsProvider>,
+        );
+
+        const docLink = screen.getByTestId('auth-drawer-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain('/docs/multi-card-authentication-studio');
+
+        // Verify the drawer is still visible and functional
+        expect(screen.getByText('Add Authentication Card')).toBeDefined();
+      } finally {
+        unregister();
+      }
+    });
+
+    it('preserves drawer close, cancel, and submit behavior alongside documentation link', async () => {
+      const onClose = vi.fn();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={onClose}
+          onSave={onSave}
+        />,
+      );
+
+      // Verify close button in header
+      const closeBtn = screen.getByLabelText('Close drawer');
+      fireEvent.click(closeBtn);
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      // Verify cancel button in footer
+      const cancelBtn = screen.getByRole('button', { name: /^cancel$/i });
+      fireEvent.click(cancelBtn);
+      expect(onClose).toHaveBeenCalledTimes(2);
+
+      // Verify submit behavior still works
+      fireEvent.change(screen.getByLabelText('Display Name'), { target: { value: 'Google Corp' } });
+      fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'google-client-id' } });
+      fireEvent.click(screen.getByTestId('drawer-save-btn'));
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledTimes(1);
+      });
+      const savedPayload = onSave.mock.calls[0]?.[0] as CreateAuthCardPayload;
+      expect(savedPayload.provider_kind).toBe('OIDC');
+      expect(savedPayload.display_name).toBe('Google Corp');
     });
   });
 });
