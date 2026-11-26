@@ -2,9 +2,10 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 import { EscalationApprovalPanel } from '../EscalationApprovalPanel';
 import * as api from '../api';
 
@@ -573,5 +574,118 @@ describe('EscalationApprovalPanel', () => {
     // Open request modal
     fireEvent.click(await screen.findByTestId('request-approval-btn'));
     expect(screen.getByTestId('hint-escalation-justification')).toBeDefined();
+  });
+
+  describe('StudioDocLink Header Integration (KAN-508)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders escalation-panel-doc-link with correct href and title in Light and Dark themes', async () => {
+      vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
+
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = renderPanel({
+          field: elevatedFieldSp,
+          callerTier: 'PROJECT_ADMIN',
+        });
+
+        const docLink = await screen.findByTestId('escalation-panel-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe(
+          'Admin Escalation & Sandbox Approvals Documentation',
+        );
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerActions = docLink.closest('.custom-field-approval-header-actions');
+        expect(headerActions).not.toBeNull();
+        const statusChip = headerActions?.querySelector('[data-testid="approval-status-chip"]');
+        expect(statusChip).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', async () => {
+      vi.mocked(api.fetchFieldApprovals).mockResolvedValue([pendingApproval]);
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Panel for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        const queryClient = new QueryClient({
+          defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+          },
+        });
+
+        render(
+          <QueryClientProvider client={queryClient}>
+            <ShellPanelsProvider>
+              <EscalationApprovalPanel
+                field={elevatedFieldSp}
+                callerTier="PROJECT_ADMIN"
+              />
+            </ShellPanelsProvider>
+          </QueryClientProvider>,
+        );
+
+        const docLink = await screen.findByTestId('escalation-panel-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = await screen.findByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain(
+          '/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals',
+        );
+
+        // Escalation panel remains mounted and functional
+        expect(screen.getByTestId('escalation-approval-panel')).toBeDefined();
+        expect(screen.getByTestId('approval-status-chip')).toBeDefined();
+      } finally {
+        unregister();
+      }
+    });
+
+    it('supports keyboard navigation with accessible role and label', async () => {
+      vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
+
+      renderPanel({
+        field: elevatedFieldSp,
+        callerTier: 'PROJECT_ADMIN',
+      });
+
+      const docLink = await screen.findByTestId('escalation-panel-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+      expect(docLink.getAttribute('aria-label')).toBe(
+        'Admin Escalation & Sandbox Approvals Documentation',
+      );
+    });
+
+    it('resolves PROJECT_ADMIN tier for standard project scope with default invoker user', async () => {
+      vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
+
+      const standardField: api.CustomFieldDefinition = {
+        ...elevatedFieldSp,
+        credential_mode: 'INVOKING_USER',
+        target_scope: 'PROJECT',
+      };
+
+      renderPanel({
+        field: standardField,
+        callerTier: 'PROJECT_ADMIN',
+      });
+
+      expect(await screen.findByText('PROJECT_ADMIN')).toBeDefined();
+    });
   });
 });

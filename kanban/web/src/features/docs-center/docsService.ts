@@ -42,6 +42,9 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   passkeys: 'webauthn-passkeys-and-totp-enrollment',
   'envelope-encryption-master-kek': 'envelope-encryption',
   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
+  'admin-escalation-and-sandbox-approvals': 'admin-escalation-sandbox-approvals',
+  'escalation-approvals': 'admin-escalation-sandbox-approvals',
+  'admin-escalation': 'admin-escalation-sandbox-approvals',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {

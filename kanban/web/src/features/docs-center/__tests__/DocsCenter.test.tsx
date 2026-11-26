@@ -1923,6 +1923,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         '/docs/multi-card-authentication-studio#passkeys',
         '/docs/multi-card-authentication-studio#envelope-encryption-master-kek',
         '/docs/production-promotion-and-backup-runbook#restore-procedure',
+        '/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals',
       ];
 
       for (const href of slice5DocHrefs) {

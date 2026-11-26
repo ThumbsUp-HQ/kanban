@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAal2StepUpCode } from '../../api/problem';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import {
   approveFieldEscalation,
@@ -198,20 +199,27 @@ export function EscalationApprovalPanel({
     <div className="custom-field-approval-panel" data-testid="escalation-approval-panel">
       <div className="custom-field-approval-header">
         <h4 className="custom-field-approval-title">Escalation & Security Approvals</h4>
-        <span
-          className={`custom-field-status-chip custom-field-status-chip--${latestApproval?.status.toLowerCase() ?? 'default'}`}
-          data-testid="approval-status-chip"
-        >
-          {latestApproval?.status === 'APPROVED'
-            ? `Approved by ${requiredTier}`
-            : latestApproval?.status === 'PENDING'
-              ? 'Pending approval'
-              : latestApproval?.status === 'PENDING_SECOND_APPROVER'
-                ? 'Pending second approver'
-                : latestApproval?.status === 'REVOKED'
-                  ? 'Revoked'
-                  : 'Default (no approval needed)'}
-        </span>
+        <div className="custom-field-approval-header-actions">
+          <StudioDocLink
+            href="/docs/admin-custom-scripted-fields-and-sandbox#admin-escalation-and-sandbox-approvals"
+            title="Admin Escalation & Sandbox Approvals Documentation"
+            testId="escalation-panel-doc-link"
+          />
+          <span
+            className={`custom-field-status-chip custom-field-status-chip--${latestApproval?.status.toLowerCase() ?? 'default'}`}
+            data-testid="approval-status-chip"
+          >
+            {latestApproval?.status === 'APPROVED'
+              ? `Approved by ${requiredTier}`
+              : latestApproval?.status === 'PENDING'
+                ? 'Pending approval'
+                : latestApproval?.status === 'PENDING_SECOND_APPROVER'
+                  ? 'Pending second approver'
+                  : latestApproval?.status === 'REVOKED'
+                    ? 'Revoked'
+                    : 'Default (no approval needed)'}
+          </span>
+        </div>
       </div>
 
       {/* Scope x Principal Matrix Requirements */}

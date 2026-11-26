@@ -235,6 +235,14 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
                 "agent-onboarding",
             }
         )
+    if "admin-custom-scripted-fields-and-sandbox" in chapter_anchors:
+        chapter_anchors["admin-custom-scripted-fields-and-sandbox"].update(
+            {
+                "admin-escalation-and-sandbox-approvals",
+                "escalation-approvals",
+                "admin-escalation",
+            }
+        )
     if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
         chapter_anchors["enterprise-whitespace-and-kanban-board"].update(
             {
