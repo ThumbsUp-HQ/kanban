@@ -20,6 +20,7 @@ import { ApiProblem } from '../../api/problem';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './StandaloneStatusPanel.css';
 
@@ -189,6 +190,7 @@ export function StandaloneStatusPanel({
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
         e.preventDefault();
         onClose();
         return;
@@ -738,6 +740,13 @@ export function StandaloneStatusPanel({
                 >
                   <label htmlFor="backup-passphrase" className="standalone-panel__label">
                     Backup Passphrase
+                    <FieldHelpHint
+                      title="Backup Passphrase"
+                      summary="Client-side passphrase used to encrypt database exports with AES-256-GCM authenticated encryption and Argon2id/PBKDF2 key derivation. The passphrase is never stored on the server."
+                      caution="Losing this passphrase makes backup snapshots unrecoverable. Store it securely in a password manager."
+                      docHref="/docs/production-promotion-and-backup-runbook"
+                      testId="backup-passphrase-help"
+                    />
                   </label>
                   <input
                     id="backup-passphrase"
@@ -792,6 +801,14 @@ export function StandaloneStatusPanel({
                   <div className="standalone-panel__field-group">
                     <label htmlFor="schedule-interval" className="standalone-panel__label">
                       Backup Interval (hours)
+                      <FieldHelpHint
+                        title="Backup Interval (hours)"
+                        summary="Interval in hours between automated background database backups."
+                        defaultValue="24 hours"
+                        validValues={['1 to 168 hours (1 hour to 7 days)']}
+                        docHref="/docs/production-promotion-and-backup-runbook"
+                        testId="schedule-interval-help"
+                      />
                     </label>
                     <input
                       id="schedule-interval"
@@ -812,6 +829,14 @@ export function StandaloneStatusPanel({
                   <div className="standalone-panel__field-group">
                     <label htmlFor="schedule-retention" className="standalone-panel__label">
                       Keep Latest Snapshots
+                      <FieldHelpHint
+                        title="Keep Latest Snapshots"
+                        summary="Number of automated backup snapshots to retain on disk before older archives are pruned."
+                        defaultValue="7 snapshots"
+                        validValues={['1 to 90 snapshots']}
+                        docHref="/docs/production-promotion-and-backup-runbook"
+                        testId="schedule-retention-help"
+                      />
                     </label>
                     <input
                       id="schedule-retention"
