@@ -6,8 +6,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648`  
-**Target Commit:** `9c7ede02` (branch `docs/KAN-429-slice5-governance-docs`, base `d601e2f1`)  
-**Wiki Commit:** `1e1291c` (branch `docs/KAN-429-slice5-governance-docs` inside `thumbs-up-kanban.wiki`)  
+**Target Commit:** `b8ae742c` (branch `docs/KAN-429-slice5-governance-docs`, base `d601e2f1`)  
+**Wiki Commit:** `d81e13e` (branch `docs/KAN-429-slice5-governance-docs` inside `thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -15,21 +15,23 @@
 
 This API Specialist Review evaluates the documentation accuracy, protocol integrity, schema contracts, and offline in-app help integration delivered under **KAN-429: Phase 4 Publish Verified Workspace/Project Settings, Custom Fields & Workflows Wiki + Docs**.
 
-The documentation covers the entire Slice-5 subsystem across 5 authoritative wiki chapters and the offline in-app DocsCenter manifest (`wikiManifest.ts`, 617,018 bytes, 145 images). Every setting, data type, sandbox tier, dual-control approval gate, and hook execution contract was audited directly against the backend API routers and React studio components:
+The documentation covers the entire Slice-5 subsystem across 5 authoritative wiki chapters and the offline in-app DocsCenter manifest (`wikiManifest.ts`, 617,428 bytes, 145 images). Every setting, data type, sandbox tier, dual-control approval gate, and hook execution contract was audited directly against the backend API routers and React studio components:
 1. **Workspace Policies & Project WIP Limits**:
-   - Workspace policy contracts (`session_idle_timeout_min` [5..720], `session_absolute_timeout_min`, `trash_retention_days`, `mcp_key_max_ttl_days`, `air_gap_mode`, `default_project_visibility` [default "private"], `issue_export_enabled`, `issue_import_enabled`, `report_export_enabled`, `issue_export_allowed_roles` including guest) documented with exact backend defaults and type constraints in `admin/workspace_settings.py` and `admin/destructive.py`.
-   - Agent-safe sequence numbering (`default_skip_loaded_sequence_numbers`) documented as skipping cultural/banned numeric sequences during sequence allocation.
-   - Project lifecycle states and WIP limit validation rules (`wip_limit >= 0`, `stage` enum, `color` hex validation, project `name` max 120, `identifier` `^[A-Z][A-Z0-9]{1,9}$`) documented in `project_config.py`.
+   - Workspace policy contracts (`session_idle_timeout_min` [5..720], `session_absolute_timeout_min` [60..10080 min, default `720` (12h)], `trash_retention_days`, `mcp_key_max_ttl_days`, `air_gap_mode`, `default_project_visibility` [default "private"], `issue_export_enabled`, `issue_import_enabled`, `report_export_enabled`, `issue_export_allowed_roles` default `["workspace_admin", "project_admin", "member"]` excluding guest) documented with exact backend defaults and type constraints in `admin/workspace_settings.py` and `admin/destructive.py`.
+   - Agent-safe sequence numbering (`default_skip_loaded_sequence_numbers` policy toggle, DB/API default `false`): accurately documented as skipping culturally and technically loaded sequence numbers `13, 69, 88, 404, 420, 666, 1337, 1488` during issue sequence allocation.
+   - Project lifecycle states and WIP limits (`wip_soft_limit` and `wip_hard_limit` bounds `1..999` with `wip_soft_limit <= wip_hard_limit`, `stage` enum, `color` hex validation, project `name` max 120, `identifier` `^[A-Z][A-Z0-9]{1,9}$`) documented in `project_config.py`.
 2. **Custom Fields 4 Flavors & 7 Output Formats**:
-   - Field flavors (`scalar`, `safe_formula`, `wasm`, `nsjail`) and 7 output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`) specified with literal JSON schemas and `output_format_metadata`.
+   - Field flavors (`scalar`, `safe_formula`, `wasm`, `nsjail` with UI creation default `'scalar'` in `CustomFieldDefinitionEditor.tsx` and backend API default `'wasm'`) and 7 output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`) specified with literal JSON schemas and `output_format_metadata`.
+   - Custom field name length bounds: `1 to 80 characters` (`models/custom_field.py:34`).
    - Credential modes match implementation 1:1: `INVOKING_USER`, `PROJECT_ADMIN_SP`, `SERVER_ADMIN_SP` (zero `SERVICE_ACCOUNT`).
    - Line-delimited `\n` format for `egress_allowlist`.
    - Dual-control step-up elevation protocol: cryptographic manifest digest validation, mandatory WebSudo AAL2 step-up (`require_admin_and_aal2`), and approval states (`PENDING`, `PENDING_SECOND_APPROVER`, `APPROVED`, `REVOKED`) documented in `custom_field_approvals.py` and `custom_fields.py`.
    - Execution sandbox boundaries: `PROJECT` (ephemeral token), `WORKSPACE` (escalated scope), and `SERVER` (requires server admin cryptographic signature).
 3. **Scripted Workflows, Transition Hooks & Dry-Run Engine**:
    - Hook types (`validator`, `mutator`, `agent_interceptor`) and failure policies strictly matching backend (`fail_closed`, `fail_open_warn`).
+   - Hook name length bounds: `1 to 120 characters` (`models/workflow_hook.py:27`).
    - Allowed mutable fields strictly restricted to the 7 valid targets: `labels`, `priority`, `assignees`, `start_date`, `due_date`, `cycle`, `custom_fields.<slug>` (with `closed_at` omitted per schema).
-   - Hook execution timeout enforced: `timeout_ms` validates between 1 and 300,000 ms.
+   - Hook execution timeout enforced: `timeout_ms` validates between 1 and 300,000 ms (`StructuredRequest.ttft_deadline_ms` bounds `1..300000 ms`).
    - Dry-run execution endpoint (`POST /api/v1/projects/{key}/custom-fields/test-execute` and hook dry-run) documented with execution trace logging.
 4. **Read-Only Bare Git Mirror Bindings**:
    - Fields matching `RepoBindingCreateRequest`: `repo_slug`, `remote_url`, `default_ref`, `access_mode` (`ro_vfs_mount` | `bare_git_tools`), `credential` (`none` | `workspace-pat` | `ssh-key`).
@@ -76,12 +78,12 @@ The documentation covers the entire Slice-5 subsystem across 5 authoritative wik
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Pytest Parity Suite (`kanban/tests/`)**:
-   - **128 passed in 105.09s** across Slice-5 backend test suite.
+   - **11 passed in 0.18s** for KAN-429 docs/sync suite (`test_wiki_bundle_sync.py` and `test_docs_custom_fields_guide.py`); **128 passed in 105.09s** across full Slice-5 backend test suite.
    - Module-level coverage >=95% on all 9 touched modules: `destructive.py` 95%, `workspace_settings.py` 96%, `custom_field_approvals.py` 100%, `custom_field_execution.py` 95%, `custom_fields.py` 100%, `project_config.py` 100%, `repo_bindings.py` 95%, `user_settings.py` 95%, `workflow_hooks.py` 100% (Overall: 96%).
 
 2. **Frontend Vitest Suite (`src/features/docs-center/`)**:
-   - **71 passed across 2 suites in 7.12s** (`DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`).
-   - Branch coverage: **96.15%**.
+   - **71 passed across 2 suites in 7.26s** (`DocsCenterImages.test.tsx`: 21 tests, `DocsCenter.test.tsx`: 50 tests).
+   - Branch coverage: **96.15%** (99.6% statements, 100% lines).
 
 3. **Playwright Visual Verification Suite**:
    - 30 unclipped Playwright screenshots across 5 viewports captured and verified via `read_file` binary viewer with 0 horizontal overflow. Port 18429 cleanly released.
@@ -90,7 +92,7 @@ The documentation covers the entire Slice-5 subsystem across 5 authoritative wik
    - `scripts/check_no_dashes.py`: 0 Unicode em/en-dashes found repository-wide and across all wiki chapters.
    - `tsc -b --noEmit`: 0 TypeScript errors.
    - `eslint . --max-warnings 0`: 0 warnings, 0 errors.
-   - `vite build`: Succeeded in 1.24s.
+   - `vite build`: Succeeded in 1.20s.
 
 ---
 
@@ -102,8 +104,8 @@ The documentation covers the entire Slice-5 subsystem across 5 authoritative wik
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: Exit code 0 across sync, dashes, typecheck, lint, and build.
-  - `unit-test-results.txt`: Documents 128 Pytest and 71 Vitest tests with >=95% branch coverage.
-  - `wiki-diff.patch`: Patch of commit `1e1291c` across 5 wiki chapters.
+  - `unit-test-results.txt`: Documents 11 Pytest (128 Epic) and 71 Vitest tests with >=95% branch coverage.
+  - `wiki-diff.patch`: Patch of commit `d81e13e` across 5 wiki chapters.
   - `screenshots/`: 30 multi-viewport PNG captures visually verified.
 
 The documentation, endpoint schemas, and security controls for KAN-429 are robust, verified, and approved for release.
