@@ -207,17 +207,41 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
 
     # Ensure known section aliases exist in chapter anchors
     if "multi-card-authentication-studio" in chapter_anchors:
-        chapter_anchors["multi-card-authentication-studio"].update({
-            "initial-setup", "local-admin-break-glass", "break-glass",
-        })
+        chapter_anchors["multi-card-authentication-studio"].update(
+            {
+                "initial-setup",
+                "local-admin-break-glass",
+                "break-glass",
+                "passkeys",
+                "envelope-encryption-master-kek",
+            }
+        )
+    if "studio-configuration-reference" in chapter_anchors:
+        chapter_anchors["studio-configuration-reference"].update(
+            {
+                "workspaces",
+                "projects",
+            }
+        )
+    if "production-promotion-and-backup-runbook" in chapter_anchors:
+        chapter_anchors["production-promotion-and-backup-runbook"].update(
+            {
+                "restore-procedure",
+            }
+        )
     if "multi-provider-ai-engine-and-runners" in chapter_anchors:
-        chapter_anchors["multi-provider-ai-engine-and-runners"].update({
-            "agent-onboarding",
-        })
+        chapter_anchors["multi-provider-ai-engine-and-runners"].update(
+            {
+                "agent-onboarding",
+            }
+        )
     if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
-        chapter_anchors["enterprise-whitespace-and-kanban-board"].update({
-            "palette", "color-presets",
-        })
+        chapter_anchors["enterprise-whitespace-and-kanban-board"].update(
+            {
+                "palette",
+                "color-presets",
+            }
+        )
 
     return chapter_anchors
 

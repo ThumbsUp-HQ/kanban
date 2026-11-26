@@ -36,11 +36,26 @@ export function slugifyAnchor(text: string): string {
   return clean.replace(/^-+|-+$/g, '') || 'section';
 }
 
+const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
+  workspaces: 'workspace-studio',
+  projects: 'project-studio-personal-settings',
+  passkeys: 'webauthn-passkeys-and-totp-enrollment',
+  'envelope-encryption-master-kek': 'envelope-encryption',
+  'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
+};
+
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {
   const cleanId = slugifyAnchor(rawAnchor);
   const direct = root.querySelector(`[id="${cleanId}"]`);
   if (direct) {
     return direct;
+  }
+  const aliasedId = SECTION_ANCHOR_ALIASES[cleanId];
+  if (aliasedId !== undefined) {
+    const aliased = root.querySelector(`[id="${aliasedId}"]`);
+    if (aliased) {
+      return aliased;
+    }
   }
   const canonicalId = cleanId.replace(/^[0-9]+-/, '').replace(/-{2,}/g, '-');
   return canonicalId.length > 0 && canonicalId !== cleanId
