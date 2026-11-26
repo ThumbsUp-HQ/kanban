@@ -61,18 +61,57 @@ class CompanionHandler(BaseHTTPRequestHandler):
         content_len = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_len) if content_len > 0 else b""
 
-        # Ollama completions
-        if self.path.startswith("/api/chat") or self.path.startswith("/api/generate"):
+        # Ollama completions & streaming generate
+        if self.path.startswith("/api/generate"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            lines = [
+                json.dumps({"response": "    session = user.authenticate(password)", "done": False}) + "\n",
+                json.dumps({"response": "\n    return session", "done": True, "prompt_eval_count": 12, "eval_count": 8}) + "\n",
+            ]
+            for l in lines:
+                self.wfile.write(l.encode("utf-8"))
+                self.wfile.flush()
+            return
+
+        if self.path.startswith("/api/chat"):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            resp = {
-                "model": "llama3.2:latest",
-                "message": {"role": "assistant", "content": "Live Ollama workout response."},
-                "response": "Live Ollama workout response.",
-                "done": True,
-                "total_duration": 15000000
-            }
+            if b'"format"' in body:
+                proposal_content = json.dumps({
+                    "schema": "kb-sticky-doc-proposal/v1",
+                    "proposed_title": "Architecture and Security Specification",
+                    "summary_markdown": "This document specifies the system architecture and security boundaries for the Kanban platform.",
+                    "sections": [
+                        {
+                            "heading": "Overview",
+                            "level": 2,
+                            "body_markdown": "Primary security controls and autonomous agent execution boundaries."
+                        }
+                    ],
+                    "extracted_action_items": [
+                        "Complete live workout validation across all viewports."
+                    ]
+                })
+                resp = {
+                    "model": "llama3.2:latest",
+                    "message": {"role": "assistant", "content": proposal_content},
+                    "response": proposal_content,
+                    "done": True,
+                    "prompt_eval_count": 25,
+                    "eval_count": 60,
+                    "total_duration": 15000000
+                }
+            else:
+                resp = {
+                    "model": "llama3.2:latest",
+                    "message": {"role": "assistant", "content": "Live Ollama workout response."},
+                    "response": "Live Ollama workout response.",
+                    "done": True,
+                    "total_duration": 15000000
+                }
             self.wfile.write(json.dumps(resp).encode("utf-8"))
             return
 

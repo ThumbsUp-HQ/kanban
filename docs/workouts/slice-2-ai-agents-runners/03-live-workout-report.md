@@ -138,9 +138,37 @@ HTTP/1.1 200 OK
 {"period_kind":"monthly","period_start":"2026-11-01","token_cap":0,"tokens_used":0,"tokens_reserved":0}
 ```
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=100)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` under `token_cap=0`.
+*Live HTTP Sparkle Completion Halt under `token_cap=0`:*
+```http
+POST /api/v1/sparkle/complete HTTP/1.1
+Host: 127.0.0.1:18413
+Content-Type: application/json
+
+{"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"01f76894-7268-4e81-bab7-e8100e3b23b0"}
+
+HTTP/1.1 200 OK
+Content-Type: text/event-stream; charset=utf-8
+
+event: done
+data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 4.12}
+```
 
 - Exhausted Cap (`token_cap = 50`, `tokens_used = 50`):
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=10)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` when tokens exhausted.
+*Live HTTP Sparkle Completion Halt under Exhausted Cap:*
+```http
+POST /api/v1/sparkle/complete HTTP/1.1
+Host: 127.0.0.1:18413
+Content-Type: application/json
+
+{"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"4d1c695a-301c-44a5-9811-03c306441e4f"}
+
+HTTP/1.1 200 OK
+Content-Type: text/event-stream; charset=utf-8
+
+event: done
+data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 1.75}
+```
 
 - Unlimited Quota (`token_cap = 10_000_000_000`):
 ```http
@@ -209,13 +237,16 @@ POST /api/v1/sparkle/complete HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"prefix":"def handle_event(event):\n    # Process audit event\n    ","suffix":"\n    return True","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c"}
+{"prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113"}
 
 HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
+event: completion
+data: {"text": "    session = user.authenticate(password)\n    return session", "tokens": 2}
+
 event: done
-data: {"status": "unavailable", "ttft_ms": 0.0, "total_ms": 0.23}
+data: {"status": "ok", "ttft_ms": 8.66, "total_ms": 8.89}
 ```
 
 - Sticky-to-Doc Promotion Preview (`POST /api/v1/projects/{proj}/stickies/{id}/promote-preview`): HTTP 200 OK returning structured markdown proposal `Incident Response Spec`.

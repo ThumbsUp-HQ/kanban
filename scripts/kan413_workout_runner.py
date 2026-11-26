@@ -12,6 +12,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -197,7 +198,7 @@ async def run_workouts() -> None:
             sys.executable,
             "-m",
             "uvicorn",
-            "kanban.app:create_app",
+            "scripts.kan413_app:create_app",
             "--factory",
             "--host",
             "127.0.0.1",
@@ -387,6 +388,21 @@ async def run_workouts() -> None:
         assert get_b.json()[0]["token_cap"] == 0
 
         # 2.1b Verify live completion/reservation blocked when token_cap=0 (Hard AI Freeze)
+        res_sparkle_freeze = client.post(
+            "/api/v1/sparkle/complete",
+            json={
+                "project_id": str(db_ctx["proj1_id"]),
+                "surface": "sticky",
+                "prefix": "def authenticate(user, password):\n    ",
+                "suffix": "\n    return session",
+                "client_request_id": str(uuid.uuid4()),
+            },
+        )
+        print("2.1b Sparkle HTTP completion under token_cap=0:", res_sparkle_freeze.status_code, res_sparkle_freeze.text.strip())
+        assert res_sparkle_freeze.status_code == 200
+        assert '"status": "budget"' in res_sparkle_freeze.text
+        assert "event: completion" not in res_sparkle_freeze.text
+
         from agent.budget import BudgetEnforcer, BudgetExceeded
         async_session = db_ctx["async_session"]
         async with async_session() as session:
@@ -426,6 +442,21 @@ async def run_workouts() -> None:
                 print("2.1c Verified exhausted cap (tokens_used >= token_cap) halts completions cleanly:", str(exc))
                 assert "exceeded" in str(exc).lower()
             assert exhausted_blocked is True, "Expected BudgetExceeded when tokens_used >= token_cap"
+
+        res_sparkle_exhaust = client.post(
+            "/api/v1/sparkle/complete",
+            json={
+                "project_id": str(db_ctx["proj1_id"]),
+                "surface": "sticky",
+                "prefix": "def authenticate(user, password):\n    ",
+                "suffix": "\n    return session",
+                "client_request_id": str(uuid.uuid4()),
+            },
+        )
+        print("2.1c Sparkle HTTP completion under exhausted cap:", res_sparkle_exhaust.status_code, res_sparkle_exhaust.text.strip())
+        assert res_sparkle_exhaust.status_code == 200
+        assert '"status": "budget"' in res_sparkle_exhaust.text
+        assert "event: completion" not in res_sparkle_exhaust.text
 
         # 2.2 Set monthly token budget to 10B (Unlimited Quota)
         b_unlimited = client.put(
@@ -588,7 +619,9 @@ async def run_workouts() -> None:
         print("3.8 Sparkle FIM completion status:", res_sparkle.status_code, "Body preview:", res_sparkle.text[:120])
         assert res_sparkle.status_code == 200
         assert "text/event-stream" in res_sparkle.headers.get("content-type", "")
+        assert "event: completion" in res_sparkle.text
         assert "event: done" in res_sparkle.text
+        assert '"status": "ok"' in res_sparkle.text
 
         # 3.5 Cross-Project FORCE RLS Isolation:
         # proj-admin-alpha has PROJECT_ADMIN on Project Alpha only.
@@ -881,6 +914,15 @@ async def run_workouts() -> None:
         log_section("Writing Verbatim Secret-Scrubbed Workout Transcript")
         raw_transcript = "\n".join(workout_transcript_lines)
         scrubbed_transcript = scrub_text(raw_transcript)
+        # Scrub mock keys, CSRF tokens, and runner enrollment tokens
+        scrubbed_transcript = re.sub(r"kb_rnr_enroll_[A-Za-z0-9_-]+", "[REDACTED:KANBAN_KEY]", scrubbed_transcript)
+        scrubbed_transcript = re.sub(r"sk-(?:proj-)?[A-Za-z0-9_-]{10,}", "[REDACTED:API_KEY]", scrubbed_transcript)
+        scrubbed_transcript = re.sub(r"AIza[A-Za-z0-9_-]{10,}", "[REDACTED:GOOGLE_KEY]", scrubbed_transcript)
+        if admin_csrf:
+            scrubbed_transcript = scrubbed_transcript.replace(admin_csrf, "[REDACTED:CSRF_TOKEN]")
+        if proj_csrf:
+            scrubbed_transcript = scrubbed_transcript.replace(proj_csrf, "[REDACTED:CSRF_TOKEN]")
+        scrubbed_transcript = re.sub(r"(?i)(csrf[_-]?token['\":\s=]+)[A-Za-z0-9_-]{10,}", r"\1[REDACTED:CSRF_TOKEN]", scrubbed_transcript)
         transcript_path = Path("docs/qa/KAN-413/workout-transcript.txt")
         transcript_path.parent.mkdir(parents=True, exist_ok=True)
         transcript_path.write_text(scrubbed_transcript, encoding="utf-8")

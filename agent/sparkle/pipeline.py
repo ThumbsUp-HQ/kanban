@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 
 from agent.providers.base import CompletionRequest
 from agent.providers.errors import (
@@ -91,7 +92,7 @@ class SparkleResult:
     route_trace: list[dict[str, Any]] = field(default_factory=list)
 
 
-async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-to-end pipeline orchestrator
+async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915  # End-to-end pipeline orchestrator
     req: SparkleRequest,
     *,
     principal_ctx: PrincipalContext | RLSContext,
@@ -170,6 +171,88 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
     # Compose final prompt (untrusted context prepended if present)
     prompt_text = "\n\n".join(snippets) + "\n\n" + clean_prefix if snippets else clean_prefix
 
+    # Step 4b: Check token budget reservation if session_factory is available
+    reservation = None
+    budget_enforcer = None
+    has_ws = bool(getattr(principal_ctx, "workspace_id", None))
+    if session_factory is not None and has_ws:
+        try:
+            from agent.budget import BudgetEnforcer, BudgetExceeded  # noqa: PLC0415
+            from database.session import RLSContext  # noqa: PLC0415
+
+            rls_ctx = RLSContext(
+                principal_id=principal_ctx.principal_id,
+                workspace_id=principal_ctx.workspace_id,
+            )
+            if hasattr(session_factory, "session"):
+                session_cm = session_factory.session(rls_ctx)
+            elif hasattr(session_factory, "sessionmaker"):
+                session_cm = session_factory.sessionmaker()
+            elif callable(session_factory):
+                session_cm = session_factory()
+            else:
+                session_cm = session_factory
+
+            async with session_cm as session:
+                budget_enforcer = BudgetEnforcer(session=session)
+                stmt_freeze = text(
+                    "SELECT provider_config_id FROM ai_token_ledgers "
+                    "WHERE (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
+                    "LIMIT 1"
+                )
+                res_freeze = await session.execute(stmt_freeze)
+                frozen_provider_id = res_freeze.scalar_one_or_none()
+                if frozen_provider_id is not None:
+                    _logger.warning(
+                        "Sparkle completion blocked: provider %s is frozen or budget exhausted",
+                        frozen_provider_id,
+                    )
+                    elapsed = (clock() - t0) * 1000.0
+                    return SparkleResult(
+                        status="budget",
+                        text="",
+                        ttft_ms=0.0,
+                        total_ms=elapsed,
+                        tokens=0,
+                        retrieval_status=ret_status,
+                        route_trace=[],
+                    )
+
+                candidates = getattr(router, "_candidates", ())
+                stmt = text(
+                    "SELECT id FROM ai_provider_configs "
+                    "WHERE workspace_id = :ws_id AND enabled = true "
+                    "ORDER BY priority ASC LIMIT 1"
+                )
+                res = await session.execute(stmt, {"ws_id": principal_ctx.workspace_id})
+                db_provider_id = res.scalar_one_or_none()
+                provider_config_id = db_provider_id or (
+                    candidates[0].provider_config_id if candidates else None
+                )
+
+                if provider_config_id is not None:
+                    try:
+                        reservation = await budget_enforcer.reserve(
+                            principal_ctx.workspace_id,
+                            None,
+                            provider_config_id,
+                            estimate_tokens=_MAX_OUTPUT_TOKENS,
+                        )
+                    except BudgetExceeded as exc:
+                        _logger.warning("Sparkle completion blocked by budget cap: %s", exc)
+                        elapsed = (clock() - t0) * 1000.0
+                        return SparkleResult(
+                            status="budget",
+                            text="",
+                            ttft_ms=0.0,
+                            total_ms=elapsed,
+                            tokens=0,
+                            retrieval_status=ret_status,
+                            route_trace=[],
+                        )
+        except Exception as exc:
+            _logger.warning("Budget check skipped or failed: %s", exc, exc_info=True)
+
     # Step 5: Streaming FIM bounded by 130ms overall timeout and 115ms TTFT SLA
     stream_iter = None
     chunks: list[str] = []
@@ -198,6 +281,9 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
         _logger.info("Sparkle FIM stream timeout: %s", exc)
         if stream_iter is not None and hasattr(stream_iter, "aclose"):
             await stream_iter.aclose()
+        if reservation is not None and budget_enforcer is not None:
+            with contextlib.suppress(Exception):
+                await budget_enforcer.release(reservation)
         elapsed = (clock() - t0) * 1000.0
         return SparkleResult(
             status="timeout",
@@ -219,6 +305,9 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
         _logger.warning("Sparkle FIM provider %s: %s", status_val, exc)
         if stream_iter is not None and hasattr(stream_iter, "aclose"):
             await stream_iter.aclose()
+        if reservation is not None and budget_enforcer is not None:
+            with contextlib.suppress(Exception):
+                await budget_enforcer.release(reservation)
         elapsed = (clock() - t0) * 1000.0
         return SparkleResult(
             status=status_val,
@@ -240,6 +329,9 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
     elapsed = (clock() - t0) * 1000.0
 
     if not filtered_text:
+        if reservation is not None and budget_enforcer is not None:
+            with contextlib.suppress(Exception):
+                await budget_enforcer.release(reservation)
         return SparkleResult(
             status="empty",
             text="",
@@ -250,7 +342,11 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0915  # End-
             route_trace=list(getattr(router, "last_route_trace", [])),
         )
 
-    # Step 7: Success
+    # Step 7: Settle budget and return success
+    if reservation is not None and budget_enforcer is not None:
+        with contextlib.suppress(Exception):
+            await budget_enforcer.settle(reservation, actual_tokens=token_count)
+
     return SparkleResult(
         status="ok",
         text=filtered_text,
