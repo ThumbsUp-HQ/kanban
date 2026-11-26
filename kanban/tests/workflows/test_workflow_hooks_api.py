@@ -361,9 +361,7 @@ async def test_attach_and_list_workflow_hooks_success(
     rules = list_resp.json()
     assert len(rules) == 3
 
-    agent_hooks = [
-        h for r in rules for h in r["hooks"] if h["hook_kind"] == "agent_interceptor"
-    ]
+    agent_hooks = [h for r in rules for h in r["hooks"] if h["hook_kind"] == "agent_interceptor"]
     assert len(agent_hooks) == 1
     assert agent_hooks[0]["timeout_ms"] == 60000
     assert agent_hooks[0]["agent_slug"] == "qa-gatekeeper"

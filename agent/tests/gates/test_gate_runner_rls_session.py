@@ -96,12 +96,14 @@ class EphemeralOllamaServer:
             await writer.wait_closed()
             return
 
-        verdict_content = json.dumps({
-            "decision": self.decision,
-            "reason_markdown": self.reason,
-            "add_labels": ["qa-approved"] if self.decision == "approve" else ["qa-rejected"],
-            "cited_files": ["tests/test_gate.py"],
-        })
+        verdict_content = json.dumps(
+            {
+                "decision": self.decision,
+                "reason_markdown": self.reason,
+                "add_labels": ["qa-approved"] if self.decision == "approve" else ["qa-rejected"],
+                "cited_files": ["tests/test_gate.py"],
+            }
+        )
         payload_data = {
             "model": "nemotron-3-super:latest",
             "message": {
@@ -161,8 +163,7 @@ async def setup_gate_environment(
         # 1. Workspace
         await conn.execute(
             text(
-                "INSERT INTO workspaces (id, slug, name) "
-                "VALUES (:id, :slug, 'Gate Test Workspace')"
+                "INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'Gate Test Workspace')"
             ),
             {"id": ws_id, "slug": f"ws-{ws_id.hex[:12]}"},
         )
@@ -250,9 +251,7 @@ async def setup_gate_environment(
         )
         body_snap = hashlib.sha256(desc.encode("utf-8")).digest()
         summary = (
-            "Incomplete ticket without proof"
-            if incomplete_ticket
-            else "Complete verified feature"
+            "Incomplete ticket without proof" if incomplete_ticket else "Complete verified feature"
         )
         await conn.execute(
             text(
@@ -490,36 +489,49 @@ async def test_positive_e2e_real_pg_and_mock_ollama_gate_approval(
         # tokens_used MUST be 75 (50 prompt + 25 completion tokens settled).
         async with pg_worker_db.connect() as conn:
             ledger_row = (
-                await conn.execute(
-                    text(
-                        "SELECT tokens_reserved, tokens_used "
-                        "FROM ai_token_ledgers WHERE id = :id"
-                    ),
-                    {"id": env["ledger_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tokens_reserved, tokens_used "
+                            "FROM ai_token_ledgers WHERE id = :id"
+                        ),
+                        {"id": env["ledger_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
 
             assert ledger_row["tokens_reserved"] == 0
             assert ledger_row["tokens_used"] == 75
 
             # Verify decision record
             inv_row = (
-                await conn.execute(
-                    text(
-                        "SELECT status, error_code FROM workflow_hook_invocations WHERE id = :id"
-                    ),
-                    {"id": env["invocation_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT status, error_code FROM workflow_hook_invocations "
+                            "WHERE id = :id"
+                        ),
+                        {"id": env["invocation_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert inv_row["status"] == "allowed"
             assert inv_row["error_code"] is None
 
             exec_row = (
-                await conn.execute(
-                    text("SELECT status FROM workflow_transition_executions WHERE id = :id"),
-                    {"id": env["execution_id"]},
+                (
+                    await conn.execute(
+                        text("SELECT status FROM workflow_transition_executions WHERE id = :id"),
+                        {"id": env["execution_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert exec_row["status"] == "approved"
     finally:
         await mock_server.stop()
@@ -563,35 +575,48 @@ async def test_negative_gate_rejection_on_incomplete_ticket(
 
         async with pg_worker_db.connect() as conn:
             ledger_row = (
-                await conn.execute(
-                    text(
-                        "SELECT tokens_reserved, tokens_used "
-                        "FROM ai_token_ledgers WHERE id = :id"
-                    ),
-                    {"id": env["ledger_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tokens_reserved, tokens_used "
+                            "FROM ai_token_ledgers WHERE id = :id"
+                        ),
+                        {"id": env["ledger_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
 
             assert ledger_row["tokens_reserved"] == 0
             assert ledger_row["tokens_used"] == 60
 
             inv_row = (
-                await conn.execute(
-                    text(
-                        "SELECT status, error_code FROM workflow_hook_invocations WHERE id = :id"
-                    ),
-                    {"id": env["invocation_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT status, error_code FROM workflow_hook_invocations "
+                            "WHERE id = :id"
+                        ),
+                        {"id": env["invocation_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert inv_row["status"] == "rejected"
             assert inv_row["error_code"] is None
 
             exec_row = (
-                await conn.execute(
-                    text("SELECT status FROM workflow_transition_executions WHERE id = :id"),
-                    {"id": env["execution_id"]},
+                (
+                    await conn.execute(
+                        text("SELECT status FROM workflow_transition_executions WHERE id = :id"),
+                        {"id": env["execution_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert exec_row["status"] == "rejected"
     finally:
         await mock_server.stop()
@@ -628,27 +653,36 @@ async def test_negative_inference_failure_rollback(
 
         async with pg_worker_db.connect() as conn:
             ledger_row = (
-                await conn.execute(
-                    text(
-                        "SELECT tokens_reserved, tokens_used "
-                        "FROM ai_token_ledgers WHERE id = :id"
-                    ),
-                    {"id": env["ledger_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT tokens_reserved, tokens_used "
+                            "FROM ai_token_ledgers WHERE id = :id"
+                        ),
+                        {"id": env["ledger_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
 
             # Zero leaked tokens: tokens_reserved MUST be restored to 0!
             assert ledger_row["tokens_reserved"] == 0
             assert ledger_row["tokens_used"] == 0
 
             inv_row = (
-                await conn.execute(
-                    text(
-                        "SELECT status, error_code FROM workflow_hook_invocations WHERE id = :id"
-                    ),
-                    {"id": env["invocation_id"]},
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT status, error_code FROM workflow_hook_invocations "
+                            "WHERE id = :id"
+                        ),
+                        {"id": env["invocation_id"]},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert inv_row["status"] in ("failed", "rejected")
             assert inv_row["error_code"] is not None
             assert "HARNESS_ERROR:" in inv_row["error_code"]
@@ -765,7 +799,10 @@ async def test_in_app_sdk_harness_coverage_branches() -> None:
     harness = InAppSdkHarness()
     with pytest.raises(RepoToolPolicyError, match="not available"):
         await harness._execute_single_tool(  # noqa: SLF001
-            "repo_tree", {}, UncallableRepoToolkit(), None  # type: ignore[arg-type]
+            "repo_tree",
+            {},
+            UncallableRepoToolkit(),  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
         )
 
     # 3. Final verdict add_labels and cited_files defaulting from parsed output
@@ -774,9 +811,7 @@ async def test_in_app_sdk_harness_coverage_branches() -> None:
         def residency_tier(self) -> str:
             return "fixture"
 
-        def stream_complete(
-            self, req: CompletionRequest
-        ) -> AsyncIterator[StreamChunk]:
+        def stream_complete(self, req: CompletionRequest) -> AsyncIterator[StreamChunk]:
             del req
             raise NotImplementedError
 
@@ -799,9 +834,7 @@ async def test_in_app_sdk_harness_coverage_branches() -> None:
                 total_latency_ms=15.0,
             )
 
-        async def embed_batch(
-            self, req: EmbedBatchRequest
-        ) -> list[list[float]]:
+        async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
             del req
             raise NotImplementedError
 
