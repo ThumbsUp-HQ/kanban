@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -2622,6 +2624,121 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('confirm-disconnect-btn')).toBeNull();
       });
+    });
+  });
+
+  describe('KAN-517: CTA Button Contrast and Subnav Contrast (WCAG AA >= 4.5:1)', () => {
+    it('renders + Mint MCP Key with .kb-mcp-studio-mint-btn and preserves click behavior', async () => {
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+      });
+
+      const mintBtn = screen.getByTestId('mint-key-button');
+      expect(mintBtn.classList.contains('kb-mcp-studio-mint-btn')).toBe(true);
+      expect(mintBtn.textContent).toContain('+ Mint MCP Key');
+
+      // Click behavior opens mint modal
+      fireEvent.click(mintBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('mint-label-input')).not.toBeNull();
+      });
+    });
+
+    it('renders + Add Workload Policy with .kb-mcp-studio-mint-btn and preserves click behavior', async () => {
+      const { WorkloadFederationSection } = await vi.importActual<typeof import('../McpUnifiedStudio')>(
+        '../McpUnifiedStudio',
+      );
+
+      vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([]);
+
+      render(<WorkloadFederationSection isAdmin={true} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('add-workload-policy-btn')).not.toBeNull();
+      });
+
+      const addPolicyBtn = screen.getByTestId('add-workload-policy-btn');
+      expect(addPolicyBtn.classList.contains('kb-mcp-studio-mint-btn')).toBe(true);
+      expect(addPolicyBtn.textContent).toContain('+ Add Workload Policy');
+
+      // Click behavior opens workload policy modal
+      fireEvent.click(addPolicyBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('workload-policy-modal')).not.toBeNull();
+      });
+    });
+
+    it('verifies McpAccessStudio.css defines >= 4.5:1 WCAG AA contrast colors and zero low-contrast fills', () => {
+      const cssPath = path.resolve(__dirname, '../McpAccessStudio.css');
+      expect(fs.existsSync(cssPath)).toBe(true);
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // 1. Verify .kb-mcp-studio-mint-btn uses emerald #047857 and hover #065f46
+      expect(cssContent).toMatch(/\.kb-mcp-studio-mint-btn\s*\{[^}]*background-color:\s*#047857;/);
+      expect(cssContent).toMatch(/\.kb-mcp-studio-mint-btn:hover:not\(:disabled\)\s*\{[^}]*background-color:\s*#065f46;/);
+
+      // 2. Verify .kb-mcp-connect-btn uses emerald #047857 and hover #065f46
+      expect(cssContent).toMatch(/\.kb-mcp-connect-btn\s*\{[^}]*background-color:\s*#047857;/);
+      expect(cssContent).toMatch(/\.kb-mcp-connect-btn:hover:not\(:disabled\)\s*\{[^}]*background-color:\s*#065f46;/);
+
+      // 3. Verify .kb-mcp-admin-subnav-active uses high-contrast --badge-fg
+      expect(cssContent).toMatch(/\.kb-mcp-admin-subnav-active\s*\{[^}]*color:\s*var\(--badge-fg\)\s*!important;/);
+      expect(cssContent).toMatch(/\.kb-mcp-admin-subnav-active\s*\{[^}]*border-bottom-color:\s*var\(--badge-fg\)\s*!important;/);
+
+      // 4. Verify zero occurrences of #10b981 or #2ea043 low-contrast fills
+      expect(cssContent).not.toContain('#10b981');
+      expect(cssContent).not.toContain('#2ea043');
+
+      // 5. Calculate and verify WCAG AA contrast ratio >= 4.5:1 for white text on button fills
+      function getLuminance(r: number, g: number, b: number): number {
+        const toLinear = (c: number): number => {
+          const s = c / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+      }
+
+      function getContrastRatio(rgb1: [number, number, number], rgb2: [number, number, number]): number {
+        const l1 = getLuminance(...rgb1);
+        const l2 = getLuminance(...rgb2);
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return (lighter + 0.05) / (darker + 0.05);
+      }
+
+      const white: [number, number, number] = [255, 255, 255];
+      const emeraldBase: [number, number, number] = [4, 120, 87]; // #047857
+      const emeraldHover: [number, number, number] = [6, 95, 70]; // #065f46
+
+      const baseContrast = getContrastRatio(white, emeraldBase);
+      const hoverContrast = getContrastRatio(white, emeraldHover);
+
+      // Both must exceed 4.5:1 (WCAG AA minimum for normal text)
+      expect(baseContrast).toBeGreaterThanOrEqual(4.5);
+      expect(hoverContrast).toBeGreaterThanOrEqual(4.5);
+      expect(baseContrast).toBeGreaterThan(5.4);
+      expect(hoverContrast).toBeGreaterThan(7.0);
+
+      // Verify subnav active --badge-fg contrast in light (#2563eb on #ffffff) and dark (#93c5fd on #0d1117)
+      const lightBg: [number, number, number] = [255, 255, 255];
+      const lightBadgeFg: [number, number, number] = [37, 99, 235]; // #2563eb
+      const darkBg: [number, number, number] = [13, 17, 23]; // #0d1117
+      const darkBadgeFg: [number, number, number] = [147, 197, 253]; // #93c5fd
+
+      const lightSubnavContrast = getContrastRatio(lightBadgeFg, lightBg);
+      const darkSubnavContrast = getContrastRatio(darkBadgeFg, darkBg);
+
+      expect(lightSubnavContrast).toBeGreaterThanOrEqual(4.5);
+      expect(darkSubnavContrast).toBeGreaterThanOrEqual(4.5);
     });
   });
 });
