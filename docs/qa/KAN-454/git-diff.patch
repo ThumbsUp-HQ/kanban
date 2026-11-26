@@ -1,0 +1,309 @@
+diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+index 99ed59ab..fa17a66b 100644
+--- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
++++ b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+@@ -10,6 +10,7 @@ import {
+ import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
+ import { isAal2StepUpCancelled } from '../../api/client';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './runnerStudio.css';
+@@ -108,21 +109,14 @@ export function RunnerStudioPage(): JSX.Element {
+       <div
+         className="kb-runner-rotation-guidance"
+         data-testid="runner-rotation-guidance"
+-        style={{
+-          padding: '12px 16px',
+-          background: 'rgba(56, 189, 248, 0.08)',
+-          border: '1px solid rgba(56, 189, 248, 0.25)',
+-          borderRadius: '8px',
+-          marginBottom: '16px',
+-        }}
+       >
+-        <h3 style={{ margin: '0 0 6px 0', fontSize: '0.95rem', fontWeight: 600, color: '#38bdf8' }}>
++        <h3 className="kb-runner-guidance-title">
+           🔄 Certificate Rotation & Runner Lifecycle Guidance
+         </h3>
+-        <p style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: 'var(--text-secondary, #94a3b8)' }}>
++        <p>
+           Remote runner mTLS client certificates are cryptographically bound to the daemon instance and cannot be modified in place. To rotate expired or compromised certificates:
+         </p>
+-        <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'var(--text-secondary, #94a3b8)' }}>
++        <ol>
+           <li>Revoke the target runner using 1-Click Revoke (AAL2 verification required).</li>
+           <li>Mint a fresh single-use enrollment token for the designated runner pool.</li>
+           <li>Re-enroll the runner daemon with fresh keypairs: <code>echo &quot;&lt;token&gt;&quot; | uv run kanban-agent-runner enroll --server-url {typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com'} --token-stdin --pool &lt;pool&gt;</code></li>
+@@ -210,12 +204,30 @@ export function RunnerStudioPage(): JSX.Element {
+                   <h3 className="kb-runner-hostname">{r.hostname}</h3>
+ 
+                   <div className="kb-runner-meta-row">
+-                    <span>Cert Expires:</span>
++                    <span className="kb-runner-meta-label">
++                      Cert Expires:
++                      <FieldHelpHint
++                        title="Certificate Expiration"
++                        summary="Cryptographic mTLS certificate lifetime for daemon authentication."
++                        defaultValue="90 days from enrollment"
++                        docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
++                        testId={`runner-cert-expires-help-${r.id}`}
++                      />
++                    </span>
+                     <span>{new Date(r.cert_expires_at).toLocaleDateString()}</span>
+                   </div>
+ 
+                   <div className="kb-runner-meta-row">
+-                    <span>Heartbeat:</span>
++                    <span className="kb-runner-meta-label">
++                      Heartbeat:
++                      <FieldHelpHint
++                        title="Heartbeat Telemetry"
++                        summary="Runner daemons emit a 15s heartbeat ping. If no heartbeat is received within the DEAD_EVICTION_S = 45.0s eviction window, the runner is marked offline."
++                        defaultValue="15s heartbeat ping (DEAD_EVICTION_S = 45.0s)"
++                        docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
++                        testId={`runner-heartbeat-help-${r.id}`}
++                      />
++                    </span>
+                     <span>
+                       {r.last_heartbeat_at
+                         ? new Date(r.last_heartbeat_at).toLocaleTimeString()
+@@ -228,9 +240,18 @@ export function RunnerStudioPage(): JSX.Element {
+                     summary="mTLS client certificate fingerprint and cryptographic parameters"
+                     testId={`runner-advanced-details-${r.id}`}
+                   >
+-                    <div className="kb-runner-meta-row" style={{ marginTop: '8px' }}>
+-                      <span>Full Cert SHA-256:</span>
+-                      <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>{r.client_cert_sha256_hex}</code>
++                    <div className="kb-runner-meta-row kb-runner-meta-row--advanced">
++                      <span className="kb-runner-meta-label">
++                        Full Cert SHA-256:
++                        <FieldHelpHint
++                          title="Full Certificate SHA-256"
++                          summary="Cryptographic SHA-256 digest of the client public certificate used for mutual TLS authentication."
++                          defaultValue="Unique per-enrollment SHA-256 fingerprint"
++                          docHref="/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security"
++                          testId={`runner-cert-sha256-help-${r.id}`}
++                        />
++                      </span>
++                      <code className="kb-runner-cert-sha256">{r.client_cert_sha256_hex}</code>
+                     </div>
+                     <div className="kb-runner-meta-row">
+                       <span>Cert Fingerprint:</span>
+@@ -303,7 +324,7 @@ export function RunnerStudioPage(): JSX.Element {
+                 Revocation will immediately terminate active WebSocket connections, cancel any in-flight execution jobs, and permanently invalidate the runner client certificate.
+               </div>
+             </div>
+-            <p className="kb-revoke-runner-rotation-note" data-testid="revoke-rotation-note" style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '8px' }}>
++            <p className="kb-revoke-runner-rotation-note" data-testid="revoke-rotation-note">
+               <strong>Rotation Procedure:</strong> Confirming revocation terminates active connections and invalidates client certificates. To complete rotation, mint a fresh enrollment token to re-enroll this runner daemon.
+             </p>
+             <div className="kb-modal-footer">
+diff --git a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
+index a4f9f889..6d9182f9 100644
+--- a/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx
+@@ -612,5 +612,86 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
+       });
+       expect(screen.queryByRole('alert')).toBeNull();
+     });
++
++    it('renders guidance title with class and zero inline style color (KAN-454)', async () => {
++      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
++      render(<RunnerStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('runner-rotation-guidance')).toBeDefined();
++      });
++      const guidanceTitle = screen.getByText(/Certificate Rotation & Runner Lifecycle Guidance/);
++      expect(guidanceTitle.classList.contains('kb-runner-guidance-title')).toBe(true);
++      expect(guidanceTitle.getAttribute('style')).toBeNull();
++
++      const guidanceBox = screen.getByTestId('runner-rotation-guidance');
++      expect(guidanceBox.getAttribute('style')).toBeNull();
++    });
++
++    it('renders telemetry FieldHelpHint popovers with heartbeat timings and wiki doc link (KAN-454)', async () => {
++      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
++      render(<RunnerStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('runner-heartbeat-help-runner-1')).toBeDefined();
++      });
++
++      const heartbeatHintBtn = screen.getByTestId('runner-heartbeat-help-runner-1');
++      expect(heartbeatHintBtn.getAttribute('aria-label')).toContain('Heartbeat');
++
++      // Keyboard focus opens popover immediately
++      act(() => {
++        heartbeatHintBtn.focus();
++      });
++
++      const popover = screen.getByTestId('runner-heartbeat-help-runner-1-popover');
++      expect(popover).toBeDefined();
++      expect(popover.textContent).toContain('15s heartbeat');
++      expect(popover.textContent).toContain('45.0s eviction');
++      expect(popover.textContent).toContain('DEAD_EVICTION_S = 45.0s');
++
++      const docLink = screen.getByTestId('runner-heartbeat-help-runner-1-doc-link');
++      expect(docLink.getAttribute('href')).toBe(
++        '/docs/multi-provider-ai-engine-and-runners#runner-infrastructure-and-protocol-security',
++      );
++
++      // Check Cert Expires hint button and popover
++      const certExpiresHintBtn = screen.getByTestId('runner-cert-expires-help-runner-1');
++      act(() => {
++        certExpiresHintBtn.focus();
++      });
++      const certExpiresPopover = screen.getByTestId('runner-cert-expires-help-runner-1-popover');
++      expect(certExpiresPopover.textContent).toContain('90 days from enrollment');
++
++      // Check Full Cert SHA-256 hint button inside AdvancedSection
++      const fullCertHintBtn = screen.getByTestId('runner-cert-sha256-help-runner-1');
++      act(() => {
++        fullCertHintBtn.focus();
++      });
++      const fullCertPopover = screen.getByTestId('runner-cert-sha256-help-runner-1-popover');
++      expect(fullCertPopover.textContent).toContain('Unique per-enrollment SHA-256 fingerprint');
++    });
++
++    it('renders offline runner badge with semantic token classes without regressions in light and dark mode (KAN-454)', async () => {
++      const mockOfflineRunner: runnersApi.RemoteRunnerResponse = {
++        ...mockActiveRunner,
++        id: 'runner-offline',
++        status: 'offline',
++      };
++      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockOfflineRunner]);
++
++      const { container } = render(<RunnerStudioPage />);
++      await waitFor(() => {
++        expect(screen.getByTestId('runner-status-runner-offline')).toBeDefined();
++      });
++
++      const offlineBadge = screen.getByTestId('runner-status-runner-offline');
++      expect(offlineBadge.classList.contains('kb-runner-status-badge--offline')).toBe(true);
++      expect(offlineBadge.textContent).toBe('offline');
++
++      // Test dark theme attribute on container without regressions
++      document.documentElement.setAttribute('data-theme', 'dark');
++      expect(container.querySelector('.kb-runner-studio')).toBeDefined();
++      expect(container.querySelector('.kb-runner-status-badge--offline')).toBeDefined();
++      document.documentElement.removeAttribute('data-theme');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-runners/runnerStudio.css b/kanban/web/src/features/admin-runners/runnerStudio.css
+index d1098ac0..0e2dcde1 100644
+--- a/kanban/web/src/features/admin-runners/runnerStudio.css
++++ b/kanban/web/src/features/admin-runners/runnerStudio.css
+@@ -95,6 +95,12 @@
+   margin-bottom: var(--space-4);
+ }
+ 
++.kb-revoke-runner-rotation-note {
++  font-size: 0.85rem;
++  color: var(--fg-secondary);
++  margin-top: 8px;
++}
++
+ .kb-mint-token-error {
+   color: var(--danger-fg);
+   margin: var(--space-2) 0;
+@@ -281,6 +287,38 @@
+   border: 1px solid #374151;
+ }
+ 
++/* Certificate Rotation & Runner Lifecycle Guidance */
++.kb-runner-rotation-guidance {
++  padding: 12px 16px;
++  background: var(--bg-accent-subtle);
++  border: 1px solid var(--border-accent-subtle);
++  border-radius: 8px;
++  margin-bottom: 16px;
++}
++
++.kb-runner-guidance-title {
++  margin: 0 0 6px 0;
++  font-size: 0.95rem;
++  font-weight: 600;
++  color: var(--badge-fg);
++}
++
++.kb-runner-rotation-guidance p,
++.kb-runner-rotation-guidance ol {
++  color: var(--fg-secondary);
++}
++
++.kb-runner-rotation-guidance p {
++  margin: 0 0 6px 0;
++  font-size: 0.85rem;
++}
++
++.kb-runner-rotation-guidance ol {
++  margin: 0;
++  padding-left: 20px;
++  font-size: 0.825rem;
++}
++
+ /* Runner Filter Pills */
+ .kb-runner-filters {
+   display: flex;
+@@ -392,9 +430,9 @@
+ }
+ 
+ .kb-runner-status-badge--offline {
+-  background-color: #f3f4f6;
+-  color: #4b5563;
+-  border: 1px solid #e5e7eb;
++  background-color: var(--bg-secondary);
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
+ }
+ 
+ [data-theme='dark'] .kb-runner-status-badge--active {
+@@ -409,12 +447,6 @@
+   border-color: #991b1b;
+ }
+ 
+-[data-theme='dark'] .kb-runner-status-badge--offline {
+-  background-color: #374151;
+-  color: #9ca3af;
+-  border-color: #4b5563;
+-}
+-
+ .kb-runner-meta-row {
+   display: flex;
+   align-items: center;
+@@ -425,6 +457,21 @@
+   color: var(--kb-color-text-secondary, #4b5563);
+ }
+ 
++.kb-runner-meta-label {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++}
++
++.kb-runner-meta-row--advanced {
++  margin-top: 8px;
++}
++
++.kb-runner-cert-sha256 {
++  word-break: break-all;
++  font-size: 0.75rem;
++}
++
+ .kb-runner-meta-row code {
+   background-color: var(--bg-secondary, #f3f4f6);
+   padding: 2px 4px;
+@@ -591,12 +638,6 @@
+     border-color: #991b1b;
+   }
+ 
+-  :root:not([data-theme='light']) .kb-runner-status-badge--offline {
+-    background-color: #374151;
+-    color: #9ca3af;
+-    border-color: #4b5563;
+-  }
+-
+   :root:not([data-theme='light']) .kb-runner-meta-row code {
+     background-color: #374151;
+     color: #f9fafb;
