@@ -1,0 +1,16 @@
+$ pnpm --dir kanban/web exec vitest run src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan452-03dcb9e6/kanban/web
+
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (50 tests) 2773ms
+   ✓ AiStudioPage & Components (KAN-22 / KANBA-219) (50)
+     ✓ AiStudioPage component & Numbered Failover Priority Stack (KAN-22) (12)
+       ✓ renders numbered #1..#N stack, local badges, and handles move up/down reordering 353ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (54 tests) 2954ms
+
+ Test Files  2 passed (2)
+      Tests  104 passed (104)
+   Start at  14:39:43
+   Duration  4.43s (tests 69%, environment 21%, import 7%, transform 2%)
+
+exit code: 0

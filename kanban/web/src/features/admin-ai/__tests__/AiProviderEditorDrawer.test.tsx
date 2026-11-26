@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import {
   AiProviderEditorDrawer,
@@ -1928,6 +1928,135 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
       } finally {
         keepaliveSpy.mockRestore();
       }
+    });
+
+    describe('KAN-452: Mention Default Values in AiProviderEditorDrawer Inputs', () => {
+      it.each(['light', 'dark'] as const)(
+        'renders explicit default URLs in label, hint, and FieldHelpHint across ollama, openai, and gemini in %s theme without breaking submission',
+        async (theme) => {
+          document.documentElement.setAttribute('data-theme', theme);
+          const onSaved = vi.fn();
+          const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue({
+            id: 'prov-new',
+            provider_kind: 'gemini',
+            display_name: 'Test Gemini',
+            base_url: 'https://generativelanguage.googleapis.com',
+            model_allowlist: ['gemini-2.5-flash'],
+            residency_tier: 'cloud_standard',
+            priority: 1,
+            settings: {},
+            api_key_set: true,
+            is_enabled: true,
+          });
+
+          try {
+            render(
+              <AiProviderEditorDrawer
+                isOpen={true}
+                onClose={vi.fn()}
+                provider={null}
+                airGapMode={false}
+                onSaved={onSaved}
+              />,
+            );
+
+            const kindSelect = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+            const helpBtn = screen.getByTestId('provider-base-url-help');
+            expect(helpBtn).toBeDefined();
+
+            // 1. Initial default (openai when airGapMode=false)
+            expect(kindSelect.value).toBe('openai');
+            const labelEl = document.querySelector('label[for="provider-base-url-input"]');
+            expect(labelEl?.textContent).toContain('(Default: https://api.openai.com/v1)');
+            expect(screen.getByText(/Default OpenAI: https:\/\/api\.openai\.com\/v1/)).toBeDefined();
+
+            act(() => {
+              helpBtn.focus();
+            });
+            expect(screen.getByTestId('provider-base-url-help-popover')).toBeDefined();
+            expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('https://api.openai.com/v1');
+            expect(screen.getByTestId('provider-base-url-help-popover').textContent).toContain('Ollama (Default: http://127.0.0.1:11434)');
+            expect(screen.getByTestId('provider-base-url-help-popover').textContent).toContain('OpenAI (Default: https://api.openai.com/v1)');
+            expect(screen.getByTestId('provider-base-url-help-popover').textContent).toContain('Gemini (Default: https://generativelanguage.googleapis.com)');
+
+            act(() => {
+              helpBtn.blur();
+            });
+            expect(screen.queryByTestId('provider-base-url-help-popover')).toBeNull();
+
+            // 2. Switch to Ollama
+            fireEvent.change(kindSelect, { target: { value: 'ollama' } });
+            expect(labelEl?.textContent).toContain('(Default: http://127.0.0.1:11434)');
+            expect(screen.getByText(/Default Ollama: http:\/\/127\.0\.0\.1:11434/)).toBeDefined();
+
+            act(() => {
+              helpBtn.focus();
+            });
+            expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('http://127.0.0.1:11434');
+
+            act(() => {
+              helpBtn.blur();
+            });
+
+            // 3. Switch to Gemini
+            fireEvent.change(kindSelect, { target: { value: 'gemini' } });
+            expect(labelEl?.textContent).toContain('(Default: https://generativelanguage.googleapis.com)');
+            expect(screen.getByText(/Default Google Gemini endpoint: https:\/\/generativelanguage\.googleapis\.com/)).toBeDefined();
+
+            act(() => {
+              helpBtn.focus();
+            });
+            expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('https://generativelanguage.googleapis.com');
+
+            act(() => {
+              helpBtn.blur();
+            });
+
+            // 4. Fill required fields and submit to verify form submission non-regression
+            fireEvent.change(screen.getByTestId('provider-name-input'), { target: { value: 'Test Gemini' } });
+            fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'secret-gemini-key' } });
+            fireEvent.click(screen.getByTestId('save-provider-btn'));
+
+            await waitFor(() => {
+              expect(createSpy).toHaveBeenCalledWith(
+                expect.objectContaining({
+                  provider_kind: 'gemini',
+                  display_name: 'Test Gemini',
+                  api_key: 'secret-gemini-key',
+                }),
+              );
+              expect(onSaved).toHaveBeenCalled();
+            });
+          } finally {
+            document.documentElement.removeAttribute('data-theme');
+            createSpy.mockRestore();
+          }
+        },
+      );
+
+      it('renders Ollama default URL in Air-Gap mode as initial state', () => {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={true}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        const kindSelect = screen.getByTestId<HTMLSelectElement>('provider-kind-select');
+        expect(kindSelect.value).toBe('ollama');
+        const labelEl = document.querySelector('label[for="provider-base-url-input"]');
+        expect(labelEl?.textContent).toContain('(Default: http://127.0.0.1:11434)');
+        expect(screen.getByText(/Default Ollama: http:\/\/127\.0\.0\.1:11434/)).toBeDefined();
+
+        const helpBtn = screen.getByTestId('provider-base-url-help');
+        act(() => {
+          helpBtn.focus();
+        });
+        expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('http://127.0.0.1:11434');
+      });
     });
   });
 });
