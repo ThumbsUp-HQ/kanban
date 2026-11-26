@@ -1,11 +1,74 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 2c7135ea..dea94d22 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -16,7 +16,7 @@
+   min-height: 18px;
+   flex-shrink: 0;
+   padding: 0;
+-  margin: 0 0 0 auto;
++  margin: 0;
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-full);
+   background: var(--bg-surface);
+@@ -221,7 +221,7 @@
+   outline-offset: 2px;
+ }
+ 
+-/* Global form-label flex alignment pinning .field-help-hint to the right edge */
++/* Global form-label flex alignment placing .field-help-hint adjacent to label */
+ label:has(> .field-help-hint),
+ .kb-label:has(> .field-help-hint),
+ .kb-form-label:has(> .field-help-hint),
+@@ -233,8 +233,7 @@ label:has(> .field-help-hint),
+ .workflow-form-label:has(> .field-help-hint),
+ .auth-editor-label:has(> .field-help-hint),
+ .kb-personal-settings-label:has(> .field-help-hint) {
+-  display: flex;
++  display: inline-flex;
+   align-items: center;
+-  width: 100%;
+   gap: var(--space-2, 8px);
+ }
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index 0e3dcf2b..04b94f60 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -217,6 +217,7 @@ export function FieldHelpHint({
+     if (e.key === 'Escape') {
+       e.preventDefault();
+       e.stopPropagation();
++      e.nativeEvent.stopImmediatePropagation();
+       ctrl.escape();
+       return;
+     }
+@@ -272,6 +273,7 @@ export function FieldHelpHint({
+     if (e.key === 'Escape') {
+       e.preventDefault();
+       e.stopPropagation();
++      e.nativeEvent.stopImmediatePropagation();
+       ctrl.escape();
+       return;
+     }
 diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-index 0af5ea41..d479f444 100644
+index 0af5ea41..5e2be665 100644
 --- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-@@ -666,6 +666,14 @@ function AiProviderEditorContent({
+@@ -590,7 +590,7 @@ function AiProviderEditorContent({
+         {/* 1. Protocol & Provider Engine */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-kind-select" className="kb-form-label">
+-            Protocol & Provider Engine
++            <span>Protocol & Provider Engine</span>
+             <FieldHelpHint
+               title="AI Provider Engine"
+               summary="The underlying runtime and API protocol for AI completions and evaluations."
+@@ -665,7 +665,15 @@ function AiProviderEditorContent({
+         {/* 2. Display Name */}
          <div className="kb-form-group">
            <label htmlFor="provider-name-input" className="kb-form-label">
-             Display Name
+-            Display Name
++            <span>Display Name</span>
 +            <FieldHelpHint
 +              title="Display Name"
 +              summary="Human-readable label for this AI provider instance."
@@ -17,10 +80,12 @@ index 0af5ea41..d479f444 100644
            </label>
            <input
              id="provider-name-input"
-@@ -688,6 +696,13 @@ function AiProviderEditorContent({
+@@ -687,7 +695,14 @@ function AiProviderEditorContent({
+         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
          <div className="kb-form-group">
            <label htmlFor="provider-key-input" className="kb-form-label">
-             {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
+-            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
++            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
 +            <FieldHelpHint
 +              title="API Secret Key"
 +              summary="Authentication secret for upstream LLM provider API requests."
@@ -31,10 +96,42 @@ index 0af5ea41..d479f444 100644
            </label>
            <div className="kb-api-key-row">
              <input
-@@ -847,6 +862,13 @@ function AiProviderEditorContent({
+@@ -755,12 +770,14 @@ function AiProviderEditorContent({
+         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            HTTP Base URL{' '}
+-            {providerKind === 'ollama'
+-              ? '(Default: http://127.0.0.1:11434)'
+-              : providerKind === 'gemini'
+-                ? '(Default: https://generativelanguage.googleapis.com)'
+-                : '(Default: https://api.openai.com/v1)'}
++            <span>
++              HTTP Base URL{' '}
++              {providerKind === 'ollama'
++                ? '(Default: http://127.0.0.1:11434)'
++                : providerKind === 'gemini'
++                  ? '(Default: https://generativelanguage.googleapis.com)'
++                  : '(Default: https://api.openai.com/v1)'}
++            </span>
+             <FieldHelpHint
+               title="HTTP Base URL"
+               summary="Base endpoint URL for outbound LLM API requests."
+@@ -812,7 +829,7 @@ function AiProviderEditorContent({
+         {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+-            Cutoff Timeout (ms)
++            <span>Cutoff Timeout (ms)</span>
+             <FieldHelpHint
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+@@ -846,7 +863,14 @@ function AiProviderEditorContent({
+         <div className="kb-form-group">
            <div className="kb-model-allowlist-header">
              <label htmlFor="provider-models-input" className="kb-form-label">
-               Model Allowlist (comma separated)
+-              Model Allowlist (comma separated)
++              <span>Model Allowlist (comma separated)</span>
 +              <FieldHelpHint
 +                title="Model Allowlist"
 +                summary="Comma-separated model names permitted for inference or probed from the endpoint."
@@ -45,7 +142,7 @@ index 0af5ea41..d479f444 100644
              </label>
              <button
                type="button"
-@@ -957,7 +979,7 @@ function AiProviderEditorContent({
+@@ -957,10 +981,10 @@ function AiProviderEditorContent({
            className="kb-advanced-model-harness-section"
          >
            <div data-testid="advanced-model-harness-config">
@@ -53,15 +150,38 @@ index 0af5ea41..d479f444 100644
 +            <div className="kb-model-params-grid">
                <div className="kb-form-group">
                  <label htmlFor="provider-temperature-input" className="kb-form-label">
-                   Temperature
-@@ -1046,14 +1068,19 @@ function AiProviderEditorContent({
+-                  Temperature
++                  <span>Temperature</span>
+                   <FieldHelpHint
+                     title="Temperature"
+                     summary="Sampling randomness governing creative variance versus deterministic predictability."
+@@ -989,7 +1013,7 @@ function AiProviderEditorContent({
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="provider-top-p-input" className="kb-form-label">
+-                  Top-P (Nucleus)
++                  <span>Top-P (Nucleus)</span>
+                   <FieldHelpHint
+                     title="Top-P (Nucleus)"
+                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
+@@ -1018,7 +1042,7 @@ function AiProviderEditorContent({
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+-                  Max Tokens
++                  <span>Max Tokens</span>
+                   <FieldHelpHint
+                     title="Max Tokens"
+                     summary="Maximum generation token ceiling for completion and reasoning generation."
+@@ -1046,14 +1070,19 @@ function AiProviderEditorContent({
                </div>
              </div>
  
 -            <div className="kb-form-group" style={{ marginTop: '12px' }}>
 +            <div className="kb-form-group kb-form-group--mt12">
                <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
-                 mTLS Client Certificate PEM (Optional)
+-                mTLS Client Certificate PEM (Optional)
++                <span>mTLS Client Certificate PEM (Optional)</span>
 +                <FieldHelpHint
 +                  title="mTLS Client Certificate PEM"
 +                  summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
@@ -77,10 +197,12 @@ index 0af5ea41..d479f444 100644
                  placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
                  value={mtlsCertPem}
                  onChange={(e) => {
-@@ -1069,6 +1096,14 @@ function AiProviderEditorContent({
+@@ -1068,7 +1097,15 @@ function AiProviderEditorContent({
+ 
              <div className="kb-form-group">
                <label htmlFor="provider-residency-select" className="kb-form-label">
-                 Data Residency Tier (Override)
+-                Data Residency Tier (Override)
++                <span>Data Residency Tier (Override)</span>
 +                <FieldHelpHint
 +                  title="Data Residency Tier"
 +                  summary="Enforces data locality boundaries preventing external data egress."
@@ -93,7 +215,7 @@ index 0af5ea41..d479f444 100644
                <select
                  id="provider-residency-select"
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
-index c6844961..93e38f0f 100644
+index c6844961..3aaa5353 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 +++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 @@ -103,7 +103,7 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
@@ -120,7 +242,56 @@ index c6844961..93e38f0f 100644
  
      // Switching back to openai
      fireEvent.change(kindSelect, { target: { value: 'openai' } });
-@@ -2058,5 +2058,73 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+@@ -964,6 +964,48 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+       });
+     });
+ 
++    it('handles AAL2 step-up cancellation and AIR_GAP_EGRESS_DENIED fallback on probe and test connection', async () => {
++      const aal2CancelError = new Error('Step-up cancelled');
++      aal2CancelError.name = 'Aal2StepUpCancelledError';
++
++      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValueOnce(aal2CancelError);
++      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValueOnce(aal2CancelError);
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      expect(screen.queryByTestId('probe-error')).toBeNull();
++
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Testing connection...');
++      });
++
++      // Test AIR_GAP_EGRESS_DENIED fallback message
++      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
++        ok: false,
++        latency_ms: 10,
++        models: [],
++        model_count: 0,
++        error_code: 'AIR_GAP_EGRESS_DENIED',
++      });
++
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
++          'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.',
++        );
++      });
++    });
++
+     it('handles probe error response without message on probe models', async () => {
+       vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
+         ok: false,
+@@ -2058,5 +2100,110 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
          expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('http://127.0.0.1:11434');
        });
      });
@@ -191,6 +362,43 @@ index c6844961..93e38f0f 100644
 +        expect(mtlsTextarea.classList.contains('kb-form-textarea--mono')).toBe(true);
 +        expect(mtlsTextarea.getAttribute('style')).toBeNull();
 +      });
++
++      it('validates cutoff timeout bounds on form submission', async () => {
++        render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={vi.fn()}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        fireEvent.change(screen.getByTestId('provider-name-input'), {
++          target: { value: 'Valid Name' },
++        });
++        fireEvent.change(screen.getByTestId('provider-key-input'), {
++          target: { value: 'sk-test' },
++        });
++        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
++          target: { value: '500' },
++        });
++
++        fireEvent.submit(screen.getByTestId('save-provider-btn'));
++
++        await waitFor(() => {
++          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
++        });
++
++        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
++          target: { value: '700000' },
++        });
++        fireEvent.submit(screen.getByTestId('save-provider-btn'));
++
++        await waitFor(() => {
++          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
++        });
++      });
 +    });
    });
  });
@@ -221,7 +429,7 @@ index 7d02cb52..b89c2c22 100644
 +}
 +
 diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
-index c9b30c6c..14d7be16 100644
+index c9b30c6c..e1cbdc0a 100644
 --- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
 @@ -1,5 +1,5 @@
@@ -1067,7 +1275,7 @@ index c9b30c6c..14d7be16 100644
        fireEvent.click(screen.getByTestId('drawer-save-btn'));
  
        await waitFor(() => {
-@@ -2756,4 +2756,174 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+@@ -2756,4 +2756,205 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
        expect(savedPayload.display_name).toBe('Google Corp');
      });
    });
@@ -1209,12 +1417,13 @@ index c9b30c6c..14d7be16 100644
 +      expect(screen.getByTestId('card-ca-pem-help')).toBeDefined();
 +    });
 +
-+    it('opens popover dialog on focus and restores state on Escape dismissal', () => {
++    it('opens popover dialog on focus and restores state on Escape dismissal without closing drawer', () => {
++      const onClose = vi.fn();
 +      render(
 +        <AuthCardEditorDrawer
 +          isOpen={true}
 +          card={null}
-+          onClose={vi.fn()}
++          onClose={onClose}
 +          onSave={vi.fn()}
 +        />,
 +      );
@@ -1235,15 +1444,45 @@ index c9b30c6c..14d7be16 100644
 +      expect(popover.getAttribute('aria-label')).toBe('Display Name');
 +      expect(popover.textContent).toContain('User-facing title shown on the login button and admin cards.');
 +
-+      // Escape key closes popover
++      // Escape key closes popover without triggering drawer onClose
 +      fireEvent.keyDown(popover, { key: 'Escape' });
 +      expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
 +      expect(screen.queryByTestId('card-display-name-help-popover')).toBeNull();
++      expect(onClose).not.toHaveBeenCalled();
++    });
++
++    it('renders LDAP Replace Stored Secret FieldHelpHint when editing an LDAP card with secret', () => {
++      const existingLdapCard: AdminAuthCard = {
++        ...existingOidcCard,
++        id: 'c-ldap-edit',
++        provider_kind: 'LDAP',
++        slug: 'corp-ldap',
++        display_name: 'Corporate LDAP',
++        has_secret: true,
++        public_config: {
++          server_url: 'ldaps://ldap.example.com',
++          bind_dn: 'cn=admin,dc=example,dc=com',
++          base_dn: 'dc=example,dc=com',
++        },
++      };
++
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={existingLdapCard}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const replaceSecretHelp = screen.getByTestId('card-ldap-replace-secret-help');
++      expect(replaceSecretHelp).toBeDefined();
++      expect(replaceSecretHelp.getAttribute('aria-label')).toBe('Help for Replace Stored Secret');
 +    });
 +  });
  });
 diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
-index 01f01bf8..7fcdbfd8 100644
+index 01f01bf8..621f3d03 100644
 --- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
 @@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, type JSX } from 'react';
@@ -1259,8 +1498,8 @@ index 01f01bf8..7fcdbfd8 100644
                <div className="auth-editor-section-title">Local Administrator Security Policy</div>
                <div className="auth-editor-prop-row">
 -                <span className="auth-editor-label">Security Profile</span>
-+                <label className="auth-editor-label">
-+                  Security Profile
++                <span className="auth-editor-label">
++                  <span>Security Profile</span>
 +                  <FieldHelpHint
 +                    title="Local Administrator Security Profile"
 +                    summary="Argon2id hashing with server HMAC pepper and mandatory Passkey or TOTP (AAL2) step-up."
@@ -1268,14 +1507,16 @@ index 01f01bf8..7fcdbfd8 100644
 +                    docHref="/docs/multi-card-authentication-studio#password-security"
 +                    testId="card-local-admin-security-help"
 +                  />
-+                </label>
++                </span>
                  <EmojiHint
                    kind="restricted"
                    label="Local Admin security"
-@@ -881,6 +891,18 @@ export function AuthCardEditorDrawer({
+@@ -880,7 +890,19 @@ export function AuthCardEditorDrawer({
+               {/* Provider Kind */}
                <div className="auth-editor-prop-row">
                  <label className="auth-editor-label" htmlFor="card-provider-kind">
-                   Provider Kind
+-                  Provider Kind
++                  <span>Provider Kind</span>
 +                  <FieldHelpHint
 +                    title="Provider Kind"
 +                    summary="Authentication protocol and provider engine (OIDC, OAuth 2.0, or LDAP/Active Directory)."
@@ -1291,10 +1532,12 @@ index 01f01bf8..7fcdbfd8 100644
                  </label>
                  <select
                    id="card-provider-kind"
-@@ -904,6 +926,14 @@ export function AuthCardEditorDrawer({
+@@ -903,7 +925,15 @@ export function AuthCardEditorDrawer({
+               {/* Display Name */}
                <div className="auth-editor-prop-row">
                  <label className="auth-editor-label" htmlFor="card-display-name">
-                   Display Name
+-                  Display Name
++                  <span>Display Name</span>
 +                  <FieldHelpHint
 +                    title="Display Name"
 +                    summary="User-facing title shown on the login button and admin cards."
@@ -1306,10 +1549,12 @@ index 01f01bf8..7fcdbfd8 100644
                  </label>
                  <input
                    id="card-display-name"
-@@ -938,6 +968,14 @@ export function AuthCardEditorDrawer({
+@@ -937,7 +967,15 @@ export function AuthCardEditorDrawer({
+               {/* Enable Card Toggle */}
                <div className="auth-editor-prop-row">
                  <label className="auth-editor-label" htmlFor="card-is-enabled">
-                   Enable Card
+-                  Enable Card
++                  <span>Enable Card</span>
 +                  <FieldHelpHint
 +                    title="Enable Card"
 +                    summary="Toggle whether this authentication card is active and visible on the login surface."
@@ -1321,11 +1566,13 @@ index 01f01bf8..7fcdbfd8 100644
                  </label>
                  <input
                    id="card-is-enabled"
-@@ -956,6 +994,14 @@ export function AuthCardEditorDrawer({
+@@ -955,7 +993,15 @@ export function AuthCardEditorDrawer({
+                 <div>
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-issuer-url">
-                       Issuer URL
-+                      <FieldHelpHint
+-                      Issuer URL
++                      <span>Issuer URL</span>
++                  <FieldHelpHint
 +                        title="Issuer URL"
 +                        summary="OpenID Connect discovery endpoint base URL (fetches .well-known/openid-configuration)."
 +                        defaultValue="None (Required for OIDC)"
@@ -1336,11 +1583,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-issuer-url"
-@@ -979,6 +1025,12 @@ export function AuthCardEditorDrawer({
+@@ -978,7 +1024,13 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-callback-url">
-                       Authorized Redirect URI (Callback URL)
-+                      <FieldHelpHint
+-                      Authorized Redirect URI (Callback URL)
++                      <span>Authorized Redirect URI (Callback URL)</span>
++                  <FieldHelpHint
 +                        title="Authorized Redirect URI"
 +                        summary="Read-only callback URL to register in your identity provider console."
 +                        docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
@@ -1355,8 +1604,8 @@ index 01f01bf8..7fcdbfd8 100644
                    <div className="auth-editor-prop-row">
 -                    <span className="auth-editor-label">Authorized JavaScript Origin</span>
 +                    <span className="auth-editor-label">
-+                      Authorized JavaScript Origin
-+                      <FieldHelpHint
++                      <span>Authorized JavaScript Origin</span>
++                  <FieldHelpHint
 +                        title="Authorized JavaScript Origin"
 +                        summary="Origin domain registered with external OAuth identity providers for CORS and popup authentication flows."
 +                        docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
@@ -1366,11 +1615,13 @@ index 01f01bf8..7fcdbfd8 100644
                      <span className="auth-field-helper" data-testid="oauth-js-origin">
                        {window.location.origin}
                      </span>
-@@ -1031,6 +1091,13 @@ export function AuthCardEditorDrawer({
+@@ -1030,7 +1090,14 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-client-id">
-                       Client ID
-+                      <FieldHelpHint
+-                      Client ID
++                      <span>Client ID</span>
++                  <FieldHelpHint
 +                        title="Client ID"
 +                        summary="OAuth 2.0 client identifier assigned by the identity provider."
 +                        defaultValue="None (Required)"
@@ -1380,11 +1631,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-client-id"
-@@ -1054,6 +1121,13 @@ export function AuthCardEditorDrawer({
+@@ -1053,7 +1120,14 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-secret">
-                       Client Secret
-+                      <FieldHelpHint
+-                      Client Secret
++                      <span>Client Secret</span>
++                  <FieldHelpHint
 +                        title="Client Secret"
 +                        summary="Confidential client secret encrypted at rest using envelope encryption (MASTER_KEK)."
 +                        defaultValue="None (Required on initial creation)"
@@ -1394,11 +1647,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-secret"
-@@ -1077,6 +1151,13 @@ export function AuthCardEditorDrawer({
+@@ -1076,7 +1150,14 @@ export function AuthCardEditorDrawer({
+                   {isEdit && card?.has_secret ? (
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-replace-secret">
-                         Replace Stored Secret
-+                        <FieldHelpHint
+-                        Replace Stored Secret
++                        <span>Replace Stored Secret</span>
++                  <FieldHelpHint
 +                          title="Replace Stored Secret"
 +                          summary="Enable to rotate or overwrite the stored encrypted client secret."
 +                          defaultValue="Unchecked (Preserve existing secret)"
@@ -1408,11 +1663,13 @@ index 01f01bf8..7fcdbfd8 100644
                        </label>
                        <input
                          id="card-replace-secret"
-@@ -1096,6 +1177,14 @@ export function AuthCardEditorDrawer({
+@@ -1095,7 +1176,15 @@ export function AuthCardEditorDrawer({
+                 <div>
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-server-url">
-                       Server URL
-+                      <FieldHelpHint
+-                      Server URL
++                      <span>Server URL</span>
++                  <FieldHelpHint
 +                        title="Server URL"
 +                        summary="LDAP directory server connection URI. Must use ldaps:// on port 636 for TLS encryption."
 +                        defaultValue="None (Required, e.g. ldaps://ad.corp.example.com:636)"
@@ -1423,11 +1680,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-server-url"
-@@ -1119,6 +1208,14 @@ export function AuthCardEditorDrawer({
+@@ -1118,7 +1207,15 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-bind-dn">
-                       Bind DN
-+                      <FieldHelpHint
+-                      Bind DN
++                      <span>Bind DN</span>
++                  <FieldHelpHint
 +                        title="Bind DN"
 +                        summary="Distinguished Name of the service account used to search and bind against directory users."
 +                        defaultValue="None (Required)"
@@ -1438,11 +1697,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-bind-dn"
-@@ -1142,6 +1239,13 @@ export function AuthCardEditorDrawer({
+@@ -1141,7 +1238,14 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-secret">
-                       Bind DN Password
-+                      <FieldHelpHint
+-                      Bind DN Password
++                      <span>Bind DN Password</span>
++                  <FieldHelpHint
 +                        title="Bind DN Password"
 +                        summary="Directory service account password encrypted at rest with MASTER_KEK."
 +                        defaultValue="None (Required on initial creation)"
@@ -1452,11 +1713,29 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-secret"
-@@ -1182,6 +1286,14 @@ export function AuthCardEditorDrawer({
+@@ -1164,7 +1268,14 @@ export function AuthCardEditorDrawer({
+                   {isEdit && card?.has_secret ? (
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-replace-secret">
+-                        Replace Stored Secret
++                        <span>Replace Stored Secret</span>
++                        <FieldHelpHint
++                          title="Replace Stored Secret"
++                          summary="Enable to rotate or overwrite the stored encrypted service bind DN password."
++                          defaultValue="Unchecked (Preserve existing secret)"
++                          docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
++                          testId="card-ldap-replace-secret-help"
++                        />
+                       </label>
+                       <input
+                         id="card-replace-secret"
+@@ -1181,7 +1292,15 @@ export function AuthCardEditorDrawer({
+ 
                    <div className="auth-editor-prop-row">
                      <label className="auth-editor-label" htmlFor="card-base-dn">
-                       Base DN
-+                      <FieldHelpHint
+-                      Base DN
++                      <span>Base DN</span>
++                  <FieldHelpHint
 +                        title="Base DN"
 +                        summary="Base Distinguished Name search subtree root containing user accounts."
 +                        defaultValue="None (Required)"
@@ -1467,11 +1746,13 @@ index 01f01bf8..7fcdbfd8 100644
                      </label>
                      <input
                        id="card-base-dn"
-@@ -1216,6 +1328,14 @@ export function AuthCardEditorDrawer({
+@@ -1215,7 +1334,15 @@ export function AuthCardEditorDrawer({
+               >
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-slug">
-                     Slug Identifier
-+                    <FieldHelpHint
+-                    Slug Identifier
++                    <span>Slug Identifier</span>
++                  <FieldHelpHint
 +                      title="Slug Identifier"
 +                      summary="Unique URL slug used for OAuth callback endpoints and card references."
 +                      defaultValue="Auto-generated from Display Name"
@@ -1482,11 +1763,13 @@ index 01f01bf8..7fcdbfd8 100644
                    </label>
                    <input
                      id="card-slug"
-@@ -1243,6 +1363,13 @@ export function AuthCardEditorDrawer({
+@@ -1242,7 +1369,14 @@ export function AuthCardEditorDrawer({
+ 
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-subtext">
-                     Button Subtext
-+                    <FieldHelpHint
+-                    Button Subtext
++                    <span>Button Subtext</span>
++                  <FieldHelpHint
 +                      title="Button Subtext"
 +                      summary="Subtitle displayed directly beneath the login button to guide users."
 +                      example="Sign in with your work email (@corp.com)"
@@ -1496,36 +1779,42 @@ index 01f01bf8..7fcdbfd8 100644
                    </label>
                    <input
                      id="card-subtext"
-@@ -1269,6 +1396,14 @@ export function AuthCardEditorDrawer({
+@@ -1268,7 +1402,15 @@ export function AuthCardEditorDrawer({
+ 
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-icon-preset">
-                     Icon Preset
-+                    <FieldHelpHint
+-                    Icon Preset
++                    <span>Icon Preset</span>
++                  <FieldHelpHint
 +                      title="Icon Preset"
 +                      summary="Brand or icon preset rendered beside the login button and provider badge."
 +                      defaultValue="shield"
-+                      validValues={['shield', 'key', 'lock', 'globe', 'google', 'github', 'active-directory']}
++                      validValues={['shield', 'key', 'lock', 'globe', 'google', 'github', 'active-directory', 'ldap', 'local-admin']}
 +                      docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
 +                      testId="card-icon-preset-help"
 +                    />
                    </label>
                    <div className="auth-editor-input-group">
                      <select
-@@ -1299,6 +1434,9 @@ export function AuthCardEditorDrawer({
+@@ -1298,7 +1440,10 @@ export function AuthCardEditorDrawer({
+ 
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-auto-provision">
-                     Auto-provision Users
-+                    <FieldHelpHint
+-                    Auto-provision Users
++                    <span>Auto-provision Users</span>
++                  <FieldHelpHint
 +                    title="Auto-provision Users" summary="Automatically provision local accounts upon first successful authentication if domain policies match." defaultValue="Checked (Enabled)" docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc" testId="card-auto-provision-help"
 +                  />
                    </label>
                    <input
                      id="card-auto-provision"
-@@ -1314,6 +1452,13 @@ export function AuthCardEditorDrawer({
+@@ -1313,7 +1458,14 @@ export function AuthCardEditorDrawer({
+ 
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-email-domains">
-                     Allowed Email Domains
-+                    <FieldHelpHint
+-                    Allowed Email Domains
++                    <span>Allowed Email Domains</span>
++                  <FieldHelpHint
 +                      title="Allowed Email Domains"
 +                      summary="Comma-separated email domain allowlist. Restricts logins to verified corporate domains."
 +                      example="corp.example.com, partner.com"
@@ -1535,17 +1824,19 @@ index 01f01bf8..7fcdbfd8 100644
                    </label>
                    <input
                      id="card-email-domains"
-@@ -1331,6 +1476,17 @@ export function AuthCardEditorDrawer({
+@@ -1330,7 +1482,18 @@ export function AuthCardEditorDrawer({
+ 
                  <div className="auth-editor-prop-row">
                    <label className="auth-editor-label" htmlFor="card-access-policy">
-                     Access Policy
-+                    <FieldHelpHint
+-                    Access Policy
++                    <span>Access Policy</span>
++                  <FieldHelpHint
 +                      title="Access Policy"
 +                      summary="Default access level assigned to authenticated accounts."
-+                      defaultValue="allow_all"
++                      defaultValue="any_user"
 +                      validValues={[
-+                        { label: 'allow_all', description: 'All authenticated users from allowed domains can log in.' },
-+                        { label: 'restricted', description: 'Only users listed in allowlist or matching groups can log in.' },
++                        { label: 'any_user', description: 'Any authenticated user in domain/directory receives workspace membership.' },
++                        { label: 'restricted', description: 'Access restricted strictly to users matching user/admin allowlists or groups.' },
 +                      ]}
 +                      docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
 +                      testId="card-access-policy-help"
@@ -1553,67 +1844,69 @@ index 01f01bf8..7fcdbfd8 100644
                    </label>
                    <select
                      id="card-access-policy"
-@@ -1350,8 +1506,11 @@ export function AuthCardEditorDrawer({
+@@ -1350,8 +1513,11 @@ export function AuthCardEditorDrawer({
                    <div>
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-admin-allowlist">
 -                        Admin Allowlist
 -                      </label>
-+                    Admin Allowlist
-+                    <FieldHelpHint
++                    <span>Admin Allowlist</span>
++                  <FieldHelpHint
 +                    title="Admin Allowlist" summary="Comma-separated emails automatically assigned Server Administrator roles upon sign-in." example="admin@corp.example.com, secops@corp.example.com" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-allowlist-help"
 +                  />
 +                  </label>
                        <input
                          id="card-admin-allowlist"
                          type="text"
-@@ -1370,8 +1529,11 @@ export function AuthCardEditorDrawer({
+@@ -1370,8 +1536,11 @@ export function AuthCardEditorDrawer({
  
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-user-allowlist">
 -                        User Allowlist
 -                      </label>
-+                    User Allowlist
-+                    <FieldHelpHint
++                    <span>User Allowlist</span>
++                  <FieldHelpHint
 +                    title="User Allowlist" summary="Explicit allowlist of permitted emails when Access Policy is set to restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-allowlist-help"
 +                  />
 +                  </label>
                        <input
                          id="card-user-allowlist"
                          type="text"
-@@ -1392,8 +1554,11 @@ export function AuthCardEditorDrawer({
+@@ -1392,8 +1561,11 @@ export function AuthCardEditorDrawer({
                        <div>
                          <div className="auth-editor-prop-row">
                            <label className="auth-editor-label" htmlFor="card-admin-groups">
 -                            Admin Groups
 -                          </label>
-+                    Admin Groups
-+                    <FieldHelpHint
++                    <span>Admin Groups</span>
++                  <FieldHelpHint
 +                    title="Admin Groups" summary="IdP or directory group claims granting Server Administrator rights upon authentication." example="DevOpsAdmins, SecurityEngineers" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-groups-help"
 +                  />
 +                  </label>
                            <input
                              id="card-admin-groups"
                              type="text"
-@@ -1412,8 +1577,11 @@ export function AuthCardEditorDrawer({
+@@ -1412,8 +1584,11 @@ export function AuthCardEditorDrawer({
  
                          <div className="auth-editor-prop-row">
                            <label className="auth-editor-label" htmlFor="card-user-groups">
 -                            User Groups
 -                          </label>
-+                    User Groups
-+                    <FieldHelpHint
++                    <span>User Groups</span>
++                  <FieldHelpHint
 +                    title="User Groups" summary="IdP or directory group claims granting standard user access when Access Policy is restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-groups-help"
 +                  />
 +                  </label>
                            <input
                              id="card-user-groups"
                              type="text"
-@@ -1608,6 +1776,14 @@ export function AuthCardEditorDrawer({
+@@ -1607,7 +1782,15 @@ export function AuthCardEditorDrawer({
+ 
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-scopes">
-                         Scopes
-+                        <FieldHelpHint
+-                        Scopes
++                        <span>Scopes</span>
++                  <FieldHelpHint
 +                          title="Scopes"
 +                          summary="OAuth 2.0 / OIDC scopes requested during authorization. Comma-separated."
 +                          defaultValue="openid, email, profile"
@@ -1624,71 +1917,72 @@ index 01f01bf8..7fcdbfd8 100644
                        </label>
                        <input
                          id="card-scopes"
-@@ -1624,8 +1800,15 @@ export function AuthCardEditorDrawer({
+@@ -1624,8 +1807,14 @@ export function AuthCardEditorDrawer({
  
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-token-auth">
 -                        Token Auth Method
 -                      </label>
-+                    Token Auth Method
-+                    <FieldHelpHint
-+                    title="Token Auth Method" summary="Authentication method used to authenticate client against the token endpoint." defaultValue="client_secret_post" validValues={[
-+                      { label: 'client_secret_post', description: 'Credentials sent in POST request body.' },
-+                      { label: 'client_secret_basic', description: 'HTTP Basic authorization header.' },
-+                      { label: 'none', description: 'Public client with PKCE S256 verification.' },
++                    <span>Token Auth Method</span>
++                  <FieldHelpHint
++                    title="Token Auth Method" summary="Authentication method used to authenticate client against the token endpoint." defaultValue="client_secret_basic" validValues={[
++                      { label: 'client_secret_basic', description: 'HTTP Basic authorization header with Client ID and Client Secret.' },
++                      { label: 'private_key_jwt', description: 'Asymmetric cryptographic client assertion signed by private key.' },
 +                    ]} docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso" testId="card-token-auth-help"
 +                  />
 +                  </label>
                        <select
                          id="card-token-auth"
                          className="auth-editor-select"
-@@ -1646,8 +1829,11 @@ export function AuthCardEditorDrawer({
+@@ -1646,8 +1835,11 @@ export function AuthCardEditorDrawer({
                    <div>
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-starttls">
 -                        StartTLS
 -                      </label>
-+                    StartTLS
-+                    <FieldHelpHint
++                    <span>StartTLS</span>
++                  <FieldHelpHint
 +                    title="StartTLS" summary="Enforces TLS upgrade negotiation on port 389 connections." defaultValue="Unchecked (Disabled)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-starttls-help"
 +                  />
 +                  </label>
                        <input
                          id="card-starttls"
                          type="checkbox"
-@@ -1663,8 +1849,11 @@ export function AuthCardEditorDrawer({
+@@ -1663,8 +1855,11 @@ export function AuthCardEditorDrawer({
  
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-user-filter">
 -                        User Filter
 -                      </label>
-+                    User Filter
-+                    <FieldHelpHint
++                    <span>User Filter</span>
++                  <FieldHelpHint
 +                    title="User Filter" summary="LDAP search query template to locate the authenticating user ({username} placeholder)." defaultValue="(&(objectClass=user)(sAMAccountName={username}))" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-user-filter-help"
 +                  />
 +                  </label>
                        <input
                          id="card-user-filter"
                          type="text"
-@@ -1680,8 +1869,11 @@ export function AuthCardEditorDrawer({
+@@ -1680,8 +1875,11 @@ export function AuthCardEditorDrawer({
  
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-subject-attr">
 -                        Subject Attribute
 -                      </label>
-+                    Subject Attribute
-+                    <FieldHelpHint
++                    <span>Subject Attribute</span>
++                  <FieldHelpHint
 +                    title="Subject Attribute" summary="Directory attribute containing the immutable unique identifier for the user." defaultValue="objectGUID (Active Directory) or entryUUID (OpenLDAP)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-subject-attr-help"
 +                  />
 +                  </label>
                        <input
                          id="card-subject-attr"
                          type="text"
-@@ -1698,6 +1890,13 @@ export function AuthCardEditorDrawer({
+@@ -1697,7 +1895,14 @@ export function AuthCardEditorDrawer({
+ 
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-email-attr">
-                         Email Attribute
-+                        <FieldHelpHint
+-                        Email Attribute
++                        <span>Email Attribute</span>
++                  <FieldHelpHint
 +                          title="Email Attribute"
 +                          summary="Directory attribute containing user's primary email address."
 +                          defaultValue="mail"
@@ -1698,11 +1992,13 @@ index 01f01bf8..7fcdbfd8 100644
                        </label>
                        <input
                          id="card-email-attr"
-@@ -1715,6 +1914,13 @@ export function AuthCardEditorDrawer({
+@@ -1714,7 +1919,14 @@ export function AuthCardEditorDrawer({
+ 
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-display-attr">
-                         Full Name Attribute
-+                        <FieldHelpHint
+-                        Full Name Attribute
++                        <span>Full Name Attribute</span>
++                  <FieldHelpHint
 +                          title="Full Name Attribute"
 +                          summary="Directory attribute containing user's display name."
 +                          defaultValue="displayName (Active Directory) or cn (OpenLDAP)"
@@ -1712,11 +2008,13 @@ index 01f01bf8..7fcdbfd8 100644
                        </label>
                        <input
                          id="card-display-attr"
-@@ -1732,6 +1938,13 @@ export function AuthCardEditorDrawer({
+@@ -1731,7 +1943,14 @@ export function AuthCardEditorDrawer({
+ 
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-spki-pin">
-                         SPKI SHA-256 Pin
-+                        <FieldHelpHint
+-                        SPKI SHA-256 Pin
++                        <span>SPKI SHA-256 Pin</span>
++                  <FieldHelpHint
 +                          title="SPKI SHA-256 Pin"
 +                          summary="64-character SHA-256 hex digest of the server Subject Public Key Info for certificate pinning."
 +                          example="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -1726,11 +2024,13 @@ index 01f01bf8..7fcdbfd8 100644
                        </label>
                        <input
                          id="card-spki-pin"
-@@ -1755,6 +1968,15 @@ export function AuthCardEditorDrawer({
+@@ -1754,7 +1973,16 @@ export function AuthCardEditorDrawer({
+ 
                      <div className="auth-editor-prop-row">
                        <label className="auth-editor-label" htmlFor="card-ca-pem">
-                         CA Certificate PEM
-+                        <FieldHelpHint
+-                        CA Certificate PEM
++                        <span>CA Certificate PEM</span>
++                  <FieldHelpHint
 +                          title="CA Certificate PEM"
 +                          summary="Custom PEM-encoded root or intermediate Certificate Authority certificate."
 +                          example="-----BEGIN CERTIFICATE-----
@@ -1743,24 +2043,72 @@ index 01f01bf8..7fcdbfd8 100644
                        <textarea
                          id="card-ca-pem"
 diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
-index dd922eaa..87a3dc43 100644
+index dd922eaa..40787803 100644
 --- a/kanban/web/src/features/admin-auth/adminAuth.css
 +++ b/kanban/web/src/features/admin-auth/adminAuth.css
-@@ -478,6 +478,8 @@
+@@ -424,7 +424,7 @@
+   position: fixed;
+   inset: 0;
+   background: rgba(0, 0, 0, 0.4);
+-  z-index: 999;
++  z-index: 1050;
+   display: flex;
+   justify-content: flex-end;
+ }
+@@ -477,7 +477,12 @@
+   font-size: 0.875rem;
    font-weight: 500;
    color: var(--fg-primary);
-   min-width: 140px;
-+  max-width: 220px;
-+  flex: 0 0 auto;
+-  min-width: 140px;
++  flex: 0 0 220px;
++  width: 220px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: flex-start;
++  gap: 6px;
  }
  
  .auth-editor-input,
-@@ -970,6 +972,8 @@
+@@ -557,7 +562,11 @@
+   justify-content: flex-end;
+   gap: 12px;
+   margin-top: 24px;
+-  padding-top: 16px;
++  position: sticky;
++  bottom: 0;
++  background: var(--bg-surface);
++  z-index: 10;
++  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+   border-top: 1px solid var(--border-subtle);
+ }
+ 
+@@ -945,6 +954,7 @@
+     justify-content: center;
+   }
+ 
++  .auth-editor-actions,
+   .auth-editor-drawer-actions,
+   .auth-card-editor-footer {
+     position: sticky;
+@@ -952,7 +962,7 @@
+     background: var(--bg-surface);
+     border-top: 1px solid var(--border-subtle);
+     padding: var(--space-3, 12px) 0;
+-    z-index: 5;
++    z-index: 10;
+   }
+ 
+   .auth-editor-drawer {
+@@ -970,6 +980,12 @@
    .auth-editor-label {
      width: 100%;
      min-width: 0;
 +    max-width: 100%;
 +    flex: none;
++    display: inline-flex;
++    align-items: center;
++    justify-content: flex-start;
++    gap: 6px;
    }
  
    .auth-editor-input-group {

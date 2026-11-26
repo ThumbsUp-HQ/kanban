@@ -1,44 +1,72 @@
-$ pnpm vitest run --coverage --coverage.include="src/features/admin-auth/AuthCardEditorDrawer.tsx" --coverage.include="src/features/admin-ai/AiProviderEditorDrawer.tsx" src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+$ cd kanban/web && pnpm vitest run --coverage --coverage.include="src/features/admin-auth/AuthCardEditorDrawer.tsx" --coverage.include="src/features/admin-ai/AiProviderEditorDrawer.tsx" src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan449-5b189911/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (56 tests) 2413ms
- ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (67 tests) 14414ms
-   ✓ AuthCardEditorDrawer (KB-P3-36) (67)
-     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 563ms
-     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 686ms
-     ✓ supports OAuth2 provider configuration with issuer_url 418ms
-     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 451ms
-     ✓ displays form error when onSave throws an error 364ms
-     ✓ edits an LDAP card with CA PEM, user filter, and replaces bind DN password 352ms
-     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 653ms
-     ✓ validates maximum lengths for display name and button subtext 328ms
-     ✓ validates empty slug on create and allows typing secret on create 421ms
-     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 699ms
-     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 571ms
-     ✓ handles empty public_config gracefully when loading OIDC and LDAP cards 326ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (58 tests) 7694ms
+   ✓ AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400) (58)
+     ✓ initializes new provider with empty modelAllowlist and prominent API Secret Key label 485ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (68 tests) 37159ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (68)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 1573ms
+     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 837ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 2233ms
+     ✓ renders null when isOpen is false and handles close button click 448ms
+     ✓ supports OAuth2 provider configuration with issuer_url 1215ms
+     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 1268ms
+     ✓ displays form error when onSave throws an error 1066ms
+     ✓ edits an LDAP card with CA PEM, user filter, and replaces bind DN password 814ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 1619ms
+     ✓ validates maximum lengths for display name and button subtext 722ms
+     ✓ validates empty slug on create and allows typing secret on create 1209ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 1548ms
+     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 1557ms
+     ✓ rejects ldap:// without StartTLS when editing an existing LDAP card with start_tls false 310ms
+     ✓ handles empty public_config gracefully when loading OIDC and LDAP cards 709ms
      ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
-       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 1053ms
+       ✓ toggles paste textarea and parses valid Google JSON with matched redirect URI 375ms
+       ✓ shows warning and details when redirect URI does not match expected callback 306ms
+       ✓ rejects installed client JSON with informative error message 373ms
+       ✓ handles invalid Google JSON structures: missing web, missing client_id/secret, untrusted endpoints 544ms
+       ✓ supports drag/drop and file input for Google JSON client secrets 365ms
+       ✓ copies expected callback URL on mismatch warning 765ms
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 2216ms
+       ✓ covers drawer handshake testing with onTestHandshake healthy, failed, and exception 375ms
+       ✓ covers access mode restricted, google json error, and unchecking secret 724ms
+       ✓ covers access policy defaults from allowlists and default handshake functions 755ms
+       ✓ covers default testAuthCardHandshake and testDraftAuthCardHandshake with fallback messages 512ms
+       ✓ covers initial restricted accessPolicyMode for admin_allowlist or user_allowlist 368ms
      ✓ Progressive Disclosure & AdvancedSection (KAN-319) (17)
-       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 798ms
-       ✓ allows editing AdvancedSection allowlists, attributes, and file upload trigger 372ms
-       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 326ms
-       ✓ covers payload construction and error handling branches 396ms
+       ✓ renders primary fields outside AdvancedSection and keeps advanced fields collapsed by default on create and edit 327ms
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 2017ms
+       ✓ handles auto-derived slug clearing and edge cases in create vs edit mode 375ms
+       ✓ toggles Enable Card and Replace Stored Secret on LDAP card 363ms
+       ✓ allows editing AdvancedSection allowlists, attributes, and file upload trigger 749ms
+       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 770ms
+       ✓ dynamically increments active overrides count badge when advanced settings are modified 396ms
+       ✓ covers payload construction and error handling branches 992ms
+       ✓ covers non-Error exception handling in Google JSON parsing 591ms
+       ✓ wires is_enabled cleanly on submit in both create and edit modes (KAN-407) 562ms
+       ✓ validates CA PEM header requires -----BEGIN CERTIFICATE----- (KAN-407) 631ms
+     ✓ StudioDocLink Header Integration (KAN-450) (3)
+       ✓ preserves drawer close, cancel, and submit behavior alongside documentation link 605ms
+     ✓ FieldHelpHint Form Fields Integration (KAN-449) (6)
+       ✓ renders advanced FieldHelpHints across AdvancedSection in both OIDC and LDAP modes 335ms
 
  Test Files  2 passed (2)
-      Tests  123 passed (123)
-   Start at  15:34:00
-   Duration  15.82s (tests 90%, environment 7%, import 2%)
+      Tests  126 passed (126)
+   Start at  15:56:44
+   Duration  40.62s (tests 90%, environment 7%, import 2%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.23 |    95.22 |     100 |   99.44 |                   
- admin-ai          |   98.89 |     94.6 |     100 |   99.23 |                   
-  ...torDrawer.tsx |   98.89 |     94.6 |     100 |   99.23 | 460-461           
+All files          |   99.49 |    95.41 |     100 |   99.72 |                   
+ admin-ai          |   99.63 |    95.14 |     100 |     100 |                   
+  ...torDrawer.tsx |   99.63 |    95.14 |     100 |     100 | ...77,385,404,438 
  admin-auth        |   99.41 |    95.57 |     100 |   99.56 |                   
   ...torDrawer.tsx |   99.41 |    95.57 |     100 |   99.56 | 650,714           
 -------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0
