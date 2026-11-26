@@ -7,24 +7,25 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3`  
 **Target Branch:** `feat/KAN-428-slice5-governance-workout`  
-**Target Commit:** `7cc71c75`  
+**Target Commit:** `68919c8b`  
 
 ---
 
 ## 1. Executive Summary & Verdict
 
-This UI Specialist Review audits the zero-mock visual ergonomics, responsive design fidelity, interaction design, accessibility (WCAG 2.2 AA), and live workout states of **KAN-428: Live Workspace/Project Policy, Dual-Control Custom Fields & Workflow Hooks Workout**.
+This UI Specialist Review audits the Round 2 re-tested zero-mock visual artifacts, dark-mode contrast tokens, responsive design fidelity, interaction design, accessibility (WCAG 2.2 AA), and live workout states of **KAN-428: Live Workspace/Project Policy, Dual-Control Custom Fields & Workflow Hooks Workout**.
 
 All 43 visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key interactive workflow states across all Slice 5 surfaces (Workspace Settings General/Trash/Groups, Project Settings Priorities/WIP-limits/Danger-zone, Personal Settings, Custom Fields Studio & Tier-A/Dual-Control Editor, and Workflows Studio with Attach Hook, Dry-Run Drawer, and Git Repo Bindings) were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience under real companion daemons and live server state is unclipped, performant, and compliant with 👍kanban UX standards.
 
-Automated test metrics verify 310/310 Vitest tests passed across 11 test files in 17.83s with 0 `act(...)` warnings and 96.22% branch coverage with full V8 coverage table recorded, and 105/105 backend Pytest tests passed in 129.54s with 90%-100% coverage on touched backend modules.
+Automated test metrics verify 310/310 Vitest tests passed across 11 test suites in 18.75s with 0 `act(...)` warnings and 96.51% branch coverage with full V8 coverage table recorded, and 116/116 backend Pytest tests passed in 156.95s with 96% overall coverage across touched modules.
 
 Key findings:
-1. **Responsive Viewport Reflow**: All 7 audited views reflow cleanly across desktop, tablet, and mobile. On `390x844` mobile portrait, settings sections, priority lists, and transition rule cards stack neatly with minimum 44px touch targets and zero horizontal scroll overflow (`scrollWidth <= viewportWidth`).
-2. **Custom Fields Studio & Flavor Selector**: The Custom Fields Studio (`10-custom-fields-studio-desktop-1440x900-dark.png`) renders the Standalone Mode banner, 1-click starter presets (`CVSS 3.1 / 4.0 Score`, `Days Until Due`, `Blocker Count`, `Total Issues in Project`), flavor pills (`wasm <25ms`, `formula <5ms`, `nsjail`), and dual-control escalation approval panel without layout clipping.
-3. **Workflow Studio & Transition Hooks**: The Workflows Studio (`15-workflow-studio-desktop-1440x900-light.png`) renders active hook pipelines, fail-closed badges, SHA-256 tamper fingerprints, and dry-run execution triggers cleanly.
-4. **Git Repository Bindings Error Reflow**: When mirror cloning encounters an error (`15-workflow-studio-desktop-1440x900-light.png`), the error banner wraps text neatly with a high-contrast danger callout and accessible dismiss/help action.
-5. **Dark Mode Palette & Contrast**: Dark theme adheres strictly to WCAG 2.2 AA contrast standards (> 7.5:1), with crisp typography, well-defined card boundaries, and distinct status badges.
+1. **Dark Mode Inputs & Danger Zone Contrast (Screenshots 04, 05, 06)**: In `04-project-settings-priorities-desktop-1440x900-dark.png` and `06-project-settings-danger-zone-desktop-1440x900-dark.png`, hex inputs (`#dc2626`), order fields, and danger cards now utilize explicit dark theme tokens providing > 7.5:1 contrast against dark backgrounds (`#0b0f19`/`#111827`), completely resolving the previous white-on-white text issues.
+2. **Tier-A Editor & Structured Format Selection (Screenshots 11 & 12)**: Screenshot 11 now cleanly displays the Tier-A Custom Field Definition form (`Basic` tab, slug, flavor selector, output format), while Screenshot 12 renders the structured format options (`Number (Intl formatted)`) with unclipped controls.
+3. **EscalationApprovalPanel Unclipped (Screenshot 13)**: The Escalation & Security Approvals panel (`13-custom-fields-escalation-dual-control-desktop-1440x900-light.png`) displays the full dual-control approval state (`Approved by SERVER_ADMIN`), scope (`SERVER`), credential mode (`SERVER_ADMIN_SP`), warning callout, and `Request Approval` action button without vertical clipping.
+4. **DryRunDrawer Simulation Results (Screenshot 17)**: Screenshot 17 shows the active simulation result (`Transition Blocked: Changes would not commit (would_commit: false)`) and the detailed failure reason (`HOOK_MANIFEST_MISMATCH`) inside the unclipped drawer container.
+5. **Git Repository Bindings Clean Sync (Screenshot 17)**: The Git repository mirror renders status `Synced (cbf44fb)` with high contrast green badge, confirming resolved credentials and zero clone errors.
+6. **Responsive Viewport Reflow**: Across all tested resolutions down to `390x844` mobile portrait, cards and forms stack cleanly with minimum 44px touch targets and zero horizontal scroll overflow (`scrollWidth <= viewportWidth`).
 
 **Verdict: APPROVED.** Visual hierarchy, design tokens, responsive reflow, and interaction patterns adhere strictly to the 👍kanban design standards.
 
@@ -37,14 +38,15 @@ Key findings:
 | `01-workspace-settings-general-desktop-1440x900-light.png` | 1440x900 Light Desktop | Workspace Settings General & Policy; form inputs for name, slug, display name, visibility; unclipped layout. | PASS (WCAG AA > 4.5:1) |
 | `01-workspace-settings-general-desktop-1440x900-dark.png` | 1440x900 Dark Desktop | Dark theme active; high contrast inputs and collapsible Advanced Security & Governance section. | PASS (WCAG AA > 7.5:1) |
 | `01-workspace-settings-general-mobile-portrait-390x844.png` | 390x844 Mobile Portrait | Mobile portrait view; navigation tabs and form fields stack cleanly without horizontal scroll. | PASS (Zero overflow) |
-| `04-project-settings-priorities-desktop-1440x900-light.png` | 1440x900 Light Desktop | Project Settings Priorities; reorderable priority list with color badges and description fields. | PASS (Drag handles aligned) |
-| `05-project-settings-wip-limits-desktop-1440x900-light.png` | 1440x900 Light Desktop | Project Settings WIP Limits; column WIP limit number inputs, soft warning thresholds, and overrides. | PASS (Inputs aligned) |
-| `06-project-settings-danger-zone-desktop-1440x900-light.png` | 1440x900 Light Desktop | Project Settings Danger Zone; archive and purge buttons with distinct danger callouts. | PASS (High contrast alerts) |
+| `04-project-settings-priorities-desktop-1440x900-dark.png` | 1440x900 Dark Desktop | Dark theme active; hex code inputs, order, and priority badges render with high contrast text. | PASS (WCAG AA > 7.5:1) |
+| `06-project-settings-danger-zone-desktop-1440x900-dark.png` | 1440x900 Dark Desktop | Dark theme active; Move Project to Trash and Permanently Purge cards have dark red backgrounds with readable white text. | PASS (High contrast alerts) |
 | `10-custom-fields-studio-desktop-1440x900-dark.png` | 1440x900 Dark Desktop | Custom Fields Studio; Standalone Mode callout; 1-click presets grid; flavor badges. | PASS (WCAG AA > 7.5:1) |
-| `13-custom-fields-escalation-dual-control-desktop-1440x900-light.png` | 1440x900 Light Desktop | Escalation Approval Panel; dual-control cryptographic approval request with pending state. | PASS (Banner formatted) |
+| `11-custom-fields-editor-tier-a-desktop-1440x900-light.png` | 1440x900 Light Desktop | Tier A Custom Field definition editor; basic tab active; field name, slug, flavor dropdown. | PASS (Inputs unclipped) |
+| `12-custom-fields-structured-format-desktop-1440x900-light.png` | 1440x900 Light Desktop | Structured format options active; number (Intl formatted) selected; advanced settings collapsed. | PASS (Form controls aligned) |
+| `13-custom-fields-escalation-dual-control-desktop-1440x900-light.png` | 1440x900 Light Desktop | Full EscalationApprovalPanel unclipped; Approved by SERVER_ADMIN badge, target scope, SP credential mode, actions visible. | PASS (Full panel in view) |
 | `15-workflow-studio-desktop-1440x900-light.png` | 1440x900 Light Desktop | Workflows Studio; Transition helper pipeline, Wasm validator card, and Git repo mirror card. | PASS (Clean hierarchy) |
 | `16-workflow-attach-hook-dialog-desktop-1440x900-light.png` | 1440x900 Light Desktop | Attach Workflow Helper Hook dialog; hook kind radio options and agent definition select. | PASS (Modal centered) |
-| `17-workflow-dry-run-drawer-desktop-1440x900-light.png` | 1440x900 Light Desktop | Dry-Run Drawer; execution simulation against sample ticket with JSON result preview. | PASS (Monospace unclipped) |
+| `17-workflow-dry-run-drawer-desktop-1440x900-light.png` | 1440x900 Light Desktop | Dry-Run Drawer; live simulation output rendered with Transition Blocked alert and rejection reason; repo mirror Synced. | PASS (Results unclipped) |
 | `18-workflow-git-repo-bindings-desktop-1440x900-light.png` | 1440x900 Light Desktop | Git Repository Bindings; bind repository drawer with masked PAT and read-only mount options. | PASS (Secret masked) |
 
 ---
