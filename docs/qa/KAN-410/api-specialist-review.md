@@ -5,8 +5,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
-**Target Commit:** `9ba1df27` (branch `docs/KAN-414-slice2-ai-docs`)  
-**Wiki Commit:** `b309499` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `3e02ef08` (branch `docs/KAN-414-slice2-ai-docs`)  
+**Wiki Commit:** `ab0fd22` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
 
 ---
 
