@@ -82,6 +82,10 @@ export function CreateProjectModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   let navigateFn: ((to: string) => void) | null = null;
   try {
@@ -141,7 +145,7 @@ export function CreateProjectModal({
       if (e.key === 'Escape') {
         e.preventDefault();
         resetForm();
-        onClose();
+        onCloseRef.current();
       }
     };
 
@@ -151,7 +155,7 @@ export function CreateProjectModal({
       clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;
@@ -256,7 +260,7 @@ export function CreateProjectModal({
 
   return (
     <div
-      className="kb-palette-scrim kb-create-project-scrim"
+      className="kb-create-project-scrim"
       data-testid="create-project-scrim"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
