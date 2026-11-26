@@ -1,0 +1,49 @@
+$ COVERAGE_INCLUDE="src/features/settings/PersonalSettingsPage.tsx" pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/PersonalSettingsPage.test.tsx --coverage
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan497-25187308/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (79 tests) 24283ms
+   ✓ PersonalSettingsPage (79)
+     ✓ renders personal settings sections with loaded profile data 443ms
+     ✓ updates display name and timezone 355ms
+     ✓ validates password length and matching confirmation 342ms
+     ✓ regenerates recovery codes and displays modal 2412ms
+     ✓ toggles password visibility and handles successful password update 827ms
+     ✓ handles password change API error response and dismisses alert 306ms
+     ✓ manages TOTP enrollment and disabling 542ms
+     ✓ cancels passkey rename modal when clicking cancel 965ms
+     ✓ enforces 14 character password minimum for server administrators 300ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 628ms
+     ✓ handles mutation errors during TOTP confirmation, TOTP disable, and recovery codes regen 468ms
+     ✓ handles non-Error string rejection in password update and passkey rename 435ms
+     ✓ covers AAL2 intercept and non-Error fallback errors for delete passkey, TOTP enroll/delete, and recovery regen 311ms
+     ✓ covers non-Error string rejection on avatar upload/delete and profile update 517ms
+     ✓ renders linked external identities and handles unlinking with confirm 356ms
+     ✓ cancels unlinking identity when confirm is false and handles unlink error 314ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 1027ms
+     ✓ covers passkey rename non-Error, passkey delete cancel, and avatar non-Error rejections 372ms
+     ✓ renders fallback U initial when profile display_name and username are null 337ms
+     ✓ covers non-Error fallback branches for TOTP, recovery codes, and passkey operations 328ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 499ms
+     ✓ preserves unsaved display_name and timezone input when avatar is uploaded and removed 431ms
+     ✓ opens PasskeyEnrollModal when clicking Add Passkey or Add FIDO2 Security Key in secure context 395ms
+     ✓ handles Test Key cancellation and error conditions 647ms
+     ✓ External Identity Linking (KAN-27) (16)
+       ✓ handles ?linked and ?link_error search parameters on mount 301ms
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 814ms
+       ✓ displays inline role="alert" ldap-modal-error on failed LDAP link and prevents backdrop error bleed 488ms
+
+ Test Files  1 passed (1)
+      Tests  79 passed (79)
+   Start at  15:48:35
+   Duration  26.40s (tests 94%, environment 4%, import 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.48 |    96.57 |   99.04 |     100 |                   
+ ...ttingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...70,392,485,581 
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0
