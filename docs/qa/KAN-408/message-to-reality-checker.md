@@ -62,7 +62,7 @@ This packet provides indisputable forensic verification evidence for ticket **KA
 Command:
 ```bash
 PYTHONPATH=. uv run --no-sync pytest \
-  kanban/tests/auth/test_auth_cards_admin_api.py \
+  kanban/tests/auth/test_auth_cards*.py \
   kanban/tests/auth/test_ldap_tls_and_bind.py \
   kanban/tests/auth/test_ldap_group_sync.py \
   kanban/tests/auth/test_oidc_flow.py \
@@ -73,16 +73,16 @@ PYTHONPATH=. uv run --no-sync pytest \
   --cov-report=term-missing \
   -p no:xdist
 ```
-- **Results:** 69 passed in 31.41s.
+- **Results:** 100 passed in 32.81s.
 - **Warnings / Failures:** 0 errors, 0 failures, 0 warnings.
-- **Coverage:** >=95% on touched authentication and LDAP modules (`kanban/auth/ldap/client.py`: 97%, `kanban/auth/cards/schemas.py`: 97%, `kanban/auth/ldap/sync.py`: 100%, `kanban/auth/ldap/group_sync.py`: 100%).
+- **Coverage:** >=95% on all touched authentication and LDAP modules (`kanban/auth/ldap/sync.py`: 100%, `kanban/auth/cards/service.py`: 98%, `kanban/auth/cards/handshake.py`: 96%, `kanban/auth/cards/schemas.py`: 100%, `kanban/auth/ldap/client.py`: 97%).
 
 ### 3.2 Frontend Test Suite (Vitest)
 Command:
 ```bash
 (cd kanban/web && COVERAGE_INCLUDE="src/features/admin-auth/AuthStudioPage.tsx,src/features/admin-auth/AuthCardEditorDrawer.tsx,src/features/rbac/RbacPolicyBuilder.tsx" npx vitest run src/features/admin-auth/AuthStudioPage.test.tsx src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx --coverage)
 ```
-- **Results:** 122 passed in 8.70s across 3 test files.
+- **Results:** 122 passed in 8.92s across 3 test files.
 - **Coverage Metrics:**
   - Statements: 99.02%
   - Branches: 95.76% (threshold: 95%)
@@ -96,22 +96,23 @@ Command:
 - `python3 scripts/check_no_dashes.py --all`: Passed (0 Unicode dash violations).
 - `pnpm --dir kanban/web typecheck`: Passed (0 TypeScript errors).
 - `pnpm --dir kanban/web lint`: Passed (0 ESLint warnings or errors).
-- `pnpm --dir kanban/web build`: Passed (built in 1.34s).
+- `pnpm --dir kanban/web build`: Passed (built in 1.30s).
 
 ---
 
-## 4. Round 1 Reality-Checker Findings Remediation
+## 4. Reality-Checker Findings Remediation (Rounds 1 & 2)
 
-All 5 findings from Round 1 audit (Board #394) have been fully resolved:
-1. **Critical Secret Removal:** Purged `scripts/post_phase3_handoff_comments.py` and performed git history reset so 0 references to tokens exist across commit history. Verified `git diff 1bbc9981 | grep -E 'kb_agt_'` returns 0 matches.
-2. **Workout 4 Real RBAC 403 Enforcement:** Admin created issue `KAN-1`, Philip J. Fry logged in, and verified granted permissions (`issue:view` -> HTTP 200, `issue:comment` -> HTTP 201) and strictly denied permissions (`issue:delete` preview -> HTTP 403, delete -> HTTP 403, role creation -> HTTP 403).
-3. **WebAuthn Verification + StartTLS 10389 + Untrusted CA Probe + 2-Hop AD Chain:** Integrated `SoftAuthenticator` in Workout 1 to verify registration (`200 OK`, `verified: true`) and assertion (`200 OK`, `auth_aal: 2`), added untrusted CA probe asserting fail-closed, added StartTLS probe on 10389 (`ok: true`), and verified 2-hop AD group nesting in PostgreSQL (`principal_group_closure` depth >= 1).
-4. **Screenshots 06, 08, 09, 11 Fixed & Inspected:** `06` shows enrolled passkey table row without modal obstruction; `08` shows valid LDAPS parameters with green HEALTHY probe banner; `09` displays WebSudo modal centered directly above dirty drawer; `11` displays Quality Auditor Lead role and category bulk buttons.
-5. **Workout Report & QA Bundle Sync:** Verbatim scrubbed logs and metrics synchronized to `docs/workouts/slice-1-auth-rbac/03-live-workout-report.md` and `docs/qa/KAN-408/workout-report.md` with 0 Unicode dashes.
+All findings from Round 1 (Board #394) and Round 2 (Board #440) audits have been fully resolved:
+1. **Critical Secret Removal (Round 1):** Purged `scripts/post_phase3_handoff_comments.py` and performed git history reset so 0 references to tokens exist across commit history. Verified `git diff 1bbc9981 | grep -E 'kb_agt_'` returns 0 matches.
+2. **Workout 4 Real RBAC 403 Enforcement (Round 1):** Admin created issue `KAN-1`, Philip J. Fry logged in, and verified granted permissions (`issue:view` -> HTTP 200, `issue:comment` -> HTTP 201) and strictly denied permissions (`issue:delete` preview -> HTTP 403, delete -> HTTP 403, role creation -> HTTP 403).
+3. **WebAuthn Verification + StartTLS 10389 + Untrusted CA Probe + 2-Hop AD Chain (Round 1):** Integrated `SoftAuthenticator` in Workout 1 to verify registration (`200 OK`, `verified: true`) and assertion (`200 OK`, `auth_aal: 2`), added untrusted CA probe asserting fail-closed, added StartTLS probe on 10389 (`ok: true`), and verified 2-hop AD group nesting in PostgreSQL (`principal_group_closure` depth >= 1).
+4. **Verbatim Wire Transcript & Stale Block Elimination (Round 2 Item 1):** Replaced all hand-authored HTTP blocks in `docs/workouts/slice-1-auth-rbac/03-live-workout-report.md` and `docs/qa/KAN-408/workout-report.md` with 100% verbatim wire logs recorded via `httpx` event hooks in `scripts/run_slice1_live_workout.py`, scrubbed via `kanban.security.scrubber.scrub_text`, and saved in `docs/qa/KAN-408/workout-transcript.txt`. Multi-hop AD group sync executed organically via directory search and group nesting edge reconciliation in `kanban/auth/ldap/sync.py` (zero manual SQL insertion).
+5. **Organic WebSudo Replay & Zero-Error Telemetry (Round 2 Item 2):** Removed synthetic event dispatch in `scripts/capture_kan408_screenshots.mjs`. Screenshot `09-websudo-replay-active.png` captured organically via PostgreSQL session expiration (`AAL2_STALE` on Save in `AuthCardEditorDrawer`), step-up code entry, and verified automatic first-replay `200 OK`. Attached Playwright telemetry listeners asserting and recording 0 console errors, 0 page errors, and 0 server 5xx errors into `docs/qa/KAN-408/screenshot-telemetry.json`.
+6. **Code Coverage on Touched Modules >=95% (Round 2 Item 3):** Added `kanban/tests/auth/test_auth_cards_service_unit.py` bringing `kanban/auth/cards/service.py` to 98% coverage, and covered defensive nesting branches in `kanban/tests/auth/test_ldap_group_sync.py` bringing `kanban/auth/ldap/sync.py` to 100% coverage. All touched auth/ldap modules now meet or exceed the 95% threshold.
 
 ---
 
-## 4. Visual Evidence & Screenshots
+## 5. Visual Evidence & Screenshots
 
 All 11 zero-mock captures were recorded in `docs/qa/KAN-408/screenshots/` and `docs/workouts/slice-1-auth-rbac/screenshots/` and visually verified via `read_file`:
 - `01-desktop-1440x900-light.png`: 1440x900 Light Desktop - Add Auth Card drawer with 1-click presets and advanced settings.
@@ -128,14 +129,14 @@ All 11 zero-mock captures were recorded in `docs/qa/KAN-408/screenshots/` and `d
 
 ---
 
-## 5. Specialist Audits
+## 6. Specialist Audits
 
 - **API Specialist Review:** Signed and **APPROVED** by `api-spec` in `docs/qa/KAN-408/api-specialist-review.md`.
 - **UI Specialist Review:** Signed and **APPROVED** by `ui-spec` in `docs/qa/KAN-408/ui-specialist-review.md`.
 
 ---
 
-## 6. Verification Commands for Reality-Checker
+## 7. Verification Commands for Reality-Checker
 
 ```bash
 # 1. Verify git diff patch against merge-base
@@ -150,7 +151,7 @@ python3 scripts/check_no_dashes.py --all docs/qa/KAN-408/ docs/workouts/slice-1-
 
 # 4. Run Pytest backend test suite
 PYTHONPATH=. uv run --no-sync pytest \
-  kanban/tests/auth/test_auth_cards_admin_api.py \
+  kanban/tests/auth/test_auth_cards*.py \
   kanban/tests/auth/test_ldap_tls_and_bind.py \
   kanban/tests/auth/test_ldap_group_sync.py \
   kanban/tests/auth/test_oidc_flow.py \
