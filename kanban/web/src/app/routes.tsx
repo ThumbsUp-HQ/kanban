@@ -79,6 +79,7 @@ import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
 import { FieldHelpHint } from '../components/help/FieldHelpHint';
+import { StudioDocLink } from '../components/help/StudioDocLink';
 import { fetchProjectStates } from '../features/views/viewsApi';
 import { fetchProjectModules } from '../features/drawer-rail/railApi';
 import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
@@ -953,6 +954,11 @@ function ProjectCyclesViewInner({
           >
             📊 View Flow Analytics Studio &rarr;
           </Link>
+          <StudioDocLink
+            href="/docs/scripted-workflows-and-transition-helpers"
+            label="Cycles & Workflows Guide ->"
+            testId="cycles-doc-link"
+          />
         </div>
       </div>
 

@@ -608,6 +608,12 @@ describe('IssuesWorkspaceRoute', () => {
     expect(popover.textContent).toContain('Cycle Dates');
     expect(popover.textContent).toContain('Optional');
     expect(popover.textContent).toContain('YYYY-MM-DD');
+
+    // KAN-463: StudioDocLink in ProjectCyclesView header
+    const docLink = screen.getByTestId('cycles-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/scripted-workflows-and-transition-helpers');
+    expect(docLink.textContent).toContain('Cycles & Workflows Guide ->');
   });
 
   it('ProjectModulesView displays error banner on failure and renders module description', async () => {

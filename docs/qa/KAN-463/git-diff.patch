@@ -1,0 +1,60 @@
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 9d2d6b0a..31c14f45 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -266,6 +266,14 @@
+   margin-bottom: var(--space-4, 16px);
+ }
+ 
++.kb-workspace-section-header .kb-chart-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3, 12px);
++  flex-wrap: wrap;
++  margin-top: var(--space-3, 12px);
++}
++
+ .kb-cycles-create-form,
+ .kb-modules-create-form {
+   background: var(--bg-surface);
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 75a3e6de..f55d7b76 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -608,6 +608,12 @@ describe('IssuesWorkspaceRoute', () => {
+     expect(popover.textContent).toContain('Cycle Dates');
+     expect(popover.textContent).toContain('Optional');
+     expect(popover.textContent).toContain('YYYY-MM-DD');
++
++    // KAN-463: StudioDocLink in ProjectCyclesView header
++    const docLink = screen.getByTestId('cycles-doc-link');
++    expect(docLink).toBeDefined();
++    expect(docLink.getAttribute('href')).toBe('/docs/scripted-workflows-and-transition-helpers');
++    expect(docLink.textContent).toContain('Cycles & Workflows Guide ->');
+   });
+ 
+   it('ProjectModulesView displays error banner on failure and renders module description', async () => {
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index f1571580..b8f0788a 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -79,6 +79,7 @@ import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
+ import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
+ import { FieldHelpHint } from '../components/help/FieldHelpHint';
++import { StudioDocLink } from '../components/help/StudioDocLink';
+ import { fetchProjectStates } from '../features/views/viewsApi';
+ import { fetchProjectModules } from '../features/drawer-rail/railApi';
+ import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
+@@ -953,6 +954,11 @@ function ProjectCyclesViewInner({
+           >
+             📊 View Flow Analytics Studio &rarr;
+           </Link>
++          <StudioDocLink
++            href="/docs/scripted-workflows-and-transition-helpers"
++            label="Cycles & Workflows Guide ->"
++            testId="cycles-doc-link"
++          />
+         </div>
+       </div>
+ 
