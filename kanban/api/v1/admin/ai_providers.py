@@ -268,6 +268,7 @@ async def reorder_providers(
             },
         )
 
+        await session.commit()
         return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
 
 
@@ -486,6 +487,7 @@ async def create_provider(
             },
         )
 
+        await session.commit()
         response.headers["Location"] = f"/api/v1/admin/ai/providers/{config.id}"
         return _to_public_config(config)
 
@@ -566,6 +568,7 @@ async def update_provider(
                 "api_key_updated": bool(new_key is not None),
             },
         )
+        await session.commit()
         return _to_public_config(updated)
 
 
@@ -604,6 +607,7 @@ async def disable_provider(
                 "display_name": disabled.display_name,
             },
         )
+        await session.commit()
         return _to_public_config(disabled)
 
 
@@ -643,6 +647,7 @@ async def delete_provider(
                 "action": "deleted",
             },
         )
+        await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -745,6 +750,7 @@ async def set_budget(
                 "project_id": str(body.project_id) if body.project_id else None,
             },
         )
+        await session.commit()
         return BudgetRecord(
             period_kind=cast("Literal['daily', 'monthly']", ledger.period_kind),
             period_start=ledger.period_start,
@@ -790,12 +796,14 @@ async def _verify_workspace(
     response_model=list[ProviderConfigPublic],
     summary="List workspace or project AI provider configurations",
 )
-async def workspace_list_providers(
+async def workspace_list_providers(  # noqa: PLR0913
     workspace: str,
     caller: WorkspaceCaller,
     session: Session,
     request: Request,
     project_id: Annotated[uuid.UUID | None, Query()] = None,
+    *,
+    include_projects: Annotated[bool, Query()] = False,
 ) -> list[ProviderConfigPublic]:
     """List AI provider configurations for workspace or project visible to caller."""
     async with timing_floor(floor_ms=25.0):
@@ -805,7 +813,7 @@ async def workspace_list_providers(
         configs = await service.list_configs(
             workspace_id=caller.workspace_id,
             project_id=project_id,
-            include_projects=project_id is not None,
+            include_projects=include_projects if project_id is None else True,
         )
         return [_to_public_config(c) for c in configs]
 
@@ -878,6 +886,7 @@ async def workspace_create_provider(  # noqa: PLR0913, PLR0917
             },
         )
 
+        await session.commit()
         response.headers["Location"] = f"/api/v1/workspaces/{workspace}/ai-providers/{config.id}"
         return _to_public_config(config)
 
@@ -953,6 +962,7 @@ async def workspace_reorder_providers(
             },
         )
 
+        await session.commit()
         return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
 
 
@@ -1111,6 +1121,7 @@ async def workspace_set_budget(
                 "project_id": str(body.project_id) if body.project_id else None,
             },
         )
+        await session.commit()
         return BudgetRecord(
             period_kind=cast("Literal['daily', 'monthly']", ledger.period_kind),
             period_start=ledger.period_start,
@@ -1238,6 +1249,7 @@ async def workspace_update_provider(  # noqa: PLR0913, PLR0917
                 "api_key_updated": bool(new_key is not None),
             },
         )
+        await session.commit()
         return _to_public_config(updated)
 
 
@@ -1279,6 +1291,7 @@ async def workspace_delete_provider(
                 "action": "deleted",
             },
         )
+        await session.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1326,6 +1339,7 @@ async def workspace_disable_provider(
                 "display_name": disabled.display_name,
             },
         )
+        await session.commit()
         return _to_public_config(disabled)
 
 

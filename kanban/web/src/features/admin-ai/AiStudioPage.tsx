@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useEffect, useCallback, type JSX } from 'react';
+import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import {
   fetchAiProviders,
   disableAiProvider,
@@ -56,6 +56,7 @@ export function AiStudioPage({
   const [providerToDelete, setProviderToDelete] = useState<ProviderConfigPublic | null>(null);
 
   const [reloadCounter, setReloadCounter] = useState<number>(0);
+  const recentSavedRef = useRef<Map<string, ProviderConfigPublic>>(new Map());
 
   useEffect(() => {
     let active = true;
@@ -74,7 +75,18 @@ export function AiStudioPage({
         ]);
         if (!active) return;
         const rawList = Array.isArray(provList) ? provList : [];
-        const sorted = [...rawList].sort((a, b) => a.priority - b.priority);
+        const mergedMap = new Map<string, ProviderConfigPublic>();
+        for (const item of rawList) {
+          mergedMap.set(item.id, item);
+        }
+        for (const [id, savedItem] of recentSavedRef.current.entries()) {
+          if (!mergedMap.has(id)) {
+            mergedMap.set(id, savedItem);
+          } else {
+            recentSavedRef.current.delete(id);
+          }
+        }
+        const sorted = Array.from(mergedMap.values()).sort((a, b) => a.priority - b.priority);
         setProviders(sorted);
         setAirGapMode(isAirGap);
       } catch (err: unknown) {
@@ -94,7 +106,15 @@ export function AiStudioPage({
     };
   }, [reloadCounter, projectId, workspaceSlug]);
 
-  const refreshData = useCallback((): void => {
+  const refreshData = useCallback((saved?: ProviderConfigPublic): void => {
+    if (saved) {
+      recentSavedRef.current.set(saved.id, saved);
+      setProviders((prev) => {
+        const next = prev.filter((p) => p.id !== saved.id);
+        next.push(saved);
+        return next.sort((a, b) => a.priority - b.priority);
+      });
+    }
     setReloadCounter((c) => c + 1);
   }, []);
 
@@ -128,6 +148,7 @@ export function AiStudioPage({
       } else {
         await deleteAiProvider(providerToDelete.id);
       }
+      recentSavedRef.current.delete(providerToDelete.id);
       setProviderToDelete(null);
       refreshData();
     } catch (err: unknown) {

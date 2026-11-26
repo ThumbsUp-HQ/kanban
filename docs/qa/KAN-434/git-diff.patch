@@ -1,0 +1,407 @@
+diff --git a/kanban/api/v1/admin/ai_providers.py b/kanban/api/v1/admin/ai_providers.py
+index 323777bf..ecbe2d56 100644
+--- a/kanban/api/v1/admin/ai_providers.py
++++ b/kanban/api/v1/admin/ai_providers.py
+@@ -268,6 +268,7 @@ async def reorder_providers(
+             },
+         )
+ 
++        await session.commit()
+         return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
+ 
+ 
+@@ -486,6 +487,7 @@ async def create_provider(
+             },
+         )
+ 
++        await session.commit()
+         response.headers["Location"] = f"/api/v1/admin/ai/providers/{config.id}"
+         return _to_public_config(config)
+ 
+@@ -566,6 +568,7 @@ async def update_provider(
+                 "api_key_updated": bool(new_key is not None),
+             },
+         )
++        await session.commit()
+         return _to_public_config(updated)
+ 
+ 
+@@ -604,6 +607,7 @@ async def disable_provider(
+                 "display_name": disabled.display_name,
+             },
+         )
++        await session.commit()
+         return _to_public_config(disabled)
+ 
+ 
+@@ -643,6 +647,7 @@ async def delete_provider(
+                 "action": "deleted",
+             },
+         )
++        await session.commit()
+         return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+@@ -745,6 +750,7 @@ async def set_budget(
+                 "project_id": str(body.project_id) if body.project_id else None,
+             },
+         )
++        await session.commit()
+         return BudgetRecord(
+             period_kind=cast("Literal['daily', 'monthly']", ledger.period_kind),
+             period_start=ledger.period_start,
+@@ -790,12 +796,14 @@ async def _verify_workspace(
+     response_model=list[ProviderConfigPublic],
+     summary="List workspace or project AI provider configurations",
+ )
+-async def workspace_list_providers(
++async def workspace_list_providers(  # noqa: PLR0913
+     workspace: str,
+     caller: WorkspaceCaller,
+     session: Session,
+     request: Request,
+     project_id: Annotated[uuid.UUID | None, Query()] = None,
++    *,
++    include_projects: Annotated[bool, Query()] = False,
+ ) -> list[ProviderConfigPublic]:
+     """List AI provider configurations for workspace or project visible to caller."""
+     async with timing_floor(floor_ms=25.0):
+@@ -805,7 +813,7 @@ async def workspace_list_providers(
+         configs = await service.list_configs(
+             workspace_id=caller.workspace_id,
+             project_id=project_id,
+-            include_projects=project_id is not None,
++            include_projects=include_projects if project_id is None else True,
+         )
+         return [_to_public_config(c) for c in configs]
+ 
+@@ -878,6 +886,7 @@ async def workspace_create_provider(  # noqa: PLR0913, PLR0917
+             },
+         )
+ 
++        await session.commit()
+         response.headers["Location"] = f"/api/v1/workspaces/{workspace}/ai-providers/{config.id}"
+         return _to_public_config(config)
+ 
+@@ -953,6 +962,7 @@ async def workspace_reorder_providers(
+             },
+         )
+ 
++        await session.commit()
+         return [_to_public_config(config_map[uid]) for uid in body.ordered_ids]
+ 
+ 
+@@ -1111,6 +1121,7 @@ async def workspace_set_budget(
+                 "project_id": str(body.project_id) if body.project_id else None,
+             },
+         )
++        await session.commit()
+         return BudgetRecord(
+             period_kind=cast("Literal['daily', 'monthly']", ledger.period_kind),
+             period_start=ledger.period_start,
+@@ -1238,6 +1249,7 @@ async def workspace_update_provider(  # noqa: PLR0913, PLR0917
+                 "api_key_updated": bool(new_key is not None),
+             },
+         )
++        await session.commit()
+         return _to_public_config(updated)
+ 
+ 
+@@ -1279,6 +1291,7 @@ async def workspace_delete_provider(
+                 "action": "deleted",
+             },
+         )
++        await session.commit()
+         return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+@@ -1326,6 +1339,7 @@ async def workspace_disable_provider(
+                 "display_name": disabled.display_name,
+             },
+         )
++        await session.commit()
+         return _to_public_config(disabled)
+ 
+ 
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index 19fe6c76..12388e34 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -24,7 +24,7 @@ interface AiProviderEditorDrawerProps {
+   onClose: () => void;
+   provider: ProviderConfigPublic | null;
+   airGapMode: boolean;
+-  onSaved: () => void;
++  onSaved?: ((saved?: ProviderConfigPublic) => void) | undefined;
+   providersCount?: number | undefined;
+   projectId?: string | null | undefined;
+   workspaceSlug?: string | undefined;
+@@ -100,7 +100,7 @@ function AiProviderEditorContent({
+   onClose: () => void;
+   provider: ProviderConfigPublic | null;
+   airGapMode: boolean;
+-  onSaved: () => void;
++  onSaved?: ((saved?: ProviderConfigPublic) => void) | undefined;
+   providersCount?: number | undefined;
+   projectId?: string | null | undefined;
+   workspaceSlug?: string | undefined;
+@@ -480,6 +480,7 @@ function AiProviderEditorContent({
+         return s;
+       };
+ 
++      let saved: ProviderConfigPublic | undefined;
+       if (provider) {
+         const payload: ProviderConfigUpdate = {
+           display_name: displayName.trim(),
+@@ -497,9 +498,9 @@ function AiProviderEditorContent({
+         }
+ 
+         if (workspaceSlug) {
+-          await updateAiProvider(provider.id, payload, workspaceSlug);
++          saved = await updateAiProvider(provider.id, payload, workspaceSlug);
+         } else {
+-          await updateAiProvider(provider.id, payload);
++          saved = await updateAiProvider(provider.id, payload);
+         }
+       } else {
+         const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
+@@ -517,14 +518,14 @@ function AiProviderEditorContent({
+         };
+ 
+         if (workspaceSlug) {
+-          await createAiProvider(payload, workspaceSlug);
++          saved = await createAiProvider(payload, workspaceSlug);
+         } else {
+-          await createAiProvider(payload);
++          saved = await createAiProvider(payload);
+         }
+       }
+ 
+       setIsSaving(false);
+-      onSaved();
++      onSaved?.(saved);
+       onClose();
+     } catch (err: unknown) {
+       setIsSaving(false);
+diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+index 1e829b4d..33c0c383 100644
+--- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
++++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, useEffect, useCallback, type JSX } from 'react';
++import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
+ import {
+   fetchAiProviders,
+   disableAiProvider,
+@@ -56,6 +56,7 @@ export function AiStudioPage({
+   const [providerToDelete, setProviderToDelete] = useState<ProviderConfigPublic | null>(null);
+ 
+   const [reloadCounter, setReloadCounter] = useState<number>(0);
++  const recentSavedRef = useRef<Map<string, ProviderConfigPublic>>(new Map());
+ 
+   useEffect(() => {
+     let active = true;
+@@ -74,7 +75,18 @@ export function AiStudioPage({
+         ]);
+         if (!active) return;
+         const rawList = Array.isArray(provList) ? provList : [];
+-        const sorted = [...rawList].sort((a, b) => a.priority - b.priority);
++        const mergedMap = new Map<string, ProviderConfigPublic>();
++        for (const item of rawList) {
++          mergedMap.set(item.id, item);
++        }
++        for (const [id, savedItem] of recentSavedRef.current.entries()) {
++          if (!mergedMap.has(id)) {
++            mergedMap.set(id, savedItem);
++          } else {
++            recentSavedRef.current.delete(id);
++          }
++        }
++        const sorted = Array.from(mergedMap.values()).sort((a, b) => a.priority - b.priority);
+         setProviders(sorted);
+         setAirGapMode(isAirGap);
+       } catch (err: unknown) {
+@@ -94,7 +106,15 @@ export function AiStudioPage({
+     };
+   }, [reloadCounter, projectId, workspaceSlug]);
+ 
+-  const refreshData = useCallback((): void => {
++  const refreshData = useCallback((saved?: ProviderConfigPublic): void => {
++    if (saved) {
++      recentSavedRef.current.set(saved.id, saved);
++      setProviders((prev) => {
++        const next = prev.filter((p) => p.id !== saved.id);
++        next.push(saved);
++        return next.sort((a, b) => a.priority - b.priority);
++      });
++    }
+     setReloadCounter((c) => c + 1);
+   }, []);
+ 
+@@ -128,6 +148,7 @@ export function AiStudioPage({
+       } else {
+         await deleteAiProvider(providerToDelete.id);
+       }
++      recentSavedRef.current.delete(providerToDelete.id);
+       setProviderToDelete(null);
+       refreshData();
+     } catch (err: unknown) {
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+index f72acd7f..b91fd63f 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -89,6 +89,7 @@ export function QuickCreateIssueModal({
+     activeAdvancedCount > 0 || defaultModuleIds.length > 0;
+ 
+   const summaryInputRef = useRef<HTMLInputElement>(null);
++  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
+   const modalContainerRef = useRef<HTMLDivElement>(null);
+   const openerRef = useRef<HTMLElement | null>(null);
+ 
+@@ -175,6 +176,32 @@ export function QuickCreateIssueModal({
+     };
+   }, [isOpen, handleClose]);
+ 
++  // Sync programmatic .value and native input/change events for automation / DevTools fill()
++  useEffect(() => {
++    if (!isOpen) return;
++    const summaryEl = summaryInputRef.current;
++    const descEl = descriptionInputRef.current;
++
++    const handleSummaryNative = (): void => {
++      setSummary(summaryEl ? summaryEl.value : '');
++    };
++    const handleDescNative = (): void => {
++      setDescription(descEl ? descEl.value : '');
++    };
++
++    summaryEl?.addEventListener('input', handleSummaryNative);
++    summaryEl?.addEventListener('change', handleSummaryNative);
++    descEl?.addEventListener('input', handleDescNative);
++    descEl?.addEventListener('change', handleDescNative);
++
++    return () => {
++      summaryEl?.removeEventListener('input', handleSummaryNative);
++      summaryEl?.removeEventListener('change', handleSummaryNative);
++      descEl?.removeEventListener('input', handleDescNative);
++      descEl?.removeEventListener('change', handleDescNative);
++    };
++  }, [isOpen]);
++
+   if (!isOpen) {
+     return null;
+   }
+@@ -182,6 +209,12 @@ export function QuickCreateIssueModal({
+   const handleDone = (): void => {
+     setSummary('');
+     setDescription('');
++    if (summaryInputRef.current) {
++      summaryInputRef.current.value = '';
++    }
++    if (descriptionInputRef.current) {
++      descriptionInputRef.current.value = '';
++    }
+     setDueDate('');
+     setParentKey('');
+     setIsDraft(false);
+@@ -192,6 +225,12 @@ export function QuickCreateIssueModal({
+   const handleCreateAnother = (): void => {
+     setSummary('');
+     setDescription('');
++    if (summaryInputRef.current) {
++      summaryInputRef.current.value = '';
++    }
++    if (descriptionInputRef.current) {
++      descriptionInputRef.current.value = '';
++    }
+     setDueDate('');
+     setParentKey('');
+     setIsDraft(false);
+@@ -218,13 +257,15 @@ export function QuickCreateIssueModal({
+ 
+   const handleSubmit = async (e: React.SyntheticEvent): Promise<void> => {
+     e.preventDefault();
+-    if (!summary.trim() || isSubmitting) return;
++    const liveSummary = (summaryInputRef.current?.value ?? summary).trim();
++    const liveDescription = (descriptionInputRef.current?.value ?? description).trim();
++    if (!liveSummary || isSubmitting) return;
+ 
+     if (isDraft) {
+       const draft = saveDraft({
+         projectKey,
+-        summary: summary.trim(),
+-        description: description.trim() || undefined,
++        summary: liveSummary,
++        description: liveDescription || undefined,
+         stateId,
+         prioritySlug,
+         moduleIds: modulesEnabled ? selectedModuleIds : undefined,
+@@ -241,7 +282,7 @@ export function QuickCreateIssueModal({
+ 
+     const matchedState = states?.find((s) => s.id === stateId);
+     const payload: Partial<IssueItem> = {
+-      summary: summary.trim(),
++      summary: liveSummary,
+       state: matchedState
+         ? {
+             id: matchedState.id,
+@@ -289,8 +330,8 @@ export function QuickCreateIssueModal({
+       },
+     };
+ 
+-    if (description.trim()) {
+-      payload.description_markdown = description.trim();
++    if (liveDescription) {
++      payload.description_markdown = liveDescription;
+     }
+     if (modulesEnabled) {
+       payload.module_ids = selectedModuleIds;
+@@ -315,7 +356,7 @@ export function QuickCreateIssueModal({
+ 
+         setPostCreateData({
+           key: resolvedKey,
+-          summary: summary.trim(),
++          summary: liveSummary,
+           isDraft: false,
+         });
+       } else {
+@@ -327,7 +368,7 @@ export function QuickCreateIssueModal({
+ 
+         setPostCreateData({
+           key: resolvedKey,
+-          summary: summary.trim(),
++          summary: liveSummary,
+           isDraft: false,
+         });
+       }
+@@ -460,6 +501,9 @@ export function QuickCreateIssueModal({
+               onChange={(e) => {
+                 setSummary(e.target.value);
+               }}
++              onInput={(e) => {
++                setSummary((e.target as HTMLInputElement).value);
++              }}
+               required
+               aria-invalid={Boolean(submitError)}
+               aria-describedby={submitError ? 'quick-create-error-msg' : undefined}
+@@ -474,6 +518,7 @@ export function QuickCreateIssueModal({
+               Description (Markdown)
+             </label>
+             <textarea
++              ref={descriptionInputRef}
+               id="quick-create-description"
+               className="quick-create-textarea"
+               placeholder="Add details, acceptance criteria, or Mermaid diagrams..."
+@@ -481,6 +526,9 @@ export function QuickCreateIssueModal({
+               onChange={(e) => {
+                 setDescription(e.target.value);
+               }}
++              onInput={(e) => {
++                setDescription((e.target as HTMLTextAreaElement).value);
++              }}
+             />
+           </div>
+ 

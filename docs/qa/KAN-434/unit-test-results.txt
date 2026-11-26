@@ -1,0 +1,55 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan434-52f6dbd3
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 1 item
+
+kanban/tests/api/test_ai_providers_commit_sync.py .                      [100%]
+
+============================== 1 passed in 0.83s ===============================
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan434-52f6dbd3/kanban/web
+> vitest run src/features/issues/__tests__/CreateIssueModal.test.tsx src/features/admin-ai/__tests__/AiProvidersStudio.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/views/QuickCreateIssueModal.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan434-52f6dbd3/kanban/web
+
+ ✓ src/features/admin-ai/__tests__/AiProvidersStudio.test.tsx (3 tests) 221ms
+   ✓ AiProvidersStudio Immediate Refetch & Optimistic Rendering (KAN-434) (3)
+     ✓ immediately renders newly created provider card without requiring page reload even if background refetch lags or returns empty
+     ✓ updates provider card immediately when updating an existing provider
+     ✓ removes deleted provider card immediately and removes it from recent saved cache
+ ✓ src/features/issues/__tests__/CreateIssueModal.test.tsx (13 tests) 582ms
+   ✓ CreateIssueModal (+ New work item) Description & Input Sync (KAN-434) (13)
+     ✓ submits non-empty description_markdown populated via fireEvent.change and fireEvent.input
+     ✓ submits exact description_markdown populated via raw DOM value assignment and Event("input")
+     ✓ submits exact description_markdown populated via raw DOM value assignment and Event("change")
+     ✓ submits without description_markdown when description is left empty
+     ✓ syncs raw DOM description to draft storage when Save as Draft is checked
+     ✓ clears input ref values when handleDone or handleCreateAnother is invoked
+     ✓ handles post dialog actions: done, view issue, and peek navigation
+     ✓ handles view issue without onOpenPeek fallback to popstate history
+     ✓ handles submission errors and displays error message banner
+     ✓ supports escape key to close modal
+     ✓ exercises state resolution branches and priority/state fallbacks
+     ✓ captures opener element and restores focus upon modal close
+     ✓ navigates to drafts when viewing draft item from post-dialog
+ ✓ src/features/views/QuickCreateIssueModal.test.tsx (19 tests) 1170ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1660ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (48 tests) 1820ms
+
+ Test Files  5 passed (5)
+      Tests  134 passed (134)
+   Start at  09:02:17
+   Duration  2.92s
+
+Coverage Summary on Touched Frontend Components:
+-----------------------------------|---------|----------|---------|---------|-------------------
+File                               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-----------------------------------|---------|----------|---------|---------|-------------------
+AiProviderEditorDrawer.tsx         |     100 |    96.08 |     100 |   99.62 | 365,377,404,425   
+AiStudioPage.tsx                   |   99.35 |    96.03 |   97.72 |   97.07 | 262               
+QuickCreateIssueModal.tsx          |   96.66 |    89.11 |      95 |   96.29 | 213,216,229,232   
+-----------------------------------|---------|----------|---------|---------|-------------------
+All touched files satisfy >= 95% line coverage standard.
