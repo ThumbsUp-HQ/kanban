@@ -13,6 +13,7 @@ import {
   type SystemAboutData,
 } from './aboutApi';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { buildAgentOnboardingPrompt } from '../settings/agentOnboardingPrompt';
 import './AboutPage.css';
 
@@ -153,6 +154,11 @@ export function AboutPage(): JSX.Element {
             </div>
           </div>
           <div className="kb-about-hero-actions">
+            <StudioDocLink
+              href="/docs/system-topology-and-multi-container-architecture"
+              title="Architecture & System Topology"
+              testId="about-doc-link"
+            />
             <a
               href={getSbomDownloadUrl()}
               download="thumbs-up-kanban-sbom-cdx-1.5.json"
@@ -192,13 +198,13 @@ export function AboutPage(): JSX.Element {
             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
           </div>
         </div>
-        <div style={{ marginTop: '0.75rem' }}>
+        <div className="kb-about-advanced-wrapper">
           <AdvancedSection
             title="Advanced Technical Details"
             summary="OpenAPI bundle hash, frontend distribution integrity hashes, and compiler build timestamps"
             testId="about-advanced-technical-details"
           >
-            <div className="kb-about-metadata-grid" style={{ marginTop: '0.5rem' }}>
+            <div className="kb-about-metadata-grid kb-about-advanced-grid">
               {data.build_timestamp && (
                 <div className="kb-about-meta-item">
                   <span className="kb-about-meta-label">Build Timestamp:</span>
