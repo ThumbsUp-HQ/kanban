@@ -1,0 +1,429 @@
+diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.css b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
+index 70bf35ec..6bbdb724 100644
+--- a/kanban/web/src/features/settings/ConnectOAuthAppModal.css
++++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.css
+@@ -1,6 +1,41 @@
+ /* Copyright 2026 Kanban Platform Contributors */
+ /* Apache-2.0 License. See LICENSE for details. */
+ 
++:root {
++  --kb-connect-oauth-card-bg: var(--kb-color-bg-surface, #ffffff);
++  --kb-connect-oauth-card-border: var(--kb-color-border-subtle, #e5e7eb);
++  --kb-connect-oauth-card-fg: var(--kb-color-text-primary, #111827);
++  --kb-connect-oauth-card-fg-secondary: var(--kb-color-text-secondary, #4b5563);
++  --kb-connect-oauth-surface-raised: var(--bg-surface-raised, #f8fafc);
++  --kb-connect-oauth-input-bg: var(--bg-input, #ffffff);
++  --kb-connect-oauth-input-border: var(--kb-color-border-subtle, #e5e7eb);
++  --kb-connect-oauth-input-fg: var(--fg-primary, #111827);
++}
++
++[data-theme='dark'] {
++  --kb-connect-oauth-card-bg: var(--kb-color-bg-surface, #16181d);
++  --kb-connect-oauth-card-border: var(--kb-color-border-subtle, #2d333f);
++  --kb-connect-oauth-card-fg: var(--kb-color-text-primary, #f9fafb);
++  --kb-connect-oauth-card-fg-secondary: var(--kb-color-text-secondary, #9ca3af);
++  --kb-connect-oauth-surface-raised: var(--bg-surface-raised, #1f232b);
++  --kb-connect-oauth-input-bg: var(--bg-input, #1f232b);
++  --kb-connect-oauth-input-border: var(--kb-color-border-subtle, #2d333f);
++  --kb-connect-oauth-input-fg: var(--fg-primary, #f9fafb);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) {
++    --kb-connect-oauth-card-bg: var(--kb-color-bg-surface, #16181d);
++    --kb-connect-oauth-card-border: var(--kb-color-border-subtle, #2d333f);
++    --kb-connect-oauth-card-fg: var(--kb-color-text-primary, #f9fafb);
++    --kb-connect-oauth-card-fg-secondary: var(--kb-color-text-secondary, #9ca3af);
++    --kb-connect-oauth-surface-raised: var(--bg-surface-raised, #1f232b);
++    --kb-connect-oauth-input-bg: var(--bg-input, #1f232b);
++    --kb-connect-oauth-input-border: var(--kb-color-border-subtle, #2d333f);
++    --kb-connect-oauth-input-fg: var(--fg-primary, #f9fafb);
++  }
++}
++
+ .kb-connect-oauth-backdrop {
+   position: fixed;
+   inset: 0;
+@@ -14,8 +49,8 @@
+ }
+ 
+ .kb-connect-oauth-card {
+-  background-color: var(--kb-color-bg-surface, #161b22);
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background-color: var(--kb-connect-oauth-card-bg, var(--kb-color-bg-surface, #161b22));
++  border: 1px solid var(--kb-connect-oauth-card-border, var(--kb-color-border-subtle, #30363d));
+   border-radius: 12px;
+   width: 100%;
+   max-width: 680px;
+@@ -23,7 +58,8 @@
+   display: flex;
+   flex-direction: column;
+   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--kb-connect-oauth-card-fg, var(--kb-color-text-primary, #f0f6fc));
++  overflow: hidden;
+ }
+ 
+ .kb-connect-oauth-header {
+@@ -81,7 +117,7 @@
+ 
+ .kb-connect-oauth-desc {
+   font-size: 0.8125rem;
+-  color: var(--kb-color-text-secondary, #8b949e);
++  color: var(--kb-connect-oauth-card-fg-secondary, var(--kb-color-text-secondary, #8b949e));
+   margin: 0;
+   line-height: 1.3;
+ }
+@@ -92,18 +128,37 @@
+   gap: 2px;
+ }
+ 
++.kb-connect-oauth-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  width: auto;
++}
++
++.kb-connect-oauth-label-row .field-help-hint {
++  margin: 0;
++}
++
+ .kb-connect-oauth-label {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
+   font-size: 0.75rem;
+   font-weight: 600;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--kb-connect-oauth-card-fg, var(--kb-color-text-primary, #f0f6fc));
++  width: auto;
++}
++
++.kb-connect-oauth-label .field-help-hint {
++  margin: 0;
+ }
+ 
+ .kb-connect-oauth-select {
+   padding: 4px 8px;
+   border-radius: 6px;
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+-  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
+-  color: var(--fg-primary, var(--kb-color-text-primary, #f0f6fc));
++  border: 1px solid var(--kb-connect-oauth-input-border, var(--kb-color-border-subtle, #30363d));
++  background-color: var(--kb-connect-oauth-input-bg, var(--bg-input, var(--kb-color-bg-surface, #ffffff)));
++  color: var(--kb-connect-oauth-input-fg, var(--fg-primary, var(--kb-color-text-primary, #f0f6fc)));
+   font-size: 0.8125rem;
+ }
+ 
+@@ -173,7 +228,7 @@
+ .kb-connect-oauth-url {
+   font-family: monospace;
+   font-size: 0.75rem;
+-  color: #58a6ff;
++  color: var(--badge-fg);
+   white-space: normal;
+   word-break: break-all;
+   overflow-wrap: anywhere;
+@@ -314,7 +369,7 @@
+ }
+ 
+ .kb-connect-oauth-device-link {
+-  color: #58a6ff;
++  color: var(--badge-fg);
+   font-weight: 600;
+   text-decoration: none;
+ }
+@@ -352,16 +407,26 @@
+ 
+   .kb-connect-oauth-card {
+     max-height: min(96vh, 880px);
++    border-radius: 10px;
++    width: 100%;
++    box-sizing: border-box;
+   }
+ 
+   .kb-connect-oauth-header {
+     padding: 8px 12px;
+     flex-wrap: wrap;
++    gap: 8px;
+   }
+ 
+   .kb-connect-oauth-body {
+     padding: 8px 12px;
+     gap: 6px;
++    overflow-y: auto;
++  }
++
++  .kb-connect-oauth-footer {
++    padding: 8px 12px;
++    flex-shrink: 0;
+   }
+ 
+   .kb-connect-oauth-tabs {
+diff --git a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
+index b49698ae..69013c13 100644
+--- a/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
++++ b/kanban/web/src/features/settings/ConnectOAuthAppModal.tsx
+@@ -263,21 +263,23 @@ ${resourceUrl}
+           </p>
+ 
+           <div className="kb-connect-oauth-field">
+-            <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
+-              Target Scope
++            <div className="kb-connect-oauth-label-row">
++              <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
++                Target Scope
++              </label>
+               <FieldHelpHint
+                 title="Target Scope"
+-                summary="Security boundary defining whether OAuth client tokens access all projects across the workspace, a single project, or server-wide resources."
++                summary="Security boundary defining whether OAuth client tokens access all projects across the workspace, a single project, or server-wide resources. Workspace scope is selected by default."
+                 validValues={[
+-                  { label: 'Workspace', description: 'Access all projects and resources in the active workspace.' },
++                  { label: 'Workspace [Default]', description: 'Access all projects and resources in the active workspace (default).' },
+                   { label: 'Single Project', description: 'Restricted strictly to the selected project.' },
+                   { label: 'Server (Global)', description: 'Server-wide administrative scope across all workspaces (requires admin role).' },
+                 ]}
+-                defaultValue="Workspace"
++                defaultValue="Workspace [Default]"
+                 docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                 testId="target-scope-help"
+               />
+-            </label>
++            </div>
+             <select
+               id="scope-tier-select"
+               className="kb-connect-oauth-select"
+@@ -287,7 +289,7 @@ ${resourceUrl}
+                 setTargetScope(e.target.value as 'workspace' | 'project' | 'server');
+               }}
+             >
+-              <option value="workspace">Workspace ({workspaceSlug})</option>
++              <option value="workspace">Workspace ({workspaceSlug}) [Default]</option>
+               <option value="project">Single Project</option>
+               <option value="server">Server (Global)</option>
+             </select>
+@@ -321,8 +323,10 @@ ${resourceUrl}
+           )}
+ 
+           <div className="kb-connect-oauth-field">
+-            <label htmlFor="surface-select" className="kb-connect-oauth-label">
+-              Target MCP Surface
++            <div className="kb-connect-oauth-label-row">
++              <label htmlFor="surface-select" className="kb-connect-oauth-label">
++                Target MCP Surface
++              </label>
+               <FieldHelpHint
+                 title="Target MCP Surface"
+                 summary="The MCP surface endpoint defining available tool namespaces and capability boundaries."
+@@ -335,7 +339,7 @@ ${resourceUrl}
+                 docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                 testId="target-surface-help"
+               />
+-            </label>
++            </div>
+             <select
+               id="surface-select"
+               className="kb-connect-oauth-select"
+diff --git a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
+index 351821e3..362cc40d 100644
+--- a/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
+@@ -837,4 +837,196 @@ describe('ConnectOAuthAppModal (KAN-28)', () => {
+       expect(headerActions?.getAttribute('style')).toBeNull();
+     });
+   });
++
++  describe('Default Scope Option with FieldHelpHint (KAN-519)', () => {
++    it('renders [Default] suffix on the Workspace option and defaults to workspace scope', async () => {
++      render(
++        <MemoryRouter>
++          <ConnectOAuthAppModal
++            workspaceSlug="acme-engineering"
++            onClose={vi.fn()}
++          />
++        </MemoryRouter>,
++      );
++
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
++      expect(scopeSelect.value).toBe('workspace');
++
++      const options = Array.from(scopeSelect.querySelectorAll('option'));
++      const workspaceOpt = options.find((opt) => opt.value === 'workspace');
++      expect(workspaceOpt).toBeDefined();
++      expect(workspaceOpt?.textContent).toBe('Workspace (acme-engineering) [Default]');
++      expect(scopeSelect.selectedOptions[0]?.textContent).toBe('Workspace (acme-engineering) [Default]');
++    });
++
++    it('renders Target Scope FieldHelpHint with default selection notice, [Default] in validValues and defaultValue, and checks ARIA', async () => {
++      render(
++        <MemoryRouter>
++          <ConnectOAuthAppModal
++            workspaceSlug="kanban"
++            onClose={vi.fn()}
++          />
++        </MemoryRouter>,
++      );
++
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      const scopeHelpBtn = screen.getByTestId('target-scope-help');
++      expect(scopeHelpBtn).toBeDefined();
++      expect(scopeHelpBtn.getAttribute('aria-label')).toBe('Help for Target Scope');
++      expect(scopeHelpBtn.getAttribute('aria-expanded')).toBe('false');
++
++      // Verify HTML semantics: FieldHelpHint is not nested inside label
++      const scopeLabel = screen.getByText('Target Scope');
++      expect(scopeLabel.tagName.toLowerCase()).toBe('label');
++      expect(scopeLabel.contains(scopeHelpBtn)).toBe(false);
++
++      act(() => {
++        scopeHelpBtn.focus();
++      });
++
++      expect(scopeHelpBtn.getAttribute('aria-expanded')).toBe('true');
++      const popover = screen.getByTestId('target-scope-help-popover');
++      expect(popover).toBeDefined();
++
++      // Summary explicitly clarifies default selection
++      expect(popover.textContent).toContain('Workspace scope is selected by default.');
++
++      // Valid values list includes Workspace [Default] with explanation
++      expect(popover.textContent).toContain('Workspace [Default]');
++      expect(popover.textContent).toContain('Access all projects and resources in the active workspace (default).');
++      expect(popover.textContent).toContain('Single Project');
++      expect(popover.textContent).toContain('Server (Global)');
++
++      // Default value row rendered
++      expect(popover.textContent).toContain('Default:');
++      expect(popover.textContent).toContain('Workspace [Default]');
++    });
++
++    it('handles Escape key behavior: closes FieldHelpHint popover without closing the modal', async () => {
++      const handleClose = vi.fn();
++      render(
++        <MemoryRouter>
++          <ConnectOAuthAppModal
++            workspaceSlug="kanban"
++            onClose={handleClose}
++          />
++        </MemoryRouter>,
++      );
++
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      const scopeHelpBtn = screen.getByTestId('target-scope-help');
++
++      // Open popover via focus
++      act(() => {
++        scopeHelpBtn.focus();
++      });
++      expect(screen.getByTestId('target-scope-help-popover')).toBeDefined();
++
++      // Press Escape while focused on trigger button
++      act(() => {
++        fireEvent.keyDown(scopeHelpBtn, { key: 'Escape' });
++      });
++
++      // Popover closes, but modal onClose was NOT called
++      expect(screen.queryByTestId('target-scope-help-popover')).toBeNull();
++      expect(handleClose).not.toHaveBeenCalled();
++
++      // Press Escape again now that popover is closed
++      act(() => {
++        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
++      });
++
++      // Modal onClose is now called
++      expect(handleClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('preserves non-regression across all scope tier selections and client snippets', async () => {
++      render(
++        <MemoryRouter>
++          <ConnectOAuthAppModal
++            workspaceSlug="prod-ws"
++            projectKey="CORE"
++            scopeTier="all"
++            onClose={vi.fn()}
++          />
++        </MemoryRouter>,
++      );
++
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      const scopeSelect = screen.getByTestId<HTMLSelectElement>('scope-tier-select');
++      expect(scopeSelect.value).toBe('workspace');
++      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws');
++
++      // Switch to Single Project
++      act(() => {
++        fireEvent.change(scopeSelect, { target: { value: 'project' } });
++      });
++      expect(scopeSelect.value).toBe('project');
++      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws/p/CORE');
++
++      // Switch to Server
++      act(() => {
++        fireEvent.change(scopeSelect, { target: { value: 'server' } });
++      });
++      expect(scopeSelect.value).toBe('server');
++      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent');
++      expect(screen.getByTestId('mcp-resource-url').textContent).not.toContain('/w/');
++
++      // Switch back to Workspace default
++      act(() => {
++        fireEvent.change(scopeSelect, { target: { value: 'workspace' } });
++      });
++      expect(scopeSelect.value).toBe('workspace');
++      expect(screen.getByTestId('mcp-resource-url').textContent).toContain('/mcp/agent/w/prod-ws');
++
++      // Check snippets across tabs
++      fireEvent.click(screen.getByTestId('tab-antigravity'));
++      expect(screen.getByTestId('command-snippet').textContent).toContain('/mcp/agent/w/prod-ws');
++
++      fireEvent.click(screen.getByTestId('tab-codex'));
++      expect(screen.getByTestId('command-snippet').textContent).toContain('codex mcp add kanban');
++    });
++
++    it('verifies ConnectOAuthAppModal.css contains all 3 theme modes, adjacent gap: 6px, and mobile constraints', async () => {
++      const fs = await import('node:fs');
++      const path = await import('node:path');
++      const cssPath = path.resolve(__dirname, '../ConnectOAuthAppModal.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf-8');
++
++      // 3 Theme Modes
++      expect(cssContent).toContain(':root {');
++      expect(cssContent).toContain("[data-theme='dark'] {");
++      expect(cssContent).toContain('@media (prefers-color-scheme: dark) {');
++
++      // Adjacent (?) with gap: 6px and margin: 0
++      expect(cssContent).toContain('.kb-connect-oauth-label-row {');
++      expect(cssContent).toContain('.kb-connect-oauth-label-row .field-help-hint {');
++      expect(cssContent).toContain('.kb-connect-oauth-label {');
++      expect(cssContent).toContain('display: inline-flex;');
++      expect(cssContent).toContain('gap: 6px;');
++      expect(cssContent).toContain('.kb-connect-oauth-label .field-help-hint {');
++      expect(cssContent).toContain('margin: 0;');
++
++      // High contrast badge-fg links
++      expect(cssContent).toContain('color: var(--badge-fg);');
++
++      // Mobile unclipped constraints
++      expect(cssContent).toContain('@media (max-width: 640px) {');
++      expect(cssContent).toContain('max-height: min(96vh, 880px);');
++      expect(cssContent).toContain('overflow-y: auto;');
++    });
++  });
+ });
