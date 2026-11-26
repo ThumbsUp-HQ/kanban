@@ -412,3 +412,85 @@ async def test_admin_trash_pagination_limit_and_offset(
 
     r_bad_offset = await api_env.client.get("/api/v1/admin/trash?offset=-1")
     assert r_bad_offset.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_trash_filter_edge_cases(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """GET /api/v1/admin/trash edge cases: unknown kind, query filter, and project filter."""
+    admin = await make_user("trash_edge_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("TEDG", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+    await _as_admin_aal2(api_env, admin)
+
+    # 1. Unknown kind returns empty list
+    r_unknown_kind = await client.get("/api/v1/admin/trash?kind=unknown_kind_xyz")
+    assert r_unknown_kind.status_code == 200
+    assert r_unknown_kind.json()["items"] == []
+
+    # 2. Search query filter
+    r_q_empty = await client.get("/api/v1/admin/trash?q=nonexistent_token_12345")
+    assert r_q_empty.status_code == 200
+    assert r_q_empty.json()["items"] == []
+
+    # 3. Project ID filter
+    r_proj = await client.get(f"/api/v1/admin/trash?project_id={proj_id}")
+    assert r_proj.status_code == 200
+
+    # 4. Member user without admin projects is forbidden
+    member = await make_user("plain_trash_member", workspace_role="WORKSPACE_MEMBER")
+    client_member = as_principal(member)
+    r_member_empty = await client_member.get("/api/v1/admin/trash")
+    assert r_member_empty.status_code == 403
+
+    # 5. Project admin querying an unmanaged project
+    proj_other = await make_project("NOTM", created_by=admin)
+    proj_admin_user = await make_user("only_proj_admin", workspace_role="WORKSPACE_MEMBER")
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
+            "VALUES (:uid, :ws, 'PROJECT_ADMIN', 'project', :pid)"
+        ),
+        {"uid": proj_admin_user.id, "ws": api_env.workspace_id, "pid": proj_id},
+    )
+    await api_env.seed.commit()
+    client_padmin = as_principal(proj_admin_user)
+    await _as_admin_aal2(api_env, proj_admin_user)
+    r_unmanaged = await client_padmin.get(f"/api/v1/admin/trash?project_id={proj_other}")
+    assert r_unmanaged.status_code == 200
+    assert r_unmanaged.json()["items"] == []
+
+    # 6. Test soft_trash request and execute through REST endpoints
+    client = as_principal(admin)
+    await _as_admin_aal2(api_env, admin)
+    r_iss = await client.post("/api/v1/projects/TEDG/issues", json={"summary": "To Be Trashed"})
+    assert r_iss.status_code == 201
+    iss_key = r_iss.json()["key"]
+
+    r_req = await client.post(
+        "/api/v1/admin/destructive:request",
+        json={"target_kind": "issue", "target": iss_key, "mode": "trash"},
+    )
+    assert r_req.status_code == 200
+    req_data = r_req.json()
+    token = req_data["confirmation_token"]
+    phrase = req_data["confirm_phrase"]
+
+    r_exec = await client.post(
+        "/api/v1/admin/destructive:execute",
+        json={
+            "target_kind": "issue",
+            "target": iss_key,
+            "mode": "trash",
+            "confirmation_token": token,
+            "confirm_phrase": phrase,
+            "reason": "Test soft trash",
+        },
+    )
+    assert r_exec.status_code == 200
+
+

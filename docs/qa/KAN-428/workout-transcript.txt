@@ -1,0 +1,195 @@
+2026-11-25 20:54:46,042 [INFO] Connecting to PostgreSQL and resetting test database...
+2026-11-25 20:54:46,122 [INFO] Workspace created: 01a2158f-f6e7-7a2b-8925-d18fa9f39afc
+2026-11-25 20:54:46,191 [INFO] Database seeding completed successfully.
+2026-11-25 20:54:46,383 [INFO] Starting Kanban server on 127.0.0.1:18428 (logging to /tmp/slice5_uvicorn.log)...
+2026-11-25 20:54:49,462 [INFO] HTTP Request: GET http://127.0.0.1:18428/ "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,462 [INFO] Kanban server ready on http://127.0.0.1:18428 (took 3.08s).
+2026-11-25 20:54:49,477 [INFO] Executing Workout 1: Workspace Policies...
+2026-11-25 20:54:49,536 [INFO] HTTP Request: PATCH http://127.0.0.1:18428/api/v1/admin/workspace-settings "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,558 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/groups/01a2158f-f712-7e53-aef9-9be2fe542c8a/members/01a2158f-f711-738d-9a51-7b964cbf353f "HTTP/1.1 409 Conflict"
+2026-11-25 20:54:49,558 [INFO] Group cycle rejection response: 409 {"type":"urn:kanban:problem:group-cycle-rejected","title":"Group Cycle Rejected","status":409,"code":"GROUP_CYCLE_REJECTED","detail":"Adding member would introduce a cyclic group dependency.","request_id":"77dab8350ff2480caeb1c819b1f0b5e4","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+2026-11-25 20:54:49,594 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:request "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,645 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:execute "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,661 [INFO] HTTP Request: GET http://127.0.0.1:18428/api/v1/admin/trash?kind=issue "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,662 [INFO] Executing Workout 2: Project Policies & WIP Limits...
+2026-11-25 20:54:49,692 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/priorities "HTTP/1.1 201 Created"
+2026-11-25 20:54:49,692 [INFO] Priority create response: 201
+2026-11-25 20:54:49,722 [INFO] HTTP Request: GET http://127.0.0.1:18428/api/v1/projects/KAN/states "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,816 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-1/move "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,878 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-2/move "HTTP/1.1 200 OK"
+2026-11-25 20:54:49,949 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-3/move "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,005 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/issues "HTTP/1.1 201 Created"
+2026-11-25 20:54:50,038 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-4/move "HTTP/1.1 409 Conflict"
+2026-11-25 20:54:50,038 [INFO] Hard WIP block response: 409 {"type":"urn:kanban:problem:WIP_HARD_LIMIT_OVERRIDE_REQUIRED","title":"Conflict","status":409,"code":"WIP_HARD_LIMIT_OVERRIDE_REQUIRED","detail":"A valid override justification between 10 and 500 characters is required","request_id":"42202db90f274a77ad6d47b89762217f","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps.","hard_limit":3,"current_count":3}
+2026-11-25 20:54:50,068 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:request "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,069 [INFO] Project Stage 1 blast radius: 3 issues, 0 docs, 0 pages, 0 cycles, 0 modules to be removed
+2026-11-25 20:54:50,103 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:execute "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,124 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:request "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,187 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/admin/destructive:execute "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,192 [INFO] Purge verified in activity ledger: DESTRUCTIVE_LIFECYCLE_EXECUTED (hash=61fe25a699e9c10d...)
+2026-11-25 20:54:50,216 [INFO] HTTP Request: PATCH http://127.0.0.1:18428/api/v1/auth/me "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,217 [INFO] Executing Workout 3: Custom Scripted Fields & Dual-Control...
+2026-11-25 20:54:50,249 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/custom-fields "HTTP/1.1 201 Created"
+2026-11-25 20:54:50,249 [INFO] Custom field create response: 201
+2026-11-25 20:54:50,281 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/custom-fields/test-execute "HTTP/1.1 200 OK"
+2026-11-25 20:54:50,282 [INFO] Custom field draft test-executed via REST: status=SUCCESS, latency=2ms
+2026-11-25 20:54:50,313 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/wasm-modules "HTTP/1.1 201 Created"
+2026-11-25 20:54:50,345 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/custom-fields "HTTP/1.1 201 Created"
+2026-11-25 20:54:50,398 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-1/custom-fields/01a21590-0755-724b-8037-4321ffa0ca80/execute "HTTP/1.1 422 Unprocessable Entity"
+2026-11-25 20:54:50,398 [INFO] Runaway script REST execution response: 422 {"type":"urn:kanban:problem:SCRIPT_FUEL_EXHAUSTED","title":"Script Fuel Exhausted","status":422,"code":"SCRIPT_FUEL_EXHAUSTED","detail":"WebAssembly execution exhausted instruction fuel (<= 50M)","request_id":"5862d74353de4e4eafd9e9850a7e2cfb","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+2026-11-25 20:54:51,473 [INFO] Runaway process group killed deterministically: timeout_caught=True, elapsed=1002.5ms
+2026-11-25 20:54:51,507 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/custom-fields/01a21590-06f7-75d9-9f66-b8a5def16f0f/approval-requests "HTTP/1.1 201 Created"
+2026-11-25 20:54:51,543 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/custom-field-approvals/eaa264fa-e73d-4bf2-9e3b-142ed6d97691/approve "HTTP/1.1 200 OK"
+2026-11-25 20:54:51,576 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/custom-field-approvals/eaa264fa-e73d-4bf2-9e3b-142ed6d97691/approve "HTTP/1.1 409 Conflict"
+2026-11-25 20:54:51,576 [INFO] Self approval blocked: 409 {"type":"urn:kanban:problem:DUAL_CONTROL_DISTINCT_APPROVER_REQUIRED","title":"Dual Control Distinct Approver Required","status":409,"code":"DUAL_CONTROL_DISTINCT_APPROVER_REQUIRED","detail":"Dual control requires a second distinct Server Administrator","request_id":"6aba23b73c4947fc9de541e2b61f09ad","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+2026-11-25 20:54:51,609 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/custom-field-approvals/eaa264fa-e73d-4bf2-9e3b-142ed6d97691/approve "HTTP/1.1 403 Forbidden"
+2026-11-25 20:54:51,609 [INFO] Stale AAL2 approval blocked: 403 {"type":"urn:kanban:problem:AAL2_REQUIRED","title":"AAL2 Authentication Required","status":403,"code":"AAL2_REQUIRED","detail":"AAL2 verification has expired (>900s). Re-authentication required.","request_id":"c3c9519c15b44fcc8f0c9478463aaf77","doc_href":"/docs/multi-card-authentication-studio#aal2-step-up","help_summary":"This administrative or security-sensitive action requires Multi-Factor Authentication (AAL2) via Passkey or TOTP."}
+2026-11-25 20:54:51,641 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/custom-field-approvals/eaa264fa-e73d-4bf2-9e3b-142ed6d97691/approve "HTTP/1.1 200 OK"
+2026-11-25 20:54:51,641 [INFO] Fresh AAL2 approval success: 200 {"id":"eaa264fa-e73d-4bf2-9e3b-142ed6d97691","workspace_id":"01a2158f-f6e7-7a2b-8925-d18fa9f39afc","project_id":"01a2158f-f6f8-7e3f-bd5f-e0e995815e8a","field_id":"01a21590-06f7-75d9-9f66-b8a5def16f0f","manifest_sha256":"12942e21191201cc66a67005d457b1f740c94037c686170e06212f2f871370a3","target_scope":"SERVER","credential_mode":"SERVER_ADMIN_SP","required_tier":"SERVER_ADMIN_DUAL","status":"APPROVED","requested_by_id":"01a2158f-f6eb-72fc-a382-9f7ebde3f0aa","justification":"Requires server admin scope to verify infrastructure metrics.","primary_approver_id":"01a2158f-f6eb-72fc-a382-9f7ebde3f0aa","primary_approver_aal":2,"primary_approved_at":"2026-11-26T01:54:51.524010Z","secondary_approver_id":"01a2158f-f6f1-71e1-9d40-a818315364a8","secondary_approver_aal":2,"secondary_approved_at":"2026-11-26T01:54:51.619413Z","sp_warning_acknowledged":true,"revoked_at":null,"revoked_reason":null,"created_at":"2026-11-26T01:54:51.484456Z"}
+2026-11-25 20:54:51,641 [INFO] Executing Workout 4: Workflow Studio, Transition Gates & Git Repo Bindings...
+2026-11-25 20:54:51,673 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/workflow-hooks/dry-run "HTTP/1.1 200 OK"
+2026-11-25 20:54:51,673 [INFO] Dry-run simulation response: 200
+2026-11-25 20:54:51,708 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-1/transitions "HTTP/1.1 422 Unprocessable Entity"
+2026-11-25 20:54:51,709 [INFO] Live transition gate reject response: 422 {"type":"urn:kanban:problem:HOOK_MANIFEST_MISMATCH","title":"Hook Manifest Mismatch","status":422,"code":"HOOK_MANIFEST_MISMATCH","detail":"Cryptographic manifest mismatch on hook 'ci-commit-verifier'","request_id":"f0211668626e499ca51e0ac2dd064bae","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps.","hook_name":"ci-commit-verifier"}
+2026-11-25 20:54:51,789 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/issues/KAN-1/transitions "HTTP/1.1 200 OK"
+2026-11-25 20:54:51,789 [INFO] Live transition gate approve response: 200 {"execution_id":"45fd8129-e30e-4760-9ead-8494155e6f8a","status":"approved","state":"Done","sync_duration_ms":0.0,"etag":"\"141e22c84d2dcfb41865beafb9c82172bb5e5362e9743f94b11339b3a37fbc65\""}
+2026-11-25 20:54:51,794 [INFO] Executing kanban-agent validate-transition CLI parity...
+2026-11-25 20:55:03,879 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/repo-bindings "HTTP/1.1 422 Unprocessable Entity"
+2026-11-25 20:55:03,879 [INFO] SSRF rejection response: 422 {"type":"urn:kanban:problem:REPO_URL_REJECTED","title":"Repository URL Rejected","status":422,"code":"REPO_URL_REJECTED","detail":"Host '192.168.1.50' resolves to forbidden IP 192.168.1.50","request_id":"0cd9dc2c9c2d4fdcbe0208a7ba45f5fc","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps.","reason":"RFC1918_ADDRESS_FORBIDDEN"}
+2026-11-25 20:55:04,013 [INFO] HTTP Request: POST http://127.0.0.1:18428/api/v1/projects/KAN/repo-bindings "HTTP/1.1 201 Created"
+2026-11-25 20:55:04,014 [INFO] Valid Git repo binding response: 201
+2026-11-25 20:55:04,410 [INFO] HTTP Request: GET http://127.0.0.1:18428/api/v1/projects/KAN/repo-bindings "HTTP/1.1 200 OK"
+2026-11-25 20:55:04,411 [INFO] Git repo mirror synced successfully: main-upstream (cbf44fb)
+2026-11-25 20:55:04,411 [INFO] All live workouts executed successfully!
+2026-11-25 20:55:04,411 [INFO] Workout results saved to /tmp/slice5_workout_results.json
+2026-11-25 20:55:04,411 [INFO] Running Node Playwright Zero-Mock Screenshot Runner...
+Launching Playwright Chromium in ZERO-MOCK mode against http://127.0.0.1:18428...
+
+=== Viewport: desktop-1440x900-light (1440x900, light) ===
+Navigating to /workspaces/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/01-workspace-settings-general-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/01-workspace-settings-general-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/02-workspace-settings-groups-nested-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/02-workspace-settings-groups-nested-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/03-workspace-settings-trash-retention-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/03-workspace-settings-trash-retention-desktop-1440x900-light.png
+Navigating to /projects/KAN/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/04-project-settings-priorities-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/04-project-settings-priorities-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/05-project-settings-wip-limits-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/05-project-settings-wip-limits-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/06-project-settings-danger-zone-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/06-project-settings-danger-zone-desktop-1440x900-light.png
+Navigating to /settings/profile...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/08-personal-settings-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/08-personal-settings-desktop-1440x900-light.png
+Navigating to /projects/KAN/settings/custom-fields...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/10-custom-fields-studio-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/10-custom-fields-studio-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/13-custom-fields-escalation-dual-control-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/13-custom-fields-escalation-dual-control-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/11-custom-fields-editor-tier-a-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/11-custom-fields-editor-tier-a-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/12-custom-fields-structured-format-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/12-custom-fields-structured-format-desktop-1440x900-light.png
+Navigating to /projects/KAN/settings/workflows...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/15-workflow-studio-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/15-workflow-studio-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/16-workflow-attach-hook-dialog-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/16-workflow-attach-hook-dialog-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/17-workflow-dry-run-drawer-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/17-workflow-dry-run-drawer-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/18-workflow-git-repo-bindings-desktop-1440x900-light.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/18-workflow-git-repo-bindings-desktop-1440x900-light.png
+Finished viewport desktop-1440x900-light.
+
+=== Viewport: desktop-1440x900-dark (1440x900, dark) ===
+Navigating to /workspaces/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/01-workspace-settings-general-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/01-workspace-settings-general-desktop-1440x900-dark.png
+Navigating to /projects/KAN/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/04-project-settings-priorities-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/04-project-settings-priorities-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/05-project-settings-wip-limits-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/05-project-settings-wip-limits-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/06-project-settings-danger-zone-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/06-project-settings-danger-zone-desktop-1440x900-dark.png
+Navigating to /settings/profile...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/08-personal-settings-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/08-personal-settings-desktop-1440x900-dark.png
+Navigating to /projects/KAN/settings/custom-fields...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/10-custom-fields-studio-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/10-custom-fields-studio-desktop-1440x900-dark.png
+Navigating to /projects/KAN/settings/workflows...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/15-workflow-studio-desktop-1440x900-dark.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/15-workflow-studio-desktop-1440x900-dark.png
+Finished viewport desktop-1440x900-dark.
+
+=== Viewport: tablet-landscape-1024x768 (1024x768, light) ===
+Navigating to /workspaces/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/01-workspace-settings-general-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/01-workspace-settings-general-tablet-landscape-1024x768.png
+Navigating to /projects/KAN/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/04-project-settings-priorities-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/04-project-settings-priorities-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/05-project-settings-wip-limits-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/05-project-settings-wip-limits-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/06-project-settings-danger-zone-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/06-project-settings-danger-zone-tablet-landscape-1024x768.png
+Navigating to /settings/profile...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/08-personal-settings-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/08-personal-settings-tablet-landscape-1024x768.png
+Navigating to /projects/KAN/settings/custom-fields...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/10-custom-fields-studio-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/10-custom-fields-studio-tablet-landscape-1024x768.png
+Navigating to /projects/KAN/settings/workflows...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/15-workflow-studio-tablet-landscape-1024x768.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/15-workflow-studio-tablet-landscape-1024x768.png
+Finished viewport tablet-landscape-1024x768.
+
+=== Viewport: tablet-portrait-768x1024 (768x1024, light) ===
+Navigating to /workspaces/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/01-workspace-settings-general-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/01-workspace-settings-general-tablet-portrait-768x1024.png
+Navigating to /projects/KAN/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/04-project-settings-priorities-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/04-project-settings-priorities-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/05-project-settings-wip-limits-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/05-project-settings-wip-limits-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/06-project-settings-danger-zone-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/06-project-settings-danger-zone-tablet-portrait-768x1024.png
+Navigating to /settings/profile...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/08-personal-settings-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/08-personal-settings-tablet-portrait-768x1024.png
+Navigating to /projects/KAN/settings/custom-fields...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/10-custom-fields-studio-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/10-custom-fields-studio-tablet-portrait-768x1024.png
+Navigating to /projects/KAN/settings/workflows...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/15-workflow-studio-tablet-portrait-768x1024.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/15-workflow-studio-tablet-portrait-768x1024.png
+Finished viewport tablet-portrait-768x1024.
+
+=== Viewport: mobile-portrait-390x844 (390x844, light) ===
+Navigating to /workspaces/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/01-workspace-settings-general-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/01-workspace-settings-general-mobile-portrait-390x844.png
+Navigating to /projects/KAN/settings...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/04-project-settings-priorities-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/04-project-settings-priorities-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/05-project-settings-wip-limits-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/05-project-settings-wip-limits-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/06-project-settings-danger-zone-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/06-project-settings-danger-zone-mobile-portrait-390x844.png
+Navigating to /settings/profile...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/08-personal-settings-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/08-personal-settings-mobile-portrait-390x844.png
+Navigating to /projects/KAN/settings/custom-fields...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/10-custom-fields-studio-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/10-custom-fields-studio-mobile-portrait-390x844.png
+Navigating to /projects/KAN/settings/workflows...
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/workouts/slice-5-workspace-project-workflows/screenshots/15-workflow-studio-mobile-portrait-390x844.png
+Saved screenshot: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan428-3ecd09d3/docs/qa/KAN-428/screenshots/15-workflow-studio-mobile-portrait-390x844.png
+Finished viewport mobile-portrait-390x844.
+Playwright Chromium browser closed.
+2026-11-25 20:56:29,659 [INFO] Stopping Kanban server process...
+2026-11-25 20:56:29,923 [INFO] Kanban server stopped.

@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.exc import IntegrityError
 
 from database.models import WorkflowTransitionExecution, WorkflowTransitionHook
+from database.models.wasm_module import ApprovedWasmModule
 from kanban.services.project_config import (
     _is_unique_violation,
     _migrate_id_in_container_list,
@@ -1738,22 +1739,32 @@ async def test_builtin_wasm_formulas_and_seeders_coverage(
 
     # 7. Exercise IntegrityError race handling in seed_builtin_wasm and ensure_approved_wasm_modules
     # Unknown module hitting IntegrityError on flush returns existing/None safely
+    await api_env.seed.execute(
+        delete(ApprovedWasmModule).where(ApprovedWasmModule.workspace_id == ws_id)
+    )
+    await api_env.seed.flush()
+
     with patch.object(
         api_env.seed,
         "flush",
         side_effect=[IntegrityError("dup", {}, Exception("dup")), None],
     ):
         await seed_builtin_wasm(
-            api_env.seed, uuid.uuid4(), uid, BUILTIN_WASM_FORMULAS[1].sha256_bytes
+            api_env.seed, ws_id, uid, BUILTIN_WASM_FORMULAS[1].sha256_bytes
         )
 
     # ensure_approved_wasm_modules handles IntegrityError race safely
+    await api_env.seed.execute(
+        delete(ApprovedWasmModule).where(ApprovedWasmModule.workspace_id == ws_id)
+    )
+    await api_env.seed.flush()
+
     with patch.object(
         api_env.seed,
         "flush",
         side_effect=[IntegrityError("dup", {}, Exception("dup")), None, None, None, None],
     ):
-        await ensure_approved_wasm_modules(api_env.seed, uuid.uuid4(), uid)
+        await ensure_approved_wasm_modules(api_env.seed, ws_id, uid)
 
 
 async def test_kan43_state_update_invariants_and_color_hex(

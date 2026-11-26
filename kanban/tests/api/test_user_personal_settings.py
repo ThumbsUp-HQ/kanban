@@ -12,6 +12,7 @@ import dataclasses
 import io
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -681,3 +682,56 @@ async def test_user_settings_raw_binary_upload_and_delete_empty(
     data = upload_res.json()
     assert data["avatar_url"] is not None
     assert "?v=" in data["avatar_url"]
+
+
+async def test_user_settings_server_admin_and_guest_roles(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test /auth/me for SERVER_ADMIN, WORKSPACE_GUEST, and AAL2 active session."""
+    now = datetime.now(UTC)
+    srv_admin = await make_user("srv_admin_user", workspace_role="SERVER_ADMIN")
+    client_admin = as_principal(srv_admin, aal_level=2)
+    # Give caller explicit aal2_expires_at and aal2_verified_at
+    client_admin.headers["X-Test-AAL2"] = "1"
+    res_admin = await client_admin.get("/api/v1/auth/me")
+    assert res_admin.status_code == 200
+    assert res_admin.json()["workspace_role"] == "SERVER_ADMIN"
+    assert "MANAGE_SERVER_ADMIN" in res_admin.json()["workspace_capabilities"]
+
+    guest = await make_user("guest_user", workspace_role="WORKSPACE_GUEST")
+    client_guest = as_principal(guest)
+    res_guest = await client_guest.get("/api/v1/auth/me")
+    assert res_guest.status_code == 200
+    assert res_guest.json()["workspace_role"] == "WORKSPACE_GUEST"
+    assert res_guest.json()["workspace_capabilities"] == []
+
+    # Direct test of build_me_response with aal2_expires_at and aal2_verified_at
+    app = FastAPI()
+    transport = getattr(client_admin, "_transport", None)
+    assert transport is not None
+    app.state.session_factory = transport.app.state.session_factory
+    scope = {"type": "http", "method": "GET", "path": "/", "headers": [], "app": app}
+    req = Request(scope)
+    ctx_exp = PrincipalContext(
+        principal_id=srv_admin.id,
+        workspace_id=srv_admin.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+        aal2_expires_at=now + timedelta(hours=1),
+    )
+    me_resp_exp = await build_me_response(req, ctx_exp)
+    assert json.loads(bytes(me_resp_exp.body))["aal2_active"] is True
+
+    ctx_ver = PrincipalContext(
+        principal_id=srv_admin.id,
+        workspace_id=srv_admin.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+        aal2_verified_at=now - timedelta(minutes=5),
+        aal2_last_active_at=now - timedelta(minutes=1),
+    )
+    me_resp_ver = await build_me_response(req, ctx_ver)
+    assert json.loads(bytes(me_resp_ver.body))["aal2_active"] is True
+
+
