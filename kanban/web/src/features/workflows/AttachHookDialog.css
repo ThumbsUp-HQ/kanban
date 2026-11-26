@@ -1,6 +1,52 @@
 /* Copyright 2026 Kanban Platform Contributors */
 /* Apache-2.0 License. See LICENSE for details. */
 
+:root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
 .workflow-dialog-body {
-  padding-bottom: 16px;
+  padding-bottom: var(--space-4, 16px);
+}
+
+.workflow-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.workflow-timeout-input-row {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+  margin-bottom: var(--space-2, 8px);
+}
+
+.workflow-timeout-input-control {
+  flex: 1;
+}
+
+.workflow-timeout-presets-row {
+  display: flex;
+  gap: var(--space-1, 4px);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .workflow-dialog {
+    max-height: calc(100dvh - 32px);
+    width: 95vw;
+    margin: 8px;
+  }
 }

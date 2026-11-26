@@ -1,0 +1,26 @@
+$ cd kanban/web && pnpm vitest run src/components/help/FieldHelpHint.test.tsx src/features/workflows/__tests__/AttachHookDialog.test.tsx --coverage --coverage.include="src/features/workflows/AttachHookDialog.tsx"
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan509-a56150ef/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/components/help/FieldHelpHint.test.tsx (32 tests) 649ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (19 tests) 3157ms
+   ✓ AttachHookDialog (KB-P5-24) (19)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 629ms
+     ✓ successfully creates an agent_interceptor hook with selected mutable fields 331ms
+
+ Test Files  2 passed (2)
+      Tests  51 passed (51)
+   Start at  17:44:46
+   Duration  5.06s (tests 58%, environment 31%, import 8%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.09 |    96.42 |     100 |   97.95 |                   
+ ...HookDialog.tsx |   98.09 |    96.42 |     100 |   97.95 | 132-133           
+-------------------|---------|----------|---------|---------|-------------------
+Exit code: 0
