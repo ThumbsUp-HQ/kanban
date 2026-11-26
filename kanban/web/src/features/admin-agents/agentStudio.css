@@ -225,6 +225,25 @@
   border-top: 1px solid var(--kb-color-border-subtle, #e5e7eb);
 }
 
+.kb-btn-success,
+.kb-agent-validate-btn {
+  background-color: var(--ok-bg);
+  border: 1px solid var(--ok-bg);
+  color: var(--accent-primary-fg);
+}
+
+.kb-btn-success:hover:not(:disabled),
+.kb-agent-validate-btn:hover:not(:disabled) {
+  background-color: var(--ok-hover);
+  border-color: var(--ok-hover);
+}
+
+.kb-btn-success:focus-visible,
+.kb-agent-validate-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 [data-theme='dark'] .kb-agent-card-actions {
   border-color: #374151;
 }

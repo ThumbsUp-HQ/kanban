@@ -228,8 +228,7 @@ export function AgentStudioPage({
               <div className="kb-agent-card-actions">
                 <button
                   type="button"
-                  className="kb-btn kb-btn-primary"
-                  style={{ backgroundColor: '#059669', borderColor: '#059669', color: '#ffffff' }}
+                  className="kb-btn kb-btn-success kb-agent-validate-btn"
                   onClick={() => { setValidatingAgent(ag); }}
                   data-testid={`validate-agent-btn-${ag.id}`}
                 >
