@@ -755,7 +755,30 @@ function AiProviderEditorContent({
         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
         <div className="kb-form-group">
           <label htmlFor="provider-base-url-input" className="kb-form-label">
-            HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+            HTTP Base URL{' '}
+            {providerKind === 'ollama'
+              ? '(Default: http://127.0.0.1:11434)'
+              : providerKind === 'gemini'
+                ? '(Default: https://generativelanguage.googleapis.com)'
+                : '(Default: https://api.openai.com/v1)'}
+            <FieldHelpHint
+              title="HTTP Base URL"
+              summary="Base endpoint URL for outbound LLM API requests."
+              defaultValue={
+                providerKind === 'ollama'
+                  ? 'http://127.0.0.1:11434'
+                  : providerKind === 'gemini'
+                    ? 'https://generativelanguage.googleapis.com'
+                    : 'https://api.openai.com/v1'
+              }
+              validValues={[
+                'Ollama (Default: http://127.0.0.1:11434)',
+                'OpenAI (Default: https://api.openai.com/v1)',
+                'Gemini (Default: https://generativelanguage.googleapis.com)',
+              ]}
+              docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+              testId="provider-base-url-help"
+            />
           </label>
           <input
             id="provider-base-url-input"
@@ -779,7 +802,7 @@ function AiProviderEditorContent({
           />
           <span className="kb-form-hint">
             {providerKind === 'ollama'
-              ? 'Local or LAN endpoint (e.g. http://127.0.0.1:11434 or http://192.168.1.50:11434).'
+              ? 'Default Ollama: http://127.0.0.1:11434. Local or LAN endpoint (e.g. http://192.168.1.50:11434).'
               : providerKind === 'gemini'
                 ? 'Default Google Gemini endpoint: https://generativelanguage.googleapis.com'
                 : 'Default OpenAI: https://api.openai.com/v1. For local proxies, use http://127.0.0.1:8000/v1 or http://localhost:1234/v1.'}

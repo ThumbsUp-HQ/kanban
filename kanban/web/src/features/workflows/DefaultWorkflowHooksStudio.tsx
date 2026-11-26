@@ -168,7 +168,6 @@ export function DefaultWorkflowHooksStudio({
     const cleanFromState =
       fromStateValue === '' || fromStateValue === '*' ? null : fromStateValue;
 
-    const cleanAgentSlug = formAgentSlug.trim().replace(/^@+/, '') || null;
     const timeoutValue = formTimeoutMs === '' ? null : formTimeoutMs;
     if (timeoutValue !== null) {
       if (Number.isNaN(timeoutValue) || timeoutValue < 1000 || timeoutValue > 600000) {
