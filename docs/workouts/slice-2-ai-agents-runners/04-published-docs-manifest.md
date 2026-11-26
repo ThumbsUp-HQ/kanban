@@ -75,15 +75,19 @@ All 8 Slice-2 UI components contain verified documentation links that resolve ag
 | Component Source File | UI Placement | Target `href` / `docHref` | Target Chapter Title | Target Heading Anchor | Resolution Status |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | `AiStudioPage.tsx` | Header Actions Bar | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
-| `AiProviderEditorDrawer.tsx` | Provider Kind Label | `/docs/multi-provider-ai-engine-and-runners#supported-runtimes` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `supported-runtimes` | **VERIFIED (200 OK)** |
-| `AiProviderEditorDrawer.tsx` | Timeout MS Label | `/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `multi-provider-benchmark-cutoff-timeout-guide` | **VERIFIED (200 OK)** |
-| `AiProviderEditorDrawer.tsx` | Sampling Parameters | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
-| `AiBudgetModal.tsx` | Token Cap Input Label | `/docs/multi-provider-ai-engine-and-runners#budget-caps` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `budget-caps` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Provider Kind Label (`provider-engine-help`) | `/docs/multi-provider-ai-engine-and-runners#supported-runtimes` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `supported-runtimes` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Timeout MS Label (`provider-timeout-help`) | `/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `multi-provider-benchmark-cutoff-timeout-guide` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Temperature Input (`provider-temperature-help`) | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Top-P Input (`provider-top-p-help`) | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Max Tokens Input (`provider-max-tokens-help`) | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
+| `AiBudgetModal.tsx` | Token Cap Input Label (`budget-token-cap-help`) | `/docs/multi-provider-ai-engine-and-runners#budget-caps` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `budget-caps` | **VERIFIED (200 OK)** |
 | `AgentStudioPage.tsx` | Header Actions Bar | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
-| `AgentDefinitionEditorDrawer.tsx` | Harness Kind Label | `/docs/multi-provider-ai-engine-and-runners#execution-harnesses` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `execution-harnesses` | **VERIFIED (200 OK)** |
-| `AgentDefinitionEditorDrawer.tsx` | Repo Access Label | `/docs/multi-provider-ai-engine-and-runners#repository-access` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `repository-access` | **VERIFIED (200 OK)** |
+| `AgentDefinitionEditorDrawer.tsx` | Harness Kind Label (`agent-harness-help`) | `/docs/multi-provider-ai-engine-and-runners#execution-harnesses` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `execution-harnesses` | **VERIFIED (200 OK)** |
+| `AgentDefinitionEditorDrawer.tsx` | Agent Timeout Label (`agent-timeout-help`) | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
+| `AgentDefinitionEditorDrawer.tsx` | Repo Access Label (`agent-repo-mode-help`) | `/docs/multi-provider-ai-engine-and-runners#repository-access` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `repository-access` | **VERIFIED (200 OK)** |
 | `RunnerStudioPage.tsx` | Header Actions Bar | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
-| `MintEnrollmentTokenModal.tsx` | Header / Footer Links | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
+| `MintEnrollmentTokenModal.tsx` | Target Runner Pool Slug (`token-pool-slug-help`) | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
+| `MintEnrollmentTokenModal.tsx` | Token Expiration TTL (`mint-token-ttl-help`) | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
 
 **Broken Links Count:** `0` (Zero broken in-app documentation links).
 
@@ -95,7 +99,7 @@ The following configuration parameters and backend contracts are documented with
 
 #### 1. AI Providers Studio & Token Budgets (13 Settings + Backend Contracts)
 - **`provider_kind`:** Underlying AI engine (`gemini`, `openai`, `ollama`).
-- **`display_name`:** Human-readable provider label (1 to 128 chars).
+- **`display_name`:** Human-readable provider label (1 to 80 chars).
 - **`base_url`:** Upstream API endpoint address (`http://127.0.0.1:11434` for Ollama, HTTPS for cloud).
 - **`api_key`:** Secret API key with write-only custody stored encrypted via envelope encryption in PostgreSQL. Zero password inputs (`input[type="password"]`) in client DOM.
 - **`model_allowlist`:** Permitted model identifiers for dispatch. Probed dynamically via `POST .../probe-models` or entered manually.
@@ -103,36 +107,38 @@ The following configuration parameters and backend contracts are documented with
 - **`temperature`:** Float between 0.0 and 2.0 (default 0.7).
 - **`top_p`:** Float between 0.0 and 1.0 (default 1.0).
 - **`max_tokens`:** Integer between 1 and 128000 (default 4096).
-- **`mtls_cert_pem`:** Optional PEM client certificate for mutual TLS provider connections.
+- **`mtls_client_cert_pem`:** Optional PEM client certificate for mutual TLS provider connections.
 - **`is_enabled`:** Boolean active toggle (`true` / `false`).
-- **`priority_and_order`:** Dispatch sequence managed via `POST /api/v1/admin/ai/providers/order` (or `PUT /api/v1/workspaces/{ws}/ai-providers/order`).
-- **`token_cap_and_budgets`:** Monthly budget quota managed via `POST /api/v1/admin/ai/providers/budgets` (or `PUT /api/v1/workspaces/{ws}/ai-providers/budgets`). `token_cap = 0` enforces Hard AI Freeze (blocks reservations with `BudgetExceeded` and halts Sparkle with status `budget`), `10_000_000_000` enables Unlimited Quota (No Cap), and presets provide 1M, 5M, 25M, and 100M tokens.
-- **`air_gap_mode`:** Workspace-level toggle (`PATCH /api/v1/workspaces/{ws}/settings`). Rejects cloud egress to `openai` and `gemini` with HTTP 409 `AIR_GAP_EGRESS_DENIED`, authorizing only local zero-egress Ollama models.
+- **`period_kind`:** Accounting duration tier for consumption caps (`daily` or `monthly`).
+- **`priority_and_order`:** Dispatch sequence managed via `PUT /api/v1/admin/ai/providers/order` (or `PUT /api/v1/workspaces/{ws}/ai-providers/order`).
+- **`token_cap_and_budgets`:** Monthly budget quota managed via `PUT /api/v1/admin/ai/budgets` (or `PUT /api/v1/workspaces/{ws}/ai-providers/budgets`). `token_cap = 0` enforces Hard AI Freeze (blocks reservations with `BudgetExceeded` and halts Sparkle with status `budget`), `10_000_000_000` enables Unlimited Quota (No Cap), and presets provide 1M, 5M, 25M, and 100M tokens. Exact button labels: `Enforce Token Cap`, `Unlimited Quota (No Cap)`, `0 (Freeze)`, `Save Token Cap`.
+- **`air_gap_mode`:** Workspace-level toggle (`PATCH /api/v1/workspaces/{ws}/settings`). Provider creation and update requests for `openai` and `gemini` return HTTP 409 `AIR_GAP_EGRESS_DENIED`, while model probing and connection test endpoints return HTTP 200 OK with `{"ok": false, "error_code": "AIR_GAP_EGRESS_DENIED", ...}`, authorizing only local zero-egress Ollama models.
 
 #### 2. Agent Definitions Studio & Onboarding (14 Settings + Backend Contracts)
 - **`slug`:** Lowercase alphanumeric ASCII string with hyphens (1 to 64 chars).
-- **`display_name`:** Descriptive persona name.
+- **`display_name`:** Descriptive persona name (1 to 200 chars).
 - **`harness_kind`:** `in_app_sdk` (in-process LLM provider), `cli_pipe` (zero-shell Linux sandbox), `remote_runner` (distributed mTLS worker).
 - **`provider_kind` & `model_id`:** For `in_app_sdk`, specifies bound provider and model slug.
 - **`cli_binary_allowlist_id` & `cli_args`:** For `cli_pipe`, restricts binary to `agy` or `codex` with arguments passed via `execve`.
 - **`remote_runner_pool_slug`:** For `remote_runner`, designates target worker pool (`default`).
 - **`repo_access_mode`:** `none` (zero filesystem access), `ro_vfs_mount` (read-only VFS volume mount for static analysis), `bare_git_tools` (read-only bare Git inspection tools).
-- **`mcp_allowed_tools`:** Least-privilege MCP tool allowlist (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`, `add_comment`).
+- **`mcp_allowed_tools`:** Least-privilege MCP tool allowlist strictly restricted to 4 read-only tools: `search_tickets`, `read_ticket`, `search_knowledge`, `read_doc` (submitting unlisted tools fails schema validation with HTTP 422 `HARNESS_FIELDS_INVALID`).
 - **`system_instructions_md`:** UTF-8 Markdown persona instructions sanitized server-side.
 - **`timeout_ms`:** Execution cutoff ceiling (1000 to 300000 ms, default 60000 ms, 300s ceiling).
 - **`project_id` & `rls_isolation`:** PostgreSQL `FORCE ROW LEVEL SECURITY` isolates project-scoped agents. Cross-project access returns HTTP 404 Not Found.
-- **`agent_validation_modal`:** Executed via `POST .../:validate`, returning a 4-section report (1. `=== 1. RENDERED CONTEXT ===`, 2. `=== 2. TOOL TRACE ===`, 3. `=== 3. LATENCY & TOKENS ===`, 4. `=== 4. SCHEMA & POLICY STATUS ===`).
+- **`agent_validation_modal`:** Executed via `POST .../:validate`, returning a 4-section report (1. `=== 1. RENDERED CONTEXT ===`, 2. `=== 2. TOOL TRACE ===`, 3. `=== 3. LATENCY & TOKENS ===`, 4. `=== 4. SCHEMA & POLICY STATUS ===`). Triggered via `Test Validation` button.
 - **`llms_txt_and_onboarding`:** Machine-readable agent capabilities at `/llms.txt`. User preferences stored in `agent_onboarding_prefs` in `/api/v1/users/me/preferences` strictly within the local project folder without modifying global user environments.
 
 #### 3. Remote Runners Studio (10 Settings + Backend Contracts)
 - **`hostname` & `pool_slug`:** Runner hostname and fleet pool identifier.
-- **`enrollment_token`:** Ephemeral single-use token minted via `POST /api/v1/admin/agent-runners/enrollment-tokens` (TTL 60s to 900s, max 15 minutes). Burns upon single use or expiration.
+- **`enrollment_token`:** Ephemeral single-use token minted via `POST /api/v1/admin/agent-runners/enrollment-tokens` (TTL 60s to 900s, max 15 minutes). Burns upon single use or expiration. Button label: `Generate Single-Use Token`.
 - **`client_cert_sha256_hex`:** SHA-256 fingerprint of validated client certificate.
 - **`cert_expires_at`:** Certificate expiration timestamp (30 days from creation).
-- **`status` & `heartbeats`:** `online`, `offline`, `revoked`. Heartbeat frame sent every 15s; missing 30s marks runner offline.
+- **`status` & `heartbeats`:** `online`, `offline`, `revoked`. Heartbeat frame sent every 15s; missing 45s marks runner offline (`DEAD_EVICTION_S = 45.0`).
 - **`unprivileged_daemon_and_posix_permissions`:** Daemon runs as non-root user. State directory `0o700` (`drwx------`), `client.key` `0o600` (`-rw-------`), `ca.pem` `0o600` (`-rw-------`), and `client.crt` `0o644` (`-rw-r--r--`).
+- **`runner_cli_run_command`:** Started via `uv run kanban-agent-runner run` (auto-detects runner config) or `uv run kanban-agent-runner run --config ~/.local/state/kanban-runner/runner.toml`.
 - **`mtls_pop_challenge`:** Challenge-response Proof-of-Possession format: `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}`.
-- **`runner_revocation`:** Executed via `POST /api/v1/admin/agent-runners/{id}:revoke`. Immediately closes WebSocket connections and rejects reconnects with HTTP 403 Forbidden.
+- **`runner_revocation`:** Executed via `POST /api/v1/admin/agent-runners/{id}:revoke`. Immediately closes WebSocket connections and rejects reconnects with HTTP 403 Forbidden. Button label: `1-Click Revoke (AAL2)`.
 
 ---
 
@@ -152,7 +158,7 @@ The following completion packet is prepared for coordinator posting to ticket `K
   - Parallel-safe update to `Studio-Configuration-Reference.md` strictly scoped to Sections 8, 9, and 10 (AI Providers Studio, Agent Definitions Studio, and Remote Runners Studio), maintaining clean diff alignment for parallel slices.
   - Synchronized `wikiManifest.ts` (34 chapters, 117 images) and copied all 22 verified multi-viewport screenshots into `thumbs-up-kanban.wiki/images/` and `kanban/web/public/docs-images/`.
   - 100% verified resolution of all `StudioDocLink` and `FieldHelpHint` links across all 8 Slice-2 components with 0 broken links.
-  - Validated `resolveSectionElement()` on all 7 Slice-2 anchor targets in `DocsCenter.test.tsx`.
+  - Validated `resolveSectionElement()` on all 7 Slice-2 anchor targets and `Studio-Configuration-Reference` Section 8 (`#8-ai-providers-studio`), Section 9 (`#9-agent-definitions-studio`), and Section 10 (`#10-remote-runners-studio`) anchors in `DocsCenter.test.tsx`.
 - **Quality Gates:**
   - `python3 scripts/check_no_dashes.py --all`: 0 Unicode dashes (Exit 0).
   - `python -m scripts.sync_wiki_bundle`: 34 chapters, 117 images synchronized (Exit 0).

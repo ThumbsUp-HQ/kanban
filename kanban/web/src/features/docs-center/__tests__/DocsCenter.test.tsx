@@ -1788,5 +1788,33 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         expect(element, `Anchor #${anchor} from ${href} must resolve in DocMarkdownViewer`).not.toBeNull();
       }
     });
+
+    it('asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors', () => {
+      const chapter = getChapter('studio-configuration-reference');
+      expect(chapter).toBeDefined();
+      if (!chapter) {
+        throw new Error('Chapter studio-configuration-reference not found');
+      }
+
+      const { container } = render(
+        <DocMarkdownViewer content={chapter.content} />
+      );
+
+      const studioSectionHrefs = [
+        '/docs/studio-configuration-reference#8-ai-providers-studio',
+        '/docs/studio-configuration-reference#9-agent-definitions-studio',
+        '/docs/studio-configuration-reference#10-remote-runners-studio',
+      ];
+
+      for (const href of studioSectionHrefs) {
+        const { anchor } = parseDocHref(href);
+        expect(anchor).toBeDefined();
+        if (!anchor) {
+          throw new Error(`Anchor missing for ${href}`);
+        }
+        const element = resolveSectionElement(container, anchor);
+        expect(element, `Anchor #${anchor} from ${href} must resolve in DocMarkdownViewer`).not.toBeNull();
+      }
+    });
   });
 });

@@ -22,29 +22,29 @@ kanban/tests/test_wiki_bundle_sync.py::test_feature_comparison_day2_clean_and_sy
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 190ms
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 168ms
 Not implemented: navigation to another Document
- ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 5264ms
-   ✓ DocsCenter & Help System (KAN-16) (50)
-     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (17)
-       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1619ms
-       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 494ms
-       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 382ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (51 tests) 5537ms
+   ✓ DocsCenter & Help System (KAN-16) (51)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (18)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1659ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 523ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 387ms
 
  Test Files  2 passed (2)
-      Tests  71 passed (71)
-   Start at  22:24:16
-   Duration  6.65s (tests 74%, environment 18%, import 5%, worker 1%, transform 1%)
+      Tests  72 passed (72)
+   Start at  23:26:05
+   Duration  7.10s (tests 71%, environment 17%, transform 6%, import 5%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |    99.6 |    96.44 |     100 |     100 |                   
+All files          |    99.6 |    96.74 |     100 |     100 |                   
  ...downViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
  ...CenterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
  HelpDrawer.tsx    |     100 |    97.72 |     100 |     100 | 69                
- docsService.ts    |     100 |    97.14 |     100 |     100 | 46                
+ docsService.ts    |     100 |      100 |     100 |     100 |                   
  index.ts          |       0 |        0 |       0 |       0 |                   
  wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
