@@ -16,7 +16,7 @@
   min-height: 18px;
   flex-shrink: 0;
   padding: 0;
-  margin: 0 0 0 auto;
+  margin: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-full);
   background: var(--bg-surface);
@@ -223,7 +223,7 @@
   outline-offset: 2px;
 }
 
-/* Global form-label flex alignment pinning .field-help-hint to the right edge */
+/* Global form-label flex alignment placing .field-help-hint adjacent to label */
 label:has(> .field-help-hint),
 .kb-label:has(> .field-help-hint),
 .kb-form-label:has(> .field-help-hint),
@@ -235,8 +235,7 @@ label:has(> .field-help-hint),
 .workflow-form-label:has(> .field-help-hint),
 .auth-editor-label:has(> .field-help-hint),
 .kb-personal-settings-label:has(> .field-help-hint) {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  width: 100%;
   gap: var(--space-2, 8px);
 }

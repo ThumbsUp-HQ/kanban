@@ -1,0 +1,2130 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 2c7135ea..dea94d22 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -16,7 +16,7 @@
+   min-height: 18px;
+   flex-shrink: 0;
+   padding: 0;
+-  margin: 0 0 0 auto;
++  margin: 0;
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-full);
+   background: var(--bg-surface);
+@@ -221,7 +221,7 @@
+   outline-offset: 2px;
+ }
+ 
+-/* Global form-label flex alignment pinning .field-help-hint to the right edge */
++/* Global form-label flex alignment placing .field-help-hint adjacent to label */
+ label:has(> .field-help-hint),
+ .kb-label:has(> .field-help-hint),
+ .kb-form-label:has(> .field-help-hint),
+@@ -233,8 +233,7 @@ label:has(> .field-help-hint),
+ .workflow-form-label:has(> .field-help-hint),
+ .auth-editor-label:has(> .field-help-hint),
+ .kb-personal-settings-label:has(> .field-help-hint) {
+-  display: flex;
++  display: inline-flex;
+   align-items: center;
+-  width: 100%;
+   gap: var(--space-2, 8px);
+ }
+diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
+index 0e3dcf2b..04b94f60 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.tsx
++++ b/kanban/web/src/components/help/FieldHelpHint.tsx
+@@ -217,6 +217,7 @@ export function FieldHelpHint({
+     if (e.key === 'Escape') {
+       e.preventDefault();
+       e.stopPropagation();
++      e.nativeEvent.stopImmediatePropagation();
+       ctrl.escape();
+       return;
+     }
+@@ -272,6 +273,7 @@ export function FieldHelpHint({
+     if (e.key === 'Escape') {
+       e.preventDefault();
+       e.stopPropagation();
++      e.nativeEvent.stopImmediatePropagation();
+       ctrl.escape();
+       return;
+     }
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index 0af5ea41..5e2be665 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -590,7 +590,7 @@ function AiProviderEditorContent({
+         {/* 1. Protocol & Provider Engine */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-kind-select" className="kb-form-label">
+-            Protocol & Provider Engine
++            <span>Protocol & Provider Engine</span>
+             <FieldHelpHint
+               title="AI Provider Engine"
+               summary="The underlying runtime and API protocol for AI completions and evaluations."
+@@ -665,7 +665,15 @@ function AiProviderEditorContent({
+         {/* 2. Display Name */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-name-input" className="kb-form-label">
+-            Display Name
++            <span>Display Name</span>
++            <FieldHelpHint
++              title="Display Name"
++              summary="Human-readable label for this AI provider instance."
++              defaultValue="None (Required)"
++              example="OpenAI GPT-4o Production"
++              docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
++              testId="provider-name-help"
++            />
+           </label>
+           <input
+             id="provider-name-input"
+@@ -687,7 +695,14 @@ function AiProviderEditorContent({
+         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-key-input" className="kb-form-label">
+-            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
++            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
++            <FieldHelpHint
++              title="API Secret Key"
++              summary="Authentication secret for upstream LLM provider API requests."
++              defaultValue={isLocal ? 'Optional (empty for unauthenticated local endpoints)' : 'None (Required)'}
++              docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
++              testId="provider-key-help"
++            />
+           </label>
+           <div className="kb-api-key-row">
+             <input
+@@ -755,12 +770,14 @@ function AiProviderEditorContent({
+         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-base-url-input" className="kb-form-label">
+-            HTTP Base URL{' '}
+-            {providerKind === 'ollama'
+-              ? '(Default: http://127.0.0.1:11434)'
+-              : providerKind === 'gemini'
+-                ? '(Default: https://generativelanguage.googleapis.com)'
+-                : '(Default: https://api.openai.com/v1)'}
++            <span>
++              HTTP Base URL{' '}
++              {providerKind === 'ollama'
++                ? '(Default: http://127.0.0.1:11434)'
++                : providerKind === 'gemini'
++                  ? '(Default: https://generativelanguage.googleapis.com)'
++                  : '(Default: https://api.openai.com/v1)'}
++            </span>
+             <FieldHelpHint
+               title="HTTP Base URL"
+               summary="Base endpoint URL for outbound LLM API requests."
+@@ -812,7 +829,7 @@ function AiProviderEditorContent({
+         {/* 4. Configurable Cutoff Timeout (ms) */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
+-            Cutoff Timeout (ms)
++            <span>Cutoff Timeout (ms)</span>
+             <FieldHelpHint
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+@@ -846,7 +863,14 @@ function AiProviderEditorContent({
+         <div className="kb-form-group">
+           <div className="kb-model-allowlist-header">
+             <label htmlFor="provider-models-input" className="kb-form-label">
+-              Model Allowlist (comma separated)
++              <span>Model Allowlist (comma separated)</span>
++              <FieldHelpHint
++                title="Model Allowlist"
++                summary="Comma-separated model names permitted for inference or probed from the endpoint."
++                example="gpt-4o, gpt-4o-mini, llama3.1"
++                docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
++                testId="provider-models-help"
++              />
+             </label>
+             <button
+               type="button"
+@@ -957,10 +981,10 @@ function AiProviderEditorContent({
+           className="kb-advanced-model-harness-section"
+         >
+           <div data-testid="advanced-model-harness-config">
+-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px' }}>
++            <div className="kb-model-params-grid">
+               <div className="kb-form-group">
+                 <label htmlFor="provider-temperature-input" className="kb-form-label">
+-                  Temperature
++                  <span>Temperature</span>
+                   <FieldHelpHint
+                     title="Temperature"
+                     summary="Sampling randomness governing creative variance versus deterministic predictability."
+@@ -989,7 +1013,7 @@ function AiProviderEditorContent({
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="provider-top-p-input" className="kb-form-label">
+-                  Top-P (Nucleus)
++                  <span>Top-P (Nucleus)</span>
+                   <FieldHelpHint
+                     title="Top-P (Nucleus)"
+                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
+@@ -1018,7 +1042,7 @@ function AiProviderEditorContent({
+ 
+               <div className="kb-form-group">
+                 <label htmlFor="provider-max-tokens-input" className="kb-form-label">
+-                  Max Tokens
++                  <span>Max Tokens</span>
+                   <FieldHelpHint
+                     title="Max Tokens"
+                     summary="Maximum generation token ceiling for completion and reasoning generation."
+@@ -1046,14 +1070,19 @@ function AiProviderEditorContent({
+               </div>
+             </div>
+ 
+-            <div className="kb-form-group" style={{ marginTop: '12px' }}>
++            <div className="kb-form-group kb-form-group--mt12">
+               <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
+-                mTLS Client Certificate PEM (Optional)
++                <span>mTLS Client Certificate PEM (Optional)</span>
++                <FieldHelpHint
++                  title="mTLS Client Certificate PEM"
++                  summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
++                  docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
++                  testId="provider-mtls-cert-help"
++                />
+               </label>
+               <textarea
+                 id="provider-mtls-cert-input"
+-                className="kb-form-input"
+-                style={{ fontFamily: 'monospace', fontSize: '0.8rem', minHeight: '80px' }}
++                className="kb-form-input kb-form-textarea--mono"
+                 placeholder="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+                 value={mtlsCertPem}
+                 onChange={(e) => {
+@@ -1068,7 +1097,15 @@ function AiProviderEditorContent({
+ 
+             <div className="kb-form-group">
+               <label htmlFor="provider-residency-select" className="kb-form-label">
+-                Data Residency Tier (Override)
++                <span>Data Residency Tier (Override)</span>
++                <FieldHelpHint
++                  title="Data Residency Tier"
++                  summary="Enforces data locality boundaries preventing external data egress."
++                  defaultValue="default"
++                  validValues={['local_only', 'cloud_standard', 'default', 'us-east', 'eu-central']}
++                  docHref="/docs/multi-provider-ai-engine-and-runners#provider-architecture-and-abstraction-layer"
++                  testId="provider-residency-help"
++                />
+               </label>
+               <select
+                 id="provider-residency-select"
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+index c6844961..3aaa5353 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -103,7 +103,7 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+     );
+ 
+     // Initial provider is openai (airGapMode=false) -> Prominent "API Secret Key" label
+-    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
++    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
+ 
+     // Initial modelAllowlist must be empty string (no hardcoded qwen2.5 or gpt-4o defaults)
+     const modelsInput = screen.getByTestId<HTMLInputElement>('provider-models-input');
+@@ -116,12 +116,12 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+     const kindSelect = screen.getByTestId('provider-kind-select');
+     fireEvent.change(kindSelect, { target: { value: 'gemini' } });
+     expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+-    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
++    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
+ 
+     // Switching providerKind to ollama displays optional hint
+     fireEvent.change(kindSelect, { target: { value: 'ollama' } });
+     expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+-    expect(screen.getByLabelText('API Secret Key (Optional for Local Endpoints)')).toBeDefined();
++    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
+ 
+     // Switching back to openai
+     fireEvent.change(kindSelect, { target: { value: 'openai' } });
+@@ -964,6 +964,48 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+       });
+     });
+ 
++    it('handles AAL2 step-up cancellation and AIR_GAP_EGRESS_DENIED fallback on probe and test connection', async () => {
++      const aal2CancelError = new Error('Step-up cancelled');
++      aal2CancelError.name = 'Aal2StepUpCancelledError';
++
++      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValueOnce(aal2CancelError);
++      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValueOnce(aal2CancelError);
++
++      render(
++        <AiProviderEditorDrawer
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++          airGapMode={false}
++          onSaved={vi.fn()}
++        />,
++      );
++
++      fireEvent.click(screen.getByTestId('probe-models-btn'));
++      expect(screen.queryByTestId('probe-error')).toBeNull();
++
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Testing connection...');
++      });
++
++      // Test AIR_GAP_EGRESS_DENIED fallback message
++      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
++        ok: false,
++        latency_ms: 10,
++        models: [],
++        model_count: 0,
++        error_code: 'AIR_GAP_EGRESS_DENIED',
++      });
++
++      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++      await waitFor(() => {
++        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
++          'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.',
++        );
++      });
++    });
++
+     it('handles probe error response without message on probe models', async () => {
+       vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
+         ok: false,
+@@ -2058,5 +2100,110 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
+         expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('http://127.0.0.1:11434');
+       });
+     });
++
++    describe('KAN-449: FieldHelpHints and CSS token styling in AiProviderEditorDrawer', () => {
++      it('renders FieldHelpHint components across display name, API key, model allowlist, mTLS, and residency tier', () => {
++        render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={vi.fn()}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        // Name & Key hints
++        const nameHelp = screen.getByTestId('provider-name-help');
++        expect(nameHelp.getAttribute('aria-label')).toBe('Help for Display Name');
++        expect(nameHelp.getAttribute('aria-haspopup')).toBe('dialog');
++
++        const keyHelp = screen.getByTestId('provider-key-help');
++        expect(keyHelp.getAttribute('aria-label')).toBe('Help for API Secret Key');
++
++        const modelsHelp = screen.getByTestId('provider-models-help');
++        expect(modelsHelp.getAttribute('aria-label')).toBe('Help for Model Allowlist');
++
++        // Open Advanced Section
++        fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
++
++        const mtlsHelp = screen.getByTestId('provider-mtls-cert-help');
++        expect(mtlsHelp.getAttribute('aria-label')).toBe('Help for mTLS Client Certificate PEM');
++
++        const residencyHelp = screen.getByTestId('provider-residency-help');
++        expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
++
++        // Verify popover interaction on provider-name-help
++        act(() => {
++          nameHelp.focus();
++        });
++        expect(screen.getByTestId('provider-name-help-popover')).toBeDefined();
++        expect(screen.getByTestId('provider-name-help-popover').textContent).toContain(
++          'Human-readable label for this AI provider instance.',
++        );
++
++        fireEvent.keyDown(screen.getByTestId('provider-name-help-popover'), { key: 'Escape' });
++        expect(screen.queryByTestId('provider-name-help-popover')).toBeNull();
++      });
++
++      it('enforces clean CSS class styling with zero inline style props on model grid and mTLS', () => {
++        const { container } = render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={vi.fn()}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
++
++        const grid = container.querySelector('.kb-model-params-grid');
++        expect(grid).not.toBeNull();
++        expect(grid?.getAttribute('style')).toBeNull();
++
++        const mtlsTextarea = screen.getByTestId('provider-mtls-cert-input');
++        expect(mtlsTextarea.classList.contains('kb-form-textarea--mono')).toBe(true);
++        expect(mtlsTextarea.getAttribute('style')).toBeNull();
++      });
++
++      it('validates cutoff timeout bounds on form submission', async () => {
++        render(
++          <AiProviderEditorDrawer
++            isOpen={true}
++            onClose={vi.fn()}
++            provider={null}
++            airGapMode={false}
++            onSaved={vi.fn()}
++          />,
++        );
++
++        fireEvent.change(screen.getByTestId('provider-name-input'), {
++          target: { value: 'Valid Name' },
++        });
++        fireEvent.change(screen.getByTestId('provider-key-input'), {
++          target: { value: 'sk-test' },
++        });
++        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
++          target: { value: '500' },
++        });
++
++        fireEvent.submit(screen.getByTestId('save-provider-btn'));
++
++        await waitFor(() => {
++          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
++        });
++
++        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
++          target: { value: '700000' },
++        });
++        fireEvent.submit(screen.getByTestId('save-provider-btn'));
++
++        await waitFor(() => {
++          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
++        });
++      });
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index 7d02cb52..b89c2c22 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -933,3 +933,21 @@
+   color: var(--fg-secondary);
+   margin-bottom: var(--space-4, 16px);
+ }
++
++/* Model harness parameter grid and input helpers (zero inline style props) */
++.kb-model-params-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
++  gap: 16px;
++}
++
++.kb-form-group--mt12 {
++  margin-top: 12px;
++}
++
++.kb-form-textarea--mono {
++  font-family: var(--font-mono, monospace);
++  font-size: 0.8rem;
++  min-height: 80px;
++}
++
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+index c9b30c6c..e1cbdc0a 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { AuthCardEditorDrawer, type AuthCardEditorDrawerProps } from './AuthCardEditorDrawer';
+ import type { AdminAuthCard, CreateAuthCardPayload } from './adminAuthApi';
+@@ -55,7 +55,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    const secretInput = screen.getByLabelText<HTMLInputElement>(/Client Secret/i);
++    const secretInput = screen.getByLabelText<HTMLInputElement>(/Client Secret/i, { selector: 'input' });
+     // Write-only: value is empty, disabled, placeholder has dek_kid
+     expect(secretInput.value).toBe('');
+     expect(secretInput.hasAttribute('disabled')).toBe(true);
+@@ -79,7 +79,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     expect('secret_input' in payload).toBe(false);
+ 
+     // 2. Check Replace Stored Secret -> unlocks input and sends new secret
+-    const replaceBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
++    const replaceBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i, { selector: 'input' });
+     fireEvent.click(replaceBox);
+     expect(secretInput.hasAttribute('disabled')).toBe(false);
+ 
+@@ -151,10 +151,10 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
+-    const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+-    const issuerInput = screen.getByLabelText<HTMLInputElement>(/Issuer URL/i);
+-    const clientIdInput = screen.getByLabelText<HTMLInputElement>(/Client ID/i);
++    const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' });
++    const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' });
++    const issuerInput = screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' });
++    const clientIdInput = screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' });
+ 
+     // Invalid slug (uppercase & underscore)
+     fireEvent.change(slugInput, { target: { value: 'Bad_Slug' } });
+@@ -184,11 +184,11 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     );
+ 
+     // Select LDAP
+-    const kindSelect = screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i);
++    const kindSelect = screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i, { selector: 'select' });
+     fireEvent.change(kindSelect, { target: { value: 'LDAP' } });
+ 
+-    const serverInput = screen.getByLabelText<HTMLInputElement>(/Server URL/i);
+-    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i);
++    const serverInput = screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' });
++    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i, { selector: 'input' });
+ 
+     // Enter ldap://
+     fireEvent.change(serverInput, { target: { value: 'ldap://dc01.corp.example.com' } });
+@@ -196,19 +196,19 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     expect(startTlsBox.hasAttribute('disabled')).toBe(true);
+ 
+     // Test invalid SPKI pin (63 hex chars, should be 64)
+-    const spkiInput = screen.getByLabelText<HTMLInputElement>(/SPKI SHA-256 Pin/i);
++    const spkiInput = screen.getByLabelText<HTMLInputElement>(/SPKI SHA-256 Pin/i, { selector: 'input' });
+     fireEvent.change(spkiInput, { target: { value: 'a'.repeat(63) } });
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'corp-ad' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Corp AD' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i, { selector: 'input' }), {
+       target: { value: 'cn=admin,dc=corp' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i, { selector: 'input' }), {
+       target: { value: 'dc=corp' },
+     });
+ 
+@@ -281,19 +281,19 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i, { selector: 'select' }), {
+       target: { value: 'OAUTH2' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'github-oauth' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'GitHub' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }), {
+       target: { value: 'https://github.com' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }), {
+       target: { value: 'gh-client-id' },
+     });
+ 
+@@ -358,13 +358,13 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i, { selector: 'select' }), {
+       target: { value: 'LDAP' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'ldap-test' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'LDAP Test' },
+     });
+ 
+@@ -376,7 +376,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     expect(screen.getByText('Base DN is required.')).toBeDefined();
+ 
+     // Invalid protocol
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }), {
+       target: { value: 'http://ldap.example.com' },
+     });
+     fireEvent.click(createBtn);
+@@ -396,16 +396,16 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'valid-slug' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Valid Name' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }), {
+       target: { value: 'https://issuer.example.com' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }), {
+       target: { value: 'client-id' },
+     });
+ 
+@@ -456,18 +456,18 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    const userFilterInput = screen.getByLabelText<HTMLInputElement>(/User Filter/i);
++    const userFilterInput = screen.getByLabelText<HTMLInputElement>(/User Filter/i, { selector: 'input' });
+     expect(userFilterInput.value).toBe('(mail={username})');
+     fireEvent.change(userFilterInput, { target: { value: '(uid={username})' } });
+ 
+-    const caPemInput = screen.getByLabelText<HTMLTextAreaElement>(/CA Certificate/i);
++    const caPemInput = screen.getByLabelText<HTMLTextAreaElement>(/CA Certificate/i, { selector: 'textarea' });
+     expect(caPemInput.value).toContain('TEST');
+     fireEvent.change(caPemInput, { target: { value: '-----BEGIN CERTIFICATE-----UPDATED-----END CERTIFICATE-----' } });
+ 
+-    const replaceSecretBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
++    const replaceSecretBox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i, { selector: 'input' });
+     fireEvent.click(replaceSecretBox);
+ 
+-    const bindPwdInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i);
++    const bindPwdInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i, { selector: 'input' });
+     fireEvent.change(bindPwdInput, { target: { value: 'new-bind-password-secret' } });
+ 
+     const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+@@ -500,32 +500,32 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'full-test' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Full Test' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i, { selector: 'input' }), {
+       target: { value: 'Custom subtext' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i, { selector: 'select' }), {
+       target: { value: 'globe' },
+     });
+-    fireEvent.click(screen.getByLabelText<HTMLInputElement>(/Auto-provision Users/i));
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i), {
++    fireEvent.click(screen.getByLabelText<HTMLInputElement>(/Auto-provision Users/i, { selector: 'input' }));
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i, { selector: 'input' }), {
+       target: { value: 'corp.com, partner.org' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }), {
+       target: { value: 'https://idp.fulltest.com' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }), {
+       target: { value: 'full-client-id' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Scopes/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Scopes/i, { selector: 'input' }), {
+       target: { value: 'openid, email' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i, { selector: 'select' }), {
+       target: { value: 'private_key_jwt' },
+     });
+ 
+@@ -563,13 +563,13 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'valid-slug' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'a'.repeat(81) },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i, { selector: 'input' }), {
+       target: { value: 'b'.repeat(121) },
+     });
+ 
+@@ -624,19 +624,19 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     expect(screen.getByText('Slug is required.')).toBeDefined();
+ 
+     // Fill valid fields and secret
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'secret-card' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Secret Card' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }), {
+       target: { value: 'https://issuer.com' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }), {
+       target: { value: 'client-1' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client Secret/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client Secret/i, { selector: 'input' }), {
+       target: { value: 'super-create-secret' },
+     });
+ 
+@@ -666,27 +666,27 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+     );
+ 
+     // Switch to LDAP with ldaps://
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i, { selector: 'select' }), {
+       target: { value: 'LDAP' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }), {
+       target: { value: 'ldaps://secure-ldap.example.com' },
+     });
+-    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i);
++    const startTlsBox = screen.getByLabelText<HTMLInputElement>(/StartTLS/i, { selector: 'input' });
+     expect(startTlsBox.checked).toBe(false);
+     fireEvent.click(startTlsBox);
+     expect(startTlsBox.checked).toBe(true);
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'secure-ldap' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Secure LDAP' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i, { selector: 'input' }), {
+       target: { value: 'cn=admin' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i, { selector: 'input' }), {
+       target: { value: 'dc=example' },
+     });
+ 
+@@ -720,10 +720,10 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    expect(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i).value).toBe(
++    expect(screen.getByLabelText<HTMLSelectElement>(/Token Auth Method/i, { selector: 'select' }).value).toBe(
+       'private_key_jwt',
+     );
+-    expect(screen.getByLabelText<HTMLInputElement>(/Scopes/i).value).toBe('openid email');
++    expect(screen.getByLabelText<HTMLInputElement>(/Scopes/i, { selector: 'input' }).value).toBe('openid email');
+   });
+ 
+   it('creates an LDAP card with ldap:// scheme forcing start_tls true', async () => {
+@@ -738,22 +738,22 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i), {
++    fireEvent.change(screen.getByLabelText<HTMLSelectElement>(/Provider Kind/i, { selector: 'select' }), {
+       target: { value: 'LDAP' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
+       target: { value: 'insecure-ldap' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
+       target: { value: 'Insecure LDAP' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }), {
+       target: { value: 'ldap://plain.example.com' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i, { selector: 'input' }), {
+       target: { value: 'cn=admin' },
+     });
+-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i), {
++    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Base DN/i, { selector: 'input' }), {
+       target: { value: 'dc=plain' },
+     });
+ 
+@@ -823,8 +823,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('');
+-    expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe('');
++    expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }).value).toBe('');
++    expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }).value).toBe('');
+ 
+     const emptyLdapCard: AdminAuthCard = {
+       ...existingOidcCard,
+@@ -841,8 +841,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('');
+-    expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i).value).toBe('');
++    expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }).value).toBe('');
++    expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i, { selector: 'input' }).value).toBe('');
+ 
+     rerender(
+       <AuthCardEditorDrawer
+@@ -852,7 +852,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         onSave={vi.fn()}
+       />,
+     );
+-    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('okta-workforce');
++    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('okta-workforce');
+ 
+     const ldapCard: AdminAuthCard = {
+       ...existingOidcCard,
+@@ -878,7 +878,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         onSave={vi.fn()}
+       />,
+     );
+-    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('corp-ad');
++    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('corp-ad');
+ 
+     rerender(
+       <AuthCardEditorDrawer
+@@ -889,7 +889,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       />,
+     );
+ 
+-    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('');
++    expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('');
+   });
+ 
+   describe('Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185)', () => {
+@@ -966,12 +966,12 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       fireEvent.click(applyBtn);
+ 
+       await waitFor(() => {
+-        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe(
++        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }).value).toBe(
+           '1234567890-testclientid.apps.googleusercontent.com',
+         );
+       });
+ 
+-      expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i).value).toBe(
++      expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i, { selector: 'input' }).value).toBe(
+         'GOCSPX-supersecretkey1234567890',
+       );
+       expect(screen.getByTestId('google-json-redirect-ok')).toBeDefined();
+@@ -1161,7 +1161,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       });
+ 
+       await waitFor(() => {
+-        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i).value).toBe(
++        expect(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }).value).toBe(
+           'file-client-id.apps.googleusercontent.com',
+         );
+       });
+@@ -1174,7 +1174,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       }
+ 
+       await waitFor(() => {
+-        expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i).value).toBe('file-secret-value');
++        expect(screen.getByLabelText<HTMLInputElement>(/Client Secret/i, { selector: 'input' }).value).toBe('file-secret-value');
+       });
+     });
+ 
+@@ -1304,19 +1304,19 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Change provider to LDAP
+-      fireEvent.change(screen.getByLabelText(/Provider Kind/i), { target: { value: 'LDAP' } });
++      fireEvent.change(screen.getByLabelText(/Provider Kind/i, { selector: 'select' }), { target: { value: 'LDAP' } });
+ 
+-      fireEvent.change(screen.getByLabelText(/Slug Identifier/i), { target: { value: 'corp-ad' } });
+-      fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Active Directory' } });
+-      fireEvent.change(screen.getByLabelText(/Server URL/i), { target: { value: 'ldap://ad.corp.example.com:389' } });
+-      fireEvent.change(screen.getByLabelText(/^Bind DN$/i), { target: { value: 'cn=bind,dc=example,dc=com' } });
+-      fireEvent.change(screen.getByLabelText(/^Base DN$/i), { target: { value: 'dc=example,dc=com' } });
+-      fireEvent.change(screen.getByLabelText(/Bind DN Password/i), { target: { value: 'SuperSecretPass123!' } });
++      fireEvent.change(screen.getByLabelText(/Slug Identifier/i, { selector: 'input' }), { target: { value: 'corp-ad' } });
++      fireEvent.change(screen.getByLabelText(/Display Name/i, { selector: 'input' }), { target: { value: 'Active Directory' } });
++      fireEvent.change(screen.getByLabelText(/Server URL/i, { selector: 'input' }), { target: { value: 'ldap://ad.corp.example.com:389' } });
++      fireEvent.change(screen.getByLabelText(/^Bind DN(?!\s*Password)/i, { selector: 'input' }), { target: { value: 'cn=bind,dc=example,dc=com' } });
++      fireEvent.change(screen.getByLabelText(/^Base DN/i, { selector: 'input' }), { target: { value: 'dc=example,dc=com' } });
++      fireEvent.change(screen.getByLabelText(/Bind DN Password/i, { selector: 'input' }), { target: { value: 'SuperSecretPass123!' } });
+ 
+       // Change access policy to restricted
+-      fireEvent.change(screen.getByLabelText(/Access Policy/i), { target: { value: 'restricted' } });
+-      fireEvent.change(screen.getByLabelText(/Admin Groups/i), { target: { value: 'Admins, SuperUsers' } });
+-      fireEvent.change(screen.getByLabelText(/User Groups/i), { target: { value: 'Engineers, Product' } });
++      fireEvent.change(screen.getByLabelText(/Access Policy/i, { selector: 'select' }), { target: { value: 'restricted' } });
++      fireEvent.change(screen.getByLabelText(/Admin Groups/i, { selector: 'input' }), { target: { value: 'Admins, SuperUsers' } });
++      fireEvent.change(screen.getByLabelText(/User Groups/i, { selector: 'input' }), { target: { value: 'Engineers, Product' } });
+ 
+       const saveBtn = screen.getByRole('button', { name: /Create Card/i });
+       fireEvent.click(saveBtn);
+@@ -1384,10 +1384,10 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      const accessPolicySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i);
++      const accessPolicySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i, { selector: 'select' });
+       expect(accessPolicySelect.value).toBe('restricted');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i).value).toBe('admin@example.com');
+-      expect(screen.getByLabelText<HTMLInputElement>(/User Allowlist/i).value).toBe('dev1@example.com, dev2@example.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i, { selector: 'input' }).value).toBe('admin@example.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/User Allowlist/i, { selector: 'input' }).value).toBe('dev1@example.com, dev2@example.com');
+     });
+ 
+     it('traps Tab and Shift+Tab navigation between first and last focusable elements', () => {
+@@ -1456,7 +1456,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://fallback.auth.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }).value).toBe('https://fallback.auth.com');
+       unmount();
+ 
+       const fallbackLdapCard: AdminAuthCard = {
+@@ -1491,8 +1491,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://corp.example.internal:636');
+-      expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i).value).toBe('cn=svc,dc=corp,dc=internal');
++      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }).value).toBe('ldaps://corp.example.internal:636');
++      expect(screen.getByLabelText<HTMLInputElement>(/^Bind DN$/i, { selector: 'input' }).value).toBe('cn=svc,dc=corp,dc=internal');
+     });
+ 
+     it('copies OAuth callback URL to clipboard and handles unchecking replace secret', () => {
+@@ -1542,7 +1542,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Uncheck replace secret clears secret input
+-      const replaceSecretCheckbox = screen.getByLabelText(/Replace Stored Secret/i);
++      const replaceSecretCheckbox = screen.getByLabelText(/Replace Stored Secret/i, { selector: 'input' });
+       fireEvent.click(replaceSecretCheckbox);
+       expect(replaceSecretCheckbox.getAttribute('checked')).toBeNull();
+     });
+@@ -1593,7 +1593,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Access policy mode is restricted
+-      const policySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i);
++      const policySelect = screen.getByLabelText<HTMLSelectElement>(/Access Policy/i, { selector: 'select' });
+       expect(policySelect.value).toBe('restricted');
+ 
+       // Submit edit
+@@ -1728,7 +1728,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       // Check replace secret and uncheck it
+       const replaceCheckbox = screen.getByRole('checkbox', { name: /Replace Stored Secret/i });
+       fireEvent.click(replaceCheckbox);
+-      const secretInput = screen.getByLabelText(/Client Secret/i);
++      const secretInput = screen.getByLabelText(/Client Secret/i, { selector: 'input' });
+       fireEvent.change(secretInput, { target: { value: 'temp-secret' } });
+       fireEvent.click(replaceCheckbox); // uncheck -> sets secretInput to ''
+ 
+@@ -1759,8 +1759,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+           onSave={vi.fn().mockResolvedValue(undefined)}
+         />,
+       );
+-      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy').value).toBe('restricted');
+-      expect(screen.getByLabelText(/Admin Allowlist/i)).toBeDefined();
++      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy', { selector: 'select' }).value).toBe('restricted');
++      expect(screen.getByLabelText(/Admin Allowlist/i, { selector: 'input' })).toBeDefined();
+       u1();
+ 
+       // 2. Initialized with user_allowlist only
+@@ -1778,8 +1778,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+           onSave={vi.fn().mockResolvedValue(undefined)}
+         />,
+       );
+-      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy').value).toBe('restricted');
+-      expect(screen.getByLabelText(/User Allowlist/i)).toBeDefined();
++      expect(screen.getByLabelText<HTMLSelectElement>('Access Policy', { selector: 'select' }).value).toBe('restricted');
++      expect(screen.getByLabelText(/User Allowlist/i, { selector: 'input' })).toBeDefined();
+       u2();
+ 
+       // 3. Test handshake with non-Error rejection
+@@ -1859,8 +1859,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+           onSave={vi.fn()}
+         />,
+       );
+-      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i)).value).toBe('restricted');
+-      expect(screen.getByLabelText(/Admin Allowlist/i)).toBeDefined();
++      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i, { selector: 'select' })).value).toBe('restricted');
++      expect(screen.getByLabelText(/Admin Allowlist/i, { selector: 'input' })).toBeDefined();
+       u1();
+ 
+       // User allowlist
+@@ -1878,7 +1878,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+           onSave={vi.fn()}
+         />,
+       );
+-      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i)).value).toBe('restricted');
++      expect((screen.getByLabelText<HTMLSelectElement>(/Access Policy/i, { selector: 'select' })).value).toBe('restricted');
+       u2();
+     });
+   });
+@@ -1895,12 +1895,12 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Primary fields must be immediately present
+-      const displayNameInput = screen.getByLabelText(/Display Name/i);
+-      const providerKindSelect = screen.getByLabelText(/Provider Kind/i);
+-      const enableCardCheckbox = screen.getByLabelText(/Enable Card/i);
+-      const issuerUrlInput = screen.getByLabelText(/Issuer URL/i);
+-      const clientIdInput = screen.getByLabelText(/Client ID/i);
+-      const clientSecretInput = screen.getByLabelText(/Client Secret/i);
++      const displayNameInput = screen.getByLabelText(/Display Name/i, { selector: 'input' });
++      const providerKindSelect = screen.getByLabelText(/Provider Kind/i, { selector: 'select' });
++      const enableCardCheckbox = screen.getByLabelText(/Enable Card/i, { selector: 'input' });
++      const issuerUrlInput = screen.getByLabelText(/Issuer URL/i, { selector: 'input' });
++      const clientIdInput = screen.getByLabelText(/Client ID/i, { selector: 'input' });
++      const clientSecretInput = screen.getByLabelText(/Client Secret/i, { selector: 'input' });
+ 
+       expect(displayNameInput).toBeDefined();
+       expect(providerKindSelect).toBeDefined();
+@@ -1947,8 +1947,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+-      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
++      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' });
++      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' });
+ 
+       fireEvent.change(nameInput, { target: { value: 'Corp Google SSO' } });
+       expect(slugInput.value).toBe('corp-google-sso');
+@@ -1988,36 +1988,36 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       // Google preset
+       const googleBtn = screen.getByRole('button', { name: /Google \(OAuth 2\.0\)/i });
+       fireEvent.click(googleBtn);
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Google Workspace');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('google-oauth');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://accounts.google.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('Google Workspace');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('google-oauth');
++      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }).value).toBe('https://accounts.google.com');
+ 
+       // GitHub preset
+       const githubBtn = screen.getByRole('button', { name: /GitHub \(OAuth 2\.0\)/i });
+       fireEvent.click(githubBtn);
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('GitHub');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('github-oauth');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://github.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('GitHub');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('github-oauth');
++      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }).value).toBe('https://github.com');
+ 
+       // Active Directory preset
+       const adBtn = screen.getByRole('button', { name: /Active Directory/i });
+       fireEvent.click(adBtn);
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Active Directory');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('ad-ldap');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://ad.corp.local:636');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('Active Directory');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('ad-ldap');
++      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }).value).toBe('ldaps://ad.corp.local:636');
+ 
+       // OpenLDAP preset
+       const openldapBtn = screen.getByRole('button', { name: /Standard LDAP/i });
+       fireEvent.click(openldapBtn);
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('OpenLDAP');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('openldap');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://ldap.corp.local:636');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('OpenLDAP');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('openldap');
++      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i, { selector: 'input' }).value).toBe('ldaps://ldap.corp.local:636');
+ 
+       // Custom OAuth preset
+       const customBtn = screen.getByRole('button', { name: /Custom OAuth 2\.0/i });
+       fireEvent.click(customBtn);
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Custom SSO');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('oauth1');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('Custom SSO');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('oauth1');
+     });
+ 
+     it('handles auto-derived slug clearing and edge cases in create vs edit mode', () => {
+@@ -2030,8 +2030,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+-      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
++      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' });
++      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' });
+ 
+       // Typing complex name
+       fireEvent.change(nameInput, { target: { value: 'Google SSO (US-West #1)!' } });
+@@ -2058,8 +2058,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      const editNameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+-      const editSlugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
++      const editNameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' });
++      const editSlugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' });
+ 
+       expect(editSlugInput.disabled).toBe(true);
+       fireEvent.change(editNameInput, { target: { value: 'Renamed Okta SSO' } });
+@@ -2104,14 +2104,14 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Toggle Enable Card
+-      const enableCheckbox = screen.getByLabelText<HTMLInputElement>(/Enable Card/i);
++      const enableCheckbox = screen.getByLabelText<HTMLInputElement>(/Enable Card/i, { selector: 'input' });
+       expect(enableCheckbox.checked).toBe(true);
+       fireEvent.click(enableCheckbox);
+       expect(enableCheckbox.checked).toBe(false);
+ 
+       // Toggle Replace Secret
+-      const replaceCheckbox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
+-      const secretInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i);
++      const replaceCheckbox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i, { selector: 'input' });
++      const secretInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i, { selector: 'input' });
+       expect(replaceCheckbox.checked).toBe(false);
+       expect(secretInput.disabled).toBe(true);
+ 
+@@ -2143,11 +2143,11 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       fireEvent.click(advToggle);
+ 
+       // Access Policy restricted mode allowlists
+-      const policySelect = screen.getByLabelText(/Access Policy/i);
++      const policySelect = screen.getByLabelText(/Access Policy/i, { selector: 'select' });
+       fireEvent.change(policySelect, { target: { value: 'restricted' } });
+ 
+-      const adminAllowlistInput = screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i);
+-      const userAllowlistInput = screen.getByLabelText<HTMLInputElement>(/User Allowlist/i);
++      const adminAllowlistInput = screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i, { selector: 'input' });
++      const userAllowlistInput = screen.getByLabelText<HTMLInputElement>(/User Allowlist/i, { selector: 'input' });
+ 
+       fireEvent.change(adminAllowlistInput, { target: { value: 'admin@corp.com, sysadmin' } });
+       fireEvent.change(userAllowlistInput, { target: { value: 'user@corp.com' } });
+@@ -2166,12 +2166,12 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       expect(clickSpy).toHaveBeenCalled();
+ 
+       // Switch to LDAP to test LDAP attribute fields in AdvancedSection
+-      const providerKindSelect = screen.getByLabelText(/Provider Kind/i);
++      const providerKindSelect = screen.getByLabelText(/Provider Kind/i, { selector: 'select' });
+       fireEvent.change(providerKindSelect, { target: { value: 'LDAP' } });
+ 
+-      const subjectInput = screen.getByLabelText<HTMLInputElement>(/Subject Attribute/i);
+-      const emailInput = screen.getByLabelText<HTMLInputElement>(/Email Attribute/i);
+-      const displayAttrInput = screen.getByLabelText<HTMLInputElement>(/Full Name Attribute/i);
++      const subjectInput = screen.getByLabelText<HTMLInputElement>(/Subject Attribute/i, { selector: 'input' });
++      const emailInput = screen.getByLabelText<HTMLInputElement>(/Email Attribute/i, { selector: 'input' });
++      const displayAttrInput = screen.getByLabelText<HTMLInputElement>(/Full Name Attribute/i, { selector: 'input' });
+ 
+       fireEvent.change(subjectInput, { target: { value: 'customUUID' } });
+       fireEvent.change(emailInput, { target: { value: 'userPrincipalName' } });
+@@ -2193,15 +2193,15 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Fill primary fields
+-      fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Valid Name' } });
+-      fireEvent.change(screen.getByLabelText(/Client ID/i), { target: { value: 'client123' } });
+-      fireEvent.change(screen.getByLabelText(/Client Secret/i), { target: { value: 'secret123' } });
++      fireEvent.change(screen.getByLabelText(/Display Name/i, { selector: 'input' }), { target: { value: 'Valid Name' } });
++      fireEvent.change(screen.getByLabelText(/Client ID/i, { selector: 'input' }), { target: { value: 'client123' } });
++      fireEvent.change(screen.getByLabelText(/Client Secret/i, { selector: 'input' }), { target: { value: 'secret123' } });
+ 
+       // Open AdvancedSection and enter invalid slug
+       const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+       fireEvent.click(advToggle);
+ 
+-      const slugInput = screen.getByLabelText(/Slug Identifier/i);
++      const slugInput = screen.getByLabelText(/Slug Identifier/i, { selector: 'input' });
+       fireEvent.change(slugInput, { target: { value: 'INVALID_UPPERCASE_SLUG' } });
+ 
+       const createBtn = screen.getByRole('button', { name: /Create Card/i });
+@@ -2261,11 +2261,11 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+       fireEvent.click(advToggle);
+ 
+-      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('advanced-sso');
+-      expect(screen.getByLabelText<HTMLSelectElement>(/Access Policy/i).value).toBe('restricted');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i).value).toBe('Enterprise Login');
+-      expect(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i).value).toBe('key');
+-      expect(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i).value).toBe('example.com');
++      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }).value).toBe('advanced-sso');
++      expect(screen.getByLabelText<HTMLSelectElement>(/Access Policy/i, { selector: 'select' }).value).toBe('restricted');
++      expect(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i, { selector: 'input' }).value).toBe('Enterprise Login');
++      expect(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i, { selector: 'select' }).value).toBe('key');
++      expect(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i, { selector: 'input' }).value).toBe('example.com');
+     });
+ 
+     it('dynamically increments active overrides count badge when advanced settings are modified', () => {
+@@ -2283,7 +2283,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       fireEvent.click(advToggle);
+ 
+       // Customize subtext
+-      const subtextInput = screen.getByLabelText(/Button Subtext/i);
++      const subtextInput = screen.getByLabelText(/Button Subtext/i, { selector: 'input' });
+       fireEvent.change(subtextInput, { target: { value: 'Custom Button Subtext' } });
+ 
+       const badge = screen.getByTestId('advanced-active-badge');
+@@ -2291,12 +2291,12 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       expect(badge.textContent).toBe('1 custom setting active');
+ 
+       // Customize icon preset
+-      const iconSelect = screen.getByLabelText(/Icon Preset/i);
++      const iconSelect = screen.getByLabelText(/Icon Preset/i, { selector: 'select' });
+       fireEvent.change(iconSelect, { target: { value: 'key' } });
+       expect(badge.textContent).toBe('2 custom settings active');
+ 
+       // Uncheck auto-provision
+-      const autoProv = screen.getByLabelText(/Auto-provision Users/i);
++      const autoProv = screen.getByLabelText(/Auto-provision Users/i, { selector: 'input' });
+       fireEvent.click(autoProv);
+       expect(badge.textContent).toBe('3 custom settings active');
+     });
+@@ -2357,7 +2357,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       expect(screen.getByText('Edit Dynamic OIDC')).toBeDefined();
+-      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Dynamic OIDC');
++      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }).value).toBe('Dynamic OIDC');
+ 
+       const ldapCardDyn: AdminAuthCard = {
+         id: 'c-ldap-dyn',
+@@ -2429,14 +2429,14 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       const githubBtn = screen.getByRole('button', { name: /GitHub \(OAuth 2\.0\)/i });
+       fireEvent.click(githubBtn);
+ 
+-      fireEvent.change(screen.getByLabelText(/Client ID/i), { target: { value: 'gh-cid' } });
+-      fireEvent.change(screen.getByLabelText(/Client Secret/i), { target: { value: 'gh-secret' } });
++      fireEvent.change(screen.getByLabelText(/Client ID/i, { selector: 'input' }), { target: { value: 'gh-cid' } });
++      fireEvent.change(screen.getByLabelText(/Client Secret/i, { selector: 'input' }), { target: { value: 'gh-secret' } });
+ 
+       // Open AdvancedSection and clear scopes so scopes fallback is triggered
+       const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+       fireEvent.click(advToggle);
+ 
+-      const scopesInput = screen.getByLabelText(/Scopes/i);
++      const scopesInput = screen.getByLabelText(/Scopes/i, { selector: 'input' });
+       fireEvent.change(scopesInput, { target: { value: '' } });
+ 
+       const createBtn = screen.getByRole('button', { name: /Create Card/i });
+@@ -2543,9 +2543,9 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       );
+ 
+       // Create mode: uncheck Enable Card
+-      fireEvent.change(screen.getByLabelText('Display Name'), { target: { value: 'Disabled Provider' } });
+-      fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-123' } });
+-      const enableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card');
++      fireEvent.change(screen.getByLabelText(/Display Name/i, { selector: 'input' }), { target: { value: 'Disabled Provider' } });
++      fireEvent.change(screen.getByLabelText(/Client ID/i, { selector: 'input' }), { target: { value: 'client-123' } });
++      const enableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card', { selector: 'input' });
+       expect(enableCheck.checked).toBe(true);
+       fireEvent.click(enableCheck);
+       expect(enableCheck.checked).toBe(false);
+@@ -2575,7 +2575,7 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+         />,
+       );
+ 
+-      const editEnableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card');
++      const editEnableCheck = screen.getByLabelText<HTMLInputElement>('Enable Card', { selector: 'input' });
+       expect(editEnableCheck.checked).toBe(true);
+       fireEvent.click(editEnableCheck);
+       expect(editEnableCheck.checked).toBe(false);
+@@ -2622,13 +2622,13 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       fireEvent.click(screen.getByTestId('preset-openldap'));
+ 
+       // Populate required bind_dn and base_dn
+-      fireEvent.change(screen.getByLabelText(/^Bind DN$/i), { target: { value: 'cn=admin,dc=corp,dc=local' } });
+-      fireEvent.change(screen.getByLabelText(/^Base DN$/i), { target: { value: 'dc=corp,dc=local' } });
++      fireEvent.change(screen.getByLabelText(/^Bind DN(?!\s*Password)/i, { selector: 'input' }), { target: { value: 'cn=admin,dc=corp,dc=local' } });
++      fireEvent.change(screen.getByLabelText(/^Base DN/i, { selector: 'input' }), { target: { value: 'dc=corp,dc=local' } });
+ 
+       // Open Advanced Section
+       fireEvent.click(screen.getByTestId('auth-advanced-section-toggle'));
+ 
+-      const pemTextarea = screen.getByLabelText(/CA Certificate PEM/i);
++      const pemTextarea = screen.getByLabelText(/CA Certificate PEM/i, { selector: 'textarea' });
+       fireEvent.change(pemTextarea, { target: { value: 'NOT_A_VALID_PEM_HEADER' } });
+ 
+       fireEvent.click(screen.getByTestId('drawer-save-btn'));
+@@ -2744,8 +2744,8 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       expect(onClose).toHaveBeenCalledTimes(2);
+ 
+       // Verify submit behavior still works
+-      fireEvent.change(screen.getByLabelText('Display Name'), { target: { value: 'Google Corp' } });
+-      fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'google-client-id' } });
++      fireEvent.change(screen.getByLabelText(/Display Name/i, { selector: 'input' }), { target: { value: 'Google Corp' } });
++      fireEvent.change(screen.getByLabelText(/Client ID/i, { selector: 'input' }), { target: { value: 'google-client-id' } });
+       fireEvent.click(screen.getByTestId('drawer-save-btn'));
+ 
+       await waitFor(() => {
+@@ -2756,4 +2756,205 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
+       expect(savedPayload.display_name).toBe('Google Corp');
+     });
+   });
++
++  describe('FieldHelpHint Form Fields Integration (KAN-449)', () => {
++    afterEach(() => {
++      document.documentElement.removeAttribute('data-theme');
++    });
++
++    it.each(['light', 'dark'] as const)(
++      'renders FieldHelpHint across mandatory OIDC and LDAP fields with ARIA attributes in %s theme',
++      (theme) => {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = render(
++          <AuthCardEditorDrawer
++            isOpen={true}
++            card={null}
++            onClose={vi.fn()}
++            onSave={vi.fn()}
++          />,
++        );
++
++        // OIDC primary hints
++        const displayNameHelp = screen.getByTestId('card-display-name-help');
++        expect(displayNameHelp).toBeDefined();
++        expect(displayNameHelp.getAttribute('aria-label')).toBe('Help for Display Name');
++        expect(displayNameHelp.getAttribute('aria-haspopup')).toBe('dialog');
++        expect(displayNameHelp.getAttribute('aria-expanded')).toBe('false');
++
++        const providerKindHelp = screen.getByTestId('card-provider-kind-help');
++        expect(providerKindHelp.getAttribute('aria-label')).toBe('Help for Provider Kind');
++
++        const isEnabledHelp = screen.getByTestId('card-is-enabled-help');
++        expect(isEnabledHelp.getAttribute('aria-label')).toBe('Help for Enable Card');
++
++        const issuerUrlHelp = screen.getByTestId('card-issuer-url-help');
++        expect(issuerUrlHelp.getAttribute('aria-label')).toBe('Help for Issuer URL');
++
++        const callbackUrlHelp = screen.getByTestId('card-callback-url-help');
++        expect(callbackUrlHelp.getAttribute('aria-label')).toBe('Help for Authorized Redirect URI');
++
++        const clientIdHelp = screen.getByTestId('card-client-id-help');
++        expect(clientIdHelp.getAttribute('aria-label')).toBe('Help for Client ID');
++
++        const secretHelp = screen.getByTestId('card-secret-help');
++        expect(secretHelp.getAttribute('aria-label')).toBe('Help for Client Secret');
++
++        // Switch to LDAP to verify LDAP-specific hints
++        fireEvent.change(screen.getByLabelText(/Provider Kind/i, { selector: 'select' }), {
++          target: { value: 'LDAP' },
++        });
++
++        const serverUrlHelp = screen.getByTestId('card-server-url-help');
++        expect(serverUrlHelp.getAttribute('aria-label')).toBe('Help for Server URL');
++
++        const bindDnHelp = screen.getByTestId('card-bind-dn-help');
++        expect(bindDnHelp.getAttribute('aria-label')).toBe('Help for Bind DN');
++
++        const ldapSecretHelp = screen.getByTestId('card-ldap-secret-help');
++        expect(ldapSecretHelp.getAttribute('aria-label')).toBe('Help for Bind DN Password');
++
++        const baseDnHelp = screen.getByTestId('card-base-dn-help');
++        expect(baseDnHelp.getAttribute('aria-label')).toBe('Help for Base DN');
++
++        unmount();
++      },
++    );
++
++    it('renders Local Administrator Security Profile FieldHelpHint when card is LOCAL_ADMIN', () => {
++      const localAdminCard: AdminAuthCard = {
++        ...existingOidcCard,
++        id: 'c-admin-local',
++        provider_kind: 'LOCAL_ADMIN',
++        slug: 'local-admin',
++        display_name: 'Local Administrator',
++        button_subtext: 'Emergency root access',
++        icon_preset: 'shield',
++      };
++
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={localAdminCard}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const localAdminHelp = screen.getByTestId('card-local-admin-security-help');
++      expect(localAdminHelp).toBeDefined();
++      expect(localAdminHelp.getAttribute('aria-label')).toBe('Help for Local Administrator Security Profile');
++      expect(localAdminHelp.getAttribute('aria-haspopup')).toBe('dialog');
++    });
++
++    it('renders advanced FieldHelpHints across AdvancedSection in both OIDC and LDAP modes', () => {
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      // Open Advanced Section
++      fireEvent.click(screen.getByTestId('auth-advanced-section-toggle'));
++
++      // Check common advanced hints
++      expect(screen.getByTestId('card-slug-help')).toBeDefined();
++      expect(screen.getByTestId('card-subtext-help')).toBeDefined();
++      expect(screen.getByTestId('card-icon-preset-help')).toBeDefined();
++      expect(screen.getByTestId('card-auto-provision-help')).toBeDefined();
++      expect(screen.getByTestId('card-email-domains-help')).toBeDefined();
++      expect(screen.getByTestId('card-access-policy-help')).toBeDefined();
++
++      // Check OIDC advanced hints
++      expect(screen.getByTestId('card-scopes-help')).toBeDefined();
++      expect(screen.getByTestId('card-token-auth-help')).toBeDefined();
++
++      // Switch to restricted policy to verify restricted allowlist hints
++      fireEvent.change(screen.getByLabelText(/Access Policy/i, { selector: 'select' }), {
++        target: { value: 'restricted' },
++      });
++      expect(screen.getByTestId('card-admin-allowlist-help')).toBeDefined();
++      expect(screen.getByTestId('card-user-allowlist-help')).toBeDefined();
++
++      // Switch to LDAP to verify LDAP advanced hints
++      fireEvent.change(screen.getByLabelText(/Provider Kind/i, { selector: 'select' }), {
++        target: { value: 'LDAP' },
++      });
++      expect(screen.getByTestId('card-admin-groups-help')).toBeDefined();
++      expect(screen.getByTestId('card-user-groups-help')).toBeDefined();
++      expect(screen.getByTestId('card-starttls-help')).toBeDefined();
++      expect(screen.getByTestId('card-user-filter-help')).toBeDefined();
++      expect(screen.getByTestId('card-subject-attr-help')).toBeDefined();
++      expect(screen.getByTestId('card-email-attr-help')).toBeDefined();
++      expect(screen.getByTestId('card-display-attr-help')).toBeDefined();
++      expect(screen.getByTestId('card-spki-pin-help')).toBeDefined();
++      expect(screen.getByTestId('card-ca-pem-help')).toBeDefined();
++    });
++
++    it('opens popover dialog on focus and restores state on Escape dismissal without closing drawer', () => {
++      const onClose = vi.fn();
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={null}
++          onClose={onClose}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const helpBtn = screen.getByTestId('card-display-name-help');
++      expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
++      expect(screen.queryByTestId('card-display-name-help-popover')).toBeNull();
++
++      // Focus opens popover
++      act(() => {
++        helpBtn.focus();
++      });
++
++      expect(helpBtn.getAttribute('aria-expanded')).toBe('true');
++      const popover = screen.getByTestId('card-display-name-help-popover');
++      expect(popover).toBeDefined();
++      expect(popover.getAttribute('role')).toBe('dialog');
++      expect(popover.getAttribute('aria-label')).toBe('Display Name');
++      expect(popover.textContent).toContain('User-facing title shown on the login button and admin cards.');
++
++      // Escape key closes popover without triggering drawer onClose
++      fireEvent.keyDown(popover, { key: 'Escape' });
++      expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
++      expect(screen.queryByTestId('card-display-name-help-popover')).toBeNull();
++      expect(onClose).not.toHaveBeenCalled();
++    });
++
++    it('renders LDAP Replace Stored Secret FieldHelpHint when editing an LDAP card with secret', () => {
++      const existingLdapCard: AdminAuthCard = {
++        ...existingOidcCard,
++        id: 'c-ldap-edit',
++        provider_kind: 'LDAP',
++        slug: 'corp-ldap',
++        display_name: 'Corporate LDAP',
++        has_secret: true,
++        public_config: {
++          server_url: 'ldaps://ldap.example.com',
++          bind_dn: 'cn=admin,dc=example,dc=com',
++          base_dn: 'dc=example,dc=com',
++        },
++      };
++
++      render(
++        <AuthCardEditorDrawer
++          isOpen={true}
++          card={existingLdapCard}
++          onClose={vi.fn()}
++          onSave={vi.fn()}
++        />,
++      );
++
++      const replaceSecretHelp = screen.getByTestId('card-ldap-replace-secret-help');
++      expect(replaceSecretHelp).toBeDefined();
++      expect(replaceSecretHelp.getAttribute('aria-label')).toBe('Help for Replace Stored Secret');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+index 01f01bf8..621f3d03 100644
+--- a/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-auth/AuthCardEditorDrawer.tsx
+@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, type JSX } from 'react';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+ import { isAal2StepUpCancelled } from '../../api/client';
+ import {
+@@ -861,7 +862,16 @@ export function AuthCardEditorDrawer({
+             <div>
+               <div className="auth-editor-section-title">Local Administrator Security Policy</div>
+               <div className="auth-editor-prop-row">
+-                <span className="auth-editor-label">Security Profile</span>
++                <span className="auth-editor-label">
++                  <span>Security Profile</span>
++                  <FieldHelpHint
++                    title="Local Administrator Security Profile"
++                    summary="Argon2id hashing with server HMAC pepper and mandatory Passkey or TOTP (AAL2) step-up."
++                    defaultValue="Argon2id (m=64MiB, t=3, p=4) + AAL2"
++                    docHref="/docs/multi-card-authentication-studio#password-security"
++                    testId="card-local-admin-security-help"
++                  />
++                </span>
+                 <EmojiHint
+                   kind="restricted"
+                   label="Local Admin security"
+@@ -880,7 +890,19 @@ export function AuthCardEditorDrawer({
+               {/* Provider Kind */}
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-provider-kind">
+-                  Provider Kind
++                  <span>Provider Kind</span>
++                  <FieldHelpHint
++                    title="Provider Kind"
++                    summary="Authentication protocol and provider engine (OIDC, OAuth 2.0, or LDAP/Active Directory)."
++                    defaultValue="OIDC"
++                    validValues={[
++                      { label: 'OIDC', description: 'OpenID Connect identity provider (Google, Okta, Keycloak).' },
++                      { label: 'OAuth 2.0', description: 'Standard OAuth 2.0 authorization server (GitHub, GitLab).' },
++                      { label: 'LDAP / Active Directory', description: 'Enterprise directory service with LDAPS/StartTLS.' },
++                    ]}
++                    docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
++                    testId="card-provider-kind-help"
++                  />
+                 </label>
+                 <select
+                   id="card-provider-kind"
+@@ -903,7 +925,15 @@ export function AuthCardEditorDrawer({
+               {/* Display Name */}
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-display-name">
+-                  Display Name
++                  <span>Display Name</span>
++                  <FieldHelpHint
++                    title="Display Name"
++                    summary="User-facing title shown on the login button and admin cards."
++                    defaultValue="None (Required)"
++                    example="Google Workspace, Corporate Active Directory"
++                    docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
++                    testId="card-display-name-help"
++                  />
+                 </label>
+                 <input
+                   id="card-display-name"
+@@ -937,7 +967,15 @@ export function AuthCardEditorDrawer({
+               {/* Enable Card Toggle */}
+               <div className="auth-editor-prop-row">
+                 <label className="auth-editor-label" htmlFor="card-is-enabled">
+-                  Enable Card
++                  <span>Enable Card</span>
++                  <FieldHelpHint
++                    title="Enable Card"
++                    summary="Toggle whether this authentication card is active and visible on the login surface."
++                    defaultValue="Enabled"
++                    validValues={['Enabled (Active)', 'Disabled (Hidden)']}
++                    docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
++                    testId="card-is-enabled-help"
++                  />
+                 </label>
+                 <input
+                   id="card-is-enabled"
+@@ -955,7 +993,15 @@ export function AuthCardEditorDrawer({
+                 <div>
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-issuer-url">
+-                      Issuer URL
++                      <span>Issuer URL</span>
++                  <FieldHelpHint
++                        title="Issuer URL"
++                        summary="OpenID Connect discovery endpoint base URL (fetches .well-known/openid-configuration)."
++                        defaultValue="None (Required for OIDC)"
++                        example="https://accounts.google.com"
++                        docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
++                        testId="card-issuer-url-help"
++                      />
+                     </label>
+                     <input
+                       id="card-issuer-url"
+@@ -978,7 +1024,13 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-callback-url">
+-                      Authorized Redirect URI (Callback URL)
++                      <span>Authorized Redirect URI (Callback URL)</span>
++                  <FieldHelpHint
++                        title="Authorized Redirect URI"
++                        summary="Read-only callback URL to register in your identity provider console."
++                        docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
++                        testId="card-callback-url-help"
++                      />
+                     </label>
+                     <div className="auth-editor-input-group">
+                       <input
+@@ -1022,7 +1074,15 @@ export function AuthCardEditorDrawer({
+                   )}
+ 
+                   <div className="auth-editor-prop-row">
+-                    <span className="auth-editor-label">Authorized JavaScript Origin</span>
++                    <span className="auth-editor-label">
++                      <span>Authorized JavaScript Origin</span>
++                  <FieldHelpHint
++                        title="Authorized JavaScript Origin"
++                        summary="Origin domain registered with external OAuth identity providers for CORS and popup authentication flows."
++                        docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
++                        testId="card-js-origin-help"
++                      />
++                    </span>
+                     <span className="auth-field-helper" data-testid="oauth-js-origin">
+                       {window.location.origin}
+                     </span>
+@@ -1030,7 +1090,14 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-client-id">
+-                      Client ID
++                      <span>Client ID</span>
++                  <FieldHelpHint
++                        title="Client ID"
++                        summary="OAuth 2.0 client identifier assigned by the identity provider."
++                        defaultValue="None (Required)"
++                        docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
++                        testId="card-client-id-help"
++                      />
+                     </label>
+                     <input
+                       id="card-client-id"
+@@ -1053,7 +1120,14 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-secret">
+-                      Client Secret
++                      <span>Client Secret</span>
++                  <FieldHelpHint
++                        title="Client Secret"
++                        summary="Confidential client secret encrypted at rest using envelope encryption (MASTER_KEK)."
++                        defaultValue="None (Required on initial creation)"
++                        docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
++                        testId="card-secret-help"
++                      />
+                     </label>
+                     <input
+                       id="card-secret"
+@@ -1076,7 +1150,14 @@ export function AuthCardEditorDrawer({
+                   {isEdit && card?.has_secret ? (
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-replace-secret">
+-                        Replace Stored Secret
++                        <span>Replace Stored Secret</span>
++                  <FieldHelpHint
++                          title="Replace Stored Secret"
++                          summary="Enable to rotate or overwrite the stored encrypted client secret."
++                          defaultValue="Unchecked (Preserve existing secret)"
++                          docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
++                          testId="card-replace-secret-help"
++                        />
+                       </label>
+                       <input
+                         id="card-replace-secret"
+@@ -1095,7 +1176,15 @@ export function AuthCardEditorDrawer({
+                 <div>
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-server-url">
+-                      Server URL
++                      <span>Server URL</span>
++                  <FieldHelpHint
++                        title="Server URL"
++                        summary="LDAP directory server connection URI. Must use ldaps:// on port 636 for TLS encryption."
++                        defaultValue="None (Required, e.g. ldaps://ad.corp.example.com:636)"
++                        example="ldaps://ad.corp.example.com:636"
++                        docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
++                        testId="card-server-url-help"
++                      />
+                     </label>
+                     <input
+                       id="card-server-url"
+@@ -1118,7 +1207,15 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-bind-dn">
+-                      Bind DN
++                      <span>Bind DN</span>
++                  <FieldHelpHint
++                        title="Bind DN"
++                        summary="Distinguished Name of the service account used to search and bind against directory users."
++                        defaultValue="None (Required)"
++                        example="cn=svc-kanban,ou=services,dc=corp,dc=com"
++                        docHref="/docs/multi-card-authentication-studio#step-by-step-guide-connecting-active-directory"
++                        testId="card-bind-dn-help"
++                      />
+                     </label>
+                     <input
+                       id="card-bind-dn"
+@@ -1141,7 +1238,14 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-secret">
+-                      Bind DN Password
++                      <span>Bind DN Password</span>
++                  <FieldHelpHint
++                        title="Bind DN Password"
++                        summary="Directory service account password encrypted at rest with MASTER_KEK."
++                        defaultValue="None (Required on initial creation)"
++                        docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
++                        testId="card-ldap-secret-help"
++                      />
+                     </label>
+                     <input
+                       id="card-secret"
+@@ -1164,7 +1268,14 @@ export function AuthCardEditorDrawer({
+                   {isEdit && card?.has_secret ? (
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-replace-secret">
+-                        Replace Stored Secret
++                        <span>Replace Stored Secret</span>
++                        <FieldHelpHint
++                          title="Replace Stored Secret"
++                          summary="Enable to rotate or overwrite the stored encrypted service bind DN password."
++                          defaultValue="Unchecked (Preserve existing secret)"
++                          docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
++                          testId="card-ldap-replace-secret-help"
++                        />
+                       </label>
+                       <input
+                         id="card-replace-secret"
+@@ -1181,7 +1292,15 @@ export function AuthCardEditorDrawer({
+ 
+                   <div className="auth-editor-prop-row">
+                     <label className="auth-editor-label" htmlFor="card-base-dn">
+-                      Base DN
++                      <span>Base DN</span>
++                  <FieldHelpHint
++                        title="Base DN"
++                        summary="Base Distinguished Name search subtree root containing user accounts."
++                        defaultValue="None (Required)"
++                        example="dc=corp,dc=com"
++                        docHref="/docs/multi-card-authentication-studio#step-by-step-guide-connecting-active-directory"
++                        testId="card-base-dn-help"
++                      />
+                     </label>
+                     <input
+                       id="card-base-dn"
+@@ -1215,7 +1334,15 @@ export function AuthCardEditorDrawer({
+               >
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-slug">
+-                    Slug Identifier
++                    <span>Slug Identifier</span>
++                  <FieldHelpHint
++                      title="Slug Identifier"
++                      summary="Unique URL slug used for OAuth callback endpoints and card references."
++                      defaultValue="Auto-generated from Display Name"
++                      example="google-oauth"
++                      docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
++                      testId="card-slug-help"
++                    />
+                   </label>
+                   <input
+                     id="card-slug"
+@@ -1242,7 +1369,14 @@ export function AuthCardEditorDrawer({
+ 
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-subtext">
+-                    Button Subtext
++                    <span>Button Subtext</span>
++                  <FieldHelpHint
++                      title="Button Subtext"
++                      summary="Subtitle displayed directly beneath the login button to guide users."
++                      example="Sign in with your work email (@corp.com)"
++                      docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
++                      testId="card-subtext-help"
++                    />
+                   </label>
+                   <input
+                     id="card-subtext"
+@@ -1268,7 +1402,15 @@ export function AuthCardEditorDrawer({
+ 
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-icon-preset">
+-                    Icon Preset
++                    <span>Icon Preset</span>
++                  <FieldHelpHint
++                      title="Icon Preset"
++                      summary="Brand or icon preset rendered beside the login button and provider badge."
++                      defaultValue="shield"
++                      validValues={['shield', 'key', 'lock', 'globe', 'google', 'github', 'active-directory', 'ldap', 'local-admin']}
++                      docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
++                      testId="card-icon-preset-help"
++                    />
+                   </label>
+                   <div className="auth-editor-input-group">
+                     <select
+@@ -1298,7 +1440,10 @@ export function AuthCardEditorDrawer({
+ 
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-auto-provision">
+-                    Auto-provision Users
++                    <span>Auto-provision Users</span>
++                  <FieldHelpHint
++                    title="Auto-provision Users" summary="Automatically provision local accounts upon first successful authentication if domain policies match." defaultValue="Checked (Enabled)" docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc" testId="card-auto-provision-help"
++                  />
+                   </label>
+                   <input
+                     id="card-auto-provision"
+@@ -1313,7 +1458,14 @@ export function AuthCardEditorDrawer({
+ 
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-email-domains">
+-                    Allowed Email Domains
++                    <span>Allowed Email Domains</span>
++                  <FieldHelpHint
++                      title="Allowed Email Domains"
++                      summary="Comma-separated email domain allowlist. Restricts logins to verified corporate domains."
++                      example="corp.example.com, partner.com"
++                      docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
++                      testId="card-email-domains-help"
++                    />
+                   </label>
+                   <input
+                     id="card-email-domains"
+@@ -1330,7 +1482,18 @@ export function AuthCardEditorDrawer({
+ 
+                 <div className="auth-editor-prop-row">
+                   <label className="auth-editor-label" htmlFor="card-access-policy">
+-                    Access Policy
++                    <span>Access Policy</span>
++                  <FieldHelpHint
++                      title="Access Policy"
++                      summary="Default access level assigned to authenticated accounts."
++                      defaultValue="any_user"
++                      validValues={[
++                        { label: 'any_user', description: 'Any authenticated user in domain/directory receives workspace membership.' },
++                        { label: 'restricted', description: 'Access restricted strictly to users matching user/admin allowlists or groups.' },
++                      ]}
++                      docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
++                      testId="card-access-policy-help"
++                    />
+                   </label>
+                   <select
+                     id="card-access-policy"
+@@ -1350,8 +1513,11 @@ export function AuthCardEditorDrawer({
+                   <div>
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-admin-allowlist">
+-                        Admin Allowlist
+-                      </label>
++                    <span>Admin Allowlist</span>
++                  <FieldHelpHint
++                    title="Admin Allowlist" summary="Comma-separated emails automatically assigned Server Administrator roles upon sign-in." example="admin@corp.example.com, secops@corp.example.com" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-allowlist-help"
++                  />
++                  </label>
+                       <input
+                         id="card-admin-allowlist"
+                         type="text"
+@@ -1370,8 +1536,11 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-user-allowlist">
+-                        User Allowlist
+-                      </label>
++                    <span>User Allowlist</span>
++                  <FieldHelpHint
++                    title="User Allowlist" summary="Explicit allowlist of permitted emails when Access Policy is set to restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-allowlist-help"
++                  />
++                  </label>
+                       <input
+                         id="card-user-allowlist"
+                         type="text"
+@@ -1392,8 +1561,11 @@ export function AuthCardEditorDrawer({
+                       <div>
+                         <div className="auth-editor-prop-row">
+                           <label className="auth-editor-label" htmlFor="card-admin-groups">
+-                            Admin Groups
+-                          </label>
++                    <span>Admin Groups</span>
++                  <FieldHelpHint
++                    title="Admin Groups" summary="IdP or directory group claims granting Server Administrator rights upon authentication." example="DevOpsAdmins, SecurityEngineers" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-groups-help"
++                  />
++                  </label>
+                           <input
+                             id="card-admin-groups"
+                             type="text"
+@@ -1412,8 +1584,11 @@ export function AuthCardEditorDrawer({
+ 
+                         <div className="auth-editor-prop-row">
+                           <label className="auth-editor-label" htmlFor="card-user-groups">
+-                            User Groups
+-                          </label>
++                    <span>User Groups</span>
++                  <FieldHelpHint
++                    title="User Groups" summary="IdP or directory group claims granting standard user access when Access Policy is restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-groups-help"
++                  />
++                  </label>
+                           <input
+                             id="card-user-groups"
+                             type="text"
+@@ -1607,7 +1782,15 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-scopes">
+-                        Scopes
++                        <span>Scopes</span>
++                  <FieldHelpHint
++                          title="Scopes"
++                          summary="OAuth 2.0 / OIDC scopes requested during authorization. Comma-separated."
++                          defaultValue="openid, email, profile"
++                          example="openid, email, profile"
++                          docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
++                          testId="card-scopes-help"
++                        />
+                       </label>
+                       <input
+                         id="card-scopes"
+@@ -1624,8 +1807,14 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-token-auth">
+-                        Token Auth Method
+-                      </label>
++                    <span>Token Auth Method</span>
++                  <FieldHelpHint
++                    title="Token Auth Method" summary="Authentication method used to authenticate client against the token endpoint." defaultValue="client_secret_basic" validValues={[
++                      { label: 'client_secret_basic', description: 'HTTP Basic authorization header with Client ID and Client Secret.' },
++                      { label: 'private_key_jwt', description: 'Asymmetric cryptographic client assertion signed by private key.' },
++                    ]} docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso" testId="card-token-auth-help"
++                  />
++                  </label>
+                       <select
+                         id="card-token-auth"
+                         className="auth-editor-select"
+@@ -1646,8 +1835,11 @@ export function AuthCardEditorDrawer({
+                   <div>
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-starttls">
+-                        StartTLS
+-                      </label>
++                    <span>StartTLS</span>
++                  <FieldHelpHint
++                    title="StartTLS" summary="Enforces TLS upgrade negotiation on port 389 connections." defaultValue="Unchecked (Disabled)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-starttls-help"
++                  />
++                  </label>
+                       <input
+                         id="card-starttls"
+                         type="checkbox"
+@@ -1663,8 +1855,11 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-user-filter">
+-                        User Filter
+-                      </label>
++                    <span>User Filter</span>
++                  <FieldHelpHint
++                    title="User Filter" summary="LDAP search query template to locate the authenticating user ({username} placeholder)." defaultValue="(&(objectClass=user)(sAMAccountName={username}))" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-user-filter-help"
++                  />
++                  </label>
+                       <input
+                         id="card-user-filter"
+                         type="text"
+@@ -1680,8 +1875,11 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-subject-attr">
+-                        Subject Attribute
+-                      </label>
++                    <span>Subject Attribute</span>
++                  <FieldHelpHint
++                    title="Subject Attribute" summary="Directory attribute containing the immutable unique identifier for the user." defaultValue="objectGUID (Active Directory) or entryUUID (OpenLDAP)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-subject-attr-help"
++                  />
++                  </label>
+                       <input
+                         id="card-subject-attr"
+                         type="text"
+@@ -1697,7 +1895,14 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-email-attr">
+-                        Email Attribute
++                        <span>Email Attribute</span>
++                  <FieldHelpHint
++                          title="Email Attribute"
++                          summary="Directory attribute containing user's primary email address."
++                          defaultValue="mail"
++                          docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
++                          testId="card-email-attr-help"
++                        />
+                       </label>
+                       <input
+                         id="card-email-attr"
+@@ -1714,7 +1919,14 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-display-attr">
+-                        Full Name Attribute
++                        <span>Full Name Attribute</span>
++                  <FieldHelpHint
++                          title="Full Name Attribute"
++                          summary="Directory attribute containing user's display name."
++                          defaultValue="displayName (Active Directory) or cn (OpenLDAP)"
++                          docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
++                          testId="card-display-attr-help"
++                        />
+                       </label>
+                       <input
+                         id="card-display-attr"
+@@ -1731,7 +1943,14 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-spki-pin">
+-                        SPKI SHA-256 Pin
++                        <span>SPKI SHA-256 Pin</span>
++                  <FieldHelpHint
++                          title="SPKI SHA-256 Pin"
++                          summary="64-character SHA-256 hex digest of the server Subject Public Key Info for certificate pinning."
++                          example="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
++                          docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
++                          testId="card-spki-pin-help"
++                        />
+                       </label>
+                       <input
+                         id="card-spki-pin"
+@@ -1754,7 +1973,16 @@ export function AuthCardEditorDrawer({
+ 
+                     <div className="auth-editor-prop-row">
+                       <label className="auth-editor-label" htmlFor="card-ca-pem">
+-                        CA Certificate PEM
++                        <span>CA Certificate PEM</span>
++                  <FieldHelpHint
++                          title="CA Certificate PEM"
++                          summary="Custom PEM-encoded root or intermediate Certificate Authority certificate."
++                          example="-----BEGIN CERTIFICATE-----
++...
++-----END CERTIFICATE-----"
++                          docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
++                          testId="card-ca-pem-help"
++                        />
+                       </label>
+                       <textarea
+                         id="card-ca-pem"
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index dd922eaa..fc92577f 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -424,7 +424,7 @@
+   position: fixed;
+   inset: 0;
+   background: rgba(0, 0, 0, 0.4);
+-  z-index: 999;
++  z-index: 1050;
+   display: flex;
+   justify-content: flex-end;
+ }
+@@ -433,7 +433,7 @@
+   width: min(640px, 100vw);
+   height: 100vh;
+   background: var(--bg-surface);
+-  padding: var(--prose-pad, 32px 40px);
++  padding: 32px 40px 0;
+   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+   display: flex;
+   flex-direction: column;
+@@ -477,7 +477,12 @@
+   font-size: 0.875rem;
+   font-weight: 500;
+   color: var(--fg-primary);
+-  min-width: 140px;
++  flex: 0 0 220px;
++  width: 220px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: flex-start;
++  gap: 6px;
+ }
+ 
+ .auth-editor-input,
+@@ -557,7 +562,11 @@
+   justify-content: flex-end;
+   gap: 12px;
+   margin-top: 24px;
+-  padding-top: 16px;
++  position: sticky;
++  bottom: 0;
++  background: var(--bg-surface);
++  z-index: 10;
++  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+   border-top: 1px solid var(--border-subtle);
+ }
+ 
+@@ -945,19 +954,20 @@
+     justify-content: center;
+   }
+ 
++  .auth-editor-actions,
+   .auth-editor-drawer-actions,
+   .auth-card-editor-footer {
+     position: sticky;
+     bottom: 0;
+     background: var(--bg-surface);
+     border-top: 1px solid var(--border-subtle);
+-    padding: var(--space-3, 12px) 0;
+-    z-index: 5;
++    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
++    z-index: 10;
+   }
+ 
+   .auth-editor-drawer {
+     width: 100vw;
+-    padding: var(--space-6, 24px) var(--space-5, 20px);
++    padding: var(--space-6, 24px) var(--space-5, 20px) 0;
+   }
+ 
+   .auth-editor-prop-row {
+@@ -970,6 +980,12 @@
+   .auth-editor-label {
+     width: 100%;
+     min-width: 0;
++    max-width: 100%;
++    flex: none;
++    display: inline-flex;
++    align-items: center;
++    justify-content: flex-start;
++    gap: 6px;
+   }
+ 
+   .auth-editor-input-group {

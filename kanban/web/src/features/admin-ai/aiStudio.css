@@ -1007,3 +1007,21 @@
   color: var(--fg-secondary);
   margin-bottom: var(--space-4, 16px);
 }
+
+/* Model harness parameter grid and input helpers (zero inline style props) */
+.kb-model-params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.kb-form-group--mt12 {
+  margin-top: 12px;
+}
+
+.kb-form-textarea--mono {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  min-height: 80px;
+}
+

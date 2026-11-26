@@ -103,7 +103,7 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
     );
 
     // Initial provider is openai (airGapMode=false) -> Prominent "API Secret Key" label
-    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
+    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
 
     // Initial modelAllowlist must be empty string (no hardcoded qwen2.5 or gpt-4o defaults)
     const modelsInput = screen.getByTestId<HTMLInputElement>('provider-models-input');
@@ -116,12 +116,12 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
     const kindSelect = screen.getByTestId('provider-kind-select');
     fireEvent.change(kindSelect, { target: { value: 'gemini' } });
     expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
-    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
+    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
 
     // Switching providerKind to ollama displays optional hint
     fireEvent.change(kindSelect, { target: { value: 'ollama' } });
     expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
-    expect(screen.getByLabelText('API Secret Key (Optional for Local Endpoints)')).toBeDefined();
+    expect(screen.getByLabelText(/API Secret Key/i, { selector: 'input' })).toBeDefined();
 
     // Switching back to openai
     fireEvent.change(kindSelect, { target: { value: 'openai' } });
@@ -960,6 +960,48 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
       await waitFor(() => {
         expect(screen.getByTestId('drawer-test-status').textContent).toBe(
           'Connection failed: ERR_UNAVAILABLE',
+        );
+      });
+    });
+
+    it('handles AAL2 step-up cancellation and AIR_GAP_EGRESS_DENIED fallback on probe and test connection', async () => {
+      const aal2CancelError = new Error('Step-up cancelled');
+      aal2CancelError.name = 'Aal2StepUpCancelledError';
+
+      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValueOnce(aal2CancelError);
+      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValueOnce(aal2CancelError);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      expect(screen.queryByTestId('probe-error')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Testing connection...');
+      });
+
+      // Test AIR_GAP_EGRESS_DENIED fallback message
+      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: 'AIR_GAP_EGRESS_DENIED',
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
+          'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.',
         );
       });
     });
@@ -2056,6 +2098,111 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
           helpBtn.focus();
         });
         expect(screen.getByTestId('provider-base-url-help-default').textContent).toContain('http://127.0.0.1:11434');
+      });
+    });
+
+    describe('KAN-449: FieldHelpHints and CSS token styling in AiProviderEditorDrawer', () => {
+      it('renders FieldHelpHint components across display name, API key, model allowlist, mTLS, and residency tier', () => {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        // Name & Key hints
+        const nameHelp = screen.getByTestId('provider-name-help');
+        expect(nameHelp.getAttribute('aria-label')).toBe('Help for Display Name');
+        expect(nameHelp.getAttribute('aria-haspopup')).toBe('dialog');
+
+        const keyHelp = screen.getByTestId('provider-key-help');
+        expect(keyHelp.getAttribute('aria-label')).toBe('Help for API Secret Key');
+
+        const modelsHelp = screen.getByTestId('provider-models-help');
+        expect(modelsHelp.getAttribute('aria-label')).toBe('Help for Model Allowlist');
+
+        // Open Advanced Section
+        fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+
+        const mtlsHelp = screen.getByTestId('provider-mtls-cert-help');
+        expect(mtlsHelp.getAttribute('aria-label')).toBe('Help for mTLS Client Certificate PEM');
+
+        const residencyHelp = screen.getByTestId('provider-residency-help');
+        expect(residencyHelp.getAttribute('aria-label')).toBe('Help for Data Residency Tier');
+
+        // Verify popover interaction on provider-name-help
+        act(() => {
+          nameHelp.focus();
+        });
+        expect(screen.getByTestId('provider-name-help-popover')).toBeDefined();
+        expect(screen.getByTestId('provider-name-help-popover').textContent).toContain(
+          'Human-readable label for this AI provider instance.',
+        );
+
+        fireEvent.keyDown(screen.getByTestId('provider-name-help-popover'), { key: 'Escape' });
+        expect(screen.queryByTestId('provider-name-help-popover')).toBeNull();
+      });
+
+      it('enforces clean CSS class styling with zero inline style props on model grid and mTLS', () => {
+        const { container } = render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        fireEvent.click(screen.getByTestId('advanced-settings-details-toggle'));
+
+        const grid = container.querySelector('.kb-model-params-grid');
+        expect(grid).not.toBeNull();
+        expect(grid?.getAttribute('style')).toBeNull();
+
+        const mtlsTextarea = screen.getByTestId('provider-mtls-cert-input');
+        expect(mtlsTextarea.classList.contains('kb-form-textarea--mono')).toBe(true);
+        expect(mtlsTextarea.getAttribute('style')).toBeNull();
+      });
+
+      it('validates cutoff timeout bounds on form submission', async () => {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        fireEvent.change(screen.getByTestId('provider-name-input'), {
+          target: { value: 'Valid Name' },
+        });
+        fireEvent.change(screen.getByTestId('provider-key-input'), {
+          target: { value: 'sk-test' },
+        });
+        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
+          target: { value: '500' },
+        });
+
+        fireEvent.submit(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
+        });
+
+        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
+          target: { value: '700000' },
+        });
+        fireEvent.submit(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
+        });
       });
     });
   });
