@@ -1,6 +1,26 @@
 /* Copyright 2026 Kanban Platform Contributors */
 /* Apache-2.0 License. See LICENSE for details. */
 
+:root {
+  --kb-passkey-enroll-bg: var(--bg-surface, #ffffff);
+  --kb-passkey-enroll-border: var(--border-subtle, #e2e8f0);
+  --kb-passkey-enroll-fg: var(--fg-primary, #0f172a);
+}
+
+[data-theme='dark'] {
+  --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
+  --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
+  --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
+    --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
+    --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
+  }
+}
+
 .kb-passkey-enroll-backdrop {
   position: fixed;
   inset: 0;
@@ -15,16 +35,24 @@
 }
 
 .kb-passkey-enroll-modal {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  background-color: var(--kb-passkey-enroll-bg, var(--bg-surface));
+  border: 1px solid var(--kb-passkey-enroll-border, var(--border-subtle));
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 520px;
+  max-height: calc(100dvh - 32px);
   box-sizing: border-box;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.kb-passkey-enroll-modal form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
 }
 
 .kb-passkey-enroll-header {
@@ -33,6 +61,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .kb-passkey-enroll-title {
@@ -78,6 +107,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
 }
 
 .kb-passkey-enroll-intro {
@@ -93,10 +126,32 @@
   gap: var(--space-2);
 }
 
+.kb-passkey-enroll-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+
 .kb-passkey-enroll-label {
+  display: inline-flex;
+  align-items: center;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--fg-primary);
+  line-height: 1.4;
+}
+
+.kb-passkey-enroll-label-text {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.4;
+}
+
+.kb-passkey-enroll-label-row .field-help-hint,
+.kb-passkey-enroll-label .field-help-hint {
+  margin: 0;
 }
 
 .kb-passkey-enroll-input {
@@ -181,17 +236,28 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 @media (max-width: 480px) {
   .kb-passkey-enroll-backdrop {
     padding: var(--space-2);
-    align-items: flex-end;
+    align-items: center;
   }
 
   .kb-passkey-enroll-modal {
     max-width: 100%;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--radius-lg);
+  }
+
+  .kb-passkey-enroll-body {
+    padding: 16px 14px;
+    gap: var(--space-3);
+  }
+
+  .kb-passkey-enroll-header,
+  .kb-passkey-enroll-footer {
+    padding: 12px 14px;
   }
 }
