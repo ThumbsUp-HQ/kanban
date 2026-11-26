@@ -98,6 +98,19 @@
   border-color: #374151;
 }
 
+/* Dark Mode Secondary Buttons (WCAG 2.2 AA Contrast >= 4.5:1) */
+[data-theme='dark'] .kb-btn-secondary {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+[data-theme='dark'] .kb-btn-secondary:hover:not(:disabled) {
+  background-color: #4b5563;
+  border-color: #6b7280;
+  color: #ffffff;
+}
+
 .kb-agent-card:hover {
   border-color: var(--border-strong, #9ca3af);
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));

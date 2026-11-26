@@ -1,0 +1,26 @@
+All checks passed!
+Success: no issues found in 815 source files
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad/kanban/web
+> tsc -b --noEmit
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad/kanban/web
+> eslint . --max-warnings 0
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming (765) src/editor/mermaid/mermaidClient.ts
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-DDIOWGDG.css            623.16 kB │ gzip:  87.99 kB
+dist/assets/index-BUmVTDkM.js           2,948.09 kB │ gzip: 816.78 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.91s

@@ -146,11 +146,6 @@ def enroll_runner(  # noqa: PLR0913
     host = hostname or socket.gethostname()
     key_pem, csr_pem = _generate_ecdsa_key_and_csr(host)
 
-    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(state_dir, 0o700)
-    key_path = state_dir / "client.key"
-    _write_secure_file(key_path, key_pem, mode=0o600)
-
     # Submit CSR to enrollment endpoint
     base_url = server_url.rstrip("/")
     enroll_url = f"{base_url}/api/v1/agent-runners/enroll"
@@ -172,6 +167,11 @@ def enroll_runner(  # noqa: PLR0913
     if resp.status_code != _HTTP_CREATED:
         msg = f"Enrollment failed with status {resp.status_code}: {resp.text}"
         raise RuntimeError(msg)
+
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(state_dir, 0o700)
+    key_path = state_dir / "client.key"
+    _write_secure_file(key_path, key_pem, mode=0o600)
 
     data = resp.json()
     runner_id = data.get("runner_id")

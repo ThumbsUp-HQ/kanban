@@ -196,10 +196,35 @@
   padding: 2px 4px;
   border-radius: 4px;
   font-family: monospace;
+  white-space: nowrap;
 }
 
 [data-theme='dark'] .kb-provider-meta-row code {
   background-color: #374151;
+  color: #f9fafb;
+}
+
+/* Dark Mode Secondary Buttons & Controls (WCAG 2.2 AA Contrast >= 4.5:1) */
+[data-theme='dark'] .kb-btn-secondary,
+[data-theme='dark'] .kb-reorder-btn,
+[data-theme='dark'] .kb-provider-enable-btn,
+[data-theme='dark'] .kb-probe-btn,
+[data-theme='dark'] .kb-preset-btn,
+[data-theme='dark'] .kb-budget-preset-btn {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+[data-theme='dark'] .kb-btn-secondary:hover:not(:disabled),
+[data-theme='dark'] .kb-reorder-btn:hover:not(:disabled),
+[data-theme='dark'] .kb-provider-enable-btn:hover:not(:disabled),
+[data-theme='dark'] .kb-probe-btn:hover:not(:disabled),
+[data-theme='dark'] .kb-preset-btn:hover:not(:disabled),
+[data-theme='dark'] .kb-budget-preset-btn:hover:not(:disabled) {
+  background-color: #4b5563;
+  border-color: #6b7280;
+  color: #ffffff;
 }
 
 .kb-provider-models-list {

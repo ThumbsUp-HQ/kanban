@@ -1,0 +1,195 @@
+[ServerAdmin] >>> GET /api/v1/auth/session
+[ServerAdmin] <<< HTTP 200
+Response Body: {"authenticated":true,"principal_id":"01a21557-16be-7164-9d76-a796e784278c","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","session_id":"f620d60a-3435-4b48-8d2e-7cbd9f483f40","aal_level":2,"mfa_pending":false,"csrf_token":"4Yq8gb8YTsV9FEjsfNYlhA.o_sJq3-1jYw1n4GLypfI2_HliioEy-W4_rcjrDAi9EE","idle_expires_at":"2026-12-03T00:52:38.762816+00:00","absolute_expires_at":"2026-12-26T00:52:38.762816+00:00","remember_me":true,"aal2_active":true,"aal2_expires_at":"2026-11-26T01:07:38.762816+00:00"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers
+Request Body: {"provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":1}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"267bbecf-5128-45cc-83ac-0a3a9a136f67","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":1,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers
+Request Body: {"provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","api_key":"sk-mock-openai-workout-key","priority":2}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"4a4fc688-38e1-4e18-9ee5-311e8a22a379","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":2,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers
+Request Body: {"provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","api_key":"AIzaSyMockGeminiKey","priority":3}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"4af3ca51-1e00-4feb-a9fc-992af6532208","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":3,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/267bbecf-5128-45cc-83ac-0a3a9a136f67/probe-models
+Request Body: {}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"ok":true,"latency_ms":45.26,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/4a4fc688-38e1-4e18-9ee5-311e8a22a379/test-connection
+Request Body: {}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"ok":true,"latency_ms":18.69,"models":["gpt-4o","gpt-4o-mini"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/4af3ca51-1e00-4feb-a9fc-992af6532208/probe-models
+Request Body: {}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"ok":true,"latency_ms":29.83,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"}
+--------------------------------------------------
+[ServerAdmin] >>> PUT /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/order
+Request Body: {"ordered_ids":["4a4fc688-38e1-4e18-9ee5-311e8a22a379","267bbecf-5128-45cc-83ac-0a3a9a136f67","4af3ca51-1e00-4feb-a9fc-992af6532208"]}
+[ServerAdmin] <<< HTTP 200
+Response Body: [{"id":"4a4fc688-38e1-4e18-9ee5-311e8a22a379","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":10,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null},{"id":"267bbecf-5128-45cc-83ac-0a3a9a136f67","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null},{"id":"4af3ca51-1e00-4feb-a9fc-992af6532208","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":30,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}]
+--------------------------------------------------
+[ServerAdmin] >>> PUT /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/budgets
+Request Body: {"provider_config_id":"267bbecf-5128-45cc-83ac-0a3a9a136f67","period_kind":"monthly","token_cap":0}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"period_kind":"monthly","period_start":"2026-11-01","token_cap":0,"tokens_used":0,"tokens_reserved":0}
+--------------------------------------------------
+[ServerAdmin] >>> GET /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/budgets?provider_config_id=267bbecf-5128-45cc-83ac-0a3a9a136f67
+[ServerAdmin] <<< HTTP 200
+Response Body: [{"period_kind":"monthly","period_start":"2026-11-01","token_cap":0,"tokens_used":0,"tokens_reserved":0}]
+--------------------------------------------------
+[ServerAdmin] >>> PUT /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/budgets
+Request Body: {"provider_config_id":"267bbecf-5128-45cc-83ac-0a3a9a136f67","period_kind":"monthly","token_cap":50}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"period_kind":"monthly","period_start":"2026-11-01","token_cap":50,"tokens_used":0,"tokens_reserved":0}
+--------------------------------------------------
+[ServerAdmin] >>> PUT /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/budgets
+Request Body: {"provider_config_id":"267bbecf-5128-45cc-83ac-0a3a9a136f67","period_kind":"monthly","token_cap":10000000000}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"period_kind":"monthly","period_start":"2026-11-01","token_cap":10000000000,"tokens_used":50,"tokens_reserved":0}
+--------------------------------------------------
+[ServerAdmin] >>> PATCH /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/settings
+Request Body: {"air_gap_mode":true}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":true,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T00:52:38.717378Z"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers
+Request Body: {"provider_kind":"openai","display_name":"Cloud OpenAI Egress Test","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o"],"api_key":"sk-cloud-test-key"}
+[ServerAdmin] <<< HTTP 409
+Response Body: {"type":"urn:kanban:problem:AIR_GAP_EGRESS_DENIED","title":"Air Gap Egress Denied","status":409,"code":"AIR_GAP_EGRESS_DENIED","detail":"Air-gap mode is active: outbound cloud egress to provider 'openai' is strictly prohibited","request_id":"3ba28f2cfe454fa3b239bc11131ef75f","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/probe-models
+Request Body: {"provider_kind":"gemini","base_url":"https://generativelanguage.googleapis.com","api_key":"AIzaSyMockEgressKey"}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"AIR_GAP_EGRESS_DENIED","message":"Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/ai-providers/267bbecf-5128-45cc-83ac-0a3a9a136f67/probe-models
+Request Body: {}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"ok":true,"latency_ms":18.14,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+--------------------------------------------------
+[ServerAdmin] >>> PATCH /api/v1/workspaces/01a21557-16ba-79c1-9c30-5168d539311c/settings
+Request Body: {"air_gap_mode":false}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T00:52:43.767268Z"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions
+Request Body: {"slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c"}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"3ea72dd8-c686-4ce1-879e-b6b6db307a8d","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c","principal_id":"457651ed-693c-4d76-970f-8bb0fd697256","slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions
+Request Body: {"slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","cli_binary_allowlist_id":"agy","cli_args":["-p"],"project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c"}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"186bd5e1-aa10-4e82-ad22-2ce7b5170675","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c","principal_id":"d602c38c-b8fd-47ec-8e88-bb10d4fbd9d8","slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":"agy","cli_args":["-p"],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions
+Request Body: {"slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","remote_runner_pool_slug":"default","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c"}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"d14236a1-3cc2-490a-ba0d-b403fb100310","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c","principal_id":"8a142456-933d-4de3-bcfc-10452b8c8522","slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":"default","repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions/3ea72dd8-c686-4ce1-879e-b6b6db307a8d:validate
+[ServerAdmin] <<< HTTP 200
+Response Body: {"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nProvider: ollama | Model: llama3.2:latest\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions/186bd5e1-aa10-4e82-ad22-2ce7b5170675:validate
+[ServerAdmin] <<< HTTP 200
+Response Body: {"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":4.5,"tokens_in":12,"tokens_out":6,"rendered_context":"Binary: agy | Args: ['-p']","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nBinary: agy | Args: ['-p']\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 2.1ms | Total: 4.5ms | Tokens: 12 in, 6 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions/d14236a1-3cc2-490a-ba0d-b403fb100310:validate
+[ServerAdmin] <<< HTTP 200
+Response Body: {"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":32.1,"tokens_in":25,"tokens_out":10,"rendered_context":"Pool: default | Agent: remote-runner-agent","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nPool: default | Agent: remote-runner-agent\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 15.0ms | Total: 32.1ms | Tokens: 25 in, 10 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/stickies/01a21557-16e6-768f-9beb-b570482cae11/promote-preview
+[ServerAdmin] <<< HTTP 200
+Response Body: {"proposal":{"schema":"kb-sticky-doc-proposal/v1","proposed_title":"Incident Response Spec","summary_markdown":"Scratchpad notes promoted to document (deterministic offline preview).","sections":[{"heading":"Overview","level":2,"body_markdown":"# Incident Response Spec\n\n1. Detect failure within 500ms.\n2. Fall back to secondary AI provider.\n3. Log forensic audit trail."}],"extracted_action_items":[]},"rendered_markdown":"# Incident Response Spec\n\n> Scratchpad notes promoted to document (deterministic offline preview).\n\n## Overview\n\n# Incident Response Spec\n\n1. Detect failure within 500ms.\n2. Fall back to secondary AI provider.\n3. Log forensic audit trail.","original_sha256":"6d11e270cb693edb9299990ebacf8a620ea5336bf8b3c169b59b719614e333f1","warnings":[],"acl_preview":{"manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: PRJA","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","workspace_name":"Kanban Wor
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/sparkle/complete
+Request Body: {"project_id":"01a21557-16d3-7d5a-96cc-13cdcab5075c","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"7e5b2dc0-cce7-44e1-b695-997ec31ac7b4"}
+[ServerAdmin] <<< HTTP 200
+Response Body: event: done
+data: {"status": "unavailable", "ttft_ms": 0.0, "total_ms": 0.23}
+
+
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-definitions
+Request Body: {"slug":"beta-agent","display_name":"Project Beta Isolated Agent","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","project_id":"01a21557-16d8-72b7-8bdc-ef1947a6335e"}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"920d36ac-8dee-4551-93cf-f8998d851806","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","project_id":"01a21557-16d8-72b7-8bdc-ef1947a6335e","principal_id":"5830c148-8651-4543-9fe8-1511dc9f34ee","slug":"beta-agent","display_name":"Project Beta Isolated Agent","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+--------------------------------------------------
+[ProjectAdmin] >>> POST /api/v1/agent-definitions/3ea72dd8-c686-4ce1-879e-b6b6db307a8d:validate
+[ProjectAdmin] <<< HTTP 200
+Response Body: {"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nProvider: ollama | Model: llama3.2:latest\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+--------------------------------------------------
+[ProjectAdmin] >>> POST /api/v1/agent-definitions/920d36ac-8dee-4551-93cf-f8998d851806:validate
+[ProjectAdmin] <<< HTTP 404
+Response Body: {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"0ae5bddbedcd47dd8eef799d2a2d7e36","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
+--------------------------------------------------
+[ProjectAdmin] >>> PATCH /api/v1/admin/agent-definitions/920d36ac-8dee-4551-93cf-f8998d851806
+Request Body: {"display_name":"Hostile Cross-Project Mutation Attempt"}
+[ProjectAdmin] <<< HTTP 404
+Response Body: {"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"1fd87e47af3643cfb60b9d7ea9b8d9e2","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
+--------------------------------------------------
+[ServerAdmin] >>> GET /llms.txt
+[ServerAdmin] <<< HTTP 200
+Response Body: # 👍kanban - Agent-First, Security-First Kanban Platform
+
+> Open-source (Apache-2.0), Security-First (Priority #0), Agent-First (Priority #1) Kanban, Ticketing, and Knowledge Platform. Embedded PostgreSQL 16 with FORCE RLS, 24 low-token MCP tools across 3 isolated surfaces, canonical Markdown only, and zero SaaS AI paywalls.
+
+## Humans
+
+If you are a human developer configuring your workspace, either:
+- Copy and paste the contents of `/llms.txt` into your AI coding agent (Claude Code, OpenAI Codex, Gemini CLI / Antigravity, Cursor), or
+- Deliver this `/llms.txt` URL directly to your agent (e.g., *"Read `<this-url>` and onboard this workspace to 👍kanban"*).
+
+## Agents
+
+### 1. Platform & 3-Surface MCP Quick-Map
+
+Access 👍kanban programmatically via Model Context Protocol (MCP) or REST APIs:
+- Agent Surface (/mcp/agent): 9 tools for ticket workflow (ping_agent, search_tickets, read_ticket, create_ticket, update_ticket, begin_work, transition_ticket, complete_work, add_comment, link_objects).
+--------------------------------------------------
+[ServerAdmin] >>> GET /api/v1/users/me/preferences
+[ServerAdmin] <<< HTTP 200
+Response Body: {"principal_id":"01a21557-16be-7164-9d76-a796e784278c","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","agent_onboarding_prefs":{"scope":"local_only","execution_mode":"swarm","model_strategy":"quota_sipping_flash","qa_rigor":"strict_forensic","custom_notes":""}}
+--------------------------------------------------
+[ServerAdmin] >>> PATCH /api/v1/users/me/preferences
+Request Body: {"agent_onboarding_prefs":{"custom_notes":"Enforce zero-tolerance security standards and passive forensic verification.","scope":"local_only","execution_mode":"swarm","qa_rigor":"strict_forensic"}}
+[ServerAdmin] <<< HTTP 200
+Response Body: {"principal_id":"01a21557-16be-7164-9d76-a796e784278c","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","agent_onboarding_prefs":{"scope":"local_only","execution_mode":"swarm","model_strategy":"quota_sipping_flash","qa_rigor":"strict_forensic","custom_notes":"Enforce zero-tolerance security standards and passive forensic verification."}}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-runners/enrollment-tokens
+Request Body: {"pool_slug":"default","ttl_seconds":600}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"01a21557-2c3b-7dab-88ea-7eb648b938ee","pool_slug":"default","enrollment_token":"kb_rnr_enroll_4bBK-6Y3xQgdkRGgTvu_m7MH8rGZYMKVjdvwHHNXp_k","expires_at":"2026-11-26T01:02:44.218256Z","created_at":"2026-11-26T00:52:44.218256Z"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-runners/enrollment-tokens
+Request Body: {"pool_slug":"default","ttl_seconds":60}
+[ServerAdmin] <<< HTTP 201
+Response Body: {"id":"01a21557-364b-7489-b470-f4e7e7df86f3","pool_slug":"default","enrollment_token":"kb_rnr_enroll_F-kCcIgkqh0lhJhui6j5uVKvneDpWKBaSYx3G4pRM24","expires_at":"2026-11-26T00:53:46.794456Z","created_at":"2026-11-26T00:52:46.794456Z"}
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/agent-runners/enroll
+Request Body: {"enrollment_token":"kb_rnr_enroll_F-kCcIgkqh0lhJhui6j5uVKvneDpWKBaSYx3G4pRM24","csr_pem":"-----BEGIN CERTIFICATE REQUEST-----\nMIIBCTCBrwIBADBNMSMwIQYDVQQDDBpleHBpcmVkLW5vZGUuaW50ZXJuYWwudGVz\ndDEmMCQGA1UECgwd8J+RjWthbmJhbiBSZW1vdGUgUnVubmVyIE5vZGUwWTATBgcq\nhkjOPQIBBggqhkjOPQMBBwNCAATjvFLuk3zWTQV3UCUWIc0PPPURCUoKEtQtpLFv\noIPsReg0r5G+aW17yXZMF3HUlqUmxBKHupRVwgXDVa6ja5bxoAAwCgYIKoZIzj0E\nAwIDSQAwRgIhALiG0F0KEDgLRO6kwAiCbrTvy+zFA66nYwUcA7Z+wRT2AiEA/r9d\n8OcArJ/lQ7Tn9rLfyVkSK/VH+TBBhDwb+3bT2nM=\n-----END CERTIFICATE REQUEST-----\n","hostname":"expired-node.internal.test"}
+[ServerAdmin] <<< HTTP 401
+Response Body: {"type":"urn:kanban:problem:ENROLLMENT_TOKEN_INVALID","title":"Enrollment Token Invalid","status":401,"code":"ENROLLMENT_TOKEN_INVALID","detail":"Enrollment token is expired, already consumed, or invalid.","request_id":"5db6941fc04145b3a9b768f8f17e6cc9","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+--------------------------------------------------
+[ServerAdmin] >>> GET /api/v1/admin/agent-runners
+[ServerAdmin] <<< HTTP 200
+Response Body: [{"id":"04e80972-b8eb-4179-ac78-2326a824dd06","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"7a85bb032f2bb24840f337944e415a0b58b839fbfcb96e463cbcbb0d00abfe4b","cert_expires_at":"2026-12-26T00:52:45.264185Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":null,"revoked_at":null,"created_at":"2026-11-26T00:52:45.265356Z"}]
+--------------------------------------------------
+[ServerAdmin] >>> GET /api/v1/admin/agent-runners
+[ServerAdmin] <<< HTTP 200
+Response Body: [{"id":"04e80972-b8eb-4179-ac78-2326a824dd06","workspace_id":"01a21557-16ba-79c1-9c30-5168d539311c","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"7a85bb032f2bb24840f337944e415a0b58b839fbfcb96e463cbcbb0d00abfe4b","cert_expires_at":"2026-12-26T00:52:45.264185Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":"2026-11-26T00:52:47.142294Z","revoked_at":null,"created_at":"2026-11-26T00:52:45.265356Z"}]
+--------------------------------------------------
+[ServerAdmin] >>> POST /api/v1/admin/agent-runners/04e80972-b8eb-4179-ac78-2326a824dd06:revoke
+[ServerAdmin] <<< HTTP 200
+Response Body: {"id":"04e80972-b8eb-4179-ac78-2326a824dd06","status":"revoked","revoked_at":"2026-11-26T00:52:47.160345+00:00"}
+--------------------------------------------------
