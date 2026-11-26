@@ -5,8 +5,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`  
-**Target Commit:** `f3458a9e` (branch `docs/KAN-409-slice1-auth-docs`)  
-**Wiki Commit:** `8195469` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `f54c855c` (branch `docs/KAN-409-slice1-auth-docs`)  
+**Wiki Commit:** `4452a11` (branch `docs/KAN-409-slice1-auth-docs` in `./thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -21,9 +21,10 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 ### Key Architectural Invariants Verified
 1. **Multi-Card Authentication Studio & Break-Glass Safeguards**:
    - Dynamic provider card priority and enable/disable states.
-   - Fail-closed anti-lockout guard: disabling local admin requires external admin presence verified within `HANDSHAKE_PROBE_MAX_AGE_SECONDS = 900` (`HTTP 409 LOCKOUT_PREVENTED`).
+   - Fail-closed anti-lockout guard: disabling local admin requires a verified interactive `SERVER_ADMIN` login via an external auth card within the last 15 minutes (`record_external_admin_handshake`), returning `HTTP 409 LOCKOUT_PREVENTED`. Test handshakes update connectivity/health only and never satisfy the anti-lockout timer.
+   - Exact count of 10 single-use recovery codes documented and tested (`RECOVERY_CODE_COUNT = 10`).
 2. **Directory Federation & Granular RBAC**:
-   - Pinned CA PEM validation for LDAPS (port 636) and StartTLS (port 389).
+   - Pinned CA PEM validation for LDAPS (port 636) and StartTLS (port 389) with explicit `LdapCardConfig` schema parity.
    - Recursive Active Directory nested group evaluation (`memberOf`).
    - Granular 30-permission RBAC engine with strict DENY precedence (`effective = allow & (~deny)`).
 3. **WebAuthn Passkeys & Sliding-Window WebSudo**:
@@ -41,10 +42,10 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 
 ### 2.1 Comprehensive Endpoint Catalog
 - **Multi-Card Auth:**
-  - `POST /api/v1/admin/auth-cards/test-handshake`
-  - `POST /api/v1/admin/auth-cards/{card_ref}/test-handshake`
   - `POST /api/v1/admin/auth-cards`
   - `PATCH /api/v1/admin/auth-cards/{id}`
+  - `POST /api/v1/admin/auth-cards/test-handshake`
+  - `POST /api/v1/admin/auth-cards/{card_ref}/test-handshake`
 - **Active Directory / LDAP:**
   - `POST /api/v1/auth/ldap/{slug}/login`
 - **OIDC Federation:**
@@ -55,10 +56,13 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
   - `POST /api/v1/auth/mfa/totp/confirm`
   - `POST /api/v1/auth/mfa/verify`
   - `POST /api/v1/auth/mfa/recovery/regenerate`
+  - `POST /api/v1/auth/aal2/drop`
   - `POST /api/v1/auth/webauthn/register/options`
 - **Granular RBAC:**
   - `GET/POST /api/v1/admin/rbac/roles`
   - `PATCH/DELETE /api/v1/admin/rbac/roles/{id}`
+  - `PUT /api/v1/admin/rbac/roles/permissions:batch`
+  - `PUT /api/v1/admin/rbac/roles/{id}/permissions`
 
 ### 2.2 Security Standards Verified
 - Mandatory WebSudo AAL2 on all administrative auth and RBAC routes.
@@ -90,11 +94,11 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
      * **Overall Vitest Branch Coverage:** **95.85%**.
 
 3. **Build & Quality Pipeline (`docs/qa/KAN-405/build-check.txt`)**:
-   - `sync_wiki_bundle`: 34 chapters synced cleanly (608,321 bytes, 106 images).
+   - `sync_wiki_bundle`: 34 chapters synced cleanly (612,452 bytes, 106 images).
    - `check-migrations`: 84 migrations valid, single head `p6_22_mcp_api_keys_capability_mask_boundary`.
    - `ruff check`: All checks passed (0 errors).
    - `check_no_dashes`: 0 Unicode dashes detected across repository.
-   - `typecheck`, `lint`, `build`: All exit code 0 clean (built in 1.39s).
+   - `typecheck`, `lint`, `build`: All exit code 0 clean (built in 1.25s).
 
 ---
 
