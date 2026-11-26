@@ -1,0 +1,29 @@
+$ pnpm --dir kanban/web exec vitest run --coverage.enabled --coverage.include='src/features/settings/McpUnifiedStudio.tsx' src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan516-e0fe316a/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (29 tests) 6990ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ filters keys by scope pills and shows project selector when Project scope is active 360ms
+     ✓ switches between My Keys and Governance views and updates title 325ms
+     ✓ handles AAL2 cancellation on minting and retries without error banners 1493ms
+     ✓ handles MFA cancellation on minting without error banners 726ms
+     ✓ handles mint error reporting on generic failure 687ms
+     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 859ms
+   ✓ WorkloadFederationSection (KAN-74) (13)
+     ✓ covers policy editing, disabled/empty-CIDR rendering, modal cancel/close, error banners, and AAL2 cancellation across mutations 488ms
+
+ Test Files  1 passed (1)
+      Tests  29 passed (29)
+   Start at  15:59:09
+   Duration  13.34s (tests 56%, transform 17%, import 15%, environment 12%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |     95.6 |     100 |     100 |                   
+ ...fiedStudio.tsx |     100 |     95.6 |     100 |     100 | 100-109,113,118   
+-------------------|---------|----------|---------|---------|-------------------
+exit_code=0

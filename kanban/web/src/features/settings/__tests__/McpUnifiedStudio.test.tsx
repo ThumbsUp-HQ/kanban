@@ -1,6 +1,8 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import React from 'react';
@@ -1226,5 +1228,163 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     document.documentElement.removeAttribute('data-theme');
 
     unmount();
+  });
+
+  it('renders FieldHelpHint on Issuer URL, Client ID / Audience, and Subject Pattern fields with full accessibility and theme support (KAN-516)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/admin/workload-identities') {
+        return [];
+      }
+      return undefined;
+    });
+
+    const { container, unmount } = render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
+    });
+
+    // Open create policy modal
+    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
+    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
+
+    // Verify 1-Click presets bar has zero inline styles
+    const presetsBar = screen.getByTestId('workload-presets-bar');
+    expect(presetsBar.style.length).toBe(0);
+
+    // Locate the 3 FieldHelpHint trigger buttons
+    const issuerHelp = screen.getByTestId('policy-issuer-help');
+    const clientIdHelp = screen.getByTestId('policy-client-id-help');
+    const subjectHelp = screen.getByTestId('policy-subject-pattern-help');
+
+    // Zero inline styles on triggers
+    expect(issuerHelp.style.length).toBe(0);
+    expect(clientIdHelp.style.length).toBe(0);
+    expect(subjectHelp.style.length).toBe(0);
+
+    // Initial ARIA semantics
+    expect(issuerHelp.getAttribute('aria-label')).toBe('Help for Issuer URL');
+    expect(issuerHelp.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(issuerHelp.getAttribute('aria-expanded')).toBe('false');
+
+    expect(clientIdHelp.getAttribute('aria-label')).toBe('Help for Client ID / Audience');
+    expect(clientIdHelp.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('false');
+
+    expect(subjectHelp.getAttribute('aria-label')).toBe('Help for Subject Pattern');
+    expect(subjectHelp.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(subjectHelp.getAttribute('aria-expanded')).toBe('false');
+
+    // 1. Focus Issuer URL Help trigger -> opens popover
+    act(() => {
+      issuerHelp.focus();
+    });
+    expect(issuerHelp.getAttribute('aria-expanded')).toBe('true');
+    const issuerPopover = screen.getByTestId('policy-issuer-help-popover');
+    expect(issuerPopover).toBeDefined();
+    expect(issuerPopover.getAttribute('role')).toBe('dialog');
+    expect(issuerPopover.textContent).toContain('Issuer URL');
+    expect(issuerPopover.textContent).toContain('OpenID Connect issuer URL');
+    expect(issuerPopover.textContent).toContain('RFC 8693');
+    expect(issuerPopover.textContent).toContain('https://token.actions.githubusercontent.com');
+    const issuerDocLink = screen.getByTestId('policy-issuer-help-doc-link');
+    expect(issuerDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
+
+    // Dismiss Issuer URL popover via Escape
+    act(() => {
+      fireEvent.keyDown(issuerHelp, { key: 'Escape' });
+    });
+    expect(issuerHelp.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('policy-issuer-help-popover')).toBeNull();
+
+    // 2. Focus Client ID / Audience Help trigger -> opens popover
+    act(() => {
+      clientIdHelp.focus();
+    });
+    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('true');
+    const clientIdPopover = screen.getByTestId('policy-client-id-help-popover');
+    expect(clientIdPopover).toBeDefined();
+    expect(clientIdPopover.getAttribute('role')).toBe('dialog');
+    expect(clientIdPopover.textContent).toContain('Client ID / Audience');
+    expect(clientIdPopover.textContent).toContain('Expected audience claim matching the aud field');
+    expect(clientIdPopover.textContent).toContain('RFC 8693');
+    expect(clientIdPopover.textContent).toContain('https://kanban.example.com');
+    const clientIdDocLink = screen.getByTestId('policy-client-id-help-doc-link');
+    expect(clientIdDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
+
+    // Dismiss Client ID popover via Escape
+    act(() => {
+      fireEvent.keyDown(clientIdHelp, { key: 'Escape' });
+    });
+    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('policy-client-id-help-popover')).toBeNull();
+
+    // 3. Focus Subject Pattern Help trigger -> opens popover
+    act(() => {
+      subjectHelp.focus();
+    });
+    expect(subjectHelp.getAttribute('aria-expanded')).toBe('true');
+    const subjectPopover = screen.getByTestId('policy-subject-pattern-help-popover');
+    expect(subjectPopover).toBeDefined();
+    expect(subjectPopover.getAttribute('role')).toBe('dialog');
+    expect(subjectPopover.textContent).toContain('Subject Pattern');
+    expect(subjectPopover.textContent).toContain('Glob or regex pattern matched against incoming OIDC JWT sub claims');
+    expect(subjectPopover.textContent).toContain('RFC 8693');
+    expect(subjectPopover.textContent).toContain('repo:org/repo:ref:refs/heads/*');
+    const subjectDocLink = screen.getByTestId('policy-subject-pattern-help-doc-link');
+    expect(subjectDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
+
+    // Dismiss Subject Pattern popover via Escape
+    act(() => {
+      fireEvent.keyDown(subjectHelp, { key: 'Escape' });
+    });
+    expect(subjectHelp.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('policy-subject-pattern-help-popover')).toBeNull();
+
+    // 4. Verify Theme switching (Light & Dark)
+    document.documentElement.setAttribute('data-theme', 'light');
+    expect(container.querySelector('[data-testid="policy-issuer-help"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="policy-client-id-help"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="policy-subject-pattern-help"]')).not.toBeNull();
+
+    document.documentElement.setAttribute('data-theme', 'dark');
+    expect(container.querySelector('[data-testid="policy-issuer-help"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="policy-client-id-help"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="policy-subject-pattern-help"]')).not.toBeNull();
+    document.documentElement.removeAttribute('data-theme');
+
+    // Close modal
+    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
+    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
+
+    unmount();
+  });
+
+  it('verifies CSS rules in McpAccessStudio.css for label adjacency, themes, and mobile layout (KAN-516)', () => {
+    const cssPath = path.resolve(import.meta.dirname, '../McpAccessStudio.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    // Form label adjacency and flex alignment
+    expect(cssContent).toContain('.kb-mcp-form-label');
+    expect(cssContent).toContain('display: inline-flex;');
+    expect(cssContent).toContain('gap: 6px;');
+    expect(cssContent).toContain('.kb-mcp-form-label .field-help-hint');
+    expect(cssContent).toContain('margin: 0;');
+    expect(cssContent).toContain('margin-left: 0;');
+
+    // Presets bar and label
+    expect(cssContent).toContain('.kb-mcp-presets-bar');
+    expect(cssContent).toContain('.kb-mcp-presets-label');
+
+    // Dark theme and prefers-color-scheme rules
+    expect(cssContent).toContain("[data-theme='dark'] .kb-mcp-form-label");
+    expect(cssContent).toContain(":root:not([data-theme='light']) .kb-mcp-form-label");
+    expect(cssContent).toContain("[data-theme='dark'] .kb-mcp-presets-label");
+    expect(cssContent).toContain(":root:not([data-theme='light']) .kb-mcp-presets-label");
+
+    // Mobile responsiveness
+    expect(cssContent).toContain('@media (max-width: 480px)');
+    expect(cssContent).toContain('.kb-snippet-modal-card');
   });
 });
