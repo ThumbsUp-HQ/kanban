@@ -1253,4 +1253,85 @@ describe('CustomFieldDefinitionEditor', () => {
     expect(await screen.findByTestId('tamper-old-sha')).toBeDefined();
     expect(screen.getByTestId('tamper-old-sha').textContent).toContain('unknown');
   });
+
+  it('renders FieldHelpHint components on all structured format inputs in AdvancedSection with explicit defaultValue and validValues (KAN-507)', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    renderEditor(true);
+
+    // Open advanced section
+    const advToggle = await screen.findByTestId('custom-field-advanced-section-toggle');
+    fireEvent.click(advToggle);
+
+    // 1. Text format structured hints
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'text' } });
+    expect(screen.getByTestId('hint-meta-text-max-length')).toBeDefined();
+    expect(screen.getByTestId('hint-meta-text-prefix')).toBeDefined();
+    expect(screen.getByTestId('hint-meta-text-monospace')).toBeDefined();
+
+    // Trigger max-length hint popover
+    fireEvent.click(screen.getByTestId('hint-meta-text-max-length'));
+    expect(screen.getByText('Maximum character limit enforced on field text values.')).toBeDefined();
+
+    // 2. Number format structured hints
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'number' } });
+    expect(screen.getByTestId('hint-meta-number-precision')).toBeDefined();
+    expect(screen.getByTestId('hint-meta-number-unit-suffix')).toBeDefined();
+    expect(screen.getByTestId('hint-meta-number-currency')).toBeDefined();
+
+    // Trigger number precision hint popover
+    fireEvent.click(screen.getByTestId('hint-meta-number-precision'));
+    expect(screen.getByText('Maximum decimal fraction digits displayed for numeric values.')).toBeDefined();
+
+    // 3. Badge format structured hints
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'badge' } });
+    expect(screen.getByTestId('hint-meta-badge-color')).toBeDefined();
+    expect(screen.getByTestId('hint-meta-badge-labels')).toBeDefined();
+
+    // Trigger badge color hint popover
+    fireEvent.click(screen.getByTestId('hint-meta-badge-color'));
+    expect(screen.getByText('Semantic theme color variant applied to the badge pill.')).toBeDefined();
+  });
+
+  it('enforces adjacent sibling structure for all FieldHelpHint components and labels without nesting (KAN-507)', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    const { container } = renderEditor(true);
+
+    // Open advanced section
+    const advToggle = await screen.findByTestId('custom-field-advanced-section-toggle');
+    fireEvent.click(advToggle);
+
+    // Switch to text format to mount structured inputs
+    fireEvent.change(screen.getByTestId('output-format-select'), { target: { value: 'text' } });
+
+    // Invariant: ZERO button.field-help-hint inside any label
+    const allLabels = container.querySelectorAll('label');
+    allLabels.forEach((label) => {
+      const nestedButton = label.querySelector('button.field-help-hint');
+      expect(nestedButton).toBeNull();
+    });
+
+    // Invariant: .custom-field-structured-label-row has both label and FieldHelpHint as adjacent siblings
+    const structuredLabelRows = container.querySelectorAll('.custom-field-structured-label-row');
+    expect(structuredLabelRows.length).toBeGreaterThanOrEqual(3);
+    structuredLabelRows.forEach((row) => {
+      const label = row.querySelector('label');
+      const hint = row.querySelector('.field-help-hint');
+      expect(label).not.toBeNull();
+      expect(hint).not.toBeNull();
+      expect(label?.parentElement).toBe(row);
+      expect(hint?.parentElement).toBe(row);
+    });
+
+    // Invariant: .custom-field-label-row has both label and FieldHelpHint as adjacent siblings
+    const labelRows = container.querySelectorAll('.custom-field-label-row');
+    expect(labelRows.length).toBeGreaterThanOrEqual(6);
+    labelRows.forEach((row) => {
+      const label = row.querySelector('label');
+      const hint = row.querySelector('.field-help-hint');
+      expect(label).not.toBeNull();
+      expect(hint).not.toBeNull();
+      expect(label?.parentElement).toBe(row);
+      expect(hint?.parentElement).toBe(row);
+    });
+  });
 });

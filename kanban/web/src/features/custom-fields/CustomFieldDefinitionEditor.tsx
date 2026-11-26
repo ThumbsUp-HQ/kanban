@@ -876,8 +876,10 @@ export function CustomFieldDefinitionEditor({
             <div className="custom-fields-form-grid">
               {/* Field Name */}
               <div className="custom-field-form-group">
-                <label htmlFor="field-name" className="custom-field-form-label">
-                  Field Name
+                <div className="custom-field-label-row">
+                  <label htmlFor="field-name" className="custom-field-form-label">
+                    Field Name
+                  </label>
                   <FieldHelpHint
                     title="Display Name"
                     summary="The human-readable label displayed on issue detail rails, tables, and boards."
@@ -885,7 +887,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#display-name"
                     testId="hint-field-name"
                   />
-                </label>
+                </div>
                 <input
                   id="field-name"
                   type="text"
@@ -903,8 +905,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Field Slug */}
               <div className="custom-field-form-group">
-                <label htmlFor="field-slug" className="custom-field-form-label">
-                  Identifier Slug (a-z0-9-)
+                <div className="custom-field-label-row">
+                  <label htmlFor="field-slug" className="custom-field-form-label">
+                    Identifier Slug (a-z0-9-)
+                  </label>
                   <FieldHelpHint
                     title="Identifier Slug"
                     summary="Unique lowercase alphanumeric identifier used in API requests, formulas, and queries."
@@ -917,7 +921,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#slug"
                     testId="hint-field-slug"
                   />
-                </label>
+                </div>
                 <input
                   id="field-slug"
                   type="text"
@@ -937,8 +941,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Field Flavor */}
               <div className="custom-field-form-group">
-                <label htmlFor="field-flavor" className="custom-field-form-label">
-                  Field Flavor
+                <div className="custom-field-label-row">
+                  <label htmlFor="field-flavor" className="custom-field-form-label">
+                    Field Flavor
+                  </label>
                   <FieldHelpHint
                     title="Field Flavor"
                     summary="The execution paradigm determining compute speed, sandbox isolation, and capabilities."
@@ -951,7 +957,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#flavors"
                     testId="hint-field-flavor"
                   />
-                </label>
+                </div>
                 <select
                   id="field-flavor"
                   className="custom-field-select"
@@ -994,8 +1000,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Output Format */}
               <div className="custom-field-form-group">
-                <label htmlFor="output-format" className="custom-field-form-label">
-                  Output Format
+                <div className="custom-field-label-row">
+                  <label htmlFor="output-format" className="custom-field-form-label">
+                    Output Format
+                  </label>
                   <FieldHelpHint
                     title="Output Format"
                     summary="Specifies how evaluated output values are sanitized, validated, and rendered in the UI."
@@ -1011,7 +1019,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#output-formats"
                     testId="hint-output-format"
                   />
-                </label>
+                </div>
                 <select
                   id="output-format"
                   className="custom-field-select"
@@ -1066,7 +1074,19 @@ export function CustomFieldDefinitionEditor({
                   {outputFormat === 'text' && (
                     <div className="custom-field-structured-grid" data-testid="structured-meta-text">
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-text-max-length">Max Length</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-text-max-length">Max Length</label>
+                          <FieldHelpHint
+                            title="Max Length"
+                            summary="Maximum character limit enforced on field text values."
+                            defaultValue="280"
+                            validValues={{
+                              '1-10000': 'Positive integer character limit (default: 280)',
+                            }}
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-text-max-length"
+                          />
+                        </div>
                         <input
                           id="meta-text-max-length"
                           type="number"
@@ -1079,7 +1099,20 @@ export function CustomFieldDefinitionEditor({
                         />
                       </div>
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-text-prefix">Prefix</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-text-prefix">Prefix</label>
+                          <FieldHelpHint
+                            title="Prefix"
+                            summary="Optional text prefix prepended before the rendered value."
+                            defaultValue="None (empty string)"
+                            validValues={{
+                              'Plain text': 'Any alphanumeric or punctuation prefix (e.g. ID: )',
+                            }}
+                            example="ID: "
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-text-prefix"
+                          />
+                        </div>
                         <input
                           id="meta-text-prefix"
                           type="text"
@@ -1093,18 +1126,31 @@ export function CustomFieldDefinitionEditor({
                         />
                       </div>
                       <div className="custom-field-structured-field custom-field-structured-field--checkbox">
-                        <label className="custom-field-checkbox-label" htmlFor="meta-text-monospace">
-                          <input
-                            id="meta-text-monospace"
-                            type="checkbox"
-                            data-testid="meta-text-monospace"
-                            checked={Boolean(parsedMetadata.monospace)}
-                            onChange={(e) => {
-                              updateMetadataField('monospace', e.target.checked);
+                        <div className="custom-field-structured-label-row">
+                          <label className="custom-field-checkbox-label" htmlFor="meta-text-monospace">
+                            <input
+                              id="meta-text-monospace"
+                              type="checkbox"
+                              data-testid="meta-text-monospace"
+                              checked={Boolean(parsedMetadata.monospace)}
+                              onChange={(e) => {
+                                updateMetadataField('monospace', e.target.checked);
+                              }}
+                            />
+                            <span>Monospace font</span>
+                          </label>
+                          <FieldHelpHint
+                            title="Monospace Font"
+                            summary="Toggle fixed-width code font family for text rendering."
+                            defaultValue="false"
+                            validValues={{
+                              true: 'Render using monospace code typography',
+                              false: 'Render using standard UI sans-serif typography',
                             }}
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-text-monospace"
                           />
-                          <span>Monospace font</span>
-                        </label>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1112,7 +1158,19 @@ export function CustomFieldDefinitionEditor({
                   {outputFormat === 'number' && (
                     <div className="custom-field-structured-grid" data-testid="structured-meta-number">
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-number-precision">Max Decimals</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-number-precision">Max Decimals</label>
+                          <FieldHelpHint
+                            title="Max Decimals"
+                            summary="Maximum decimal fraction digits displayed for numeric values."
+                            defaultValue="2"
+                            validValues={{
+                              '0-10': 'Integer decimal precision between 0 and 10 (default: 2)',
+                            }}
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-number-precision"
+                          />
+                        </div>
                         <input
                           id="meta-number-precision"
                           type="number"
@@ -1125,7 +1183,20 @@ export function CustomFieldDefinitionEditor({
                         />
                       </div>
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-number-unit-suffix">Unit Suffix</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-number-unit-suffix">Unit Suffix</label>
+                          <FieldHelpHint
+                            title="Unit Suffix"
+                            summary="Unit label or symbol displayed immediately following the numeric value."
+                            defaultValue="None (empty string)"
+                            validValues={{
+                              'Unit string': 'Arbitrary text suffix (e.g. pts, ms, USD, %)',
+                            }}
+                            example=" pts"
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-number-unit-suffix"
+                          />
+                        </div>
                         <input
                           id="meta-number-unit-suffix"
                           type="text"
@@ -1139,7 +1210,20 @@ export function CustomFieldDefinitionEditor({
                         />
                       </div>
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-number-currency">Currency Symbol</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-number-currency">Currency Symbol</label>
+                          <FieldHelpHint
+                            title="Currency Symbol"
+                            summary="Currency symbol prefixed before the formatted numeric value."
+                            defaultValue="None (empty string)"
+                            validValues={{
+                              'Currency symbol': 'Standard currency symbols (e.g. $, €, £, ¥)',
+                            }}
+                            example="$"
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-number-currency"
+                          />
+                        </div>
                         <input
                           id="meta-number-currency"
                           type="text"
@@ -1158,7 +1242,23 @@ export function CustomFieldDefinitionEditor({
                   {outputFormat === 'badge' && (
                     <div className="custom-field-structured-grid" data-testid="structured-meta-badge">
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-badge-color">Color Token</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-badge-color">Color Token</label>
+                          <FieldHelpHint
+                            title="Color Token"
+                            summary="Semantic theme color variant applied to the badge pill."
+                            defaultValue="info"
+                            validValues={[
+                              { label: 'info', description: 'Informational blue semantic token' },
+                              { label: 'success', description: 'Positive green semantic token' },
+                              { label: 'warning', description: 'Alert orange semantic token' },
+                              { label: 'danger', description: 'Destructive red semantic token' },
+                            ]}
+                            example="info"
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-badge-color"
+                          />
+                        </div>
                         <input
                           id="meta-badge-color"
                           type="text"
@@ -1172,7 +1272,20 @@ export function CustomFieldDefinitionEditor({
                         />
                       </div>
                       <div className="custom-field-structured-field">
-                        <label htmlFor="meta-badge-labels">Allowed Labels (comma-separated)</label>
+                        <div className="custom-field-structured-label-row">
+                          <label htmlFor="meta-badge-labels">Allowed Labels (comma-separated)</label>
+                          <FieldHelpHint
+                            title="Allowed Labels"
+                            summary="Allowlist of approved badge label strings. If empty, all labels are permitted."
+                            defaultValue="All labels allowed (empty list)"
+                            validValues={{
+                              'Comma-separated strings': 'e.g. Active, Verified, Pending',
+                            }}
+                            example="Active, Verified, Pending"
+                            docHref="/docs/custom-fields#format-metadata"
+                            testId="hint-meta-badge-labels"
+                          />
+                        </div>
                         <input
                           id="meta-badge-labels"
                           type="text"
@@ -1199,8 +1312,10 @@ export function CustomFieldDefinitionEditor({
                     : ''
                 }`}
               >
-                <label htmlFor="format-metadata" className="custom-field-form-label">
-                  Format Configuration Metadata (JSON)
+                <div className="custom-field-label-row">
+                  <label htmlFor="format-metadata" className="custom-field-form-label">
+                    Format Configuration Metadata (JSON)
+                  </label>
                   <FieldHelpHint
                     title="Format Metadata JSON"
                     summary="JSON configuration dictionary tailoring display options for the selected output format."
@@ -1217,7 +1332,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#format-metadata"
                     testId="hint-format-metadata"
                   />
-                </label>
+                </div>
                 <textarea
                   id="format-metadata"
                   className="custom-field-textarea mono"
@@ -1239,8 +1354,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Script Source Code */}
               <div className="custom-field-form-group">
-                <label htmlFor="script-source" className="custom-field-form-label">
-                  Script Source Code (Sandboxed, never executed client-side)
+                <div className="custom-field-label-row">
+                  <label htmlFor="script-source" className="custom-field-form-label">
+                    Script Source Code (Sandboxed, never executed client-side)
+                  </label>
                   <FieldHelpHint
                     title="Script / Formula Source"
                     summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
@@ -1249,7 +1366,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#script-source"
                     testId="hint-script-source"
                   />
-                </label>
+                </div>
                 <textarea
                   id="script-source"
                   className="custom-field-textarea mono custom-field-source-editor"
@@ -1386,8 +1503,10 @@ export function CustomFieldDefinitionEditor({
             <div className="custom-fields-form-grid">
               {/* Execution Tier */}
               <div className="custom-field-form-group">
-                <label htmlFor="execution-tier" className="custom-field-form-label">
-                  Execution Sandbox (S13.3)
+                <div className="custom-field-label-row">
+                  <label htmlFor="execution-tier" className="custom-field-form-label">
+                    Execution Sandbox (S13.3)
+                  </label>
                   <FieldHelpHint
                     title="Sandbox Tier"
                     summary="The isolation boundary executing custom field code."
@@ -1406,7 +1525,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#sandbox-tier"
                     testId="hint-execution-tier"
                   />
-                </label>
+                </div>
                 <select
                   id="execution-tier"
                   className="custom-field-select"
@@ -1438,8 +1557,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Target Scope */}
               <div className="custom-field-form-group">
-                <label htmlFor="target-scope" className="custom-field-form-label">
-                  Token Scope (S13.2)
+                <div className="custom-field-label-row">
+                  <label htmlFor="target-scope" className="custom-field-form-label">
+                    Token Scope (S13.2)
+                  </label>
                   <FieldHelpHint
                     title="Target Scope"
                     summary="The permission boundary for API tokens granted to script executions."
@@ -1463,7 +1584,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#target-scope"
                     testId="hint-target-scope"
                   />
-                </label>
+                </div>
                 <select
                   id="target-scope"
                   className="custom-field-select"
@@ -1499,8 +1620,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Credential Mode */}
               <div className="custom-field-form-group">
-                <label htmlFor="credential-mode" className="custom-field-form-label">
-                  Credential Mode (S13.2)
+                <div className="custom-field-label-row">
+                  <label htmlFor="credential-mode" className="custom-field-form-label">
+                    Credential Mode (S13.2)
+                  </label>
                   <FieldHelpHint
                     title="Credential Mode"
                     summary="The identity and authority assumed by custom field executions."
@@ -1525,7 +1648,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#credential-mode"
                     testId="hint-credential-mode"
                   />
-                </label>
+                </div>
                 <select
                   id="credential-mode"
                   className="custom-field-select"
@@ -1543,8 +1666,10 @@ export function CustomFieldDefinitionEditor({
 
               {/* Egress Allowlist */}
               <div className="custom-field-form-group">
-                <label htmlFor="egress-allowlist" className="custom-field-form-label">
-                  Egress Allowlist
+                <div className="custom-field-label-row">
+                  <label htmlFor="egress-allowlist" className="custom-field-form-label">
+                    Egress Allowlist
+                  </label>
                   <FieldHelpHint
                     title="Egress Allowlist"
                     summary="Line-delimited list of approved hostnames or IP addresses for nsjail scripts."
@@ -1557,7 +1682,7 @@ export function CustomFieldDefinitionEditor({
                     docHref="/docs/custom-fields#egress-allowlist"
                     testId="hint-egress-allowlist"
                   />
-                </label>
+                </div>
                 <textarea
                   id="egress-allowlist"
                   className="custom-field-textarea mono"
