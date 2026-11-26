@@ -14,6 +14,12 @@ from kanban.api.v1.admin.ai_providers import (
 )
 from kanban.api.v1.admin.audit_shred import router as admin_audit_shred_router
 from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
+from kanban.api.v1.admin.default_workflow_hooks import (
+    router as admin_default_workflow_hooks_router,
+)
+from kanban.api.v1.admin.default_workflow_hooks import (
+    workspace_router as workspace_default_workflow_hooks_router,
+)
 from kanban.api.v1.admin.destructive import router as admin_destructive_router
 from kanban.api.v1.admin.diagnostics import router as admin_diagnostics_router
 from kanban.api.v1.admin.exports import router as admin_exports_router
@@ -149,6 +155,8 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(custom_field_execution_router)
     v1.include_router(auth_cards_public_router)
     v1.include_router(admin_auth_cards_router)
+    v1.include_router(admin_default_workflow_hooks_router)
+    v1.include_router(workspace_default_workflow_hooks_router)
     v1.include_router(admin_audit_shred_router)
     v1.include_router(admin_ai_router)
     v1.include_router(workspace_ai_router)

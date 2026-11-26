@@ -71,6 +71,7 @@ import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
 import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
 import { AboutPage } from '../features/about/AboutPage';
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+import { DefaultWorkflowHooksStudio } from '../features/workflows/DefaultWorkflowHooksStudio';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { DocsCenterPage } from '../features/docs-center/DocsCenterPage';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
@@ -2241,6 +2242,10 @@ export const appRoutes: RouteObject[] = [
               {
                 path: 'agents',
                 element: <AdminAgentsRedirect />,
+              },
+              {
+                path: 'workflows',
+                element: <DefaultWorkflowHooksStudio scopeKind="system" />,
               },
               {
                 path: 'agent-runners',

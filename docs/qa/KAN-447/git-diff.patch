@@ -1,0 +1,375 @@
+diff --git a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+index 3a8f391a..a0c22a99 100644
+--- a/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
++++ b/kanban/web/src/features/admin-ai/AiBudgetModal.tsx
+@@ -357,7 +357,7 @@ function AiBudgetModalContent({
+                 onClick={onClose}
+                 data-testid="budget-cancel-btn"
+               >
+-                Close
++                Cancel
+               </button>
+               <button
+                 type="submit"
+@@ -382,6 +382,19 @@ export function AiBudgetModal({
+   onBudgetUpdated,
+   workspaceSlug,
+ }: AiBudgetModalProps): JSX.Element | null {
++  useEffect(() => {
++    if (!isOpen || !provider) return;
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        onClose();
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isOpen, provider, onClose]);
++
+   if (!isOpen || !provider) return null;
+ 
+   return (
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiBudgetModal.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiBudgetModal.test.tsx
+new file mode 100644
+index 00000000..6b24b977
+--- /dev/null
++++ b/kanban/web/src/features/admin-ai/__tests__/AiBudgetModal.test.tsx
+@@ -0,0 +1,336 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { AiBudgetModal } from '../AiBudgetModal';
++import * as aiApi from '../aiAdminApi';
++import type { ProviderConfigPublic, BudgetRecord } from '../aiAdminApi';
++
++describe('AiBudgetModal Component (KAN-447)', () => {
++  const mockProvider: ProviderConfigPublic = {
++    id: 'prov-openai-test-447',
++    provider_kind: 'openai',
++    display_name: 'Test OpenAI Provider',
++    base_url: 'https://api.openai.com/v1',
++    model_allowlist: ['gpt-4o'],
++    residency_tier: 'cloud_standard',
++    priority: 10,
++    settings: {},
++    api_key_set: true,
++    is_enabled: true,
++    project_id: null,
++  };
++
++  const mockBudgets: BudgetRecord[] = [
++    {
++      period_kind: 'monthly',
++      period_start: '2026-11-01',
++      token_cap: 1000000,
++      tokens_used: 250000,
++      tokens_reserved: 50000,
++    },
++    {
++      period_kind: 'daily',
++      period_start: '2026-11-26',
++      token_cap: 50000,
++      tokens_used: 10000,
++      tokens_reserved: 0,
++    },
++  ];
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++    document.documentElement.removeAttribute('data-theme');
++  });
++
++  afterEach(() => {
++    document.documentElement.removeAttribute('data-theme');
++  });
++
++  describe('Positive Rendering and Modal Footer Cadence', () => {
++    it('renders modal footer with Cancel label on budget-cancel-btn matching universal cadence', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-cancel-btn')).toBeDefined();
++      });
++
++      const cancelBtn = screen.getByTestId('budget-cancel-btn');
++      expect(cancelBtn.textContent.trim()).toBe('Cancel');
++
++      // Header button retains close dialog aria-label and symbol
++      const headerCloseBtn = screen.getByTestId('close-budget-modal-btn');
++      expect(headerCloseBtn.getAttribute('aria-label')).toBe('Close dialog');
++      expect(headerCloseBtn.textContent.trim()).toBe('✕');
++
++      // Save button is present in footer alongside Cancel button
++      const saveBtn = screen.getByTestId('save-budget-btn');
++      expect(saveBtn).toBeDefined();
++      expect(saveBtn.textContent.trim()).toBe('Save Token Cap');
++    });
++
++    it('returns null when isOpen is false or provider is null', () => {
++      const { container: closedContainer } = render(
++        <AiBudgetModal
++          isOpen={false}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++      expect(closedContainer.firstChild).toBeNull();
++
++      const { container: noProviderContainer } = render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={null}
++        />,
++      );
++      expect(noProviderContainer.firstChild).toBeNull();
++    });
++  });
++
++  describe('Click and Escape Dismissal Non-Regression', () => {
++    it('calls onClose when clicking the Cancel footer button', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const onClose = vi.fn();
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={onClose}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-cancel-btn')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('budget-cancel-btn'));
++      expect(onClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('calls onClose when clicking the header close button', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const onClose = vi.fn();
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={onClose}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('close-budget-modal-btn')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('close-budget-modal-btn'));
++      expect(onClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('calls onClose when pressing Escape key', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const onClose = vi.fn();
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={onClose}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('ai-budget-modal')).toBeDefined();
++      });
++
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(onClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('does not call onClose when pressing other keys like Enter or Space', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const onClose = vi.fn();
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={onClose}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('ai-budget-modal')).toBeDefined();
++      });
++
++      fireEvent.keyDown(window, { key: 'Enter' });
++      fireEvent.keyDown(window, { key: ' ' });
++      fireEvent.keyDown(window, { key: 'ArrowDown' });
++      expect(onClose).not.toHaveBeenCalled();
++    });
++  });
++
++  describe('Save Budget Submission Non-Regression', () => {
++    it('submits updated token cap successfully and triggers onBudgetUpdated callback', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue({
++        period_kind: 'monthly',
++        period_start: '2026-11-01',
++        token_cap: 3000000,
++        tokens_used: 250000,
++        tokens_reserved: 50000,
++      });
++      const onBudgetUpdated = vi.fn();
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++          onBudgetUpdated={onBudgetUpdated}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-token-cap-input')).toBeDefined();
++      });
++
++      const input = screen.getByTestId('budget-token-cap-input');
++      fireEvent.change(input, { target: { value: '3000000' } });
++
++      const saveBtn = screen.getByTestId('save-budget-btn');
++      fireEvent.click(saveBtn);
++
++      await waitFor(() => {
++        expect(setBudgetSpy).toHaveBeenCalledWith({
++          provider_config_id: 'prov-openai-test-447',
++          project_id: undefined,
++          period_kind: 'monthly',
++          token_cap: 3000000,
++        });
++        expect(onBudgetUpdated).toHaveBeenCalledTimes(1);
++      });
++    });
++
++    it('supports unlimited quota mode submission', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget').mockResolvedValue({
++        period_kind: 'monthly',
++        period_start: '2026-11-01',
++        token_cap: 10000000000,
++        tokens_used: 250000,
++        tokens_reserved: 50000,
++      });
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('cap-mode-unlimited-btn')).toBeDefined();
++      });
++
++      fireEvent.click(screen.getByTestId('cap-mode-unlimited-btn'));
++      fireEvent.click(screen.getByTestId('save-budget-btn'));
++
++      await waitFor(() => {
++        expect(setBudgetSpy).toHaveBeenCalledWith({
++          provider_config_id: 'prov-openai-test-447',
++          project_id: undefined,
++          period_kind: 'monthly',
++          token_cap: 10000000000,
++        });
++      });
++    });
++
++    it('validates negative or non-numeric token cap without calling setBudget', async () => {
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++      const setBudgetSpy = vi.spyOn(aiApi, 'setBudget');
++
++      render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-token-cap-input')).toBeDefined();
++      });
++
++      const input = screen.getByTestId('budget-token-cap-input');
++      fireEvent.change(input, { target: { value: '-500' } });
++      fireEvent.click(screen.getByTestId('save-budget-btn'));
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-error').textContent).toContain('Token cap must be a non-negative integer');
++      });
++      expect(setBudgetSpy).not.toHaveBeenCalled();
++    });
++  });
++
++  describe('Light and Dark Theme Rendering', () => {
++    it('renders cleanly in light mode with Cancel button clearly styled', async () => {
++      document.documentElement.setAttribute('data-theme', 'light');
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++
++      const { container } = render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-cancel-btn')).toBeDefined();
++      });
++
++      const cancelBtn = screen.getByTestId('budget-cancel-btn');
++      expect(cancelBtn.textContent.trim()).toBe('Cancel');
++      expect(cancelBtn.className).toContain('kb-btn-secondary');
++      expect(container.querySelector('.kb-modal-card')).not.toBeNull();
++    });
++
++    it('renders cleanly in dark mode with Cancel button clearly styled', async () => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(mockBudgets);
++
++      const { container } = render(
++        <AiBudgetModal
++          isOpen={true}
++          onClose={vi.fn()}
++          provider={mockProvider}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('budget-cancel-btn')).toBeDefined();
++      });
++
++      const cancelBtn = screen.getByTestId('budget-cancel-btn');
++      expect(cancelBtn.textContent.trim()).toBe('Cancel');
++      expect(cancelBtn.className).toContain('kb-btn-secondary');
++      expect(container.querySelector('.kb-modal-card')).not.toBeNull();
++    });
++  });
++});
