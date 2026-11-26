@@ -75,7 +75,7 @@ All 8 Slice-2 UI components contain verified documentation links that resolve ag
 | Component Source File | UI Placement | Target `href` / `docHref` | Target Chapter Title | Target Heading Anchor | Resolution Status |
 | :--- | :--- | :--- | :--- | :--- | :---: |
 | `AiStudioPage.tsx` | Header Actions Bar | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
-| `AiProviderEditorDrawer.tsx` | Provider Kind Label (`provider-engine-help`) | `/docs/multi-provider-ai-engine-and-runners#supported-runtimes` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `supported-runtimes` | **VERIFIED (200 OK)** |
+| `AiProviderEditorDrawer.tsx` | Provider Kind Label (`provider-kind-help`) | `/docs/multi-provider-ai-engine-and-runners#supported-runtimes` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `supported-runtimes` | **VERIFIED (200 OK)** |
 | `AiProviderEditorDrawer.tsx` | Timeout MS Label (`provider-timeout-help`) | `/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `multi-provider-benchmark-cutoff-timeout-guide` | **VERIFIED (200 OK)** |
 | `AiProviderEditorDrawer.tsx` | Temperature Input (`provider-temperature-help`) | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
 | `AiProviderEditorDrawer.tsx` | Top-P Input (`provider-top-p-help`) | `/docs/multi-provider-ai-engine-and-runners#sampling-parameters` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `sampling-parameters` | **VERIFIED (200 OK)** |
@@ -86,7 +86,7 @@ All 8 Slice-2 UI components contain verified documentation links that resolve ag
 | `AgentDefinitionEditorDrawer.tsx` | Agent Timeout Label (`agent-timeout-help`) | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
 | `AgentDefinitionEditorDrawer.tsx` | Repo Access Label (`agent-repo-mode-help`) | `/docs/multi-provider-ai-engine-and-runners#repository-access` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `repository-access` | **VERIFIED (200 OK)** |
 | `RunnerStudioPage.tsx` | Header Actions Bar | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
-| `MintEnrollmentTokenModal.tsx` | Target Runner Pool Slug (`token-pool-slug-help`) | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
+| `MintEnrollmentTokenModal.tsx` | Target Runner Pool Slug (`runner_pool_slug`) | `/docs/multi-provider-ai-engine-and-runners#remote-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `remote-runners` | **VERIFIED (200 OK)** |
 | `MintEnrollmentTokenModal.tsx` | Token Expiration TTL (`mint-token-ttl-help`) | `/docs/multi-provider-ai-engine-and-runners` | Multi-Provider AI Engine, Execution Harnesses, and Runners | `[root]` | **VERIFIED (200 OK)** |
 
 **Broken Links Count:** `0` (Zero broken in-app documentation links).
@@ -163,10 +163,10 @@ The following completion packet is prepared for coordinator posting to ticket `K
   - `python3 scripts/check_no_dashes.py --all`: 0 Unicode dashes (Exit 0).
   - `python -m scripts.sync_wiki_bundle`: 34 chapters, 117 images synchronized (Exit 0).
   - Pytest `test_wiki_bundle_sync.py`: 7/7 passed in 0.13s (Exit 0).
-  - Vitest `DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`: 71/71 passed in 6.70s with 96.44% branch coverage (Exit 0).
+  - Vitest `DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`: 72/72 passed in 7.10s with 96.74% branch coverage (Exit 0).
   - TypeScript `pnpm --dir kanban/web typecheck`: 0 errors (Exit 0).
   - ESLint `pnpm --dir kanban/web lint`: 0 warnings, 0 errors (Exit 0).
-  - Vite `pnpm --dir kanban/web build`: Clean production build compiled in 1.34s (Exit 0).
+  - Vite `pnpm --dir kanban/web build`: Clean production build compiled in 1.29s (Exit 0).
   - Zero-mock multi-viewport `/docs` Playwright screenshots captured across 5 standard viewports and visually verified.
 ```
 
@@ -179,7 +179,7 @@ The following completion packet is prepared for coordinator posting to ticket `K
 | **Wiki Bundle Sync** | `uv run python -m scripts.sync_wiki_bundle` | 34 chapters, 117 images synced | **PASSED (34 chapters, 117 images)** |
 | **No Dashes Global** | `python3 scripts/check_no_dashes.py --all` | Exit code 0, 0 Unicode dashes | **PASSED (0 dashes)** |
 | **No Dashes Target Wiki** | `python3 scripts/check_no_dashes.py thumbs-up-kanban.wiki/Multi-Provider-AI-Engine-and-Runners.md thumbs-up-kanban.wiki/Studio-Configuration-Reference.md` | Exit code 0, 0 Unicode dashes | **PASSED (0 dashes)** |
-| **DocsCenter Unit Tests** | `npx vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx` | 100% pass, >=95% branch coverage | **PASSED (71/71 passed, 96.44% branch)** |
+| **DocsCenter Unit Tests** | `npx vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenterImages.test.tsx` | 100% pass, >=95% branch coverage | **PASSED (72/72 passed, 96.74% branch)** |
 | **Web TypeScript** | `pnpm --dir kanban/web typecheck` | Exit code 0, 0 type errors | **PASSED (0 errors)** |
 | **Web ESLint** | `pnpm --dir kanban/web lint` | Exit code 0, 0 warnings | **PASSED (0 warnings)** |
 | **Web Production Build** | `pnpm --dir kanban/web build` | Exit code 0, production bundle compiled | **PASSED (100% clean)** |

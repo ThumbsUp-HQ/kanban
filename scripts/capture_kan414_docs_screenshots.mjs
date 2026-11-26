@@ -189,13 +189,16 @@ async function main() {
         if (mermaidEl) {
           await page.evaluate((el) => {
             const canvas = document.querySelector('.media-viewport__canvas');
-            if (canvas) canvas.style.paddingBottom = '140px';
+            if (canvas) canvas.style.paddingBottom = '120px';
             const viewport = document.querySelector('.media-viewport');
-            if (viewport) viewport.style.maxHeight = '720px';
+            if (viewport) viewport.style.maxHeight = '700px';
             const controls = document.querySelector('.media-viewport__controls');
             if (controls) controls.style.display = 'none'; // Avoid obscuring bottom boxes
+            // Hide the next sibling figure to keep 03 focused purely on the Mermaid diagram without legacy image
+            const nextFig = document.querySelector('img[src*="16-async-agent-gate-states"]')?.closest('.kb-doc-figure');
+            if (nextFig) nextFig.style.visibility = 'hidden';
             const rect = el.getBoundingClientRect();
-            window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - 40), behavior: 'instant' });
+            window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - 120), behavior: 'instant' });
           }, mermaidEl);
           await page.waitForTimeout(500);
 
@@ -309,7 +312,7 @@ async function main() {
           const target = tableHeading || document.getElementById('remote-runners-studio');
           if (target) {
             const rect = target.getBoundingClientRect();
-            window.scrollTo({ top: Math.max(0, window.scrollY + rect.top - 20), behavior: 'instant' });
+            window.scrollTo({ top: Math.max(0, window.scrollY + rect.top + 140), behavior: 'instant' });
           }
         });
         await page.waitForTimeout(500);
