@@ -223,7 +223,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1050;
   padding: var(--space-4, 16px);
   box-sizing: border-box;
 }
@@ -242,10 +242,43 @@
   overflow-y: auto;
 }
 
+.kb-budget-modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.kb-budget-modal-card .kb-modal-header {
+  flex-shrink: 0;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.kb-budget-modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kb-budget-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+.kb-budget-modal-form .kb-modal-footer {
+  flex-shrink: 0;
+  margin-top: var(--space-4, 16px);
+}
+
 .kb-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3, 12px);
   margin-bottom: var(--space-4, 16px);
 }
 
@@ -253,6 +286,19 @@
   font-size: var(--text-xl, 18px);
   font-weight: 700;
   margin: 0;
+}
+
+.kb-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.kb-modal-header-actions .kb-studio-doc-link {
+  white-space: nowrap;
 }
 
 .kb-form-group {
@@ -356,6 +402,8 @@
 .kb-budget-stats-row {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 12px;
   color: var(--fg-secondary);
   margin-top: 4px;
@@ -886,6 +934,32 @@
   display: flex;
   gap: var(--space-2, 8px);
   margin-bottom: var(--space-4, 16px);
+}
+
+.kb-budget-mode-toggle button {
+  height: auto;
+  min-height: 38px;
+}
+
+@media (max-width: 640px) {
+  .kb-modal-card {
+    padding: var(--space-4, 16px);
+  }
+
+  .kb-modal-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-modal-header-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .kb-budget-mode-toggle {
+    flex-direction: column;
+  }
 }
 
 .kb-budget-presets-row {

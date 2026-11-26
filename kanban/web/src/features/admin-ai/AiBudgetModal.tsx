@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import {
   fetchBudgets,
   setBudget,
@@ -132,245 +133,258 @@ function AiBudgetModalContent({
   };
 
   return (
-    <div className="kb-modal-card">
+    <div className="kb-modal-card kb-budget-modal-card">
       <div className="kb-modal-header">
         <h2 id="budget-modal-title">Token Budget & Usage Ledger</h2>
-        <button
-          type="button"
-          className="kb-btn kb-btn-secondary"
-          onClick={onClose}
-          aria-label="Close dialog"
-          data-testid="close-budget-modal-btn"
-        >
-          ✕
-        </button>
+        <div className="kb-modal-header-actions">
+          <StudioDocLink
+            href="/docs/multi-provider-ai-engine-and-runners#budget-caps"
+            title="Token Budget and Circuit Breaker Guide"
+            testId="ai-budget-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-btn kb-btn-secondary"
+            onClick={onClose}
+            aria-label="Close dialog"
+            data-testid="close-budget-modal-btn"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <p className="kb-ai-studio-subtitle">
-        Configure monthly and daily token caps and inspect consumption for {provider.display_name}.
-      </p>
+      <form
+        noValidate
+        onSubmit={(e) => { void handleSaveBudget(e); }}
+        className="kb-budget-modal-form"
+      >
+        <div className="kb-budget-modal-body">
+          <p className="kb-ai-studio-subtitle">
+            Configure monthly and daily token caps and inspect consumption for {provider.display_name}.
+          </p>
 
-      {error && (
-        <div className="kb-form-error" data-testid="budget-error">
-          {error}
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="kb-loading-state" data-testid="budget-loading">
-          Loading budget ledger...
-        </div>
-      ) : (
-        <>
-          <div className="kb-budget-progress-container" data-testid="budget-ledger-summary">
-            <div className="kb-budget-stats-row">
-              <span>
-                <strong>Usage:</strong> {usedNum.toLocaleString()} tokens
-                {reservedNum > 0 && ` (+${reservedNum.toLocaleString()} reserved)`}
-              </span>
-              <span>
-                <strong>Cap:</strong>{' '}
-                {isZeroFreeze
-                  ? 'Zero-Allowance Freeze (0 tokens)'
-                  : isUnlimitedCeiling
-                    ? 'Unlimited (No Cap)'
-                    : capNum > 0
-                      ? `${capNum.toLocaleString()} tokens`
-                      : 'Unlimited'}
-              </span>
+          {error && (
+            <div className="kb-form-error" data-testid="budget-error">
+              {error}
             </div>
+          )}
 
-            <div className="kb-budget-progress-container">
-              <progress
-                className={`kb-budget-progress ${
-                  percentUsed >= 90
-                    ? 'kb-budget-progress--danger'
-                    : percentUsed >= 70
-                      ? 'kb-budget-progress--warning'
-                      : ''
-                }`}
-                max={100}
-                value={percentUsed}
-                aria-label="Token budget consumption"
-                data-testid="budget-progress-bar"
-              />
+          {isLoading ? (
+            <div className="kb-loading-state" data-testid="budget-loading">
+              Loading budget ledger...
             </div>
-
-            <div className="kb-budget-stats-row">
-              <span>{String(percentUsed)}% consumed</span>
-              <span>
-                {isZeroFreeze
-                  ? 'Frozen (0 tokens allowance)'
-                  : isUnlimitedCeiling
-                    ? 'Unlimited (10B ceiling)'
-                    : capNum > usedNum + reservedNum
-                      ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
-                      : capNum > 0
-                        ? '0 tokens remaining'
-                        : 'No cap enforced'}
-              </span>
-            </div>
-          </div>
-
-          <form noValidate onSubmit={(e) => { void handleSaveBudget(e); }}>
-            <div className="kb-budget-mode-toggle" role="radiogroup" aria-label="Budget Quota Enforcement Mode">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={capMode === 'enforce'}
-                className={`kb-btn ${capMode === 'enforce' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
-                onClick={() => {
-                  setCapMode('enforce');
-                  if (!tokenCap || tokenCap === '10000000000') {
-                    setTokenCap('1000000');
-                  }
-                }}
-                data-testid="cap-mode-enforce-btn"
-              >
-                Enforce Token Cap
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={capMode === 'unlimited'}
-                className={`kb-btn ${capMode === 'unlimited' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
-                onClick={() => {
-                  setCapMode('unlimited');
-                  setTokenCap('10000000000');
-                }}
-                data-testid="cap-mode-unlimited-btn"
-              >
-                Unlimited Quota (No Cap)
-              </button>
-            </div>
-
-            <div className="kb-form-group">
-              <label htmlFor="budget-period-select" className="kb-form-label">
-                Accounting Period
-              </label>
-              <select
-                id="budget-period-select"
-                className="kb-form-select"
-                value={periodKind}
-                onChange={(e) => { setPeriodKind(e.target.value as 'daily' | 'monthly'); }}
-                data-testid="budget-period-select"
-              >
-                <option value="monthly">Monthly Cap</option>
-                <option value="daily">Daily Cap</option>
-              </select>
-            </div>
-
-            {capMode === 'enforce' && (
-              <>
-                <div className="kb-budget-presets-row" data-testid="budget-presets-row">
-                  <span className="kb-budget-presets-label">Presets:</span>
-                  <button
-                    type="button"
-                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
-                    onClick={() => { setTokenCap('1000000'); }}
-                    data-testid="preset-budget-1m-btn"
-                  >
-                    1M
-                  </button>
-                  <button
-                    type="button"
-                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
-                    onClick={() => { setTokenCap('5000000'); }}
-                    data-testid="preset-budget-5m-btn"
-                  >
-                    5M
-                  </button>
-                  <button
-                    type="button"
-                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
-                    onClick={() => { setTokenCap('25000000'); }}
-                    data-testid="preset-budget-25m-btn"
-                  >
-                    25M
-                  </button>
-                  <button
-                    type="button"
-                    className="kb-btn kb-btn-secondary kb-budget-preset-btn"
-                    onClick={() => { setTokenCap('100000000'); }}
-                    data-testid="preset-budget-100m-btn"
-                  >
-                    100M
-                  </button>
-                  <button
-                    type="button"
-                    className="kb-btn kb-btn-secondary kb-budget-preset-btn kb-budget-preset-btn--freeze"
-                    onClick={() => { setTokenCap('0'); }}
-                    data-testid="preset-budget-0-freeze-btn"
-                  >
-                    0 (Freeze)
-                  </button>
-                </div>
-
-                <div className="kb-form-group">
-                  <label htmlFor="budget-token-cap-input" className="kb-form-label">
-                    Maximum Token Cap
-                    <FieldHelpHint
-                      title="Maximum Token Cap"
-                      summary="Hard token usage ceiling enforced during the accounting window."
-                      defaultValue="0 (Zero-allowance freeze) or positive quota"
-                      docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
-                      testId="budget-token-cap-help"
-                    />
-                  </label>
-                  <input
-                    id="budget-token-cap-input"
-                    type="number"
-                    min="0"
-                    max="10000000000"
-                    className="kb-form-input"
-                    value={tokenCap}
-                    onChange={(e) => { setTokenCap(e.target.value); }}
-                    placeholder="e.g. 5000000"
-                    data-testid="budget-token-cap-input"
-                    required
-                  />
-                  <span className="kb-form-hint">
-                    Enter 0 for zero-allowance freeze or an integer token quota (e.g. 1,000,000).
+          ) : (
+            <>
+              <div className="kb-budget-progress-container" data-testid="budget-ledger-summary">
+                <div className="kb-budget-stats-row">
+                  <span>
+                    <strong>Usage:</strong> {usedNum.toLocaleString()} tokens
+                    {reservedNum > 0 && ` (+${reservedNum.toLocaleString()} reserved)`}
+                  </span>
+                  <span>
+                    <strong>Cap:</strong>{' '}
+                    {isZeroFreeze
+                      ? 'Zero-Allowance Freeze (0 tokens)'
+                      : isUnlimitedCeiling
+                        ? 'Unlimited (No Cap)'
+                        : capNum > 0
+                          ? `${capNum.toLocaleString()} tokens`
+                          : 'Unlimited'}
                   </span>
                 </div>
 
-                {tokenCap === '0' && (
-                  <div className="kb-zero-cap-warning" role="alert" data-testid="zero-cap-freeze-warning">
-                    <strong>⚠️ Hard AI Freeze:</strong> 0 tokens set: Completions through this provider are completely frozen.
-                  </div>
-                )}
-              </>
-            )}
+                <div className="kb-budget-progress-container">
+                  <progress
+                    className={`kb-budget-progress ${
+                      percentUsed >= 90
+                        ? 'kb-budget-progress--danger'
+                        : percentUsed >= 70
+                          ? 'kb-budget-progress--warning'
+                          : ''
+                    }`}
+                    max={100}
+                    value={percentUsed}
+                    aria-label="Token budget consumption"
+                    data-testid="budget-progress-bar"
+                  />
+                </div>
 
-            {capMode === 'unlimited' && (
-              <div className="kb-budget-unlimited-note" data-testid="budget-unlimited-note">
-                <p>
-                  Unlimited Quota (No Cap) is active. Completions through {provider.display_name} will run without an enforced token budget ceiling.
-                </p>
+                <div className="kb-budget-stats-row">
+                  <span>{String(percentUsed)}% consumed</span>
+                  <span>
+                    {isZeroFreeze
+                      ? 'Frozen (0 tokens allowance)'
+                      : isUnlimitedCeiling
+                        ? 'Unlimited (10B ceiling)'
+                        : capNum > usedNum + reservedNum
+                          ? `${(capNum - (usedNum + reservedNum)).toLocaleString()} tokens remaining`
+                          : capNum > 0
+                            ? '0 tokens remaining'
+                            : 'No cap enforced'}
+                  </span>
+                </div>
               </div>
-            )}
 
-            <div className="kb-modal-footer">
-              <button
-                type="button"
-                className="kb-btn kb-btn-secondary"
-                onClick={onClose}
-                data-testid="budget-cancel-btn"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="kb-btn kb-btn-primary"
-                disabled={isSaving}
-                data-testid="save-budget-btn"
-              >
-                {isSaving ? 'Updating Cap...' : 'Save Token Cap'}
-              </button>
-            </div>
-          </form>
-        </>
-      )}
+              <div className="kb-budget-mode-toggle" role="radiogroup" aria-label="Budget Quota Enforcement Mode">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={capMode === 'enforce'}
+                  className={`kb-btn ${capMode === 'enforce' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
+                  onClick={() => {
+                    setCapMode('enforce');
+                    if (!tokenCap || tokenCap === '10000000000') {
+                      setTokenCap('1000000');
+                    }
+                  }}
+                  data-testid="cap-mode-enforce-btn"
+                >
+                  Enforce Token Cap
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={capMode === 'unlimited'}
+                  className={`kb-btn ${capMode === 'unlimited' ? 'kb-btn-primary' : 'kb-btn-secondary'}`}
+                  onClick={() => {
+                    setCapMode('unlimited');
+                    setTokenCap('10000000000');
+                  }}
+                  data-testid="cap-mode-unlimited-btn"
+                >
+                  Unlimited Quota (No Cap)
+                </button>
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="budget-period-select" className="kb-form-label">
+                  Accounting Period
+                </label>
+                <select
+                  id="budget-period-select"
+                  className="kb-form-select"
+                  value={periodKind}
+                  onChange={(e) => { setPeriodKind(e.target.value as 'daily' | 'monthly'); }}
+                  data-testid="budget-period-select"
+                >
+                  <option value="monthly">Monthly Cap</option>
+                  <option value="daily">Daily Cap</option>
+                </select>
+              </div>
+
+              {capMode === 'enforce' && (
+                <>
+                  <div className="kb-budget-presets-row" data-testid="budget-presets-row">
+                    <span className="kb-budget-presets-label">Presets:</span>
+                    <button
+                      type="button"
+                      className="kb-btn kb-btn-secondary kb-budget-preset-btn"
+                      onClick={() => { setTokenCap('1000000'); }}
+                      data-testid="preset-budget-1m-btn"
+                    >
+                      1M
+                    </button>
+                    <button
+                      type="button"
+                      className="kb-btn kb-btn-secondary kb-budget-preset-btn"
+                      onClick={() => { setTokenCap('5000000'); }}
+                      data-testid="preset-budget-5m-btn"
+                    >
+                      5M
+                    </button>
+                    <button
+                      type="button"
+                      className="kb-btn kb-btn-secondary kb-budget-preset-btn"
+                      onClick={() => { setTokenCap('25000000'); }}
+                      data-testid="preset-budget-25m-btn"
+                    >
+                      25M
+                    </button>
+                    <button
+                      type="button"
+                      className="kb-btn kb-btn-secondary kb-budget-preset-btn"
+                      onClick={() => { setTokenCap('100000000'); }}
+                      data-testid="preset-budget-100m-btn"
+                    >
+                      100M
+                    </button>
+                    <button
+                      type="button"
+                      className="kb-btn kb-btn-secondary kb-budget-preset-btn kb-budget-preset-btn--freeze"
+                      onClick={() => { setTokenCap('0'); }}
+                      data-testid="preset-budget-0-freeze-btn"
+                    >
+                      0 (Freeze)
+                    </button>
+                  </div>
+
+                  <div className="kb-form-group">
+                    <label htmlFor="budget-token-cap-input" className="kb-form-label">
+                      Maximum Token Cap
+                      <FieldHelpHint
+                        title="Maximum Token Cap"
+                        summary="Hard token usage ceiling enforced during the accounting window."
+                        defaultValue="0 (Zero-allowance freeze) or positive quota"
+                        docHref="/docs/multi-provider-ai-engine-and-runners#budget-caps"
+                        testId="budget-token-cap-help"
+                      />
+                    </label>
+                    <input
+                      id="budget-token-cap-input"
+                      type="number"
+                      min="0"
+                      max="10000000000"
+                      className="kb-form-input"
+                      value={tokenCap}
+                      onChange={(e) => { setTokenCap(e.target.value); }}
+                      placeholder="e.g. 5000000"
+                      data-testid="budget-token-cap-input"
+                      required
+                    />
+                    <span className="kb-form-hint">
+                      Enter 0 for zero-allowance freeze or an integer token quota (e.g. 1,000,000).
+                    </span>
+                  </div>
+
+                  {tokenCap === '0' && (
+                    <div className="kb-zero-cap-warning" role="alert" data-testid="zero-cap-freeze-warning">
+                      <strong>⚠️ Hard AI Freeze:</strong> 0 tokens set: Completions through this provider are completely frozen.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {capMode === 'unlimited' && (
+                <div className="kb-budget-unlimited-note" data-testid="budget-unlimited-note">
+                  <p>
+                    Unlimited Quota (No Cap) is active. Completions through {provider.display_name} will run without an enforced token budget ceiling.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="kb-modal-footer">
+          <button
+            type="button"
+            className="kb-btn kb-btn-secondary"
+            onClick={onClose}
+            data-testid="budget-cancel-btn"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="kb-btn kb-btn-primary"
+            disabled={isSaving || isLoading}
+            data-testid="save-budget-btn"
+          >
+            {isSaving ? 'Updating Cap...' : 'Save Token Cap'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
