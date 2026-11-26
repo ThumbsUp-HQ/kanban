@@ -33,6 +33,7 @@ from agent.providers.errors import (
     ProviderTimeout,
     ProviderUnavailable,
 )
+from agent.providers.router import RouteCandidate
 from agent.sparkle.output_filter import filter_completion
 from agent.sparkle.retrieval import RetrievalStatus, retrieve_context
 from kanban.security.scrubber import outbound_secret_scrubber
@@ -196,9 +197,83 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
             async with session_cm as session:
                 budget_enforcer = BudgetEnforcer(session=session)
                 candidates = getattr(router, "_candidates", ())
-                target_cfg_id = candidates[0].provider_config_id if candidates else None
+                candidate_cfg_id = candidates[0].provider_config_id if candidates else None
 
-                if target_cfg_id is not None:
+                # Resolve active provider_config_id:
+                # 1. If candidate_cfg_id is given, check if it exists in ai_provider_configs
+                provider_config_id = None
+                if candidate_cfg_id is not None:
+                    stmt_check = text(
+                        "SELECT id FROM ai_provider_configs "
+                        "WHERE workspace_id = :ws_id AND id = :cfg_id AND is_enabled = true LIMIT 1"
+                    )
+                    res_check = await session.execute(
+                        stmt_check,
+                        {"ws_id": principal_ctx.workspace_id, "cfg_id": candidate_cfg_id},
+                    )
+                    provider_config_id = res_check.scalar_one_or_none()
+
+                # 2. If not matched by ID, resolve by candidate provider kind
+                if provider_config_id is None and candidates:
+                    prov = getattr(candidates[0], "provider", None)
+                    prov_type = type(prov).__name__.lower() if prov else ""
+                    kind = None
+                    if "ollama" in prov_type:
+                        kind = "ollama"
+                    elif "openai" in prov_type:
+                        kind = "openai"
+                    elif "gemini" in prov_type:
+                        kind = "gemini"
+
+                    if kind is not None:
+                        stmt_kind = text(
+                            "SELECT id FROM ai_provider_configs "
+                            "WHERE workspace_id = :ws_id AND provider_kind = :kind "
+                            "  AND is_enabled = true "
+                            "ORDER BY priority ASC, created_at ASC LIMIT 1"
+                        )
+                        res_kind = await session.execute(
+                            stmt_kind,
+                            {"ws_id": principal_ctx.workspace_id, "kind": kind},
+                        )
+                        provider_config_id = res_kind.scalar_one_or_none()
+
+                # 3. Fallback to highest-priority enabled provider from DB
+                if provider_config_id is None:
+                    stmt_active = text(
+                        "SELECT id FROM ai_provider_configs "
+                        "WHERE workspace_id = :ws_id AND is_enabled = true "
+                        "ORDER BY priority ASC, created_at ASC LIMIT 1"
+                    )
+                    res_active = await session.execute(
+                        stmt_active,
+                        {"ws_id": principal_ctx.workspace_id},
+                    )
+                    provider_config_id = res_active.scalar_one_or_none()
+
+                # Fallback to candidate_cfg_id if no enabled provider found in DB
+                if provider_config_id is None:
+                    provider_config_id = candidate_cfg_id
+
+                # Align candidate[0].provider_config_id if router._candidates is a mutable list
+                if (
+                    provider_config_id is not None
+                    and candidates
+                    and candidates[0].provider_config_id != provider_config_id
+                ):
+                    with contextlib.suppress(Exception):
+                        router_candidates = getattr(router, "_candidates", None)
+                        if isinstance(router_candidates, list) and len(router_candidates) > 0:
+                            c0 = router_candidates[0]
+                            router_candidates[0] = RouteCandidate(
+                                provider_config_id=provider_config_id,
+                                provider=c0.provider,
+                                residency_tier=c0.residency_tier,
+                                priority=c0.priority,
+                            )
+
+                # Check if provider is frozen (token_cap = 0) or budget is exhausted
+                if provider_config_id is not None:
                     stmt_freeze = text(
                         "SELECT provider_config_id FROM ai_token_ledgers "
                         "WHERE workspace_id = :ws_id "
@@ -208,7 +283,7 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
                     )
                     res_freeze = await session.execute(
                         stmt_freeze,
-                        {"ws_id": principal_ctx.workspace_id, "cfg_id": target_cfg_id},
+                        {"ws_id": principal_ctx.workspace_id, "cfg_id": provider_config_id},
                     )
                 else:
                     stmt_freeze = text(
@@ -239,37 +314,37 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
                         route_trace=[],
                     )
 
-                stmt = text(
-                    "SELECT id FROM ai_provider_configs "
-                    "WHERE workspace_id = :ws_id AND enabled = true "
-                    "ORDER BY priority ASC LIMIT 1"
-                )
-                res = await session.execute(stmt, {"ws_id": principal_ctx.workspace_id})
-                db_provider_id = res.scalar_one_or_none()
-                provider_config_id = target_cfg_id or db_provider_id
-
                 if provider_config_id is not None:
-                    try:
-                        reservation = await budget_enforcer.reserve(
-                            principal_ctx.workspace_id,
-                            None,
-                            provider_config_id,
-                            estimate_tokens=_MAX_OUTPUT_TOKENS,
-                        )
-                    except BudgetExceeded as exc:
-                        _logger.warning("Sparkle completion blocked by budget cap: %s", exc)
-                        elapsed = (clock() - t0) * 1000.0
-                        return SparkleResult(
-                            status="budget",
-                            text="",
-                            ttft_ms=0.0,
-                            total_ms=elapsed,
-                            tokens=0,
-                            retrieval_status=ret_status,
-                            route_trace=[],
-                        )
-        except Exception as exc:
-            _logger.warning("Budget check skipped or failed: %s", exc, exc_info=True)
+                    reservation = await budget_enforcer.reserve(
+                        principal_ctx.workspace_id,
+                        None,
+                        provider_config_id,
+                        estimate_tokens=_MAX_OUTPUT_TOKENS,
+                    )
+        except BudgetExceeded as exc:
+            _logger.warning("Sparkle completion blocked by budget cap: %s", exc)
+            elapsed = (clock() - t0) * 1000.0
+            return SparkleResult(
+                status="budget",
+                text="",
+                ttft_ms=0.0,
+                total_ms=elapsed,
+                tokens=0,
+                retrieval_status=ret_status,
+                route_trace=[],
+            )
+        except Exception:
+            _logger.exception("Sparkle budget enforcement check failed")
+            elapsed = (clock() - t0) * 1000.0
+            return SparkleResult(
+                status="budget",
+                text="",
+                ttft_ms=0.0,
+                total_ms=elapsed,
+                tokens=0,
+                retrieval_status=ret_status,
+                route_trace=[],
+            )
 
     # Step 5: Streaming FIM bounded by 130ms overall timeout and 115ms TTFT SLA
     stream_iter = None

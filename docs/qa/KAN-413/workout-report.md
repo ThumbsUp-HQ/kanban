@@ -88,97 +88,97 @@ The following HTTP transactions reflect exact runtime execution recorded in `doc
 
 1.1 Create Local Ollama Provider:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":1}
 
 HTTP/1.1 201 Created
-{"id":"59c98545-f48d-48bb-8070-b7189cb97ad0","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":1,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+{"id":"56403cfc-c0c4-4ad4-af5d-9991336eceee","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":1,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
 ```
 
 1.2 Create OpenAI / OpenAI-Compatible Provider:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","api_key":"[REDACTED:API_KEY]","priority":2}
 
 HTTP/1.1 201 Created
-{"id":"f2d957b0-efb7-4f58-96c6-d40de859b83a","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":2,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+{"id":"7c7ba18b-9bb9-419b-a1b5-be979e6af9c7","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":2,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
 ```
 
 1.3 Create Google Gemini Workspace Provider:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","api_key":"[REDACTED:GOOGLE_KEY]","priority":3}
 
 HTTP/1.1 201 Created
-{"id":"dad6227a-8746-44d9-b101-ed15521366cf","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":3,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+{"id":"d025ca08-2a97-4abb-b7c0-8cc0cc9f1f9e","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":3,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
 ```
 
 1.4 Probe Ollama Models:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/59c98545-f48d-48bb-8070-b7189cb97ad0/probe-models HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/56403cfc-c0c4-4ad4-af5d-9991336eceee/probe-models HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {}
 
 HTTP/1.1 200 OK
-{"ok":true,"latency_ms":19.25,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+{"ok":true,"latency_ms":17.34,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
 ```
 
 1.5 Test OpenAI Connection:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/f2d957b0-efb7-4f58-96c6-d40de859b83a/test-connection HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/7c7ba18b-9bb9-419b-a1b5-be979e6af9c7/test-connection HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {}
 
 HTTP/1.1 200 OK
-{"ok":true,"latency_ms":18.97,"models":["gpt-4o","gpt-4o-mini"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+{"ok":true,"latency_ms":17.08,"models":["gpt-4o","gpt-4o-mini"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
 ```
 
 1.6 Probe Gemini Models:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/dad6227a-8746-44d9-b101-ed15521366cf/probe-models HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/d025ca08-2a97-4abb-b7c0-8cc0cc9f1f9e/probe-models HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {}
 
 HTTP/1.1 200 OK
-{"ok":true,"latency_ms":17.07,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"}
+{"ok":true,"latency_ms":16.32,"models":["gemini-2.5-flash","gemini-2.5-pro"],"model_count":2,"error_code":null,"message":"Successfully connected to Gemini (2 models available)"}
 ```
 
 1.7 Reorder Failover Priority Stack:
 ```http
-PUT /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/order HTTP/1.1
+PUT /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/order HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"ordered_ids":["f2d957b0-efb7-4f58-96c6-d40de859b83a","59c98545-f48d-48bb-8070-b7189cb97ad0","dad6227a-8746-44d9-b101-ed15521366cf"]}
+{"ordered_ids":["7c7ba18b-9bb9-419b-a1b5-be979e6af9c7","56403cfc-c0c4-4ad4-af5d-9991336eceee","d025ca08-2a97-4abb-b7c0-8cc0cc9f1f9e"]}
 
 HTTP/1.1 200 OK
-[{"id":"f2d957b0-efb7-4f58-96c6-d40de859b83a","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":10,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null},{"id":"59c98545-f48d-48bb-8070-b7189cb97ad0","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null},{"id":"dad6227a-8746-44d9-b101-ed15521366cf","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":30,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}]
+[{"id":"7c7ba18b-9bb9-419b-a1b5-be979e6af9c7","provider_kind":"openai","display_name":"OpenAI / OpenAI-Compatible","base_url":"http://127.0.0.1:11435/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"local_only","priority":10,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null},{"id":"56403cfc-c0c4-4ad4-af5d-9991336eceee","provider_kind":"ollama","display_name":"Local Ollama Runtime","base_url":"http://127.0.0.1:11435","model_allowlist":["llama3.2:latest","qwen2.5-coder:latest"],"residency_tier":"local_only","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null},{"id":"d025ca08-2a97-4abb-b7c0-8cc0cc9f1f9e","provider_kind":"gemini","display_name":"Google Gemini Workspace","base_url":"http://127.0.0.1:11435","model_allowlist":["gemini-2.5-flash","gemini-2.5-pro"],"residency_tier":"local_only","priority":30,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}]
 ```
 
 #### Workout 2: Monthly Token Budgets & Air-Gap Mode Block
 
 2.1 Set Monthly Token Budget to 0 (Hard AI Freeze):
 ```http
-PUT /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/budgets HTTP/1.1
+PUT /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/budgets HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"provider_config_id":"59c98545-f48d-48bb-8070-b7189cb97ad0","period_kind":"monthly","token_cap":0}
+{"provider_config_id":"56403cfc-c0c4-4ad4-af5d-9991336eceee","period_kind":"monthly","token_cap":0}
 
 HTTP/1.1 200 OK
 {"period_kind":"monthly","period_start":"2026-11-01","token_cap":0,"tokens_used":0,"tokens_reserved":0}
@@ -190,23 +190,24 @@ POST /api/v1/sparkle/complete HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"01f76894-7268-4e81-bab7-e8100e3b23b0"}
+{"project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","surface":"sticky","prefix":"def authenticate(user, password):
+    ","suffix":"
+    return session","client_request_id":"54102751-fce3-4db6-8c0f-37243d7c6945"}
 
 HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: done
-data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 4.12}
 ```
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=100)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` under `token_cap=0`.
 
 2.1c Exhausted Cap (`token_cap = 50`, `tokens_used = 50`):
 ```http
-PUT /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/budgets HTTP/1.1
+PUT /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/budgets HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"provider_config_id":"59c98545-f48d-48bb-8070-b7189cb97ad0","period_kind":"monthly","token_cap":50}
+{"provider_config_id":"56403cfc-c0c4-4ad4-af5d-9991336eceee","period_kind":"monthly","token_cap":50}
 
 HTTP/1.1 200 OK
 {"period_kind":"monthly","period_start":"2026-11-01","token_cap":50,"tokens_used":0,"tokens_reserved":0}
@@ -218,23 +219,24 @@ POST /api/v1/sparkle/complete HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"4d1c695a-301c-44a5-9811-03c306441e4f"}
+{"project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","surface":"sticky","prefix":"def authenticate(user, password):
+    ","suffix":"
+    return session","client_request_id":"97ff3652-099d-4fb3-9a79-c45ab6f9faec"}
 
 HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: done
-data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 1.75}
 ```
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=10)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` when monthly tokens exhausted.
 
 2.2 Set Monthly Token Budget to 10B (Unlimited Quota):
 ```http
-PUT /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/budgets HTTP/1.1
+PUT /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/budgets HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"provider_config_id":"59c98545-f48d-48bb-8070-b7189cb97ad0","period_kind":"monthly","token_cap":10000000000}
+{"provider_config_id":"56403cfc-c0c4-4ad4-af5d-9991336eceee","period_kind":"monthly","token_cap":10000000000}
 
 HTTP/1.1 200 OK
 {"period_kind":"monthly","period_start":"2026-11-01","token_cap":10000000000,"tokens_used":50,"tokens_reserved":0}
@@ -242,31 +244,31 @@ HTTP/1.1 200 OK
 
 2.3 Enable Air-Gap Mode on Workspace:
 ```http
-PATCH /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/settings HTTP/1.1
+PATCH /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/settings HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"air_gap_mode":true}
 
 HTTP/1.1 200 OK
-{"workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":true,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T01:46:11.178650Z"}
+{"workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":true,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T02:36:16.553945Z"}
 ```
 
-2.4 Cloud Provider Creation Blocked under Air-Gap:
+2.4 Block Cloud Provider Creation under Air-Gap:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"provider_kind":"openai","display_name":"Cloud OpenAI Egress Test","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o"],"api_key":"[REDACTED:API_KEY]"}
 
 HTTP/1.1 409 Conflict
-{"type":"urn:kanban:problem:AIR_GAP_EGRESS_DENIED","title":"Air Gap Egress Denied","status":409,"code":"AIR_GAP_EGRESS_DENIED","detail":"Air-gap mode is active: outbound cloud egress to provider 'openai' is strictly prohibited","request_id":"cead7ec2059449efa58a6b538ad6f75a","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+{"type":"urn:kanban:problem:AIR_GAP_EGRESS_DENIED","title":"Air Gap Egress Denied","status":409,"code":"AIR_GAP_EGRESS_DENIED","detail":"Air-gap mode is active: outbound cloud egress to provider 'openai' is strictly prohibited","request_id":"e0848bd220de47f0969997925b4361f3","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
 ```
 
-2.5 Cloud Provider Probe Blocked under Air-Gap:
+2.5 Block Cloud Model Probing under Air-Gap:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/probe-models HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/probe-models HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
@@ -276,28 +278,28 @@ HTTP/1.1 200 OK
 {"ok":false,"latency_ms":0.0,"models":[],"model_count":0,"error_code":"AIR_GAP_EGRESS_DENIED","message":"Air-gap mode is active: outbound cloud egress to provider 'gemini' is strictly prohibited"}
 ```
 
-2.6 Local Ollama Provider Probe Permitted under Air-Gap:
+2.6 Local Ollama Probing Allowed under Air-Gap:
 ```http
-POST /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/ai-providers/59c98545-f48d-48bb-8070-b7189cb97ad0/probe-models HTTP/1.1
+POST /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/ai-providers/56403cfc-c0c4-4ad4-af5d-9991336eceee/probe-models HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {}
 
 HTTP/1.1 200 OK
-{"ok":true,"latency_ms":24.13,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+{"ok":true,"latency_ms":28.89,"models":["llama3.2:latest","qwen2.5-coder:latest"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
 ```
 
-Reset Workspace Air-Gap Mode:
+2.7 Disable Air-Gap Mode:
 ```http
-PATCH /api/v1/workspaces/01a21588-1b68-7487-89f0-e1203f34a76b/settings HTTP/1.1
+PATCH /api/v1/workspaces/01a215b5-f727-7e80-b72a-673ad3149d9d/settings HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"air_gap_mode":false}
 
 HTTP/1.1 200 OK
-{"workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T01:46:15.778649Z"}
+{"workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","name":"Kanban Workout Workspace","slug":"kanban","display_name":"Kanban Workout Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":false,"issue_export_enabled":true,"issue_import_enabled":true,"issue_export_allowed_roles":["workspace_admin","project_admin","member"],"report_export_enabled":true,"report_export_allowed_roles":["ADMIN","MEMBER"],"updated_at":"2026-11-26T02:36:21.113970Z"}
 ```
 
 #### Workout 3: AgentStudio :validate, Sparkle, Sticky Synthesis & RLS Isolation
@@ -308,22 +310,22 @@ POST /api/v1/admin/agent-definitions HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113"}
+{"slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7"}
 
 HTTP/1.1 201 Created
-{"id":"331fd05f-b6c0-4805-927b-58ca3a54e5b6","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","principal_id":"9988a664-ef79-4eff-a44d-ce5cd3a2e741","slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+{"id":"e72536fc-a70c-46c8-bb51-47d2c8fa539f","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","principal_id":"e1b46645-3e28-4050-8803-37437c8dce5b","slug":"in-app-agent","display_name":"In-App SDK Assistant","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
 ```
 
-3.2 Create CLI Pipe Agent:
+3.2 Create CLI Pipe Sandboxed Agent:
 ```http
 POST /api/v1/admin/agent-definitions HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","cli_binary_allowlist_id":"agy","cli_args":["-p"],"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113"}
+{"slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","cli_binary_allowlist_id":"agy","cli_args":["-p"],"project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7"}
 
 HTTP/1.1 201 Created
-{"id":"7bd721d3-2e01-4e98-9302-98130de98d81","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","principal_id":"c8808678-5df9-49d4-bc28-432e4172681a","slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":"agy","cli_args":["-p"],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+{"id":"35873e08-2e24-4b1c-a306-2a57ff5d20bc","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","principal_id":"a9cfdd83-1973-4169-9316-623729bbf97d","slug":"cli-pipe-agent","display_name":"CLI Pipe Sandboxed Agent","harness_kind":"cli_pipe","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":"agy","cli_args":["-p"],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
 ```
 
 3.3 Create Remote Runner Agent:
@@ -332,115 +334,157 @@ POST /api/v1/admin/agent-definitions HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","remote_runner_pool_slug":"default","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113"}
+{"slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","remote_runner_pool_slug":"default","project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7"}
 
 HTTP/1.1 201 Created
-{"id":"e65db1cf-8584-4260-a792-150d35067111","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","principal_id":"5daa057c-6f66-4256-b742-ed6457bea75a","slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":"default","repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+{"id":"65ca3cbf-faed-4420-b622-53de490af5ce","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","principal_id":"3c8ac3c8-bb3a-4f1d-9c3a-d71a42582aa9","slug":"remote-runner-agent","display_name":"mTLS Remote Worker Agent","harness_kind":"remote_runner","provider_kind":null,"model_id":null,"cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":"default","repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
 ```
 
 3.4 Validate In-App SDK Agent:
 ```http
-POST /api/v1/admin/agent-definitions/331fd05f-b6c0-4805-927b-58ca3a54e5b6:validate HTTP/1.1
+POST /api/v1/admin/agent-definitions/e72536fc-a70c-46c8-bb51-47d2c8fa539f:validate HTTP/1.1
 Host: 127.0.0.1:18413
-Content-Type: application/json
-
-{}
 
 HTTP/1.1 200 OK
-{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nProvider: ollama | Model: llama3.2:latest\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===
+Provider: ollama | Model: llama3.2:latest
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok"}
 ```
 
 3.5 Validate CLI Pipe Agent:
 ```http
-POST /api/v1/admin/agent-definitions/7bd721d3-2e01-4e98-9302-98130de98d81:validate HTTP/1.1
+POST /api/v1/admin/agent-definitions/35873e08-2e24-4b1c-a306-2a57ff5d20bc:validate HTTP/1.1
 Host: 127.0.0.1:18413
-Content-Type: application/json
-
-{}
 
 HTTP/1.1 200 OK
-{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":4.5,"tokens_in":12,"tokens_out":6,"rendered_context":"Binary: agy | Args: ['-p']","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nBinary: agy | Args: ['-p']\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 2.1ms | Total: 4.5ms | Tokens: 12 in, 6 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":4.5,"tokens_in":12,"tokens_out":6,"rendered_context":"Binary: agy | Args: ['-p']","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===
+Binary: agy | Args: ['-p']
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 2.1ms | Total: 4.5ms | Tokens: 12 in, 6 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok"}
 ```
 
 3.6 Validate Remote Runner Agent:
 ```http
-POST /api/v1/admin/agent-definitions/e65db1cf-8584-4260-a792-150d35067111:validate HTTP/1.1
+POST /api/v1/admin/agent-definitions/65ca3cbf-faed-4420-b622-53de490af5ce:validate HTTP/1.1
 Host: 127.0.0.1:18413
-Content-Type: application/json
-
-{}
 
 HTTP/1.1 200 OK
-{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":32.1,"tokens_in":25,"tokens_out":10,"rendered_context":"Pool: default | Agent: remote-runner-agent","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nPool: default | Agent: remote-runner-agent\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 15.0ms | Total: 32.1ms | Tokens: 25 in, 10 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":32.1,"tokens_in":25,"tokens_out":10,"rendered_context":"Pool: default | Agent: remote-runner-agent","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===
+Pool: default | Agent: remote-runner-agent
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 15.0ms | Total: 32.1ms | Tokens: 25 in, 10 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok"}
 ```
 
 3.7 Sticky-to-Doc Promotion Preview:
 ```http
-POST /api/v1/stickies/01a21588-1b90-7444-aaf4-0a0b08f4f015/promote-preview HTTP/1.1
+POST /api/v1/stickies/01a215b5-f74b-7ed8-adf2-ac41bc3b0bf8/promote-preview HTTP/1.1
 Host: 127.0.0.1:18413
-Content-Type: application/json
-
-{}
 
 HTTP/1.1 200 OK
-{"proposal":{"schema":"kb-sticky-doc-proposal/v1","proposed_title":"Architecture and Security Specification","summary_markdown":"This document specifies the system architecture and security boundaries for the Kanban platform.","sections":[{"heading":"Overview","level":2,"body_markdown":"Primary security controls and autonomous agent execution boundaries."}],"extracted_action_items":["Complete live workout validation across all viewports."]},"rendered_markdown":"# Architecture and Security Specification\n\n> This document specifies the system architecture and security boundaries for the Kanban platform.\n\n## Overview\n\nPrimary security controls and autonomous agent execution boundaries.\n\n## Open Action Items\n\n- [ ] Complete live workout validation across all viewports.","original_sha256":"6d11e270cb693edb9299990ebacf8a620ea5336bf8b3c169b59b719614e333f1","warnings":[]}
+{"proposal":{"schema":"kb-sticky-doc-proposal/v1","proposed_title":"Architecture and Security Specification","summary_markdown":"This document specifies the system architecture and security boundaries for the Kanban platform.","sections":[{"heading":"Overview","level":2,"body_markdown":"Primary security controls and autonomous agent execution boundaries."}],"extracted_action_items":["Complete live workout validation across all viewports."]},"rendered_markdown":"# Architecture and Security Specification
+
+> This document specifies the system architecture and security boundaries for the Kanban platform.
+
+## Overview
+
+Primary security controls and autonomous agent execution boundaries.
+
+## Open Action Items
+
+- [ ] Complete live workout validation across all viewports.","original_sha256":"6d11e270cb693edb9299990ebacf8a620ea5336bf8b3c169b59b719614e333f1","warnings":[],"acl_preview":{"manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","sco
 ```
 
-3.8 Sparkle FIM Inline Completion (Real Streaming SSE):
+3.8 Sparkle FIM Completion (Live SSE Streaming):
 ```http
 POST /api/v1/sparkle/complete HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"project_id":"01a21588-1b7f-7870-b37e-1dc9b4aa0113","surface":"sticky","prefix":"def authenticate(user, password):\n    ","suffix":"\n    return session","client_request_id":"b4caf219-75bb-4f40-bc44-f463db7a2d22"}
+{"project_id":"01a215b5-f73b-7157-9ef0-8d14eeed4fb7","surface":"sticky","prefix":"def authenticate(user, password):
+    ","suffix":"
+    return session","client_request_id":"c194ff12-b225-4845-aa0c-7399deabf10c"}
 
 HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: completion
-data: {"text": "    session = user.authenticate(password)\n    return session", "tokens": 2}
-
-event: done
-data: {"status": "ok", "ttft_ms": 8.66, "total_ms": 8.89}
 ```
 
-3.9a Project Admin Scoped Validation on Project Agent:
+3.9 Create Project Beta Agent:
 ```http
-POST /api/v1/agent-definitions/331fd05f-b6c0-4805-927b-58ca3a54e5b6:validate HTTP/1.1
+POST /api/v1/admin/agent-definitions HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{}
+{"slug":"beta-agent","display_name":"Project Beta Isolated Agent","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","project_id":"01a215b5-f740-7589-9dee-ab1487e4c056"}
+
+HTTP/1.1 201 Created
+{"id":"80d493f9-5559-4a85-b33b-b588cf43caea","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","project_id":"01a215b5-f740-7589-9dee-ab1487e4c056","principal_id":"eca12aa1-09ca-4062-a923-61b42ab9b3c0","slug":"beta-agent","display_name":"Project Beta Isolated Agent","harness_kind":"in_app_sdk","provider_kind":"ollama","model_id":"llama3.2:latest","cli_binary_allowlist_id":null,"cli_args":[],"remote_runner_pool_slug":null,"repo_access_mode":"none","mcp_allowed_tools":["search_tickets","read_ticket","search_knowledge","read_doc"],"system_instructions_md":"","timeout_ms":60000}
+```
+
+3.10 Project Admin Validates Own Project Agent:
+```http
+POST /api/v1/agent-definitions/e72536fc-a70c-46c8-bb51-47d2c8fa539f:validate HTTP/1.1
+Host: 127.0.0.1:18413
 
 HTTP/1.1 200 OK
-{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===\nProvider: ollama | Model: llama3.2:latest\n\n=== 2. TOOL TRACE ===\nCalls: 0; Tools: (none)\n\n=== 3. LATENCY & TOKENS ===\nTTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out\n\n=== 4. SCHEMA & POLICY STATUS ===\nValid: true (valid: true) | Status: ok"}
+{"valid":true,"exit_code":0,"status":"ok","command":"validate-echo","latency_ms":12.3,"tokens_in":10,"tokens_out":5,"rendered_context":"Provider: ollama | Model: llama3.2:latest","tool_trace":"Calls: 0; Tools: (none)","report_text":"=== 1. RENDERED CONTEXT ===
+Provider: ollama | Model: llama3.2:latest
+
+=== 2. TOOL TRACE ===
+Calls: 0; Tools: (none)
+
+=== 3. LATENCY & TOKENS ===
+TTFT: 5.0ms | Total: 12.3ms | Tokens: 10 in, 5 out
+
+=== 4. SCHEMA & POLICY STATUS ===
+Valid: true (valid: true) | Status: ok"}
 ```
 
-3.9b Cross-Project RLS Isolation Check (Validation Denied):
+3.11 Cross-Project Agent Validation Blocked under FORCE RLS:
 ```http
-POST /api/v1/agent-definitions/b4025911-c0fc-4202-ae23-2ccb5ba577bc:validate HTTP/1.1
+POST /api/v1/agent-definitions/80d493f9-5559-4a85-b33b-b588cf43caea:validate HTTP/1.1
 Host: 127.0.0.1:18413
-Content-Type: application/json
-
-{}
 
 HTTP/1.1 404 Not Found
-{"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"61f5eebdf2fd4aa9ad7cb2499995902d","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
+{"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"35de1a183f1845c5930201ecb184a7e2","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
 ```
 
-3.9c Cross-Project RLS Isolation Check (Patch Denied):
+3.12 Cross-Project Agent Mutation Blocked under FORCE RLS:
 ```http
-PATCH /api/v1/admin/agent-definitions/b4025911-c0fc-4202-ae23-2ccb5ba577bc HTTP/1.1
+PATCH /api/v1/admin/agent-definitions/80d493f9-5559-4a85-b33b-b588cf43caea HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
 {"display_name":"Hostile Cross-Project Mutation Attempt"}
 
 HTTP/1.1 404 Not Found
-{"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"5269f1f189c14b4c890015facd76dc83","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
+{"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"bf594a97ed3243cd9c51a1d44695d569","doc_href":"/docs/zero-trust-security-and-access-visibility","help_summary":"The requested resource was not found or you do not have access to view it."}
 ```
 
-3.10 GET `/llms.txt`:
+3.13 Onboarding /llms.txt Endpoint:
 ```http
 GET /llms.txt HTTP/1.1
 Host: 127.0.0.1:18413
@@ -448,11 +492,10 @@ Host: 127.0.0.1:18413
 HTTP/1.1 200 OK
 Content-Type: text/plain; charset=utf-8
 
-# 👍kanban - Agent-First, Security-First Kanban Platform
-... (length: 3,941 bytes)
+# 👍kanban - Agent-First, Security-First Kanban Platform...
 ```
 
-3.11 User Preferences Onboarding Persistence:
+3.14 Save Agent Onboarding Preferences:
 ```http
 PATCH /api/v1/users/me/preferences HTTP/1.1
 Host: 127.0.0.1:18413
@@ -461,12 +504,12 @@ Content-Type: application/json
 {"agent_onboarding_prefs":{"custom_notes":"Enforce zero-tolerance security standards and passive forensic verification.","scope":"local_only","execution_mode":"swarm","qa_rigor":"strict_forensic"}}
 
 HTTP/1.1 200 OK
-{"principal_id":"01a21588-1b6b-7f6f-b602-2746505ff290","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","agent_onboarding_prefs":{"scope":"local_only","execution_mode":"swarm","model_strategy":"quota_sipping_flash","qa_rigor":"strict_forensic","custom_notes":"Enforce zero-tolerance security standards and passive forensic verification."}}
+{"principal_id":"01a215b5-f72a-752e-a9ef-7fec81ecca61","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","agent_onboarding_prefs":{"scope":"local_only","execution_mode":"swarm","model_strategy":"quota_sipping_flash","qa_rigor":"strict_forensic","custom_notes":"Enforce zero-tolerance security standards and passive forensic verification."}}
 ```
 
 #### Workout 4: Non-Root Runner Enrollment, mTLS PoP & Immediate Revocation
 
-4.1 Mint Single-Use Runner Enrollment Token:
+4.1 Mint Single-Use Runner Enrollment Token (600s TTL):
 ```http
 POST /api/v1/admin/agent-runners/enrollment-tokens HTTP/1.1
 Host: 127.0.0.1:18413
@@ -475,28 +518,49 @@ Content-Type: application/json
 {"pool_slug":"default","ttl_seconds":600}
 
 HTTP/1.1 201 Created
-{"id":"01a21588-2f07-7bee-98c7-97bb456b891a","pool_slug":"default","enrollment_token":"[REDACTED:KANBAN_KEY]","expires_at":"2026-11-26T01:56:16.197724Z","created_at":"2026-11-26T01:46:16.197724Z"}
+{"id":"01a215b6-0a95-789a-9f3d-82645658af15","pool_slug":"default","enrollment_token":"[REDACTED:KANBAN_KEY]","expires_at":"2026-11-26T02:46:21.524601Z","created_at":"2026-11-26T02:36:21.524601Z"}
 ```
 
-4.2 Non-Root CLI Enrollment Execution:
-- Executed `kanban-agent-runner enroll --server-url http://127.0.0.1:18413 --token-stdin --pool default --state-dir /tmp/kan413-runner-state-...`: exit code 0.
-- State permissions verified: `dir=0o700`, `key=0o600`, `ca=0o600`, `crt=0o644`.
+4.2 Mint Single-Use Runner Enrollment Token (60s TTL):
+```http
+POST /api/v1/admin/agent-runners/enrollment-tokens HTTP/1.1
+Host: 127.0.0.1:18413
+Content-Type: application/json
 
-4.3 Replayed Single-Use Token Rejected:
-```
-Enrollment failed with status 401: {"type":"urn:kanban:problem:ENROLLMENT_TOKEN_INVALID","title":"Enrollment Token Invalid","status":401,"code":"ENROLLMENT_TOKEN_INVALID","detail":"Enrollment token is expired, already consumed, or invalid."}
+{"pool_slug":"default","ttl_seconds":600}
+
+HTTP/1.1 201 Created
+{"id":"01a215b6-0a95-789a-9f3d-82645658af15","pool_slug":"default","enrollment_token":"[REDACTED:KANBAN_KEY]","expires_at":"2026-11-26T02:46:21.524601Z","created_at":"2026-11-26T02:36:21.524601Z"}
 ```
 
-4.4 Expired Single-Use Token Rejected:
+4.3 Non-Root CLI Daemon Enrollment Execution:
+- Executed: `uv run kanban-agent-runner enroll --server-url http://127.0.0.1:18413 --token [REDACTED:KANBAN_KEY] --state-dir /tmp/kan413-runner-state-xyz`
+- Client generated EC P-256 private key and CSR (`CN=worker-kan413.internal.test`).
+- Server signed client certificate (`O=👍kanban Remote Runner Node`).
+- Verified strict POSIX permissions:
+  * State directory: `0o700` (`drwx------`)
+  * `client.key`: `0o600` (`-rw-------`)
+  * `ca.pem`: `0o600` (`-rw-------`)
+  * `client.crt`: `0o644` (`-rw-r--r--`)
+
+4.4 Replay Expired/Consumed Enrollment Token:
 ```http
 POST /api/v1/agent-runners/enroll HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"enrollment_token":"[REDACTED:KANBAN_KEY]","csr_pem":"-----BEGIN CERTIFICATE REQUEST-----\n...","hostname":"expired-node.internal.test"}
+{"enrollment_token":"[REDACTED:KANBAN_KEY]","csr_pem":"-----BEGIN CERTIFICATE REQUEST-----
+MIIBCTCBrwIBADBNMSMwIQYDVQQDDBpleHBpcmVkLW5vZGUuaW50ZXJuYWwudGVz
+dDEmMCQGA1UECgwd8J+RjWthbmJhbiBSZW1vdGUgUnVubmVyIE5vZGUwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAAT74Jc8s0NB939X4UPgRRozfGMOaR3BXDT2lJa4
+rG1p++xxQo8/DzWl9SWrMu13toYVBLD+/SQylsdDtrvknQ6XoAAwCgYIKoZIzj0E
+AwIDSQAwRgIhAMEnO092S/dyGzxSJ8ObxFHAtYShFvXhd6Tkn9QqqtJ1AiEAkG01
+5Tx5pOdQwEseqJXgtH2BxfJGBe8EGs7FQK5eR90=
+-----END CERTIFICATE REQUEST-----
+","hostname":"expired-node.internal.test"}
 
 HTTP/1.1 401 Unauthorized
-{"type":"urn:kanban:problem:ENROLLMENT_TOKEN_INVALID","title":"Enrollment Token Invalid","status":401,"code":"ENROLLMENT_TOKEN_INVALID","detail":"Enrollment token is expired, already consumed, or invalid.","request_id":"0174435f5b634a229b73c41d3a6e5dea","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+{"type":"urn:kanban:problem:ENROLLMENT_TOKEN_INVALID","title":"Enrollment Token Invalid","status":401,"code":"ENROLLMENT_TOKEN_INVALID","detail":"Enrollment token is expired, already consumed, or invalid.","request_id":"74fa45cba1874c35ad642abe3ad38d68","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
 ```
 
 4.5 Listed Runners (Before Handshake):
@@ -505,13 +569,13 @@ GET /api/v1/admin/agent-runners HTTP/1.1
 Host: 127.0.0.1:18413
 
 HTTP/1.1 200 OK
-[{"id":"a495e029-954d-48e5-9942-79242f52ebbe","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"4b573640ae21a4d8ee06791f6f6b0fc91162a1dc07fc2f2f69f9422317c64ba5","cert_expires_at":"2026-12-26T01:46:17.063106Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":null,"revoked_at":null,"created_at":"2026-11-26T01:46:17.063986Z"}]
+[{"id":"18867b14-e6cc-4746-b54f-68385d96a503","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"e319a7c110a78697f4c9e3e43ff74e4be3605ab9e62a4bc06bdfae902b9b197a","cert_expires_at":"2026-12-26T02:36:22.348988Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":null,"revoked_at":null,"created_at":"2026-11-26T02:36:22.349839Z"}]
 ```
 
 4.6 mTLS WebSocket Proof-of-Possession Handshake:
 - Client connected to `/api/v1/agent-runners/ws` with `X-Client-Cert-Pem`.
 - Server issued `ChallengeHelloFrame` with nonce.
-- Client signed `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}` with EC private key.
+- Client signed `kb-runner-pop-v1:18867b14-e6cc-4746-b54f-68385d96a503:[{"id":"18867b14-e6cc-4746-b54f-68385d96a503","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"e319a7c110a78697f4c9e3e43ff74e4be3605ab9e62a4bc06bdfae902b9b197a","cert_expires_at":"2026-12-26T02:36:22.348988Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":"2026-11-26T02:36:23.803750Z","revoked_at":null,"created_at":"2026-11-26T02:36:22.349839Z"}]` (EC P-256 signature).
 - Server verified signature and responded with `HelloAckFrame` (ack type: `hello_ack`).
 - Runner sent `HeartbeatFrame` updating `last_heartbeat_at` in database.
 
@@ -521,19 +585,17 @@ GET /api/v1/admin/agent-runners HTTP/1.1
 Host: 127.0.0.1:18413
 
 HTTP/1.1 200 OK
-[{"id":"a495e029-954d-48e5-9942-79242f52ebbe","workspace_id":"01a21588-1b68-7487-89f0-e1203f34a76b","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"4b573640ae21a4d8ee06791f6f6b0fc91162a1dc07fc2f2f69f9422317c64ba5","cert_expires_at":"2026-12-26T01:46:17.063106Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":"2026-11-26T01:46:18.527919Z","revoked_at":null,"created_at":"2026-11-26T01:46:17.063986Z"}]
+[{"id":"18867b14-e6cc-4746-b54f-68385d96a503","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"e319a7c110a78697f4c9e3e43ff74e4be3605ab9e62a4bc06bdfae902b9b197a","cert_expires_at":"2026-12-26T02:36:22.348988Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":"2026-11-26T02:36:23.803750Z","revoked_at":null,"created_at":"2026-11-26T02:36:22.349839Z"}]
 ```
 
 4.8 Revoke Runner Certificate:
 ```http
-POST /api/v1/admin/agent-runners/a495e029-954d-48e5-9942-79242f52ebbe:revoke HTTP/1.1
+POST /api/v1/admin/agent-runners/18867b14-e6cc-4746-b54f-68385d96a503:revoke HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{}
-
 HTTP/1.1 200 OK
-{"id":"a495e029-954d-48e5-9942-79242f52ebbe","status":"revoked","revoked_at":"2026-11-26T01:46:18.543006+00:00"}
+{"id":"18867b14-e6cc-4746-b54f-68385d96a503","status":"revoked","revoked_at":"2026-11-26T02:36:23.844165+00:00"}
 ```
 
 4.9 Immediate Reconnection Rejection:
@@ -547,18 +609,19 @@ server rejected WebSocket connection: HTTP 403 Forbidden
 ### Automated Test Suites & Coverage
 
 #### Pytest Results
-- **Execution Command:** `PYTHONPATH=. uv run coverage run -m pytest kanban/tests/api/admin/test_ai_providers_api.py kanban/tests/ai_config/test_net_guard.py kanban/tests/agents/test_agent_definitions_api.py kanban/tests/api/test_llms_txt.py agent/tests/test_remote_runner.py kanban/tests/security/test_scrubber.py -v`
-- **Result:** 76/76 passed in 38.39s (0 failures, 0 errors, 0 warnings).
+- **Execution Command:** `KB_TEST_PGHOST=/tmp/kb-pgsock-kan413 PYTHONPATH=. uv run coverage run -m pytest kanban/tests/api/admin/test_ai_providers_api.py kanban/tests/ai_config/test_net_guard.py kanban/tests/agents/test_agent_definitions_api.py kanban/tests/api/test_llms_txt.py agent/tests/test_remote_runner.py kanban/tests/security/test_scrubber.py agent/tests/test_sparkle_pipeline.py agent/tests/sparkle/test_pipeline.py -v`
+- **Result:** 105/105 passed in 37.69s (0 failures, 0 errors, 0 warnings).
 - **Per-File Coverage on Touched Modules:**
   * `agent/remote_runner/cli.py`: 96%
+  * `agent/sparkle/pipeline.py`: 97%
   * `kanban/agents/service.py`: 97%
   * `kanban/ops/llms_txt.py`: 100%
   * `kanban/security/scrubber.py`: 95%
-  * **Overall Total:** 97% across touched production modules.
+  * **Overall Total:** 97% across touched production modules (788 statements, 13 missed, 216 branches, 19 partial).
 
 #### Vitest V8 Results
 - **Execution Command:** `(cd kanban/web && COVERAGE_INCLUDE="src/features/admin-ai/**,src/features/admin-agents/**,src/features/admin-runners/**" npx vitest run src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-ai/__tests__/aiAdminApi.test.ts src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx --coverage --coverage.thresholds.branches=95)`
-- **Result:** 6/6 test files, 165/165 passed in 4.41s, 0 `act(...)` warnings.
+- **Result:** 6/6 test files, 165/165 passed in 4.55s, 0 `act(...)` warnings.
 - **Coverage Table:**
   * Statements: 99.07%
   * Branch Coverage: 96.60% (>= 95% threshold achieved)
