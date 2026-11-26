@@ -112,14 +112,14 @@ The following configuration parameters and backend contracts are documented with
 - **`user_search_filter`:** LDAP filter expression substituting `{username}` (e.g., `(&(objectCategory=person)(sAMAccountName={username}))`).
 - **`subject_attribute`:** Attribute providing immutable unique principal identifier (default `objectGUID` for AD, `entryUUID` for OpenLDAP).
 - **`email_attribute`:** Directory attribute mapped to user email address (default `mail`).
-- **`display_name_attribute`:** Directory attribute mapped to user full name (default `displayName`).
+- **`display_name_attribute`:** Directory attribute mapped to user full name (default `cn`, Active Directory preset `displayName`).
 - **`member_of_attribute`:** Directory attribute providing group memberships (default `memberOf`).
 - **`group_dn_map`:** JSON mapping of directory group Distinguished Names to 👍kanban roles.
-- **`access_mode`:** Access gate mode (`open` allows all authenticated directory users; `restricted` requires membership in allowed groups).
+- **`access_mode`:** Access restriction policy (`any_user` allows all authenticated directory users; `group_restricted` requires membership in allowed groups; default `any_user`).
 - **`admin_groups`:** Array of group Distinguished Names whose members automatically receive `SERVER_ADMIN` or `WORKSPACE_ADMIN`.
-- **`user_groups`:** Array of group Distinguished Names permitted to log in when `access_mode` is `restricted`.
+- **`user_groups`:** Array of group Distinguished Names permitted to log in when `access_mode` is `group_restricted`.
 - **`ca_cert_pem`:** Custom enterprise root or intermediate CA certificate bundle in PEM format for private enterprise PKI.
-- **`spki_sha256_pins`:** Array of Subject Public Key Info SHA-256 base64 pin hashes for TLS public key pinning against rogue CAs (configured via administrative REST API).
+- **`spki_sha256_pins`:** Array of Subject Public Key Info SHA-256 lowercase 64-hex digest hashes matching `^[0-9a-f]{64}$` (up to 4 pins) for TLS public key pinning against rogue CAs (configured via administrative REST API).
 
 #### 3. OpenID Connect (OIDC) & Google OAuth Settings (7 Settings + Backend Contracts)
 - **`issuer_url`:** Discovery endpoint base URL. Fetches `/.well-known/openid-configuration` and JWKS keys.
@@ -144,9 +144,9 @@ The following configuration parameters and backend contracts are documented with
 - **`role_name`:** Human-readable role title (1 to 100 characters).
 - **`color_hex`:** UI badge accent color (7-character hex code).
 - **`permissions`:** 30 granular permission keys evaluated with absolute DENY precedence (`effective = allow & (~deny)`):
-  - Workspace Tier (8): `workspace:create`, `workspace:edit_settings`, `workspace:manage_members`, `workspace:manage_groups`, `workspace:create_role`, `workspace:create_project`, `workspace:manage_trash`, `workspace:manage_mcp_keys`.
-  - Issue Tier (10): `issue:create`, `issue:view`, `issue:comment`, `issue:transition`, `issue:move_rank`, `issue:link`, `issue:copy`, `issue:archive`, `issue:delete`, `issue:manage_acl`.
-  - Field Tier (12): `field:title:view`, `field:title:edit`, `field:description:view`, `field:description:edit`, `field:assignee:view`, `field:assignee:edit`, `field:priority:view`, `field:priority:edit`, `field:estimate:view`, `field:estimate:edit`, `field:custom:view`, `field:custom:edit`.
+  - Workspace Tier (8): `workspace:create` (Create Workspaces), `workspace:edit_settings` (Edit Settings), `workspace:manage_members` (Manage Members), `workspace:create_role` (Manage Roles), `workspace:manage_mcp_keys` (Manage Integrations), `workspace:audit_logs` (View Audit Logs), `workspace:export_data` (Export Data), `workspace:manage_trash` (Purge Trash).
+  - Issue Tier (10): `issue:create` (Create Issues), `issue:view` (View Issues), `issue:comment` (Comment on Issues), `issue:transition` (Transition States), `issue:move_rank` (Re-order / Move Rank), `issue:copy` (Copy Issues), `issue:link` (Link Objects), `issue:archive` (Archive Issues), `issue:delete` (Delete Issues), `issue:manage_acl` (Subscribe to Issues).
+  - Field Tier (12): `field:modify_summary`, `field:modify_description`, `field:modify_state`, `field:modify_priority`, `field:modify_assignees`, `field:modify_labels`, `field:modify_dates`, `field:modify_cycle`, `field:modify_modules` (UI: `field:modify_module`), `field:modify_parent`, `field:modify_custom_fields`, `field:attach_files`.
 - **`Capability(IntFlag)`:** 8-bit integer bitmask: `NONE=0`, `VIEW=1`, `COMMENT=2`, `EDIT=4`, `TRANSITION=8`, `LINK=16`, `SHARE=32`, `ADMIN=64`, `DELETE=128`, `ALL=255`.
 
 ---
