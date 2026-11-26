@@ -5,7 +5,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
-**Target Commit:** `3e02ef08` (branch `docs/KAN-414-slice2-ai-docs`)  
+**Target Commit:** `d3eff3cc` (branch `docs/KAN-414-slice2-ai-docs`)  
 **Wiki Commit:** `ab0fd22` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
 
 ---
@@ -52,10 +52,10 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 - **AI Providers & Budgets:**
   - `POST /api/v1/admin/ai/providers/probe-models`
   - `POST /api/v1/admin/ai/providers/test-connection`
-  - `POST /api/v1/admin/ai/providers/order`
-  - `POST /api/v1/admin/ai/providers/budgets`
+  - `PUT /api/v1/admin/ai/providers/order`
+  - `PUT /api/v1/admin/ai/budgets`
   - `PUT /api/v1/workspaces/{ws}/ai-providers/order`
-  - `GET/PATCH /api/v1/workspaces/{ws}/ai-providers/budgets`
+  - `GET/PUT /api/v1/workspaces/{ws}/ai-providers/budgets`
 - **Agent Definitions:**
   - `POST /api/v1/agent-definitions`
   - `POST /api/v1/agent-definitions/{id}:validate`

@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
-**Target Commit:** `3e02ef08` (branch `docs/KAN-414-slice2-ai-docs`)  
+**Target Commit:** `d3eff3cc` (branch `docs/KAN-414-slice2-ai-docs`)  
 **Wiki Commit:** `ab0fd22` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
 
 ---
@@ -19,7 +19,7 @@ The documentation covers the entire Slice-2 subsystem across authoritative wiki 
 1. **Multi-Provider AI Engine & Token Budgets**:
    - Provider probing and connection testing routes: `POST /api/v1/admin/ai/providers/probe-models` (backend proxy discovery) and `POST /api/v1/admin/ai/providers/test-connection`.
    - Ordering and failover persistence: `PUT /api/v1/admin/ai/providers/order` (note: `PUT`) and `PUT /api/v1/workspaces/{ws}/ai-providers/order`.
-   - Token budget ceiling semantics verified: `PUT /api/v1/admin/ai/budgets` (note: `PUT /budgets`, not `/providers/budgets`) and `GET/PATCH /api/v1/workspaces/{ws}/ai-providers/budgets` where `token_cap=0` strictly enforces **Hard AI Freeze** (`TOKEN_BUDGET_EXCEEDED`) and `token_cap=10_000_000_000` indicates **Unlimited Quota**.
+   - Token budget ceiling semantics verified: `PUT /api/v1/admin/ai/budgets` (note: `PUT /budgets`, not `/providers/budgets`) and `GET/PUT /api/v1/workspaces/{ws}/ai-providers/budgets` (note: `PUT`, not `PATCH`) where `token_cap=0` strictly enforces **Hard AI Freeze** (`TOKEN_BUDGET_EXCEEDED`) and `token_cap=10_000_000_000` indicates **Unlimited Quota**.
    - Zero cleartext secrets exposed in frontend responses; credentials write-only (`mtls_client_cert_pem` correctly specified).
    - Air-gap behavior accurately detailed: provider creation/update returns HTTP 409 `AIR_GAP_EGRESS_DENIED`, while `/probe-models` and `/test-connection` return HTTP 200 with `{"ok": false, "error_code": "AIR_GAP_EGRESS_DENIED", ...}`.
 2. **Autonomous Agent Definitions & Validation Sandbox**:
@@ -57,7 +57,7 @@ The documentation covers the entire Slice-2 subsystem across authoritative wiki 
   - `PUT /api/v1/admin/ai/providers/order`
   - `PUT /api/v1/admin/ai/budgets`
   - `PUT /api/v1/workspaces/{ws}/ai-providers/order`
-  - `GET/PATCH /api/v1/workspaces/{ws}/ai-providers/budgets`
+  - `GET/PUT /api/v1/workspaces/{ws}/ai-providers/budgets`
 - **Agent Definitions:**
   - `POST /api/v1/agent-definitions`
   - `POST /api/v1/agent-definitions/{id}:validate`
@@ -79,19 +79,20 @@ The documentation covers the entire Slice-2 subsystem across authoritative wiki 
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Pytest Suite (`kanban/tests/`)**:
-   - **7/7 wiki sync tests passed in 0.14s** (`test_wiki_bundle_sync.py`).
+   - **7/7 wiki sync tests passed in 0.13s** (`test_wiki_bundle_sync.py`).
    - Image parity verified with zero external image links and zero unreferenced orphans.
 
 2. **Frontend Vitest Suite (`src/features/docs-center/`)**:
-   - **72/72 tests passed across 2 suites in 7.10s** (`DocsCenter.test.tsx` and `DocsCenterImages.test.tsx`).
+   - **72/72 tests passed across 2 suites in 6.93s** (`DocsCenter.test.tsx`: 51 tests, `DocsCenterImages.test.tsx`: 21 tests).
    - Branch coverage: **96.74%** (Statements 99.6%, Functions 100%, Lines 100%).
    - All 7 Slice-2 `docHref` anchors resolve cleanly to real heading elements.
+   - Responsive table styling verified in `DocMarkdownViewer.css`: `@media (max-width: 1024px)` auto-wraps and scales fonts; `@media (max-width: 640px)` stacks wide table rows into vertical cards, preventing horizontal clipping across mobile viewports.
 
 3. **Build & Quality Pipeline**:
    - `scripts/check_no_dashes.py`: 0 Unicode dashes repository-wide and across all wiki chapters.
    - `tsc -b --noEmit`: 0 TypeScript errors.
    - `eslint . --max-warnings 0`: 0 warnings, 0 errors.
-   - `vite build`: Clean production bundle in 1.29s.
+   - `vite build`: Clean production bundle in 1.26s.
 
 ---
 
