@@ -1,35 +1,32 @@
 diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.css b/kanban/web/src/features/settings/PasskeyEnrollModal.css
-index 44b12a81..88d1ebc9 100644
+index 44b12a81..d514b2b5 100644
 --- a/kanban/web/src/features/settings/PasskeyEnrollModal.css
 +++ b/kanban/web/src/features/settings/PasskeyEnrollModal.css
-@@ -1,6 +1,26 @@
+@@ -1,6 +1,23 @@
  /* Copyright 2026 Kanban Platform Contributors */
  /* Apache-2.0 License. See LICENSE for details. */
  
 +:root {
 +  --kb-passkey-enroll-bg: var(--bg-surface, #ffffff);
 +  --kb-passkey-enroll-border: var(--border-subtle, #e2e8f0);
-+  --kb-passkey-enroll-fg: var(--fg-primary, #0f172a);
 +}
 +
 +[data-theme='dark'] {
 +  --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
 +  --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
-+  --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
 +}
 +
 +@media (prefers-color-scheme: dark) {
 +  :root:not([data-theme='light']) {
 +    --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
 +    --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
-+    --kb-passkey-enroll-fg: var(--fg-primary, #f1f5f9);
 +  }
 +}
 +
  .kb-passkey-enroll-backdrop {
    position: fixed;
    inset: 0;
-@@ -15,11 +35,12 @@
+@@ -15,11 +32,12 @@
  }
  
  .kb-passkey-enroll-modal {
@@ -44,7 +41,7 @@ index 44b12a81..88d1ebc9 100644
    box-sizing: border-box;
    box-shadow: var(--shadow-xl);
    overflow: hidden;
-@@ -27,12 +48,20 @@
+@@ -27,12 +45,20 @@
    flex-direction: column;
  }
  
@@ -65,7 +62,7 @@ index 44b12a81..88d1ebc9 100644
  }
  
  .kb-passkey-enroll-title {
-@@ -78,6 +107,10 @@
+@@ -78,6 +104,10 @@
    display: flex;
    flex-direction: column;
    gap: var(--space-4);
@@ -76,7 +73,7 @@ index 44b12a81..88d1ebc9 100644
  }
  
  .kb-passkey-enroll-intro {
-@@ -93,10 +126,32 @@
+@@ -93,10 +123,26 @@
    gap: var(--space-2);
  }
  
@@ -97,19 +94,13 @@ index 44b12a81..88d1ebc9 100644
 +  line-height: 1.4;
 +}
 +
-+.kb-passkey-enroll-label-text {
-+  display: inline-flex;
-+  align-items: center;
-+  line-height: 1.4;
-+}
-+
 +.kb-passkey-enroll-label-row .field-help-hint,
 +.kb-passkey-enroll-label .field-help-hint {
 +  margin: 0;
  }
  
  .kb-passkey-enroll-input {
-@@ -181,17 +236,28 @@
+@@ -181,17 +227,28 @@
    display: flex;
    justify-content: flex-end;
    gap: var(--space-2);
@@ -142,7 +133,7 @@ index 44b12a81..88d1ebc9 100644
    }
  }
 diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.tsx b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
-index 48215bee..1d9fa393 100644
+index 48215bee..7c6665bf 100644
 --- a/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
 +++ b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
 @@ -13,6 +13,8 @@ import {
@@ -236,15 +227,6 @@ index 48215bee..1d9fa393 100644
                  <label
                    className={`kb-passkey-enroll-option ${
                      attachmentChoice === 'platform' ? 'kb-passkey-enroll-option--selected' : ''
-@@ -344,7 +390,7 @@ export function PasskeyEnrollModal({
-               data-testid="passkey-enroll-submit-btn"
-               disabled={isSubmitting || !nickname.trim()}
-             >
--              {isSubmitting ? 'Registering...' : 'Continue'}
-+              {isSubmitting ? 'Registering...' : 'Register'}
-             </button>
-           </div>
-         </form>
 diff --git a/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx b/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
 index db0b3dd8..7c9ff6c5 100644
 --- a/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
