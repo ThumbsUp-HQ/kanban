@@ -39,9 +39,15 @@
 - Created `DefaultWorkflowHooksStudio.tsx` in `kanban/web/src/features/workflows/`:
   - System templates management at `/admin/workflows` (linked in `AdminStudioSubnav.tsx` under `serverOnly: true`, registered in `routes.tsx`, linked in `Topbar.tsx` avatar menu).
   - Workspace templates management in `WorkspaceSettingsPage.tsx` under the `workflows` tab (`/workspaces/settings/workflows`).
+  - Conditional input fields based on `formHookKind`:
+    - `agent_interceptor` (`agent_async`): renders required `Agent Slug *` input (`data-testid="template-agent-slug-input"`), sets `wasm_module_sha256 = null`.
+    - `wasm_validator` (`wasm_sync`): hides agent input, renders required `Wasm Module SHA-256 *` hex digest input (`data-testid="template-wasm-sha-input"`), sets `agent = null, agent_slug = null`.
+    - `builtin`: renders `Builtin Guard *` selector (`data-testid="template-builtin-select"`) populated from verified builtin formulas (`qa-proof-validator`, `security-invariant-validator`, `auto-label-mutator`), sets `agent = null, agent_slug = null`.
+    - Edit dialog populates `formWasmSha256` from `tpl.wasm_module_sha256`.
   - Standard `.workflow-dialog` class hierarchy with Escape key handler and `.workflow-form-grid-2` responsive collapse on mobile.
   - Strict UI theme variable usage (`var(--bg-surface)`, `var(--border-subtle)`, `var(--fg-secondary)`, etc.) for dark/light mode compatibility.
   - Client-side validation for timeout range `[1000, 600000]` ms and required fields.
+  - `fetchDefaultWorkflowHooks` in `api.ts` does NOT swallow errors; HTTP 403 / 500 / AAL2 errors propagate cleanly to render the error alert banner while suppressing misleading empty states.
 - Updated `HookPipelineRow.tsx` with an `Inherited from Default` badge (`data-testid="hook-inherited-badge-{hook.id}"`) using `.hook-inherited-badge` token styles and enabled Project Admins to disable, edit, or detach hooks.
 - Added `Sync Default Hooks` button (`data-testid="sync-default-hooks-btn"`) on `WorkflowStudioPage.tsx` with robust error alert banner on failure (`role="alert"`).
 - Updated API client functions in `kanban/web/src/features/workflows/api.ts`.
@@ -54,16 +60,16 @@
 ### Test Logs
 - `docs/qa/KAN-438/build-check.txt`:
   - `ruff check .`: All checks passed.
-  - `ruff format --check .`: 2906 files already formatted.
+  - `ruff format --check .`: 2908 files already formatted.
   - `mypy`: Success (0 errors in 1383 source files).
   - `lint-imports`: Contracts kept (2 kept, 0 broken).
   - `scripts.check_no_dashes`: Clean (strictly zero Unicode dashes).
   - `database.migrations.cli check-migrations --static-only`: All 86 migrations valid. Single head: `p6_24_default_workflow_hooks`.
 - `docs/qa/KAN-438/unit-test-results.txt`:
-  - `kanban/tests/workflows/test_default_workflow_hooks.py`: 8 passed (system/workspace inheritance, detach/non-agentic issue tracker behavior, RBAC 403 / AAL2 checks, cross-tenant isolation, admin bounds and 409 conflict validation, disabled workspace template suppression, blueprint inheritance).
+  - `kanban/tests/workflows/test_default_workflow_hooks.py`: 10 passed (system/workspace inheritance, detach/non-agentic issue tracker behavior, RBAC 403 / AAL2 checks, cross-tenant isolation, admin bounds and 409 conflict validation, disabled workspace template suppression, blueprint inheritance, wasm & builtin inheritance, and cross-field rejection validations).
   - `database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py`: 1 passed (full migration upgrade/downgrade cycle).
   - `kanban/tests/security/test_admin_routes_protected.py`: 2 passed (`/api/v1/admin/default-workflow-hooks` protected).
-  - `DefaultWorkflowHooksStudio.test.tsx`: 10 passed (vitest).
+  - `DefaultWorkflowHooksStudio.test.tsx`: 13 passed (vitest).
 - `docs/qa/KAN-438/changed-files-manifest.txt`: List of all touched files.
 - `docs/qa/KAN-438/git-diff.patch`: Complete patch relative to main base commit.
 

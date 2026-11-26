@@ -12,6 +12,7 @@ import {
   createDefaultWorkflowHook,
   updateDefaultWorkflowHook,
   deleteDefaultWorkflowHook,
+  DEFAULT_WASM_MODULES,
   type DefaultWorkflowHook,
   type DefaultHookScopeKind,
   type CreateDefaultWorkflowHookPayload,
@@ -53,6 +54,7 @@ export function DefaultWorkflowHooksStudio({
   const [formToState, setFormToState] = useState('Done');
   const [formHookKind, setFormHookKind] = useState('agent_interceptor');
   const [formAgentSlug, setFormAgentSlug] = useState('@reality-checker');
+  const [formWasmSha256, setFormWasmSha256] = useState<string>(DEFAULT_WASM_MODULES[0]?.sha256 ?? '');
   const [formSortRank, setFormSortRank] = useState(100);
   const [formTimeoutMs, setFormTimeoutMs] = useState<number | ''>(60000);
   const [formFailurePolicy, setFormFailurePolicy] = useState<'fail_closed' | 'fail_open_warn'>('fail_closed');
@@ -79,6 +81,7 @@ export function DefaultWorkflowHooksStudio({
     setFormToState('Done');
     setFormHookKind('agent_interceptor');
     setFormAgentSlug('@reality-checker');
+    setFormWasmSha256(DEFAULT_WASM_MODULES[0]?.sha256 ?? '');
     setFormSortRank(100);
     setFormTimeoutMs(60000);
     setFormFailurePolicy('fail_closed');
@@ -109,6 +112,7 @@ export function DefaultWorkflowHooksStudio({
     setFormHookKind(initialKind);
 
     setFormAgentSlug(template.agent_slug ? `@${template.agent_slug.replace(/^@+/, '')}` : '');
+    setFormWasmSha256(template.wasm_module_sha256 ?? DEFAULT_WASM_MODULES[0]?.sha256 ?? '');
     setFormSortRank(template.sort_rank);
     setFormTimeoutMs(template.timeout_ms ?? '');
     setFormFailurePolicy(template.failure_policy === 'fail_open_warn' ? 'fail_open_warn' : 'fail_closed');
@@ -175,36 +179,130 @@ export function DefaultWorkflowHooksStudio({
     }
 
     try {
-      if (editingTemplate) {
-        const payload: UpdateDefaultWorkflowHookPayload = {
-          name: formName.trim(),
-          from_state_name: cleanFromState,
-          to_state_name: formToState.trim(),
-          hook_kind: formHookKind,
-          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
-          agent_slug: cleanAgentSlug,
-          sort_rank: formSortRank,
-          timeout_ms: timeoutValue,
-          failure_policy: formFailurePolicy,
-          max_rework_attempts: formMaxRework,
-        };
-        await updateDefaultWorkflowHook(editingTemplate.id, payload, workspaceId);
+      if (formHookKind === 'agent_interceptor') {
+        const cleanAgentSlug = formAgentSlug.trim().replace(/^@+/, '') || null;
+        if (!cleanAgentSlug) {
+          setErrorMessage('Agent slug is required for agent gate hooks.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (editingTemplate) {
+          const payload: UpdateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'agent_async',
+            agent: `@${cleanAgentSlug}`,
+            agent_slug: cleanAgentSlug,
+            agent_definition_id: null,
+            wasm_module_sha256: null,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await updateDefaultWorkflowHook(editingTemplate.id, payload, workspaceId);
+        } else {
+          const payload: CreateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            scope_kind: scopeKind,
+            workspace_id: scopeKind === 'workspace' ? (workspaceId ?? null) : null,
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'agent_async',
+            agent: `@${cleanAgentSlug}`,
+            agent_slug: cleanAgentSlug,
+            wasm_module_sha256: null,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await createDefaultWorkflowHook(payload, workspaceId);
+        }
+      } else if (formHookKind === 'wasm_validator') {
+        const cleanWasmSha = formWasmSha256.trim();
+        if (!cleanWasmSha) {
+          setErrorMessage('Wasm module SHA-256 is required for wasm validator hooks.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (editingTemplate) {
+          const payload: UpdateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'wasm_sync',
+            agent: null,
+            agent_slug: null,
+            agent_definition_id: null,
+            wasm_module_sha256: cleanWasmSha,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await updateDefaultWorkflowHook(editingTemplate.id, payload, workspaceId);
+        } else {
+          const payload: CreateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            scope_kind: scopeKind,
+            workspace_id: scopeKind === 'workspace' ? (workspaceId ?? null) : null,
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'wasm_sync',
+            agent: null,
+            agent_slug: null,
+            wasm_module_sha256: cleanWasmSha,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await createDefaultWorkflowHook(payload, workspaceId);
+        }
       } else {
-        const payload: CreateDefaultWorkflowHookPayload = {
-          name: formName.trim(),
-          scope_kind: scopeKind,
-          workspace_id: scopeKind === 'workspace' ? (workspaceId ?? null) : null,
-          from_state_name: cleanFromState,
-          to_state_name: formToState.trim(),
-          hook_kind: formHookKind,
-          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
-          agent_slug: cleanAgentSlug,
-          sort_rank: formSortRank,
-          timeout_ms: timeoutValue,
-          failure_policy: formFailurePolicy,
-          max_rework_attempts: formMaxRework,
-        };
-        await createDefaultWorkflowHook(payload, workspaceId);
+        // builtin
+        const cleanWasmSha = formWasmSha256.trim() || (DEFAULT_WASM_MODULES[0]?.sha256 ?? '');
+        if (!cleanWasmSha) {
+          setErrorMessage('Builtin module SHA-256 is required for builtin guard hooks.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (editingTemplate) {
+          const payload: UpdateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'builtin',
+            agent: null,
+            agent_slug: null,
+            agent_definition_id: null,
+            wasm_module_sha256: cleanWasmSha,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await updateDefaultWorkflowHook(editingTemplate.id, payload, workspaceId);
+        } else {
+          const payload: CreateDefaultWorkflowHookPayload = {
+            name: formName.trim(),
+            scope_kind: scopeKind,
+            workspace_id: scopeKind === 'workspace' ? (workspaceId ?? null) : null,
+            from_state_name: cleanFromState,
+            to_state_name: formToState.trim(),
+            hook_kind: 'builtin',
+            agent: null,
+            agent_slug: null,
+            wasm_module_sha256: cleanWasmSha,
+            sort_rank: formSortRank,
+            timeout_ms: timeoutValue,
+            failure_policy: formFailurePolicy,
+            max_rework_attempts: formMaxRework,
+          };
+          await createDefaultWorkflowHook(payload, workspaceId);
+        }
       }
       await queryClient.invalidateQueries({ queryKey });
       setDialogOpen(false);
@@ -282,7 +380,7 @@ export function DefaultWorkflowHooksStudio({
       )}
 
       {/* Empty State */}
-      {!isLoading && templates.length === 0 && (
+      {!isLoading && !error && templates.length === 0 && (
         <div
           data-testid="empty-templates-notice"
           style={{
@@ -390,6 +488,7 @@ export function DefaultWorkflowHooksStudio({
                   {/* Agent Slug */}
                   {tpl.agent_slug && (
                     <span
+                      data-testid={`template-agent-slug-${tpl.id}`}
                       style={{
                         fontFamily: 'var(--font-mono, monospace)',
                         fontSize: '0.8rem',
@@ -397,6 +496,21 @@ export function DefaultWorkflowHooksStudio({
                       }}
                     >
                       @{tpl.agent_slug.replace(/^@+/, '')}
+                    </span>
+                  )}
+
+                  {/* WASM Module SHA */}
+                  {tpl.wasm_module_sha256 && (
+                    <span
+                      data-testid={`template-wasm-sha-${tpl.id}`}
+                      style={{
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: '0.8rem',
+                        color: 'var(--fg-secondary)',
+                      }}
+                      title={tpl.wasm_module_sha256}
+                    >
+                      SHA: {tpl.wasm_module_sha256.slice(0, 8)}...
                     </span>
                   )}
 
@@ -568,7 +682,7 @@ export function DefaultWorkflowHooksStudio({
                   </div>
                 </div>
 
-                {/* Hook Kind & Agent Slug */}
+                {/* Hook Kind & Target Configuration */}
                 <div className="workflow-form-grid-2">
                   <div>
                     <label
@@ -583,32 +697,91 @@ export function DefaultWorkflowHooksStudio({
                       className="workflow-form-control"
                       style={{ width: '100%' }}
                       value={formHookKind}
-                      onChange={(e) => { setFormHookKind(e.target.value); }}
+                      onChange={(e) => {
+                        const newKind = e.target.value;
+                        setFormHookKind(newKind);
+                        if (newKind === 'builtin' || newKind === 'wasm_validator') {
+                          if (!formWasmSha256) {
+                            setFormWasmSha256(DEFAULT_WASM_MODULES[0]?.sha256 ?? '');
+                          }
+                        }
+                      }}
                     >
                       <option value="agent_interceptor">Agent Gate (Async)</option>
                       <option value="wasm_validator">Wasm Validator (Sync)</option>
                       <option value="builtin">Builtin Guard</option>
                     </select>
                   </div>
-                  <div>
-                    <label
-                      htmlFor="template-agent-slug-input"
-                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
-                    >
-                      Agent Slug
-                    </label>
-                    <input
-                      id="template-agent-slug-input"
-                      data-testid="template-agent-slug-input"
-                      type="text"
-                      className="workflow-form-control"
-                      style={{ width: '100%' }}
-                      placeholder="@reality-checker"
-                      value={formAgentSlug}
-                      onChange={(e) => { setFormAgentSlug(e.target.value); }}
-                      maxLength={80}
-                    />
-                  </div>
+
+                  {formHookKind === 'agent_interceptor' && (
+                    <div>
+                      <label
+                        htmlFor="template-agent-slug-input"
+                        style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
+                      >
+                        Agent Slug *
+                      </label>
+                      <input
+                        id="template-agent-slug-input"
+                        data-testid="template-agent-slug-input"
+                        type="text"
+                        className="workflow-form-control"
+                        style={{ width: '100%' }}
+                        placeholder="@reality-checker"
+                        value={formAgentSlug}
+                        onChange={(e) => { setFormAgentSlug(e.target.value); }}
+                        maxLength={80}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {formHookKind === 'wasm_validator' && (
+                    <div>
+                      <label
+                        htmlFor="template-wasm-sha-input"
+                        style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
+                      >
+                        Wasm Module SHA-256 *
+                      </label>
+                      <input
+                        id="template-wasm-sha-input"
+                        data-testid="template-wasm-sha-input"
+                        type="text"
+                        className="workflow-form-control"
+                        style={{ width: '100%' }}
+                        placeholder="64-character hex SHA-256"
+                        value={formWasmSha256}
+                        onChange={(e) => { setFormWasmSha256(e.target.value); }}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {formHookKind === 'builtin' && (
+                    <div>
+                      <label
+                        htmlFor="template-builtin-select"
+                        style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
+                      >
+                        Builtin Guard *
+                      </label>
+                      <select
+                        id="template-builtin-select"
+                        data-testid="template-builtin-select"
+                        className="workflow-form-control"
+                        style={{ width: '100%' }}
+                        value={formWasmSha256}
+                        onChange={(e) => { setFormWasmSha256(e.target.value); }}
+                      >
+                        {DEFAULT_WASM_MODULES.map((m) => (
+                          <option key={m.sha256} value={m.sha256}>
+                            {m.name} ({m.target_latency_budget ?? '<25ms'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Timeout & Failure Policy */}

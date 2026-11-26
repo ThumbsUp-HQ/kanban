@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from database.models.agent_definition import AgentDefinition
+from database.models.principals import Principal
 from database.models.projects import WorkflowState
+from database.models.wasm_module import ApprovedWasmModule
 from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
+from kanban.workflows.builtins import seed_builtin_wasm
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 
 if TYPE_CHECKING:
@@ -177,6 +180,36 @@ async def materialize_default_workflow_hooks(
                 tpl.name,
             )
             continue
+
+        if wasm_sha is not None:
+            # Ensure builtin WASM module is seeded in target workspace
+            mod_stmt = select(ApprovedWasmModule.id).where(
+                ApprovedWasmModule.workspace_id == workspace_id,
+                ApprovedWasmModule.sha256 == wasm_sha,
+            )
+            existing_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+            if existing_mod is None:
+                p_stmt = (
+                    select(Principal.id)
+                    .where(
+                        Principal.workspace_id == workspace_id,
+                        Principal.principal_type == "USER",
+                    )
+                    .limit(1)
+                )
+                creator_p = (await session.execute(p_stmt)).scalar_one_or_none()
+                if creator_p is None:
+                    creator_p = (
+                        await session.execute(select(Principal.id).limit(1))
+                    ).scalar_one_or_none()
+                if creator_p is not None:
+                    await seed_builtin_wasm(
+                        session,
+                        workspace_id,
+                        creator_p,
+                        wasm_sha,
+                        project_id=project_id,
+                    )
 
         clean_fields = list(tpl.allowed_mutable_fields)
 

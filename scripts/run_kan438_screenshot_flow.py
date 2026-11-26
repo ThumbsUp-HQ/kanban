@@ -64,7 +64,11 @@ async def prepare_database() -> dict[str, Any]:
         up_sql = f.read()
     mig_conn = await asyncpg.connect(user="kanban_migrator", database=DB_NAME, host=SOCKET_DIR)
     try:
-        await mig_conn.execute(up_sql)
+        table_exists = await mig_conn.fetchval(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'default_workflow_hooks'"
+        )
+        if not table_exists:
+            await mig_conn.execute(up_sql)
     finally:
         await mig_conn.close()
 
@@ -151,6 +155,9 @@ async def prepare_database() -> dict[str, Any]:
             hook_kind="wasm_sync",
             sort_rank=50,
             is_enabled=True,
+            wasm_module_sha256=bytes.fromhex(
+                "92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968"
+            ),
             allowed_mutable_fields=[],
             failure_policy="fail_open_warn",
             timeout_ms=None,

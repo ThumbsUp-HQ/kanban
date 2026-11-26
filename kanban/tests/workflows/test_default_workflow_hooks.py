@@ -15,6 +15,7 @@ from sqlalchemy import select, text
 from database.models.agent_definition import AgentDefinition
 from database.models.projects import Project
 from database.models.spine import Workspace
+from database.models.wasm_module import ApprovedWasmModule
 from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
 from kanban.projects.blueprint_service import (
     BlueprintState,
@@ -568,6 +569,7 @@ async def test_admin_validations_and_conflict_handling(
             "name": "Unique Name Test",
             "scope_kind": "system",
             "to_state_name": "Done",
+            "agent": "@reality-checker",
         },
     )
     assert res_first.status_code == 201, res_first.text
@@ -578,6 +580,7 @@ async def test_admin_validations_and_conflict_handling(
             "name": "Unique Name Test",
             "scope_kind": "system",
             "to_state_name": "Done",
+            "agent": "@reality-checker",
         },
     )
     assert res_dup.status_code == 409, res_dup.text
@@ -726,3 +729,225 @@ async def test_apply_blueprint_inherits_default_hooks(
     inherited = [h for h in hooks if str(h.inherited_from_template_id) == tpl_id]
     assert len(inherited) == 1
     assert inherited[0].name == "Blueprint Hook Inheritance Gate"
+
+
+@pytest.mark.asyncio
+async def test_wasm_and_builtin_default_hooks_inheritance(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify wasm_sync and builtin default hook templates materialize onto new projects."""
+    session = api_env.seed
+    ws_id = api_env.workspace_id
+    admin = await make_user("wasm_adm", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    qa_wasm_sha = "92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968"
+    sec_wasm_sha = "7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874"
+
+    # 1. Create builtin system template
+    res_sys = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "System Builtin QA Guard",
+            "scope_kind": "system",
+            "from_state_name": "*",
+            "to_state_name": "Done",
+            "hook_kind": "builtin",
+            "wasm_module_sha256": qa_wasm_sha,
+            "failure_policy": "fail_closed",
+        },
+    )
+    assert res_sys.status_code == 201, res_sys.text
+    sys_tpl_id = res_sys.json()["id"]
+
+    # 2. Create wasm_validator workspace template
+    res_ws = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Workspace Sec Guard",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "wasm_validator",
+            "wasm_module_sha256": sec_wasm_sha,
+            "failure_policy": "fail_closed",
+        },
+    )
+    assert res_ws.status_code == 201, res_ws.text
+    ws_tpl_id = res_ws.json()["id"]
+
+    # 3. Create project
+    res_proj = await client_admin.post(
+        "/api/v1/projects",
+        json={"name": "WASM Project", "identifier": "WASM1"},
+    )
+    assert res_proj.status_code == 201, res_proj.text
+    proj_id = uuid.UUID(res_proj.json()["id"])
+
+    # 4. Verify hooks materialized onto project
+    hooks = list(
+        (
+            await session.execute(
+                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(hooks) >= 2
+    sys_hook = next((h for h in hooks if str(h.inherited_from_template_id) == sys_tpl_id), None)
+    ws_hook = next((h for h in hooks if str(h.inherited_from_template_id) == ws_tpl_id), None)
+
+    assert sys_hook is not None
+    assert sys_hook.name == "System Builtin QA Guard"
+    assert sys_hook.wasm_module_sha256 == bytes.fromhex(qa_wasm_sha)
+    assert sys_hook.agent_definition_id is None
+
+    assert ws_hook is not None
+    assert ws_hook.name == "Workspace Sec Guard"
+    assert ws_hook.wasm_module_sha256 == bytes.fromhex(sec_wasm_sha)
+    assert ws_hook.agent_definition_id is None
+
+    # 5. Verify ApprovedWasmModule was seeded in workspace for both shas
+    modules = list(
+        (
+            await session.execute(
+                select(ApprovedWasmModule).where(ApprovedWasmModule.workspace_id == ws_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    mod_shas = {m.sha256.hex() for m in modules}
+    assert qa_wasm_sha in mod_shas
+    assert sec_wasm_sha in mod_shas
+
+
+@pytest.mark.asyncio
+async def test_hook_kind_cross_field_validations(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify cross-field validation rules between hook_kind, wasm_module_sha256, and agent targets."""
+    session = api_env.seed
+    ws_id = api_env.workspace_id
+    admin = await make_user("val_adm", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    qa_wasm_sha = "92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968"
+
+    # 1. wasm_sync missing wasm_module_sha256 -> 422 MISSING_WASM_MODULE
+    res = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "WASM No Sha",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "wasm_sync",
+        },
+    )
+    assert res.status_code == 422, res.text
+    assert res.json()["code"] == "MISSING_WASM_MODULE"
+
+    # 2. agent_async missing agent target -> 422 MISSING_AGENT_TARGET
+    res = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Agent No Target",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "agent_async",
+        },
+    )
+    assert res.status_code == 422, res.text
+    assert res.json()["code"] == "MISSING_AGENT_TARGET"
+
+    # 3. agent_async with wasm_module_sha256 -> 422 INVALID_HOOK_TARGET
+    res = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Agent With Wasm",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "agent_async",
+            "agent": "@reality-checker",
+            "wasm_module_sha256": qa_wasm_sha,
+        },
+    )
+    assert res.status_code == 422, res.text
+    assert res.json()["code"] == "INVALID_HOOK_TARGET"
+
+    # 4. wasm_sync with agent -> 422 INVALID_HOOK_TARGET
+    res = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Wasm With Agent",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "wasm_sync",
+            "wasm_module_sha256": qa_wasm_sha,
+            "agent": "@reality-checker",
+        },
+    )
+    assert res.status_code == 422, res.text
+    assert res.json()["code"] == "INVALID_HOOK_TARGET"
+
+    # 5. Create valid agent template, then PATCH with wasm_module_sha256 -> 422 INVALID_HOOK_TARGET
+    res_agent = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Valid Agent Hook",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "agent_async",
+            "agent": "@reality-checker",
+        },
+    )
+    assert res_agent.status_code == 201, res_agent.text
+    agent_tpl_id = res_agent.json()["id"]
+
+    res_patch = await client_admin.patch(
+        f"/api/v1/admin/default-workflow-hooks/{agent_tpl_id}",
+        json={"wasm_module_sha256": qa_wasm_sha},
+    )
+    assert res_patch.status_code == 422, res_patch.text
+    assert res_patch.json()["code"] == "INVALID_HOOK_TARGET"
+
+    # 6. Create valid wasm template, then PATCH with agent -> 422 INVALID_HOOK_TARGET
+    res_wasm = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Valid Wasm Hook",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "hook_kind": "wasm_sync",
+            "wasm_module_sha256": qa_wasm_sha,
+        },
+    )
+    assert res_wasm.status_code == 201, res_wasm.text
+    wasm_tpl_id = res_wasm.json()["id"]
+
+    res_patch_wasm = await client_admin.patch(
+        f"/api/v1/admin/default-workflow-hooks/{wasm_tpl_id}",
+        json={"agent": "@reality-checker"},
+    )
+    assert res_patch_wasm.status_code == 422, res_patch_wasm.text
+    assert res_patch_wasm.json()["code"] == "INVALID_HOOK_TARGET"

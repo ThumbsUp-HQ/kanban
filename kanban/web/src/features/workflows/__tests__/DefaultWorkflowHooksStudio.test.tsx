@@ -361,7 +361,7 @@ describe('DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438)', () =>
       expect(updateSpy).toHaveBeenCalledWith(
         'template-ws-wasm',
         expect.objectContaining({
-          hook_kind: 'wasm_validator',
+          hook_kind: 'wasm_sync',
           timeout_ms: 30000,
         }),
         'ws-1234',
@@ -394,5 +394,129 @@ describe('DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438)', () =>
       expect(alert.className).toContain('workflow-alert-danger');
       expect(alert.textContent).toContain('Network sync error');
     });
+  });
+
+  it('switches hook kind to wasm_validator and submits wasm_module_sha256', async () => {
+    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([]);
+    const createSpy = vi.spyOn(api, 'createDefaultWorkflowHook').mockResolvedValue({
+      ...MOCK_SYSTEM_TEMPLATE,
+      id: 'template-wasm-1',
+      hook_kind: 'wasm_validator',
+      wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+      agent_slug: null,
+    });
+
+    renderStudio({ scopeKind: 'system' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-default-hook-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('create-default-hook-btn'));
+    expect(screen.getByTestId('template-dialog')).toBeDefined();
+
+    // Fill common fields
+    fireEvent.change(screen.getByTestId('template-name-input'), { target: { value: 'custom-wasm-guard' } });
+    fireEvent.change(screen.getByTestId('template-to-state-input'), { target: { value: 'Done' } });
+
+    // Switch hook kind to wasm_validator
+    fireEvent.change(screen.getByTestId('template-hook-kind-select'), {
+      target: { value: 'wasm_validator' },
+    });
+
+    // Verify wasm input is shown and agent input is hidden
+    expect(screen.getByTestId('template-wasm-sha-input')).toBeDefined();
+    expect(screen.queryByTestId('template-agent-slug-input')).toBeNull();
+
+    // Fill wasm sha
+    fireEvent.change(screen.getByTestId('template-wasm-sha-input'), {
+      target: { value: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968' },
+    });
+
+    fireEvent.click(screen.getByTestId('save-template-btn'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'custom-wasm-guard',
+          hook_kind: 'wasm_sync',
+          wasm_module_sha256: '92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968',
+          agent: null,
+          agent_slug: null,
+        }),
+        undefined,
+      );
+    });
+  });
+
+  it('switches hook kind to builtin and submits selected builtin sha', async () => {
+    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([]);
+    const createSpy = vi.spyOn(api, 'createDefaultWorkflowHook').mockResolvedValue({
+      ...MOCK_SYSTEM_TEMPLATE,
+      id: 'template-builtin-1',
+      hook_kind: 'builtin',
+      wasm_module_sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
+      agent_slug: null,
+    });
+
+    renderStudio({ scopeKind: 'system' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('create-default-hook-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('create-default-hook-btn'));
+    expect(screen.getByTestId('template-dialog')).toBeDefined();
+
+    // Fill common fields
+    fireEvent.change(screen.getByTestId('template-name-input'), { target: { value: 'builtin-sec-guard' } });
+    fireEvent.change(screen.getByTestId('template-to-state-input'), { target: { value: 'Done' } });
+
+    // Switch hook kind to builtin
+    fireEvent.change(screen.getByTestId('template-hook-kind-select'), {
+      target: { value: 'builtin' },
+    });
+
+    // Verify builtin select is shown and agent input is hidden
+    const builtinSelect = screen.getByTestId<HTMLSelectElement>('template-builtin-select');
+    expect(builtinSelect).toBeDefined();
+    expect(screen.queryByTestId('template-agent-slug-input')).toBeNull();
+
+    // Change to security-invariant-validator
+    fireEvent.change(builtinSelect, {
+      target: { value: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874' },
+    });
+
+    fireEvent.click(screen.getByTestId('save-template-btn'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'builtin-sec-guard',
+          hook_kind: 'builtin',
+          wasm_module_sha256: '7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874',
+          agent: null,
+          agent_slug: null,
+        }),
+        undefined,
+      );
+    });
+  });
+
+  it('renders error alert banner and suppresses empty notice when fetchDefaultWorkflowHooks fails', async () => {
+    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockRejectedValue(
+      new Error('HTTP 403: Administrative role required'),
+    );
+
+    renderStudio({ scopeKind: 'system' });
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeDefined();
+      expect(alert.textContent).toContain('HTTP 403: Administrative role required');
+    });
+
+    // Ensure misleading empty notice is NOT shown when error occurred
+    expect(screen.queryByTestId('empty-templates-notice')).toBeNull();
   });
 });

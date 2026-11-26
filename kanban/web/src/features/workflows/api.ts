@@ -614,24 +614,20 @@ export async function fetchDefaultWorkflowHooks(
   scopeKind?: DefaultHookScopeKind,
   workspaceId?: string,
 ): Promise<DefaultWorkflowHook[]> {
-  try {
-    const params = new URLSearchParams();
-    if (scopeKind) params.set('scope_kind', scopeKind);
-    if (workspaceId && scopeKind !== 'system') params.set('workspace_id', workspaceId);
-    const qs = params.toString();
-    const endpoint =
-      workspaceId && scopeKind !== 'system'
-        ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=false` : ''}`
-        : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
-    const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
-    if (!Array.isArray(data)) return [];
-    if (scopeKind) {
-      return data.filter((t) => t.scope_kind === scopeKind);
-    }
-    return data;
-  } catch {
-    return [];
+  const params = new URLSearchParams();
+  if (scopeKind) params.set('scope_kind', scopeKind);
+  if (workspaceId && scopeKind !== 'system') params.set('workspace_id', workspaceId);
+  const qs = params.toString();
+  const endpoint =
+    workspaceId && scopeKind !== 'system'
+      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=false` : ''}`
+      : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
+  const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
+  if (!Array.isArray(data)) return [];
+  if (scopeKind) {
+    return data.filter((t) => t.scope_kind === scopeKind);
   }
+  return data;
 }
 
 export async function createDefaultWorkflowHook(

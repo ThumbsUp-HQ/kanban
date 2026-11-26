@@ -24,7 +24,7 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
 from kanban.auth.mfa.policy import require_admin_aal2
-from kanban.workflows.builtins import BUILTIN_WASM_FORMULAS, seed_builtin_wasm
+from kanban.workflows.builtins import BUILTIN_WASM_BY_SHA, BUILTIN_WASM_FORMULAS, seed_builtin_wasm
 from kanban.workflows.hooks_service import _parse_sha256_hex, _validate_mutable_fields
 
 logger = logging.getLogger(__name__)
@@ -313,7 +313,9 @@ async def _validate_wasm_sha(
                 detail="WASM module SHA-256 is not approved in this workspace.",
             )
     elif scope_kind == "system":
-        is_builtin = any(b.sha256_bytes == wasm_bytes for b in BUILTIN_WASM_FORMULAS)
+        is_builtin = wasm_bytes in BUILTIN_WASM_BY_SHA or any(
+            b.sha256_bytes == wasm_bytes for b in BUILTIN_WASM_FORMULAS
+        )
         if not is_builtin:
             sys_stmt = select(ApprovedWasmModule.id).where(ApprovedWasmModule.sha256 == wasm_bytes)
             if (await session.execute(sys_stmt)).scalar_one_or_none() is None:
@@ -424,36 +426,7 @@ async def admin_create_default_hook(  # noqa: PLR0915
                     title="Invalid Template Scope",
                     detail="System templates must have workspace_id set to null.",
                 )
-            if body.agent_definition_id is not None:
-                raise ProblemException(
-                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
-                    status=422,
-                    title="System Template Requires Agent Slug",
-                    detail=(
-                        "System templates must not specify an agent_definition_id; "
-                        "use agent_slug instead to prevent cross-tenant leakage."
-                    ),
-                )
-            if body.agent is not None:
-                raw_agent = body.agent.strip()
-                try:
-                    uuid.UUID(raw_agent)
-                    raise ProblemException(
-                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
-                        status=422,
-                        title="System Template Requires Agent Slug",
-                        detail=(
-                            "System templates must specify an agent slug (e.g. '@reality-checker') "
-                            "instead of a UUID."
-                        ),
-                    )
-                except ValueError:
-                    agent_slug = raw_agent.lstrip("@")
-            elif body.agent_slug is not None:
-                agent_slug = body.agent_slug.strip().lstrip("@")
-            agent_def_id = None
         else:
-            # Workspace scope
             target_ws_id = body.workspace_id or caller.workspace_id
             if target_ws_id != caller.workspace_id and not is_server_admin:
                 raise ProblemException(
@@ -471,58 +444,152 @@ async def admin_create_default_hook(  # noqa: PLR0915
                 )
             body.workspace_id = target_ws_id
 
-            agent_def_id = body.agent_definition_id
-            agent_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
-
-            if body.agent is not None:
-                raw_agent = body.agent.strip()
-                try:
-                    agent_def_id = uuid.UUID(raw_agent)
-                except ValueError:
-                    agent_slug = raw_agent.lstrip("@")
-                    ad_stmt = select(AgentDefinition).where(
-                        AgentDefinition.workspace_id == target_ws_id,
-                        AgentDefinition.slug == agent_slug,
-                    )
-                    ad_row = (await session.execute(ad_stmt)).scalar_one_or_none()
-                    if ad_row is not None:
-                        agent_def_id = ad_row.id
-
-            if agent_def_id is not None:
-                ad_stmt = select(AgentDefinition).where(
-                    AgentDefinition.id == agent_def_id,
-                    AgentDefinition.workspace_id == target_ws_id,
+        if hook_kind == "agent_async":
+            if body.wasm_module_sha256 is not None:
+                raise ProblemException(
+                    code="INVALID_HOOK_TARGET",
+                    status=422,
+                    title="Invalid Hook Target",
+                    detail="agent_async hooks must not specify a wasm_module_sha256.",
                 )
-                agent_row = (await session.execute(ad_stmt)).scalar_one_or_none()
-                if agent_row is None:
+            if body.scope_kind == "system":
+                if body.agent_definition_id is not None:
                     raise ProblemException(
-                        code="AGENT_NOT_FOUND",
+                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
                         status=422,
-                        title="Agent Not Found",
-                        detail=f"Agent definition '{agent_def_id}' not found in target workspace.",
+                        title="System Template Requires Agent Slug",
+                        detail=(
+                            "System templates must not specify an agent_definition_id; "
+                            "use agent_slug instead to prevent cross-tenant leakage."
+                        ),
                     )
-                if agent_row.slug and not agent_slug:
-                    agent_slug = agent_row.slug
-                if agent_row.harness_kind == "cli_pipe":
+                if body.agent is not None:
+                    raw_agent = body.agent.strip()
                     try:
-                        assert_runtime_argv(agent_row)
-                    except CliPolicyError as exc:
+                        uuid.UUID(raw_agent)
                         raise ProblemException(
-                            code="CLI_POLICY_VIOLATION",
+                            code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
                             status=422,
-                            title="CLI Policy Violation",
-                            detail=exc.detail,
-                        ) from exc
+                            title="System Template Requires Agent Slug",
+                            detail=(
+                                "System templates must specify an agent slug "
+                                "(e.g. '@reality-checker') instead of a UUID."
+                            ),
+                        )
+                    except ValueError:
+                        agent_slug = raw_agent.lstrip("@")
+                elif body.agent_slug is not None:
+                    agent_slug = body.agent_slug.strip().lstrip("@")
+
+                if not agent_slug:
+                    raise ProblemException(
+                        code="MISSING_AGENT_TARGET",
+                        status=422,
+                        title="Missing Agent Target",
+                        detail=(
+                            "System default workflow hooks of kind 'agent_async' require "
+                            "agent_slug (e.g. '@reality-checker')."
+                        ),
+                    )
+                agent_def_id = None
+            else:
+                agent_def_id = body.agent_definition_id
+                agent_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
+
+                if body.agent is not None:
+                    raw_agent = body.agent.strip()
+                    try:
+                        agent_def_id = uuid.UUID(raw_agent)
+                    except ValueError:
+                        agent_slug = raw_agent.lstrip("@")
+                        ad_stmt = select(AgentDefinition).where(
+                            AgentDefinition.workspace_id == target_ws_id,
+                            AgentDefinition.slug == agent_slug,
+                        )
+                        ad_row = (await session.execute(ad_stmt)).scalar_one_or_none()
+                        if ad_row is not None:
+                            agent_def_id = ad_row.id
+
+                if agent_def_id is not None:
+                    ad_stmt = select(AgentDefinition).where(
+                        AgentDefinition.id == agent_def_id,
+                        AgentDefinition.workspace_id == target_ws_id,
+                    )
+                    agent_row = (await session.execute(ad_stmt)).scalar_one_or_none()
+                    if agent_row is None:
+                        raise ProblemException(
+                            code="AGENT_NOT_FOUND",
+                            status=422,
+                            title="Agent Not Found",
+                            detail=(
+                                f"Agent definition '{agent_def_id}' not found in target workspace."
+                            ),
+                        )
+                    if agent_row.slug and not agent_slug:
+                        agent_slug = agent_row.slug
+                    if agent_row.harness_kind == "cli_pipe":
+                        try:
+                            assert_runtime_argv(agent_row)
+                        except CliPolicyError as exc:
+                            raise ProblemException(
+                                code="CLI_POLICY_VIOLATION",
+                                status=422,
+                                title="CLI Policy Violation",
+                                detail=exc.detail,
+                            ) from exc
+
+                if agent_def_id is None and not agent_slug:
+                    raise ProblemException(
+                        code="MISSING_AGENT_TARGET",
+                        status=422,
+                        title="Missing Agent Target",
+                        detail=(
+                            "Workspace default workflow hooks of kind 'agent_async' require an "
+                            "agent definition or slug."
+                        ),
+                    )
+            wasm_bytes = None
+        else:
+            if (
+                body.agent is not None
+                or body.agent_slug is not None
+                or body.agent_definition_id is not None
+            ):
+                raise ProblemException(
+                    code="INVALID_HOOK_TARGET",
+                    status=422,
+                    title="Invalid Hook Target",
+                    detail="Sync WASM and builtin hooks must not specify an agent target.",
+                )
+            if not body.wasm_module_sha256 or not body.wasm_module_sha256.strip():
+                raise ProblemException(
+                    code="MISSING_WASM_MODULE",
+                    status=422,
+                    title="Missing WASM Module",
+                    detail=(
+                        "WASM sync and builtin hooks require a valid 32-byte wasm_module_sha256."
+                    ),
+                )
+            agent_def_id = None
+            agent_slug = None
+            wasm_bytes = await _validate_wasm_sha(
+                session,
+                body.wasm_module_sha256,
+                body.scope_kind,
+                body.workspace_id,
+                caller.principal_id,
+            )
+            if wasm_bytes is None:
+                raise ProblemException(
+                    code="MISSING_WASM_MODULE",
+                    status=422,
+                    title="Missing WASM Module",
+                    detail=(
+                        "WASM sync and builtin hooks require a valid 32-byte wasm_module_sha256."
+                    ),
+                )
 
         await _assert_unique_name(session, body.scope_kind, body.workspace_id, clean_name)
-
-        wasm_bytes = await _validate_wasm_sha(
-            session,
-            body.wasm_module_sha256,
-            body.scope_kind,
-            body.workspace_id,
-            caller.principal_id,
-        )
 
         template = DefaultWorkflowHook(
             scope_kind=body.scope_kind,
@@ -612,146 +679,223 @@ async def admin_update_default_hook(  # noqa: PLR0915
             )
         if body.to_state_name is not None:
             template.to_state_name = body.to_state_name.strip()
-        if body.hook_kind is not None:
-            template.hook_kind = _normalize_hook_kind(body.hook_kind)
         if body.sort_rank is not None:
             template.sort_rank = body.sort_rank
         if body.is_enabled is not None:
             template.is_enabled = body.is_enabled
 
-        if "wasm_module_sha256" in body.model_fields_set:
-            template.wasm_module_sha256 = await _validate_wasm_sha(
-                session,
-                body.wasm_module_sha256,
-                template.scope_kind,
-                template.workspace_id,
-                caller.principal_id,
-            )
+        effective_kind = (
+            _normalize_hook_kind(body.hook_kind)
+            if body.hook_kind is not None
+            else template.hook_kind
+        )
+        template.hook_kind = effective_kind
 
-        if template.scope_kind == "system":
-            if body.agent_definition_id is not None:
+        if effective_kind == "agent_async":
+            if (
+                "wasm_module_sha256" in body.model_fields_set
+                and body.wasm_module_sha256 is not None
+            ):
                 raise ProblemException(
-                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
+                    code="INVALID_HOOK_TARGET",
                     status=422,
-                    title="System Template Requires Agent Slug",
-                    detail=(
-                        "System templates must not specify an agent_definition_id; "
-                        "use agent_slug instead."
-                    ),
+                    title="Invalid Hook Target",
+                    detail="agent_async hooks must not specify a wasm_module_sha256.",
                 )
-            if body.agent is not None:
-                raw_agent = body.agent.strip()
-                try:
-                    uuid.UUID(raw_agent)
+            template.wasm_module_sha256 = None
+
+            if template.scope_kind == "system":
+                if body.agent_definition_id is not None:
                     raise ProblemException(
                         code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
                         status=422,
                         title="System Template Requires Agent Slug",
                         detail=(
-                            "System templates must specify an agent slug (e.g. '@reality-checker') "
-                            "instead of a UUID."
+                            "System templates must not specify an agent_definition_id; "
+                            "use agent_slug instead."
                         ),
                     )
-                except ValueError:
-                    template.agent_slug = raw_agent.lstrip("@")
-                    template.agent_definition_id = None
-            elif "agent_slug" in body.model_fields_set:
-                template.agent_slug = (
-                    body.agent_slug.strip().lstrip("@") if body.agent_slug else None
-                )
-                template.agent_definition_id = None
-        else:  # noqa: PLR5501
-            # Workspace template agent handling
-            if body.agent is not None:
-                raw_agent = body.agent.strip()
-                try:
-                    agent_u = uuid.UUID(raw_agent)
-                    stmt = select(AgentDefinition).where(
-                        AgentDefinition.id == agent_u,
-                        AgentDefinition.workspace_id == template.workspace_id,
-                    )
-                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
-                    if ad_row is None:
+                if body.agent is not None:
+                    raw_agent = body.agent.strip()
+                    try:
+                        uuid.UUID(raw_agent)
                         raise ProblemException(
-                            code="AGENT_NOT_FOUND",
+                            code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
                             status=422,
-                            title="Agent Not Found",
-                            detail=f"Agent definition '{agent_u}' not found in workspace.",
-                        )
-                    template.agent_definition_id = ad_row.id
-                    template.agent_slug = ad_row.slug
-                    if ad_row.harness_kind == "cli_pipe":
-                        try:
-                            assert_runtime_argv(ad_row)
-                        except CliPolicyError as exc:
-                            raise ProblemException(
-                                code="CLI_POLICY_VIOLATION",
-                                status=422,
-                                title="CLI Policy Violation",
-                                detail=exc.detail,
-                            ) from exc
-                except ValueError:
-                    clean_slug = raw_agent.lstrip("@")
-                    template.agent_slug = clean_slug
-                    stmt = select(AgentDefinition).where(
-                        AgentDefinition.workspace_id == template.workspace_id,
-                        AgentDefinition.slug == clean_slug,
-                    )
-                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
-                    template.agent_definition_id = ad_row.id if ad_row is not None else None
-                    if ad_row is not None and ad_row.harness_kind == "cli_pipe":
-                        try:
-                            assert_runtime_argv(ad_row)
-                        except CliPolicyError as exc:
-                            raise ProblemException(
-                                code="CLI_POLICY_VIOLATION",
-                                status=422,
-                                title="CLI Policy Violation",
-                                detail=exc.detail,
-                            ) from exc
-            elif "agent_definition_id" in body.model_fields_set:
-                if body.agent_definition_id is not None:
-                    stmt = select(AgentDefinition).where(
-                        AgentDefinition.id == body.agent_definition_id,
-                        AgentDefinition.workspace_id == template.workspace_id,
-                    )
-                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
-                    if ad_row is None:
-                        raise ProblemException(
-                            code="AGENT_NOT_FOUND",
-                            status=422,
-                            title="Agent Not Found",
+                            title="System Template Requires Agent Slug",
                             detail=(
-                                f"Agent definition '{body.agent_definition_id}' "
-                                "not found in workspace."
+                                "System templates must specify an agent slug "
+                                "(e.g. '@reality-checker') instead of a UUID."
                             ),
                         )
-                    template.agent_definition_id = ad_row.id
-                    template.agent_slug = ad_row.slug
-                    if ad_row.harness_kind == "cli_pipe":
-                        try:
-                            assert_runtime_argv(ad_row)
-                        except CliPolicyError as exc:
-                            raise ProblemException(
-                                code="CLI_POLICY_VIOLATION",
-                                status=422,
-                                title="CLI Policy Violation",
-                                detail=exc.detail,
-                            ) from exc
-                else:
-                    template.agent_definition_id = None
-            elif "agent_slug" in body.model_fields_set:
-                updated_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
-                template.agent_slug = updated_slug
-                if updated_slug:
-                    stmt = select(AgentDefinition).where(
-                        AgentDefinition.workspace_id == template.workspace_id,
-                        AgentDefinition.slug == updated_slug,
+                    except ValueError:
+                        template.agent_slug = raw_agent.lstrip("@")
+                        template.agent_definition_id = None
+                elif "agent_slug" in body.model_fields_set:
+                    template.agent_slug = (
+                        body.agent_slug.strip().lstrip("@") if body.agent_slug else None
                     )
-                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
-                    template.agent_definition_id = ad_row.id if ad_row is not None else None
-                else:
                     template.agent_definition_id = None
+
+                if not template.agent_slug:
+                    raise ProblemException(
+                        code="MISSING_AGENT_TARGET",
+                        status=422,
+                        title="Missing Agent Target",
+                        detail=(
+                            "System default workflow hooks of kind 'agent_async' "
+                            "require agent_slug."
+                        ),
+                    )
+            else:
+                # Workspace template agent handling
+                if body.agent is not None:
+                    raw_agent = body.agent.strip()
+                    try:
+                        agent_u = uuid.UUID(raw_agent)
+                        stmt = select(AgentDefinition).where(
+                            AgentDefinition.id == agent_u,
+                            AgentDefinition.workspace_id == template.workspace_id,
+                        )
+                        ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                        if ad_row is None:
+                            raise ProblemException(
+                                code="AGENT_NOT_FOUND",
+                                status=422,
+                                title="Agent Not Found",
+                                detail=f"Agent definition '{agent_u}' not found in workspace.",
+                            )
+                        template.agent_definition_id = ad_row.id
+                        template.agent_slug = ad_row.slug
+                        if ad_row.harness_kind == "cli_pipe":
+                            try:
+                                assert_runtime_argv(ad_row)
+                            except CliPolicyError as exc:
+                                raise ProblemException(
+                                    code="CLI_POLICY_VIOLATION",
+                                    status=422,
+                                    title="CLI Policy Violation",
+                                    detail=exc.detail,
+                                ) from exc
+                    except ValueError:
+                        clean_slug = raw_agent.lstrip("@")
+                        template.agent_slug = clean_slug
+                        stmt = select(AgentDefinition).where(
+                            AgentDefinition.workspace_id == template.workspace_id,
+                            AgentDefinition.slug == clean_slug,
+                        )
+                        ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                        template.agent_definition_id = ad_row.id if ad_row is not None else None
+                        if ad_row is not None and ad_row.harness_kind == "cli_pipe":
+                            try:
+                                assert_runtime_argv(ad_row)
+                            except CliPolicyError as exc:
+                                raise ProblemException(
+                                    code="CLI_POLICY_VIOLATION",
+                                    status=422,
+                                    title="CLI Policy Violation",
+                                    detail=exc.detail,
+                                ) from exc
+                elif "agent_definition_id" in body.model_fields_set:
+                    if body.agent_definition_id is not None:
+                        stmt = select(AgentDefinition).where(
+                            AgentDefinition.id == body.agent_definition_id,
+                            AgentDefinition.workspace_id == template.workspace_id,
+                        )
+                        ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                        if ad_row is None:
+                            raise ProblemException(
+                                code="AGENT_NOT_FOUND",
+                                status=422,
+                                title="Agent Not Found",
+                                detail=(
+                                    f"Agent definition '{body.agent_definition_id}' "
+                                    "not found in workspace."
+                                ),
+                            )
+                        template.agent_definition_id = ad_row.id
+                        template.agent_slug = ad_row.slug
+                        if ad_row.harness_kind == "cli_pipe":
+                            try:
+                                assert_runtime_argv(ad_row)
+                            except CliPolicyError as exc:
+                                raise ProblemException(
+                                    code="CLI_POLICY_VIOLATION",
+                                    status=422,
+                                    title="CLI Policy Violation",
+                                    detail=exc.detail,
+                                ) from exc
+                    else:
+                        template.agent_definition_id = None
+                elif "agent_slug" in body.model_fields_set:
+                    updated_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
+                    template.agent_slug = updated_slug
+                    if updated_slug:
+                        stmt = select(AgentDefinition).where(
+                            AgentDefinition.workspace_id == template.workspace_id,
+                            AgentDefinition.slug == updated_slug,
+                        )
+                        ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                        template.agent_definition_id = ad_row.id if ad_row is not None else None
+                    else:
+                        template.agent_definition_id = None
+
+                if template.agent_definition_id is None and not template.agent_slug:
+                    raise ProblemException(
+                        code="MISSING_AGENT_TARGET",
+                        status=422,
+                        title="Missing Agent Target",
+                        detail=(
+                            "Workspace default workflow hooks of kind 'agent_async' "
+                            "require an agent definition or slug."
+                        ),
+                    )
+        else:
+            if (
+                ("agent" in body.model_fields_set and body.agent is not None)
+                or ("agent_slug" in body.model_fields_set and body.agent_slug is not None)
+                or (
+                    "agent_definition_id" in body.model_fields_set
+                    and body.agent_definition_id is not None
+                )
+            ):
+                raise ProblemException(
+                    code="INVALID_HOOK_TARGET",
+                    status=422,
+                    title="Invalid Hook Target",
+                    detail="Sync WASM and builtin hooks must not specify an agent target.",
+                )
+            template.agent_definition_id = None
+            template.agent_slug = None
+
+            if "wasm_module_sha256" in body.model_fields_set:
+                if body.wasm_module_sha256 is None or not body.wasm_module_sha256.strip():
+                    raise ProblemException(
+                        code="MISSING_WASM_MODULE",
+                        status=422,
+                        title="Missing WASM Module",
+                        detail=(
+                            "WASM sync and builtin hooks require a valid 32-byte "
+                            "wasm_module_sha256."
+                        ),
+                    )
+                template.wasm_module_sha256 = await _validate_wasm_sha(
+                    session,
+                    body.wasm_module_sha256,
+                    template.scope_kind,
+                    template.workspace_id,
+                    caller.principal_id,
+                )
+
+            if template.wasm_module_sha256 is None:
+                raise ProblemException(
+                    code="MISSING_WASM_MODULE",
+                    status=422,
+                    title="Missing WASM Module",
+                    detail=(
+                        "WASM sync and builtin hooks require a valid 32-byte wasm_module_sha256."
+                    ),
+                )
 
         if body.allowed_mutable_fields is not None:
             template.allowed_mutable_fields = _validate_mutable_fields(body.allowed_mutable_fields)
