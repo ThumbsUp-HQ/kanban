@@ -1154,4 +1154,62 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     });
     unmount();
   });
+
+  it('renders StudioDocLink and header FieldHelpHint in Light and Dark themes without breaking Add Workload Policy (KAN-515)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/admin/workload-identities') {
+        return [];
+      }
+      return undefined;
+    });
+
+    const { container, unmount } = render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
+    });
+
+    // 1. Verify StudioDocLink rendering, href, title, and label
+    const docLink = screen.getByTestId('workload-federation-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
+    expect(docLink.getAttribute('aria-label')).toBe('Workload Identity Federation Documentation');
+    expect(docLink.textContent).toContain('Documentation ->');
+
+    // 2. Verify header FieldHelpHint trigger and popover contents
+    const helpBtn = screen.getByTestId('workload-federation-header-help');
+    expect(helpBtn).toBeDefined();
+    fireEvent.focus(helpBtn);
+
+    const helpPopover = screen.getByTestId('workload-federation-header-help-popover');
+    expect(helpPopover).toBeDefined();
+    expect(helpPopover.textContent).toContain('Workload Identity Federation');
+    expect(helpPopover.textContent).toContain('keyless OIDC JWT token exchange (RFC 8693)');
+    expect(helpPopover.textContent).toContain('Kubernetes workloads');
+    const helpDocLink = screen.getByTestId('workload-federation-header-help-doc-link');
+    expect(helpDocLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
+
+    // 3. Verify + Add Workload Policy button renders alongside docLink and opens create modal cleanly
+    const addBtn = screen.getByTestId('add-workload-policy-btn');
+    expect(addBtn).toBeDefined();
+    expect(addBtn.textContent).toContain('+ Add Workload Policy');
+    fireEvent.click(addBtn);
+
+    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
+    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
+
+    // 4. Verify Theme switching (Light & Dark) retains valid structure
+    document.documentElement.setAttribute('data-theme', 'light');
+    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
+
+    document.documentElement.setAttribute('data-theme', 'dark');
+    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
+    document.documentElement.removeAttribute('data-theme');
+
+    unmount();
+  });
 });
