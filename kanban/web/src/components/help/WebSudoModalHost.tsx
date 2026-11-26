@@ -6,6 +6,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { apiClient, registerAal2StepUpHandler } from '../../api/client';
 import { SecondFactorStep } from '../../features/auth/SecondFactorStep';
 import type { MfaMethod } from '../../features/auth/authApi';
+import { StudioDocLink } from './StudioDocLink';
 import './ErrorHelpHint.css';
 
 /**
@@ -180,6 +181,13 @@ export function WebSudoModalHost(): JSX.Element | null {
             Your 15-minute Admin 2FA verification window (AAL2) has expired or is required.
             Verify with your Passkey or Authenticator app to continue without losing your edits.
           </p>
+          <div className="kb-websudo-modal-doc-link">
+            <StudioDocLink
+              href="/docs/multi-card-authentication-studio"
+              label="Admin Security Architecture ->"
+              testId="websudo-doc-link"
+            />
+          </div>
         </header>
         <SecondFactorStep
           challengeId={challengeId}
