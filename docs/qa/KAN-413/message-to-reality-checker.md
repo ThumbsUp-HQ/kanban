@@ -4,7 +4,7 @@
 **Target Ticket:** `KAN-413` (`[SLICE-2-P3][KB-AI-WORKOUT] Phase 3: Live Gemini/Ollama AI Provider, Autonomous Agent & mTLS Runner Workout + Screenshots`)  
 **Parent Epic:** `KAN-410` (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`)  
 **Target Documentation Ticket:** `KAN-414` (`[SLICE-2-P4][KB-AI-DOCS]`)  
-**Branch:** `feat/KAN-413-slice2-ai-workout` (base `1bbc9981`, commit `586d2b6a`)  
+**Branch:** `feat/KAN-413-slice2-ai-workout` (base `1bbc9981`, commit `16cf51a5`)  
 **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
 **Status:** **READY FOR REALITY-CHECKER AUDIT**  
 **Pre-Prod Safety Invariant:** Absolute zero mutations on protected pre-production (`192.168.1.101` / `k.hackedyour.info` / `inferrence1`). All live workouts executed hermetically against isolated local PostgreSQL container `kan413-pg-test-1`, companion fixture `127.0.0.1:11435`, and dedicated local Kanban server `127.0.0.1:18413`.
@@ -46,12 +46,12 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
 
 1. **Backend Unit Tests (Pytest):**
    - Command: `PYTHONPATH=. uv run --no-sync pytest kanban/tests/api/admin/test_ai_providers_api.py kanban/tests/ai_config/test_net_guard.py kanban/tests/agents/test_agent_definitions_api.py kanban/tests/api/test_llms_txt.py agent/tests/test_remote_runner.py --cov=kanban.api.v1.admin.ai_providers --cov=kanban.api.v1.agent_definitions --cov=kanban.api.v1.remote_runners --cov=agent.remote_runner.cli --cov=kanban.ops.llms_txt --cov-report=term-missing`
-   - Result: **63 passed in 65.76s**, 0 warnings, `>=95%` coverage on touched modules.
+   - Result: **67 passed in 40.43s**, 0 warnings, 97% overall coverage across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%).
    - Verbatim scrubbed logs: `docs/qa/KAN-413/unit-test-results.txt`.
 
 2. **Frontend Unit Tests (Vitest):**
-   - Command: `pnpm --dir kanban/web test -- --run src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx --coverage --coverage.thresholds.branches=95`
-   - Result: **4,106 passed across 285 test files in 78.80s**, 0 `act(...)` warnings.
+   - Command: `(cd kanban/web && COVERAGE_INCLUDE="src/features/admin-ai/**,src/features/admin-agents/**,src/features/admin-runners/**" npx vitest run src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx src/features/admin-runners/__tests__/MintEnrollmentTokenModal.test.tsx --coverage --coverage.thresholds.branches=95)`
+   - Result: **165 passed across 6 test files in 4.54s**, 0 `act(...)` warnings, **96.60% branch coverage** with complete V8 branch coverage table.
    - Verbatim scrubbed logs: `docs/qa/KAN-413/unit-test-results.txt`.
 
 3. **Static Build Gates:**
@@ -60,7 +60,7 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
    - Dash check: `python3 scripts/check_no_dashes.py --all` -> **0 violations**
    - Frontend TypeScript: `pnpm --dir kanban/web typecheck` -> **0 errors**
    - Frontend ESLint: `pnpm --dir kanban/web lint` -> **0 warnings**
-   - Frontend Production Build: `pnpm --dir kanban/web build` -> **Built in 2.08s**
+   - Frontend Production Build: `pnpm --dir kanban/web build` -> **Built in 4.91s**
    - Verbatim scrubbed logs: `docs/qa/KAN-413/build-check.txt`.
 
 ---
