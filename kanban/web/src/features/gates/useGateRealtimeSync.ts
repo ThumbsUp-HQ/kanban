@@ -130,6 +130,7 @@ export function updateBoardIssueWithGate(
   }
 
   if (
+    eventType === 'issue.transition_rejected' ||
     eventType === 'workflow.gate.rejected' ||
     eventType === 'workflow.gate.timed_out' ||
     eventType === 'workflow.gate.vetoed' ||
@@ -270,6 +271,7 @@ export function handleGateEvent(
       };
     }
     if (
+      eventType === 'issue.transition_rejected' ||
       eventType === 'workflow.gate.rejected' ||
       eventType === 'workflow.gate.timed_out' ||
       eventType === 'workflow.gate.vetoed' ||
@@ -329,6 +331,7 @@ export function handleGateEvent(
   const activityEventMap: Record<string, GateActivityItem['event_type']> = {
     'workflow.gate.approved': 'GATE_APPROVED',
     'gate.approved': 'GATE_APPROVED',
+    'issue.transition_rejected': 'GATE_REJECTED',
     'workflow.gate.rejected': 'GATE_REJECTED',
     'gate.rejected': 'GATE_REJECTED',
     'workflow.gate.vetoed': 'GATE_REJECTED',
@@ -405,6 +408,7 @@ export function handleGateEvent(
 
   // 4. Notifications & Callbacks
   const isVetoOrReject =
+    eventType === 'issue.transition_rejected' ||
     eventType === 'workflow.gate.rejected' ||
     eventType === 'workflow.gate.timed_out' ||
     eventType === 'workflow.gate.vetoed' ||
@@ -469,6 +473,7 @@ export function useGateRealtimeSync({
         normalizedType.startsWith('workflow.gate.') ||
         normalizedType.startsWith('gate.') ||
         [
+          'issue.transition_rejected',
           'workflow.gate.pending',
           'workflow.gate.approved',
           'workflow.gate.rejected',

@@ -234,6 +234,62 @@ describe('useGateRealtimeSync & handleGateEvent (KB-P5-25)', () => {
       expect(detail?.state?.name).toBe('In Progress');
     });
 
+    it('handles issue.transition_rejected event and snaps back state cleanly', () => {
+      const pendingIssue: BoardIssue = {
+        id: 'issue-1',
+        key: 'KAN-8',
+        summary: 'Task',
+        state_id: 'state-in-review',
+        board_rank: '0|hzzzzz:',
+        gate_status: 'pending',
+      };
+      queryClient.setQueryData(qk.issues('KAN', {}), [pendingIssue]);
+
+      const initialDetail: IssueDetail = {
+        key: 'KAN-8',
+        project_key: 'KAN',
+        summary: 'Task',
+        state: { id: 'state-in-review', name: 'In Review', group: 'started' },
+        pending_gate: {
+          execution_id: 'exec-trans-1',
+          hook_name: 'forensic-code-check',
+          agent_slug: 'reality-checker',
+          harness_label: 'cli: agy -p',
+          started_at: '2026-11-14T00:00:00Z',
+        },
+      };
+      queryClient.setQueryData(qk.issue('KAN-8'), initialDetail);
+
+      const onGateVetoed = vi.fn();
+      const payload: WorkflowGateEventPayload = {
+        issue_key: 'KAN-8',
+        execution_id: 'exec-trans-1',
+        hook_name: 'forensic-code-check',
+        agent_slug: 'reality-checker',
+        from_state: 'In Progress',
+        from_state_id: 'state-in-progress',
+        to_state: 'In Review',
+        to_state_id: 'state-in-review',
+        reason_preview: 'Transition rejected: gate vetoed.',
+      };
+
+      handleGateEvent('issue.transition_rejected', payload, queryClient, {
+        projectKey: 'KAN',
+        onGateVetoed,
+      });
+
+      expect(onGateVetoed).toHaveBeenCalledWith(payload);
+
+      const boardIssues = queryClient.getQueryData<BoardIssue[]>(qk.issues('KAN', {}));
+      expect(boardIssues?.[0]?.gate_status).toBe('rejected');
+      expect(boardIssues?.[0]?.state_id).toBe('state-in-progress');
+
+      const detail = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-8'));
+      expect(detail?.pending_gate).toBeNull();
+      expect(detail?.latest_gate_verdict?.decision).toBe('reject');
+      expect(detail?.state?.name).toBe('In Progress');
+    });
+
     it('handles workflow.gate.timed_out, resets state, and updates caches', () => {
       const pendingIssue: BoardIssue = {
         id: 'issue-1',

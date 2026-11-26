@@ -139,6 +139,21 @@ async function main() {
         if (scrollWidth > 390) {
           throw new Error(`Mobile horizontal overflow detected: document.documentElement.scrollWidth (${scrollWidth}px) > 390px`);
         }
+
+        const topbarScrollWidth = await page.evaluate(() => document.querySelector('.kb-topbar')?.scrollWidth ?? 0);
+        console.log(`[Mobile Topbar Check] .kb-topbar.scrollWidth = ${topbarScrollWidth}px (max allowed: 390px)`);
+        if (topbarScrollWidth > 390) {
+          throw new Error(`.kb-topbar scrollWidth (${topbarScrollWidth}px) > 390px`);
+        }
+
+        const avatarRight = await page.evaluate(() => {
+          const el = document.querySelector('.kb-avatar-button') || document.querySelector('.kb-avatar-wrapper');
+          return el ? el.getBoundingClientRect().right : 0;
+        });
+        console.log(`[Mobile Avatar Check] avatar right edge = ${avatarRight}px (max allowed: 390px)`);
+        if (avatarRight > 390) {
+          throw new Error(`avatar right edge (${avatarRight}px) > 390px - avatar is clipped!`);
+        }
       }
 
       const filename = `${vp.name}-board-gate-indicators.png`;

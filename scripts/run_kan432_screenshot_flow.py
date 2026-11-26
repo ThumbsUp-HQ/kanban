@@ -361,6 +361,37 @@ async def prepare_database() -> dict[str, Any]:
                 "vjson": verdict2,
             },
         )
+        await s.execute(
+            text(
+                "INSERT INTO workflow_hook_invocations ("
+                "  id, workspace_id, execution_id, hook_id, hook_kind, status, duration_us, started_at, completed_at, output_json"
+                ") VALUES ("
+                "  :id, :ws, :exec_id, :hook_id, 'agent_interceptor', 'rejected', 320000, clock_timestamp(), clock_timestamp(), CAST(:out_json AS jsonb)"
+                ")"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "ws": ws_id,
+                "exec_id": exec2_id,
+                "hook_id": hook1.id,
+                "out_json": verdict2,
+            },
+        )
+        await s.execute(
+            text(
+                "INSERT INTO activity_records ("
+                "  workspace_id, object_id, object_type, actor_id, event_type, payload, recorded_at"
+                ") VALUES ("
+                "  :ws, :oid, 'issue'::object_kind, :actor, 'GATE_REJECTED', CAST(:payload AS jsonb), clock_timestamp()"
+                ")"
+            ),
+            {
+                "ws": ws_id,
+                "oid": created_issues["KAN-2"],
+                "actor": p_id,
+                "payload": verdict2,
+            },
+        )
 
         # KAN-3: Approved gate execution
         exec3_id = uuid.uuid4()
