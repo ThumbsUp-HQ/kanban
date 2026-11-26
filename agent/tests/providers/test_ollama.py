@@ -129,8 +129,9 @@ class TestOllamaSettings:
             _make_settings(connect_timeout_s=15.0)
         with pytest.raises(ValidationError):
             _make_settings(read_timeout_s=0.5)
+        assert _make_settings(read_timeout_s=600.0).read_timeout_s == 600.0
         with pytest.raises(ValidationError):
-            _make_settings(read_timeout_s=500.0)
+            _make_settings(read_timeout_s=601.0)
 
     def test_mtls_cert_and_key_mutual_requirement(self, tmp_path: Path) -> None:
         """Enforce that mTLS cert and key paths are both present or both absent."""

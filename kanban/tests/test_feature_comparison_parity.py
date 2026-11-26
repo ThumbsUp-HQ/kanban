@@ -156,13 +156,13 @@ def test_codebase_metrics_parity() -> None:
     """Assert ORM model, migration, and OpenAPI counts in README match live codebase."""
     # Live ORM models
     orm_count = len(Base.metadata.tables)
-    assert orm_count == 92, f"Expected 92 Base.metadata.tables, got {orm_count}"
+    assert orm_count == 93, f"Expected 93 Base.metadata.tables, got {orm_count}"
 
     # Live migrations
     sql_up_files = list((ROOT_DIR / "database" / "migrations" / "sql").glob("*.up.sql"))
     versions_dir = ROOT_DIR / "database" / "migrations" / "versions"
     alembic_files = [f for f in versions_dir.glob("*.py") if not f.name.endswith("__init__.py")]
-    assert len(sql_up_files) >= 76, f"Expected >=76 SQL up files, got {len(sql_up_files)}"
+    assert len(sql_up_files) >= 86, f"Expected >=86 SQL up files, got {len(sql_up_files)}"
     assert len(alembic_files) == len(sql_up_files), (
         f"Expected {len(sql_up_files)} Alembic versions, got {len(alembic_files)}"
     )
@@ -178,16 +178,16 @@ def test_codebase_metrics_parity() -> None:
     )
     schemas_count = len(openapi.get("components", {}).get("schemas", {}))
 
-    assert paths_count == 292
-    assert ops_count == 388
-    assert schemas_count == 391
+    assert paths_count == 297
+    assert ops_count == 397
+    assert schemas_count == 394
 
     readme_text = README_PATH.read_text(encoding="utf-8")
-    assert "92 SQLAlchemy 2.0 models" in readme_text
-    assert "76 Alembic single-head migrations" in readme_text
-    assert "292" in readme_text
-    assert "388" in readme_text
-    assert "391" in readme_text
+    assert "93 SQLAlchemy 2.0 models" in readme_text
+    assert "86 Alembic single-head migrations" in readme_text
+    assert "297" in readme_text
+    assert "397" in readme_text
+    assert "394" in readme_text
 
 
 def test_wiki_manifest_synchronization() -> None:

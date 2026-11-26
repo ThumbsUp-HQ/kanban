@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { McpAccessStudio } from './McpAccessStudio';
@@ -253,19 +254,32 @@ export function WorkloadFederationSection({
         <div>
           <h2 className="kb-mcp-section-title">
             <span>Workload Identity Federation (RFC 8693)</span>
+            <FieldHelpHint
+              title="Workload Identity Federation"
+              summary="Enables keyless OIDC JWT token exchange (RFC 8693) for CI/CD pipelines (GitHub Actions, GitLab CI) and Kubernetes workloads to acquire scoped MCP credentials without long-lived static secrets."
+              docHref="/docs/zero-trust-service-auth-and-workload-oidc"
+              testId="workload-federation-header-help"
+            />
           </h2>
           <p className="kb-mcp-studio-subtitle">
             Configure headless CI/CD runners (GitHub Actions, GitLab CI, Kubernetes) to exchange OIDC JWT tokens for scoped MCP credentials without long-lived static secrets.
           </p>
         </div>
-        <button
-          type="button"
-          className="kb-mcp-studio-mint-btn"
-          data-testid="add-workload-policy-btn"
-          onClick={handleOpenCreate}
-        >
-          + Add Workload Policy
-        </button>
+        <div className="kb-mcp-header-actions">
+          <StudioDocLink
+            href="/docs/zero-trust-service-auth-and-workload-oidc"
+            title="Workload Identity Federation Documentation"
+            testId="workload-federation-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-mcp-studio-mint-btn"
+            data-testid="add-workload-policy-btn"
+            onClick={handleOpenCreate}
+          >
+            + Add Workload Policy
+          </button>
+        </div>
       </div>
 
       {error && (
