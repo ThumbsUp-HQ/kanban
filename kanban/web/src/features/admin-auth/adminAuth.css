@@ -424,7 +424,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 999;
+  z-index: 1050;
   display: flex;
   justify-content: flex-end;
 }
@@ -477,9 +477,12 @@
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--fg-primary);
-  min-width: 140px;
-  max-width: 220px;
-  flex: 0 0 auto;
+  flex: 0 0 220px;
+  width: 220px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .auth-editor-input,
@@ -559,7 +562,11 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
-  padding-top: 16px;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-surface);
+  z-index: 10;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -947,6 +954,7 @@
     justify-content: center;
   }
 
+  .auth-editor-actions,
   .auth-editor-drawer-actions,
   .auth-card-editor-footer {
     position: sticky;
@@ -954,7 +962,7 @@
     background: var(--bg-surface);
     border-top: 1px solid var(--border-subtle);
     padding: var(--space-3, 12px) 0;
-    z-index: 5;
+    z-index: 10;
   }
 
   .auth-editor-drawer {
@@ -974,6 +982,10 @@
     min-width: 0;
     max-width: 100%;
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
   }
 
   .auth-editor-input-group {

@@ -964,6 +964,48 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
       });
     });
 
+    it('handles AAL2 step-up cancellation and AIR_GAP_EGRESS_DENIED fallback on probe and test connection', async () => {
+      const aal2CancelError = new Error('Step-up cancelled');
+      aal2CancelError.name = 'Aal2StepUpCancelledError';
+
+      vi.spyOn(aiApi, 'probeAiModels').mockRejectedValueOnce(aal2CancelError);
+      vi.spyOn(aiApi, 'testAiConnection').mockRejectedValueOnce(aal2CancelError);
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      expect(screen.queryByTestId('probe-error')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Testing connection...');
+      });
+
+      // Test AIR_GAP_EGRESS_DENIED fallback message
+      vi.spyOn(aiApi, 'testAiConnection').mockResolvedValueOnce({
+        ok: false,
+        latency_ms: 10,
+        models: [],
+        model_count: 0,
+        error_code: 'AIR_GAP_EGRESS_DENIED',
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain(
+          'Egress denied by Air-Gap policy: cloud endpoints cannot be contacted.',
+        );
+      });
+    });
+
     it('handles probe error response without message on probe models', async () => {
       vi.spyOn(aiApi, 'probeAiModels').mockResolvedValueOnce({
         ok: false,
@@ -2124,6 +2166,43 @@ describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01 & KAN-400)', () => {
         const mtlsTextarea = screen.getByTestId('provider-mtls-cert-input');
         expect(mtlsTextarea.classList.contains('kb-form-textarea--mono')).toBe(true);
         expect(mtlsTextarea.getAttribute('style')).toBeNull();
+      });
+
+      it('validates cutoff timeout bounds on form submission', async () => {
+        render(
+          <AiProviderEditorDrawer
+            isOpen={true}
+            onClose={vi.fn()}
+            provider={null}
+            airGapMode={false}
+            onSaved={vi.fn()}
+          />,
+        );
+
+        fireEvent.change(screen.getByTestId('provider-name-input'), {
+          target: { value: 'Valid Name' },
+        });
+        fireEvent.change(screen.getByTestId('provider-key-input'), {
+          target: { value: 'sk-test' },
+        });
+        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
+          target: { value: '500' },
+        });
+
+        fireEvent.submit(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
+        });
+
+        fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
+          target: { value: '700000' },
+        });
+        fireEvent.submit(screen.getByTestId('save-provider-btn'));
+
+        await waitFor(() => {
+          expect(screen.getByText(/Cutoff timeout must be between 1,000 and 600,000 ms/i)).toBeDefined();
+        });
       });
     });
   });

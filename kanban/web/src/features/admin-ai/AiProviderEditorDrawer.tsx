@@ -590,7 +590,7 @@ function AiProviderEditorContent({
         {/* 1. Protocol & Provider Engine */}
         <div className="kb-form-group">
           <label htmlFor="provider-kind-select" className="kb-form-label">
-            Protocol & Provider Engine
+            <span>Protocol & Provider Engine</span>
             <FieldHelpHint
               title="AI Provider Engine"
               summary="The underlying runtime and API protocol for AI completions and evaluations."
@@ -665,7 +665,7 @@ function AiProviderEditorContent({
         {/* 2. Display Name */}
         <div className="kb-form-group">
           <label htmlFor="provider-name-input" className="kb-form-label">
-            Display Name
+            <span>Display Name</span>
             <FieldHelpHint
               title="Display Name"
               summary="Human-readable label for this AI provider instance."
@@ -695,7 +695,7 @@ function AiProviderEditorContent({
         {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
         <div className="kb-form-group">
           <label htmlFor="provider-key-input" className="kb-form-label">
-            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
+            <span>{isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}</span>
             <FieldHelpHint
               title="API Secret Key"
               summary="Authentication secret for upstream LLM provider API requests."
@@ -770,12 +770,14 @@ function AiProviderEditorContent({
         {/* 4. HTTP Base URL (Promoted from Advanced into primary connection settings) */}
         <div className="kb-form-group">
           <label htmlFor="provider-base-url-input" className="kb-form-label">
-            HTTP Base URL{' '}
-            {providerKind === 'ollama'
-              ? '(Default: http://127.0.0.1:11434)'
-              : providerKind === 'gemini'
-                ? '(Default: https://generativelanguage.googleapis.com)'
-                : '(Default: https://api.openai.com/v1)'}
+            <span>
+              HTTP Base URL{' '}
+              {providerKind === 'ollama'
+                ? '(Default: http://127.0.0.1:11434)'
+                : providerKind === 'gemini'
+                  ? '(Default: https://generativelanguage.googleapis.com)'
+                  : '(Default: https://api.openai.com/v1)'}
+            </span>
             <FieldHelpHint
               title="HTTP Base URL"
               summary="Base endpoint URL for outbound LLM API requests."
@@ -827,7 +829,7 @@ function AiProviderEditorContent({
         {/* 4. Configurable Cutoff Timeout (ms) */}
         <div className="kb-form-group">
           <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
-            Cutoff Timeout (ms)
+            <span>Cutoff Timeout (ms)</span>
             <FieldHelpHint
               title="Cutoff Timeout (ms)"
               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
@@ -861,7 +863,7 @@ function AiProviderEditorContent({
         <div className="kb-form-group">
           <div className="kb-model-allowlist-header">
             <label htmlFor="provider-models-input" className="kb-form-label">
-              Model Allowlist (comma separated)
+              <span>Model Allowlist (comma separated)</span>
               <FieldHelpHint
                 title="Model Allowlist"
                 summary="Comma-separated model names permitted for inference or probed from the endpoint."
@@ -982,7 +984,7 @@ function AiProviderEditorContent({
             <div className="kb-model-params-grid">
               <div className="kb-form-group">
                 <label htmlFor="provider-temperature-input" className="kb-form-label">
-                  Temperature
+                  <span>Temperature</span>
                   <FieldHelpHint
                     title="Temperature"
                     summary="Sampling randomness governing creative variance versus deterministic predictability."
@@ -1011,7 +1013,7 @@ function AiProviderEditorContent({
 
               <div className="kb-form-group">
                 <label htmlFor="provider-top-p-input" className="kb-form-label">
-                  Top-P (Nucleus)
+                  <span>Top-P (Nucleus)</span>
                   <FieldHelpHint
                     title="Top-P (Nucleus)"
                     summary="Nucleus sampling threshold pruning lowest-probability tokens."
@@ -1040,7 +1042,7 @@ function AiProviderEditorContent({
 
               <div className="kb-form-group">
                 <label htmlFor="provider-max-tokens-input" className="kb-form-label">
-                  Max Tokens
+                  <span>Max Tokens</span>
                   <FieldHelpHint
                     title="Max Tokens"
                     summary="Maximum generation token ceiling for completion and reasoning generation."
@@ -1070,7 +1072,7 @@ function AiProviderEditorContent({
 
             <div className="kb-form-group kb-form-group--mt12">
               <label htmlFor="provider-mtls-cert-input" className="kb-form-label">
-                mTLS Client Certificate PEM (Optional)
+                <span>mTLS Client Certificate PEM (Optional)</span>
                 <FieldHelpHint
                   title="mTLS Client Certificate PEM"
                   summary="Cryptographic client certificate for mutual TLS authentication against secured enterprise AI gateways."
@@ -1095,7 +1097,7 @@ function AiProviderEditorContent({
 
             <div className="kb-form-group">
               <label htmlFor="provider-residency-select" className="kb-form-label">
-                Data Residency Tier (Override)
+                <span>Data Residency Tier (Override)</span>
                 <FieldHelpHint
                   title="Data Residency Tier"
                   summary="Enforces data locality boundaries preventing external data egress."

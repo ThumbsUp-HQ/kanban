@@ -2894,12 +2894,13 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(screen.getByTestId('card-ca-pem-help')).toBeDefined();
     });
 
-    it('opens popover dialog on focus and restores state on Escape dismissal', () => {
+    it('opens popover dialog on focus and restores state on Escape dismissal without closing drawer', () => {
+      const onClose = vi.fn();
       render(
         <AuthCardEditorDrawer
           isOpen={true}
           card={null}
-          onClose={vi.fn()}
+          onClose={onClose}
           onSave={vi.fn()}
         />,
       );
@@ -2920,10 +2921,40 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(popover.getAttribute('aria-label')).toBe('Display Name');
       expect(popover.textContent).toContain('User-facing title shown on the login button and admin cards.');
 
-      // Escape key closes popover
+      // Escape key closes popover without triggering drawer onClose
       fireEvent.keyDown(popover, { key: 'Escape' });
       expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
       expect(screen.queryByTestId('card-display-name-help-popover')).toBeNull();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('renders LDAP Replace Stored Secret FieldHelpHint when editing an LDAP card with secret', () => {
+      const existingLdapCard: AdminAuthCard = {
+        ...existingOidcCard,
+        id: 'c-ldap-edit',
+        provider_kind: 'LDAP',
+        slug: 'corp-ldap',
+        display_name: 'Corporate LDAP',
+        has_secret: true,
+        public_config: {
+          server_url: 'ldaps://ldap.example.com',
+          bind_dn: 'cn=admin,dc=example,dc=com',
+          base_dn: 'dc=example,dc=com',
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingLdapCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const replaceSecretHelp = screen.getByTestId('card-ldap-replace-secret-help');
+      expect(replaceSecretHelp).toBeDefined();
+      expect(replaceSecretHelp.getAttribute('aria-label')).toBe('Help for Replace Stored Secret');
     });
   });
 });
