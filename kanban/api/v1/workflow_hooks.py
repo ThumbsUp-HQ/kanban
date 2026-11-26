@@ -223,5 +223,6 @@ async def sync_default_workflow_hooks(
             project_obj.id,
             skip_existing=True,
         )
+        serialized = [await WorkflowHookService.serialize_hook(session, h) for h in created]
         await session.commit()
-        return [await WorkflowHookService.serialize_hook(session, h) for h in created]
+        return serialized

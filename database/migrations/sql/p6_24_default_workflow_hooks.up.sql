@@ -18,16 +18,24 @@ CREATE TABLE default_workflow_hooks (
     allowed_mutable_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
     failure_policy TEXT NOT NULL DEFAULT 'fail_closed' CHECK (failure_policy IN ('fail_closed', 'fail_open_warn')),
     timeout_ms INTEGER NULL CHECK (timeout_ms IS NULL OR timeout_ms BETWEEN 1000 AND 600000),
-    max_rework_attempts INTEGER NOT NULL DEFAULT 3 CHECK (max_rework_attempts BETWEEN 0 AND 20),
+    max_rework_attempts INTEGER NOT NULL DEFAULT 3 CHECK (max_rework_attempts BETWEEN 1 AND 20),
     created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_default_workflow_hooks_scope CHECK (
         (scope_kind = 'system' AND workspace_id IS NULL) OR
         (scope_kind = 'workspace' AND workspace_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_default_workflow_hooks_system_agent_def CHECK (
+        scope_kind <> 'system' OR agent_definition_id IS NULL
+    ),
+    CONSTRAINT chk_default_workflow_hooks_wasm_len CHECK (
+        wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32
     )
 );
 
+CREATE UNIQUE INDEX uq_default_workflow_hooks_scope_ws_name
+    ON default_workflow_hooks (scope_kind, COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
 CREATE INDEX idx_default_workflow_hooks_scope ON default_workflow_hooks (scope_kind, workspace_id);
 CREATE INDEX idx_default_workflow_hooks_workspace_id ON default_workflow_hooks (workspace_id);
 

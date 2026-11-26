@@ -577,37 +577,37 @@ export interface DefaultWorkflowHook {
 export interface CreateDefaultWorkflowHookPayload {
   name: string;
   scope_kind: DefaultHookScopeKind;
-  workspace_id?: string | null;
-  from_state_name?: string | null;
+  workspace_id?: string | null | undefined;
+  from_state_name?: string | null | undefined;
   to_state_name: string;
-  hook_kind?: string;
-  sort_rank?: number;
-  is_enabled?: boolean;
-  wasm_module_sha256?: string | null;
-  agent?: string | null;
-  agent_definition_id?: string | null;
-  agent_slug?: string | null;
-  allowed_mutable_fields?: string[];
-  failure_policy?: FailurePolicy;
-  timeout_ms?: number | null;
-  max_rework_attempts?: number;
+  hook_kind?: string | undefined;
+  sort_rank?: number | undefined;
+  is_enabled?: boolean | undefined;
+  wasm_module_sha256?: string | null | undefined;
+  agent?: string | null | undefined;
+  agent_definition_id?: string | null | undefined;
+  agent_slug?: string | null | undefined;
+  allowed_mutable_fields?: string[] | undefined;
+  failure_policy?: FailurePolicy | undefined;
+  timeout_ms?: number | null | undefined;
+  max_rework_attempts?: number | undefined;
 }
 
 export interface UpdateDefaultWorkflowHookPayload {
-  name?: string;
-  from_state_name?: string | null;
-  to_state_name?: string;
-  hook_kind?: string;
-  sort_rank?: number;
-  is_enabled?: boolean;
-  wasm_module_sha256?: string | null;
-  agent?: string | null;
-  agent_definition_id?: string | null;
-  agent_slug?: string | null;
-  allowed_mutable_fields?: string[];
-  failure_policy?: FailurePolicy;
-  timeout_ms?: number | null;
-  max_rework_attempts?: number;
+  name?: string | undefined;
+  from_state_name?: string | null | undefined;
+  to_state_name?: string | undefined;
+  hook_kind?: string | undefined;
+  sort_rank?: number | undefined;
+  is_enabled?: boolean | undefined;
+  wasm_module_sha256?: string | null | undefined;
+  agent?: string | null | undefined;
+  agent_definition_id?: string | null | undefined;
+  agent_slug?: string | null | undefined;
+  allowed_mutable_fields?: string[] | undefined;
+  failure_policy?: FailurePolicy | undefined;
+  timeout_ms?: number | null | undefined;
+  max_rework_attempts?: number | undefined;
 }
 
 export async function fetchDefaultWorkflowHooks(
@@ -617,13 +617,18 @@ export async function fetchDefaultWorkflowHooks(
   try {
     const params = new URLSearchParams();
     if (scopeKind) params.set('scope_kind', scopeKind);
-    if (workspaceId) params.set('workspace_id', workspaceId);
+    if (workspaceId && scopeKind !== 'system') params.set('workspace_id', workspaceId);
     const qs = params.toString();
-    const endpoint = workspaceId
-      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=${scopeKind === 'system' ? 'true' : 'false'}` : ''}`
-      : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
+    const endpoint =
+      workspaceId && scopeKind !== 'system'
+        ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=false` : ''}`
+        : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
     const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    if (scopeKind) {
+      return data.filter((t) => t.scope_kind === scopeKind);
+    }
+    return data;
   } catch {
     return [];
   }

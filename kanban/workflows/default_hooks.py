@@ -35,11 +35,10 @@ async def materialize_default_workflow_hooks(
     Resolves to_state_name and optional from_state_name against the project's workflow states.
     Resolves agent_slug within workspace_id if agent_definition_id is not set.
     """
-    # 1. Fetch enabled default templates for system and this workspace
+    # 1. Fetch default templates for system and this workspace (both enabled and disabled)
     tpl_stmt = (
         select(DefaultWorkflowHook)
         .where(
-            DefaultWorkflowHook.is_enabled.is_(True),
             (DefaultWorkflowHook.scope_kind == "system")
             | (
                 (DefaultWorkflowHook.scope_kind == "workspace")
@@ -61,7 +60,10 @@ async def materialize_default_workflow_hooks(
         if tpl.scope_kind == "workspace":
             tpl_map[tpl.name.strip().casefold()] = tpl
 
-    active_templates = sorted(tpl_map.values(), key=lambda t: t.sort_rank)
+    # Disabled workspace templates suppress same-named system templates
+    active_templates = [
+        t for t in sorted(tpl_map.values(), key=lambda t: t.sort_rank) if t.is_enabled
+    ]
 
     # 3. Fetch workflow states for this project
     st_stmt = select(WorkflowState.id, WorkflowState.name).where(
@@ -120,23 +122,44 @@ async def materialize_default_workflow_hooks(
             resolved_kind = "agent_interceptor" if "agent" in tpl.hook_kind else "sync_validator"
 
         # Resolve agent if needed
-        agent_def_id = tpl.agent_definition_id
-        if agent_def_id is None and tpl.agent_slug:
-            clean_slug = tpl.agent_slug.strip().lstrip("@")
-            agent_stmt = select(AgentDefinition.id).where(
-                AgentDefinition.workspace_id == workspace_id,
-                AgentDefinition.slug == clean_slug,
-            )
-            agent_def_id = (await session.execute(agent_stmt)).scalar_one_or_none()
-            if agent_def_id is None:
-                logger.warning(
-                    "Default hook template '%s' requires agent slug '%s', "
-                    "not found in workspace %s; skipping gracefully.",
-                    tpl.name,
-                    clean_slug,
-                    workspace_id,
+        agent_def_id: uuid.UUID | None = None
+        if tpl.scope_kind == "system":
+            # System templates MUST ignore agent_definition_id and resolve agent_slug
+            # strictly in workspace_id
+            if tpl.agent_slug:
+                clean_slug = tpl.agent_slug.strip().lstrip("@")
+                agent_stmt = select(AgentDefinition.id).where(
+                    AgentDefinition.workspace_id == workspace_id,
+                    AgentDefinition.slug == clean_slug,
                 )
-                continue
+                agent_def_id = (await session.execute(agent_stmt)).scalar_one_or_none()
+                if agent_def_id is None:
+                    logger.warning(
+                        "System default hook template '%s' requires agent slug '%s', "
+                        "not found in workspace %s; skipping gracefully.",
+                        tpl.name,
+                        clean_slug,
+                        workspace_id,
+                    )
+                    continue
+        else:
+            agent_def_id = tpl.agent_definition_id
+            if agent_def_id is None and tpl.agent_slug:
+                clean_slug = tpl.agent_slug.strip().lstrip("@")
+                agent_stmt = select(AgentDefinition.id).where(
+                    AgentDefinition.workspace_id == workspace_id,
+                    AgentDefinition.slug == clean_slug,
+                )
+                agent_def_id = (await session.execute(agent_stmt)).scalar_one_or_none()
+                if agent_def_id is None:
+                    logger.warning(
+                        "Workspace default hook template '%s' requires agent slug '%s', "
+                        "not found in workspace %s; skipping gracefully.",
+                        tpl.name,
+                        clean_slug,
+                        workspace_id,
+                    )
+                    continue
 
         if resolved_kind == "agent_interceptor" and agent_def_id is None:
             logger.warning(

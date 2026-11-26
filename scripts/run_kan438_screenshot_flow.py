@@ -59,6 +59,15 @@ async def prepare_database() -> dict[str, Any]:
     finally:
         await conn.close()
 
+    print("[KAN-438 Prep] Applying migration p6_24_default_workflow_hooks.up.sql...")
+    with open("database/migrations/sql/p6_24_default_workflow_hooks.up.sql") as f:
+        up_sql = f.read()
+    mig_conn = await asyncpg.connect(user="kanban_migrator", database=DB_NAME, host=SOCKET_DIR)
+    try:
+        await mig_conn.execute(up_sql)
+    finally:
+        await mig_conn.close()
+
     print("[KAN-438 Prep] Seeding workspace, admin user, default hook templates, and project PROJ...")
     engine = create_async_engine(MIGRATOR_URL)
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -145,7 +154,7 @@ async def prepare_database() -> dict[str, Any]:
             allowed_mutable_fields=[],
             failure_policy="fail_open_warn",
             timeout_ms=None,
-            max_rework_attempts=0,
+            max_rework_attempts=3,
         )
         s.add(ws_tpl)
         await s.flush()

@@ -591,11 +591,6 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
                 curr_state_map[bp_st.name] = new_st
         await session.flush()
 
-        if is_new_project:
-            await materialize_default_workflow_hooks(
-                session, caller.workspace_id, project_id, skip_existing=True
-            )
-
         # 2. State migrations
         for old_name, new_name in blueprint.state_migrations.items():
             if old_name in curr_state_map and new_name in curr_state_map:
@@ -617,6 +612,11 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
             if st_row.name not in target_state_names:
                 await session.delete(st_row)
         await session.flush()
+
+        if is_new_project:
+            await materialize_default_workflow_hooks(
+                session, caller.workspace_id, project_id, skip_existing=True
+            )
 
         # Handle priorities
         curr_pris_q = select(ProjectPriority).where(ProjectPriority.project_id == project_id)

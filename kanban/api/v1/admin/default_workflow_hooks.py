@@ -11,17 +11,21 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.agent_definition import AgentDefinition
 from database.models.spine import Workspace
+from database.models.wasm_module import ApprovedWasmModule
 from database.models.workflow import DefaultWorkflowHook
+from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.workflows.builtins import BUILTIN_WASM_FORMULAS, seed_builtin_wasm
+from kanban.workflows.hooks_service import _parse_sha256_hex, _validate_mutable_fields
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +75,39 @@ class DefaultWorkflowHookCreateRequest(BaseModel):
         default=None, ge=1000, le=600000, description="Optional timeout in ms (1000..600000)"
     )
     max_rework_attempts: int = Field(
-        default=3, ge=0, le=20, description="Maximum rework attempts (0..20)"
+        default=3, ge=1, le=20, description="Maximum rework attempts (1..20)"
     )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate template name is not empty or whitespace only."""
+        clean = v.strip()
+        if not clean:
+            msg = "Template name cannot be empty or whitespace only"
+            raise ValueError(msg)
+        return clean
+
+    @field_validator("to_state_name")
+    @classmethod
+    def validate_to_state(cls, v: str) -> str:
+        """Validate target state name is not empty or whitespace only."""
+        clean = v.strip()
+        if not clean:
+            msg = "Target state name cannot be empty or whitespace only"
+            raise ValueError(msg)
+        return clean
+
+    @field_validator("from_state_name")
+    @classmethod
+    def validate_from_state(cls, v: str | None) -> str | None:
+        """Normalize from_state_name wildcard or whitespace to None."""
+        if v is None:
+            return None
+        clean = v.strip()
+        if not clean or clean == "*":
+            return None
+        return clean
 
 
 class DefaultWorkflowHookUpdateRequest(BaseModel):
@@ -93,7 +128,42 @@ class DefaultWorkflowHookUpdateRequest(BaseModel):
     allowed_mutable_fields: list[str] | None = Field(default=None)
     failure_policy: FailurePolicy | None = Field(default=None)
     timeout_ms: int | None = Field(default=None, ge=1000, le=600000)
-    max_rework_attempts: int | None = Field(default=None, ge=0, le=20)
+    max_rework_attempts: int | None = Field(default=None, ge=1, le=20)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        """Validate template name is not empty or whitespace only."""
+        if v is None:
+            return None
+        clean = v.strip()
+        if not clean:
+            msg = "Template name cannot be empty or whitespace only"
+            raise ValueError(msg)
+        return clean
+
+    @field_validator("to_state_name")
+    @classmethod
+    def validate_to_state(cls, v: str | None) -> str | None:
+        """Validate target state name is not empty or whitespace only."""
+        if v is None:
+            return None
+        clean = v.strip()
+        if not clean:
+            msg = "Target state name cannot be empty or whitespace only"
+            raise ValueError(msg)
+        return clean
+
+    @field_validator("from_state_name")
+    @classmethod
+    def validate_from_state(cls, v: str | None) -> str | None:
+        """Normalize from_state_name wildcard or whitespace to None."""
+        if v is None:
+            return None
+        clean = v.strip()
+        if not clean or clean == "*":
+            return None
+        return clean
 
 
 class DefaultWorkflowHookResponse(BaseModel):
@@ -130,7 +200,12 @@ def _normalize_hook_kind(raw: str) -> str:
         return "wasm_sync"
     if cleaned == "builtin":
         return "builtin"
-    return "agent_async" if "agent" in cleaned else "wasm_sync"
+    raise ProblemException(
+        code="INVALID_HOOK_KIND",
+        status=422,
+        title="Invalid Hook Kind",
+        detail=f"Unsupported hook_kind '{raw}'. Must be agent_async, wasm_sync, or builtin.",
+    )
 
 
 def _serialize_template(t: DefaultWorkflowHook) -> DefaultWorkflowHookResponse:
@@ -177,6 +252,78 @@ async def _get_admin_roles(session: AsyncSession) -> tuple[bool, bool]:
         ).scalar_one()
     )
     return is_server_admin, is_ws_admin
+
+
+async def _assert_unique_name(
+    session: AsyncSession,
+    scope_kind: str,
+    workspace_id: uuid.UUID | None,
+    name: str,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    stmt = select(DefaultWorkflowHook.id).where(
+        DefaultWorkflowHook.scope_kind == scope_kind,
+        DefaultWorkflowHook.workspace_id == workspace_id,
+        func.lower(DefaultWorkflowHook.name) == name.strip().lower(),
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(DefaultWorkflowHook.id != exclude_id)
+    existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is not None:
+        raise ProblemException(
+            code="TEMPLATE_NAME_CONFLICT",
+            status=409,
+            title="Template Name Conflict",
+            detail=(
+                f"A default workflow hook template with name '{name.strip()}' "
+                "already exists in this scope."
+            ),
+        )
+
+
+async def _validate_wasm_sha(
+    session: AsyncSession,
+    wasm_hex: str | None,
+    scope_kind: str,
+    workspace_id: uuid.UUID | None,
+    caller_principal_id: uuid.UUID,
+) -> bytes | None:
+    if not wasm_hex:
+        return None
+    raw_hex = wasm_hex.strip()
+    if raw_hex.lower().startswith("0x"):
+        raw_hex = raw_hex[2:]
+    wasm_bytes = _parse_sha256_hex(raw_hex)
+
+    if scope_kind == "workspace" and workspace_id is not None:
+        stmt = select(ApprovedWasmModule).where(
+            ApprovedWasmModule.workspace_id == workspace_id,
+            ApprovedWasmModule.sha256 == wasm_bytes,
+        )
+        approved = (await session.execute(stmt)).scalar_one_or_none()
+        if approved is None:
+            approved = await seed_builtin_wasm(
+                session, workspace_id, caller_principal_id, wasm_bytes
+            )
+        if approved is None:
+            raise ProblemException(
+                code="WASM_MODULE_NOT_APPROVED",
+                status=422,
+                title="WASM Module Not Approved",
+                detail="WASM module SHA-256 is not approved in this workspace.",
+            )
+    elif scope_kind == "system":
+        is_builtin = any(b.sha256_bytes == wasm_bytes for b in BUILTIN_WASM_FORMULAS)
+        if not is_builtin:
+            sys_stmt = select(ApprovedWasmModule.id).where(ApprovedWasmModule.sha256 == wasm_bytes)
+            if (await session.execute(sys_stmt)).scalar_one_or_none() is None:
+                raise ProblemException(
+                    code="WASM_MODULE_NOT_APPROVED",
+                    status=422,
+                    title="WASM Module Not Approved",
+                    detail="WASM module SHA-256 is not approved.",
+                )
+    return wasm_bytes
 
 
 router = APIRouter(
@@ -237,7 +384,7 @@ async def admin_list_default_hooks(
     response_model=DefaultWorkflowHookResponse,
     summary="Create a default workflow hook template",
 )
-async def admin_create_default_hook(
+async def admin_create_default_hook(  # noqa: PLR0915
     body: DefaultWorkflowHookCreateRequest,
     caller: Caller,
     session: Session,
@@ -248,6 +395,20 @@ async def admin_create_default_hook(
     """
     async with timing_floor(floor_ms=25.0):
         is_server_admin, is_ws_admin = await _get_admin_roles(session)
+
+        clean_name = body.name.strip()
+        clean_to_state = body.to_state_name.strip()
+        clean_from_state = (
+            None
+            if body.from_state_name is None or body.from_state_name.strip() in ("", "*")
+            else body.from_state_name.strip()
+        )
+        hook_kind = _normalize_hook_kind(body.hook_kind)
+        clean_fields = _validate_mutable_fields(body.allowed_mutable_fields)
+
+        agent_def_id: uuid.UUID | None = None
+        agent_slug: str | None = None
+
         if body.scope_kind == "system":
             if not is_server_admin:
                 raise ProblemException(
@@ -263,7 +424,44 @@ async def admin_create_default_hook(
                     title="Invalid Template Scope",
                     detail="System templates must have workspace_id set to null.",
                 )
+            if body.agent_definition_id is not None:
+                raise ProblemException(
+                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
+                    status=422,
+                    title="System Template Requires Agent Slug",
+                    detail=(
+                        "System templates must not specify an agent_definition_id; "
+                        "use agent_slug instead to prevent cross-tenant leakage."
+                    ),
+                )
+            if body.agent is not None:
+                raw_agent = body.agent.strip()
+                try:
+                    uuid.UUID(raw_agent)
+                    raise ProblemException(
+                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
+                        status=422,
+                        title="System Template Requires Agent Slug",
+                        detail=(
+                            "System templates must specify an agent slug (e.g. '@reality-checker') "
+                            "instead of a UUID."
+                        ),
+                    )
+                except ValueError:
+                    agent_slug = raw_agent.lstrip("@")
+            elif body.agent_slug is not None:
+                agent_slug = body.agent_slug.strip().lstrip("@")
+            agent_def_id = None
         else:
+            # Workspace scope
+            target_ws_id = body.workspace_id or caller.workspace_id
+            if target_ws_id != caller.workspace_id and not is_server_admin:
+                raise ProblemException(
+                    code="CROSS_WORKSPACE_FORBIDDEN",
+                    status=403,
+                    title="Cross Workspace Forbidden",
+                    detail="Access to target workspace forbidden.",
+                )
             if not (is_server_admin or is_ws_admin):
                 raise ProblemException(
                     code="INSUFFICIENT_CAPABILITY",
@@ -271,56 +469,74 @@ async def admin_create_default_hook(
                     title="Insufficient Capability",
                     detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
                 )
-            if body.workspace_id is None:
-                body.workspace_id = caller.workspace_id
+            body.workspace_id = target_ws_id
 
-        hook_kind = _normalize_hook_kind(body.hook_kind)
-        agent_def_id = body.agent_definition_id
-        agent_slug = body.agent_slug
+            agent_def_id = body.agent_definition_id
+            agent_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
 
-        if body.agent is not None:
-            raw_agent = body.agent.strip()
-            if body.scope_kind == "system":
-                agent_slug = raw_agent.lstrip("@")
-                agent_def_id = None
-            else:
+            if body.agent is not None:
+                raw_agent = body.agent.strip()
                 try:
                     agent_def_id = uuid.UUID(raw_agent)
                 except ValueError:
                     agent_slug = raw_agent.lstrip("@")
-                    if body.workspace_id is not None:
-                        ad_stmt = select(AgentDefinition.id).where(
-                            AgentDefinition.workspace_id == body.workspace_id,
-                            AgentDefinition.slug == agent_slug,
-                        )
-                        found_id = (await session.execute(ad_stmt)).scalar_one_or_none()
-                        if found_id is not None:
-                            agent_def_id = found_id
+                    ad_stmt = select(AgentDefinition).where(
+                        AgentDefinition.workspace_id == target_ws_id,
+                        AgentDefinition.slug == agent_slug,
+                    )
+                    ad_row = (await session.execute(ad_stmt)).scalar_one_or_none()
+                    if ad_row is not None:
+                        agent_def_id = ad_row.id
 
-        from_state = (
-            None
-            if body.from_state_name is None or body.from_state_name.strip() in ("", "*")
-            else body.from_state_name.strip()
-        )
-        wasm_bytes = (
-            bytes.fromhex(body.wasm_module_sha256.strip().lower())
-            if body.wasm_module_sha256
-            else None
+            if agent_def_id is not None:
+                ad_stmt = select(AgentDefinition).where(
+                    AgentDefinition.id == agent_def_id,
+                    AgentDefinition.workspace_id == target_ws_id,
+                )
+                agent_row = (await session.execute(ad_stmt)).scalar_one_or_none()
+                if agent_row is None:
+                    raise ProblemException(
+                        code="AGENT_NOT_FOUND",
+                        status=422,
+                        title="Agent Not Found",
+                        detail=f"Agent definition '{agent_def_id}' not found in target workspace.",
+                    )
+                if agent_row.slug and not agent_slug:
+                    agent_slug = agent_row.slug
+                if agent_row.harness_kind == "cli_pipe":
+                    try:
+                        assert_runtime_argv(agent_row)
+                    except CliPolicyError as exc:
+                        raise ProblemException(
+                            code="CLI_POLICY_VIOLATION",
+                            status=422,
+                            title="CLI Policy Violation",
+                            detail=exc.detail,
+                        ) from exc
+
+        await _assert_unique_name(session, body.scope_kind, body.workspace_id, clean_name)
+
+        wasm_bytes = await _validate_wasm_sha(
+            session,
+            body.wasm_module_sha256,
+            body.scope_kind,
+            body.workspace_id,
+            caller.principal_id,
         )
 
         template = DefaultWorkflowHook(
             scope_kind=body.scope_kind,
             workspace_id=body.workspace_id,
-            name=body.name.strip(),
-            from_state_name=from_state,
-            to_state_name=body.to_state_name.strip(),
+            name=clean_name,
+            from_state_name=clean_from_state,
+            to_state_name=clean_to_state,
             hook_kind=hook_kind,
             sort_rank=body.sort_rank,
             is_enabled=body.is_enabled,
             wasm_module_sha256=wasm_bytes,
             agent_definition_id=agent_def_id,
             agent_slug=agent_slug,
-            allowed_mutable_fields=body.allowed_mutable_fields,
+            allowed_mutable_fields=clean_fields,
             failure_policy=body.failure_policy,
             timeout_ms=body.timeout_ms,
             max_rework_attempts=body.max_rework_attempts,
@@ -337,7 +553,7 @@ async def admin_create_default_hook(
     response_model=DefaultWorkflowHookResponse,
     summary="Update a default workflow hook template",
 )
-async def admin_update_default_hook(
+async def admin_update_default_hook(  # noqa: PLR0915
     template_id: uuid.UUID,
     body: DefaultWorkflowHookUpdateRequest,
     caller: Caller,
@@ -347,7 +563,6 @@ async def admin_update_default_hook(
 
     Requires appropriate admin role and AAL2.
     """
-    del caller
     async with timing_floor(floor_ms=25.0):
         template = await session.get(DefaultWorkflowHook, template_id)
         if template is None:
@@ -362,16 +577,33 @@ async def admin_update_default_hook(
                     title="Insufficient Capability",
                     detail="Operation requires SERVER_ADMIN role.",
                 )
-        elif not (is_server_admin or is_ws_admin):
-            raise ProblemException(
-                code="INSUFFICIENT_CAPABILITY",
-                status=403,
-                title="Insufficient Capability",
-                detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
-            )
+        else:
+            if template.workspace_id != caller.workspace_id and not is_server_admin:
+                raise ProblemException(
+                    code="CROSS_WORKSPACE_FORBIDDEN",
+                    status=403,
+                    title="Cross Workspace Forbidden",
+                    detail="Access to target workspace forbidden.",
+                )
+            if not (is_server_admin or is_ws_admin):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
+                )
 
         if body.name is not None:
-            template.name = body.name.strip()
+            clean_name = body.name.strip()
+            await _assert_unique_name(
+                session,
+                template.scope_kind,
+                template.workspace_id,
+                clean_name,
+                exclude_id=template.id,
+            )
+            template.name = clean_name
+
         if "from_state_name" in body.model_fields_set:
             template.from_state_name = (
                 None
@@ -386,28 +618,143 @@ async def admin_update_default_hook(
             template.sort_rank = body.sort_rank
         if body.is_enabled is not None:
             template.is_enabled = body.is_enabled
+
         if "wasm_module_sha256" in body.model_fields_set:
-            template.wasm_module_sha256 = (
-                bytes.fromhex(body.wasm_module_sha256.strip().lower())
-                if body.wasm_module_sha256
-                else None
+            template.wasm_module_sha256 = await _validate_wasm_sha(
+                session,
+                body.wasm_module_sha256,
+                template.scope_kind,
+                template.workspace_id,
+                caller.principal_id,
             )
-        if body.agent is not None:
-            raw_agent = body.agent.strip()
-            if template.scope_kind == "system":
-                template.agent_slug = raw_agent.lstrip("@")
-                template.agent_definition_id = None
-            else:
+
+        if template.scope_kind == "system":
+            if body.agent_definition_id is not None:
+                raise ProblemException(
+                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
+                    status=422,
+                    title="System Template Requires Agent Slug",
+                    detail=(
+                        "System templates must not specify an agent_definition_id; "
+                        "use agent_slug instead."
+                    ),
+                )
+            if body.agent is not None:
+                raw_agent = body.agent.strip()
                 try:
-                    template.agent_definition_id = uuid.UUID(raw_agent)
+                    uuid.UUID(raw_agent)
+                    raise ProblemException(
+                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
+                        status=422,
+                        title="System Template Requires Agent Slug",
+                        detail=(
+                            "System templates must specify an agent slug (e.g. '@reality-checker') "
+                            "instead of a UUID."
+                        ),
+                    )
                 except ValueError:
                     template.agent_slug = raw_agent.lstrip("@")
-        if "agent_definition_id" in body.model_fields_set:
-            template.agent_definition_id = body.agent_definition_id
-        if "agent_slug" in body.model_fields_set:
-            template.agent_slug = body.agent_slug.strip() if body.agent_slug else None
+                    template.agent_definition_id = None
+            elif "agent_slug" in body.model_fields_set:
+                template.agent_slug = (
+                    body.agent_slug.strip().lstrip("@") if body.agent_slug else None
+                )
+                template.agent_definition_id = None
+        else:  # noqa: PLR5501
+            # Workspace template agent handling
+            if body.agent is not None:
+                raw_agent = body.agent.strip()
+                try:
+                    agent_u = uuid.UUID(raw_agent)
+                    stmt = select(AgentDefinition).where(
+                        AgentDefinition.id == agent_u,
+                        AgentDefinition.workspace_id == template.workspace_id,
+                    )
+                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                    if ad_row is None:
+                        raise ProblemException(
+                            code="AGENT_NOT_FOUND",
+                            status=422,
+                            title="Agent Not Found",
+                            detail=f"Agent definition '{agent_u}' not found in workspace.",
+                        )
+                    template.agent_definition_id = ad_row.id
+                    template.agent_slug = ad_row.slug
+                    if ad_row.harness_kind == "cli_pipe":
+                        try:
+                            assert_runtime_argv(ad_row)
+                        except CliPolicyError as exc:
+                            raise ProblemException(
+                                code="CLI_POLICY_VIOLATION",
+                                status=422,
+                                title="CLI Policy Violation",
+                                detail=exc.detail,
+                            ) from exc
+                except ValueError:
+                    clean_slug = raw_agent.lstrip("@")
+                    template.agent_slug = clean_slug
+                    stmt = select(AgentDefinition).where(
+                        AgentDefinition.workspace_id == template.workspace_id,
+                        AgentDefinition.slug == clean_slug,
+                    )
+                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                    template.agent_definition_id = ad_row.id if ad_row is not None else None
+                    if ad_row is not None and ad_row.harness_kind == "cli_pipe":
+                        try:
+                            assert_runtime_argv(ad_row)
+                        except CliPolicyError as exc:
+                            raise ProblemException(
+                                code="CLI_POLICY_VIOLATION",
+                                status=422,
+                                title="CLI Policy Violation",
+                                detail=exc.detail,
+                            ) from exc
+            elif "agent_definition_id" in body.model_fields_set:
+                if body.agent_definition_id is not None:
+                    stmt = select(AgentDefinition).where(
+                        AgentDefinition.id == body.agent_definition_id,
+                        AgentDefinition.workspace_id == template.workspace_id,
+                    )
+                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                    if ad_row is None:
+                        raise ProblemException(
+                            code="AGENT_NOT_FOUND",
+                            status=422,
+                            title="Agent Not Found",
+                            detail=(
+                                f"Agent definition '{body.agent_definition_id}' "
+                                "not found in workspace."
+                            ),
+                        )
+                    template.agent_definition_id = ad_row.id
+                    template.agent_slug = ad_row.slug
+                    if ad_row.harness_kind == "cli_pipe":
+                        try:
+                            assert_runtime_argv(ad_row)
+                        except CliPolicyError as exc:
+                            raise ProblemException(
+                                code="CLI_POLICY_VIOLATION",
+                                status=422,
+                                title="CLI Policy Violation",
+                                detail=exc.detail,
+                            ) from exc
+                else:
+                    template.agent_definition_id = None
+            elif "agent_slug" in body.model_fields_set:
+                updated_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
+                template.agent_slug = updated_slug
+                if updated_slug:
+                    stmt = select(AgentDefinition).where(
+                        AgentDefinition.workspace_id == template.workspace_id,
+                        AgentDefinition.slug == updated_slug,
+                    )
+                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
+                    template.agent_definition_id = ad_row.id if ad_row is not None else None
+                else:
+                    template.agent_definition_id = None
+
         if body.allowed_mutable_fields is not None:
-            template.allowed_mutable_fields = body.allowed_mutable_fields
+            template.allowed_mutable_fields = _validate_mutable_fields(body.allowed_mutable_fields)
         if body.failure_policy is not None:
             template.failure_policy = body.failure_policy
         if "timeout_ms" in body.model_fields_set:
@@ -431,7 +778,6 @@ async def admin_delete_default_hook(
     session: Session,
 ) -> Response:
     """Delete a default workflow hook template. Requires appropriate admin role and AAL2."""
-    del caller
     async with timing_floor(floor_ms=25.0):
         template = await session.get(DefaultWorkflowHook, template_id)
         if template is None:
@@ -446,13 +792,21 @@ async def admin_delete_default_hook(
                     title="Insufficient Capability",
                     detail="Operation requires SERVER_ADMIN role.",
                 )
-        elif not (is_server_admin or is_ws_admin):
-            raise ProblemException(
-                code="INSUFFICIENT_CAPABILITY",
-                status=403,
-                title="Insufficient Capability",
-                detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
-            )
+        else:
+            if template.workspace_id != caller.workspace_id and not is_server_admin:
+                raise ProblemException(
+                    code="CROSS_WORKSPACE_FORBIDDEN",
+                    status=403,
+                    title="Cross Workspace Forbidden",
+                    detail="Access to target workspace forbidden.",
+                )
+            if not (is_server_admin or is_ws_admin):
+                raise ProblemException(
+                    code="INSUFFICIENT_CAPABILITY",
+                    status=403,
+                    title="Insufficient Capability",
+                    detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
+                )
 
         await session.delete(template)
         await session.commit()

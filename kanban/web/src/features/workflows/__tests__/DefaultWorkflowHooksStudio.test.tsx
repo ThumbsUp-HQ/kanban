@@ -49,7 +49,7 @@ const MOCK_WORKSPACE_TEMPLATE: api.DefaultWorkflowHook = {
   allowed_mutable_fields: [],
   failure_policy: 'fail_open_warn',
   timeout_ms: null,
-  max_rework_attempts: 0,
+  max_rework_attempts: 3,
   created_by: null,
   created_at: '2026-11-26T12:00:00Z',
   updated_at: '2026-11-26T12:00:00Z',
@@ -325,6 +325,74 @@ describe('DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438)', () =>
       expect(syncSpy).toHaveBeenCalledWith('NEWP');
       expect(screen.getByTestId('sync-defaults-status')).toBeDefined();
       expect(screen.getByTestId('sync-defaults-status').textContent).toContain('Successfully synced 1 default hook template(s).');
+    });
+  });
+
+  it('handles edit round-trip for agent_async and wasm_sync preserving exact hook kinds', async () => {
+    const wasmTemplate: api.DefaultWorkflowHook = {
+      ...MOCK_WORKSPACE_TEMPLATE,
+      id: 'template-ws-wasm',
+      hook_kind: 'wasm_sync',
+    };
+    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([wasmTemplate]);
+    const updateSpy = vi.spyOn(api, 'updateDefaultWorkflowHook').mockResolvedValue({
+      ...wasmTemplate,
+      timeout_ms: 30000,
+    });
+
+    renderStudio({ scopeKind: 'workspace', workspaceId: 'ws-1234' });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('template-edit-btn-template-ws-wasm')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('template-edit-btn-template-ws-wasm'));
+    expect(screen.getByTestId('template-dialog')).toBeDefined();
+
+    const kindSelect = screen.getByTestId<HTMLSelectElement>('template-hook-kind-select');
+    expect(kindSelect.value).toBe('wasm_validator');
+
+    fireEvent.change(screen.getByTestId('template-timeout-input'), {
+      target: { value: '30000' },
+    });
+    fireEvent.click(screen.getByTestId('save-template-btn'));
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        'template-ws-wasm',
+        expect.objectContaining({
+          hook_kind: 'wasm_validator',
+          timeout_ms: 30000,
+        }),
+        'ws-1234',
+      );
+    });
+  });
+
+  it('renders danger alert with role=alert when syncDefaultWorkflowHooks fails', async () => {
+    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
+    vi.spyOn(api, 'syncDefaultWorkflowHooks').mockRejectedValue(new Error('Network sync error'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/NEWP/settings/workflows']}>
+          <WorkflowStudioPage projectKeyOverride="NEWP" isAdmin={true} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sync-default-hooks-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('sync-default-hooks-btn'));
+
+    await waitFor(() => {
+      const alert = screen.getByTestId('sync-defaults-status');
+      expect(alert).toBeDefined();
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.className).toContain('workflow-alert-danger');
+      expect(alert.textContent).toContain('Network sync error');
     });
   });
 });

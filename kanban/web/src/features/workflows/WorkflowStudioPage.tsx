@@ -128,7 +128,7 @@ export function WorkflowStudioPage({
 
   // Sync default workflow hooks state
   const [isSyncingDefaults, setIsSyncingDefaults] = useState(false);
-  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
+  const [syncAlert, setSyncAlert] = useState<{ kind: 'info' | 'danger'; text: string } | null>(null);
 
   const handleSaveProjectTimeout = async (val: number | null) => {
     if (val !== null && (Number.isNaN(val) || val < 1000 || val > 600000)) {
@@ -289,17 +289,22 @@ export function WorkflowStudioPage({
   const handleSyncDefaults = async () => {
     try {
       setIsSyncingDefaults(true);
-      setSyncStatusMessage(null);
+      setSyncAlert(null);
       const synced = await syncDefaultWorkflowHooks(projectKey);
       await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
-      setSyncStatusMessage(
-        synced.length > 0
-          ? `Successfully synced ${String(synced.length)} default hook template(s).`
-          : 'All default hook templates are already present on this project.',
-      );
+      setSyncAlert({
+        kind: 'info',
+        text:
+          synced.length > 0
+            ? `Successfully synced ${String(synced.length)} default hook template(s).`
+            : 'All default hook templates are already present on this project.',
+      });
     } catch (err: unknown) {
       if (!isAal2StepUpCancelled(err)) {
-        setSyncStatusMessage('Failed to sync default workflow hook templates.');
+        setSyncAlert({
+          kind: 'danger',
+          text: err instanceof Error ? err.message : 'Failed to sync default workflow hook templates.',
+        });
       }
     } finally {
       setIsSyncingDefaults(false);
@@ -351,19 +356,19 @@ export function WorkflowStudioPage({
       </header>
 
       {/* Sync Status Banner */}
-      {syncStatusMessage && (
+      {syncAlert && (
         <div
-          className="workflow-alert workflow-alert-info"
-          role="status"
+          className={`workflow-alert ${syncAlert.kind === 'danger' ? 'workflow-alert-danger' : 'workflow-alert-info'}`}
+          role={syncAlert.kind === 'danger' ? 'alert' : 'status'}
           data-testid="sync-defaults-status"
           style={{ marginBottom: '1rem' }}
         >
-          <span>{syncStatusMessage}</span>
+          <span>{syncAlert.text}</span>
           <button
             type="button"
             className="workflow-btn workflow-btn-secondary workflow-btn-sm"
             style={{ marginLeft: 'auto' }}
-            onClick={() => { setSyncStatusMessage(null); }}
+            onClick={() => { setSyncAlert(null); }}
           >
             Dismiss
           </button>

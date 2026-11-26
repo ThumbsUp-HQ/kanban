@@ -4,41 +4,28 @@ rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 7 items
+collecting ... collected 11 items
 
-kanban/tests/workflows/test_default_workflow_hooks.py::test_admin_crud_and_copy_on_create_inheritance PASSED [ 14%]
-kanban/tests/workflows/test_default_workflow_hooks.py::test_non_agentic_project_detach_and_sibling_isolation PASSED [ 28%]
-kanban/tests/workflows/test_default_workflow_hooks.py::test_security_auth_and_aal2_enforcement PASSED [ 42%]
-kanban/tests/workflows/test_default_workflow_hooks.py::test_workspace_convenience_routes_and_sync_defaults PASSED [ 57%]
-database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py::test_p6_24_default_workflow_hooks_migration_lifecycle PASSED [ 71%]
-kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 85%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_admin_crud_and_copy_on_create_inheritance PASSED [  9%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_non_agentic_project_detach_and_sibling_isolation PASSED [ 18%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_security_auth_and_aal2_enforcement PASSED [ 27%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_workspace_convenience_routes_and_sync_defaults PASSED [ 36%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_system_template_cross_tenant_isolation_and_rejections PASSED [ 45%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_admin_validations_and_conflict_handling PASSED [ 54%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_disabled_workspace_template_suppresses_system_template PASSED [ 63%]
+kanban/tests/workflows/test_default_workflow_hooks.py::test_apply_blueprint_inherits_default_hooks PASSED [ 72%]
+database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py::test_p6_24_default_workflow_hooks_migration_lifecycle PASSED [ 81%]
+kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 90%]
 kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [100%]
 
-============================== 7 passed in 3.72s ===============================
-
-> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan438-8bec86f0/kanban/web
-> vitest run src/features/workflows/ --run
-
+============================== 11 passed in 9.65s ==============================
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan438-8bec86f0/kanban/web
 
- ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 141ms
- ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 414ms
- ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 737ms
- ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (16 tests) 1349ms
-   ✓ AttachHookDialog (KB-P5-24) (16)
-     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 352ms
- ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx (8 tests) 436ms
- ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (17 tests) 986ms
- ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 3773ms
-   ✓ Workflow Studio Coverage Booster (30)
-     ✓ HookPipelineRow variations (6)
-       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2072ms
-     ✓ WorkflowStudioPage interactive actions (10)
-       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 330ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx (10 tests) 775ms
 
- Test Files  7 passed (7)
-      Tests  97 passed (97)
-   Start at  13:19:36
-   Duration  6.07s (tests 43%, environment 31%, import 17%, transform 8%)
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  14:13:15
+   Duration  4.40s (import 32%, environment 27%, transform 21%, tests 19%)
 

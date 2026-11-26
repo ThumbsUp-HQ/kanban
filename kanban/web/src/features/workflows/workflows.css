@@ -351,10 +351,40 @@
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 12px;
-  background-color: rgba(99, 102, 241, 0.12);
-  color: var(--accent-primary, #6366f1);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background-color: var(--badge-bg);
+  color: var(--badge-fg);
+  border: 1px solid var(--badge-border);
   letter-spacing: 0.02em;
+}
+
+.template-scope-badge-system {
+  background-color: var(--badge-bg);
+  color: var(--badge-fg);
+  border: 1px solid var(--badge-border);
+}
+
+.template-scope-badge-workspace {
+  background-color: var(--bg-success-subtle);
+  color: var(--ok-fg);
+  border: 1px solid var(--border-success);
+}
+
+.workflow-alert-info {
+  background-color: var(--badge-bg);
+  color: var(--badge-fg);
+  border: 1px solid var(--badge-border);
+}
+
+.workflow-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .workflow-form-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
 
 .hook-policy-badge {

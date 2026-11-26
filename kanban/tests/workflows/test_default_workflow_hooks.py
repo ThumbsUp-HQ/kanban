@@ -13,14 +13,22 @@ import pytest
 from sqlalchemy import select, text
 
 from database.models.agent_definition import AgentDefinition
+from database.models.projects import Project
+from database.models.spine import Workspace
 from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
+from kanban.projects.blueprint_service import (
+    BlueprintState,
+    ProjectBlueprint,
+)
+from kanban.tests.api.conftest import SeededUser
+from kanban.tests.security.helpers import add_role_binding, create_user, rebuild_era
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from kanban.tests.api.conftest import ApiEnv, SeededUser
+    from kanban.tests.api.conftest import ApiEnv
 
 pytestmark = pytest.mark.committed_db
 
@@ -374,3 +382,347 @@ async def test_workspace_convenience_routes_and_sync_defaults(
     synced_hooks = res_sync.json()
     assert len(synced_hooks) >= 1
     assert any(h["name"] == "WS Sync Gate" for h in synced_hooks)
+
+
+@pytest.mark.asyncio
+async def test_system_template_cross_tenant_isolation_and_rejections(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify system templates forbid agent_definition_id/UUID and resolve agent_slug per workspace."""
+    session = api_env.seed
+    admin = await make_user("sys_cross_admin", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    fake_agent_id = uuid.uuid4()
+
+    # 1. Reject agent_definition_id on system create
+    res_err1 = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Invalid Agent ID System Hook",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+            "agent_definition_id": str(fake_agent_id),
+        },
+    )
+    assert res_err1.status_code == 422, res_err1.text
+    assert res_err1.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
+
+    # 2. Reject UUID string in agent on system create
+    res_err2 = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Invalid UUID Agent System Hook",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+            "agent": str(fake_agent_id),
+        },
+    )
+    assert res_err2.status_code == 422, res_err2.text
+    assert res_err2.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
+
+    # 3. Create valid system template with slug
+    res_sys = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Cross Tenant Reality Gate",
+            "scope_kind": "system",
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "agent": "@reality-checker",
+        },
+    )
+    assert res_sys.status_code == 201, res_sys.text
+    sys_tpl_id = res_sys.json()["id"]
+
+    # 4. Reject PATCH with agent_definition_id
+    res_err3 = await client_admin.patch(
+        f"/api/v1/admin/default-workflow-hooks/{sys_tpl_id}",
+        json={"agent_definition_id": str(fake_agent_id)},
+    )
+    assert res_err3.status_code == 422, res_err3.text
+    assert res_err3.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
+
+    # 5. Create Workspace B and seed an agent in Workspace B
+    ws_b = Workspace(name="Workspace Beta", slug=f"ws-b-{uuid.uuid4().hex[:6]}")
+    session.add(ws_b)
+    await session.commit()
+
+    agent_b_id = await _seed_agent(session, ws_b.id, admin.id, slug="reality-checker")
+
+    # 6. Create admin in Workspace B and create project
+    user_b_id = await create_user(
+        session, ws_b.id, handle=f"@admin_b_{uuid.uuid4().hex[:4]}", display_name="Admin B"
+    )
+    await add_role_binding(session, ws_b.id, user_b_id, role="SERVER_ADMIN", scope_type="server")
+    await rebuild_era(session, ws_b.id)
+    await session.commit()
+    user_b = SeededUser(id=user_b_id, workspace_id=ws_b.id, handle="admin_b")
+    await _enroll_mfa(session, user_b.id)
+    client_b = as_principal(user_b, aal_level=2)
+
+    res_proj_b = await client_b.post(
+        "/api/v1/projects",
+        json={"name": "Workspace B Project", "identifier": "WSB1"},
+    )
+    assert res_proj_b.status_code == 201, res_proj_b.text
+    wsb_proj_id = uuid.UUID(res_proj_b.json()["id"])
+
+    # Verify materialized hook in Workspace B
+    hook_b = (
+        await session.execute(
+            select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == wsb_proj_id)
+        )
+    ).scalar_one()
+    assert hook_b.agent_definition_id == agent_b_id
+    assert str(hook_b.inherited_from_template_id) == sys_tpl_id
+
+
+@pytest.mark.asyncio
+async def test_admin_validations_and_conflict_handling(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify cross-workspace 403, invalid WASM 422, bounds 422, and duplicate name 409."""
+    session = api_env.seed
+    admin = await make_user("val_admin", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    ws_admin = await make_user("ws_admin_only", workspace_role="WORKSPACE_ADMIN")
+    await _enroll_mfa(session, ws_admin.id)
+    client_ws_admin = as_principal(ws_admin, aal_level=2)
+
+    # 1. Cross-workspace create attempt by non-server-admin -> 403
+    foreign_ws_id = uuid.uuid4()
+    res_cross = await client_ws_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Cross WS Attempt",
+            "scope_kind": "workspace",
+            "workspace_id": str(foreign_ws_id),
+            "to_state_name": "Done",
+        },
+    )
+    assert res_cross.status_code == 403, res_cross.text
+    assert res_cross.json()["code"] == "CROSS_WORKSPACE_FORBIDDEN"
+
+    # Switch principal back to server admin
+    client_admin = as_principal(admin, aal_level=2)
+
+    # 2. Invalid WASM hex -> 422
+    res_wasm_err = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Invalid WASM Hex",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+            "wasm_module_sha256": "not-valid-hex!",
+        },
+    )
+    assert res_wasm_err.status_code == 422, res_wasm_err.text
+
+    # 3. max_rework_attempts = 0 (out of 1..20 bounds) -> 422
+    res_rework_err = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Zero Rework Attempts",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+            "max_rework_attempts": 0,
+        },
+    )
+    assert res_rework_err.status_code == 422, res_rework_err.text
+
+    # 4. Whitespace name -> 422
+    res_ws_name_err = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "    ",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+        },
+    )
+    assert res_ws_name_err.status_code == 422, res_ws_name_err.text
+
+    # 5. Invalid hook_kind -> 422
+    res_kind_err = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Unknown Kind Template",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+            "hook_kind": "arbitrary_custom_unknown_kind",
+        },
+    )
+    assert res_kind_err.status_code == 422, res_kind_err.text
+
+    # 6. Duplicate template name -> 409
+    res_first = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Unique Name Test",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+        },
+    )
+    assert res_first.status_code == 201, res_first.text
+
+    res_dup = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Unique Name Test",
+            "scope_kind": "system",
+            "to_state_name": "Done",
+        },
+    )
+    assert res_dup.status_code == 409, res_dup.text
+    assert res_dup.json()["code"] == "TEMPLATE_NAME_CONFLICT"
+
+
+@pytest.mark.asyncio
+async def test_disabled_workspace_template_suppresses_system_template(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify a disabled workspace template with the same name suppresses an enabled system template."""
+    session = api_env.seed
+    ws_id = api_env.workspace_id
+    admin = await make_user("suppress_admin", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
+
+    # 1. Enabled system template
+    res_sys = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Universal Security Check",
+            "scope_kind": "system",
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "agent": "@reality-checker",
+            "is_enabled": True,
+        },
+    )
+    assert res_sys.status_code == 201, res_sys.text
+
+    # 2. Disabled workspace template with same name
+    res_ws = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Universal Security Check",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "agent": "@reality-checker",
+            "is_enabled": False,
+        },
+    )
+    assert res_ws.status_code == 201, res_ws.text
+
+    # 3. Create project in this workspace
+    res_proj = await client_admin.post(
+        "/api/v1/projects",
+        json={"name": "Suppression Test Project", "identifier": "SUP1"},
+    )
+    assert res_proj.status_code == 201, res_proj.text
+    proj_id = uuid.UUID(res_proj.json()["id"])
+
+    # 4. Verify hook was NOT created because the workspace template suppressed the system template
+    hooks = (
+        (
+            await session.execute(
+                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    hook_names = {h.name for h in hooks}
+    assert "Universal Security Check" not in hook_names
+
+
+@pytest.mark.asyncio
+async def test_apply_blueprint_inherits_default_hooks(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify apply_blueprint with is_new_project=True inherits default hook templates."""
+    session = api_env.seed
+    ws_id = api_env.workspace_id
+    admin = await make_user("bp_adm", workspace_role="SERVER_ADMIN")
+    await _enroll_mfa(session, admin.id)
+    client_admin = as_principal(admin, aal_level=2)
+
+    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
+
+    # Create default hook template
+    res_tpl = await client_admin.post(
+        "/api/v1/admin/default-workflow-hooks",
+        json={
+            "name": "Blueprint Hook Inheritance Gate",
+            "scope_kind": "workspace",
+            "workspace_id": str(ws_id),
+            "from_state_name": "In Progress",
+            "to_state_name": "Done",
+            "agent": "@reality-checker",
+        },
+    )
+    assert res_tpl.status_code == 201, res_tpl.text
+    tpl_id = res_tpl.json()["id"]
+
+    # Apply blueprint for a new project via admin API
+    bp = ProjectBlueprint(
+        identifier="BP99",
+        name="Blueprint Generated Project",
+        states=[
+            BlueprintState(name="In Progress", group="started", color="#3b82f6"),
+            BlueprintState(name="Done", group="completed", color="#10b981"),
+            BlueprintState(name="Canceled", group="cancelled", color="#ef4444"),
+        ],
+    )
+    res_plan = await client_admin.post(
+        "/api/v1/admin/projects/blueprint:plan",
+        json={"blueprint": bp.model_dump()},
+    )
+    assert res_plan.status_code == 200, res_plan.text
+    plan_sha = res_plan.json()["plan_sha256"]
+
+    res_apply = await client_admin.post(
+        "/api/v1/admin/projects/blueprint:apply",
+        json={"blueprint": bp.model_dump(), "plan_sha256": plan_sha},
+    )
+    assert res_apply.status_code == 200, res_apply.text
+    proj = (
+        await session.execute(
+            select(Project).where(
+                Project.workspace_id == ws_id,
+                Project.identifier == bp.identifier,
+            )
+        )
+    ).scalar_one()
+    proj_id = proj.id
+
+    # Verify project has inherited hook
+    hooks = list(
+        (
+            await session.execute(
+                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(hooks) >= 1
+    inherited = [h for h in hooks if str(h.inherited_from_template_id) == tpl_id]
+    assert len(inherited) == 1
+    assert inherited[0].name == "Blueprint Hook Inheritance Gate"

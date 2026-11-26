@@ -686,7 +686,9 @@ export interface paths {
         put?: never;
         /**
          * Create a default workflow hook template
-         * @description Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
+         * @description Create a new default workflow hook template.
+         *
+         *     Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
          */
         post: operations["admin_create_default_hook_api_v1_admin_default_workflow_hooks_post"];
         delete?: never;
@@ -714,7 +716,9 @@ export interface paths {
         head?: never;
         /**
          * Update a default workflow hook template
-         * @description Update an existing default workflow hook template. Requires appropriate admin role and AAL2.
+         * @description Update an existing default workflow hook template.
+         *
+         *     Requires appropriate admin role and AAL2.
          */
         patch: operations["admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch"];
         trace?: never;
@@ -5066,9 +5070,9 @@ export interface paths {
         put?: never;
         /**
          * Sync missing default workflow hook templates to project
-         * @description Apply missing default hook templates onto an existing project without overwriting existing hooks.
+         * @description Apply missing default hook templates onto an existing project.
          *
-         *     Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
+         *     Does not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
          */
         post: operations["sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post"];
         delete?: never;
@@ -9149,7 +9153,7 @@ export interface components {
             is_enabled: boolean;
             /**
              * Max Rework Attempts
-             * @description Maximum rework attempts (0..20)
+             * @description Maximum rework attempts (1..20)
              * @default 3
              */
             max_rework_attempts: number;

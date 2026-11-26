@@ -267,8 +267,23 @@ class DefaultWorkflowHook(Base):
             name="chk_default_workflow_hooks_timeout_ms",
         ),
         CheckConstraint(
-            "max_rework_attempts BETWEEN 0 AND 20",
+            "scope_kind <> 'system' OR agent_definition_id IS NULL",
+            name="chk_default_workflow_hooks_system_agent_def",
+        ),
+        CheckConstraint(
+            "wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32",
+            name="chk_default_workflow_hooks_wasm_len",
+        ),
+        CheckConstraint(
+            "max_rework_attempts BETWEEN 1 AND 20",
             name="chk_default_workflow_hooks_max_rework",
+        ),
+        Index(
+            "uq_default_workflow_hooks_scope_ws_name",
+            "scope_kind",
+            text("COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("lower(name)"),
+            unique=True,
         ),
         Index("idx_default_workflow_hooks_scope", "scope_kind", "workspace_id"),
         Index("idx_default_workflow_hooks_workspace_id", "workspace_id"),

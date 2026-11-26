@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, type JSX } from 'react';
+import React, { useEffect, useState, type JSX } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
@@ -58,6 +58,20 @@ export function DefaultWorkflowHooksStudio({
   const [formFailurePolicy, setFormFailurePolicy] = useState<'fail_closed' | 'fail_open_warn'>('fail_closed');
   const [formMaxRework, setFormMaxRework] = useState(3);
 
+  // Close on Escape key press
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDialogOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [dialogOpen]);
+
   const openCreateDialog = () => {
     setEditingTemplate(null);
     setFormName('');
@@ -78,12 +92,27 @@ export function DefaultWorkflowHooksStudio({
     setFormName(template.name);
     setFormFromState(template.from_state_name ?? '');
     setFormToState(template.to_state_name);
-    setFormHookKind(template.hook_kind);
+
+    let initialKind = template.hook_kind;
+    if (initialKind === 'agent_async' || initialKind === 'agent_interceptor') {
+      initialKind = 'agent_interceptor';
+    } else if (
+      initialKind === 'wasm_sync' ||
+      initialKind === 'wasm_validator' ||
+      initialKind === 'sync_validator' ||
+      initialKind === 'sync_mutator'
+    ) {
+      initialKind = 'wasm_validator';
+    } else if (initialKind === 'builtin') {
+      initialKind = 'builtin';
+    }
+    setFormHookKind(initialKind);
+
     setFormAgentSlug(template.agent_slug ? `@${template.agent_slug.replace(/^@+/, '')}` : '');
     setFormSortRank(template.sort_rank);
     setFormTimeoutMs(template.timeout_ms ?? '');
     setFormFailurePolicy(template.failure_policy === 'fail_open_warn' ? 'fail_open_warn' : 'fail_closed');
-    setFormMaxRework(template.max_rework_attempts);
+    setFormMaxRework(Math.max(1, Math.min(20, template.max_rework_attempts || 1)));
     setErrorMessage(null);
     setDialogOpen(true);
   };
@@ -152,6 +181,7 @@ export function DefaultWorkflowHooksStudio({
           from_state_name: cleanFromState,
           to_state_name: formToState.trim(),
           hook_kind: formHookKind,
+          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
           agent_slug: cleanAgentSlug,
           sort_rank: formSortRank,
           timeout_ms: timeoutValue,
@@ -167,6 +197,7 @@ export function DefaultWorkflowHooksStudio({
           from_state_name: cleanFromState,
           to_state_name: formToState.trim(),
           hook_kind: formHookKind,
+          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
           agent_slug: cleanAgentSlug,
           sort_rank: formSortRank,
           timeout_ms: timeoutValue,
@@ -218,7 +249,7 @@ export function DefaultWorkflowHooksStudio({
               : 'Define workspace-level workflow hook templates inherited by newly created projects in this workspace, overriding system-wide templates.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <StudioDocLink
             href="/docs/scripted-workflows-and-transition-helpers"
             title="Default Workflow Hooks Documentation"
@@ -314,14 +345,15 @@ export function DefaultWorkflowHooksStudio({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
                   {/* Scope Badge */}
                   <span
-                    className="workflow-studio-title-badge"
+                    className={`workflow-studio-title-badge ${
+                      tpl.scope_kind === 'system'
+                        ? 'template-scope-badge-system'
+                        : 'template-scope-badge-workspace'
+                    }`}
                     style={{
                       textTransform: 'uppercase',
                       fontSize: '0.7rem',
                       fontWeight: 600,
-                      background: tpl.scope_kind === 'system' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                      color: tpl.scope_kind === 'system' ? '#2563eb' : '#059669',
-                      border: `1px solid ${tpl.scope_kind === 'system' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
                     }}
                   >
                     {tpl.scope_kind}
@@ -437,48 +469,37 @@ export function DefaultWorkflowHooksStudio({
       {/* Modal Dialog for Create / Edit */}
       {dialogOpen && (
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="template-dialog-title"
-          data-testid="template-dialog"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '1rem',
-          }}
+          className="workflow-modal-backdrop"
+          role="presentation"
+          onClick={() => { setDialogOpen(false); }}
         >
           <div
-            style={{
-              background: 'var(--bg-surface)',
-              borderRadius: '8px',
-              padding: '1.5rem',
-              width: '100%',
-              maxWidth: '540px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            }}
+            className="workflow-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-dialog-title"
+            data-testid="template-dialog"
+            onClick={(e) => { e.stopPropagation(); }}
           >
-            <h2 id="template-dialog-title" style={{ margin: '0 0 1rem 0', fontSize: '1.25rem' }}>
-              {editingTemplate ? 'Edit Default Hook Template' : 'Add Default Hook Template'}
-            </h2>
+            <div className="workflow-dialog-header">
+              <h2 id="template-dialog-title" className="workflow-dialog-title">
+                {editingTemplate ? 'Edit Default Hook Template' : 'Add Default Hook Template'}
+              </h2>
+            </div>
 
-            {errorMessage && (
-              <div
-                className="workflow-alert workflow-alert-danger"
-                role="alert"
-                style={{ marginBottom: '1rem' }}
-              >
-                <span>{errorMessage}</span>
-                <ErrorHelpHint error={errorMessage} />
-              </div>
-            )}
+            <form onSubmit={(e) => void handleSave(e)} className="workflow-dialog-form">
+              <div className="workflow-dialog-body">
+                {errorMessage && (
+                  <div
+                    className="workflow-alert workflow-alert-danger"
+                    role="alert"
+                    style={{ marginBottom: '0.5rem' }}
+                  >
+                    <span>{errorMessage}</span>
+                    <ErrorHelpHint error={errorMessage} />
+                  </div>
+                )}
 
-            <form onSubmit={(e) => void handleSave(e)}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {/* Template Name */}
                 <div>
                   <label
@@ -502,7 +523,7 @@ export function DefaultWorkflowHooksStudio({
                 </div>
 
                 {/* Transition States: From & To */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="workflow-form-grid-2">
                   <div>
                     <label
                       htmlFor="template-from-state-input"
@@ -548,7 +569,7 @@ export function DefaultWorkflowHooksStudio({
                 </div>
 
                 {/* Hook Kind & Agent Slug */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="workflow-form-grid-2">
                   <div>
                     <label
                       htmlFor="template-hook-kind-select"
@@ -591,7 +612,7 @@ export function DefaultWorkflowHooksStudio({
                 </div>
 
                 {/* Timeout & Failure Policy */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="workflow-form-grid-2">
                   <div>
                     <label
                       htmlFor="template-timeout-input"
@@ -635,7 +656,7 @@ export function DefaultWorkflowHooksStudio({
                 </div>
 
                 {/* Sort Rank & Max Rework Attempts */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="workflow-form-grid-2">
                   <div>
                     <label
                       htmlFor="template-sort-rank-input"
@@ -665,7 +686,7 @@ export function DefaultWorkflowHooksStudio({
                       id="template-rework-input"
                       data-testid="template-rework-input"
                       type="number"
-                      min={0}
+                      min={1}
                       max={20}
                       className="workflow-form-control"
                       style={{ width: '100%' }}
@@ -677,16 +698,7 @@ export function DefaultWorkflowHooksStudio({
               </div>
 
               {/* Action Buttons */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '0.75rem',
-                  marginTop: '1.5rem',
-                  paddingTop: '1rem',
-                  borderTop: '1px solid var(--border-subtle)',
-                }}
-              >
+              <div className="workflow-dialog-actions">
                 <button
                   type="button"
                   className="workflow-btn workflow-btn-secondary"

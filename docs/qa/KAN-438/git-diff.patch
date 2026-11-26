@@ -1,3 +1,134 @@
+diff --git a/database/migrations/sql/p6_24_default_workflow_hooks.down.sql b/database/migrations/sql/p6_24_default_workflow_hooks.down.sql
+new file mode 100644
+index 00000000..955e2ce7
+--- /dev/null
++++ b/database/migrations/sql/p6_24_default_workflow_hooks.down.sql
+@@ -0,0 +1,10 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 2. Drop inherited_from_template_id column and index on workflow_transition_hooks
++DROP INDEX IF EXISTS idx_workflow_transition_hooks_inherited_from_template_id;
++ALTER TABLE workflow_transition_hooks DROP COLUMN IF EXISTS inherited_from_template_id;
++
++-- 1. Drop default_workflow_hooks table and index
++DROP INDEX IF EXISTS uq_default_workflow_hooks_scope_ws_name;
++DROP TABLE IF EXISTS default_workflow_hooks CASCADE;
+diff --git a/database/migrations/sql/p6_24_default_workflow_hooks.up.sql b/database/migrations/sql/p6_24_default_workflow_hooks.up.sql
+new file mode 100644
+index 00000000..a66e444d
+--- /dev/null
++++ b/database/migrations/sql/p6_24_default_workflow_hooks.up.sql
+@@ -0,0 +1,80 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Create default_workflow_hooks table
++CREATE TABLE default_workflow_hooks (
++    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++    scope_kind TEXT NOT NULL CHECK (scope_kind IN ('system', 'workspace')),
++    workspace_id UUID NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
++    from_state_name TEXT NULL CHECK (from_state_name IS NULL OR char_length(from_state_name) BETWEEN 1 AND 80),
++    to_state_name TEXT NOT NULL CHECK (char_length(to_state_name) BETWEEN 1 AND 80),
++    hook_kind TEXT NOT NULL CHECK (hook_kind IN ('wasm_sync', 'agent_async', 'builtin')),
++    sort_rank INTEGER NOT NULL DEFAULT 100 CHECK (sort_rank >= 0),
++    is_enabled BOOLEAN NOT NULL DEFAULT true,
++    wasm_module_sha256 BYTEA NULL,
++    agent_definition_id UUID NULL REFERENCES agent_definitions(id) ON DELETE RESTRICT,
++    agent_slug TEXT NULL CHECK (agent_slug IS NULL OR char_length(agent_slug) BETWEEN 1 AND 80),
++    allowed_mutable_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
++    failure_policy TEXT NOT NULL DEFAULT 'fail_closed' CHECK (failure_policy IN ('fail_closed', 'fail_open_warn')),
++    timeout_ms INTEGER NULL CHECK (timeout_ms IS NULL OR timeout_ms BETWEEN 1000 AND 600000),
++    max_rework_attempts INTEGER NOT NULL DEFAULT 3 CHECK (max_rework_attempts BETWEEN 1 AND 20),
++    created_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++    CONSTRAINT chk_default_workflow_hooks_scope CHECK (
++        (scope_kind = 'system' AND workspace_id IS NULL) OR
++        (scope_kind = 'workspace' AND workspace_id IS NOT NULL)
++    ),
++    CONSTRAINT chk_default_workflow_hooks_system_agent_def CHECK (
++        scope_kind <> 'system' OR agent_definition_id IS NULL
++    ),
++    CONSTRAINT chk_default_workflow_hooks_wasm_len CHECK (
++        wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32
++    )
++);
++
++CREATE UNIQUE INDEX uq_default_workflow_hooks_scope_ws_name
++    ON default_workflow_hooks (scope_kind, COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
++CREATE INDEX idx_default_workflow_hooks_scope ON default_workflow_hooks (scope_kind, workspace_id);
++CREATE INDEX idx_default_workflow_hooks_workspace_id ON default_workflow_hooks (workspace_id);
++
++ALTER TABLE default_workflow_hooks ENABLE ROW LEVEL SECURITY;
++ALTER TABLE default_workflow_hooks FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY default_workflow_hooks_select_rls ON default_workflow_hooks
++    FOR SELECT USING (
++        scope_kind = 'system' OR (scope_kind = 'workspace' AND workspace_id = app_current_workspace_id())
++    );
++
++CREATE POLICY default_workflow_hooks_insert_rls ON default_workflow_hooks
++    FOR INSERT WITH CHECK (
++        (scope_kind = 'workspace' AND workspace_id = app_current_workspace_id()) OR
++        (scope_kind = 'system' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++    );
++
++CREATE POLICY default_workflow_hooks_update_rls ON default_workflow_hooks
++    FOR UPDATE USING (
++        (scope_kind = 'workspace' AND workspace_id = app_current_workspace_id()) OR
++        (scope_kind = 'system' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++    ) WITH CHECK (
++        (scope_kind = 'workspace' AND workspace_id = app_current_workspace_id()) OR
++        (scope_kind = 'system' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++    );
++
++CREATE POLICY default_workflow_hooks_delete_rls ON default_workflow_hooks
++    FOR DELETE USING (
++        (scope_kind = 'workspace' AND workspace_id = app_current_workspace_id()) OR
++        (scope_kind = 'system' AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN']))
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE default_workflow_hooks TO kanban_app;
++GRANT SELECT ON TABLE default_workflow_hooks TO app_rls_reader;
++ALTER TABLE default_workflow_hooks OWNER TO kanban_migrator;
++
++-- 2. Add inherited_from_template_id on workflow_transition_hooks
++ALTER TABLE workflow_transition_hooks
++    ADD COLUMN IF NOT EXISTS inherited_from_template_id UUID NULL REFERENCES default_workflow_hooks(id) ON DELETE SET NULL;
++
++CREATE INDEX IF NOT EXISTS idx_workflow_transition_hooks_inherited_from_template_id
++    ON workflow_transition_hooks (inherited_from_template_id);
+diff --git a/database/migrations/versions/p6_24_default_workflow_hooks.py b/database/migrations/versions/p6_24_default_workflow_hooks.py
+new file mode 100644
+index 00000000..e35ade38
+--- /dev/null
++++ b/database/migrations/versions/p6_24_default_workflow_hooks.py
+@@ -0,0 +1,23 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Add default_workflow_hooks templates and inherited_from_template_id."""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p6_24_default_workflow_hooks"
++down_revision: str | None = "p6_23_gate_timeouts_and_project_defaults"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p6_24_default_workflow_hooks migration."""
++    execute_sql_file("p6_24_default_workflow_hooks.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p6_24_default_workflow_hooks migration."""
++    execute_sql_file("p6_24_default_workflow_hooks.down.sql")
 diff --git a/database/models/__init__.py b/database/models/__init__.py
 index 24ace811..854cc7f0 100644
 --- a/database/models/__init__.py
@@ -19,7 +150,7 @@ index 24ace811..854cc7f0 100644
      "Doc",
      "EffectiveResourceAccess",
 diff --git a/database/models/workflow.py b/database/models/workflow.py
-index 086042cf..d6efe67e 100644
+index 086042cf..3a68414a 100644
 --- a/database/models/workflow.py
 +++ b/database/models/workflow.py
 @@ -68,6 +68,10 @@ class WorkflowTransitionHook(Base):
@@ -43,7 +174,7 @@ index 086042cf..d6efe67e 100644
  
  
  class WorkflowTransitionExecution(Base):
-@@ -214,3 +221,97 @@ class WorkflowHookInvocation(Base):
+@@ -214,3 +221,112 @@ class WorkflowHookInvocation(Base):
      )
      completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
      deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -93,8 +224,23 @@ index 086042cf..d6efe67e 100644
 +            name="chk_default_workflow_hooks_timeout_ms",
 +        ),
 +        CheckConstraint(
-+            "max_rework_attempts BETWEEN 0 AND 20",
++            "scope_kind <> 'system' OR agent_definition_id IS NULL",
++            name="chk_default_workflow_hooks_system_agent_def",
++        ),
++        CheckConstraint(
++            "wasm_module_sha256 IS NULL OR octet_length(wasm_module_sha256) = 32",
++            name="chk_default_workflow_hooks_wasm_len",
++        ),
++        CheckConstraint(
++            "max_rework_attempts BETWEEN 1 AND 20",
 +            name="chk_default_workflow_hooks_max_rework",
++        ),
++        Index(
++            "uq_default_workflow_hooks_scope_ws_name",
++            "scope_kind",
++            text("COALESCE(workspace_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
++            text("lower(name)"),
++            unique=True,
 +        ),
 +        Index("idx_default_workflow_hooks_scope", "scope_kind", "workspace_id"),
 +        Index("idx_default_workflow_hooks_workspace_id", "workspace_id"),
@@ -141,6 +287,36 @@ index 086042cf..d6efe67e 100644
 +    updated_at: Mapped[datetime] = mapped_column(
 +        DateTime(timezone=True), nullable=False, server_default=text("now()")
 +    )
+diff --git a/database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py b/database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py
+new file mode 100644
+index 00000000..1ee64807
+--- /dev/null
++++ b/database/tests/migrations/test_p6_24_default_workflow_hooks_migration.py
+@@ -0,0 +1,24 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p6_24_default_workflow_hooks."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p6_24_default_workflow_hooks_migration_lifecycle() -> None:
++    """Verify p6_24_default_workflow_hooks upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p6_24_default_workflow_hooks")
++        assert prev_rev == "p6_23_gate_timeouts_and_project_defaults"
++
++        # 1. Upgrade to p6_24_default_workflow_hooks
++        await harness.upgrade("p6_24_default_workflow_hooks")
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p6_24_default_workflow_hooks")
 diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
 index 4b1b02b0..76465354 100644
 --- a/kanban/api/v1/__init__.py
@@ -189,11 +365,961 @@ index 8597b017..88f1e72c 100644
 +    "link_auditor_router",
 +    "workspace_default_workflow_hooks_router",
 +]
+diff --git a/kanban/api/v1/admin/default_workflow_hooks.py b/kanban/api/v1/admin/default_workflow_hooks.py
+new file mode 100644
+index 00000000..4a0d78c6
+--- /dev/null
++++ b/kanban/api/v1/admin/default_workflow_hooks.py
+@@ -0,0 +1,944 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: C901, PLR0912, TC003, FBT002
++"""REST API router for default workflow hook templates administration and workspace management."""
++
++from __future__ import annotations
++
++import logging
++import uuid
++from datetime import datetime
++from typing import Annotated, Literal
++
++from fastapi import APIRouter, Depends, Query, Response, status
++from pydantic import BaseModel, ConfigDict, Field, field_validator
++from sqlalchemy import func, select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models.agent_definition import AgentDefinition
++from database.models.spine import Workspace
++from database.models.wasm_module import ApprovedWasmModule
++from database.models.workflow import DefaultWorkflowHook
++from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
++from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++from kanban.api.problems import ProblemException, not_found
++from kanban.api.timing import timing_floor
++from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.workflows.builtins import BUILTIN_WASM_FORMULAS, seed_builtin_wasm
++from kanban.workflows.hooks_service import _parse_sha256_hex, _validate_mutable_fields
++
++logger = logging.getLogger(__name__)
++
++ScopeKind = Literal["system", "workspace"]
++FailurePolicy = Literal["fail_closed", "fail_open_warn"]
++
++
++class DefaultWorkflowHookCreateRequest(BaseModel):
++    """Payload for creating a default workflow hook template."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str = Field(min_length=1, max_length=120, description="Unique template name")
++    scope_kind: ScopeKind = Field(description="Scope kind: system or workspace")
++    workspace_id: uuid.UUID | None = Field(
++        default=None, description="Workspace ID (required for workspace scope, null for system)"
++    )
++    from_state_name: str | None = Field(
++        default=None,
++        max_length=80,
++        description="Source state name, or null/'*' for Any State wildcard",
++    )
++    to_state_name: str = Field(
++        min_length=1, max_length=80, description="Target state name (e.g. Done)"
++    )
++    hook_kind: str = Field(
++        default="agent_async",
++        description="Hook kind: agent_async, wasm_sync, builtin (or agent_interceptor)",
++    )
++    sort_rank: int = Field(default=100, ge=0, description="Sort rank ordering (>= 0)")
++    is_enabled: bool = Field(default=True, description="Whether template is enabled")
++    wasm_module_sha256: str | None = Field(
++        default=None, description="Hex SHA-256 of approved WASM module"
++    )
++    agent: str | None = Field(
++        default=None, description="Agent definition UUID or slug (e.g. @reality-checker)"
++    )
++    agent_definition_id: uuid.UUID | None = Field(default=None, description="Agent definition UUID")
++    agent_slug: str | None = Field(default=None, max_length=80, description="Agent slug")
++    allowed_mutable_fields: list[str] = Field(
++        default_factory=list, description="Fields this hook is permitted to modify"
++    )
++    failure_policy: FailurePolicy = Field(
++        default="fail_closed", description="Failure policy: fail_closed or fail_open_warn"
++    )
++    timeout_ms: int | None = Field(
++        default=None, ge=1000, le=600000, description="Optional timeout in ms (1000..600000)"
++    )
++    max_rework_attempts: int = Field(
++        default=3, ge=1, le=20, description="Maximum rework attempts (1..20)"
++    )
++
++    @field_validator("name")
++    @classmethod
++    def validate_name(cls, v: str) -> str:
++        """Validate template name is not empty or whitespace only."""
++        clean = v.strip()
++        if not clean:
++            msg = "Template name cannot be empty or whitespace only"
++            raise ValueError(msg)
++        return clean
++
++    @field_validator("to_state_name")
++    @classmethod
++    def validate_to_state(cls, v: str) -> str:
++        """Validate target state name is not empty or whitespace only."""
++        clean = v.strip()
++        if not clean:
++            msg = "Target state name cannot be empty or whitespace only"
++            raise ValueError(msg)
++        return clean
++
++    @field_validator("from_state_name")
++    @classmethod
++    def validate_from_state(cls, v: str | None) -> str | None:
++        """Normalize from_state_name wildcard or whitespace to None."""
++        if v is None:
++            return None
++        clean = v.strip()
++        if not clean or clean == "*":
++            return None
++        return clean
++
++
++class DefaultWorkflowHookUpdateRequest(BaseModel):
++    """Payload for updating an existing default workflow hook template."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str | None = Field(default=None, min_length=1, max_length=120)
++    from_state_name: str | None = Field(default=None, max_length=80)
++    to_state_name: str | None = Field(default=None, min_length=1, max_length=80)
++    hook_kind: str | None = Field(default=None)
++    sort_rank: int | None = Field(default=None, ge=0)
++    is_enabled: bool | None = Field(default=None)
++    wasm_module_sha256: str | None = Field(default=None)
++    agent: str | None = Field(default=None)
++    agent_definition_id: uuid.UUID | None = Field(default=None)
++    agent_slug: str | None = Field(default=None, max_length=80)
++    allowed_mutable_fields: list[str] | None = Field(default=None)
++    failure_policy: FailurePolicy | None = Field(default=None)
++    timeout_ms: int | None = Field(default=None, ge=1000, le=600000)
++    max_rework_attempts: int | None = Field(default=None, ge=1, le=20)
++
++    @field_validator("name")
++    @classmethod
++    def validate_name(cls, v: str | None) -> str | None:
++        """Validate template name is not empty or whitespace only."""
++        if v is None:
++            return None
++        clean = v.strip()
++        if not clean:
++            msg = "Template name cannot be empty or whitespace only"
++            raise ValueError(msg)
++        return clean
++
++    @field_validator("to_state_name")
++    @classmethod
++    def validate_to_state(cls, v: str | None) -> str | None:
++        """Validate target state name is not empty or whitespace only."""
++        if v is None:
++            return None
++        clean = v.strip()
++        if not clean:
++            msg = "Target state name cannot be empty or whitespace only"
++            raise ValueError(msg)
++        return clean
++
++    @field_validator("from_state_name")
++    @classmethod
++    def validate_from_state(cls, v: str | None) -> str | None:
++        """Normalize from_state_name wildcard or whitespace to None."""
++        if v is None:
++            return None
++        clean = v.strip()
++        if not clean or clean == "*":
++            return None
++        return clean
++
++
++class DefaultWorkflowHookResponse(BaseModel):
++    """Serialized representation of a default workflow hook template."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    scope_kind: ScopeKind
++    workspace_id: uuid.UUID | None = None
++    name: str
++    from_state_name: str | None = None
++    to_state_name: str
++    hook_kind: str
++    sort_rank: int
++    is_enabled: bool
++    wasm_module_sha256: str | None = None
++    agent_definition_id: uuid.UUID | None = None
++    agent_slug: str | None = None
++    allowed_mutable_fields: list[str]
++    failure_policy: str
++    timeout_ms: int | None = None
++    max_rework_attempts: int
++    created_by: uuid.UUID | None = None
++    created_at: datetime
++    updated_at: datetime
++
++
++def _normalize_hook_kind(raw: str) -> str:
++    cleaned = raw.strip().lower()
++    if cleaned in ("agent_async", "agent_interceptor"):
++        return "agent_async"
++    if cleaned in ("wasm_sync", "wasm_validator", "sync_validator", "sync_mutator"):
++        return "wasm_sync"
++    if cleaned == "builtin":
++        return "builtin"
++    raise ProblemException(
++        code="INVALID_HOOK_KIND",
++        status=422,
++        title="Invalid Hook Kind",
++        detail=f"Unsupported hook_kind '{raw}'. Must be agent_async, wasm_sync, or builtin.",
++    )
++
++
++def _serialize_template(t: DefaultWorkflowHook) -> DefaultWorkflowHookResponse:
++    wasm_hex = t.wasm_module_sha256.hex() if t.wasm_module_sha256 else None
++    fields = list(t.allowed_mutable_fields)
++    return DefaultWorkflowHookResponse(
++        id=t.id,
++        scope_kind="system" if t.scope_kind == "system" else "workspace",
++        workspace_id=t.workspace_id,
++        name=t.name,
++        from_state_name=t.from_state_name,
++        to_state_name=t.to_state_name,
++        hook_kind=t.hook_kind,
++        sort_rank=t.sort_rank,
++        is_enabled=t.is_enabled,
++        wasm_module_sha256=wasm_hex,
++        agent_definition_id=t.agent_definition_id,
++        agent_slug=t.agent_slug,
++        allowed_mutable_fields=fields,
++        failure_policy=t.failure_policy,
++        timeout_ms=t.timeout_ms,
++        max_rework_attempts=t.max_rework_attempts,
++        created_by=t.created_by,
++        created_at=t.created_at,
++        updated_at=t.updated_at,
++    )
++
++
++async def _get_admin_roles(session: AsyncSession) -> tuple[bool, bool]:
++    is_server_admin = bool(
++        (
++            await session.execute(
++                text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
++            )
++        ).scalar_one()
++    )
++    is_ws_admin = bool(
++        (
++            await session.execute(
++                text(
++                    "SELECT app_principal_has_role(NULL, ARRAY['WORKSPACE_ADMIN', 'SERVER_ADMIN'])"
++                )
++            )
++        ).scalar_one()
++    )
++    return is_server_admin, is_ws_admin
++
++
++async def _assert_unique_name(
++    session: AsyncSession,
++    scope_kind: str,
++    workspace_id: uuid.UUID | None,
++    name: str,
++    exclude_id: uuid.UUID | None = None,
++) -> None:
++    stmt = select(DefaultWorkflowHook.id).where(
++        DefaultWorkflowHook.scope_kind == scope_kind,
++        DefaultWorkflowHook.workspace_id == workspace_id,
++        func.lower(DefaultWorkflowHook.name) == name.strip().lower(),
++    )
++    if exclude_id is not None:
++        stmt = stmt.where(DefaultWorkflowHook.id != exclude_id)
++    existing = (await session.execute(stmt)).scalar_one_or_none()
++    if existing is not None:
++        raise ProblemException(
++            code="TEMPLATE_NAME_CONFLICT",
++            status=409,
++            title="Template Name Conflict",
++            detail=(
++                f"A default workflow hook template with name '{name.strip()}' "
++                "already exists in this scope."
++            ),
++        )
++
++
++async def _validate_wasm_sha(
++    session: AsyncSession,
++    wasm_hex: str | None,
++    scope_kind: str,
++    workspace_id: uuid.UUID | None,
++    caller_principal_id: uuid.UUID,
++) -> bytes | None:
++    if not wasm_hex:
++        return None
++    raw_hex = wasm_hex.strip()
++    if raw_hex.lower().startswith("0x"):
++        raw_hex = raw_hex[2:]
++    wasm_bytes = _parse_sha256_hex(raw_hex)
++
++    if scope_kind == "workspace" and workspace_id is not None:
++        stmt = select(ApprovedWasmModule).where(
++            ApprovedWasmModule.workspace_id == workspace_id,
++            ApprovedWasmModule.sha256 == wasm_bytes,
++        )
++        approved = (await session.execute(stmt)).scalar_one_or_none()
++        if approved is None:
++            approved = await seed_builtin_wasm(
++                session, workspace_id, caller_principal_id, wasm_bytes
++            )
++        if approved is None:
++            raise ProblemException(
++                code="WASM_MODULE_NOT_APPROVED",
++                status=422,
++                title="WASM Module Not Approved",
++                detail="WASM module SHA-256 is not approved in this workspace.",
++            )
++    elif scope_kind == "system":
++        is_builtin = any(b.sha256_bytes == wasm_bytes for b in BUILTIN_WASM_FORMULAS)
++        if not is_builtin:
++            sys_stmt = select(ApprovedWasmModule.id).where(ApprovedWasmModule.sha256 == wasm_bytes)
++            if (await session.execute(sys_stmt)).scalar_one_or_none() is None:
++                raise ProblemException(
++                    code="WASM_MODULE_NOT_APPROVED",
++                    status=422,
++                    title="WASM Module Not Approved",
++                    detail="WASM module SHA-256 is not approved.",
++                )
++    return wasm_bytes
++
++
++router = APIRouter(
++    prefix="/admin/default-workflow-hooks",
++    tags=["admin-default-workflow-hooks"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++
++workspace_router = APIRouter(
++    prefix="/workspaces/{workspace}/default-workflow-hooks",
++    tags=["workspace-default-workflow-hooks"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++
++Caller = Annotated[PrincipalContext, Depends(get_principal)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++@router.get(
++    "",
++    response_model=list[DefaultWorkflowHookResponse],
++    summary="List default workflow hook templates",
++)
++async def admin_list_default_hooks(
++    caller: Caller,
++    session: Session,
++    scope_kind: Annotated[ScopeKind | None, Query()] = None,
++    workspace_id: Annotated[uuid.UUID | None, Query()] = None,
++) -> list[DefaultWorkflowHookResponse]:
++    """List default workflow hook templates. Requires admin role and AAL2."""
++    del caller
++    async with timing_floor(floor_ms=25.0):
++        is_server_admin, is_ws_admin = await _get_admin_roles(session)
++        if not (is_server_admin or is_ws_admin):
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Administrative role required.",
++            )
++
++        stmt = select(DefaultWorkflowHook)
++        if scope_kind is not None:
++            stmt = stmt.where(DefaultWorkflowHook.scope_kind == scope_kind)
++        if workspace_id is not None:
++            stmt = stmt.where(DefaultWorkflowHook.workspace_id == workspace_id)
++
++        stmt = stmt.order_by(
++            DefaultWorkflowHook.sort_rank.asc(), DefaultWorkflowHook.created_at.asc()
++        )
++        rows = list((await session.execute(stmt)).scalars().all())
++        return [_serialize_template(r) for r in rows]
++
++
++@router.post(
++    "",
++    status_code=status.HTTP_201_CREATED,
++    response_model=DefaultWorkflowHookResponse,
++    summary="Create a default workflow hook template",
++)
++async def admin_create_default_hook(  # noqa: PLR0915
++    body: DefaultWorkflowHookCreateRequest,
++    caller: Caller,
++    session: Session,
++) -> DefaultWorkflowHookResponse:
++    """Create a new default workflow hook template.
++
++    Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
++    """
++    async with timing_floor(floor_ms=25.0):
++        is_server_admin, is_ws_admin = await _get_admin_roles(session)
++
++        clean_name = body.name.strip()
++        clean_to_state = body.to_state_name.strip()
++        clean_from_state = (
++            None
++            if body.from_state_name is None or body.from_state_name.strip() in ("", "*")
++            else body.from_state_name.strip()
++        )
++        hook_kind = _normalize_hook_kind(body.hook_kind)
++        clean_fields = _validate_mutable_fields(body.allowed_mutable_fields)
++
++        agent_def_id: uuid.UUID | None = None
++        agent_slug: str | None = None
++
++        if body.scope_kind == "system":
++            if not is_server_admin:
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires SERVER_ADMIN role.",
++                )
++            if body.workspace_id is not None:
++                raise ProblemException(
++                    code="INVALID_TEMPLATE_SCOPE",
++                    status=422,
++                    title="Invalid Template Scope",
++                    detail="System templates must have workspace_id set to null.",
++                )
++            if body.agent_definition_id is not None:
++                raise ProblemException(
++                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
++                    status=422,
++                    title="System Template Requires Agent Slug",
++                    detail=(
++                        "System templates must not specify an agent_definition_id; "
++                        "use agent_slug instead to prevent cross-tenant leakage."
++                    ),
++                )
++            if body.agent is not None:
++                raw_agent = body.agent.strip()
++                try:
++                    uuid.UUID(raw_agent)
++                    raise ProblemException(
++                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
++                        status=422,
++                        title="System Template Requires Agent Slug",
++                        detail=(
++                            "System templates must specify an agent slug (e.g. '@reality-checker') "
++                            "instead of a UUID."
++                        ),
++                    )
++                except ValueError:
++                    agent_slug = raw_agent.lstrip("@")
++            elif body.agent_slug is not None:
++                agent_slug = body.agent_slug.strip().lstrip("@")
++            agent_def_id = None
++        else:
++            # Workspace scope
++            target_ws_id = body.workspace_id or caller.workspace_id
++            if target_ws_id != caller.workspace_id and not is_server_admin:
++                raise ProblemException(
++                    code="CROSS_WORKSPACE_FORBIDDEN",
++                    status=403,
++                    title="Cross Workspace Forbidden",
++                    detail="Access to target workspace forbidden.",
++                )
++            if not (is_server_admin or is_ws_admin):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
++                )
++            body.workspace_id = target_ws_id
++
++            agent_def_id = body.agent_definition_id
++            agent_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
++
++            if body.agent is not None:
++                raw_agent = body.agent.strip()
++                try:
++                    agent_def_id = uuid.UUID(raw_agent)
++                except ValueError:
++                    agent_slug = raw_agent.lstrip("@")
++                    ad_stmt = select(AgentDefinition).where(
++                        AgentDefinition.workspace_id == target_ws_id,
++                        AgentDefinition.slug == agent_slug,
++                    )
++                    ad_row = (await session.execute(ad_stmt)).scalar_one_or_none()
++                    if ad_row is not None:
++                        agent_def_id = ad_row.id
++
++            if agent_def_id is not None:
++                ad_stmt = select(AgentDefinition).where(
++                    AgentDefinition.id == agent_def_id,
++                    AgentDefinition.workspace_id == target_ws_id,
++                )
++                agent_row = (await session.execute(ad_stmt)).scalar_one_or_none()
++                if agent_row is None:
++                    raise ProblemException(
++                        code="AGENT_NOT_FOUND",
++                        status=422,
++                        title="Agent Not Found",
++                        detail=f"Agent definition '{agent_def_id}' not found in target workspace.",
++                    )
++                if agent_row.slug and not agent_slug:
++                    agent_slug = agent_row.slug
++                if agent_row.harness_kind == "cli_pipe":
++                    try:
++                        assert_runtime_argv(agent_row)
++                    except CliPolicyError as exc:
++                        raise ProblemException(
++                            code="CLI_POLICY_VIOLATION",
++                            status=422,
++                            title="CLI Policy Violation",
++                            detail=exc.detail,
++                        ) from exc
++
++        await _assert_unique_name(session, body.scope_kind, body.workspace_id, clean_name)
++
++        wasm_bytes = await _validate_wasm_sha(
++            session,
++            body.wasm_module_sha256,
++            body.scope_kind,
++            body.workspace_id,
++            caller.principal_id,
++        )
++
++        template = DefaultWorkflowHook(
++            scope_kind=body.scope_kind,
++            workspace_id=body.workspace_id,
++            name=clean_name,
++            from_state_name=clean_from_state,
++            to_state_name=clean_to_state,
++            hook_kind=hook_kind,
++            sort_rank=body.sort_rank,
++            is_enabled=body.is_enabled,
++            wasm_module_sha256=wasm_bytes,
++            agent_definition_id=agent_def_id,
++            agent_slug=agent_slug,
++            allowed_mutable_fields=clean_fields,
++            failure_policy=body.failure_policy,
++            timeout_ms=body.timeout_ms,
++            max_rework_attempts=body.max_rework_attempts,
++            created_by=caller.principal_id,
++        )
++        session.add(template)
++        await session.flush()
++        await session.commit()
++        return _serialize_template(template)
++
++
++@router.patch(
++    "/{template_id}",
++    response_model=DefaultWorkflowHookResponse,
++    summary="Update a default workflow hook template",
++)
++async def admin_update_default_hook(  # noqa: PLR0915
++    template_id: uuid.UUID,
++    body: DefaultWorkflowHookUpdateRequest,
++    caller: Caller,
++    session: Session,
++) -> DefaultWorkflowHookResponse:
++    """Update an existing default workflow hook template.
++
++    Requires appropriate admin role and AAL2.
++    """
++    async with timing_floor(floor_ms=25.0):
++        template = await session.get(DefaultWorkflowHook, template_id)
++        if template is None:
++            not_found()
++
++        is_server_admin, is_ws_admin = await _get_admin_roles(session)
++        if template.scope_kind == "system":
++            if not is_server_admin:
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires SERVER_ADMIN role.",
++                )
++        else:
++            if template.workspace_id != caller.workspace_id and not is_server_admin:
++                raise ProblemException(
++                    code="CROSS_WORKSPACE_FORBIDDEN",
++                    status=403,
++                    title="Cross Workspace Forbidden",
++                    detail="Access to target workspace forbidden.",
++                )
++            if not (is_server_admin or is_ws_admin):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
++                )
++
++        if body.name is not None:
++            clean_name = body.name.strip()
++            await _assert_unique_name(
++                session,
++                template.scope_kind,
++                template.workspace_id,
++                clean_name,
++                exclude_id=template.id,
++            )
++            template.name = clean_name
++
++        if "from_state_name" in body.model_fields_set:
++            template.from_state_name = (
++                None
++                if body.from_state_name is None or body.from_state_name.strip() in ("", "*")
++                else body.from_state_name.strip()
++            )
++        if body.to_state_name is not None:
++            template.to_state_name = body.to_state_name.strip()
++        if body.hook_kind is not None:
++            template.hook_kind = _normalize_hook_kind(body.hook_kind)
++        if body.sort_rank is not None:
++            template.sort_rank = body.sort_rank
++        if body.is_enabled is not None:
++            template.is_enabled = body.is_enabled
++
++        if "wasm_module_sha256" in body.model_fields_set:
++            template.wasm_module_sha256 = await _validate_wasm_sha(
++                session,
++                body.wasm_module_sha256,
++                template.scope_kind,
++                template.workspace_id,
++                caller.principal_id,
++            )
++
++        if template.scope_kind == "system":
++            if body.agent_definition_id is not None:
++                raise ProblemException(
++                    code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
++                    status=422,
++                    title="System Template Requires Agent Slug",
++                    detail=(
++                        "System templates must not specify an agent_definition_id; "
++                        "use agent_slug instead."
++                    ),
++                )
++            if body.agent is not None:
++                raw_agent = body.agent.strip()
++                try:
++                    uuid.UUID(raw_agent)
++                    raise ProblemException(
++                        code="SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG",
++                        status=422,
++                        title="System Template Requires Agent Slug",
++                        detail=(
++                            "System templates must specify an agent slug (e.g. '@reality-checker') "
++                            "instead of a UUID."
++                        ),
++                    )
++                except ValueError:
++                    template.agent_slug = raw_agent.lstrip("@")
++                    template.agent_definition_id = None
++            elif "agent_slug" in body.model_fields_set:
++                template.agent_slug = (
++                    body.agent_slug.strip().lstrip("@") if body.agent_slug else None
++                )
++                template.agent_definition_id = None
++        else:  # noqa: PLR5501
++            # Workspace template agent handling
++            if body.agent is not None:
++                raw_agent = body.agent.strip()
++                try:
++                    agent_u = uuid.UUID(raw_agent)
++                    stmt = select(AgentDefinition).where(
++                        AgentDefinition.id == agent_u,
++                        AgentDefinition.workspace_id == template.workspace_id,
++                    )
++                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
++                    if ad_row is None:
++                        raise ProblemException(
++                            code="AGENT_NOT_FOUND",
++                            status=422,
++                            title="Agent Not Found",
++                            detail=f"Agent definition '{agent_u}' not found in workspace.",
++                        )
++                    template.agent_definition_id = ad_row.id
++                    template.agent_slug = ad_row.slug
++                    if ad_row.harness_kind == "cli_pipe":
++                        try:
++                            assert_runtime_argv(ad_row)
++                        except CliPolicyError as exc:
++                            raise ProblemException(
++                                code="CLI_POLICY_VIOLATION",
++                                status=422,
++                                title="CLI Policy Violation",
++                                detail=exc.detail,
++                            ) from exc
++                except ValueError:
++                    clean_slug = raw_agent.lstrip("@")
++                    template.agent_slug = clean_slug
++                    stmt = select(AgentDefinition).where(
++                        AgentDefinition.workspace_id == template.workspace_id,
++                        AgentDefinition.slug == clean_slug,
++                    )
++                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
++                    template.agent_definition_id = ad_row.id if ad_row is not None else None
++                    if ad_row is not None and ad_row.harness_kind == "cli_pipe":
++                        try:
++                            assert_runtime_argv(ad_row)
++                        except CliPolicyError as exc:
++                            raise ProblemException(
++                                code="CLI_POLICY_VIOLATION",
++                                status=422,
++                                title="CLI Policy Violation",
++                                detail=exc.detail,
++                            ) from exc
++            elif "agent_definition_id" in body.model_fields_set:
++                if body.agent_definition_id is not None:
++                    stmt = select(AgentDefinition).where(
++                        AgentDefinition.id == body.agent_definition_id,
++                        AgentDefinition.workspace_id == template.workspace_id,
++                    )
++                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
++                    if ad_row is None:
++                        raise ProblemException(
++                            code="AGENT_NOT_FOUND",
++                            status=422,
++                            title="Agent Not Found",
++                            detail=(
++                                f"Agent definition '{body.agent_definition_id}' "
++                                "not found in workspace."
++                            ),
++                        )
++                    template.agent_definition_id = ad_row.id
++                    template.agent_slug = ad_row.slug
++                    if ad_row.harness_kind == "cli_pipe":
++                        try:
++                            assert_runtime_argv(ad_row)
++                        except CliPolicyError as exc:
++                            raise ProblemException(
++                                code="CLI_POLICY_VIOLATION",
++                                status=422,
++                                title="CLI Policy Violation",
++                                detail=exc.detail,
++                            ) from exc
++                else:
++                    template.agent_definition_id = None
++            elif "agent_slug" in body.model_fields_set:
++                updated_slug = body.agent_slug.strip().lstrip("@") if body.agent_slug else None
++                template.agent_slug = updated_slug
++                if updated_slug:
++                    stmt = select(AgentDefinition).where(
++                        AgentDefinition.workspace_id == template.workspace_id,
++                        AgentDefinition.slug == updated_slug,
++                    )
++                    ad_row = (await session.execute(stmt)).scalar_one_or_none()
++                    template.agent_definition_id = ad_row.id if ad_row is not None else None
++                else:
++                    template.agent_definition_id = None
++
++        if body.allowed_mutable_fields is not None:
++            template.allowed_mutable_fields = _validate_mutable_fields(body.allowed_mutable_fields)
++        if body.failure_policy is not None:
++            template.failure_policy = body.failure_policy
++        if "timeout_ms" in body.model_fields_set:
++            template.timeout_ms = body.timeout_ms
++        if body.max_rework_attempts is not None:
++            template.max_rework_attempts = body.max_rework_attempts
++
++        await session.flush()
++        await session.commit()
++        return _serialize_template(template)
++
++
++@router.delete(
++    "/{template_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Delete a default workflow hook template",
++)
++async def admin_delete_default_hook(
++    template_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> Response:
++    """Delete a default workflow hook template. Requires appropriate admin role and AAL2."""
++    async with timing_floor(floor_ms=25.0):
++        template = await session.get(DefaultWorkflowHook, template_id)
++        if template is None:
++            not_found()
++
++        is_server_admin, is_ws_admin = await _get_admin_roles(session)
++        if template.scope_kind == "system":
++            if not is_server_admin:
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires SERVER_ADMIN role.",
++                )
++        else:
++            if template.workspace_id != caller.workspace_id and not is_server_admin:
++                raise ProblemException(
++                    code="CROSS_WORKSPACE_FORBIDDEN",
++                    status=403,
++                    title="Cross Workspace Forbidden",
++                    detail="Access to target workspace forbidden.",
++                )
++            if not (is_server_admin or is_ws_admin):
++                raise ProblemException(
++                    code="INSUFFICIENT_CAPABILITY",
++                    status=403,
++                    title="Insufficient Capability",
++                    detail="Operation requires WORKSPACE_ADMIN or SERVER_ADMIN role.",
++                )
++
++        await session.delete(template)
++        await session.commit()
++        return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
++# =============================================================================
++# Workspace-scoped convenience endpoints
++# =============================================================================
++
++
++async def _resolve_workspace_id(
++    session: AsyncSession, caller: PrincipalContext, workspace_ref: str
++) -> uuid.UUID:
++    if workspace_ref in ("current", "@current"):
++        return caller.workspace_id
++    try:
++        ws_id = uuid.UUID(workspace_ref)
++        if ws_id == caller.workspace_id:
++            return ws_id
++    except ValueError:
++        pass
++    stmt = select(Workspace.id).where(
++        (Workspace.id == caller.workspace_id) & (Workspace.slug == workspace_ref)
++    )
++    found = (await session.execute(stmt)).scalar_one_or_none()
++    if found is not None:
++        return found
++    raise not_found()
++
++
++@workspace_router.get(
++    "",
++    response_model=list[DefaultWorkflowHookResponse],
++    summary="List default workflow hook templates for workspace",
++)
++async def workspace_list_default_hooks(
++    workspace: str,
++    caller: Caller,
++    session: Session,
++    include_system: Annotated[bool, Query()] = True,
++) -> list[DefaultWorkflowHookResponse]:
++    """List default workflow hook templates for workspace."""
++    async with timing_floor(floor_ms=25.0):
++        ws_id = await _resolve_workspace_id(session, caller, workspace)
++        is_server_admin, is_ws_admin = await _get_admin_roles(session)
++        if not (is_server_admin or is_ws_admin):
++            raise ProblemException(
++                code="INSUFFICIENT_CAPABILITY",
++                status=403,
++                title="Insufficient Capability",
++                detail="Workspace admin role required.",
++            )
++
++        stmt = select(DefaultWorkflowHook)
++        if include_system:
++            stmt = stmt.where(
++                (DefaultWorkflowHook.scope_kind == "system")
++                | (
++                    (DefaultWorkflowHook.scope_kind == "workspace")
++                    & (DefaultWorkflowHook.workspace_id == ws_id)
++                )
++            )
++        else:
++            stmt = stmt.where(
++                (DefaultWorkflowHook.scope_kind == "workspace")
++                & (DefaultWorkflowHook.workspace_id == ws_id)
++            )
++
++        stmt = stmt.order_by(
++            DefaultWorkflowHook.sort_rank.asc(), DefaultWorkflowHook.created_at.asc()
++        )
++        rows = list((await session.execute(stmt)).scalars().all())
++        return [_serialize_template(r) for r in rows]
++
++
++@workspace_router.post(
++    "",
++    status_code=status.HTTP_201_CREATED,
++    response_model=DefaultWorkflowHookResponse,
++    summary="Create a default workflow hook template for workspace",
++)
++async def workspace_create_default_hook(
++    workspace: str,
++    body: DefaultWorkflowHookCreateRequest,
++    caller: Caller,
++    session: Session,
++) -> DefaultWorkflowHookResponse:
++    """Create a default workflow hook template scoped to this workspace."""
++    async with timing_floor(floor_ms=25.0):
++        ws_id = await _resolve_workspace_id(session, caller, workspace)
++        body.scope_kind = "workspace"
++        body.workspace_id = ws_id
++        return await admin_create_default_hook(body, caller, session)
++
++
++@workspace_router.patch(
++    "/{template_id}",
++    response_model=DefaultWorkflowHookResponse,
++    summary="Update a workspace default workflow hook template",
++)
++async def workspace_update_default_hook(
++    workspace: str,
++    template_id: uuid.UUID,
++    body: DefaultWorkflowHookUpdateRequest,
++    caller: Caller,
++    session: Session,
++) -> DefaultWorkflowHookResponse:
++    """Update a workspace default workflow hook template."""
++    async with timing_floor(floor_ms=25.0):
++        ws_id = await _resolve_workspace_id(session, caller, workspace)
++        template = await session.get(DefaultWorkflowHook, template_id)
++        if template is None or template.workspace_id != ws_id:
++            not_found()
++        return await admin_update_default_hook(template_id, body, caller, session)
++
++
++@workspace_router.delete(
++    "/{template_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Delete a workspace default workflow hook template",
++)
++async def workspace_delete_default_hook(
++    workspace: str,
++    template_id: uuid.UUID,
++    caller: Caller,
++    session: Session,
++) -> Response:
++    """Delete a workspace default workflow hook template."""
++    async with timing_floor(floor_ms=25.0):
++        ws_id = await _resolve_workspace_id(session, caller, workspace)
++        template = await session.get(DefaultWorkflowHook, template_id)
++        if template is None or template.workspace_id != ws_id:
++            not_found()
++        return await admin_delete_default_hook(template_id, caller, session)
 diff --git a/kanban/api/v1/workflow_hooks.py b/kanban/api/v1/workflow_hooks.py
-index 8ea03a1a..9d908dee 100644
+index 8ea03a1a..61d7acdb 100644
 --- a/kanban/api/v1/workflow_hooks.py
 +++ b/kanban/api/v1/workflow_hooks.py
-@@ -197,3 +197,31 @@ async def list_approved_wasm_modules(
+@@ -197,3 +197,32 @@ async def list_approved_wasm_modules(
          )
          await session.commit()
          return modules
@@ -223,10 +1349,11 @@ index 8ea03a1a..9d908dee 100644
 +            project_obj.id,
 +            skip_existing=True,
 +        )
++        serialized = [await WorkflowHookService.serialize_hook(session, h) for h in created]
 +        await session.commit()
-+        return [await WorkflowHookService.serialize_hook(session, h) for h in created]
++        return serialized
 diff --git a/kanban/projects/blueprint_service.py b/kanban/projects/blueprint_service.py
-index a099a6d7..6b383fdf 100644
+index a099a6d7..f99ca2f4 100644
 --- a/kanban/projects/blueprint_service.py
 +++ b/kanban/projects/blueprint_service.py
 @@ -46,6 +46,7 @@ from kanban.services.projects import (
@@ -245,8 +1372,8 @@ index a099a6d7..6b383fdf 100644
  
          project_id: uuid.UUID
          if project is None:
-@@ -589,6 +591,11 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
-                 curr_state_map[bp_st.name] = new_st
+@@ -611,6 +613,11 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
+                 await session.delete(st_row)
          await session.flush()
  
 +        if is_new_project:
@@ -254,9 +1381,9 @@ index a099a6d7..6b383fdf 100644
 +                session, caller.workspace_id, project_id, skip_existing=True
 +            )
 +
-         # 2. State migrations
-         for old_name, new_name in blueprint.state_migrations.items():
-             if old_name in curr_state_map and new_name in curr_state_map:
+         # Handle priorities
+         curr_pris_q = select(ProjectPriority).where(ProjectPriority.project_id == project_id)
+         curr_pris = list((await session.execute(curr_pris_q)).scalars().all())
 diff --git a/kanban/services/projects.py b/kanban/services/projects.py
 index 2d2074eb..ace7b1a2 100644
 --- a/kanban/services/projects.py
@@ -277,8 +1404,742 @@ index 2d2074eb..ace7b1a2 100644
      except IntegrityError as exc:
          if _is_unique_violation(exc):
              raise _problem(
+diff --git a/kanban/tests/workflows/test_default_workflow_hooks.py b/kanban/tests/workflows/test_default_workflow_hooks.py
+new file mode 100644
+index 00000000..e8da98fb
+--- /dev/null
++++ b/kanban/tests/workflows/test_default_workflow_hooks.py
+@@ -0,0 +1,728 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: D400, D415, E501, TC002, ARG001
++"""Feature unit and security tests for system-wide and workspace default workflow hook templates (KAN-438)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++from sqlalchemy import select, text
++
++from database.models.agent_definition import AgentDefinition
++from database.models.projects import Project
++from database.models.spine import Workspace
++from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
++from kanban.projects.blueprint_service import (
++    BlueprintState,
++    ProjectBlueprint,
++)
++from kanban.tests.api.conftest import SeededUser
++from kanban.tests.security.helpers import add_role_binding, create_user, rebuild_era
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv
++
++pytestmark = pytest.mark.committed_db
++
++
++async def _enroll_mfa(session: AsyncSession, user_id: uuid.UUID) -> None:
++    """Enroll and confirm TOTP factor so require_admin_aal2 evaluates AAL rather than MFA_ENROLLMENT_REQUIRED."""
++    await session.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user_id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await session.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user_id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await session.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await session.commit()
++
++
++async def _seed_agent(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    principal_id: uuid.UUID,
++    slug: str = "reality-checker",
++) -> uuid.UUID:
++    """Seed an AgentDefinition and return its ID."""
++    agent_id = uuid.uuid4()
++    agent = AgentDefinition(
++        id=agent_id,
++        workspace_id=workspace_id,
++        principal_id=principal_id,
++        slug=slug,
++        display_name="Reality-Checker Gate",
++        harness_kind="in_app_sdk",
++        provider_kind="openai",
++        model_id="gpt-4o",
++        timeout_ms=60000,
++    )
++    session.add(agent)
++    await session.commit()
++    return agent_id
++
++
++@pytest.mark.asyncio
++async def test_admin_crud_and_copy_on_create_inheritance(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 1:
++
++    1. Admin creates system and workspace default hooks (* -> Done, In Progress -> Done).
++    2. Creating new project NEWP automatically inherits both hooks with inherited_from_template_id set.
++    """
++    session = api_env.seed
++    ws_id = api_env.workspace_id
++    server_admin = await make_user("s_admin", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, server_admin.id)
++    client_admin = as_principal(server_admin, aal_level=2)
++
++    # Seed @reality-checker agent in workspace
++    await _seed_agent(session, ws_id, server_admin.id, slug="reality-checker")
++
++    # 1. Create system template: * Any -> Done with @reality-checker
++    res_sys = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Reality-Checker Any Gate",
++            "scope_kind": "system",
++            "from_state_name": "*",
++            "to_state_name": "Done",
++            "hook_kind": "agent_interceptor",
++            "agent": "@reality-checker",
++            "failure_policy": "fail_closed",
++            "timeout_ms": 120000,
++        },
++    )
++    assert res_sys.status_code == 201, res_sys.text
++    sys_hook_data = res_sys.json()
++    assert sys_hook_data["name"] == "Reality-Checker Any Gate"
++    assert sys_hook_data["scope_kind"] == "system"
++    assert sys_hook_data["from_state_name"] is None  # normalized wildcard
++    assert sys_hook_data["to_state_name"] == "Done"
++    sys_template_id = sys_hook_data["id"]
++
++    # 2. Create workspace template: In Progress -> Done
++    res_ws = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Workspace In Progress Gate",
++            "scope_kind": "workspace",
++            "workspace_id": str(ws_id),
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "hook_kind": "agent_interceptor",
++            "agent": "@reality-checker",
++            "failure_policy": "fail_closed",
++            "timeout_ms": 90000,
++        },
++    )
++    assert res_ws.status_code == 201, res_ws.text
++    ws_hook_data = res_ws.json()
++    assert ws_hook_data["name"] == "Workspace In Progress Gate"
++    assert ws_hook_data["scope_kind"] == "workspace"
++    assert ws_hook_data["workspace_id"] == str(ws_id)
++    ws_template_id = ws_hook_data["id"]
++
++    # 3. Create new project NEWP via projects API
++    res_proj = await client_admin.post(
++        "/api/v1/projects",
++        json={
++            "name": "New Project",
++            "identifier": "NEWP",
++        },
++    )
++    assert res_proj.status_code == 201, res_proj.text
++    newp_id = uuid.UUID(res_proj.json()["id"])
++
++    # 4. Verify NEWP automatically has both inherited hooks
++    hooks_stmt = (
++        select(WorkflowTransitionHook)
++        .where(WorkflowTransitionHook.project_id == newp_id)
++        .order_by(WorkflowTransitionHook.sort_rank.asc())
++    )
++    newp_hooks = list((await session.execute(hooks_stmt)).scalars().all())
++    assert len(newp_hooks) == 2
++
++    hook_names = {h.name for h in newp_hooks}
++    assert "Reality-Checker Any Gate" in hook_names
++    assert "Workspace In Progress Gate" in hook_names
++
++    template_ids = {str(h.inherited_from_template_id) for h in newp_hooks}
++    assert sys_template_id in template_ids
++    assert ws_template_id in template_ids
++
++    # 5. Verify serialized response via API exposes inherited_from_template_id and inherited_from_scope
++    res_list = await client_admin.get("/api/v1/projects/NEWP/workflow-hooks")
++    assert res_list.status_code == 200, res_list.text
++    rules = res_list.json()
++    assert len(rules) >= 1
++    all_hook_items = [h for r in rules for h in r["hooks"]]
++    assert len(all_hook_items) == 2
++
++    for item in all_hook_items:
++        assert item["inherited_from_template_id"] is not None
++        assert item["inherited_from_scope"] in ("system", "workspace")
++
++
++@pytest.mark.asyncio
++async def test_non_agentic_project_detach_and_sibling_isolation(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 2:
++
++    1. NEWP and SIBP both inherit default hook.
++    2. Project Admin deletes inherited hook on NEWP.
++    3. NEWP hook is removed, while default template and SIBP hook remain completely intact.
++    """
++    session = api_env.seed
++    ws_id = api_env.workspace_id
++    admin = await make_user("admin_user", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client_admin = as_principal(admin, aal_level=2)
++
++    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
++
++    # Create default hook template
++    res_tpl = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Standard Reality Gate",
++            "scope_kind": "system",
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "hook_kind": "agent_interceptor",
++            "agent": "@reality-checker",
++            "failure_policy": "fail_closed",
++        },
++    )
++    assert res_tpl.status_code == 201, res_tpl.text
++    tpl_id = res_tpl.json()["id"]
++
++    # Create NEWP and SIBP
++    res_newp = await client_admin.post(
++        "/api/v1/projects", json={"name": "New P", "identifier": "NEW1"}
++    )
++    assert res_newp.status_code == 201
++    newp_id = uuid.UUID(res_newp.json()["id"])
++
++    res_sibp = await client_admin.post(
++        "/api/v1/projects", json={"name": "Sib P", "identifier": "SIB1"}
++    )
++    assert res_sibp.status_code == 201
++    sibp_id = uuid.UUID(res_sibp.json()["id"])
++
++    # Both projects have inherited hook
++    hook_newp = (
++        await session.execute(
++            select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == newp_id)
++        )
++    ).scalar_one()
++    assert str(hook_newp.inherited_from_template_id) == tpl_id
++
++    hook_sibp = (
++        await session.execute(
++            select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == sibp_id)
++        )
++    ).scalar_one()
++    assert str(hook_sibp.inherited_from_template_id) == tpl_id
++
++    # Detach (delete) inherited hook from NEWP
++    res_del = await client_admin.delete(f"/api/v1/workflow-hooks/{hook_newp.id}")
++    assert res_del.status_code == 204
++
++    # NEWP now has 0 hooks (non-agentic tracker)
++    newp_hooks_remaining = (
++        (
++            await session.execute(
++                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == newp_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(newp_hooks_remaining) == 0
++
++    # SIBP hook remains intact
++    sibp_hooks_remaining = (
++        (
++            await session.execute(
++                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == sibp_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(sibp_hooks_remaining) == 1
++
++    # Default template remains intact
++    tpl_row = await session.get(DefaultWorkflowHook, uuid.UUID(tpl_id))
++    assert tpl_row is not None
++
++
++@pytest.mark.asyncio
++async def test_security_auth_and_aal2_enforcement(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test Case 3:
++
++    1. Non-admin receives HTTP 403.
++    2. Missing AAL2 returns HTTP 403 or 401.
++    """
++    session = api_env.seed
++    admin = await make_user("super_adm", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    member = await make_user("norm_member")
++
++    # 1. Non-admin with AAL2 -> 403
++    client_member_aal2 = as_principal(member, aal_level=2)
++    res_forbidden = await client_member_aal2.get("/api/v1/admin/default-workflow-hooks")
++    assert res_forbidden.status_code == 403, res_forbidden.text
++
++    # 2. Server admin with AAL1 (missing AAL2) -> 403 or 401
++    client_admin_aal1 = as_principal(admin, aal_level=1)
++    res_aal1 = await client_admin_aal1.get("/api/v1/admin/default-workflow-hooks")
++    assert res_aal1.status_code in (401, 403), res_aal1.text
++
++    # 3. Workspace admin creating system hook -> 403
++    ws_admin = await make_user("ws_adm_only", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_mfa(session, ws_admin.id)
++    client_ws_admin = as_principal(ws_admin, aal_level=2)
++    res_sys_denied = await client_ws_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Unauthorized System Hook",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++        },
++    )
++    assert res_sys_denied.status_code == 403, res_sys_denied.text
++
++
++@pytest.mark.asyncio
++async def test_workspace_convenience_routes_and_sync_defaults(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test workspace routes (/workspaces/{workspace}/default-workflow-hooks) and sync-defaults endpoint."""
++    session = api_env.seed
++    ws_id = api_env.workspace_id
++    admin = await make_user("ws_mgr", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client = as_principal(admin, aal_level=2)
++
++    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
++
++    # Create workspace template via workspace convenience route
++    res_create = await client.post(
++        f"/api/v1/workspaces/{ws_id}/default-workflow-hooks",
++        json={
++            "name": "WS Sync Gate",
++            "scope_kind": "workspace",
++            "to_state_name": "Done",
++            "hook_kind": "agent_interceptor",
++            "agent": "@reality-checker",
++        },
++    )
++    assert res_create.status_code == 201, res_create.text
++    tpl_id = res_create.json()["id"]
++
++    # List workspace templates
++    res_list = await client.get(f"/api/v1/workspaces/{ws_id}/default-workflow-hooks")
++    assert res_list.status_code == 200
++    assert any(t["id"] == tpl_id for t in res_list.json())
++
++    # Create existing project without hooks initially
++    proj_id = await make_project("SYNC1", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    # Delete any auto-materialized hooks to simulate older project
++    existing = (
++        (
++            await session.execute(
++                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    for h in existing:
++        await session.delete(h)
++    await session.commit()
++
++    # Call sync-defaults endpoint
++    res_sync = await client.post("/api/v1/projects/SYNC1/workflow-hooks/sync-defaults")
++    assert res_sync.status_code == 200, res_sync.text
++    synced_hooks = res_sync.json()
++    assert len(synced_hooks) >= 1
++    assert any(h["name"] == "WS Sync Gate" for h in synced_hooks)
++
++
++@pytest.mark.asyncio
++async def test_system_template_cross_tenant_isolation_and_rejections(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify system templates forbid agent_definition_id/UUID and resolve agent_slug per workspace."""
++    session = api_env.seed
++    admin = await make_user("sys_cross_admin", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client_admin = as_principal(admin, aal_level=2)
++
++    fake_agent_id = uuid.uuid4()
++
++    # 1. Reject agent_definition_id on system create
++    res_err1 = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Invalid Agent ID System Hook",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++            "agent_definition_id": str(fake_agent_id),
++        },
++    )
++    assert res_err1.status_code == 422, res_err1.text
++    assert res_err1.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
++
++    # 2. Reject UUID string in agent on system create
++    res_err2 = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Invalid UUID Agent System Hook",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++            "agent": str(fake_agent_id),
++        },
++    )
++    assert res_err2.status_code == 422, res_err2.text
++    assert res_err2.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
++
++    # 3. Create valid system template with slug
++    res_sys = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Cross Tenant Reality Gate",
++            "scope_kind": "system",
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "agent": "@reality-checker",
++        },
++    )
++    assert res_sys.status_code == 201, res_sys.text
++    sys_tpl_id = res_sys.json()["id"]
++
++    # 4. Reject PATCH with agent_definition_id
++    res_err3 = await client_admin.patch(
++        f"/api/v1/admin/default-workflow-hooks/{sys_tpl_id}",
++        json={"agent_definition_id": str(fake_agent_id)},
++    )
++    assert res_err3.status_code == 422, res_err3.text
++    assert res_err3.json()["code"] == "SYSTEM_TEMPLATE_REQUIRES_AGENT_SLUG"
++
++    # 5. Create Workspace B and seed an agent in Workspace B
++    ws_b = Workspace(name="Workspace Beta", slug=f"ws-b-{uuid.uuid4().hex[:6]}")
++    session.add(ws_b)
++    await session.commit()
++
++    agent_b_id = await _seed_agent(session, ws_b.id, admin.id, slug="reality-checker")
++
++    # 6. Create admin in Workspace B and create project
++    user_b_id = await create_user(
++        session, ws_b.id, handle=f"@admin_b_{uuid.uuid4().hex[:4]}", display_name="Admin B"
++    )
++    await add_role_binding(session, ws_b.id, user_b_id, role="SERVER_ADMIN", scope_type="server")
++    await rebuild_era(session, ws_b.id)
++    await session.commit()
++    user_b = SeededUser(id=user_b_id, workspace_id=ws_b.id, handle="admin_b")
++    await _enroll_mfa(session, user_b.id)
++    client_b = as_principal(user_b, aal_level=2)
++
++    res_proj_b = await client_b.post(
++        "/api/v1/projects",
++        json={"name": "Workspace B Project", "identifier": "WSB1"},
++    )
++    assert res_proj_b.status_code == 201, res_proj_b.text
++    wsb_proj_id = uuid.UUID(res_proj_b.json()["id"])
++
++    # Verify materialized hook in Workspace B
++    hook_b = (
++        await session.execute(
++            select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == wsb_proj_id)
++        )
++    ).scalar_one()
++    assert hook_b.agent_definition_id == agent_b_id
++    assert str(hook_b.inherited_from_template_id) == sys_tpl_id
++
++
++@pytest.mark.asyncio
++async def test_admin_validations_and_conflict_handling(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify cross-workspace 403, invalid WASM 422, bounds 422, and duplicate name 409."""
++    session = api_env.seed
++    admin = await make_user("val_admin", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client_admin = as_principal(admin, aal_level=2)
++
++    ws_admin = await make_user("ws_admin_only", workspace_role="WORKSPACE_ADMIN")
++    await _enroll_mfa(session, ws_admin.id)
++    client_ws_admin = as_principal(ws_admin, aal_level=2)
++
++    # 1. Cross-workspace create attempt by non-server-admin -> 403
++    foreign_ws_id = uuid.uuid4()
++    res_cross = await client_ws_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Cross WS Attempt",
++            "scope_kind": "workspace",
++            "workspace_id": str(foreign_ws_id),
++            "to_state_name": "Done",
++        },
++    )
++    assert res_cross.status_code == 403, res_cross.text
++    assert res_cross.json()["code"] == "CROSS_WORKSPACE_FORBIDDEN"
++
++    # Switch principal back to server admin
++    client_admin = as_principal(admin, aal_level=2)
++
++    # 2. Invalid WASM hex -> 422
++    res_wasm_err = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Invalid WASM Hex",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++            "wasm_module_sha256": "not-valid-hex!",
++        },
++    )
++    assert res_wasm_err.status_code == 422, res_wasm_err.text
++
++    # 3. max_rework_attempts = 0 (out of 1..20 bounds) -> 422
++    res_rework_err = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Zero Rework Attempts",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++            "max_rework_attempts": 0,
++        },
++    )
++    assert res_rework_err.status_code == 422, res_rework_err.text
++
++    # 4. Whitespace name -> 422
++    res_ws_name_err = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "    ",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++        },
++    )
++    assert res_ws_name_err.status_code == 422, res_ws_name_err.text
++
++    # 5. Invalid hook_kind -> 422
++    res_kind_err = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Unknown Kind Template",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++            "hook_kind": "arbitrary_custom_unknown_kind",
++        },
++    )
++    assert res_kind_err.status_code == 422, res_kind_err.text
++
++    # 6. Duplicate template name -> 409
++    res_first = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Unique Name Test",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++        },
++    )
++    assert res_first.status_code == 201, res_first.text
++
++    res_dup = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Unique Name Test",
++            "scope_kind": "system",
++            "to_state_name": "Done",
++        },
++    )
++    assert res_dup.status_code == 409, res_dup.text
++    assert res_dup.json()["code"] == "TEMPLATE_NAME_CONFLICT"
++
++
++@pytest.mark.asyncio
++async def test_disabled_workspace_template_suppresses_system_template(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify a disabled workspace template with the same name suppresses an enabled system template."""
++    session = api_env.seed
++    ws_id = api_env.workspace_id
++    admin = await make_user("suppress_admin", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client_admin = as_principal(admin, aal_level=2)
++
++    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
++
++    # 1. Enabled system template
++    res_sys = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Universal Security Check",
++            "scope_kind": "system",
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "agent": "@reality-checker",
++            "is_enabled": True,
++        },
++    )
++    assert res_sys.status_code == 201, res_sys.text
++
++    # 2. Disabled workspace template with same name
++    res_ws = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Universal Security Check",
++            "scope_kind": "workspace",
++            "workspace_id": str(ws_id),
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "agent": "@reality-checker",
++            "is_enabled": False,
++        },
++    )
++    assert res_ws.status_code == 201, res_ws.text
++
++    # 3. Create project in this workspace
++    res_proj = await client_admin.post(
++        "/api/v1/projects",
++        json={"name": "Suppression Test Project", "identifier": "SUP1"},
++    )
++    assert res_proj.status_code == 201, res_proj.text
++    proj_id = uuid.UUID(res_proj.json()["id"])
++
++    # 4. Verify hook was NOT created because the workspace template suppressed the system template
++    hooks = (
++        (
++            await session.execute(
++                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    hook_names = {h.name for h in hooks}
++    assert "Universal Security Check" not in hook_names
++
++
++@pytest.mark.asyncio
++async def test_apply_blueprint_inherits_default_hooks(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify apply_blueprint with is_new_project=True inherits default hook templates."""
++    session = api_env.seed
++    ws_id = api_env.workspace_id
++    admin = await make_user("bp_adm", workspace_role="SERVER_ADMIN")
++    await _enroll_mfa(session, admin.id)
++    client_admin = as_principal(admin, aal_level=2)
++
++    await _seed_agent(session, ws_id, admin.id, slug="reality-checker")
++
++    # Create default hook template
++    res_tpl = await client_admin.post(
++        "/api/v1/admin/default-workflow-hooks",
++        json={
++            "name": "Blueprint Hook Inheritance Gate",
++            "scope_kind": "workspace",
++            "workspace_id": str(ws_id),
++            "from_state_name": "In Progress",
++            "to_state_name": "Done",
++            "agent": "@reality-checker",
++        },
++    )
++    assert res_tpl.status_code == 201, res_tpl.text
++    tpl_id = res_tpl.json()["id"]
++
++    # Apply blueprint for a new project via admin API
++    bp = ProjectBlueprint(
++        identifier="BP99",
++        name="Blueprint Generated Project",
++        states=[
++            BlueprintState(name="In Progress", group="started", color="#3b82f6"),
++            BlueprintState(name="Done", group="completed", color="#10b981"),
++            BlueprintState(name="Canceled", group="cancelled", color="#ef4444"),
++        ],
++    )
++    res_plan = await client_admin.post(
++        "/api/v1/admin/projects/blueprint:plan",
++        json={"blueprint": bp.model_dump()},
++    )
++    assert res_plan.status_code == 200, res_plan.text
++    plan_sha = res_plan.json()["plan_sha256"]
++
++    res_apply = await client_admin.post(
++        "/api/v1/admin/projects/blueprint:apply",
++        json={"blueprint": bp.model_dump(), "plan_sha256": plan_sha},
++    )
++    assert res_apply.status_code == 200, res_apply.text
++    proj = (
++        await session.execute(
++            select(Project).where(
++                Project.workspace_id == ws_id,
++                Project.identifier == bp.identifier,
++            )
++        )
++    ).scalar_one()
++    proj_id = proj.id
++
++    # Verify project has inherited hook
++    hooks = list(
++        (
++            await session.execute(
++                select(WorkflowTransitionHook).where(WorkflowTransitionHook.project_id == proj_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(hooks) >= 1
++    inherited = [h for h in hooks if str(h.inherited_from_template_id) == tpl_id]
++    assert len(inherited) == 1
++    assert inherited[0].name == "Blueprint Hook Inheritance Gate"
 diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
-index 1c0c66a3..3a4b57e0 100644
+index 3cc0687e..c36ada59 100644
 --- a/kanban/web/openapi.json
 +++ b/kanban/web/openapi.json
 @@ -5631,6 +5631,517 @@
@@ -372,9 +2233,9 @@ index 1c0c66a3..3a4b57e0 100644
 +          },
 +          "max_rework_attempts": {
 +            "default": 3,
-+            "description": "Maximum rework attempts (0..20)",
++            "description": "Maximum rework attempts (1..20)",
 +            "maximum": 20.0,
-+            "minimum": 0.0,
++            "minimum": 1.0,
 +            "title": "Max Rework Attempts",
 +            "type": "integer"
 +          },
@@ -721,7 +2582,7 @@ index 1c0c66a3..3a4b57e0 100644
 +            "anyOf": [
 +              {
 +                "maximum": 20.0,
-+                "minimum": 0.0,
++                "minimum": 1.0,
 +                "type": "integer"
 +              },
 +              {
@@ -799,24 +2660,6 @@ index 1c0c66a3..3a4b57e0 100644
        "DestructiveExecuteIn": {
          "additionalProperties": false,
          "description": "Payload for Stage 2 delete execution.",
-@@ -14441,7 +14952,7 @@
-                 "type": "null"
-               }
-             ],
--            "description": "Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)",
-+            "description": "Updated default workflow gate timeout in milliseconds (1000..600000, or null)",
-             "title": "Default Gate Timeout Ms"
-           },
-           "description_markdown": {
-@@ -14547,7 +15058,7 @@
-                 "type": "null"
-               }
-             ],
--            "description": "Configured default workflow transition gate timeout in milliseconds, if enabled",
-+            "description": "Configured default workflow gate timeout in milliseconds",
-             "title": "Default Gate Timeout Ms"
-           },
-           "default_module_ids": {
 @@ -21690,6 +22201,33 @@
              "title": "Id",
              "type": "string"
@@ -855,12 +2698,12 @@ index 1c0c66a3..3a4b57e0 100644
    },
    "info": {
      "title": "\ud83d\udc4dkanban API",
--    "version": "0.2.1869",
--    "x-build-commit": "7e161c070c48",
--    "x-openapi-bundle-hash": "208b77d47e5910a5ec789571bb747d46331d9e95e816187a84247084e384de31"
-+    "version": "0.2.1870",
-+    "x-build-commit": "a6967d0fc893",
-+    "x-openapi-bundle-hash": "c74657a708877eef3f148e47515ff0a98a23c194beeb171901f1b879bf1b896b"
+-    "version": "0.2.1870",
+-    "x-build-commit": "a6967d0fc893",
+-    "x-openapi-bundle-hash": "5dc0880e775f968eab4735e0153a60ad7d5bf46595462c54124a312e0698c8f8"
++    "version": "0.2.1876",
++    "x-build-commit": "01c4f4577242",
++    "x-openapi-bundle-hash": "101bfc04022fd610bd4f023811fd036eb0ee2a586306af1fc2e554d3e376927b"
    },
    "openapi": "3.1.0",
    "paths": {
@@ -1752,7 +3595,7 @@ index 1c0c66a3..3a4b57e0 100644
 -            "schema": {
 -              "title": "Card Ref",
 -              "type": "string"
-+        "description": "Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.",
++        "description": "Create a new default workflow hook template.\n\nRequires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.",
 +        "operationId": "admin_create_default_hook_api_v1_admin_default_workflow_hooks_post",
 +        "requestBody": {
 +          "content": {
@@ -1842,7 +3685,7 @@ index 1c0c66a3..3a4b57e0 100644
 -        "operationId": "reorder_admin_card_api_v1_admin_auth_cards__card_ref__reorder_post",
 +      },
 +      "patch": {
-+        "description": "Update an existing default workflow hook template. Requires appropriate admin role and AAL2.",
++        "description": "Update an existing default workflow hook template.\n\nRequires appropriate admin role and AAL2.",
 +        "operationId": "admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch",
          "parameters": [
            {
@@ -1955,7 +3798,7 @@ index 1c0c66a3..3a4b57e0 100644
      },
 +    "/api/v1/projects/{project}/workflow-hooks/sync-defaults": {
 +      "post": {
-+        "description": "Apply missing default hook templates onto an existing project without overwriting existing hooks.\n\nRequires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.",
++        "description": "Apply missing default hook templates onto an existing project.\n\nDoes not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.",
 +        "operationId": "sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post",
 +        "parameters": [
 +          {
@@ -2320,10 +4163,10 @@ index 1c0c66a3..3a4b57e0 100644
        "get": {
          "description": "Render interactive consent screen for authorization code grant with PKCE S256.",
 diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
-index c93fc2de..2fdbd6b2 100644
+index d545d992..91310cae 100644
 --- a/kanban/web/src/api/schema.gen.ts
 +++ b/kanban/web/src/api/schema.gen.ts
-@@ -671,6 +671,54 @@ export interface paths {
+@@ -671,6 +671,58 @@ export interface paths {
          patch?: never;
          trace?: never;
      };
@@ -2342,7 +4185,9 @@ index c93fc2de..2fdbd6b2 100644
 +        put?: never;
 +        /**
 +         * Create a default workflow hook template
-+         * @description Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
++         * @description Create a new default workflow hook template.
++         *
++         *     Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
 +         */
 +        post: operations["admin_create_default_hook_api_v1_admin_default_workflow_hooks_post"];
 +        delete?: never;
@@ -2370,7 +4215,9 @@ index c93fc2de..2fdbd6b2 100644
 +        head?: never;
 +        /**
 +         * Update a default workflow hook template
-+         * @description Update an existing default workflow hook template. Requires appropriate admin role and AAL2.
++         * @description Update an existing default workflow hook template.
++         *
++         *     Requires appropriate admin role and AAL2.
 +         */
 +        patch: operations["admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch"];
 +        trace?: never;
@@ -2378,7 +4225,7 @@ index c93fc2de..2fdbd6b2 100644
      "/api/v1/admin/destructive:execute": {
          parameters: {
              query?: never;
-@@ -5007,6 +5055,28 @@ export interface paths {
+@@ -5007,6 +5059,28 @@ export interface paths {
          patch?: never;
          trace?: never;
      };
@@ -2393,9 +4240,9 @@ index c93fc2de..2fdbd6b2 100644
 +        put?: never;
 +        /**
 +         * Sync missing default workflow hook templates to project
-+         * @description Apply missing default hook templates onto an existing project without overwriting existing hooks.
++         * @description Apply missing default hook templates onto an existing project.
 +         *
-+         *     Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
++         *     Does not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
 +         */
 +        post: operations["sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post"];
 +        delete?: never;
@@ -2407,7 +4254,7 @@ index c93fc2de..2fdbd6b2 100644
      "/api/v1/repo-bindings/{binding_id}": {
          parameters: {
              query?: never;
-@@ -6175,6 +6245,54 @@ export interface paths {
+@@ -6175,6 +6249,54 @@ export interface paths {
          patch?: never;
          trace?: never;
      };
@@ -2462,7 +4309,7 @@ index c93fc2de..2fdbd6b2 100644
      "/oauth/authorize": {
          parameters: {
              query?: never;
-@@ -8980,6 +9098,189 @@ export interface components {
+@@ -8980,6 +9102,189 @@ export interface components {
              /** Size */
              size: number;
          };
@@ -2517,7 +4364,7 @@ index c93fc2de..2fdbd6b2 100644
 +            is_enabled: boolean;
 +            /**
 +             * Max Rework Attempts
-+             * @description Maximum rework attempts (0..20)
++             * @description Maximum rework attempts (1..20)
 +             * @default 3
 +             */
 +            max_rework_attempts: number;
@@ -2652,25 +4499,7 @@ index c93fc2de..2fdbd6b2 100644
          /**
           * DestructiveExecuteIn
           * @description Payload for Stage 2 delete execution.
-@@ -13008,7 +13309,7 @@ export interface components {
-             auto_archive_days?: number | null;
-             /**
-              * Default Gate Timeout Ms
--             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
-+             * @description Updated default workflow gate timeout in milliseconds (1000..600000, or null)
-              */
-             default_gate_timeout_ms?: number | null;
-             /**
-@@ -13056,7 +13357,7 @@ export interface components {
-             capabilities: string[];
-             /**
-              * Default Gate Timeout Ms
--             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
-+             * @description Configured default workflow gate timeout in milliseconds
-              */
-             default_gate_timeout_ms?: number | null;
-             /**
-@@ -16335,6 +16636,10 @@ export interface components {
+@@ -16335,6 +16640,10 @@ export interface components {
              hook_kind: string;
              /** Id */
              id: string;
@@ -2681,7 +4510,7 @@ index c93fc2de..2fdbd6b2 100644
              /** Is Enabled */
              is_enabled: boolean;
              /** Manifest Sha256 */
-@@ -18402,18 +18707,17 @@ export interface operations {
+@@ -18402,18 +18711,17 @@ export interface operations {
              };
          };
      };
@@ -2706,7 +4535,7 @@ index c93fc2de..2fdbd6b2 100644
          responses: {
              /** @description Successful Response */
              200: {
-@@ -18421,7 +18725,7 @@ export interface operations {
+@@ -18421,7 +18729,7 @@ export interface operations {
                      [name: string]: unknown;
                  };
                  content: {
@@ -2715,7 +4544,7 @@ index c93fc2de..2fdbd6b2 100644
                  };
              };
              /** @description Unauthorized - authentication required */
-@@ -18433,15 +18737,6 @@ export interface operations {
+@@ -18433,15 +18741,6 @@ export interface operations {
                      "application/problem+json": components["schemas"]["ProblemDetails"];
                  };
              };
@@ -2731,7 +4560,7 @@ index c93fc2de..2fdbd6b2 100644
              /** @description Validation Error */
              422: {
                  headers: {
-@@ -18453,7 +18748,7 @@ export interface operations {
+@@ -18453,7 +18752,7 @@ export interface operations {
              };
          };
      };
@@ -2740,7 +4569,7 @@ index c93fc2de..2fdbd6b2 100644
          parameters: {
              query?: never;
              header?: never;
-@@ -18462,17 +18757,17 @@ export interface operations {
+@@ -18462,17 +18761,17 @@ export interface operations {
          };
          requestBody: {
              content: {
@@ -2761,7 +4590,7 @@ index c93fc2de..2fdbd6b2 100644
                  };
              };
              /** @description Unauthorized - authentication required */
-@@ -18484,15 +18779,6 @@ export interface operations {
+@@ -18484,15 +18783,6 @@ export interface operations {
                      "application/problem+json": components["schemas"]["ProblemDetails"];
                  };
              };
@@ -2777,7 +4606,7 @@ index c93fc2de..2fdbd6b2 100644
              /** @description Validation Error */
              422: {
                  headers: {
-@@ -18504,26 +18790,210 @@ export interface operations {
+@@ -18504,21 +18794,205 @@ export interface operations {
              };
          };
      };
@@ -2802,11 +4631,9 @@ index c93fc2de..2fdbd6b2 100644
              /** @description Successful Response */
 -            200: {
 +            204: {
-                 headers: {
-                     [name: string]: unknown;
-                 };
--                content: {
--                    "application/json": components["schemas"]["DestructiveRestoreOut"];
++                headers: {
++                    [name: string]: unknown;
++                };
 +                content?: never;
 +            };
 +            /** @description Unauthorized - authentication required */
@@ -2990,15 +4817,10 @@ index c93fc2de..2fdbd6b2 100644
 +        responses: {
 +            /** @description Successful Response */
 +            200: {
-+                headers: {
-+                    [name: string]: unknown;
-+                };
-+                content: {
-+                    "application/json": components["schemas"]["DestructiveRestoreOut"];
+                 headers: {
+                     [name: string]: unknown;
                  };
-             };
-             /** @description Unauthorized - authentication required */
-@@ -29630,6 +30100,46 @@ export interface operations {
+@@ -29630,6 +30104,46 @@ export interface operations {
              };
          };
      };
@@ -3045,7 +4867,7 @@ index c93fc2de..2fdbd6b2 100644
      delete_repo_binding_api_v1_repo_bindings__binding_id__delete: {
          parameters: {
              query?: never;
-@@ -32583,6 +33093,176 @@ export interface operations {
+@@ -32583,6 +33097,176 @@ export interface operations {
              };
          };
      };
@@ -3364,6 +5186,738 @@ index 5aefd00a..afc023d3 100644
          {activeTab === 'trash' && (
            <div className="kb-members-section" data-testid="workspace-trash-studio">
              <div className="kb-settings-header">
+diff --git a/kanban/web/src/features/workflows/DefaultWorkflowHooksStudio.tsx b/kanban/web/src/features/workflows/DefaultWorkflowHooksStudio.tsx
+new file mode 100644
+index 00000000..b41f9c43
+--- /dev/null
++++ b/kanban/web/src/features/workflows/DefaultWorkflowHooksStudio.tsx
+@@ -0,0 +1,726 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useEffect, useState, type JSX } from 'react';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
++import { isAal2StepUpCancelled } from '../../api/client';
++import {
++  fetchDefaultWorkflowHooks,
++  createDefaultWorkflowHook,
++  updateDefaultWorkflowHook,
++  deleteDefaultWorkflowHook,
++  type DefaultWorkflowHook,
++  type DefaultHookScopeKind,
++  type CreateDefaultWorkflowHookPayload,
++  type UpdateDefaultWorkflowHookPayload,
++} from './api';
++import './workflows.css';
++
++export interface DefaultWorkflowHooksStudioProps {
++  scopeKind?: DefaultHookScopeKind | undefined;
++  workspaceId?: string | undefined;
++  showSubnav?: boolean | undefined;
++}
++
++export function DefaultWorkflowHooksStudio({
++  scopeKind = 'system',
++  workspaceId,
++  showSubnav = true,
++}: DefaultWorkflowHooksStudioProps): JSX.Element {
++  const queryClient = useQueryClient();
++  const queryKey = ['default-workflow-hooks', scopeKind, workspaceId ?? 'all'];
++
++  const {
++    data: templates = [],
++    isLoading,
++    error,
++  } = useQuery({
++    queryKey,
++    queryFn: () => fetchDefaultWorkflowHooks(scopeKind, workspaceId),
++  });
++
++  const [dialogOpen, setDialogOpen] = useState(false);
++  const [editingTemplate, setEditingTemplate] = useState<DefaultWorkflowHook | null>(null);
++  const [errorMessage, setErrorMessage] = useState<string | null>(null);
++  const [isSubmitting, setIsSubmitting] = useState(false);
++
++  // Form fields
++  const [formName, setFormName] = useState('');
++  const [formFromState, setFormFromState] = useState('');
++  const [formToState, setFormToState] = useState('Done');
++  const [formHookKind, setFormHookKind] = useState('agent_interceptor');
++  const [formAgentSlug, setFormAgentSlug] = useState('@reality-checker');
++  const [formSortRank, setFormSortRank] = useState(100);
++  const [formTimeoutMs, setFormTimeoutMs] = useState<number | ''>(60000);
++  const [formFailurePolicy, setFormFailurePolicy] = useState<'fail_closed' | 'fail_open_warn'>('fail_closed');
++  const [formMaxRework, setFormMaxRework] = useState(3);
++
++  // Close on Escape key press
++  useEffect(() => {
++    if (!dialogOpen) return;
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') {
++        setDialogOpen(false);
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [dialogOpen]);
++
++  const openCreateDialog = () => {
++    setEditingTemplate(null);
++    setFormName('');
++    setFormFromState('');
++    setFormToState('Done');
++    setFormHookKind('agent_interceptor');
++    setFormAgentSlug('@reality-checker');
++    setFormSortRank(100);
++    setFormTimeoutMs(60000);
++    setFormFailurePolicy('fail_closed');
++    setFormMaxRework(3);
++    setErrorMessage(null);
++    setDialogOpen(true);
++  };
++
++  const openEditDialog = (template: DefaultWorkflowHook) => {
++    setEditingTemplate(template);
++    setFormName(template.name);
++    setFormFromState(template.from_state_name ?? '');
++    setFormToState(template.to_state_name);
++
++    let initialKind = template.hook_kind;
++    if (initialKind === 'agent_async' || initialKind === 'agent_interceptor') {
++      initialKind = 'agent_interceptor';
++    } else if (
++      initialKind === 'wasm_sync' ||
++      initialKind === 'wasm_validator' ||
++      initialKind === 'sync_validator' ||
++      initialKind === 'sync_mutator'
++    ) {
++      initialKind = 'wasm_validator';
++    } else if (initialKind === 'builtin') {
++      initialKind = 'builtin';
++    }
++    setFormHookKind(initialKind);
++
++    setFormAgentSlug(template.agent_slug ? `@${template.agent_slug.replace(/^@+/, '')}` : '');
++    setFormSortRank(template.sort_rank);
++    setFormTimeoutMs(template.timeout_ms ?? '');
++    setFormFailurePolicy(template.failure_policy === 'fail_open_warn' ? 'fail_open_warn' : 'fail_closed');
++    setFormMaxRework(Math.max(1, Math.min(20, template.max_rework_attempts || 1)));
++    setErrorMessage(null);
++    setDialogOpen(true);
++  };
++
++  const handleToggle = async (template: DefaultWorkflowHook) => {
++    try {
++      await updateDefaultWorkflowHook(
++        template.id,
++        { is_enabled: !template.is_enabled },
++        workspaceId,
++      );
++      await queryClient.invalidateQueries({ queryKey });
++    } catch (err: unknown) {
++      if (!isAal2StepUpCancelled(err)) {
++        setErrorMessage(err instanceof Error ? err.message : 'Failed to toggle template status.');
++      }
++    }
++  };
++
++  const handleDelete = async (templateId: string) => {
++    if (!window.confirm('Are you sure you want to delete this default hook template?')) {
++      return;
++    }
++    try {
++      await deleteDefaultWorkflowHook(templateId, workspaceId);
++      await queryClient.invalidateQueries({ queryKey });
++    } catch (err: unknown) {
++      if (!isAal2StepUpCancelled(err)) {
++        setErrorMessage(err instanceof Error ? err.message : 'Failed to delete template.');
++      }
++    }
++  };
++
++  const handleSave = async (e: React.SyntheticEvent) => {
++    e.preventDefault();
++    if (!formName.trim()) {
++      setErrorMessage('Template name is required.');
++      return;
++    }
++    if (!formToState.trim()) {
++      setErrorMessage('Target state is required.');
++      return;
++    }
++
++    setIsSubmitting(true);
++    setErrorMessage(null);
++
++    const fromStateValue = formFromState.trim();
++    const cleanFromState =
++      fromStateValue === '' || fromStateValue === '*' ? null : fromStateValue;
++
++    const cleanAgentSlug = formAgentSlug.trim().replace(/^@+/, '') || null;
++    const timeoutValue = formTimeoutMs === '' ? null : formTimeoutMs;
++    if (timeoutValue !== null) {
++      if (Number.isNaN(timeoutValue) || timeoutValue < 1000 || timeoutValue > 600000) {
++        setErrorMessage('Timeout must be between 1000 and 600000 ms (1s to 10m).');
++        setIsSubmitting(false);
++        return;
++      }
++    }
++
++    try {
++      if (editingTemplate) {
++        const payload: UpdateDefaultWorkflowHookPayload = {
++          name: formName.trim(),
++          from_state_name: cleanFromState,
++          to_state_name: formToState.trim(),
++          hook_kind: formHookKind,
++          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
++          agent_slug: cleanAgentSlug,
++          sort_rank: formSortRank,
++          timeout_ms: timeoutValue,
++          failure_policy: formFailurePolicy,
++          max_rework_attempts: formMaxRework,
++        };
++        await updateDefaultWorkflowHook(editingTemplate.id, payload, workspaceId);
++      } else {
++        const payload: CreateDefaultWorkflowHookPayload = {
++          name: formName.trim(),
++          scope_kind: scopeKind,
++          workspace_id: scopeKind === 'workspace' ? (workspaceId ?? null) : null,
++          from_state_name: cleanFromState,
++          to_state_name: formToState.trim(),
++          hook_kind: formHookKind,
++          agent: cleanAgentSlug ? `@${cleanAgentSlug}` : null,
++          agent_slug: cleanAgentSlug,
++          sort_rank: formSortRank,
++          timeout_ms: timeoutValue,
++          failure_policy: formFailurePolicy,
++          max_rework_attempts: formMaxRework,
++        };
++        await createDefaultWorkflowHook(payload, workspaceId);
++      }
++      await queryClient.invalidateQueries({ queryKey });
++      setDialogOpen(false);
++    } catch (err: unknown) {
++      if (!isAal2StepUpCancelled(err)) {
++        setErrorMessage(err instanceof Error ? err.message : 'Failed to save template.');
++      }
++    } finally {
++      setIsSubmitting(false);
++    }
++  };
++
++  const isSystem = scopeKind === 'system';
++
++  return (
++    <div
++      className="workflow-studio default-workflow-hooks-studio"
++      data-testid="default-workflow-hooks-studio"
++      style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}
++    >
++      {isSystem && showSubnav && <AdminStudioSubnav activeTab="workflows" />}
++
++      {/* Header */}
++      <header
++        className="workflow-studio-header"
++        style={{
++          display: 'flex',
++          justifyContent: 'space-between',
++          alignItems: 'flex-start',
++          marginBottom: '1.5rem',
++          flexWrap: 'wrap',
++          gap: '1rem',
++        }}
++      >
++        <div>
++          <h1 className="workflow-studio-title" style={{ fontSize: '1.5rem', margin: '0 0 0.5rem 0' }}>
++            <span>⚡ {isSystem ? 'System-Wide Default Workflow Hooks' : 'Workspace Default Workflow Hooks'}</span>
++          </h1>
++          <p style={{ margin: 0, color: 'var(--fg-secondary)', fontSize: '0.875rem' }}>
++            {isSystem
++              ? 'Define system-wide default workflow hook templates inherited automatically by all new projects across workspaces. Removable at the project level.'
++              : 'Define workspace-level workflow hook templates inherited by newly created projects in this workspace, overriding system-wide templates.'}
++          </p>
++        </div>
++        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
++          <StudioDocLink
++            href="/docs/scripted-workflows-and-transition-helpers"
++            title="Default Workflow Hooks Documentation"
++            testId="default-workflow-hooks-doc-link"
++          />
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-primary"
++            data-testid="create-default-hook-btn"
++            onClick={() => { openCreateDialog(); }}
++          >
++            + Add Default Hook Template
++          </button>
++        </div>
++      </header>
++
++      {/* Error Banner (shown on page when dialog is closed) */}
++      {!dialogOpen && (errorMessage !== null || error !== null) && (
++        <div className="workflow-alert workflow-alert-danger" role="alert" style={{ marginBottom: '1.5rem' }}>
++          <span>{errorMessage ?? (error instanceof Error ? error.message : 'An error occurred')}</span>
++          {errorMessage && <ErrorHelpHint error={errorMessage} />}
++        </div>
++      )}
++
++      {/* Loading State */}
++      {isLoading && (
++        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--fg-secondary)' }}>
++          Loading default workflow hook templates...
++        </div>
++      )}
++
++      {/* Empty State */}
++      {!isLoading && templates.length === 0 && (
++        <div
++          data-testid="empty-templates-notice"
++          style={{
++            padding: '3rem',
++            textAlign: 'center',
++            background: 'var(--bg-surface)',
++            border: '1px dashed var(--border-subtle)',
++            borderRadius: '8px',
++          }}
++        >
++          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⚡</div>
++          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem' }}>No Default Workflow Hook Templates</h3>
++          <p style={{ margin: '0 0 1rem 0', color: 'var(--fg-secondary)', fontSize: '0.875rem' }}>
++            {isSystem
++              ? 'No system default hook templates defined yet. New projects will be created without inherited transition gates.'
++              : 'No workspace default hook templates defined yet. New projects will inherit system defaults if configured.'}
++          </p>
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-primary"
++            onClick={() => { openCreateDialog(); }}
++          >
++            Create First Template
++          </button>
++        </div>
++      )}
++
++      {/* Templates List */}
++      {!isLoading && templates.length > 0 && (
++        <div
++          className="default-hooks-list"
++          style={{
++            display: 'flex',
++            flexDirection: 'column',
++            gap: '0.75rem',
++          }}
++        >
++          {templates.map((tpl) => {
++            const fromText = tpl.from_state_name ?? '* Any State';
++            const toText = tpl.to_state_name;
++            const isAgent = tpl.hook_kind.includes('agent');
++
++            return (
++              <article
++                key={tpl.id}
++                className={`hook-pipeline-row ${!tpl.is_enabled ? 'is-disabled' : ''}`}
++                data-testid={`template-row-${tpl.id}`}
++                style={{
++                  display: 'flex',
++                  alignItems: 'center',
++                  justifyContent: 'space-between',
++                  padding: '1rem',
++                  background: 'var(--bg-surface)',
++                  border: '1px solid var(--border-subtle)',
++                  borderRadius: '8px',
++                  gap: '1rem',
++                  flexWrap: 'wrap',
++                }}
++              >
++                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', flex: 1 }}>
++                  {/* Scope Badge */}
++                  <span
++                    className={`workflow-studio-title-badge ${
++                      tpl.scope_kind === 'system'
++                        ? 'template-scope-badge-system'
++                        : 'template-scope-badge-workspace'
++                    }`}
++                    style={{
++                      textTransform: 'uppercase',
++                      fontSize: '0.7rem',
++                      fontWeight: 600,
++                    }}
++                  >
++                    {tpl.scope_kind}
++                  </span>
++
++                  {/* Hook Kind Badge */}
++                  <span
++                    className={`hook-type-badge ${isAgent ? 'hook-type-agent' : 'hook-type-sync'}`}
++                    style={{ fontSize: '0.75rem' }}
++                  >
++                    {isAgent ? '🤖 [Agent Gate]' : '⚡ [Sync Validator]'}
++                  </span>
++
++                  {/* Template Name */}
++                  <strong
++                    className="hook-name"
++                    data-testid={`template-name-${tpl.id}`}
++                    style={{ fontSize: '1rem' }}
++                  >
++                    {tpl.name}
++                  </strong>
++
++                  {/* Transition Rule Badge */}
++                  <span
++                    className="state-badge"
++                    data-testid={`template-transition-${tpl.id}`}
++                    style={{ fontSize: '0.8rem', padding: '2px 8px' }}
++                  >
++                    <span>{fromText}</span>
++                    <span style={{ margin: '0 4px' }}>&rarr;</span>
++                    <span style={{ fontWeight: 600 }}>{toText}</span>
++                  </span>
++
++                  {/* Agent Slug */}
++                  {tpl.agent_slug && (
++                    <span
++                      style={{
++                        fontFamily: 'var(--font-mono, monospace)',
++                        fontSize: '0.8rem',
++                        color: 'var(--fg-secondary)',
++                      }}
++                    >
++                      @{tpl.agent_slug.replace(/^@+/, '')}
++                    </span>
++                  )}
++
++                  {/* Timeout */}
++                  {tpl.timeout_ms && (
++                    <span className="hook-metric-pill" style={{ fontSize: '0.75rem' }}>
++                      {tpl.timeout_ms / 1000}s
++                    </span>
++                  )}
++
++                  {/* Failure Policy */}
++                  <span
++                    className={`hook-policy-badge ${
++                      tpl.failure_policy === 'fail_closed' ? 'policy-fail-closed' : 'policy-fail-open'
++                    }`}
++                  >
++                    {tpl.failure_policy === 'fail_closed' ? 'Fail-Closed' : 'Fail-Open (Warn)'}
++                  </span>
++                </div>
++
++                {/* Right Actions */}
++                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
++                  {/* Status Toggle */}
++                  <label
++                    className="hook-toggle-switch"
++                    htmlFor={`template-toggle-${tpl.id}`}
++                    title={tpl.is_enabled ? 'Template is enabled' : 'Template is disabled'}
++                  >
++                    <input
++                      id={`template-toggle-${tpl.id}`}
++                      data-testid={`template-toggle-${tpl.id}`}
++                      type="checkbox"
++                      checked={tpl.is_enabled}
++                      onChange={() => {
++                        void handleToggle(tpl);
++                      }}
++                      aria-label={`Toggle ${tpl.name}`}
++                    />
++                    <span className="hook-toggle-slider" />
++                  </label>
++
++                  {/* Edit Button */}
++                  <button
++                    type="button"
++                    className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++                    data-testid={`template-edit-btn-${tpl.id}`}
++                    onClick={() => { openEditDialog(tpl); }}
++                  >
++                    Edit
++                  </button>
++
++                  {/* Delete Button */}
++                  <button
++                    type="button"
++                    className="workflow-btn workflow-btn-danger workflow-btn-sm"
++                    data-testid={`template-delete-btn-${tpl.id}`}
++                    onClick={() => {
++                      void handleDelete(tpl.id);
++                    }}
++                  >
++                    Delete
++                  </button>
++                </div>
++              </article>
++            );
++          })}
++        </div>
++      )}
++
++      {/* Modal Dialog for Create / Edit */}
++      {dialogOpen && (
++        <div
++          className="workflow-modal-backdrop"
++          role="presentation"
++          onClick={() => { setDialogOpen(false); }}
++        >
++          <div
++            className="workflow-dialog"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="template-dialog-title"
++            data-testid="template-dialog"
++            onClick={(e) => { e.stopPropagation(); }}
++          >
++            <div className="workflow-dialog-header">
++              <h2 id="template-dialog-title" className="workflow-dialog-title">
++                {editingTemplate ? 'Edit Default Hook Template' : 'Add Default Hook Template'}
++              </h2>
++            </div>
++
++            <form onSubmit={(e) => void handleSave(e)} className="workflow-dialog-form">
++              <div className="workflow-dialog-body">
++                {errorMessage && (
++                  <div
++                    className="workflow-alert workflow-alert-danger"
++                    role="alert"
++                    style={{ marginBottom: '0.5rem' }}
++                  >
++                    <span>{errorMessage}</span>
++                    <ErrorHelpHint error={errorMessage} />
++                  </div>
++                )}
++
++                {/* Template Name */}
++                <div>
++                  <label
++                    htmlFor="template-name-input"
++                    style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                  >
++                    Template Name *
++                  </label>
++                  <input
++                    id="template-name-input"
++                    data-testid="template-name-input"
++                    type="text"
++                    className="workflow-form-control"
++                    style={{ width: '100%' }}
++                    placeholder="e.g. reality-checker-gate"
++                    value={formName}
++                    onChange={(e) => { setFormName(e.target.value); }}
++                    required
++                    maxLength={120}
++                  />
++                </div>
++
++                {/* Transition States: From & To */}
++                <div className="workflow-form-grid-2">
++                  <div>
++                    <label
++                      htmlFor="template-from-state-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      From State (Optional)
++                    </label>
++                    <input
++                      id="template-from-state-input"
++                      data-testid="template-from-state-input"
++                      type="text"
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      placeholder="* Any State"
++                      value={formFromState}
++                      onChange={(e) => { setFormFromState(e.target.value); }}
++                      maxLength={80}
++                    />
++                    <small style={{ color: 'var(--fg-secondary)', fontSize: '0.75rem' }}>
++                      Leave blank or * for Any State wildcard
++                    </small>
++                  </div>
++                  <div>
++                    <label
++                      htmlFor="template-to-state-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      To State *
++                    </label>
++                    <input
++                      id="template-to-state-input"
++                      data-testid="template-to-state-input"
++                      type="text"
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      placeholder="e.g. Done"
++                      value={formToState}
++                      onChange={(e) => { setFormToState(e.target.value); }}
++                      required
++                      maxLength={80}
++                    />
++                  </div>
++                </div>
++
++                {/* Hook Kind & Agent Slug */}
++                <div className="workflow-form-grid-2">
++                  <div>
++                    <label
++                      htmlFor="template-hook-kind-select"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Hook Kind *
++                    </label>
++                    <select
++                      id="template-hook-kind-select"
++                      data-testid="template-hook-kind-select"
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      value={formHookKind}
++                      onChange={(e) => { setFormHookKind(e.target.value); }}
++                    >
++                      <option value="agent_interceptor">Agent Gate (Async)</option>
++                      <option value="wasm_validator">Wasm Validator (Sync)</option>
++                      <option value="builtin">Builtin Guard</option>
++                    </select>
++                  </div>
++                  <div>
++                    <label
++                      htmlFor="template-agent-slug-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Agent Slug
++                    </label>
++                    <input
++                      id="template-agent-slug-input"
++                      data-testid="template-agent-slug-input"
++                      type="text"
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      placeholder="@reality-checker"
++                      value={formAgentSlug}
++                      onChange={(e) => { setFormAgentSlug(e.target.value); }}
++                      maxLength={80}
++                    />
++                  </div>
++                </div>
++
++                {/* Timeout & Failure Policy */}
++                <div className="workflow-form-grid-2">
++                  <div>
++                    <label
++                      htmlFor="template-timeout-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Timeout (ms)
++                    </label>
++                    <input
++                      id="template-timeout-input"
++                      data-testid="template-timeout-input"
++                      type="number"
++                      min={1000}
++                      max={600000}
++                      step={1000}
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      placeholder="60000"
++                      value={formTimeoutMs}
++                      onChange={(e) => { setFormTimeoutMs(e.target.value === '' ? '' : Number(e.target.value)); }}
++                    />
++                  </div>
++                  <div>
++                    <label
++                      htmlFor="template-policy-select"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Failure Policy *
++                    </label>
++                    <select
++                      id="template-policy-select"
++                      data-testid="template-policy-select"
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      value={formFailurePolicy}
++                      onChange={(e) => { setFormFailurePolicy(e.target.value as 'fail_closed' | 'fail_open_warn'); }}
++                    >
++                      <option value="fail_closed">Fail Closed (Block transition)</option>
++                      <option value="fail_open_warn">Fail Open (Warn only)</option>
++                    </select>
++                  </div>
++                </div>
++
++                {/* Sort Rank & Max Rework Attempts */}
++                <div className="workflow-form-grid-2">
++                  <div>
++                    <label
++                      htmlFor="template-sort-rank-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Sort Rank
++                    </label>
++                    <input
++                      id="template-sort-rank-input"
++                      data-testid="template-sort-rank-input"
++                      type="number"
++                      min={0}
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      value={formSortRank}
++                      onChange={(e) => { setFormSortRank(Number(e.target.value)); }}
++                    />
++                  </div>
++                  <div>
++                    <label
++                      htmlFor="template-rework-input"
++                      style={{ display: 'block', fontSize: '0.85rem', fontWeight: 500, marginBottom: '0.25rem' }}
++                    >
++                      Max Rework Attempts
++                    </label>
++                    <input
++                      id="template-rework-input"
++                      data-testid="template-rework-input"
++                      type="number"
++                      min={1}
++                      max={20}
++                      className="workflow-form-control"
++                      style={{ width: '100%' }}
++                      value={formMaxRework}
++                      onChange={(e) => { setFormMaxRework(Number(e.target.value)); }}
++                    />
++                  </div>
++                </div>
++              </div>
++
++              {/* Action Buttons */}
++              <div className="workflow-dialog-actions">
++                <button
++                  type="button"
++                  className="workflow-btn workflow-btn-secondary"
++                  data-testid="cancel-template-btn"
++                  onClick={() => { setDialogOpen(false); }}
++                  disabled={isSubmitting}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="workflow-btn workflow-btn-primary"
++                  data-testid="save-template-btn"
++                  disabled={isSubmitting}
++                >
++                  {isSubmitting ? 'Saving...' : editingTemplate ? 'Update Template' : 'Create Template'}
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
 diff --git a/kanban/web/src/features/workflows/HookPipelineRow.tsx b/kanban/web/src/features/workflows/HookPipelineRow.tsx
 index 155c2bff..d114efce 100644
 --- a/kanban/web/src/features/workflows/HookPipelineRow.tsx
@@ -3389,7 +5943,7 @@ index 155c2bff..d114efce 100644
  
          <div className="hook-pipeline-right">
 diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-index fd8c2d77..3fa46821 100644
+index 9f293e17..65ee30cb 100644
 --- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 +++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 @@ -20,6 +20,7 @@ import {
@@ -3406,12 +5960,12 @@ index fd8c2d77..3fa46821 100644
  
 +  // Sync default workflow hooks state
 +  const [isSyncingDefaults, setIsSyncingDefaults] = useState(false);
-+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
++  const [syncAlert, setSyncAlert] = useState<{ kind: 'info' | 'danger'; text: string } | null>(null);
 +
    const handleSaveProjectTimeout = async (val: number | null) => {
-     try {
-       setIsSavingTimeout(true);
-@@ -276,6 +281,27 @@ export function WorkflowStudioPage({
+     if (val !== null && (Number.isNaN(val) || val < 1000 || val > 600000)) {
+       setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+@@ -280,6 +285,32 @@ export function WorkflowStudioPage({
      }
    };
  
@@ -3419,17 +5973,22 @@ index fd8c2d77..3fa46821 100644
 +  const handleSyncDefaults = async () => {
 +    try {
 +      setIsSyncingDefaults(true);
-+      setSyncStatusMessage(null);
++      setSyncAlert(null);
 +      const synced = await syncDefaultWorkflowHooks(projectKey);
 +      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
-+      setSyncStatusMessage(
-+        synced.length > 0
-+          ? `Successfully synced ${String(synced.length)} default hook template(s).`
-+          : 'All default hook templates are already present on this project.',
-+      );
++      setSyncAlert({
++        kind: 'info',
++        text:
++          synced.length > 0
++            ? `Successfully synced ${String(synced.length)} default hook template(s).`
++            : 'All default hook templates are already present on this project.',
++      });
 +    } catch (err: unknown) {
 +      if (!isAal2StepUpCancelled(err)) {
-+        setSyncStatusMessage('Failed to sync default workflow hook templates.');
++        setSyncAlert({
++          kind: 'danger',
++          text: err instanceof Error ? err.message : 'Failed to sync default workflow hook templates.',
++        });
 +      }
 +    } finally {
 +      setIsSyncingDefaults(false);
@@ -3439,7 +5998,7 @@ index fd8c2d77..3fa46821 100644
    return (
      <div className="workflow-studio" data-testid="workflow-studio-page">
        {/* Studio Header */}
-@@ -293,6 +319,18 @@ export function WorkflowStudioPage({
+@@ -297,6 +328,18 @@ export function WorkflowStudioPage({
              title="Scripted Workflows & Transition Helpers Documentation"
              testId="workflow-studio-doc-link"
            />
@@ -3458,24 +6017,24 @@ index fd8c2d77..3fa46821 100644
            <button
              type="button"
              className="workflow-btn workflow-btn-primary"
-@@ -308,6 +346,26 @@ export function WorkflowStudioPage({
+@@ -312,6 +355,26 @@ export function WorkflowStudioPage({
          </div>
        </header>
  
 +      {/* Sync Status Banner */}
-+      {syncStatusMessage && (
++      {syncAlert && (
 +        <div
-+          className="workflow-alert workflow-alert-info"
-+          role="status"
++          className={`workflow-alert ${syncAlert.kind === 'danger' ? 'workflow-alert-danger' : 'workflow-alert-info'}`}
++          role={syncAlert.kind === 'danger' ? 'alert' : 'status'}
 +          data-testid="sync-defaults-status"
 +          style={{ marginBottom: '1rem' }}
 +        >
-+          <span>{syncStatusMessage}</span>
++          <span>{syncAlert.text}</span>
 +          <button
 +            type="button"
 +            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
 +            style={{ marginLeft: 'auto' }}
-+            onClick={() => { setSyncStatusMessage(null); }}
++            onClick={() => { setSyncAlert(null); }}
 +          >
 +            Dismiss
 +          </button>
@@ -3485,8 +6044,412 @@ index fd8c2d77..3fa46821 100644
        {/* General Alert */}
        {generalError && (
          <div className="workflow-alert workflow-alert-danger" role="alert">
+diff --git a/kanban/web/src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx b/kanban/web/src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx
+new file mode 100644
+index 00000000..1730fc62
+--- /dev/null
++++ b/kanban/web/src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx
+@@ -0,0 +1,398 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, expect, it, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import { DefaultWorkflowHooksStudio } from '../DefaultWorkflowHooksStudio';
++import { HookPipelineRow } from '../HookPipelineRow';
++import { WorkflowStudioPage } from '../WorkflowStudioPage';
++import * as api from '../api';
++
++const MOCK_SYSTEM_TEMPLATE: api.DefaultWorkflowHook = {
++  id: 'template-sys-1',
++  scope_kind: 'system',
++  workspace_id: null,
++  name: 'default-reality-checker',
++  from_state_name: null,
++  to_state_name: 'Done',
++  hook_kind: 'agent_interceptor',
++  sort_rank: 100,
++  is_enabled: true,
++  wasm_module_sha256: null,
++  agent_definition_id: null,
++  agent_slug: 'reality-checker',
++  allowed_mutable_fields: ['labels'],
++  failure_policy: 'fail_closed',
++  timeout_ms: 60000,
++  max_rework_attempts: 3,
++  created_by: null,
++  created_at: '2026-11-26T12:00:00Z',
++  updated_at: '2026-11-26T12:00:00Z',
++};
++
++const MOCK_WORKSPACE_TEMPLATE: api.DefaultWorkflowHook = {
++  id: 'template-ws-1',
++  scope_kind: 'workspace',
++  workspace_id: 'ws-1234',
++  name: 'ws-custom-gate',
++  from_state_name: 'In Review',
++  to_state_name: 'Done',
++  hook_kind: 'wasm_validator',
++  sort_rank: 50,
++  is_enabled: false,
++  wasm_module_sha256: null,
++  agent_definition_id: null,
++  agent_slug: null,
++  allowed_mutable_fields: [],
++  failure_policy: 'fail_open_warn',
++  timeout_ms: null,
++  max_rework_attempts: 3,
++  created_by: null,
++  created_at: '2026-11-26T12:00:00Z',
++  updated_at: '2026-11-26T12:00:00Z',
++};
++
++describe('DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false, staleTime: Infinity },
++      },
++    });
++    vi.restoreAllMocks();
++  });
++
++  function renderStudio(props: {
++    scopeKind?: 'system' | 'workspace';
++    workspaceId?: string;
++    showSubnav?: boolean;
++  } = {}) {
++    return render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter>
++          <DefaultWorkflowHooksStudio
++            scopeKind={props.scopeKind ?? 'system'}
++            workspaceId={props.workspaceId}
++            showSubnav={props.showSubnav ?? false}
++          />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++  }
++
++  it('renders system default hooks list with template details and badges', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([MOCK_SYSTEM_TEMPLATE]);
++
++    renderStudio({ scopeKind: 'system' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('default-workflow-hooks-studio')).toBeDefined();
++    });
++
++    expect(screen.getByText(/System-Wide Default Workflow Hooks/i)).toBeDefined();
++    expect(screen.getByTestId('template-row-template-sys-1')).toBeDefined();
++    expect(screen.getByTestId('template-name-template-sys-1').textContent).toBe('default-reality-checker');
++    expect(screen.getByTestId('template-transition-template-sys-1').textContent).toContain('* Any State');
++    expect(screen.getByTestId('template-transition-template-sys-1').textContent).toContain('Done');
++    expect(screen.getByText('@reality-checker')).toBeDefined();
++    expect(screen.getByText('Fail-Closed')).toBeDefined();
++  });
++
++  it('renders empty notice when no templates are configured', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([]);
++
++    renderStudio({ scopeKind: 'workspace', workspaceId: 'ws-1234' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('empty-templates-notice')).toBeDefined();
++    });
++    expect(screen.getByText(/No Default Workflow Hook Templates/i)).toBeDefined();
++  });
++
++  it('opens create modal, enforces client-side timeout validation, and creates template', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([]);
++    const createSpy = vi.spyOn(api, 'createDefaultWorkflowHook').mockResolvedValue({
++      ...MOCK_SYSTEM_TEMPLATE,
++      id: 'template-sys-new',
++      name: 'new-gate',
++    });
++
++    renderStudio({ scopeKind: 'system' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('create-default-hook-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('create-default-hook-btn'));
++    expect(screen.getByTestId('template-dialog')).toBeDefined();
++
++    // Fill form fields
++    fireEvent.change(screen.getByTestId('template-name-input'), { target: { value: 'new-gate' } });
++    fireEvent.change(screen.getByTestId('template-to-state-input'), { target: { value: 'Done' } });
++
++    // Test invalid timeout < 1000
++    fireEvent.change(screen.getByTestId('template-timeout-input'), { target: { value: '500' } });
++    const dialogForm = screen.getByRole('dialog').querySelector('form');
++    expect(dialogForm).not.toBeNull();
++    if (dialogForm) {
++      fireEvent.submit(dialogForm);
++    }
++
++    await waitFor(() => {
++      expect(screen.getByText(/Timeout must be between 1000 and 600000 ms/i)).toBeDefined();
++    });
++    expect(createSpy).not.toHaveBeenCalled();
++
++    // Correct timeout to valid value
++    fireEvent.change(screen.getByTestId('template-timeout-input'), { target: { value: '120000' } });
++    if (dialogForm) {
++      fireEvent.submit(dialogForm);
++    }
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          name: 'new-gate',
++          scope_kind: 'system',
++          to_state_name: 'Done',
++          timeout_ms: 120000,
++        }),
++        undefined,
++      );
++    });
++  });
++
++  it('opens edit dialog, modifies template, and updates successfully', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([MOCK_WORKSPACE_TEMPLATE]);
++    const updateSpy = vi.spyOn(api, 'updateDefaultWorkflowHook').mockResolvedValue({
++      ...MOCK_WORKSPACE_TEMPLATE,
++      name: 'ws-custom-gate-updated',
++    });
++
++    renderStudio({ scopeKind: 'workspace', workspaceId: 'ws-1234' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('template-edit-btn-template-ws-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('template-edit-btn-template-ws-1'));
++    expect(screen.getByTestId('template-dialog')).toBeDefined();
++
++    fireEvent.change(screen.getByTestId('template-name-input'), {
++      target: { value: 'ws-custom-gate-updated' },
++    });
++    fireEvent.click(screen.getByTestId('save-template-btn'));
++
++    await waitFor(() => {
++      expect(updateSpy).toHaveBeenCalledWith(
++        'template-ws-1',
++        expect.objectContaining({
++          name: 'ws-custom-gate-updated',
++        }),
++        'ws-1234',
++      );
++    });
++  });
++
++  it('toggles template status on checkbox click', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([MOCK_SYSTEM_TEMPLATE]);
++    const updateSpy = vi.spyOn(api, 'updateDefaultWorkflowHook').mockResolvedValue({
++      ...MOCK_SYSTEM_TEMPLATE,
++      is_enabled: false,
++    });
++
++    renderStudio({ scopeKind: 'system' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('template-toggle-template-sys-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('template-toggle-template-sys-1'));
++
++    await waitFor(() => {
++      expect(updateSpy).toHaveBeenCalledWith(
++        'template-sys-1',
++        { is_enabled: false },
++        undefined,
++      );
++    });
++  });
++
++  it('deletes template after user confirmation', async () => {
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([MOCK_SYSTEM_TEMPLATE]);
++    const deleteSpy = vi.spyOn(api, 'deleteDefaultWorkflowHook').mockResolvedValue();
++    vi.spyOn(window, 'confirm').mockReturnValue(true);
++
++    renderStudio({ scopeKind: 'system' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('template-delete-btn-template-sys-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('template-delete-btn-template-sys-1'));
++
++    await waitFor(() => {
++      expect(deleteSpy).toHaveBeenCalledWith('template-sys-1', undefined);
++    });
++  });
++
++  it('HookPipelineRow displays Inherited from Default badge and allows Detach', () => {
++    const onDetachMock = vi.fn();
++    const onEditMock = vi.fn();
++    const onToggleMock = vi.fn();
++
++    const inheritedHook: api.WorkflowHook = {
++      id: 'hook-inherited-42',
++      name: 'reality-checker-gate',
++      from_state: 'In Review',
++      to_state: 'Done',
++      hook_kind: 'agent_interceptor',
++      sort_rank: '100',
++      failure_policy: 'fail_closed',
++      manifest_sha256: 'abc123456789',
++      is_enabled: true,
++      inherited_from_template_id: 'template-sys-1',
++      inherited_from_scope: 'system',
++    };
++
++    render(
++      <HookPipelineRow
++        hook={inheritedHook}
++        index={0}
++        total={1}
++        projectKey="PROJ"
++        onDetach={onDetachMock}
++        onEdit={onEditMock}
++        onToggle={onToggleMock}
++      />,
++    );
++
++    // Verify badge
++    const badge = screen.getByTestId('hook-inherited-badge-hook-inherited-42');
++    expect(badge).toBeDefined();
++    expect(badge.textContent).toBe('Inherited from Default');
++
++    // Verify Detach button is enabled and works (project-level removal)
++    const detachBtn = screen.getByRole('button', { name: /Detach reality-checker-gate/i });
++    expect(detachBtn).toBeDefined();
++    fireEvent.click(detachBtn);
++    expect(onDetachMock).toHaveBeenCalledWith('hook-inherited-42');
++
++    // Verify Edit button is enabled
++    const editBtn = screen.getByRole('button', { name: /Edit reality-checker-gate/i });
++    expect(editBtn).toBeDefined();
++    fireEvent.click(editBtn);
++    expect(onEditMock).toHaveBeenCalledWith(inheritedHook);
++  });
++
++  it('WorkflowStudioPage provides Sync Default Hooks button that invokes API', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
++    const syncSpy = vi.spyOn(api, 'syncDefaultWorkflowHooks').mockResolvedValue([
++      {
++        id: 'hook-synced-1',
++        name: 'synced-template',
++        from_state: null,
++        to_state: 'Done',
++        hook_kind: 'agent_interceptor',
++        sort_rank: '100',
++        failure_policy: 'fail_closed',
++        manifest_sha256: 'def456',
++        is_enabled: true,
++        inherited_from_template_id: 'template-sys-1',
++      },
++    ]);
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/projects/NEWP/settings/workflows']}>
++          <WorkflowStudioPage projectKeyOverride="NEWP" isAdmin={true} />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('sync-default-hooks-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('sync-default-hooks-btn'));
++
++    await waitFor(() => {
++      expect(syncSpy).toHaveBeenCalledWith('NEWP');
++      expect(screen.getByTestId('sync-defaults-status')).toBeDefined();
++      expect(screen.getByTestId('sync-defaults-status').textContent).toContain('Successfully synced 1 default hook template(s).');
++    });
++  });
++
++  it('handles edit round-trip for agent_async and wasm_sync preserving exact hook kinds', async () => {
++    const wasmTemplate: api.DefaultWorkflowHook = {
++      ...MOCK_WORKSPACE_TEMPLATE,
++      id: 'template-ws-wasm',
++      hook_kind: 'wasm_sync',
++    };
++    vi.spyOn(api, 'fetchDefaultWorkflowHooks').mockResolvedValue([wasmTemplate]);
++    const updateSpy = vi.spyOn(api, 'updateDefaultWorkflowHook').mockResolvedValue({
++      ...wasmTemplate,
++      timeout_ms: 30000,
++    });
++
++    renderStudio({ scopeKind: 'workspace', workspaceId: 'ws-1234' });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('template-edit-btn-template-ws-wasm')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('template-edit-btn-template-ws-wasm'));
++    expect(screen.getByTestId('template-dialog')).toBeDefined();
++
++    const kindSelect = screen.getByTestId<HTMLSelectElement>('template-hook-kind-select');
++    expect(kindSelect.value).toBe('wasm_validator');
++
++    fireEvent.change(screen.getByTestId('template-timeout-input'), {
++      target: { value: '30000' },
++    });
++    fireEvent.click(screen.getByTestId('save-template-btn'));
++
++    await waitFor(() => {
++      expect(updateSpy).toHaveBeenCalledWith(
++        'template-ws-wasm',
++        expect.objectContaining({
++          hook_kind: 'wasm_validator',
++          timeout_ms: 30000,
++        }),
++        'ws-1234',
++      );
++    });
++  });
++
++  it('renders danger alert with role=alert when syncDefaultWorkflowHooks fails', async () => {
++    vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
++    vi.spyOn(api, 'syncDefaultWorkflowHooks').mockRejectedValue(new Error('Network sync error'));
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/projects/NEWP/settings/workflows']}>
++          <WorkflowStudioPage projectKeyOverride="NEWP" isAdmin={true} />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('sync-default-hooks-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('sync-default-hooks-btn'));
++
++    await waitFor(() => {
++      const alert = screen.getByTestId('sync-defaults-status');
++      expect(alert).toBeDefined();
++      expect(alert.getAttribute('role')).toBe('alert');
++      expect(alert.className).toContain('workflow-alert-danger');
++      expect(alert.textContent).toContain('Network sync error');
++    });
++  });
++});
 diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
-index 9a4c10ac..eb1b21a4 100644
+index 9a4c10ac..790410e7 100644
 --- a/kanban/web/src/features/workflows/api.ts
 +++ b/kanban/web/src/features/workflows/api.ts
 @@ -53,6 +53,8 @@ export interface WorkflowHook {
@@ -3498,7 +6461,7 @@ index 9a4c10ac..eb1b21a4 100644
  }
  
  export interface TransitionRule {
-@@ -547,3 +549,130 @@ export async function fetchApprovedWasmModules(projectKey?: string): Promise<Was
+@@ -547,3 +549,135 @@ export async function fetchApprovedWasmModules(projectKey?: string): Promise<Was
      return DEFAULT_WASM_MODULES;
    }
  }
@@ -3530,37 +6493,37 @@ index 9a4c10ac..eb1b21a4 100644
 +export interface CreateDefaultWorkflowHookPayload {
 +  name: string;
 +  scope_kind: DefaultHookScopeKind;
-+  workspace_id?: string | null;
-+  from_state_name?: string | null;
++  workspace_id?: string | null | undefined;
++  from_state_name?: string | null | undefined;
 +  to_state_name: string;
-+  hook_kind?: string;
-+  sort_rank?: number;
-+  is_enabled?: boolean;
-+  wasm_module_sha256?: string | null;
-+  agent?: string | null;
-+  agent_definition_id?: string | null;
-+  agent_slug?: string | null;
-+  allowed_mutable_fields?: string[];
-+  failure_policy?: FailurePolicy;
-+  timeout_ms?: number | null;
-+  max_rework_attempts?: number;
++  hook_kind?: string | undefined;
++  sort_rank?: number | undefined;
++  is_enabled?: boolean | undefined;
++  wasm_module_sha256?: string | null | undefined;
++  agent?: string | null | undefined;
++  agent_definition_id?: string | null | undefined;
++  agent_slug?: string | null | undefined;
++  allowed_mutable_fields?: string[] | undefined;
++  failure_policy?: FailurePolicy | undefined;
++  timeout_ms?: number | null | undefined;
++  max_rework_attempts?: number | undefined;
 +}
 +
 +export interface UpdateDefaultWorkflowHookPayload {
-+  name?: string;
-+  from_state_name?: string | null;
-+  to_state_name?: string;
-+  hook_kind?: string;
-+  sort_rank?: number;
-+  is_enabled?: boolean;
-+  wasm_module_sha256?: string | null;
-+  agent?: string | null;
-+  agent_definition_id?: string | null;
-+  agent_slug?: string | null;
-+  allowed_mutable_fields?: string[];
-+  failure_policy?: FailurePolicy;
-+  timeout_ms?: number | null;
-+  max_rework_attempts?: number;
++  name?: string | undefined;
++  from_state_name?: string | null | undefined;
++  to_state_name?: string | undefined;
++  hook_kind?: string | undefined;
++  sort_rank?: number | undefined;
++  is_enabled?: boolean | undefined;
++  wasm_module_sha256?: string | null | undefined;
++  agent?: string | null | undefined;
++  agent_definition_id?: string | null | undefined;
++  agent_slug?: string | null | undefined;
++  allowed_mutable_fields?: string[] | undefined;
++  failure_policy?: FailurePolicy | undefined;
++  timeout_ms?: number | null | undefined;
++  max_rework_attempts?: number | undefined;
 +}
 +
 +export async function fetchDefaultWorkflowHooks(
@@ -3570,13 +6533,18 @@ index 9a4c10ac..eb1b21a4 100644
 +  try {
 +    const params = new URLSearchParams();
 +    if (scopeKind) params.set('scope_kind', scopeKind);
-+    if (workspaceId) params.set('workspace_id', workspaceId);
++    if (workspaceId && scopeKind !== 'system') params.set('workspace_id', workspaceId);
 +    const qs = params.toString();
-+    const endpoint = workspaceId
-+      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=${scopeKind === 'system' ? 'true' : 'false'}` : ''}`
-+      : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
++    const endpoint =
++      workspaceId && scopeKind !== 'system'
++        ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=false` : ''}`
++        : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
 +    const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
-+    return Array.isArray(data) ? data : [];
++    if (!Array.isArray(data)) return [];
++    if (scopeKind) {
++      return data.filter((t) => t.scope_kind === scopeKind);
++    }
++    return data;
 +  } catch {
 +    return [];
 +  }
@@ -3630,10 +6598,10 @@ index 9a4c10ac..eb1b21a4 100644
 +  return Array.isArray(res) ? res : [];
 +}
 diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
-index 53722255..27322e96 100644
+index f15f7da8..f76e65e6 100644
 --- a/kanban/web/src/features/workflows/workflows.css
 +++ b/kanban/web/src/features/workflows/workflows.css
-@@ -342,6 +342,20 @@
+@@ -343,6 +343,50 @@
    border: 1px solid var(--border-subtle);
  }
  
@@ -3645,15 +6613,271 @@ index 53722255..27322e96 100644
 +  font-weight: 600;
 +  padding: 2px 8px;
 +  border-radius: 12px;
-+  background-color: rgba(99, 102, 241, 0.12);
-+  color: var(--accent-primary, #6366f1);
-+  border: 1px solid rgba(99, 102, 241, 0.3);
++  background-color: var(--badge-bg);
++  color: var(--badge-fg);
++  border: 1px solid var(--badge-border);
 +  letter-spacing: 0.02em;
++}
++
++.template-scope-badge-system {
++  background-color: var(--badge-bg);
++  color: var(--badge-fg);
++  border: 1px solid var(--badge-border);
++}
++
++.template-scope-badge-workspace {
++  background-color: var(--bg-success-subtle);
++  color: var(--ok-fg);
++  border: 1px solid var(--border-success);
++}
++
++.workflow-alert-info {
++  background-color: var(--badge-bg);
++  color: var(--badge-fg);
++  border: 1px solid var(--badge-border);
++}
++
++.workflow-form-grid-2 {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 0.75rem;
++}
++
++@media (max-width: 640px) {
++  .workflow-form-grid-2 {
++    grid-template-columns: 1fr;
++  }
 +}
 +
  .hook-policy-badge {
    font-size: 0.75rem;
    font-weight: 500;
+diff --git a/kanban/workflows/default_hooks.py b/kanban/workflows/default_hooks.py
+new file mode 100644
+index 00000000..130df317
+--- /dev/null
++++ b/kanban/workflows/default_hooks.py
+@@ -0,0 +1,220 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: C901, PLR0912, PLR0915, TC003
++"""Default workflow hook template materialization and inheritance helpers."""
++
++from __future__ import annotations
++
++import logging
++import uuid
++from typing import TYPE_CHECKING
++
++from sqlalchemy import select
++
++from database.models.agent_definition import AgentDefinition
++from database.models.projects import WorkflowState
++from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++logger = logging.getLogger(__name__)
++
++
++async def materialize_default_workflow_hooks(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    *,
++    skip_existing: bool = True,
++) -> list[WorkflowTransitionHook]:
++    """Copy enabled default workflow hook templates into a project (copy-on-create inheritance).
++
++    Workspace-scoped templates override system-scoped templates of the same name (case-insensitive).
++    Resolves to_state_name and optional from_state_name against the project's workflow states.
++    Resolves agent_slug within workspace_id if agent_definition_id is not set.
++    """
++    # 1. Fetch default templates for system and this workspace (both enabled and disabled)
++    tpl_stmt = (
++        select(DefaultWorkflowHook)
++        .where(
++            (DefaultWorkflowHook.scope_kind == "system")
++            | (
++                (DefaultWorkflowHook.scope_kind == "workspace")
++                & (DefaultWorkflowHook.workspace_id == workspace_id)
++            ),
++        )
++        .order_by(DefaultWorkflowHook.sort_rank.asc(), DefaultWorkflowHook.created_at.asc())
++    )
++    templates = list((await session.execute(tpl_stmt)).scalars().all())
++    if not templates:
++        return []
++
++    # 2. Workspace templates override system templates of the same name.casefold()
++    tpl_map: dict[str, DefaultWorkflowHook] = {}
++    for tpl in templates:
++        if tpl.scope_kind == "system":
++            tpl_map[tpl.name.strip().casefold()] = tpl
++    for tpl in templates:
++        if tpl.scope_kind == "workspace":
++            tpl_map[tpl.name.strip().casefold()] = tpl
++
++    # Disabled workspace templates suppress same-named system templates
++    active_templates = [
++        t for t in sorted(tpl_map.values(), key=lambda t: t.sort_rank) if t.is_enabled
++    ]
++
++    # 3. Fetch workflow states for this project
++    st_stmt = select(WorkflowState.id, WorkflowState.name).where(
++        WorkflowState.project_id == project_id
++    )
++    states = (await session.execute(st_stmt)).all()
++    state_map = {name.strip().casefold(): s_id for s_id, name in states}
++
++    # 4. Fetch existing hooks in project to avoid duplicate names if skip_existing
++    existing_names: set[str] = set()
++    if skip_existing:
++        hook_stmt = select(WorkflowTransitionHook.name).where(
++            WorkflowTransitionHook.project_id == project_id
++        )
++        existing_names = {
++            name.strip().casefold() for name in (await session.execute(hook_stmt)).scalars().all()
++        }
++
++    created_hooks: list[WorkflowTransitionHook] = []
++    for tpl in active_templates:
++        clean_name = tpl.name.strip()
++        if skip_existing and clean_name.casefold() in existing_names:
++            continue
++
++        to_key = tpl.to_state_name.strip().casefold()
++        if to_key not in state_map:
++            logger.warning(
++                "Default hook template '%s' target state '%s' not found in project %s; skipping.",
++                tpl.name,
++                tpl.to_state_name,
++                project_id,
++            )
++            continue
++        to_id = state_map[to_key]
++
++        from_id: uuid.UUID | None = None
++        if tpl.from_state_name and tpl.from_state_name.strip() not in ("", "*"):
++            from_key = tpl.from_state_name.strip().casefold()
++            if from_key not in state_map:
++                logger.warning(
++                    "Default hook template '%s' from state '%s' not found in project %s; skipping.",
++                    tpl.name,
++                    tpl.from_state_name,
++                    project_id,
++                )
++                continue
++            from_id = state_map[from_key]
++
++        # Resolve hook kind
++        resolved_kind: str
++        if tpl.hook_kind in ("agent_async", "agent_interceptor"):
++            resolved_kind = "agent_interceptor"
++        elif tpl.hook_kind in ("wasm_sync", "wasm_validator", "sync_validator", "sync_mutator"):
++            resolved_kind = "sync_mutator" if tpl.allowed_mutable_fields else "sync_validator"
++        else:
++            resolved_kind = "agent_interceptor" if "agent" in tpl.hook_kind else "sync_validator"
++
++        # Resolve agent if needed
++        agent_def_id: uuid.UUID | None = None
++        if tpl.scope_kind == "system":
++            # System templates MUST ignore agent_definition_id and resolve agent_slug
++            # strictly in workspace_id
++            if tpl.agent_slug:
++                clean_slug = tpl.agent_slug.strip().lstrip("@")
++                agent_stmt = select(AgentDefinition.id).where(
++                    AgentDefinition.workspace_id == workspace_id,
++                    AgentDefinition.slug == clean_slug,
++                )
++                agent_def_id = (await session.execute(agent_stmt)).scalar_one_or_none()
++                if agent_def_id is None:
++                    logger.warning(
++                        "System default hook template '%s' requires agent slug '%s', "
++                        "not found in workspace %s; skipping gracefully.",
++                        tpl.name,
++                        clean_slug,
++                        workspace_id,
++                    )
++                    continue
++        else:
++            agent_def_id = tpl.agent_definition_id
++            if agent_def_id is None and tpl.agent_slug:
++                clean_slug = tpl.agent_slug.strip().lstrip("@")
++                agent_stmt = select(AgentDefinition.id).where(
++                    AgentDefinition.workspace_id == workspace_id,
++                    AgentDefinition.slug == clean_slug,
++                )
++                agent_def_id = (await session.execute(agent_stmt)).scalar_one_or_none()
++                if agent_def_id is None:
++                    logger.warning(
++                        "Workspace default hook template '%s' requires agent slug '%s', "
++                        "not found in workspace %s; skipping gracefully.",
++                        tpl.name,
++                        clean_slug,
++                        workspace_id,
++                    )
++                    continue
++
++        if resolved_kind == "agent_interceptor" and agent_def_id is None:
++            logger.warning(
++                "Default hook template '%s' is agent_interceptor but lacks agent_definition; "
++                "skipping.",
++                tpl.name,
++            )
++            continue
++
++        wasm_sha = tpl.wasm_module_sha256
++        if resolved_kind in ("sync_validator", "sync_mutator") and wasm_sha is None:
++            logger.warning(
++                "Default hook template '%s' is sync wasm hook but lacks wasm_module_sha256; "
++                "skipping.",
++                tpl.name,
++            )
++            continue
++
++        clean_fields = list(tpl.allowed_mutable_fields)
++
++        manifest_sha = compute_hook_manifest_sha256(
++            from_state_id=from_id,
++            to_state_id=to_id,
++            hook_kind=resolved_kind,
++            wasm_module_sha256=wasm_sha,
++            agent_definition_id=agent_def_id,
++            allowed_mutable_fields=clean_fields,
++            failure_policy=tpl.failure_policy,
++        )
++
++        sort_rank = f"{tpl.sort_rank:016d}"
++
++        hook = WorkflowTransitionHook(
++            workspace_id=workspace_id,
++            project_id=project_id,
++            name=clean_name,
++            from_state_id=from_id,
++            to_state_id=to_id,
++            hook_kind=resolved_kind,
++            sort_rank=sort_rank,
++            is_enabled=tpl.is_enabled,
++            wasm_module_sha256=wasm_sha,
++            agent_definition_id=agent_def_id,
++            allowed_mutable_fields=clean_fields,
++            failure_policy=tpl.failure_policy,
++            manifest_sha256=manifest_sha,
++            timeout_ms=tpl.timeout_ms,
++            max_rework_attempts=tpl.max_rework_attempts,
++            inherited_from_template_id=tpl.id,
++        )
++        session.add(hook)
++        created_hooks.append(hook)
++        existing_names.add(clean_name.casefold())
++
++    if created_hooks:
++        await session.flush()
++
++    return created_hooks
 diff --git a/kanban/workflows/hooks_service.py b/kanban/workflows/hooks_service.py
 index 163535f6..6e5f1108 100644
 --- a/kanban/workflows/hooks_service.py
@@ -3743,3 +6967,549 @@ index 163535f6..6e5f1108 100644
 +    from kanban.workflows.default_hooks import materialize_default_workflow_hooks as _materialize  # noqa: PLC0415
 +
 +    return await _materialize(session, workspace_id, project_id, skip_existing=skip_existing)
+diff --git a/scripts/capture_kan438_screenshots.mjs b/scripts/capture_kan438_screenshots.mjs
+new file mode 100644
+index 00000000..b226337b
+--- /dev/null
++++ b/scripts/capture_kan438_screenshots.mjs
+@@ -0,0 +1,169 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++/**
++ * Playwright screenshot capture script for KAN-438.
++ * Captures responsive views of:
++ * 1. DefaultWorkflowHooksStudio (/admin/workflows) showing System-Wide Default Workflow Hook Templates
++ * 2. DefaultWorkflowHooksStudio dialog (/admin/workflows) showing Add/Edit Default Hook Template
++ * 3. WorkflowStudioPage (/projects/PROJ/settings/workflows) showing Inherited from Default badge and Sync Default Hooks button
++ * 4. WorkspaceSettingsPage (/workspaces/settings#tab-workflows) showing Workspace Default Workflow Hooks
++ */
++
++import fs from 'node:fs';
++import path from 'node:path';
++
++let chromium;
++try {
++  const localPlaywright = path.resolve('kanban/web/node_modules/@playwright/test/index.mjs');
++  ({ chromium } = await import(localPlaywright));
++} catch {
++  try {
++    ({ chromium } = await import('playwright'));
++  } catch {
++    ({ chromium } = await import('@playwright/test'));
++  }
++}
++
++const PORT = process.env.KAN438_PORT || '18438';
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const COOKIE_VAL = process.env.KAN438_COOKIE || '';
++const CSRF_TOKEN = process.env.KAN438_CSRF || '';
++
++const OUT_DIR = path.resolve('docs/qa/KAN-438/screenshots');
++fs.mkdirSync(OUT_DIR, { recursive: true });
++
++async function preparePageForScreenshot(page, theme) {
++  await page.evaluate((t) => {
++    document.documentElement.dataset.theme = t;
++    localStorage.setItem('theme', t);
++  }, theme);
++  await page.waitForTimeout(300);
++}
++
++async function saveScreenshot(page, filename) {
++  const fullPath = path.join(OUT_DIR, filename);
++  await page.screenshot({ path: fullPath, fullPage: false });
++  console.log(`[Captured] ${filename}`);
++}
++
++async function createContext(browser, width, height, theme) {
++  const context = await browser.newContext({
++    viewport: { width, height },
++    colorScheme: theme,
++    bypassCSP: true,
++  });
++
++  if (COOKIE_VAL) {
++    await context.addCookies([
++      {
++        name: 'kb_session',
++        value: COOKIE_VAL,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++      {
++        name: 'kb_csrf',
++        value: CSRF_TOKEN,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: false,
++        sameSite: 'Lax',
++      },
++    ]);
++  }
++
++  return context;
++}
++
++const VIEWPORTS = [
++  { name: 'desktop-light-1440x900', width: 1440, height: 900, theme: 'light' },
++  { name: 'desktop-dark-1440x900', width: 1440, height: 900, theme: 'dark' },
++  { name: 'tablet-768x1024', width: 768, height: 1024, theme: 'light' },
++  { name: 'mobile-390x844', width: 390, height: 844, theme: 'light' },
++];
++
++async function main() {
++  console.log(`[Playwright] Connecting to ${BASE_URL}...`);
++  const browser = await chromium.launch({ headless: true });
++
++  try {
++    for (const vp of VIEWPORTS) {
++      console.log(`\n--- Viewport: ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme}) ---`);
++      const context = await createContext(browser, vp.width, vp.height, vp.theme);
++      const page = await context.newPage();
++      page.on('console', (msg) => console.log(`[Browser Console] ${msg.type()}: ${msg.text()}`));
++      page.on('pageerror', (err) => console.log(`[Browser Error] ${err.message}`));
++
++      // 1. System Default Workflow Hooks Studio (/admin/workflows)
++      console.log(`Navigating to ${BASE_URL}/admin/workflows...`);
++      await page.goto(`${BASE_URL}/admin/workflows`, { waitUntil: 'networkidle' });
++      await preparePageForScreenshot(page, vp.theme);
++
++      const adminStudio = page.locator('[data-testid="default-workflow-hooks-studio"]');
++      await adminStudio.waitFor({ state: 'visible', timeout: 10000 });
++
++      await saveScreenshot(page, `01-admin-default-workflow-hooks-${vp.name}.png`);
++      // Also save primary desktop screenshots as canonical names
++      await saveScreenshot(page, `${vp.name}.png`);
++
++      // 2. Open Add Default Hook Template dialog
++      const addBtn = page.locator('[data-testid="create-default-hook-btn"]').first();
++      if (await addBtn.isVisible()) {
++        await addBtn.click();
++        const dialog = page.locator('[data-testid="template-dialog"]');
++        await dialog.waitFor({ state: 'visible', timeout: 5000 });
++        await page.waitForTimeout(200);
++
++        await saveScreenshot(page, `02-add-default-hook-template-dialog-${vp.name}.png`);
++
++        const cancelBtn = page.locator('[data-testid="cancel-template-btn"]').first();
++        if (await cancelBtn.isVisible()) {
++          await cancelBtn.click();
++          await page.waitForTimeout(200);
++        }
++      }
++
++      // 3. Project Workflow Studio (/projects/PROJ/settings/workflows) showing Inherited from Default badge and Sync button
++      console.log(`Navigating to ${BASE_URL}/projects/PROJ/settings/workflows...`);
++      await page.goto(`${BASE_URL}/projects/PROJ/settings/workflows`, { waitUntil: 'networkidle' });
++      await preparePageForScreenshot(page, vp.theme);
++
++      const studioPage = page.locator('[data-testid="workflow-studio-page"]');
++      await studioPage.waitFor({ state: 'visible', timeout: 10000 });
++
++      // Verify inherited badge is present
++      const inheritedBadge = page.locator('[data-testid^="hook-inherited-badge-"]').first();
++      if (await inheritedBadge.isVisible()) {
++        console.log('[Verified] Inherited from Default badge is visible on project hook');
++      }
++
++      const syncBtn = page.locator('[data-testid="sync-default-hooks-btn"]');
++      await syncBtn.waitFor({ state: 'visible', timeout: 5000 });
++
++      await saveScreenshot(page, `03-project-workflow-inherited-hooks-${vp.name}.png`);
++
++      // 4. Workspace Default Workflow Hooks tab (/workspaces/settings#tab-workflows)
++      console.log(`Navigating to ${BASE_URL}/workspaces/settings#tab-workflows...`);
++      await page.goto(`${BASE_URL}/workspaces/settings#tab-workflows`, { waitUntil: 'networkidle' });
++      await preparePageForScreenshot(page, vp.theme);
++      await page.waitForTimeout(500);
++
++      const wsTab = page.locator('[data-testid="tab-workflows"]');
++      if (await wsTab.isVisible()) {
++        await wsTab.click();
++        await page.waitForTimeout(300);
++      }
++
++      await saveScreenshot(page, `04-workspace-default-workflow-hooks-${vp.name}.png`);
++
++      await context.close();
++    }
++  } finally {
++    await browser.close();
++  }
++}
++
++main().catch((err) => {
++  console.error('[Playwright Error]', err);
++  process.exit(1);
++});
+diff --git a/scripts/run_kan438_screenshot_flow.py b/scripts/run_kan438_screenshot_flow.py
+new file mode 100644
+index 00000000..abe6d7c3
+--- /dev/null
++++ b/scripts/run_kan438_screenshot_flow.py
+@@ -0,0 +1,365 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Playwright Screenshot Orchestrator for KAN-438.
++
++Binds temporary test server strictly to 127.0.0.1:18438.
++Seeds hermetic test database kanban_live438 from kanban_template.
++Captures responsive screenshots of:
++1. System-Wide Default Workflow Hooks Studio (/admin/workflows)
++2. Add Default Hook Template dialog
++3. Project Workflow Studio (/projects/PROJ/settings/workflows) showing Inherited badge + Sync button
++4. Workspace Default Workflow Hooks tab (/workspaces/settings#tab-workflows)
++Tears down server cleanly after capture.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import os
++import subprocess
++import sys
++import time
++import urllib.request
++import uuid
++from typing import Any
++
++import asyncpg
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
++from sqlalchemy.orm import sessionmaker
++
++from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
++from kanban.auth.sessions.service import SessionService
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++SOCKET_DIR = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")
++PORT = 18438
++DB_NAME = "kanban_live438"
++SUPERUSER_DSN = f"postgresql://kanban_test@/{DB_NAME}?host={SOCKET_DIR}"
++MIGRATOR_URL = f"postgresql+asyncpg://kanban_migrator@/{DB_NAME}?host={SOCKET_DIR}"
++APP_URL = f"postgresql+asyncpg://kanban_app@/{DB_NAME}?host={SOCKET_DIR}"
++
++SESSION_HMAC_KEY = b"s" * 32
++MASTER_KEK = b"k" * 32
++AUTH_PEPPER = b"p" * 32
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++async def prepare_database() -> dict[str, Any]:
++    print("[KAN-438 Prep] Creating database from kanban_template...")
++    conn = await asyncpg.connect(user="kanban_test", database="postgres", host=SOCKET_DIR)
++    try:
++        await conn.execute(f'DROP DATABASE IF EXISTS "{DB_NAME}" WITH (FORCE)')
++        await conn.execute(f'CREATE DATABASE "{DB_NAME}" TEMPLATE kanban_template')
++    finally:
++        await conn.close()
++
++    print("[KAN-438 Prep] Applying migration p6_24_default_workflow_hooks.up.sql...")
++    with open("database/migrations/sql/p6_24_default_workflow_hooks.up.sql") as f:
++        up_sql = f.read()
++    mig_conn = await asyncpg.connect(user="kanban_migrator", database=DB_NAME, host=SOCKET_DIR)
++    try:
++        await mig_conn.execute(up_sql)
++    finally:
++        await mig_conn.close()
++
++    print("[KAN-438 Prep] Seeding workspace, admin user, default hook templates, and project PROJ...")
++    engine = create_async_engine(MIGRATOR_URL)
++    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++
++    async with async_session() as s:
++        # 1. Workspace
++        ws_id = uuid.uuid4()
++        await s.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'engineering', 'Engineering')"),
++            {"id": ws_id},
++        )
++
++        # 2. Server Admin Principal & User
++        p_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO principals (id, workspace_id, principal_type, status, display_name) "
++                "VALUES (:id, :ws_id, 'USER', 'ACTIVE', 'Admin User')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await s.execute(
++            text(
++                "SELECT register_object('user'::object_kind, :ws_id, NULL, 'server_admin', 'Admin User', :p_id, :p_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++                "VALUES (:id, 'user', 'USER', :ws_id, 'admin@kanban.local')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++
++        # 3. Agent Definition: Reality Checker
++        agent_id = uuid.uuid4()
++        instructions = (
++            "# Mandatory Forensic Reality Checker\n\n"
++            "1. Passive forensic audit of all code and test evidence.\n"
++            "2. Ensure zero mock data and >=95% test coverage.\n"
++            "3. Issue GRADE-A READY verification certification."
++        )
++        await s.execute(
++            text(
++                "INSERT INTO agent_definitions (id, workspace_id, principal_id, slug, display_name, harness_kind, provider_kind, model_id, cli_binary_allowlist_id, cli_args_json, repo_access_mode, mcp_allowed_tools, system_instructions_md, timeout_ms) "
++                "VALUES (:id, :ws_id, :p_id, 'reality-checker', 'Forensic Reality Checker', 'cli_pipe', NULL, NULL, 'agy', '[\"-p\"]'::jsonb, 'none', '{\"search_tickets\",\"read_ticket\"}', :instructions, 60000)"
++            ),
++            {"id": agent_id, "ws_id": ws_id, "p_id": p_id, "instructions": instructions},
++        )
++
++        # 4. System Default Workflow Hook Template
++        sys_tpl_id = uuid.uuid4()
++        sys_tpl = DefaultWorkflowHook(
++            id=sys_tpl_id,
++            scope_kind="system",
++            workspace_id=None,
++            name="reality-checker-default-gate",
++            from_state_name="In Progress",
++            to_state_name="Done",
++            hook_kind="agent_async",
++            sort_rank=100,
++            is_enabled=True,
++            agent_slug="reality-checker",
++            allowed_mutable_fields=["labels"],
++            failure_policy="fail_closed",
++            timeout_ms=60000,
++            max_rework_attempts=3,
++        )
++        s.add(sys_tpl)
++
++        # 5. Workspace Default Workflow Hook Template
++        ws_tpl_id = uuid.uuid4()
++        ws_tpl = DefaultWorkflowHook(
++            id=ws_tpl_id,
++            scope_kind="workspace",
++            workspace_id=ws_id,
++            name="ws-qa-validator",
++            from_state_name="In QA",
++            to_state_name="Done",
++            hook_kind="wasm_sync",
++            sort_rank=50,
++            is_enabled=True,
++            allowed_mutable_fields=[],
++            failure_policy="fail_open_warn",
++            timeout_ms=None,
++            max_rework_attempts=3,
++        )
++        s.add(ws_tpl)
++        await s.flush()
++
++        # 6. Project PROJ
++        reg_row = await s.execute(
++            text("SELECT register_object('project'::object_kind, :ws_id, NULL, 'PROJ', 'Core Platform', :p_id)"),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        proj_id = reg_row.scalar_one()
++        await s.execute(
++            text(
++                "INSERT INTO projects (id, workspace_id, identifier, name, modules_enabled) "
++                "VALUES (:id, :ws_id, 'PROJ', 'Core Platform', false)"
++            ),
++            {"id": proj_id, "ws_id": ws_id},
++        )
++
++        # 7. Workflow States
++        existing_states = (
++            await s.execute(
++                text("SELECT id, name FROM workflow_states WHERE project_id = :p_id"),
++                {"p_id": proj_id},
++            )
++        ).fetchall()
++        state_ids = {row[1]: row[0] for row in existing_states}
++
++        states_to_seed = [
++            ("Backlog", "backlog", "#94a3b8", 10),
++            ("In Progress", "started", "#3b82f6", 20),
++            ("In QA", "started", "#8b5cf6", 30),
++            ("Done", "completed", "#22c55e", 40),
++        ]
++        for sname, sgroup, scolor, sorder in states_to_seed:
++            if sname not in state_ids:
++                sid = uuid.uuid4()
++                state_ids[sname] = sid
++                await s.execute(
++                    text(
++                        "INSERT INTO workflow_states (id, workspace_id, project_id, name, state_group, color_hex, sort_order) "
++                        "VALUES (:id, :ws_id, :p_id, :name, :sgroup, :scolor, :sorder)"
++                    ),
++                    {
++                        "id": sid,
++                        "ws_id": ws_id,
++                        "p_id": proj_id,
++                        "name": sname,
++                        "sgroup": sgroup,
++                        "scolor": scolor,
++                        "sorder": sorder,
++                    },
++                )
++
++        # 8. Role Bindings
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
++                "VALUES (:ws_id, :p_id, 'SERVER_ADMIN', 'server'), (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:ws_id, :p_id, 'PROJECT_ADMIN', 'project', :proj_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id, "proj_id": proj_id},
++        )
++
++        # 9. Inherited Workflow Transition Hook on PROJ
++        msha = compute_hook_manifest_sha256(
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            wasm_module_sha256=None,
++            agent_definition_id=agent_id,
++            allowed_mutable_fields=["labels"],
++            failure_policy="fail_closed",
++        )
++        hook = WorkflowTransitionHook(
++            workspace_id=ws_id,
++            project_id=proj_id,
++            name="reality-checker-default-gate",
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            sort_rank="0|hzzzzz:",
++            is_enabled=True,
++            agent_definition_id=agent_id,
++            manifest_sha256=msha,
++            allowed_mutable_fields=["labels"],
++            failure_policy="fail_closed",
++            timeout_ms=60000,
++            inherited_from_template_id=sys_tpl_id,
++        )
++        s.add(hook)
++        await s.flush()
++
++        # 10. TOTP Setup
++        with contextlib.suppress(Exception):
++            await s.execute(
++                text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++                {"p_id": p_id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
++            )
++            res_totp = await s.execute(
++                text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++                {"p_id": p_id},
++            )
++            totp_row = res_totp.first()
++            if totp_row:
++                await s.execute(
++                    text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++                    {"p_fid": totp_row[0]},
++                )
++
++        # 11. Issue AAL2 Session
++        svc = SessionService(session_hmac_key=SESSION_HMAC_KEY)
++        issued = await svc.create_after_login(
++            s,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            remember_me=True,
++        )
++        await s.commit()
++
++    await engine.dispose()
++    return {
++        "cookie_val": issued.cookie_val,
++        "csrf_token": issued.csrf_token,
++    }
++
++
++def main() -> None:
++    seed_info = asyncio.run(prepare_database())
++    env = os.environ.copy()
++    env["KANBAN_DEPLOYMENT_MODE"] = "standalone"
++    env["KB_BIND_HOST"] = "127.0.0.1"
++    env["KB_BIND_PORT"] = str(PORT)
++    env["KB_PUBLIC_ORIGIN"] = f"http://127.0.0.1:{PORT}"
++    env["KANBAN_DATABASE_URL"] = APP_URL
++    env["KANBAN_MASTER_KEK"] = _b64(MASTER_KEK)
++    env["KANBAN_AUTH_PEPPER"] = _b64(AUTH_PEPPER)
++    env["KANBAN_SESSION_HMAC_KEY"] = _b64(SESSION_HMAC_KEY)
++    env["KANBAN_MASTER_KEK_KID"] = "test-kid-1"
++    env["KAN438_PORT"] = str(PORT)
++    env["KAN438_COOKIE"] = seed_info["cookie_val"]
++    env["KAN438_CSRF"] = seed_info["csrf_token"]
++
++    uv_log = open("/tmp/uvicorn_kan438.log", "w")
++    print(f"[KAN-438] Spawning temporary Kanban server on 127.0.0.1:{PORT}...")
++    proc = subprocess.Popen(
++        [
++            sys.executable,
++            "-m",
++            "uvicorn",
++            "kanban.app:create_app",
++            "--factory",
++            "--host",
++            "127.0.0.1",
++            "--port",
++            str(PORT),
++            "--log-level",
++            "info",
++        ],
++        env=env,
++        stdout=uv_log,
++        stderr=uv_log,
++    )
++
++    try:
++        print(f"[KAN-438] Waiting for server on http://127.0.0.1:{PORT} to be ready...")
++        ready = False
++        for _ in range(40):
++            try:
++                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/v1/health", timeout=1) as resp:
++                    if resp.status in (200, 302, 404):
++                        ready = True
++                        break
++            except Exception:
++                time.sleep(0.5)
++
++        if not ready:
++            print("[KAN-438] Server failed to become ready. Logs:")
++            with open("/tmp/uvicorn_kan438.log") as f:
++                print(f.read())
++            raise RuntimeError(f"Server on port {PORT} failed to become ready.")
++
++        print("[KAN-438] Server is ready! Executing Playwright capture...")
++        subprocess.run(
++            ["node", "scripts/capture_kan438_screenshots.mjs"],
++            env=env,
++            check=True,
++        )
++        print("[KAN-438] Screenshots captured successfully!")
++    finally:
++        print("[KAN-438] Terminating temporary server cleanly...")
++        proc.terminate()
++        try:
++            proc.wait(timeout=5)
++        except subprocess.TimeoutExpired:
++            proc.kill()
++        uv_log.close()
++        print("[KAN-438] Teardown complete.")
++
++
++if __name__ == "__main__":
++    main()

@@ -5718,9 +5718,9 @@
           },
           "max_rework_attempts": {
             "default": 3,
-            "description": "Maximum rework attempts (0..20)",
+            "description": "Maximum rework attempts (1..20)",
             "maximum": 20.0,
-            "minimum": 0.0,
+            "minimum": 1.0,
             "title": "Max Rework Attempts",
             "type": "integer"
           },
@@ -6067,7 +6067,7 @@
             "anyOf": [
               {
                 "maximum": 20.0,
-                "minimum": 0.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -23371,9 +23371,9 @@
   },
   "info": {
     "title": "\ud83d\udc4dkanban API",
-    "version": "0.2.1870",
-    "x-build-commit": "a6967d0fc893",
-    "x-openapi-bundle-hash": "c74657a708877eef3f148e47515ff0a98a23c194beeb171901f1b879bf1b896b"
+    "version": "0.2.1876",
+    "x-build-commit": "01c4f4577242",
+    "x-openapi-bundle-hash": "101bfc04022fd610bd4f023811fd036eb0ee2a586306af1fc2e554d3e376927b"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -26108,7 +26108,7 @@
         ]
       },
       "post": {
-        "description": "Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.",
+        "description": "Create a new default workflow hook template.\n\nRequires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.",
         "operationId": "admin_create_default_hook_api_v1_admin_default_workflow_hooks_post",
         "requestBody": {
           "content": {
@@ -26223,7 +26223,7 @@
         ]
       },
       "patch": {
-        "description": "Update an existing default workflow hook template. Requires appropriate admin role and AAL2.",
+        "description": "Update an existing default workflow hook template.\n\nRequires appropriate admin role and AAL2.",
         "operationId": "admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch",
         "parameters": [
           {
@@ -44626,7 +44626,7 @@
     },
     "/api/v1/projects/{project}/workflow-hooks/sync-defaults": {
       "post": {
-        "description": "Apply missing default hook templates onto an existing project without overwriting existing hooks.\n\nRequires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.",
+        "description": "Apply missing default hook templates onto an existing project.\n\nDoes not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.",
         "operationId": "sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post",
         "parameters": [
           {
