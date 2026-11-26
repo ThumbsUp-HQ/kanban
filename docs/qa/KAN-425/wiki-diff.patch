@@ -198,7 +198,7 @@ index 8e6db3f..950417a 100644
  | Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
  | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 diff --git a/Scripted-Workflows-and-Transition-Helpers.md b/Scripted-Workflows-and-Transition-Helpers.md
-index 46067f4..8cef267 100644
+index 46067f4..c667815 100644
 --- a/Scripted-Workflows-and-Transition-Helpers.md
 +++ b/Scripted-Workflows-and-Transition-Helpers.md
 @@ -13,12 +13,12 @@ In traditional project management tools, workflow rules are either simple notifi
@@ -208,7 +208,7 @@ index 46067f4..8cef267 100644
 -    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
 -    Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters"]
 +    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm) - Verify blockers resolved - Verify Definition of Done criteria & PR links"]
-+    Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A) - Auto-set closed_at timestamp - Update cycle velocity counters"]
++    Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A) - Auto-tag labels & priority - Update cycle velocity counters"]
      Stage1 -->|VETO| VetoInstant["Transition Rejected (422 Unprocessable)"]
 -    Stage2 --> Stage3["Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (⏳🤖)<br/>- Dispatches forensic audit to agent"]
 -    Stage3 -->|Approved| Approved["Gate Approved (✅🤖)<br/>Card lands cleanly in Done column"]
@@ -350,7 +350,7 @@ index 46067f4..8cef267 100644
 +### 2. Define the `reality-checker` Agent (`/admin/agents`)
 +1. Open **Autonomous Agent Definitions Studio** (`/admin/agents`) and click **+ Register Agent**.
 +2. Configure Harness Kind as `in_app_sdk`, Provider Kind as `ollama`, and Model as `nemotron-3-super:latest`.
-+3. Set Timeout to `60000` ms (matching the `StructuredRequest.ttft_deadline_ms` limit of `<= 60000` ms).
++3. Set Timeout to `60000` ms (matching the `StructuredRequest.ttft_deadline_ms` limit of `<= 300000` ms, 1..300000).
 +4. Enter System Instructions defaulting to `"reject"` unless the ticket includes checked-off Definition of Done items, passing unit test and build outputs, and explicit forensic verification proof.
 +
 +![Reality-Checker Agent Definition using ollama/nemotron-3-super:latest](images/rc-ollama-02-agent-definition.png)
@@ -379,10 +379,10 @@ index 46067f4..8cef267 100644
 +![Negative Transition Ticket Activity and Rejection Comment on RCD-2](images/rc-ollama-07-negative-comment.png)
 +
 diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
-index 907f8ce..2c4c88e 100644
+index 907f8ce..8cd1b73 100644
 --- a/Studio-Configuration-Reference.md
 +++ b/Studio-Configuration-Reference.md
-@@ -5,80 +5,281 @@ Authoritative technical reference specification for all configuration attributes
+@@ -5,80 +5,279 @@ Authoritative technical reference specification for all configuration attributes
  ---
  
  ## 1. Workspace Studio
@@ -418,9 +418,9 @@ index 907f8ce..2c4c88e 100644
 +| `trash_retention_days` | Duration soft-deleted items remain in Trash before permanent purge | Integer between 7 and 365 days | 30 | Governs compliance data retention and recovery windows |
 +| `mcp_key_max_ttl_days` | Maximum validity period permitted for minted MCP API keys | Integer between 1 and 365 days | 90 | Caps autonomous agent credential lifetimes |
 +| `air_gap_mode` | Strict isolation mode blocking external cloud AI and external egress | Boolean (`true` / `false`) | `false` | When active, restricts AI execution strictly to local Ollama and on-prem runners |
-+| `default_skip_loaded_sequence_numbers` | Realtime WebSocket event optimization toggle | Boolean (`true` / `false`) | `false` | Skips already-cached sequence events to minimize client bandwidth |
++| `default_skip_loaded_sequence_numbers` | Agent-Safe Sequence Numbering policy toggle | Boolean (`true` / `false`) | `false` | Skips culturally and technically loaded sequence numbers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`) during issue sequence allocation |
 +| `issue_export_enabled` | Allows exporting work items to JSON or CSV archives | Boolean (`true` / `false`) | `true` | Controlled data exfiltration prevention |
-+| `issue_export_allowed_roles` | Explicit RBAC roles permitted to export work item data | List of role strings (`"workspace_admin"`, `"project_admin"`, `"member"`, `"guest"`) | All 4 roles | Restricts bulk export capability to authorized team members |
++| `issue_export_allowed_roles` | Explicit RBAC roles permitted to export work item data | List of role strings (`"workspace_admin"`, `"project_admin"`, `"member"`, `"guest"`) | `["workspace_admin", "project_admin", "member"]` | Restricts bulk export capability to authorized team members |
 +| `issue_import_enabled` | Allows lossless ingestion from external trackers | Boolean (`true` / `false`) | `true` | Gates administrative bulk ingestion workflows |
 +| `report_export_enabled` | Allows exporting statistical flow reports and audit logs | Boolean (`true` / `false`) | `true` | Governs access to compliance and telemetry exports |
 +| `report_export_allowed_roles` | Roles allowed to download statistical flow telemetry | List of role strings (`"ADMIN"`, `"MEMBER"`) | Both roles | Prevents unauthorized aggregation of engineering velocity data |
@@ -436,9 +436,9 @@ index 907f8ce..2c4c88e 100644
 +- **trash_retention_days:** Defines how many days soft-deleted work items, docs, stickies, and cycles reside in the Trash Studio (`/trash`) before being permanently purged by the background vacuum worker. Values range from 7 to 365 days (default 30 days).
 +- **mcp_key_max_ttl_days:** Upper boundary enforced when administrators or developers mint Model Context Protocol (MCP) scoped tokens. The backend rejects any key creation request specifying a TTL exceeding this configured cap (1 to 365 days, default 90 days).
 +- **air_gap_mode:** When set to `true`, 👍kanban activates zero-external-egress enforcement. All outbound requests to cloud AI providers (OpenAI, Gemini) and remote webhooks are fail-closed blocked at the transport layer, restricting agent pipelines exclusively to LAN Ollama servers and local CLI runners.
-+- **default_skip_loaded_sequence_numbers:** An optimization flag for high-throughput teams. When enabled, WebSocket clients receiving state updates skip downloading historical activity sequence packets that the client has already recorded in IndexedDB.
++- **default_skip_loaded_sequence_numbers:** An Agent-Safe Sequence Numbering policy flag. When enabled, the sequence allocator automatically skips culturally and technically loaded issue sequence numbers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`) during work item creation (DB/API default `false`).
 +- **issue_export_enabled:** Master toggle for work item data extraction. Disabling this flag blocks `/api/v1/projects/{project}/issues/export` across both the REST API and the web interface to prevent bulk data exfiltration.
-+- **issue_export_allowed_roles:** Role allowlist determining who can trigger issue exports. Configurable with combinations of `"workspace_admin"`, `"project_admin"`, `"member"`, and `"guest"`.
++- **issue_export_allowed_roles:** Role allowlist determining who can trigger issue exports. Configurable with combinations of `"workspace_admin"`, `"project_admin"`, `"member"`, and `"guest"`, defaulting to `["workspace_admin", "project_admin", "member"]` (3 roles, excluding guest accounts).
 +- **issue_import_enabled:** Administrative toggle governing data ingestion from external platforms (Plane, Jira, GitHub, Linear). Disabling this blocks `/api/v1/admin/imports` to preserve data integrity during audit periods.
 +- **report_export_enabled:** Controls whether statistical flow telemetry, Monte Carlo lead-time forecasts, and velocity percentiles can be downloaded as CSV or JSON payloads.
 +- **report_export_allowed_roles:** Specifies the minimum permission tier required to export engineering flow reports (options include `"ADMIN"` and `"MEMBER"`).
@@ -525,11 +525,9 @@ index 907f8ce..2c4c88e 100644
 +4. **Configure WIP Limits:** Enter a Soft WIP Limit (e.g. `4`) to flag column congestion, and enter a Hard WIP Limit (e.g. `6`) if your team enforces strict pull-based flow and prohibits card overloading (`wip_soft_limit <= wip_hard_limit`).
 +5. **Reorder Board Columns:** Drag states up and down using the grip handle to adjust their execution sort order from left to right.
 +6. **Save Changes:** Click **Save States** to persist the configuration. Board columns update immediately across all connected WebSockets.
- 
- ---
- 
--## 3. Workflow Transition Studio
--The Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.
++
++---
++
 +### Personal Settings
 +The Personal Settings Studio (`/settings` or `/profile`) provides comprehensive user identity self-service, including canonical timezone localization, avatar upload with automatic sanitization and cropping, password rotation with server-admin entropy rules, WebAuthn Passkeys, TOTP two-factor authentication, one-time emergency recovery codes, and external OIDC/LDAP identity account linking.
 +
@@ -540,7 +538,7 @@ index 907f8ce..2c4c88e 100644
 +![Personal Settings - Mobile Portrait](images/slice5-personal-settings-mobile-portrait-390x844.png)
 +
 +### Personal Settings Configuration Table
- 
++
 +| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
 +| :--- | :--- | :--- | :--- | :--- |
 +| `display_name` | Public user profile name displayed to colleagues | UTF-8 String (1 to 120 characters) | User's full name | Sanitized against invisible Unicode characters and control codes |
@@ -564,12 +562,14 @@ index 907f8ce..2c4c88e 100644
 +- **totp_enabled:** Activates Time-Based One-Time Password verification for authenticator applications (Aegis, Google Authenticator, 1Password). Enrolled via QR code and verified with a 6-digit challenge code. Disabling TOTP requires mandatory AAL2 step-up verification.
 +- **recovery_codes:** A set of 10 single-use emergency recovery codes generated when two-factor authentication is configured. Each code can be used exactly once to regain account access if hardware tokens or authenticator apps are lost.
 +- **linked_identities:** Manages connected third-party enterprise identity cards (Google Workspace, GitHub, GitLab, Okta, Active Directory LDAP). Users can link multiple external accounts to a single local identity or unlink secondary providers after completing AAL2 step-up verification.
-+
-+---
-+
+ 
+ ---
+ 
+-## 3. Workflow Transition Studio
+-The Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.
 +## 3. Workflow Transition Studio & Git Repo Bindings
 +The Workflow Transition Studio (`/projects/:proj/settings/workflows`) coordinates lifecycle rules, pre-transition validators, field mutators, asynchronous AI agent gates, and read-only bare Git repository mirror bindings.
-+
+ 
 +![Workflow Transition Studio - Desktop Dark](images/slice5-workflow-studio-desktop-1440x900-dark.png)
 +![Workflow Transition Studio - Tablet Landscape](images/slice5-workflow-studio-tablet-landscape-1024x768.png)
 +![Workflow Transition Studio - Tablet Portrait](images/slice5-workflow-studio-tablet-portrait-768x1024.png)
@@ -586,7 +586,7 @@ index 907f8ce..2c4c88e 100644
 -| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |
 -| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |
 -| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |
-+| `name` | Descriptive label for transition helper hook | UTF-8 String (1 to 128 characters) | Required | Displayed in pipeline lists, dry-run logs, and error explanations |
++| `name` | Descriptive label for transition helper hook | UTF-8 String (1 to 120 characters) | Required | Displayed in pipeline lists, dry-run logs, and error explanations |
 +| `from_state` | Origin workflow state of the transition rule | Valid state name or `null` (Any state) | `null` (Wildcard) | Restricts hook evaluation to specific card movements |
 +| `to_state` | Destination workflow state of the transition | Valid project state name | Required | The target column being protected by the transition helper |
 +| `hook_kind` | Execution engine and evaluation timing | `"sync_validator"`, `"sync_mutator"`, `"agent_interceptor"` | `"sync_validator"` | Governs execution latency and synchronous vs asynchronous processing |
@@ -603,7 +603,7 @@ index 907f8ce..2c4c88e 100644
 +
 +### Setting-by-Setting Technical Paragraphs (Workflow Transition Studio & Repo Bindings)
 +
-+- **name:** The user-defined identifier assigned to the workflow hook (such as `qa-done-gate` or `enforce-pr-link`). Appears on pipeline transition cards, dry-run evaluation outputs, and timeline rejection entries.
++- **name:** The user-defined identifier assigned to the workflow hook (such as `qa-done-gate` or `enforce-pr-link`, 1 to 120 characters). Appears on pipeline transition cards, dry-run evaluation outputs, and timeline rejection entries.
 +- **from_state:** The initial state of the card before transition (e.g. `In Progress`). Selecting `null` creates a wildcard rule matching transitions originating from any state into `to_state`.
 +- **to_state:** The protected destination state (e.g. `Done`). The card cannot land in this state until all attached synchronous validators pass and all asynchronous agent gates approve.
 +- **hook_kind:** Defines the execution engine: `"sync_validator"` runs fast in-process WebAssembly checks (<25ms); `"sync_mutator"` applies deterministic property updates; `"agent_interceptor"` dispatches an asynchronous background gate to an AI model or test runner.
@@ -665,9 +665,9 @@ index 907f8ce..2c4c88e 100644
 -| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |
 -| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |
 -| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |
-+| `name` | Human-readable custom field title | String (1 to 64 characters) | Required | Displayed on ticket rails, table columns, and board badges |
++| `name` | Human-readable custom field title | String (1 to 80 characters) | Required | Displayed on ticket rails, table columns, and board badges |
 +| `slug` | Unique identifier used in formulas and API queries | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |
-+| `flavor` | Execution tier and underlying calculation engine | `"scalar"`, `"formula"`, `"wasm"`, `"nsjail"` | `"formula"` | Determines execution latency and Standalone mode compatibility |
++| `flavor` | Execution tier and underlying calculation engine | `"scalar"`, `"formula"`, `"wasm"`, `"nsjail"` | `"scalar"` | Determines execution latency and Standalone mode compatibility |
 +| `sandbox_tier` | Multi-tier sandbox engine used for execution | `"scalar"`, `"wasm"` (Tier A), `"nsjail"` (Tier B) | `"wasm"` | `nsjail` requires multi-container compose; fail-closed in standalone |
 +| `credential_mode` | Identity token provided during script execution | `"INVOKING_USER"`, `"PROJECT_ADMIN_SP"`, `"SERVER_ADMIN_SP"` | `"INVOKING_USER"` | Elevated service principal modes require dual-control cryptographic approval |
 +| `target_scope` | Maximum tenant visibility boundary of the field | `"PROJECT"`, `"WORKSPACE"`, `"SERVER"` | `"PROJECT"` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |
@@ -680,9 +680,9 @@ index 907f8ce..2c4c88e 100644
 +
 +### Setting-by-Setting Technical Paragraphs (Custom Fields Studio & Dual-Control Escalation)
 +
-+- **name:** The human-facing label displayed on ticket property rails, table view columns, and board card badges. Rendered alongside a subtle test tube icon (`🧪`) for computed fields.
++- **name:** The human-facing label displayed on ticket property rails, table view columns, and board card badges (1 to 80 characters). Rendered alongside a subtle test tube icon (`🧪`) for computed fields.
 +- **slug:** The immutable ASCII identifier representing the custom field in JSON payloads, query filters, and Safe Formula references. Derived automatically from the field name upon creation.
-+- **flavor:** The computation tier. `"scalar"` stores static values; `"formula"` executes deterministic Python AST math in-process (<5ms); `"wasm"` runs compiled WebAssembly modules via `wasmtime` (<25ms); `"nsjail"` executes Linux container scripts (<250ms).
++- **flavor:** The computation tier. UI defaults to `"scalar"` (`CustomFieldDefinitionEditor.tsx` line 245; stores static values); `"formula"` executes deterministic Python AST math in-process (<5ms); `"wasm"` runs compiled WebAssembly modules via `wasmtime` (<25ms; API tier default); `"nsjail"` executes Linux container scripts (<250ms).
 +- **sandbox_tier:** Selects between in-process WebAssembly (`wasm` Tier A) and containerized namespace isolation (`nsjail` Tier B). In Standalone mode, `nsjail` is fail-closed disabled with `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
 +- **credential_mode:** Determines which identity credentials are provided to the script during execution. `"INVOKING_USER"` executes strictly within the permissions of the calling user. `"PROJECT_ADMIN_SP"` executes with Project Admin service principal authority. `"SERVER_ADMIN_SP"` executes with Server Admin service principal authority and mandates dual-control approval.
 +- **target_scope:** Controls the data visibility boundary of the field. `"PROJECT"` scope can only read issues within the active project. Escalating to `"WORKSPACE"` (reading across all workspace projects) or `"SERVER"` (global) requires dual-control cryptographic sign-off.
@@ -701,8 +701,6 @@ index 907f8ce..2c4c88e 100644
 +4. **Draft and Test Execute:** Author your formula expression or script logic, then click **Test Execute** to simulate evaluation in memory against sample payloads.
 +5. **Submit for Approval:** Click **Save & Request Escalation**. The field enters `pending` approval status.
 +6. **Independent AAL2 Review & Approval:** A distinct Workspace or Server Administrator opens the Custom Fields Studio, inspects the script source, requested scope, and blast radius, clicks **Approve Escalation**, and provides fresh Authenticator Assurance Level 2 (AAL2) credentials (Passkey, security key, or TOTP). Once verified, the field is activated and logged in the immutable audit ledger.
-+
-+---
  
  ---
  
