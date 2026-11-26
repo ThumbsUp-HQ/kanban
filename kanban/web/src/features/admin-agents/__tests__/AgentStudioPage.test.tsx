@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { AgentStudioPage } from '../AgentStudioPage';
 import { AgentValidationModal } from '../AgentValidationModal';
 import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
@@ -918,6 +920,89 @@ describe('AgentStudioPage & Components (KANBA-219)', () => {
       } finally {
         globalThis.fetch = originalFetch;
       }
+    });
+
+    describe('KAN-440: Validate Agent action button tokens and theme cadence', () => {
+      it('renders Validate button with kb-btn-success and kb-agent-validate-btn classes and without inline colors in light theme', async () => {
+        document.documentElement.removeAttribute('data-theme');
+        vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
+
+        render(<AgentStudioPage isServerAdmin={true} />);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('validate-agent-btn-agent-1')).toBeDefined();
+        });
+
+        const validateBtn = screen.getByTestId('validate-agent-btn-agent-1');
+        expect(validateBtn.className).toContain('kb-btn');
+        expect(validateBtn.className).toContain('kb-btn-success');
+        expect(validateBtn.className).toContain('kb-agent-validate-btn');
+        expect(validateBtn.className).not.toContain('kb-btn-primary');
+
+        // Assert zero inline color / background-color / border-color styling
+        expect(validateBtn.style.backgroundColor).toBe('');
+        expect(validateBtn.style.borderColor).toBe('');
+        expect(validateBtn.style.color).toBe('');
+
+        // Click button and verify validation modal opens cleanly in light mode
+        fireEvent.click(validateBtn);
+        await waitFor(() => {
+          expect(screen.getByTestId('agent-validation-modal')).toBeDefined();
+        });
+      });
+
+      it('renders Validate button and opens validation modal cleanly in dark theme', async () => {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        vi.spyOn(agentApi, 'fetchAgentDefinitions').mockResolvedValue([mockAgentSdk]);
+
+        try {
+          render(<AgentStudioPage isServerAdmin={true} />);
+
+          await waitFor(() => {
+            expect(screen.getByTestId('validate-agent-btn-agent-1')).toBeDefined();
+          });
+
+          const validateBtn = screen.getByTestId('validate-agent-btn-agent-1');
+          expect(validateBtn.className).toContain('kb-btn-success');
+          expect(validateBtn.className).toContain('kb-agent-validate-btn');
+          expect(validateBtn.style.backgroundColor).toBe('');
+          expect(validateBtn.style.borderColor).toBe('');
+          expect(validateBtn.style.color).toBe('');
+
+          // Trigger validation modal in dark mode
+          fireEvent.click(validateBtn);
+          await waitFor(() => {
+            expect(screen.getByTestId('agent-validation-modal')).toBeDefined();
+          });
+        } finally {
+          document.documentElement.removeAttribute('data-theme');
+        }
+      });
+
+      it('verifies agentStudio.css defines .kb-btn-success and .kb-agent-validate-btn using semantic variables', () => {
+        const cssPath = path.resolve(import.meta.dirname, '../agentStudio.css');
+        const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+        expect(cssContent).toMatch(/\.kb-btn-success/);
+        expect(cssContent).toMatch(/\.kb-agent-validate-btn/);
+        expect(cssContent).toContain('background-color: var(--ok-bg);');
+        expect(cssContent).toContain('border: 1px solid var(--ok-bg);');
+        expect(cssContent).toContain('color: var(--accent-primary-fg);');
+        expect(cssContent).toContain('background-color: var(--ok-hover);');
+        expect(cssContent).toContain('border-color: var(--ok-hover);');
+        expect(cssContent).toContain('outline: 2px solid var(--focus-ring);');
+      });
+
+      it('verifies theme.css provides WCAG AA compliant --ok-bg and --ok-hover tokens', () => {
+        const themeCssPath = path.resolve(import.meta.dirname, '../../../styles/theme.css');
+        const themeCss = fs.readFileSync(themeCssPath, 'utf8');
+
+        // Root tokens
+        expect(themeCss).toMatch(/--ok-fg:\s*#047857;/);
+        expect(themeCss).toMatch(/--text-success:\s*#047857;/);
+        expect(themeCss).toMatch(/--ok-bg:\s*#047857;/);
+        expect(themeCss).toMatch(/--ok-hover:\s*#065f46;/);
+      });
     });
   });
 });
