@@ -1,0 +1,49 @@
+Timestamp: 2026-11-26T04:02:18Z
+
+>>> PYTHONPATH=. uv run --no-sync python -m scripts.sync_wiki_bundle
+Successfully synchronized 34 wiki chapters into kanban/web/src/features/docs-center/wikiManifest.ts (617018 bytes, 145 images copied to kanban/web/public/docs-images).
+
+>>> uv run kanban-ctl db check-migrations --static-only
+OK: All 84 migrations valid. Single head: p6_22_mcp_api_keys_capability_mask_boundary
+
+>>> uv run ruff check kanban/ deploy/
+All checks passed!
+
+>>> python3 scripts/check_no_dashes.py --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+>>> python3 scripts/check_no_dashes.py thumbs-up-kanban.wiki/Admin-Custom-Scripted-Fields-and-Sandbox.md thumbs-up-kanban.wiki/Guide-Custom-Fields.md thumbs-up-kanban.wiki/Scripted-Workflows-and-Transition-Helpers.md thumbs-up-kanban.wiki/Zero-Trust-Security-and-Access-Visibility.md thumbs-up-kanban.wiki/Studio-Configuration-Reference.md
+
+>>> pnpm --dir kanban/web typecheck
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/kanban/web
+> tsc -b --noEmit
+
+
+>>> pnpm --dir kanban/web lint
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/kanban/web
+> eslint . --max-warnings 0
+
+
+>>> pnpm --dir kanban/web build
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 765 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CMcHJYe_.css            626.91 kB │ gzip:  88.38 kB
+dist/assets/index-BOkptxgQ.js           2,993.03 kB │ gzip: 830.48 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.30s

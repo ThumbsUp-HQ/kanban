@@ -1,0 +1,132 @@
+=== Backend Pytest Results ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 128 items
+
+kanban/tests/api/test_workspace_settings.py ..............               [ 10%]
+kanban/tests/api/test_project_config.py ..................               [ 25%]
+kanban/tests/api/test_admin_trash_api.py .......                         [ 30%]
+kanban/tests/api/test_user_personal_settings.py ...........              [ 39%]
+kanban/tests/api/test_agent_onboarding_preferences.py ............       [ 48%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 53%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 60%]
+kanban/tests/custom_fields/test_execution_api.py ....                    [ 63%]
+kanban/tests/workflows/test_workflow_hooks_api.py .................      [ 76%]
+kanban/tests/workflows/test_dry_run.py .......                           [ 82%]
+kanban/tests/repos/test_repo_bindings_api.py ............                [ 91%]
+kanban/tests/test_wiki_bundle_sync.py .......                            [ 96%]
+kanban/tests/test_docs_custom_fields_guide.py ....                       [100%]
+
+======================= 128 passed in 105.09s (0:01:45) ========================
+
+=== Backend Coverage Report (9 Touched Modules) ===
+Name                                        Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------
+kanban/api/v1/admin/destructive.py            133      4     26      4    95%   284, 330, 333, 335
+kanban/api/v1/admin/workspace_settings.py     187      2     68      8    96%   238, 244->277, 260, 301->308, 304->308, 317->334, 366->369, 421->488
+kanban/api/v1/custom_field_approvals.py        24      0      0      0   100%
+kanban/api/v1/custom_field_execution.py       104      1     22      5    95%   73->76, 111->127, 161->164, 244->247, 258
+kanban/api/v1/custom_fields.py                 30      0      0      0   100%
+kanban/api/v1/project_config.py                74      0      0      0   100%
+kanban/api/v1/repo_bindings.py                184      6     38      6    95%   154, 294, 353, 365, 421, 439
+kanban/api/v1/user_settings.py                408     15    118     11    95%   136-137, 190-191, 194-195, 222-223, 236->238, 254-257, 294->318, 297->318, 314->318, 370-371, 403->413, 404->413, 406, 408->404, 609->612
+kanban/api/v1/workflow_hooks.py                52      0      0      0   100%
+---------------------------------------------------------------------------------------
+TOTAL                                        1196     28    272     34    96%
+
+=== Frontend Vitest Results ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 295ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 71ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 823ms
+   ✓ DryRunDrawer (KB-P5-24) (6)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 429ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 842ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1167ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (15 tests) 2164ms
+   ✓ AttachHookDialog (KB-P5-24) (15)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 726ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (16 tests) 1659ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (16)
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 353ms
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (42 tests) 4080ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (42)
+     ✓ renders workspace settings page and updates workspace name and slug 648ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 303ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (47 tests) 3861ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 5203ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 450ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 323ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 323ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 5008ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ renders different hook kinds and failure policies 319ms
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2091ms
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 555ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 398ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 7255ms
+   ✓ DocsCenter & Help System (KAN-16) (50)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 402ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (17)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 401ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1865ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 548ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 420ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 652ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (71 tests) 14399ms
+   ✓ PersonalSettingsPage (71)
+     ✓ renders personal settings sections with loaded profile data 449ms
+     ✓ regenerates recovery codes and displays modal 2354ms
+     ✓ toggles password visibility and handles successful password update 511ms
+     ✓ cancels passkey rename modal when clicking cancel 559ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 392ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 549ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 328ms
+     ✓ External Identity Linking (KAN-27) (16)
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 452ms
+
+ Test Files  13 passed (13)
+      Tests  385 passed (385)
+   Start at  23:14:00
+   Duration  16.75s (tests 64%, environment 21%, import 10%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.63 |    96.55 |   99.43 |   99.93 |                   
+ custom-fields     |   99.72 |    96.65 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    97.01 |     100 |     100 | ...,642,1168-1182 
+  ...ldsStudio.tsx |     100 |      100 |     100 |     100 |                   
+  ...ovalPanel.tsx |   98.82 |    95.74 |     100 |     100 | 111-123,139,153   
+ docs-center       |    99.6 |    96.15 |     100 |     100 |                   
+  ...ownViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+  ...enterPage.tsx |     100 |    95.12 |     100 |     100 | 52-55,100         
+  HelpDrawer.tsx   |     100 |    97.72 |     100 |     100 | 69                
+  docsService.ts   |     100 |    97.14 |     100 |     100 | 46                
+  wikiManifest.ts  |     100 |      100 |     100 |     100 |                   
+ settings          |   99.68 |    95.81 |   98.88 |     100 |                   
+  ...tingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...69,391,484,580 
+  ...tingsPage.tsx |   99.57 |    95.05 |     100 |     100 | ...1095,1770,2870 
+  ...tingsPage.tsx |     100 |    96.26 |    96.9 |     100 | ...76-477,685,714 
+ workflows         |   99.48 |    98.64 |     100 |   99.64 |                   
+  ...ookDialog.tsx |   97.59 |    99.14 |     100 |   97.36 | 131-132           
+  DryRunDrawer.tsx |     100 |    98.38 |     100 |     100 | 188               
+  ...gsSection.tsx |     100 |    97.82 |     100 |     100 | 76,158            
+  ...pelineRow.tsx |   98.57 |    97.72 |     100 |     100 | 58,93             
+  ...nRuleCard.tsx |     100 |      100 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    98.63 |     100 |     100 | 294               
+  api.ts           |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -1758,6 +1758,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
     });
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     it('asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM', () => {
       const slice1Links = [
         '/docs/multi-card-authentication-studio',
@@ -1889,6 +1890,55 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         const el = resolveSectionElement(container, parsed.anchor ?? '');
         expect(el).not.toBeNull();
         expect(el?.tagName).toMatch(/^H[1-6]$/);
+      }
+    });
+
+    it('resolves all Slice-5 docHref anchors against rendered chapter DOM', () => {
+      const slice5DocHrefs = [
+        // Custom Fields Editor & Approvals
+        '/docs/custom-fields#display-name',
+        '/docs/custom-fields#slug',
+        '/docs/custom-fields#flavors',
+        '/docs/custom-fields#sandbox-tier',
+        '/docs/custom-fields#credential-mode',
+        '/docs/custom-fields#target-scope',
+        '/docs/custom-fields#output-formats',
+        '/docs/custom-fields#format-metadata',
+        '/docs/custom-fields#script-source',
+        '/docs/custom-fields#egress-allowlist',
+        '/docs/custom-fields#aal2-stepup',
+        '/docs/custom-fields#approvals',
+        // Workflow Studio & Transition Hooks
+        '/docs/scripted-workflows-and-transition-helpers#helper-architecture',
+        '/docs/scripted-workflows-and-transition-helpers#failure-policies',
+        // Project Settings
+        '/docs/ticket-screen-and-work-item-features#modules',
+        '/docs/ticket-screen-and-work-item-features#auto-archive',
+        '/docs/ticket-screen-and-work-item-features#labels',
+        // Personal Settings
+        '/docs/zero-trust-security-and-access-visibility#authentication',
+        // Workspace Settings
+        '/docs/role-and-permission-matrix#workspace-level-roles',
+      ];
+
+      for (const href of slice5DocHrefs) {
+        const { slug, anchor } = parseDocHref(href);
+        expect(slug).toBeDefined();
+        expect(anchor).toBeDefined();
+        const chapter = WIKI_CHAPTERS.find((c) => c.slug === slug);
+        expect(chapter).toBeDefined();
+        if (!chapter || !anchor) {
+          throw new Error(`Failed to find chapter or anchor for ${href}`);
+        }
+
+        const { container, unmount } = render(
+          <DocMarkdownViewer
+            content={chapter.content}
+          />,
+        );
+        const targetElement = resolveSectionElement(container, anchor);
+        expect(targetElement).not.toBeNull();
+        unmount();
       }
     });
       }

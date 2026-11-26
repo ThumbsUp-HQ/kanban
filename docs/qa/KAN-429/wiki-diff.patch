@@ -1,0 +1,988 @@
+diff --git a/Admin-Custom-Scripted-Fields-and-Sandbox.md b/Admin-Custom-Scripted-Fields-and-Sandbox.md
+index 8930d46..078c31b 100644
+--- a/Admin-Custom-Scripted-Fields-and-Sandbox.md
++++ b/Admin-Custom-Scripted-Fields-and-Sandbox.md
+@@ -21,14 +21,16 @@ To protect the platform from unauthorized logic injection:
+ 
+ Administrators manage custom fields through the visual studio at `/projects/KAN/settings/custom-fields`.
+ 
+-![Custom Fields Studio and Escalation Banner](images/14-custom-fields-studio.png)
++![Custom Fields Studio and Escalation Banner](images/slice5-custom-fields-studio-desktop-1440x900-light.png)
+ 
+ ### Studio Capabilities
+ - **Field Types:** String, Integer, Float, Boolean, Date, Multi-Select, and Dynamic Computed Script.
+ - **Execution Engine Selection:** Choose between lightweight WebAssembly (Wasmtime) or isolated containerized scripts (nsjail).
+-- **Execution Badging (`🧪`):** Computed fields render a subtle test tube (`🧪`) glyph on the ticket properties rail, showing real-time computation status and latency.
++- **Execution Badging (🧪):** Computed fields render a subtle test tube (`🧪`) glyph on the ticket properties rail, showing real-time computation status and latency.
+ - **Pre-Commit Test Execution:** Test custom script logic against sample payloads in real time before committing field definitions to the database.
+ 
++![Custom Fields Editor Tier A](images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png)
++
+ ---
+ 
+ ## Test-Execute Sandbox Modal
+@@ -66,8 +68,8 @@ When a work item is created or updated, active custom field scripts are executed
+ flowchart TD
+     Update["Work Item Updated: State / Properties Changed"] --> Dispatcher["Sandbox Dispatcher (kanban/sandbox/)"]
+     
+-    Dispatcher -->|Lightweight Math / String Formats| TierA["Tier A: Wasmtime Engine<br/>- In-process WebAssembly<br/>- Sub-millisecond execution (<1ms)<br/>- Zero OS syscall capability<br/>- Memory capped at 16 MB"]
+-    Dispatcher -->|Complex Logic / Scripts| TierB["Tier B: nsjail Container Jail<br/>- Linux namespaces (CLONE_NEWNET)<br/>- Read-only root filesystem<br/>- CPU timeout: 5 sec, Memory: 512 MB"]
++    Dispatcher -->|Lightweight Math / String Formats| TierA["Tier A: Wasmtime Engine - In-process WebAssembly - Sub-millisecond execution (<1ms) - Zero OS syscall capability - Memory capped at 16 MB"]
++    Dispatcher -->|Complex Logic / Scripts| TierB["Tier B: nsjail Container Jail - Linux namespaces (CLONE_NEWNET) - Read-only root filesystem - CPU timeout: 5 sec, Memory: 512 MB"]
+     
+     TierA --> Verify["Verify Computed Value vs Pydantic Schema"]
+     TierB --> Verify
+@@ -114,13 +116,10 @@ sequenceDiagram
+ ```
+ 
+ 1. **Ephemeral Project Tokens:** By default, every script executes using an ephemeral API token scoped strictly to the current **Project**. It cannot read data from other projects or workspace settings.
+-2. **Cryptographic Privilege Escalation:** If a script requires broader access (such as reading data across the entire **Workspace** or querying **Server** configuration):
+-   - The script must request an escalated token scope.
+-   - The UI displays an unmissable administrative warning banner detailing the blast radius.
+-   - The escalation must be signed with cryptographic approval by an administrator possessing authority over that target tier.
+-   - Scripts can never escalate to Server Admin privileges without explicit multi-factor confirmation.
++2. **Cryptographic Privilege Escalation:** If a script requires broader access (such as reading data across the entire **Workspace** or querying **Server** configuration), the script must request an escalated token scope. The UI displays an unmissable administrative warning banner detailing the blast radius, and the escalation must be signed with cryptographic approval by an administrator possessing authority over that target tier. Scripts can never escalate to Server Admin privileges without explicit multi-factor confirmation.
+ 
+-![Custom Fields Dual Control Escalation Studio](images/52-custom-fields-dual-control.png)
++![Custom Fields Dual Control Escalation Studio](images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png)
++![Custom Fields Dual Control Escalation Flow](images/52-custom-fields-dual-control.png)
+ 
+ ### Dual-Control Principle:
+ To satisfy enterprise SOC 2 and ISO 27001 separation of duties, escalating a custom scripted field to workspace-wide or server-wide scope requires dual-control authorization:
+diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
+index e7813ae..e41d09f 100644
+--- a/Guide-Custom-Fields.md
++++ b/Guide-Custom-Fields.md
+@@ -10,6 +10,8 @@ This comprehensive guide covers how Custom Fields work, where their values surfa
+ 
+ Custom Fields allow project administrators and server administrators to attach computed or scalar attributes to issues. Whenever an issue is viewed, edited, or evaluated in a workflow, Custom Fields are resolved and formatted according to their output specifications.
+ 
++![Custom Fields Studio - Desktop Light](images/slice5-custom-fields-studio-desktop-1440x900-light.png)
++
+ Custom field values automatically surface across the following surfaces in the web interface:
+ 
+ - **Issue Properties Rail:** Located in the right sidebar of the issue detail screen. Displays the custom field label, current value (formatted as text, number, badge, severity pill, link, markdown snippet, or table), and cache status with an instant recalculate trigger.
+@@ -23,6 +25,8 @@ Custom field values automatically surface across the following surfaces in the w
+ 
+ 👍kanban provides four distinct execution tiers for custom fields, balanced across performance, security isolation, and deployment modes:
+ 
++![Custom Fields Editor Tier A](images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png)
++
+ | Tier | Engine / Flavor | Latency Budget | Standalone Mode | Multi-Container Compose | Best Used For |
+ | :--- | :--- | :--- | :--- | :--- | :--- |
+ | **Scalar** | Static metadata | `<1ms` | Supported | Supported | Static tags, manual attributes, default strings, constant numbers |
+@@ -151,6 +155,8 @@ Roll up total project issues and blockers using WebAssembly or Multi-Container n
+ 
+ Every custom field produces output formatted according to one of seven canonical schemas:
+ 
++![Custom Fields Structured Format](images/slice5-custom-fields-structured-format-desktop-1440x900-light.png)
++
+ ### 1. `text`
+ Single-line formatted string with optional prefix and monospace font.
+ ```json
+@@ -266,60 +272,59 @@ This evaluates your formula or script against a mock issue payload or existing i
+ 
+ ### Scope Escalation and AAL2 Dual-Control Approval
+ Custom fields can be scoped at three tiers:
+-- **`PROJECT` Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
+-- **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
+-- **`SERVER` Scope:** Global fields available across all workspaces.
++- **PROJECT Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
++- **WORKSPACE Scope:** Can read issues across all projects in the workspace.
++- **SERVER Scope:** Global fields available across all workspaces.
++
++![Custom Fields Dual Control Escalation](images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png)
++
++**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Principal credentials `PROJECT_ADMIN_SP` or `SERVER_ADMIN_SP` rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
++
++### Step-by-Step Guide: Authoring & Requesting Dual-Control Custom Scripted Fields
+ 
+-**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
++1. **Navigate to Custom Fields Studio:** Open `/projects/<PROJECT_KEY>/settings/custom-fields` and click **+ New Custom Field**.
++2. **Configure Baseline Attributes:** Set the Display Name (e.g. `Cross-Project Security Compliance Score`), confirm the automatically generated Field Slug (`cross-proj-sec-score`), select the Flavor / Tier (`formula` or `wasm`), and choose the Output Format (`severity_pill` or `number`).
++3. **Select Elevated Scope or Service Principal:** In the Target Scope Tier dropdown, select `WORKSPACE` or `SERVER`. Optionally select Credential Mode as `PROJECT_ADMIN_SP` or `SERVER_ADMIN_SP` if elevated service authority is required. The UI immediately renders an amber unmissable Dual-Control Escalation Banner warning of the expanded tenant blast radius.
++4. **Draft and Test Execute:** Author your formula expression or compiled module, then click **Test Execute** to verify execution in memory against sample payloads.
++5. **Submit Escalation Request:** Click **Save & Request Escalation**. An escalation proposal is created and dispatched to the approval queue with pending status.
++6. **Independent Admin Review & Cryptographic Approval:** A distinct Workspace or Server Administrator opens `/projects/<PROJECT_KEY>/settings/custom-fields` (or the Escalation Approvals panel), inspects the script source, requested scope, credential mode, and blast radius, clicks **Approve Escalation**, and provides fresh Authenticator Assurance Level 2 (AAL2) credentials (biometric Passkey, hardware FIDO2 key, or 6-digit TOTP code). Upon AAL2 verification, the approval is cryptographically sealed, logged in the activity ledger, and the escalated custom field activates immediately.
+ 
+ ---
+ 
+ ## Custom Field Configuration Attributes and Controls
+ 
+-<a id="display-name"></a>
+-### Display Name (`#display-name`)
++### Display Name
+ The human-readable title of the custom field shown on ticket property rails, board cards, and table columns.
+ 
+-<a id="slug"></a>
+-### Field Slug (`#slug`)
++### Slug
+ The unique, URL-safe ASCII identifier used in formulas, API payloads, and query filters.
+ 
+-<a id="flavors"></a>
+-### Field Flavors (`#flavors`)
++### Flavors
+ Determines the underlying calculation mechanism: `scalar`, `formula`, `wasm`, or `nsjail`.
+ 
+-<a id="sandbox-tier"></a>
+-### Execution Sandbox Tier (`#sandbox-tier`)
++### Sandbox Tier
+ Selects between in-process WebAssembly (`wasmtime` Tier A) and containerized Linux namespaces (`nsjail` Tier B). In Standalone mode, `nsjail` is gated.
+ 
+-<a id="credential-mode"></a>
+-### Ephemeral Credential Mode (`#credential-mode`)
+-Specifies whether the field executes with `INVOKING_USER` permissions or elevated `SERVICE_ACCOUNT` credentials.
++### Credential Mode
++Specifies whether the field executes with `INVOKING_USER` permissions or elevated `PROJECT_ADMIN_SP` / `SERVER_ADMIN_SP` service principal credentials.
+ 
+-<a id="target-scope"></a>
+-### Target Scope Tier (`#target-scope`)
++### Target Scope
+ Controls the tenant boundary accessible to the custom field: `PROJECT`, `WORKSPACE`, or `SERVER`.
+ 
+-<a id="output-formats"></a>
+-### Output Formats (`#output-formats`)
++### Output Formats
+ Canonical schema used to format and validate the output: `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, or `json_table`.
+ 
+-<a id="format-metadata"></a>
+-### Format Metadata Configuration (`#format-metadata`)
++### Format Metadata
+ JSON metadata configuring format-specific options such as decimal precision, color tokens, and table column schemas.
+ 
+-<a id="script-source"></a>
+-### Custom Script Source (`#script-source`)
++### Script Source
+ The Python AST expression, compiled WebAssembly module, or sandboxed script implementing the field calculation.
+ 
+-<a id="egress-allowlist"></a>
+-### Network Egress Allowlist (`#egress-allowlist`)
++### Egress Allowlist
+ Explicit list of destination hosts accessible to `nsjail` tier scripts. Network access is disabled by default via `CLONE_NEWNET`.
+ 
+-<a id="aal2-stepup"></a>
+-### Mandatory AAL2 Step-Up (`#aal2-stepup`)
++### AAL2 Stepup
+ Administrative modifications and scope escalations require recent multi-factor authentication (AAL2 verified within 900 seconds).
+ 
+-<a id="approvals"></a>
+-### Dual-Control Cryptographic Approvals (`#approvals`)
++### Approvals
+ Escalating a field to workspace or server scope requires explicit cryptographic signing and approval by an administrator of that target tier.
+diff --git a/Role-and-Permission-Matrix.md b/Role-and-Permission-Matrix.md
+index 8e6db3f..950417a 100644
+--- a/Role-and-Permission-Matrix.md
++++ b/Role-and-Permission-Matrix.md
+@@ -16,8 +16,9 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
+-<a id="system-roles"></a>
+-## The 7 Principal Tiers
++## System Roles
++
++### The 7 Principal Tiers
+ 
+ 1. **Guest (`WORKSPACE_GUEST` / `PROJECT_GUEST`):** Ephemeral or external collaborator. Confined strictly to explicitly shared objects with zero ambient project or workspace visibility.
+ 2. **Viewer (`WORKSPACE_VIEWER` / `PROJECT_VIEWER`):** Read-only stakeholder. Permitted to inspect un-restricted workspace or project assets, but cannot author or modify data.
+@@ -29,8 +30,9 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
+-<a id="workspace-level-roles"></a>
+-## Master Capability Matrix
++## Workspace-Level Roles
++
++### Master Capability Matrix
+ 
+ | Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
+ | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+diff --git a/Scripted-Workflows-and-Transition-Helpers.md b/Scripted-Workflows-and-Transition-Helpers.md
+index 46067f4..c667815 100644
+--- a/Scripted-Workflows-and-Transition-Helpers.md
++++ b/Scripted-Workflows-and-Transition-Helpers.md
+@@ -13,12 +13,12 @@ In traditional project management tools, workflow rules are either simple notifi
+ ```mermaid
+ flowchart TD
+     Drag["User / Agent moves card: In Progress -> Done"] --> HelperEngine["Transition Helper Engine"]
+-    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links"]
+-    Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters"]
++    HelperEngine --> Stage1["Stage 1: Synchronous Validator (Tier A Wasm) - Verify blockers resolved - Verify Definition of Done criteria & PR links"]
++    Stage1 -->|PASS| Stage2["Stage 2: Synchronous Field Mutator (Tier A) - Auto-tag labels & priority - Update cycle velocity counters"]
+     Stage1 -->|VETO| VetoInstant["Transition Rejected (422 Unprocessable)"]
+-    Stage2 --> Stage3["Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (⏳🤖)<br/>- Dispatches forensic audit to agent"]
+-    Stage3 -->|Approved| Approved["Gate Approved (✅🤖)<br/>Card lands cleanly in Done column"]
+-    Stage3 -->|Vetoed| VetoSnap["Gate Veto (🛑🤖)<br/>240ms spring snap-back to In Progress<br/>Itemized rejection posted to activity feed"]
++    Stage2 --> Stage3["Stage 3: Asynchronous Gate Hold (Tier B Async Agent) - Card enters pending_agent_gate hold (⏳🤖) - Dispatches forensic audit to agent"]
++    Stage3 -->|Approved| Approved["Gate Approved (✅🤖) - Card lands cleanly in Done column"]
++    Stage3 -->|Vetoed| VetoSnap["Gate Veto (🛑🤖) - 240ms spring snap-back to In Progress - Itemized rejection posted to activity feed"]
+ ```
+ 
+ ---
+@@ -43,13 +43,25 @@ Every attached transition helper specifies an explicit failure policy to determi
+ 
+ Project Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.
+ 
+-![Workflow Transition Studio and Dry-Run Drawer](images/15-workflow-transition-studio.png)
++![Workflow Transition Studio - Desktop Light](images/slice5-workflow-studio-desktop-1440x900-light.png)
+ 
+ ### Studio Capabilities
+ - **State Transition Matrix:** Select any valid transition path (e.g. `In Progress -> In Review`, `In Review -> Done`).
+ - **Pipeline Reordering:** Drag to reorder validators and mutators in the execution chain.
+ - **Mutable Field Checkboxes:** Explicitly define which fields the transition helper is permitted to modify, enforcing least-privilege mutation boundaries.
+ 
++![Attach Workflow Hook Dialog](images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png)
++
++### Step-by-Step Guide: Attaching Workflow Transition Hooks with Dry-Run
++
++1. **Open Workflow Studio:** Navigate to `/projects/<PROJECT_KEY>/settings/workflows`.
++2. **Select Transition Rule:** Locate the transition rule card matching your target lifecycle change (e.g. `In Progress -> Done` or `In Review -> Done`).
++3. **Click Attach Hook:** Click the **+ Attach Hook** button on the transition rule card to open the Attach Workflow Hook Dialog.
++4. **Configure Hook Metadata:** Specify a descriptive Hook Name (e.g. `reality-checker-done-gate`), select the Hook Kind (`sync_validator`, `sync_mutator`, or `agent_interceptor`), and choose the Failure Policy (`fail_closed` to block transition on error/timeout, or `fail_open_warn` to log a warning while permitting the transition).
++5. **Select Engine or Agent Definition:** For Wasm modules, choose an approved module. For Agent Interceptors, select the registered Agent Definition (grouped by harness: CLI Pipe, In-App SDK, or Remote Runner); the dialog auto-populates the agent's real timeout (between 1 and 300,000 ms, e.g. `60000ms`). If using mutators, select permitted mutable fields (`labels`, `priority`, `assignees`, `start_date`, `due_date`, `cycle`, or `custom_fields.<slug>`).
++6. **Save Hook:** Click **Attach Hook** to save the rule to the pipeline.
++7. **Simulate in Dry-Run Drawer:** Click the **Dry-Run** button on the transition rule, select a sample ticket fixture or live issue key, click **Run Dry-Run** to execute the pipeline inside a simulated non-mutating sandbox, and inspect individual hook execution timings (e.g. `1.2ms`, `3.4ms`), returned logs, and allowed/vetoed verdicts before deploying to production.
++
+ ### The Non-Persistent Dry-Run Drawer
+ Testing workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:
+ - Select an existing ticket fixture or pick a live issue.
+@@ -78,7 +90,7 @@ sequenceDiagram
+     Drawer-->>Admin: Display green "Transition Allowed: Changes would commit"
+ ```
+ 
+-![Workflow Studio Dry-Run Drawer Simulation](images/50-workflow-studio-dry-run-drawer.png)
++![Workflow Studio Dry-Run Drawer Simulation](images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png)
+ 
+ ---
+ 
+@@ -89,7 +101,16 @@ Autonomous agents evaluating transition gates often require access to source cod
+ - The volume mount is strictly enforced as read-only (`:ro bare mirror`).
+ - Agents can run `git diff`, `git log`, and code analysis against the mirror, but all write attempts fail at the OS kernel boundary.
+ 
+-![Git Repository Bindings Modal](images/51-workflow-bind-git-repo-modal.png)
++![Git Repository Bindings Modal](images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png)
++![Git Repository Bindings Modal Architecture](images/51-workflow-bind-git-repo-modal.png)
++
++### Step-by-Step Guide: Binding Git Repositories
++
++1. **Access Project Repository Bindings:** Navigate to `/projects/<PROJECT_KEY>/settings/workflows` and scroll down to the Git Repository Bindings section.
++2. **Open Repository Binding Dialog:** Click **+ Bind Git Repository** to open the repository configuration drawer.
++3. **Specify Binding Parameters:** Enter the Repository Slug (e.g. `kanban-core`), remote repository URL (`remote_url`), default tracking branch or ref (`default_ref`, e.g. `main`), access mode (`ro_vfs_mount` or `bare_git_tools`), and optional credential binding (`workspace-pat` or `ssh-key`).
++4. **Enforce Read-Only Security Invariant:** The backend provisions a bare mirror under `/var/lib/kanban/repos/<project>/<slug>.git` with strict read-only POSIX permissions (`:ro`). Even if an agent gains shell execution capability inside a runner, commits or branch writes are rejected at the filesystem level.
++5. **Verify Live Mirror Refresh:** Click **Refresh Mirror** to trigger an immediate background fetch and inspect the last sync timestamp, head commit SHA, and branch count directly in the status table.
+ 
+ ---
+ 
+@@ -112,17 +133,9 @@ stateDiagram-v2
+ 
+ ### The Board Interaction States
+ 
+-1. **Pending Hold (`⏳🤖`):**
+-   - The card displays an amber countdown timer and progress indicator.
+-   - The ticket enters database status `pending_agent_gate`.
+-   - Other users viewing the board see the real-time hold status over WebSockets.
+-2. **Gate Veto and 240ms Spring Snap-Back (`🛑🤖`):**
+-   - If the agent discovers a defect or missing verification proof, the gate is vetoed.
+-   - The board executes a physics-based 240ms spring snap-back animation, returning the card to its original column.
+-   - A non-intrusive toast notification alerts the user, and the agent automatically posts an itemized rejection explanation to the ticket's `🤖 Gates` activity feed.
+-3. **Gate Approval (`✅🤖`):**
+-   - When all criteria are certified, the gate resolves to approved.
+-   - The card transitions smoothly into the destination column, stamped with an immutable cryptographic verification badge.
++- **Pending Hold (⏳🤖):** The card displays an amber countdown timer and progress indicator. The ticket enters database status `pending_agent_gate`. Other users viewing the board see the real-time hold status over WebSockets.
++- **Gate Veto and 240ms Spring Snap-Back (🛑🤖):** If the agent discovers a defect or missing verification proof, the gate is vetoed. The board executes a physics-based 240ms spring snap-back animation, returning the card to its original column. A non-intrusive toast notification alerts the user, and the agent automatically posts an itemized rejection explanation to the ticket's `🤖 Gates` activity feed.
++- **Gate Approval (✅🤖):** When all criteria are certified, the gate resolves to approved. The card transitions smoothly into the destination column, stamped with an immutable cryptographic verification badge.
+ 
+ ---
+ 
+@@ -131,21 +144,21 @@ stateDiagram-v2
+ You can enforce automated Definition-of-Done verification on any project board in three steps without writing custom glue code:
+ 
+ ### Step 1: Register and Probe Your AI Provider (`/admin/ai`)
+-1. Open **AI Providers & Token Caps Studio** at `/admin/ai` and click **`+ Register Provider`**.
+-2. Place your API secret key in the **API Secret Key** field at the top of the drawer (optional for local Ollama), configure the **HTTP Base URL** and hard **Cutoff Timeout (ms)** (for example `20000` ms or `35000` ms), and click **`🔍 Probe Models`** to replace defaults exclusively with live discovered models.
++1. Open **AI Providers & Token Caps Studio** at `/admin/ai` and click **+ Register Provider**.
++2. Place your API secret key in the **API Secret Key** field at the top of the drawer (optional for local Ollama), configure the **HTTP Base URL** and hard **Cutoff Timeout (ms)** (for example `20000` ms or `35000` ms), and click **🔍 Probe Models** to replace defaults exclusively with live discovered models.
+ 
+ ![Gemini Provider Editor with Top API Key and Probed Models](images/62-ai-provider-gemini-top-key-probe.png)
+ 
+ ![Ollama Provider Editor with Live Probed Models and Cutoff Timeout](images/63-ai-provider-ollama-probed-models.png)
+ 
+ ### Step 2: Register an Agent Definition (`/admin/agents`)
+-1. Open **Autonomous Agent Definitions Studio** at `/admin/agents` and click **`+ Register Agent`**.
++1. Open **Autonomous Agent Definitions Studio** at `/admin/agents` and click **+ Register Agent**.
+ 2. Choose **In-App SDK**, pick your provider (`ollama`, `openai`, or `gemini`), click one of the **Probed Models** quick-pick chips (such as `gemma3:4b` or `gpt-4o-mini`), set the timeout cutoff, and enter your QA rubric in **System Instructions**.
+ 
+ ![QA Done Gate Agent Definition with Probed Model Quick-Picks](images/64-agent-qa-done-definition.png)
+ 
+ ### Step 3: Attach the Hook to `In Progress -> Done` via `+ Workflow`
+-1. On the Kanban board, click **`+ Workflow`** on the **`Done`** column header (or open `/projects/KAN/settings/workflows`).
++1. On the Kanban board, click **+ Workflow** on the **Done** column header (or open `/projects/KAN/settings/workflows`).
+ 2. Select `From State: In Progress`, `To State: Done`, `Hook Kind: Agent Transition Helper`, your `@qa-done-gate` agent, and `Failure Policy: Fail-Closed`, then click **Attach Hook**.
+ 
+ ![Attach Workflow Helper Hook Dialog for In Progress to Done](images/65-workflow-attach-qa-done-gate.png)
+@@ -162,11 +175,55 @@ Attach an `agent_interceptor` or Tier A Wasm `sync_validator` on `Todo -> In Pro
+ 
+ ### Idea 3: Automated Definition-of-Done QA Gate (`In Progress -> Done`)
+ Require completed acceptance criteria and documented unit/QA verification evidence before any card can land in `Done`:
+-- **Positive Transition (`KAN-1` Approved):** A ticket with checked Acceptance Criteria and documented Verification Proof passes the gate, lands in `Done`, and receives a persisted `## ✅🤖 Workflow Transition Gate Approved` rationale comment.
++- **Positive Transition (KAN-1 Approved):** A ticket with checked Acceptance Criteria and documented Verification Proof passes the gate, lands in `Done`, and receives a persisted `## ✅🤖 Workflow Transition Gate Approved` rationale comment.
+ 
+ ![Positive Gate Approval Landing Ticket in Done](images/66-qa-gate-positive-approved-done.png)
+ 
+-- **Negative Transition (`KAN-2` Vetoed):** An unverified or impossible ticket (such as `"Build a rocket ship and serve ice cream on Saturn"` with no design doc, no tests, and no proof) is **vetoed** and kept safely in `In Progress` with an itemized `🛑🤖 Gate` rejection comment.
++- **Negative Transition (KAN-2 Vetoed):** An unverified or impossible ticket (such as `"Build a rocket ship and serve ice cream on Saturn"` with no design doc, no tests, and no proof) is **vetoed** and kept safely in `In Progress` with an itemized `🛑🤖 Gate` rejection comment.
+ 
+ ![Negative Gate Veto Blocking Saturn Ice Cream Ticket in In Progress](images/67-qa-gate-negative-saturn-ice-cream-vetoed.png)
+ 
++---
++
++## Live Walkthrough: Reality-Checker Done Gate with Self-Hosted Ollama (`nemotron-3-super:latest`)
++
++This walkthrough captures an end-to-end verification on a fresh standalone `👍kanban` container backed by a self-hosted **Ollama** server running `nemotron-3-super:latest` (123.6B Q4_K_M reasoning model).
++
++### 1. Register and Probe the Self-Hosted Ollama Provider (`/admin/ai`)
++1. Open **AI Providers & Token Caps Studio** (`/admin/ai`) and register an `ollama` provider pointing to your LAN Ollama host (for example `http://192.168.1.101:11434`).
++2. Click **Probe Models** to verify live connectivity and allowlist `nemotron-3-super:latest`.
++3. Set the provider cutoff timeout to at least `60000` ms for large reasoning models (`nemotron-3-super:latest` typically completes a full gate evaluation in `13s` to `25s`).
++
++![Ollama Provider Probed with nemotron-3-super:latest](images/rc-ollama-01-provider-probe.png)
++
++### 2. Define the `reality-checker` Agent (`/admin/agents`)
++1. Open **Autonomous Agent Definitions Studio** (`/admin/agents`) and click **+ Register Agent**.
++2. Configure Harness Kind as `in_app_sdk`, Provider Kind as `ollama`, and Model as `nemotron-3-super:latest`.
++3. Set Timeout to `60000` ms (matching the `StructuredRequest.ttft_deadline_ms` limit of `<= 300000` ms, 1..300000).
++4. Enter System Instructions defaulting to `"reject"` unless the ticket includes checked-off Definition of Done items, passing unit test and build outputs, and explicit forensic verification proof.
++
++![Reality-Checker Agent Definition using ollama/nemotron-3-super:latest](images/rc-ollama-02-agent-definition.png)
++
++### 3. Attach the Fail-Closed Hook on `In Progress -> Done`
++1. In your project's **Workflow Transition Studio** (`/projects/<KEY>/settings/workflows`), attach an `agent_interceptor` hook named `reality-checker-done-gate` targeting `In Progress -> Done` with **Failure Policy: Fail-Closed** and agent `@reality-checker`.
++
++![Reality-Checker Workflow Hook Attached to In Progress to Done](images/rc-ollama-03-workflow-hook.png)
++
++### 4. Positive Transition (`RCD-1`: Approved with Comment and Allowed to `Done`)
++A work item (`RCD-1: Implement /healthz Readiness Endpoint with Unit Tests`) containing checked-off Definition of Done items, passing `pytest` / `ruff` / `mypy` results, and documented `docs/qa/RCD-1/` proof artifacts is moved from `In Progress` to `Done`:
++- The API returns **HTTP 202 Accepted** and dispatches the asynchronous gate to `in_app_sdk (ollama/nemotron-3-super:latest)`.
++- Within ~13 seconds, the gate posts a persisted **## ✅🤖 Workflow Transition Gate Approved** comment (`All Definition of Done items are completed and forensic verification passes.`) and commits the state transition to **Done**.
++
++![Positive Transition Board View Landing RCD-1 in Done](images/rc-ollama-04-positive-done.png)
++
++![Positive Transition Ticket Activity and Approval Comment on RCD-1](images/rc-ollama-05-positive-comment.png)
++
++### 5. Negative Transition (`RCD-2`: Vetoed with Comment and Blocked in `In Progress`)
++A work item (`RCD-2: Deploy Quantum Warp Drive to Production`) with unchecked Definition of Done items, missing tests, and no verification proof is moved from `In Progress` to `Done`:
++- Within ~22 seconds, `nemotron-3-super:latest` evaluates the spotlighted ticket context and returns a `reject` verdict.
++- Because the hook is **Fail-Closed**, the transition is **blocked** (`RCD-2` remains in **In Progress**) and `@realitycheckerqagate` persists a **🛑🤖 Gate** rejection comment citing the exact missing criteria (skipped design document, zero unit tests, unrun build/lint checks, and lack of trusted proof).
++
++![Negative Transition Board View Keeping RCD-2 Blocked in In Progress](images/rc-ollama-06-negative-blocked.png)
++
++![Negative Transition Ticket Activity and Rejection Comment on RCD-2](images/rc-ollama-07-negative-comment.png)
++
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+index 907f8ce..8cd1b73 100644
+--- a/Studio-Configuration-Reference.md
++++ b/Studio-Configuration-Reference.md
+@@ -5,80 +5,279 @@ Authoritative technical reference specification for all configuration attributes
+ ---
+ 
+ ## 1. Workspace Studio
+-The Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.
++The Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspace-settings`) manages top-level tenant policies, display metadata, session lifetimes, trash retention, export permissions, and air-gap network boundaries under strict AAL2 authentication.
+ 
++![Workspace Settings General - Desktop Light](images/slice5-workspace-settings-general-desktop-1440x900-light.png)
++![Workspace Settings General - Desktop Dark](images/slice5-workspace-settings-general-desktop-1440x900-dark.png)
++![Workspace Settings General - Tablet Landscape](images/slice5-workspace-settings-general-tablet-landscape-1024x768.png)
++![Workspace Settings General - Tablet Portrait](images/slice5-workspace-settings-general-tablet-portrait-768x1024.png)
++![Workspace Settings General - Mobile Portrait](images/slice5-workspace-settings-general-mobile-portrait-390x844.png)
++![Workspace Settings Nested Groups](images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png)
++![Workspace Settings Trash Retention](images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png)
+ 
+ ### Workspace Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |
+-| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |
+-| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |
+-| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |
+-| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |
+-| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |
+-| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |
+-| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |
++| `name` | Canonical internal name of the workspace | UTF-8 String (1 to 200 characters) | Required at provisioning | Tenant root identifier in PostgreSQL RLS context |
++| `slug` | URL-safe workspace slug used in REST routing and browser paths | Lowercase alphanumeric ASCII with hyphens (2 to 63 chars) | Derived from name | Immutable tenant boundary in database session context |
++| `display_name` | Human-readable workspace title displayed in navigation header | UTF-8 String (1 to 80 characters) | `"Workspace"` | Visible across topbar, breadcrumbs, and notification emails |
++| `default_project_visibility` | Baseline privacy level assigned to newly initialized projects | `"private"`, `"workspace"` | `"private"` | Prevents accidental cross-project disclosure in multi-team workspaces |
++| `session_idle_timeout_min` | Inactivity window before user session transitions to stale | Integer between 5 and 720 minutes | 60 | Enforces local re-authentication after inactivity period |
++| `session_absolute_timeout_min` | Maximum lifetime of an authentication session cookie | Integer between 60 and 10080 minutes | 720 (12h) | Requires full re-login upon absolute expiration |
++| `trash_retention_days` | Duration soft-deleted items remain in Trash before permanent purge | Integer between 7 and 365 days | 30 | Governs compliance data retention and recovery windows |
++| `mcp_key_max_ttl_days` | Maximum validity period permitted for minted MCP API keys | Integer between 1 and 365 days | 90 | Caps autonomous agent credential lifetimes |
++| `air_gap_mode` | Strict isolation mode blocking external cloud AI and external egress | Boolean (`true` / `false`) | `false` | When active, restricts AI execution strictly to local Ollama and on-prem runners |
++| `default_skip_loaded_sequence_numbers` | Agent-Safe Sequence Numbering policy toggle | Boolean (`true` / `false`) | `false` | Skips culturally and technically loaded sequence numbers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`) during issue sequence allocation |
++| `issue_export_enabled` | Allows exporting work items to JSON or CSV archives | Boolean (`true` / `false`) | `true` | Controlled data exfiltration prevention |
++| `issue_export_allowed_roles` | Explicit RBAC roles permitted to export work item data | List of role strings (`"workspace_admin"`, `"project_admin"`, `"member"`, `"guest"`) | `["workspace_admin", "project_admin", "member"]` | Restricts bulk export capability to authorized team members |
++| `issue_import_enabled` | Allows lossless ingestion from external trackers | Boolean (`true` / `false`) | `true` | Gates administrative bulk ingestion workflows |
++| `report_export_enabled` | Allows exporting statistical flow reports and audit logs | Boolean (`true` / `false`) | `true` | Governs access to compliance and telemetry exports |
++| `report_export_allowed_roles` | Roles allowed to download statistical flow telemetry | List of role strings (`"ADMIN"`, `"MEMBER"`) | Both roles | Prevents unauthorized aggregation of engineering velocity data |
++
++### Setting-by-Setting Technical Paragraphs (Workspace Settings)
++
++- **name:** Internal database name representing the workspace tenant in PostgreSQL. Required during bootstrap and immutable across standard operation, binding the tenant scope for Row-Level Security policies.
++- **slug:** URL-safe ASCII slug identifying the tenant in REST API endpoints (`/api/v1/workspaces/{slug}`) and browser URL routes (`/{slug}/projects`). Must be between 2 and 63 alphanumeric characters and hyphens.
++- **display_name:** The human-facing label rendered on topbars, page document titles, mobile shells, and notification cards. Supports UTF-8 strings up to 80 characters with full internationalization.
++- **default_project_visibility:** Sets the default privacy tier assigned when users create new projects. Options are `"private"` (accessible strictly to explicitly invited members and project administrators, default) or `"workspace"` (visible to all authenticated workspace members).
++- **session_idle_timeout_min:** Controls how long an idle user session remains active before requiring step-up authentication or PIN challenge. Configurable from 5 minutes to 720 minutes (12 hours), with a standard enterprise default of 60 minutes.
++- **session_absolute_timeout_min:** Hard maximum duration for any active session cookie regardless of user activity. Configurable between 60 minutes (1 hour) and 10080 minutes (7 days), defaulting to 720 minutes (12 hours).
++- **trash_retention_days:** Defines how many days soft-deleted work items, docs, stickies, and cycles reside in the Trash Studio (`/trash`) before being permanently purged by the background vacuum worker. Values range from 7 to 365 days (default 30 days).
++- **mcp_key_max_ttl_days:** Upper boundary enforced when administrators or developers mint Model Context Protocol (MCP) scoped tokens. The backend rejects any key creation request specifying a TTL exceeding this configured cap (1 to 365 days, default 90 days).
++- **air_gap_mode:** When set to `true`, 👍kanban activates zero-external-egress enforcement. All outbound requests to cloud AI providers (OpenAI, Gemini) and remote webhooks are fail-closed blocked at the transport layer, restricting agent pipelines exclusively to LAN Ollama servers and local CLI runners.
++- **default_skip_loaded_sequence_numbers:** An Agent-Safe Sequence Numbering policy flag. When enabled, the sequence allocator automatically skips culturally and technically loaded issue sequence numbers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`) during work item creation (DB/API default `false`).
++- **issue_export_enabled:** Master toggle for work item data extraction. Disabling this flag blocks `/api/v1/projects/{project}/issues/export` across both the REST API and the web interface to prevent bulk data exfiltration.
++- **issue_export_allowed_roles:** Role allowlist determining who can trigger issue exports. Configurable with combinations of `"workspace_admin"`, `"project_admin"`, `"member"`, and `"guest"`, defaulting to `["workspace_admin", "project_admin", "member"]` (3 roles, excluding guest accounts).
++- **issue_import_enabled:** Administrative toggle governing data ingestion from external platforms (Plane, Jira, GitHub, Linear). Disabling this blocks `/api/v1/admin/imports` to preserve data integrity during audit periods.
++- **report_export_enabled:** Controls whether statistical flow telemetry, Monte Carlo lead-time forecasts, and velocity percentiles can be downloaded as CSV or JSON payloads.
++- **report_export_allowed_roles:** Specifies the minimum permission tier required to export engineering flow reports (options include `"ADMIN"` and `"MEMBER"`).
++
++### Step-by-Step Guide: Configuring Workspace Policies and Trash Retention
++
++1. **Access Workspace Settings:** Click your avatar or the settings cog in the top navigation bar and select **Workspace Settings** (or navigate directly to `/workspaces/<slug>/settings`).
++2. **Review General Policies:** In the General tab, update your Display Name, verify the Workspace Slug, and select the Default Project Visibility (`Private` or `Workspace`).
++3. **Configure Session Security:** Under Session Lifetimes, configure Session Idle Timeout (e.g. 60 minutes) to force re-authentication for unattended terminals, and set Session Absolute Timeout (e.g. 720 minutes / 12 hours) to mandate periodic credential rotation.
++4. **Tune Compliance & Trash Retention:** In the Data Lifecycle & Trash card, adjust Trash Retention Days between 7 and 365 days (default 30 days). Soft-deleted work items remain recoverable in Trash for this duration before automated irreversible purging.
++5. **Manage Air-Gap and Export Restrictions:** If operating in a sovereign or disconnected environment, toggle Air-Gap Mode to ON to restrict agent and runner execution to LAN hosts. Review Allowed Export Roles to govern bulk data extraction.
++6. **Save Changes:** Click **Save Settings** to persist the configuration to the database and audit ledger. Changes take effect across the workspace immediately.
+ 
+ ---
+ 
+-## 2. Project Studio
+-The Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.
+-
++## 2. Project Studio & Personal Settings
++The Project Studio (`/projects/:proj/settings`) configures project workflows, custom status states, WIP limits, priority emojis, labels, and two-stage project deletion. Personal Settings (`/settings` or `/profile`) manages user profiles, canonical timezones, custom avatars, password rotation, Passkeys, TOTP 2FA, recovery codes, and external identity linking.
++
++![Project Settings Priorities - Desktop Light](images/slice5-project-settings-priorities-desktop-1440x900-light.png)
++![Project Settings Priorities - Desktop Dark](images/slice5-project-settings-priorities-desktop-1440x900-dark.png)
++![Project Settings Priorities - Tablet Landscape](images/slice5-project-settings-priorities-tablet-landscape-1024x768.png)
++![Project Settings Priorities - Tablet Portrait](images/slice5-project-settings-priorities-tablet-portrait-768x1024.png)
++![Project Settings Priorities - Mobile Portrait](images/slice5-project-settings-priorities-mobile-portrait-390x844.png)
++![Project Settings WIP Limits - Desktop Light](images/slice5-project-settings-wip-limits-desktop-1440x900-light.png)
++![Project Settings WIP Limits - Desktop Dark](images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png)
++![Project Settings WIP Limits - Tablet Landscape](images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png)
++![Project Settings WIP Limits - Tablet Portrait](images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png)
++![Project Settings WIP Limits - Mobile Portrait](images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png)
++![Project Settings Danger Zone - Desktop Light](images/slice5-project-settings-danger-zone-desktop-1440x900-light.png)
++![Project Settings Danger Zone - Desktop Dark](images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png)
++![Project Settings Danger Zone - Tablet Landscape](images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png)
++![Project Settings Danger Zone - Tablet Portrait](images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png)
++![Project Settings Danger Zone - Mobile Portrait](images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png)
+ 
+ ### Project Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |
+-| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |
+-| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |
+-| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |
+-| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |
+-| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |
+-| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |
+-| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |
+-| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |
++| `name` | Human-readable project display name | UTF-8 String (1 to 120 characters) | Required at creation | Scoped to workspace; surfaced in topbars and command palette |
++| `key` | Issue identifier prefix (e.g. `KAN`, `CORE`) | Uppercase ASCII alphanumeric `^[A-Z][A-Z0-9]{1,9}$` (2 to 10 chars) | Required at creation | Immutable; generates unique issue keys across all surfaces |
++| `state_name` | Name of workflow state (e.g. `In Progress`) | UTF-8 String (1 to 64 characters) | Required | Displayed on board columns, list groupings, and peek drawers |
++| `group` | Lifecycle category mapping | `"backlog"`, `"unstarted"`, `"started"`, `"completed"`, `"cancelled"` | Required | Drives cycle velocity metrics, burn-downs, and SLA calculations |
++| `color_hex` | Hexadecimal color accent for state badge | 7-character hex code (`^#[0-9A-Fa-f]{6}$`) | `#3B82F6` | Provides distinct visual identification across board and table views |
++| `sort_order` | Execution ordering of states across the board | Integer (0 to 1000) | `0` | Controls horizontal board lane arrangement and transition flow |
++| `is_default` | Default state assigned to newly created issues | Boolean (`true` / `false`) | `false` | Exactly one state per project can be designated default |
++| `wip_soft_limit` | Warning threshold for work-in-progress cards | Integer between 1 and 999 (or `null`) | `null` (None) | Renders subtle amber capacity warnings when column count is exceeded |
++| `wip_hard_limit` | Strict blocking limit for work-in-progress cards | Integer between 1 and 999 (or `null`) | `null` (None) | Disallows moving or creating cards into lane when limit is reached |
++| `priority_slug` | Normalized priority key (e.g. `urgent`, `high`) | Lowercase regex `^[a-z][a-z0-9_-]{0,31}$` | Required | Standardized priority value used in query filters and formula AST |
++| `priority_label` | Human-readable priority label with emoji | UTF-8 String (1 to 64 characters) | Required | Displayed on card badges, priority dropdowns, and peek rails |
++| `exclusive_group` | Mutual exclusion category for label grouping | Lowercase regex `^[a-z0-9][a-z0-9_-]{0,31}$` | `null` (Optional) | Enforces single-selection among conflicting tags (e.g. `env:prod`) |
++
++### Setting-by-Setting Technical Paragraphs (Project Settings)
++
++- **name:** The project name displayed across navigation breadcrumbs, issue peek drawers, and workspace summary cards. Scoped strictly to the active workspace (max 120 characters).
++- **key:** The immutable uppercase prefix key identifying work items within this project (e.g. `KAN` generates `KAN-1`, `KAN-2`). Validated against `^[A-Z][A-Z0-9]{1,9}$` (between 2 and 10 alphanumeric characters).
++- **state_name:** The human-facing title of a workflow state (e.g. `Backlog`, `In Progress`, `Code Review`, `Done`). Renaming a state immediately reflects across all active cards without modifying historical audit events.
++- **group:** The canonical lifecycle category to which the state belongs (`backlog`, `unstarted`, `started`, `completed`, `cancelled`). Group mapping is fundamental: cycle burndowns, cumulative flow diagrams, and throughput percentiles aggregate work based on group identity.
++- **color_hex:** A 7-character hexadecimal color string (`#RRGGBB`) applied to column lane headers, state pills, and board drop zones to ensure high contrast and immediate readability.
++- **sort_order:** An integer specifying the left-to-right presentation order of board columns and workflow dropdowns. Lower numbers appear earlier in the delivery lifecycle.
++- **is_default:** Designates the initial workflow state automatically assigned when a contributor quick-creates an issue without specifying a state. Exactly one state per project can be default.
++- **wip_soft_limit:** An advisory Work-In-Progress limit for Kanban columns (1 to 999). When the active card count exceeds this number, the column header displays an amber count badge (`5/4 WIP`) without preventing drops.
++- **wip_hard_limit:** A strict Work-In-Progress enforcement threshold (1 to 999). When reached, further card drops or status changes targeting this column are rejected at the API boundary (`422 WIP_LIMIT_EXCEEDED`). Must be greater than or equal to `wip_soft_limit`.
++- **priority_slug:** Machine-readable identifier for priority tiers (`urgent`, `high`, `medium`, `low`, `none`). Used in Safe Formula evaluations, MCP tool queries, and REST search filters.
++- **priority_label:** The user-facing priority string, typically combining an expressive semantic emoji and clear text (e.g. `🔴 Urgent`, `🟠 High`, `🟡 Medium`, `🔵 Low`).
++- **exclusive_group:** An optional label category constraint. When applied to tags (e.g. `tier:free`, `tier:pro`), applying one tag from the group automatically removes any previously attached tags in that same exclusive group.
++
++### Step-by-Step Guide: Setting Project WIP Limits and Workflow States
++
++1. **Navigate to Project Settings:** Open your target project (e.g. `/projects/KAN`) and click **Settings** in the project sidebar.
++2. **Open Workflow States Studio:** Select the **States** tab to view all currently configured workflow states grouped by lifecycle phase.
++3. **Add or Edit a State:** Click **+ Add State** or click the edit icon on an existing state row. Specify the State Name (e.g. `In Review`), assign the Lifecycle Group (`started` for active work, `completed` for resolved work), choose an Accent Color, and check Make Default if newly created tickets should land in this column.
++4. **Configure WIP Limits:** Enter a Soft WIP Limit (e.g. `4`) to flag column congestion, and enter a Hard WIP Limit (e.g. `6`) if your team enforces strict pull-based flow and prohibits card overloading (`wip_soft_limit <= wip_hard_limit`).
++5. **Reorder Board Columns:** Drag states up and down using the grip handle to adjust their execution sort order from left to right.
++6. **Save Changes:** Click **Save States** to persist the configuration. Board columns update immediately across all connected WebSockets.
++
++---
++
++### Personal Settings
++The Personal Settings Studio (`/settings` or `/profile`) provides comprehensive user identity self-service, including canonical timezone localization, avatar upload with automatic sanitization and cropping, password rotation with server-admin entropy rules, WebAuthn Passkeys, TOTP two-factor authentication, one-time emergency recovery codes, and external OIDC/LDAP identity account linking.
++
++![Personal Settings - Desktop Light](images/slice5-personal-settings-desktop-1440x900-light.png)
++![Personal Settings - Desktop Dark](images/slice5-personal-settings-desktop-1440x900-dark.png)
++![Personal Settings - Tablet Landscape](images/slice5-personal-settings-tablet-landscape-1024x768.png)
++![Personal Settings - Tablet Portrait](images/slice5-personal-settings-tablet-portrait-768x1024.png)
++![Personal Settings - Mobile Portrait](images/slice5-personal-settings-mobile-portrait-390x844.png)
++
++### Personal Settings Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `display_name` | Public user profile name displayed to colleagues | UTF-8 String (1 to 120 characters) | User's full name | Sanitized against invisible Unicode characters and control codes |
++| `timezone` | Canonical IANA timezone used for date formatting | 15 canonical timezones (e.g. `America/New_York`, `UTC`) | `UTC` | Localizes ticket creation, audit timestamps, and SLA due date displays |
++| `avatar` | User profile photograph or custom avatar | PNG, JPEG, or WebP image file (<= 2 MiB) | Default letter icon | Re-encoded server-side via Pillow; SVG uploads rejected fail-closed |
++| `current_password` | Verification of existing credentials before password update | String matching current password | Required on change | Prevents unauthorized password changes on unattended sessions |
++| `new_password` | Updated local authentication password | Min 12 chars (Min 14 for Server Admins) | User-supplied | Salted and hashed via Argon2id with server-side pepper |
++| `passkeys` | FIDO2 / WebAuthn biometric security keys | Platform (Touch ID/Hello) or Cross-Platform (YubiKey) | None enrolled | Hardware-bound cryptographic public key authentication |
++| `totp_enabled` | Time-based one-time password (RFC 6238) 2FA | 6-digit verification code from authenticator app | Disabled | Requires AAL2 step-up challenge to disable once activated |
++| `recovery_codes` | Single-use emergency account recovery backup codes | 10 alphanumeric single-use codes | Generated on 2FA setup | Stored hashed in PostgreSQL; invalidated upon individual consumption |
++| `linked_identities` | External OIDC, Google, GitHub, or LDAP accounts | Verified external provider identity claims | Primary login card | Enables single-sign-on without password storage; unlinking requires AAL2 |
++
++### Setting-by-Setting Technical Paragraphs (Personal Settings)
++
++- **display_name:** The user's public identity rendered across comments, avatar badges, activity feeds, and assignment menus. Cleaned server-side using Unicode guards to strip zero-width spaces and spoofing homoglyphs.
++- **timezone:** The user's localized timezone selection, chosen from 15 canonical IANA timezones (such as `America/New_York`, `Europe/London`, `Asia/Tokyo`, `UTC`). All timestamps remain stored canonically as UTC in PostgreSQL and are formatted to the user's local offset on the client.
++- **avatar:** Profile picture uploaded via `PUT /api/v1/auth/me/avatar`. The backend enforces a strict 2 MiB size cap and validates the raster payload via content-sniffing. Dangerous vector formats (SVG) are rejected fail-closed to eliminate XSS risks, and images are re-encoded to sanitized PNG format.
++- **current_password:** Required whenever a user modifies their local password via `POST /api/v1/auth/me/password`. Guards against session hijacking by requiring proof of current knowledge before modifying credentials.
++- **new_password:** The updated password. The platform enforces strict entropy requirements: standard users must supply at least 12 characters, while users possessing the `SERVER_ADMIN` role must supply at least 14 characters.
++- **passkeys:** WebAuthn credentials registered via `POST /api/v1/auth/webauthn/register:start` and `:finish`. Passkeys support both platform biometrics (Touch ID, Face ID, Windows Hello) and cross-platform hardware tokens (YubiKey). Each enrolled key displays nickname, enrolled date, and a non-intrusive **Test Passkey** verification button.
++- **totp_enabled:** Activates Time-Based One-Time Password verification for authenticator applications (Aegis, Google Authenticator, 1Password). Enrolled via QR code and verified with a 6-digit challenge code. Disabling TOTP requires mandatory AAL2 step-up verification.
++- **recovery_codes:** A set of 10 single-use emergency recovery codes generated when two-factor authentication is configured. Each code can be used exactly once to regain account access if hardware tokens or authenticator apps are lost.
++- **linked_identities:** Manages connected third-party enterprise identity cards (Google Workspace, GitHub, GitLab, Okta, Active Directory LDAP). Users can link multiple external accounts to a single local identity or unlink secondary providers after completing AAL2 step-up verification.
+ 
+ ---
+ 
+-## 3. Workflow Transition Studio
+-The Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.
++## 3. Workflow Transition Studio & Git Repo Bindings
++The Workflow Transition Studio (`/projects/:proj/settings/workflows`) coordinates lifecycle rules, pre-transition validators, field mutators, asynchronous AI agent gates, and read-only bare Git repository mirror bindings.
+ 
++![Workflow Transition Studio - Desktop Dark](images/slice5-workflow-studio-desktop-1440x900-dark.png)
++![Workflow Transition Studio - Tablet Landscape](images/slice5-workflow-studio-tablet-landscape-1024x768.png)
++![Workflow Transition Studio - Tablet Portrait](images/slice5-workflow-studio-tablet-portrait-768x1024.png)
++![Workflow Transition Studio - Mobile Portrait](images/slice5-workflow-studio-mobile-portrait-390x844.png)
+ 
+ ### Workflow Transition Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |
+-| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |
+-| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |
+-| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |
+-| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |
+-| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |
+-| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |
++| `name` | Descriptive label for transition helper hook | UTF-8 String (1 to 120 characters) | Required | Displayed in pipeline lists, dry-run logs, and error explanations |
++| `from_state` | Origin workflow state of the transition rule | Valid state name or `null` (Any state) | `null` (Wildcard) | Restricts hook evaluation to specific card movements |
++| `to_state` | Destination workflow state of the transition | Valid project state name | Required | The target column being protected by the transition helper |
++| `hook_kind` | Execution engine and evaluation timing | `"sync_validator"`, `"sync_mutator"`, `"agent_interceptor"` | `"sync_validator"` | Governs execution latency and synchronous vs asynchronous processing |
++| `failure_policy` | Action taken if helper times out or rejects | `"fail_closed"`, `"fail_open_warn"` | `"fail_closed"` | Fail-closed guarantees invalid transitions never commit |
++| `wasm_module_sha256` | SHA-256 digest of sandboxed Wasm module | 64-character lowercase hex string | Required for Wasm | Verifies bytecode authenticity before in-process execution |
++| `agent` | Identifier of registered autonomous agent | Valid agent slug (e.g. `reality-checker`) | Required for Agent | Binds asynchronous gate to configured LLM or CLI runner harness |
++| `timeout_ms` | Maximum allowed execution time in milliseconds | Integer between 1 and 300000 ms | 60000 for Agent | Protects transition queues from hanging subprocesses |
++| `allowed_mutable_fields` | Explicit field allowlist for mutator hooks | List of field names (`labels`, `priority`, `assignees`, `start_date`, `due_date`, `cycle`, `custom_fields.<slug>`) | `[]` (Empty) | Enforces least-privilege mutation; `state` and `description` are forbidden |
++| `repo_slug` | Identifier for project bare Git mirror | Regex `^[a-z0-9][a-z0-9-]{1,62}$` | Required | Names local bare mirror directory under `/var/lib/kanban/repos/` |
++| `remote_url` | Upstream Git repository clone URL | HTTPS or SSH Git URL | Required | Validated against SSRF policy before initiating background fetch |
++| `default_ref` | Primary branch or ref used for agent diff inspections | Valid Git ref name (e.g. `main`, `master`) | `"main"` | Baseline target branch used by reality-checker audits |
++| `access_mode` | Storage access mode for repository mirror | `"ro_vfs_mount"`, `"bare_git_tools"` | `"ro_vfs_mount"` | Enforces read-only filesystem or git tool execution |
++| `credential` | Optional credential reference for private repository authentication | `null`, `"workspace-pat"`, `"ssh-key"` | `null` | Secure token reference stored in credentials vault |
++
++### Setting-by-Setting Technical Paragraphs (Workflow Transition Studio & Repo Bindings)
++
++- **name:** The user-defined identifier assigned to the workflow hook (such as `qa-done-gate` or `enforce-pr-link`, 1 to 120 characters). Appears on pipeline transition cards, dry-run evaluation outputs, and timeline rejection entries.
++- **from_state:** The initial state of the card before transition (e.g. `In Progress`). Selecting `null` creates a wildcard rule matching transitions originating from any state into `to_state`.
++- **to_state:** The protected destination state (e.g. `Done`). The card cannot land in this state until all attached synchronous validators pass and all asynchronous agent gates approve.
++- **hook_kind:** Defines the execution engine: `"sync_validator"` runs fast in-process WebAssembly checks (<25ms); `"sync_mutator"` applies deterministic property updates; `"agent_interceptor"` dispatches an asynchronous background gate to an AI model or test runner.
++- **failure_policy:** The error handling invariant. `"fail_closed"` (default) blocks the transition immediately if the helper fails, times out, or errors. `"fail_open_warn"` logs an administrative warning to the activity ledger and allows the card transition to complete.
++- **wasm_module_sha256:** The cryptographic hash of the compiled WebAssembly bytecode module executed by the `wasmtime` engine. Prevents execution of unverified or tampered binaries.
++- **agent:** The slug of the registered autonomous agent (`@reality-checker`, `@security-auditor`) assigned to evaluate asynchronous gate transitions. The attach dialog groups available agents by execution harness (`cli_pipe`, `in_app_sdk`, `remote_runner`).
++- **timeout_ms:** The maximum wall-clock execution deadline allocated to the helper (validating between 1 and 300,000 ms, defaulting to 60,000 ms for agent interceptors).
++- **allowed_mutable_fields:** A strict security allowlist restricting which issue properties a `sync_mutator` hook can modify (`labels`, `priority`, `assignees`, `start_date`, `due_date`, `cycle`, and `custom_fields.<slug>`). Project invariants strictly forbid modifying `state` or `description_markdown` to prevent recursive transition loops and content tampering.
++- **repo_slug:** The local filesystem folder name allocated to the bare Git mirror. Must be a clean lowercase alphanumeric string with hyphens.
++- **remote_url:** The external Git repository URL (e.g. `https://github.com/org/repo.git`). The server validates the URL against an anti-SSRF policy (blocking RFC 1918 private IP addresses unless explicitly allowlisted) before establishing outbound connections.
++- **default_ref:** The primary branch or ref name against which code inspection scripts, PR validation checks, and diff analyses are evaluated (default `"main"`).
++- **access_mode:** Defines how agents access repository contents: `"ro_vfs_mount"` mounts a read-only filesystem tree, while `"bare_git_tools"` allows executing read-only Git query commands.
++- **credential:** Optional secret identifier (`"workspace-pat"` or `"ssh-key"`) used to authenticate against private upstream repositories without exposing cleartext credentials to agents.
++
++### Step-by-Step Guide: Attaching Workflow Transition Hooks with Dry-Run
++
++1. **Navigate to Workflow Studio:** Open `/projects/<PROJECT_KEY>/settings/workflows`.
++2. **Select Transition Rule:** Locate the transition rule card for your target state movement (e.g. `In Progress -> Done`).
++3. **Click Attach Hook:** Click the **+ Attach Hook** button to open the Attach Workflow Hook Dialog.
++4. **Define Hook Parameters:** Specify a unique Hook Name (e.g. `reality-checker-done-gate`), select the Hook Kind (`sync_validator`, `sync_mutator`, or `agent_interceptor`), and choose the Failure Policy (`fail_closed` to block unverified tickets, or `fail_open_warn` to log warnings while allowing progress).
++5. **Select Engine or Agent:** For Wasm, choose an approved module (e.g. `check-blockers-resolved`). For Agent Interceptors, select the target Agent Definition from the dropdown; the system automatically populates the agent's real timeout (between 1 and 300,000 ms, e.g. `60000ms`). For mutators, select permitted mutable fields (`labels`, `priority`, `assignees`, `start_date`, `due_date`, `cycle`, or `custom_fields.<slug>`).
++6. **Save Hook:** Click **Attach Hook** to commit the hook to the project's transition pipeline.
++7. **Simulate in Dry-Run Drawer:** Click the **Dry-Run** button on the rule card, choose a sample ticket fixture or enter a live issue key, click **Run Dry-Run** to execute the pipeline in a simulated, non-mutating sandbox, and inspect the execution timings (e.g. `1.2ms`, `3.4ms`), returned logs, and allowed/vetoed verdicts before deploying to production.
++
++### Step-by-Step Guide: Binding Git Repositories
++
++1. **Access Repository Bindings:** Navigate to `/projects/<PROJECT_KEY>/settings/workflows` and scroll down to the Git Repository Bindings section.
++2. **Click Bind Repository:** Click **+ Bind Git Repository** to open the repository configuration drawer.
++3. **Configure Repository Details:** Enter the Repository Slug (e.g. `kanban-core`), remote repository URL (`remote_url`), default tracking branch or ref (`default_ref`, e.g. `main`), access mode (`ro_vfs_mount` or `bare_git_tools`), and optional credential binding (`workspace-pat` or `ssh-key`).
++4. **Enforce Read-Only Mirror Invariant:** The system creates a local bare Git mirror with strict read-only permissions (`:ro`). Autonomous agents can query commit trees and run `git diff` during gate reviews, but write access is impossible.
++5. **Trigger Immediate Mirror Refresh:** Click **Refresh Mirror** to perform an initial fetch and verify that commit SHAs and branch references synchronize successfully.
+ 
+ ---
+ 
+-## 4. Custom Fields Studio
+-The Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.
++## 4. Custom Fields Studio & Dual-Control Escalation
++The Custom Fields Studio (`/projects/:proj/settings/custom-fields`) manages dynamic attributes, safe mathematical formulas, WebAssembly modules, and dual-control tenant scope escalations under AAL2 cryptographic verification.
+ 
++![Custom Fields Studio - Desktop Dark](images/slice5-custom-fields-studio-desktop-1440x900-dark.png)
++![Custom Fields Studio - Tablet Landscape](images/slice5-custom-fields-studio-tablet-landscape-1024x768.png)
++![Custom Fields Studio - Tablet Portrait](images/slice5-custom-fields-studio-tablet-portrait-768x1024.png)
++![Custom Fields Studio - Mobile Portrait](images/slice5-custom-fields-studio-mobile-portrait-390x844.png)
++![Custom Fields Editor Tier A](images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png)
++![Custom Fields Structured Format](images/slice5-custom-fields-structured-format-desktop-1440x900-light.png)
++![Custom Fields Dual Control Escalation](images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png)
+ 
+ ### Custom Fields Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`🧪`) |
+-| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |
+-| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |
+-| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |
+-| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |
+-| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |
+-| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |
+-| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |
+-| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |
+-| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |
++| `name` | Human-readable custom field title | String (1 to 80 characters) | Required | Displayed on ticket rails, table columns, and board badges |
++| `slug` | Unique identifier used in formulas and API queries | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |
++| `flavor` | Execution tier and underlying calculation engine | `"scalar"`, `"formula"`, `"wasm"`, `"nsjail"` | `"scalar"` | Determines execution latency and Standalone mode compatibility |
++| `sandbox_tier` | Multi-tier sandbox engine used for execution | `"scalar"`, `"wasm"` (Tier A), `"nsjail"` (Tier B) | `"wasm"` | `nsjail` requires multi-container compose; fail-closed in standalone |
++| `credential_mode` | Identity token provided during script execution | `"INVOKING_USER"`, `"PROJECT_ADMIN_SP"`, `"SERVER_ADMIN_SP"` | `"INVOKING_USER"` | Elevated service principal modes require dual-control cryptographic approval |
++| `target_scope` | Maximum tenant visibility boundary of the field | `"PROJECT"`, `"WORKSPACE"`, `"SERVER"` | `"PROJECT"` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |
++| `output_format` | Canonical schema used to format and render output | `"text"`, `"number"`, `"badge"`, `"severity_pill"`, `"url"`, `"markdown_snippet"`, `"json_table"` | `"text"` | Enforces strict Pydantic validation before persisting to JSONB |
++| `format_metadata` | Configuration options tailored to chosen format | JSON object matching format schema | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |
++| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |
++| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Line-delimited (`\n`) domain list | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |
++| `approval_status` | Current dual-control escalation state | `"PENDING"`, `"PENDING_SECOND_APPROVER"`, `"APPROVED"`, `"REVOKED"` | `"APPROVED"` (Project) | Gated at `PENDING` when requesting Workspace or Server scope |
++| `aal2_freshness` | Maximum age of AAL2 verification for approval | Integer (Max 900 seconds / 15 minutes) | 900s | Enforces fresh multi-factor authentication on administrative step-up |
++
++### Setting-by-Setting Technical Paragraphs (Custom Fields Studio & Dual-Control Escalation)
++
++- **name:** The human-facing label displayed on ticket property rails, table view columns, and board card badges (1 to 80 characters). Rendered alongside a subtle test tube icon (`🧪`) for computed fields.
++- **slug:** The immutable ASCII identifier representing the custom field in JSON payloads, query filters, and Safe Formula references. Derived automatically from the field name upon creation.
++- **flavor:** The computation tier. UI defaults to `"scalar"` (`CustomFieldDefinitionEditor.tsx` line 245; stores static values); `"formula"` executes deterministic Python AST math in-process (<5ms); `"wasm"` runs compiled WebAssembly modules via `wasmtime` (<25ms; API tier default); `"nsjail"` executes Linux container scripts (<250ms).
++- **sandbox_tier:** Selects between in-process WebAssembly (`wasm` Tier A) and containerized namespace isolation (`nsjail` Tier B). In Standalone mode, `nsjail` is fail-closed disabled with `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
++- **credential_mode:** Determines which identity credentials are provided to the script during execution. `"INVOKING_USER"` executes strictly within the permissions of the calling user. `"PROJECT_ADMIN_SP"` executes with Project Admin service principal authority. `"SERVER_ADMIN_SP"` executes with Server Admin service principal authority and mandates dual-control approval.
++- **target_scope:** Controls the data visibility boundary of the field. `"PROJECT"` scope can only read issues within the active project. Escalating to `"WORKSPACE"` (reading across all workspace projects) or `"SERVER"` (global) requires dual-control cryptographic sign-off.
++- **output_format:** The strict Pydantic schema used to validate and render the field's computed output. Supports 7 canonical formats: `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, and `json_table`.
++- **format_metadata:** A JSON configuration dictionary customizing the chosen output format (such as specifying `unit_suffix: "%"`, `maximum_fraction_digits: 1`, or table column definitions).
++- **script_source:** The executable source code (Python formula expression, Wasm bytecode, or shell script). Hashed with SHA-256 upon save; if the hash in PostgreSQL fails verification at runtime, execution is halted immediately.
++- **egress_allowlist:** A line-delimited (`\n`) list of permitted network hosts accessible to `nsjail` scripts. By default, network egress is completely disabled via kernel `CLONE_NEWNET`.
++- **approval_status:** Tracks the dual-control lifecycle (`PENDING`, `PENDING_SECOND_APPROVER`, `APPROVED`, `REVOKED`). Fields requesting `WORKSPACE` or `SERVER` scope enter `PENDING` status and cannot execute until approved by an administrator holding target tier authority.
++- **aal2_freshness:** The security policy requiring that the approving administrator must have performed multi-factor authentication (biometric Passkey, hardware key, or TOTP) within the preceding 900 seconds (15 minutes).
++
++### Step-by-Step Guide: Authoring and Requesting Dual-Control Custom Scripted Fields
++
++1. **Open Custom Fields Studio:** Navigate to `/projects/<PROJECT_KEY>/settings/custom-fields` and click **+ New Custom Field**.
++2. **Define Field Metadata:** Enter a Name (e.g. `Cross-Project Security Compliance Score`), confirm the automatically generated Slug (`cross-proj-sec-score`), select the Flavor (`formula` or `wasm`), and choose the Output Format (`severity_pill` or `number`).
++3. **Request Elevated Scope:** Set Target Scope to `WORKSPACE` or `SERVER`. Optionally select Credential Mode as `PROJECT_ADMIN_SP` or `SERVER_ADMIN_SP` if elevated service authority is required. The UI immediately surfaces an amber Dual-Control Escalation Banner warning of the expanded data access boundary.
++4. **Draft and Test Execute:** Author your formula expression or script logic, then click **Test Execute** to simulate evaluation in memory against sample payloads.
++5. **Submit for Approval:** Click **Save & Request Escalation**. The field enters `pending` approval status.
++6. **Independent AAL2 Review & Approval:** A distinct Workspace or Server Administrator opens the Custom Fields Studio, inspects the script source, requested scope, and blast radius, clicks **Approve Escalation**, and provides fresh Authenticator Assurance Level 2 (AAL2) credentials (Passkey, security key, or TOTP). Once verified, the field is activated and logged in the immutable audit ledger.
+ 
+ ---
+ 
+diff --git a/Ticket-Screen-and-Work-Item-Features.md b/Ticket-Screen-and-Work-Item-Features.md
+index 853e873..7cb6527 100644
+--- a/Ticket-Screen-and-Work-Item-Features.md
++++ b/Ticket-Screen-and-Work-Item-Features.md
+@@ -131,8 +131,7 @@ The activity feed separates human conversation from automated audit logs and AI
+ 
+ ![Activity Stream and Audit History](images/28-activity-stream-audit.png)
+ 
+-<a id="modules"></a>
+-### Sprints, Cycles, and Functional Modules
++### Modules
+ Work items bind directly to sprint cycles and functional modules with real-time velocity roll-ups:
+ 
+ ![Sprint Cycle Planning and Velocity Tracking](images/24-cycles-sprints.png)
+@@ -144,10 +143,12 @@ Two-stage deletion safety calculates the ripple impact across child issues, depe
+ 
+ ![Delete Blast Radius Warning Modal](images/20-delete-blast-radius.png)
+ 
+-<a id="auto-archive"></a>
+-### Auto-Archive Policy
++### Auto-Archive
+ Work items completed past the retention threshold are automatically moved to archive storage.
+ 
++### Labels
++Multi-colored semantic labels support both workspace-level and project-level scopes, with optional mutual exclusion groups enforcing single-selection among conflicting categories.
++
+ ---
+ 
+ ## PostgreSQL Issue Copy and Deep Subtree Duplication Procedure
+diff --git a/Zero-Trust-Security-and-Access-Visibility.md b/Zero-Trust-Security-and-Access-Visibility.md
+index 4e4e57b..8de3073 100644
+--- a/Zero-Trust-Security-and-Access-Visibility.md
++++ b/Zero-Trust-Security-and-Access-Visibility.md
+@@ -13,6 +13,12 @@ Key security pillars:
+ 
+ ---
+ 
++## Authentication
++
++Account authentication enforces minimum entropy requirements (minimum 12 characters for standard users, 14 characters for Server Admins). Authentication cards support local password credentials, WebAuthn Passkeys, TOTP two-factor authentication, LDAPS/Active Directory, and multi-card OIDC/OAuth providers. Sessions are cryptographically sealed with monotonic idle and absolute timeout expirations.
++
++---
++
+ ## Universal Access Control Model
+ 
+ 👍kanban unifies human users, user groups, and autonomous agent service-principals under a single Universal Object Graph access model.
+@@ -29,7 +35,7 @@ flowchart TD
+     
+     subgraph AgentOBO["Agent On-Behalf-Of Clamping"]
+         Combined --> Intersect{"Intersection (∩)"}
+-        KeyScope["API Key Scope Constraints<br/>(Allowed surfaces, projects, tools)"] --> Intersect
++        KeyScope["API Key Scope Constraints - Allowed surfaces, projects, tools"] --> Intersect
+         AgentGrant["Explicit Agent Grant"] --> Intersect
+         Intersect --> Effective["Final Effective Agent Permission"]
+     end
+@@ -37,7 +43,7 @@ flowchart TD
+ 
+ Where:
+ - **Roles:** `Owner`, `Admin`, `Member`, `Guest`.
+-- **Authoritative 8-Bit Capability Bitmask (`Capability(IntFlag)`):**
++- **Authoritative 8-Bit Capability Bitmask** (`Capability(IntFlag)`):
+   * `VIEW` (`0x01` / `1`): Read ticket summary, description, and metadata.
+   * `COMMENT` (`0x02` / `2`): Add comments to discussions and activity feeds.
+   * `EDIT` (`0x04` / `4`): Mutate scalar fields, tags, and assignments.
+@@ -47,7 +53,7 @@ Where:
+   * `ADMIN` (`0x40` / `64`): Manage permissions, scripted fields, and audit settings.
+   * `DELETE` (`0x80` / `128`): Soft-trash or permanently purge entities.
+   * `ALL` (`0xFF` / `255`): Full administrative capability mask.
+-- **`SCOPE_CAPABILITY_MAP`:** Maps OAuth/API key scopes to capabilities:
++- **SCOPE_CAPABILITY_MAP:** Maps OAuth/API key scopes to capabilities:
+   * `session`: `Capability.ALL` (`0xFF`)
+   * `read`, `agent:read`, `docs:read`, `admin:read`: `Capability.VIEW` (`0x01`)
+   * `comment`: `Capability.VIEW | Capability.COMMENT` (`0x03`)
+@@ -149,7 +155,7 @@ When an agent reads a resource with an elevated confidentiality label, its sessi
+ 
+ Remote execution daemons and test runners never share general HTTP application ingress. Instead, they authenticate through a dedicated mutual TLS port:
+ 
+-- **Dedicated Port `:8444`:** Distributed runners communicate exclusively with the orchestrator over port `:8444`. Port `:8921` handles human web traffic and general REST/MCP calls, while `:8444` enforces mandatory client certificate exchange.
++- **Dedicated Port :8444:** Distributed runners communicate exclusively with the orchestrator over port `:8444`. Port `:8921` handles human web traffic and general REST/MCP calls, while `:8444` enforces mandatory client certificate exchange.
+ - **Cryptographic Proof-of-Possession (PoP):** During runner enrollment, the daemon generates a local private key and presents a hardware-bound CSR. Upon successful verification of the short-lived enrollment token (15-minute TTL), the orchestrator signs the client certificate. Every subsequent WebSocket connection requires a cryptographic Proof-of-Possession challenge, verifying the daemon possesses the matching private key before receiving build workloads.
+ - **Hardware-Bound Certificate Rotation:** Certificates cannot be silently renewed. If a runner certificate expires or requires rotation, the administrator revokes the runner identity in `/admin/agent-runners` (requiring AAL2 step-up verification), mints a fresh enrollment token, and re-enrolls the runner host.
+ 
+diff --git a/images/rc-ollama-01-provider-probe.png b/images/rc-ollama-01-provider-probe.png
+new file mode 100644
+index 0000000..06844b8
+Binary files /dev/null and b/images/rc-ollama-01-provider-probe.png differ
+diff --git a/images/rc-ollama-02-agent-definition.png b/images/rc-ollama-02-agent-definition.png
+new file mode 100644
+index 0000000..b572c2d
+Binary files /dev/null and b/images/rc-ollama-02-agent-definition.png differ
+diff --git a/images/rc-ollama-03-workflow-hook.png b/images/rc-ollama-03-workflow-hook.png
+new file mode 100644
+index 0000000..7ea5b41
+Binary files /dev/null and b/images/rc-ollama-03-workflow-hook.png differ
+diff --git a/images/rc-ollama-04-positive-done.png b/images/rc-ollama-04-positive-done.png
+new file mode 100644
+index 0000000..6f91d95
+Binary files /dev/null and b/images/rc-ollama-04-positive-done.png differ
+diff --git a/images/rc-ollama-05-positive-comment.png b/images/rc-ollama-05-positive-comment.png
+new file mode 100644
+index 0000000..bbd99e7
+Binary files /dev/null and b/images/rc-ollama-05-positive-comment.png differ
+diff --git a/images/rc-ollama-06-negative-blocked.png b/images/rc-ollama-06-negative-blocked.png
+new file mode 100644
+index 0000000..a4f9a96
+Binary files /dev/null and b/images/rc-ollama-06-negative-blocked.png differ
+diff --git a/images/rc-ollama-07-negative-comment.png b/images/rc-ollama-07-negative-comment.png
+new file mode 100644
+index 0000000..c8540ba
+Binary files /dev/null and b/images/rc-ollama-07-negative-comment.png differ
+diff --git a/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png b/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..7e70b67
+Binary files /dev/null and b/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png b/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..8f33636
+Binary files /dev/null and b/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png b/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..e1f9df6
+Binary files /dev/null and b/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-studio-desktop-1440x900-dark.png b/images/slice5-custom-fields-studio-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..579798a
+Binary files /dev/null and b/images/slice5-custom-fields-studio-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-custom-fields-studio-desktop-1440x900-light.png b/images/slice5-custom-fields-studio-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..727d615
+Binary files /dev/null and b/images/slice5-custom-fields-studio-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-studio-mobile-portrait-390x844.png b/images/slice5-custom-fields-studio-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..cfec8d7
+Binary files /dev/null and b/images/slice5-custom-fields-studio-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png b/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..dff469e
+Binary files /dev/null and b/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png b/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..baf68b0
+Binary files /dev/null and b/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-personal-settings-desktop-1440x900-dark.png b/images/slice5-personal-settings-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..a1bcac9
+Binary files /dev/null and b/images/slice5-personal-settings-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-personal-settings-desktop-1440x900-light.png b/images/slice5-personal-settings-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..c7d95d8
+Binary files /dev/null and b/images/slice5-personal-settings-desktop-1440x900-light.png differ
+diff --git a/images/slice5-personal-settings-mobile-portrait-390x844.png b/images/slice5-personal-settings-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..0f20eb1
+Binary files /dev/null and b/images/slice5-personal-settings-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-personal-settings-tablet-landscape-1024x768.png b/images/slice5-personal-settings-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e935d72
+Binary files /dev/null and b/images/slice5-personal-settings-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-personal-settings-tablet-portrait-768x1024.png b/images/slice5-personal-settings-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..ad2373c
+Binary files /dev/null and b/images/slice5-personal-settings-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png b/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..3387cd6
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png b/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..0e304d4
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png b/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..2792003
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png b/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e6643aa
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png b/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..e22e06b
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-priorities-desktop-1440x900-dark.png b/images/slice5-project-settings-priorities-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..5061230
+Binary files /dev/null and b/images/slice5-project-settings-priorities-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-priorities-desktop-1440x900-light.png b/images/slice5-project-settings-priorities-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..c348be7
+Binary files /dev/null and b/images/slice5-project-settings-priorities-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-priorities-mobile-portrait-390x844.png b/images/slice5-project-settings-priorities-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..1a5ca1b
+Binary files /dev/null and b/images/slice5-project-settings-priorities-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png b/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..5146c17
+Binary files /dev/null and b/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png b/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..c4160ca
+Binary files /dev/null and b/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png b/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..d4d1020
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png b/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..00a0c9e
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png b/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..e9d4191
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png b/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..8f22091
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png b/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..08dbef4
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png b/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..07bc994
+Binary files /dev/null and b/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png b/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..5682833
+Binary files /dev/null and b/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png b/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..9e22ade
+Binary files /dev/null and b/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-studio-desktop-1440x900-dark.png b/images/slice5-workflow-studio-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..3fc3e01
+Binary files /dev/null and b/images/slice5-workflow-studio-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-workflow-studio-desktop-1440x900-light.png b/images/slice5-workflow-studio-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..9bc7124
+Binary files /dev/null and b/images/slice5-workflow-studio-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-studio-mobile-portrait-390x844.png b/images/slice5-workflow-studio-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..ec6b9b5
+Binary files /dev/null and b/images/slice5-workflow-studio-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-workflow-studio-tablet-landscape-1024x768.png b/images/slice5-workflow-studio-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e3ec4d6
+Binary files /dev/null and b/images/slice5-workflow-studio-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-workflow-studio-tablet-portrait-768x1024.png b/images/slice5-workflow-studio-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..fda0c0b
+Binary files /dev/null and b/images/slice5-workflow-studio-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workspace-settings-general-desktop-1440x900-dark.png b/images/slice5-workspace-settings-general-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..cd41a36
+Binary files /dev/null and b/images/slice5-workspace-settings-general-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-workspace-settings-general-desktop-1440x900-light.png b/images/slice5-workspace-settings-general-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..54b0b98
+Binary files /dev/null and b/images/slice5-workspace-settings-general-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workspace-settings-general-mobile-portrait-390x844.png b/images/slice5-workspace-settings-general-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..7878c95
+Binary files /dev/null and b/images/slice5-workspace-settings-general-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png b/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..64cf723
+Binary files /dev/null and b/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png b/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..3f8d36d
+Binary files /dev/null and b/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png b/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..941769d
+Binary files /dev/null and b/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png b/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..042d4c9
+Binary files /dev/null and b/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png differ
