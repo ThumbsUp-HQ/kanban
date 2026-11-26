@@ -16,6 +16,7 @@ import {
   type AgentOnboardingPrefs,
 } from './personalSettingsApi';
 import { buildAgentOnboardingPrompt } from './agentOnboardingPrompt';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { copyToClipboard } from '../../utils/clipboard';
 import './AgentOnboardingPromptCard.css';
 
@@ -113,13 +114,22 @@ function AgentOnboardingPromptCardInner({ projectKey }: AgentOnboardingPromptCar
   return (
     <div className="kb-agent-onboarding-card" data-testid="agent-onboarding-prompt-card">
       <div className="kb-agent-onboarding-card-header">
-        <h3 className="kb-agent-onboarding-title">
-          <span>🤖</span> Agent Onboarding Prompt (/llms.txt)
-        </h3>
-        <p className="kb-agent-onboarding-subtitle">
-          Configure how autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI / Antigravity)
-          interact with your codebase. Persistence defaults strictly to your local project folder.
-        </p>
+        <div className="kb-agent-onboarding-header-main">
+          <h3 className="kb-agent-onboarding-title">
+            <span>🤖</span> Agent Onboarding Prompt (/llms.txt)
+          </h3>
+          <p className="kb-agent-onboarding-subtitle">
+            Configure how autonomous coding agents (Claude Code, OpenAI Codex, Gemini CLI / Antigravity)
+            interact with your codebase. Persistence defaults strictly to your local project folder.
+          </p>
+        </div>
+        <div className="kb-agent-onboarding-header-actions">
+          <StudioDocLink
+            href="/docs/multi-provider-ai-engine-and-runners#agent-onboarding"
+            title="Agent Onboarding Documentation"
+            testId="agent-onboarding-doc-link"
+          />
+        </div>
       </div>
 
       <div className="kb-agent-onboarding-grid">
