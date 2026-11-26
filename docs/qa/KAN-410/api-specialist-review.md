@@ -5,8 +5,8 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
-**Target Commit:** `f7f38a74` (branch `docs/KAN-414-slice2-ai-docs`)  
-**Wiki Commit:** `5365cc5` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
+**Target Commit:** `9ba1df27` (branch `docs/KAN-414-slice2-ai-docs`)  
+**Wiki Commit:** `b309499` (branch `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki`)  
 
 ---
 
@@ -21,13 +21,17 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 ### Key Architectural Invariants Verified
 1. **Multi-Provider AI Engine & Budget Enforcer**:
    - Universal `LLMProvider` contracts supporting Gemini, OpenAI, and Local Ollama.
-   - Provider probing via secure backend proxy (`POST /api/v1/admin/ai-providers/probe-models`).
+   - Provider probing via secure backend proxy (`POST /api/v1/admin/ai/providers/probe-models`).
    - Token budget ceiling verified: `token_cap=0` strictly enforces **Hard AI Freeze**; `10_000_000_000` indicates **Unlimited Quota**.
    - Secret zeroization: zero API keys exposed in frontend state or serialized responses.
 2. **Autonomous Agent Definitions & Isolation Sandbox**:
-   - Validation endpoint `POST /api/v1/agent-definitions/{id}:validate` returning atomic 4-section traces.
+   - Validation endpoint `POST /api/v1/agent-definitions/{id}:validate` returning atomic 4-section traces:
+     * `=== 1. RENDERED CONTEXT ===`
+     * `=== 2. TOOL TRACE ===`
+     * `=== 3. LATENCY & TOKENS ===`
+     * `=== 4. SCHEMA & POLICY STATUS ===`
    - Strict 300s reasoning ceiling enforced (`timeout_ms <= 300000`).
-   - Repository access modes (`none`, `ro_mount` with `CLONE_NEWNS`, `ephemeral_clone`) strictly isolated.
+   - Repository access modes match `RepoAccessMode` enum: `none`, `ro_vfs_mount`, and `bare_git_tools`.
 3. **Remote mTLS Runners Fleet**:
    - Dedicated mTLS port terminating mutual TLS handshakes.
    - Single-use enrollment tokens (`max_ttl_seconds <= 900`).
@@ -46,10 +50,12 @@ This API Specialist Review evaluates the complete end-to-end architecture, API c
 
 ### 2.1 Comprehensive Endpoint Catalog
 - **AI Providers & Budgets:**
-  - `POST /api/v1/admin/ai-providers/probe-models`
-  - `POST /api/v1/admin/ai-providers/test-connection`
-  - `POST /api/v1/admin/ai-providers/order`
-  - `POST /api/v1/admin/ai-providers/budgets`
+  - `POST /api/v1/admin/ai/providers/probe-models`
+  - `POST /api/v1/admin/ai/providers/test-connection`
+  - `POST /api/v1/admin/ai/providers/order`
+  - `POST /api/v1/admin/ai/providers/budgets`
+  - `PUT /api/v1/workspaces/{ws}/ai-providers/order`
+  - `GET/PATCH /api/v1/workspaces/{ws}/ai-providers/budgets`
 - **Agent Definitions:**
   - `POST /api/v1/agent-definitions`
   - `POST /api/v1/agent-definitions/{id}:validate`
