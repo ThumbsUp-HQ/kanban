@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import { McpAccessStudio } from '../McpAccessStudio';
@@ -1177,18 +1177,33 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     expect(docLink.getAttribute('aria-label')).toBe('Workload Identity Federation Documentation');
     expect(docLink.textContent).toContain('Documentation ->');
 
-    // 2. Verify header FieldHelpHint trigger and popover contents
+    // 2. Verify header FieldHelpHint trigger, ARIA semantics, popover contents, and Escape dismissal
     const helpBtn = screen.getByTestId('workload-federation-header-help');
     expect(helpBtn).toBeDefined();
-    fireEvent.focus(helpBtn);
+    expect(helpBtn.getAttribute('aria-label')).toBe('Help for Workload Identity Federation');
+    expect(helpBtn.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      helpBtn.focus();
+    });
+    expect(helpBtn.getAttribute('aria-expanded')).toBe('true');
 
     const helpPopover = screen.getByTestId('workload-federation-header-help-popover');
     expect(helpPopover).toBeDefined();
+    expect(helpPopover.getAttribute('role')).toBe('dialog');
     expect(helpPopover.textContent).toContain('Workload Identity Federation');
     expect(helpPopover.textContent).toContain('keyless OIDC JWT token exchange (RFC 8693)');
     expect(helpPopover.textContent).toContain('Kubernetes workloads');
     const helpDocLink = screen.getByTestId('workload-federation-header-help-doc-link');
     expect(helpDocLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
+
+    // Dismiss popover via Escape key on trigger
+    act(() => {
+      fireEvent.keyDown(helpBtn, { key: 'Escape' });
+    });
+    expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('workload-federation-header-help-popover')).toBeNull();
 
     // 3. Verify + Add Workload Policy button renders alongside docLink and opens create modal cleanly
     const addBtn = screen.getByTestId('add-workload-policy-btn');
