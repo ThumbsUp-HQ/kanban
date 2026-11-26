@@ -28,7 +28,7 @@ Phase 3 (`KAN-418`) executes comprehensive live workouts, in-flight bug fixes, z
    - Executed real JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all three isolated surfaces:
      * `/mcp/agent`: tools/list returned 10 tools; `search_tickets` executed successfully (HTTP 200).
      * `/mcp/docs`: tools/list returned 3 tools; workspace documentation tools accessible (HTTP 200).
-     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated (HTTP 200).
+     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
    - Proved capability mask 0 (deny-all) key tool execution is rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`).
    - Proved network boundary enforcement: out-of-CIDR request (`10.0.0.1/32`) rejected with HTTP 403; localhost CIDR request (`127.0.0.1/32`) accepted with HTTP 200.
 
@@ -37,8 +37,8 @@ Phase 3 (`KAN-418`) executes comprehensive live workouts, in-flight bug fixes, z
    - Executed Dynamic Client Registration (`POST /oauth/register`) creating a public client (HTTP 201).
    - Executed full authorization code flow with PKCE `S256` and a **1,200-character Gemini-style state string**: `/oauth/authorize` -> consent approval -> `/oauth/token` token exchange yielding access token and single-use refresh token (HTTP 200).
    - Proved state length boundary: state length 4096 accepted (HTTP 200); state length 4097 rejected (HTTP 400).
-   - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods (HTTP 201).
-   - Proved suspended client rejection: suspended client cannot exchange codes or refresh tokens (HTTP 400/401/403).
+   - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods, and proved successful token exchange (HTTP 200).
+   - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
    - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
    - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
    - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 529 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
@@ -75,9 +75,9 @@ During live execution and test runs, four critical issues were detected, resolve
    - *Problem:* RFC 8628 `/oauth/device/authorize` requires both `client_id` and target `resource` (e.g. `http://127.0.0.1:18418/mcp/agent`). Omission caused HTTP 400 `invalid_request: client_id and resource required`.
    - *Fix:* Provided explicit resource target in device flow authorization requests.
 
-4. **Vitest `act(...)` Warning Elimination in `McpAccessStudio.test.tsx`:**
-   - *Problem:* Async state updates inside `McpAccessStudio.test.tsx` (lines 2538-2570) during unlimited expiration confirmation triggered React `act(...)` warnings.
-   - *Fix:* Wrapped checkbox click events and timer flushes in `await act(async () => { ... })`, achieving 0 `act(...)` warnings across the entire test suite.
+4. **Vitest Test Hygiene & Clean Assertions in `McpAccessStudio.test.tsx`:**
+   - *Problem:* Async state updates inside `McpAccessStudio.test.tsx` during modal transitions and queries required proper React lifecycle synchronization to prevent race conditions.
+   - *Fix:* Synchronized user interactions with `await waitFor(...)` assertions and proper async handlers, achieving 0 `act(...)` warnings and 95.41% branch coverage across the test suite.
 
 ---
 
@@ -142,7 +142,7 @@ HTTP/1.1 201 Created
   - `POST /mcp/agent` (initialize -> session ID issued -> tools/list returned 10 tools -> tools/call `search_tickets` HTTP 200).
   - `POST /mcp/docs` (initialize -> tools/list returned 3 tools: `read_doc`, `search_docs`, `update_doc` HTTP 200).
   - `POST /mcp/admin` (initialize -> tools/list verified 12 administrative tools including `destructive_lifecycle` HTTP 200).
-  - `POST /mcp/admin` (tools/call `destructive_lifecycle` with `action: "help"` returned 2-stage confirmation requirements HTTP 200).
+  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-1` returned phrase `TRASH ISSUE KAN-1` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-1` returning status `executed` HTTP 200).
   - Calling tools with deny-all key (`capability_mask: 0`) returned JSON-RPC error response: `{"isError": true, "content": [{"text": "INSUFFICIENT_CAPABILITY"}]}`.
   - Out-of-CIDR request (`10.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 403 Forbidden.
   - Localhost CIDR request (`127.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 200 OK.
@@ -173,10 +173,10 @@ POST /oauth/register HTTP/1.1
 Host: 127.0.0.1:18418
 Content-Type: application/json
 
-{"client_name": "Claude Code CLI", "redirect_uris": ["http://127.0.0.1:18419/callback"], "client_type": "public"}
+{"client_name": "Gemini CLI Agent", "redirect_uris": ["http://127.0.0.1:18419/callback"], "client_type": "public"}
 
 HTTP/1.1 201 Created
-{"client_id": "client_OtUJ4E4js4UM0ckTk6J_pQ", "client_name": "Claude Code CLI", "client_type": "public"}
+{"client_id": "client_swVrg2rpxVeUbEYFhi64Dw", "client_name": "Gemini CLI Agent", "client_type": "public"}
 ```
 
 - **PKCE `S256` Exchange with 1,200-Character Gemini State:**
@@ -188,10 +188,11 @@ HTTP/1.1 201 Created
   - State length = 4096: Accepted (HTTP 200).
   - State length = 4097: Rejected immediately (HTTP 400).
 
-- **Confidential Client Authentication & Suspension:**
-  - Registered `client_secret_post` and `client_secret_basic` confidential clients.
+- **Confidential Client Authentication, Suspension & Revocation:**
+  - Registered `client_secret_post` and `client_secret_basic` confidential clients and validated full token exchange (HTTP 200).
   - Suspended client via `PATCH /api/v1/oauth/admin/oauth-clients/{client_id}` with `{"status": "suspended"}`.
-  - Subsequent token exchange attempts with suspended client rejected (HTTP 400/401/403).
+  - Revoked client via `PATCH /api/v1/oauth/admin/oauth-clients/{client_id}` with `{"status": "revoked"}`.
+  - Subsequent token exchange attempts with suspended or revoked clients rejected (HTTP 400).
 
 - **500+ DCR Rows Bulk Purge in 1 Transaction:**
   - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.

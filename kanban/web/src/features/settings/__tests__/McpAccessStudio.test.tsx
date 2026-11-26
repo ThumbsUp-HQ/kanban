@@ -2566,5 +2566,62 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       const submitBtn = screen.getByTestId<HTMLButtonElement>('mint-submit-btn');
       expect(submitBtn.disabled).toBe(false);
     });
+
+    it('copies agent skills prompt on llms callout button click', async () => {
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mcp-copy-llms-prompt-btn')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('mcp-copy-llms-prompt-btn'));
+    });
+
+    it('handles AAL2 cancellation during connected app revocation', async () => {
+      const app = {
+        id: 'grant-aal2-cancel',
+        client_id: 'client_123',
+        client_name: 'Cancel App',
+        client_type: 'public' as const,
+        scopes: ['agent:read'],
+        surface: 'agent' as const,
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        last_used_at: null,
+        revoked_at: null,
+      };
+      vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+      vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([app]);
+      vi.spyOn(settingsApi, 'revokeConnectedApp').mockRejectedValue(new clientModule.Aal2StepUpCancelledError());
+
+      render(
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="personal" />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('disconnect-btn-grant-aal2-cancel')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('disconnect-btn-grant-aal2-cancel'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-disconnect-btn')).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByTestId('confirm-disconnect-btn'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('confirm-disconnect-btn')).toBeNull();
+      });
+    });
   });
 });

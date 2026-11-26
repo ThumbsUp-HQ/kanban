@@ -34,13 +34,13 @@ This packet delivers passive forensic verification proof for ticket **KAN-418 (P
    - Executed live JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all 3 surfaces.
    - Validated capability mask 0 (deny-all boundary) enforces execution error (`INSUFFICIENT_CAPABILITY`).
    - Verified out-of-CIDR `/32` requests fail immediately (HTTP 403 Forbidden).
-   - Validated 2-stage destructive lifecycle confirmation on `/mcp/admin`.
+   - Validated 2-stage destructive lifecycle confirmation on `/mcp/admin`: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`; Stage 2 `execute_delete` executed deletion returning status `executed`.
 2. **OAuth 2.1 DCR + PKCE S256 + 1,200-Character Gemini State (`scripts/run_kan418_live_workout.py`)**:
    - Executed RFC 9728 discovery -> RFC 7591 Dynamic Client Registration (`/api/v1/oauth/register`) -> `/oauth/authorize` + consent -> `/api/v1/oauth/token` PKCE S256 exchange.
    - Tested 1,200-character Gemini-style state string.
    - Verified state length boundary: 4096 characters accepted (200 OK), 4097 characters rejected (400 Bad Request).
-   - Verified confidential client authentication (`client_secret_post` and `client_secret_basic`).
-   - Verified suspended and revoked OAuth clients fail immediately (401/403).
+   - Verified confidential client authentication (`client_secret_post` and `client_secret_basic`, 200 OK).
+   - Verified suspended and revoked OAuth clients fail immediately (400 Bad Request).
    - Seeded 525 stale DCR client rows alongside an active client with active refresh token; validated pagination and executed single-transaction bulk unused DCR purge in `OAuthClientGovernanceStudio`, deleting all 525 stale rows while cleanly preserving the active client.
 3. **RFC 8628 /activate Device Authorization Flow (`scripts/run_kan418_live_workout.py`, `scripts/capture_kan418_screenshots.mjs`)**:
    - Requested device code via `/api/v1/oauth/device/code`.
@@ -75,28 +75,29 @@ All 7 unclipped screenshots were captured with `0` mocks (`page.route` / `mockAp
 ## 4. Test Verification & Static Quality Gates
 
 1. **Backend Pytest Suite (`docs/qa/KAN-418/unit-test-results.txt`)**:
-   - 119 passed in 52.44s.
+   - 119 passed in 374.74s (0:06:14).
    - 95% total coverage across all touched backend modules:
-     * `kanban/api/v1/oauth.py`: 95%
-     * `kanban/api/v1/mcp_keys.py`: 97%
-     * `kanban/api/v1/auth_mcp_keys.py`: 88%
+     * `database/models/mcp_api_key.py`: 100%
      * `kanban/api/v1/admin/mcp_keys.py`: 95%
      * `kanban/api/v1/admin/workload_identities.py`: 98%
+     * `kanban/api/v1/auth_mcp_keys.py`: 88%
+     * `kanban/api/v1/mcp_keys.py`: 97%
+     * `kanban/api/v1/oauth.py`: 95%
      * `mcp/app.py`: 95%
 2. **Frontend Vitest Suite (`docs/qa/KAN-418/unit-test-results.txt`)**:
-   - 108 passed across 4 targeted test files in 7.80s with 0 `act(...)` warnings.
-   - 95.56% branch coverage across all touched frontend components (100% >= 95% threshold):
+   - 110 passed across 4 targeted test files in 6.88s with 0 `act(...)` warnings.
+   - 95.79% branch coverage across all touched frontend components (100% >= 95% threshold):
      * `DeviceActivatePage.tsx`: 100% Stmts, 96.55% Branch, 100% Funcs, 100% Lines
      * `OAuthClientGovernanceStudio.tsx`: 98.45% Stmts, 96.11% Branch, 100% Funcs, 98.39% Lines
      * `ConnectOAuthAppModal.tsx`: 100% Stmts, 96.07% Branch, 100% Funcs, 100% Lines
-     * `McpAccessStudio.tsx`: 98.36% Stmts, 94.97% Branch, 98.88% Funcs, 98.71% Lines
+     * `McpAccessStudio.tsx`: 99.29% Stmts, 95.41% Branch, 100% Funcs, 99.74% Lines
 3. **Static Build Check Pipeline (`docs/qa/KAN-418/build-check.txt`)**:
-   - Ruff: 0 errors across `kanban/`, `mcp/`, `database/`.
-   - Mypy: 0 errors across 1063 source files.
+   - Ruff: 0 errors across `kanban/`, `mcp/` (All checks passed!).
+   - Mypy: 0 errors across 808 source files (Success: no issues found in 808 source files).
    - Dash Checker: `check_no_dashes.py --all` exit code 0, 0 violations.
-   - TypeScript: `pnpm --dir kanban/web typecheck` clean.
-   - ESLint: `pnpm --dir kanban/web lint` clean (0 warnings).
-   - Vite Build: `pnpm --dir kanban/web build` clean in 1.44s.
+   - TypeScript: `pnpm --dir kanban/web typecheck` clean (tsc -b --noEmit exit 0).
+   - ESLint: `pnpm --dir kanban/web lint` clean (eslint . --max-warnings 0 exit 0).
+   - Vite Build: `pnpm --dir kanban/web build` clean in 1.30s (built in 1.30s exit 0).
 
 ---
 

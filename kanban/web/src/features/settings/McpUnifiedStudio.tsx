@@ -335,7 +335,7 @@ export function WorkloadFederationSection({
                       {p.is_enabled ? 'Active' : 'Disabled'}
                     </span>
                   </td>
-                  <td className="kb-mcp-td">
+                  <td className="kb-mcp-td kb-mcp-actions-cell">
                     <button
                       type="button"
                       className="kb-mcp-action-btn"

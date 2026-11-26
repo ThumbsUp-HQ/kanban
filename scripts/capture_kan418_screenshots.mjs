@@ -149,18 +149,7 @@ async function main() {
       const page = await context.newPage();
       await page.goto(`${BASE_URL}/admin/mcp`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('[data-testid="workload-federation-section"]', { timeout: 10000 });
-
-      // Open add policy modal and click GitHub Actions preset
-      const addPolicyBtn = page.locator('[data-testid="add-workload-policy-btn"]');
-      if (await addPolicyBtn.count()) {
-        await addPolicyBtn.click();
-        await page.waitForSelector('[data-testid="workload-policy-modal"]', { timeout: 5000 });
-        const ghPreset = page.locator('[data-testid="preset-github-actions"]');
-        if (await ghPreset.count()) {
-          await ghPreset.click();
-          await page.waitForTimeout(200);
-        }
-      }
+      await page.waitForSelector('[data-testid="workload-policies-table"]', { timeout: 10000 });
 
       await preparePageForScreenshot(page, { width: 1024, height: 768 }, 'light');
       await saveScreenshot(page, '03-desktop-1024x768-workload-oidc-studio.png');
@@ -224,6 +213,18 @@ async function main() {
 
       // Wait for config snippet modal
       await page.waitForSelector('[data-testid="mcp-snippet-modal"]', { timeout: 8000 });
+
+      // Redact DOM token values to ensure zero secret leakage in screenshots
+      await page.evaluate(() => {
+        const keyVal = document.querySelector('.kb-snippet-key-value');
+        if (keyVal) {
+          keyVal.textContent = 'kb_agt_***REDACTED***';
+        }
+        const codeBox = document.querySelector('.kb-snippet-code-box');
+        if (codeBox) {
+          codeBox.textContent = codeBox.textContent.replace(/kb_agt_[A-Za-z0-9_-]+/g, 'kb_agt_***REDACTED***');
+        }
+      });
 
       await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
       await saveScreenshot(page, '06-desktop-1440x900-light-mcp-config-snippet-modal.png');

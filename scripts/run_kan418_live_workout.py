@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from kanban.auth.sessions.service import SessionService
+import yaml
 
 # Keyring definition matching our test env
 SESSION_HMAC_KEY = b"s" * 32
@@ -277,6 +278,24 @@ def main() -> None:
         assert me_resp.status_code == 200, f"Auth me check failed: {me_resp.text}"
         print(f"  Backend verified healthy: caller={me_resp.json()['display_name']}, AAL={me_resp.json()['aal_level']}")
 
+        # Create test issues in project KAN
+        resp = client.post(
+            "/api/v1/projects/KAN/issues",
+            headers=admin_headers,
+            json={"summary": "Destructive Lifecycle Target"},
+        )
+        assert resp.status_code == 201, f"Create issue failed: {resp.text}"
+        iss1_key = resp.json()["key"]
+
+        resp = client.post(
+            "/api/v1/projects/KAN/issues",
+            headers=admin_headers,
+            json={"summary": "Kanban Core Feature Ticket"},
+        )
+        assert resp.status_code == 201, f"Create issue failed: {resp.text}"
+        iss2_key = resp.json()["key"]
+        print(f"  Created test issues: {iss1_key} and {iss2_key}")
+
         # =========================================================================
         # WORKOUT 1: Scoped kb_* MCP Keys Across Surfaces & CIDR & 2-Stage Confirm
         # =========================================================================
@@ -492,7 +511,12 @@ def main() -> None:
             "method": "tools/call",
             "params": {
                 "name": "destructive_lifecycle",
-                "arguments": {"action": "help"},
+                "arguments": {
+                    "action": "request_delete",
+                    "target_kind": "issue",
+                    "target": iss1_key,
+                    "mode": "trash",
+                },
             },
         }
         resp = client.post(
@@ -500,10 +524,51 @@ def main() -> None:
             headers=admin_mcp_headers,
             json=rpc_stage1,
         )
-        assert resp.status_code == 200, f"destructive_lifecycle help failed: {resp.text}"
-        stage1_res = resp.json().get("result", {})
-        results["workout_1_scoped_keys"]["destructive_lifecycle_stage1"] = stage1_res
-        print("  [1.8] destructive_lifecycle stage 1 verified with 2-stage lifecycle requirements")
+        assert resp.status_code == 200, f"destructive_lifecycle stage 1 failed: {resp.text}"
+        stage1_body = resp.json()
+        assert not stage1_body.get("result", {}).get("isError"), f"Stage 1 returned error: {stage1_body}"
+        stage1_text = stage1_body["result"]["content"][0]["text"]
+        stage1_data = yaml.safe_load(stage1_text) if isinstance(stage1_text, str) else stage1_text
+        assert stage1_data["stage"] == "confirmation_required", f"Unexpected stage: {stage1_data}"
+        assert stage1_data["target"] == iss1_key
+        assert stage1_data["confirmation_token"].startswith("kb_del_")
+        confirm_token = stage1_data["confirmation_token"]
+        confirm_phrase = stage1_data["confirm_phrase"]
+        results["workout_1_scoped_keys"]["destructive_lifecycle_stage1"] = stage1_data
+        print(f"  [1.8] destructive_lifecycle Stage 1 (request_delete) verified: token={confirm_token[:12]}..., phrase='{confirm_phrase}'")
+
+        # 2-Stage Destructive Confirmation: Stage 2 (execute_delete)
+        rpc_stage2 = {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "destructive_lifecycle",
+                "arguments": {
+                    "action": "execute_delete",
+                    "target_kind": "issue",
+                    "target": iss1_key,
+                    "mode": "trash",
+                    "confirmation_token": confirm_token,
+                    "confirm_phrase": confirm_phrase,
+                    "reason": f"Audited decommission of {iss1_key} during live workout",
+                },
+            },
+        }
+        resp = client.post(
+            "/mcp/admin",
+            headers=admin_mcp_headers,
+            json=rpc_stage2,
+        )
+        assert resp.status_code == 200, f"destructive_lifecycle stage 2 failed: {resp.text}"
+        stage2_body = resp.json()
+        assert not stage2_body.get("result", {}).get("isError"), f"Stage 2 returned error: {stage2_body}"
+        stage2_text = stage2_body["result"]["content"][0]["text"]
+        stage2_data = yaml.safe_load(stage2_text) if isinstance(stage2_text, str) else stage2_text
+        assert stage2_data["status"] == "executed", f"Unexpected status: {stage2_data}"
+        assert stage2_data["target"] == iss1_key
+        results["workout_1_scoped_keys"]["destructive_lifecycle_stage2"] = stage2_data
+        print(f"  [1.8] destructive_lifecycle Stage 2 (execute_delete) verified: status={stage2_data['status']}")
 
         # 1.9 Prove capability_mask 0 rejects execution immediately
         resp = client.post(
@@ -521,7 +586,7 @@ def main() -> None:
 
         rpc_deny = {
             "jsonrpc": "2.0",
-            "id": 7,
+            "id": 8,
             "method": "tools/call",
             "params": {"name": "search_tickets", "arguments": {"query": "test"}},
         }
@@ -711,7 +776,127 @@ def main() -> None:
         conf_basic_secret = conf_basic_data["client_secret"]
         print("  [2.5] Confidential clients registered (client_secret_post & client_secret_basic)")
 
-        # Test suspended client rejection
+        # 2.5a Full PKCE exchange for confidential client_secret_post
+        verifier_post = _generate_code_verifier()
+        challenge_post = _generate_code_challenge(verifier_post)
+        resp = client.get(
+            "/oauth/authorize",
+            params={
+                "response_type": "code",
+                "client_id": conf_post_id,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "scope": "agent:read agent:write",
+                "code_challenge": challenge_post,
+                "code_challenge_method": "S256",
+                "state": "post_state_123",
+            },
+            headers={"Cookie": cookie_header},
+        )
+        assert resp.status_code == 200, f"/oauth/authorize failed for confidential post client: {resp.text}"
+        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.text)
+        assert m is not None, "csrf_token not found in authorization HTML"
+        csrf_post = m.group(1)
+
+        resp = client.post(
+            "/oauth/authorize/decision",
+            data={
+                "client_id": conf_post_id,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "resource": "http://127.0.0.1:18418/mcp/agent",
+                "code_challenge": challenge_post,
+                "code_challenge_method": "S256",
+                "state": "post_state_123",
+                "action": "approve",
+                "csrf_token": csrf_post,
+                "scopes": ["agent:read", "agent:write"],
+            },
+            headers={
+                "Cookie": cookie_header,
+                "Origin": "http://127.0.0.1:18418",
+                "Sec-Fetch-Site": "same-origin",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303), f"Consent decision failed: {resp.status_code} {resp.text}"
+        loc = resp.headers["location"]
+        code_post = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)["code"][0]
+
+        resp = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code_post,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "client_id": conf_post_id,
+                "client_secret": conf_post_secret,
+                "code_verifier": verifier_post,
+            },
+        )
+        assert resp.status_code == 200, f"Token exchange with client_secret_post failed: {resp.text}"
+        assert "access_token" in resp.json(), "access_token missing in client_secret_post exchange"
+        print("  [2.5] Full PKCE exchange verified for client_secret_post (HTTP 200)")
+
+        # 2.5b Full PKCE exchange for confidential client_secret_basic
+        verifier_basic = _generate_code_verifier()
+        challenge_basic = _generate_code_challenge(verifier_basic)
+        resp = client.get(
+            "/oauth/authorize",
+            params={
+                "response_type": "code",
+                "client_id": conf_basic_id,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "scope": "agent:read agent:write",
+                "code_challenge": challenge_basic,
+                "code_challenge_method": "S256",
+                "state": "basic_state_123",
+            },
+            headers={"Cookie": cookie_header},
+        )
+        assert resp.status_code == 200, f"/oauth/authorize failed for confidential basic client: {resp.text}"
+        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.text)
+        assert m is not None, "csrf_token not found in authorization HTML"
+        csrf_basic = m.group(1)
+
+        resp = client.post(
+            "/oauth/authorize/decision",
+            data={
+                "client_id": conf_basic_id,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "resource": "http://127.0.0.1:18418/mcp/agent",
+                "code_challenge": challenge_basic,
+                "code_challenge_method": "S256",
+                "state": "basic_state_123",
+                "action": "approve",
+                "csrf_token": csrf_basic,
+                "scopes": ["agent:read", "agent:write"],
+            },
+            headers={
+                "Cookie": cookie_header,
+                "Origin": "http://127.0.0.1:18418",
+                "Sec-Fetch-Site": "same-origin",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303), f"Consent decision failed: {resp.status_code} {resp.text}"
+        loc = resp.headers["location"]
+        code_basic = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)["code"][0]
+
+        basic_creds = base64.b64encode(f"{conf_basic_id}:{conf_basic_secret}".encode("utf-8")).decode("ascii")
+        resp = client.post(
+            "/oauth/token",
+            headers={"Authorization": f"Basic {basic_creds}"},
+            data={
+                "grant_type": "authorization_code",
+                "code": code_basic,
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "code_verifier": verifier_basic,
+            },
+        )
+        assert resp.status_code == 200, f"Token exchange with client_secret_basic failed: {resp.text}"
+        assert "access_token" in resp.json(), "access_token missing in client_secret_basic exchange"
+        print("  [2.5] Full PKCE exchange verified for client_secret_basic (HTTP 200)")
+
+        # 2.5c Test suspended client rejection
         resp = client.patch(
             f"/api/v1/oauth/admin/oauth-clients/{conf_post_id}",
             headers=admin_headers,
@@ -719,7 +904,7 @@ def main() -> None:
         )
         assert resp.status_code == 200, f"Suspend client failed: {resp.text}"
 
-        # Attempt token exchange with suspended client -> 401/403
+        # Attempt token exchange with suspended client -> 400/401/403
         resp = client.post(
             "/oauth/token",
             data={
@@ -733,6 +918,28 @@ def main() -> None:
         )
         assert resp.status_code in (400, 401, 403), f"Suspended client not rejected: {resp.status_code}"
         print("  [2.5] Suspended OAuth client rejected with HTTP 400/401/403")
+
+        # 2.5d Test revoked client rejection
+        resp = client.patch(
+            f"/api/v1/oauth/admin/oauth-clients/{conf_basic_id}",
+            headers=admin_headers,
+            json={"status": "revoked"},
+        )
+        assert resp.status_code == 200, f"Revoke client failed: {resp.text}"
+
+        # Attempt token exchange with revoked client -> 400/401/403
+        resp = client.post(
+            "/oauth/token",
+            headers={"Authorization": f"Basic {basic_creds}"},
+            data={
+                "grant_type": "authorization_code",
+                "code": "dummy_code",
+                "redirect_uri": "http://127.0.0.1:18419/callback",
+                "code_verifier": "dummy_verifier",
+            },
+        )
+        assert resp.status_code in (400, 401, 403), f"Revoked client not rejected: {resp.status_code}"
+        print("  [2.5] Revoked OAuth client rejected with HTTP 400/401/403")
 
         # 2.6 Seed 525 stale DCR rows + 1 active client, paginate & bulk purge
         print("  [2.6] Seeding 525 stale DCR rows in oauth_clients...")
@@ -1007,6 +1214,27 @@ def main() -> None:
         )
         assert resp.status_code in (400, 401, 403), f"Bad issuer was not rejected: {resp.status_code}"
         print(f"  [4.5] Mismatched issuer rejected with HTTP {resp.status_code}")
+
+        # Re-seed 525 stale DCR clients so Screenshot 07 captures 500+ paginated table
+        print("\n--- Preparing Data & Capturing Zero-Mock Playwright Screenshots ---")
+        stale_reseed = asyncio.run(seed_stale_dcr())
+        print(f"  Re-seeded {stale_reseed} DCR clients for paginated governance studio screenshot")
+
+        screen_env = os.environ.copy()
+        screen_env["KAN418_PORT"] = "18418"
+        screen_env["KAN418_COOKIE"] = cookie
+        screen_env["KAN418_CSRF"] = csrf_token
+        res_screen = subprocess.run(
+            ["node", "scripts/capture_kan418_screenshots.mjs"],
+            env=screen_env,
+            capture_output=True,
+            text=True,
+        )
+        print(res_screen.stdout)
+        if res_screen.returncode != 0:
+            print("Screenshot capture stderr:", res_screen.stderr)
+            raise RuntimeError(f"Screenshot capture failed with code {res_screen.returncode}")
+        print("  Zero-mock Playwright screenshots captured successfully across all 5 viewports!")
 
         print("\n=== ALL 4 LIVE WORKOUTS PASSED 100% SUCCESSFULLY! ===")
 

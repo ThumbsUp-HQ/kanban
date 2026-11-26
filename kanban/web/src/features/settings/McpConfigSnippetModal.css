@@ -120,7 +120,7 @@
 
 .kb-snippet-warning-note {
   font-size: 0.75rem;
-  color: #8b949e;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
   margin: 0;
 }
 
@@ -166,7 +166,7 @@
   height: 32px;
   background-color: #0d1117;
   border: 1px solid var(--border-subtle, #30363d);
-  color: #c9d1d9;
+  color: var(--kb-color-text-primary, var(--fg-primary, #c9d1d9));
   border-radius: 6px;
   padding: 0 8px;
   font-size: 0.875rem;
@@ -184,17 +184,16 @@
   overflow-x: auto;
   max-height: 200px;
   white-space: pre;
+  margin-bottom: 16px;
 }
 
 .kb-snippet-footer-row {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 16px;
   border-top: 1px solid var(--border-subtle, #30363d);
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
   background: var(--bg-surface);
 }
 
@@ -242,7 +241,7 @@
 
 .kb-snippet-llms-callout-text {
   font-size: 0.8125rem;
-  color: #c9d1d9;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #c9d1d9));
 }
 
 .kb-snippet-llms-callout-text a {
