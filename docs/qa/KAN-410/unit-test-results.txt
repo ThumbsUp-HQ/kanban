@@ -1,0 +1,79 @@
+=== PYTEST UNIT TEST RESULTS WITH COVERAGE: KAN-410 ROLLUP ===
+Timestamp: 2026-11-26T03:40:24Z
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 112 items
+
+kanban/tests/api/admin/test_ai_providers_api.py ..........               [  8%]
+kanban/tests/ai_config/test_net_guard.py ...........                     [ 18%]
+kanban/tests/agents/test_agent_definitions_api.py ...................... [ 38%]
+....                                                                     [ 41%]
+kanban/tests/api/test_llms_txt.py .......                                [ 48%]
+agent/tests/test_remote_runner.py .............                          [ 59%]
+kanban/tests/security/test_scrubber.py .........                         [ 67%]
+agent/tests/test_sparkle_pipeline.py ..................                  [ 83%]
+agent/tests/sparkle/test_pipeline.py ...........                         [ 93%]
+kanban/tests/test_wiki_bundle_sync.py .......                            [100%]
+
+============================= 112 passed in 37.82s =============================
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+agent/remote_runner/cli.py      166      4     34      4    96%   88->90, 231, 238, 344, 348
+agent/sparkle/pipeline.py       192      8     66     10    93%   160->164, 222, 224, 226, 229-239, 266->276, 317->350, 375->377, 378-379, 399->401
+kanban/agents/service.py        145      2     34      4    97%   86->exit, 218, 338->341, 375
+kanban/ops/llms_txt.py          126      0     20      0   100%
+kanban/security/scrubber.py     159      5     62      5    95%   210, 224, 231, 265, 292
+-------------------------------------------------------------------------
+TOTAL                           788     19    216     23    96%
+
+=== VITEST UNIT TEST RESULTS WITH COVERAGE: KAN-410 ROLLUP ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 19ms
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 188ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (12 tests) 555ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 938ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (51 tests) 1942ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (48 tests) 2081ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (22 tests) 2905ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (50 tests) 5596ms
+
+ Test Files  8 passed (8)
+      Tests  241 passed (241)
+   Start at  22:39:17
+   Duration  7.25s (tests 60%, environment 29%, import 8%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.34 |    96.74 |     100 |   99.92 |                   
+ admin-agents      |   99.54 |    97.22 |     100 |     100 |                   
+  ...torDrawer.tsx |     100 |    96.98 |     100 |     100 | ...10-112,209,242 
+  ...tudioPage.tsx |      98 |     97.5 |     100 |     100 | 73                
+  ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
+  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
+  cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
+ admin-ai          |    98.9 |    96.55 |     100 |    99.8 |                   
+  ...dgetModal.tsx |     100 |    97.77 |     100 |     100 | 130,224           
+  ...torDrawer.tsx |   99.62 |    96.08 |     100 |     100 | ...65,377,404,425 
+  AiStudioPage.tsx |    97.4 |     95.9 |     100 |   99.28 | 241               
+  aiAdminApi.ts    |   97.91 |    98.52 |     100 |     100 | 172               
+ admin-runners     |     100 |    98.43 |     100 |     100 |                   
+  ...okenModal.tsx |     100 |      100 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    97.61 |     100 |     100 | 128               
+  ...rsAdminApi.ts |     100 |      100 |     100 |     100 |                   
+ docs-center       |    99.6 |    96.44 |     100 |     100 |                   
+  ...ownViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+  ...enterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+  HelpDrawer.tsx   |     100 |    97.72 |     100 |     100 | 69                
+  docsService.ts   |     100 |    97.14 |     100 |     100 | 46                
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  wikiManifest.ts  |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

@@ -1,0 +1,43 @@
+=== 1. Pytest Wiki Bundle Sync Suite ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 7 items
+
+kanban/tests/test_wiki_bundle_sync.py .......                            [100%]
+
+============================== 7 passed in 0.13s ===============================
+
+=== 2. Vitest DocsCenter & DocsCenterImages Suites ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 160ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (51 tests) 5654ms
+   ✓ DocsCenter & Help System (KAN-16) (51)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (18)
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1549ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 532ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 420ms
+
+ Test Files  2 passed (2)
+      Tests  72 passed (72)
+   Start at  23:47:25
+   Duration  6.93s (tests 76%, environment 16%, import 5%, transform 1%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    99.6 |    96.74 |     100 |     100 |                   
+ ...downViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+ ...CenterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+ HelpDrawer.tsx    |     100 |    97.72 |     100 |     100 | 69                
+ docsService.ts    |     100 |      100 |     100 |     100 |                   
+ index.ts          |       0 |        0 |       0 |       0 |                   
+ wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

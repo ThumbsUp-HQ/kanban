@@ -1801,5 +1801,67 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         }
       }
     });
+
+    it('asserts resolveSectionElement resolves all Slice-2 AI and Runner docHref anchors', () => {
+      const chapter = getChapter('multi-provider-ai-engine-and-runners');
+      expect(chapter).toBeDefined();
+      if (!chapter) {
+        throw new Error('Chapter multi-provider-ai-engine-and-runners not found');
+      }
+
+      const { container } = render(
+        <DocMarkdownViewer content={chapter.content} />
+      );
+
+      const slice2DocHrefs = [
+        '/docs/multi-provider-ai-engine-and-runners#supported-runtimes',
+        '/docs/multi-provider-ai-engine-and-runners#execution-harnesses',
+        '/docs/multi-provider-ai-engine-and-runners#remote-runners',
+        '/docs/multi-provider-ai-engine-and-runners#repository-access',
+        '/docs/multi-provider-ai-engine-and-runners#budget-caps',
+        '/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide',
+        '/docs/multi-provider-ai-engine-and-runners#sampling-parameters',
+      ];
+
+      for (const href of slice2DocHrefs) {
+        const { anchor } = parseDocHref(href);
+        expect(anchor).toBeDefined();
+        if (!anchor) {
+          throw new Error(`Anchor missing for ${href}`);
+        }
+        const element = resolveSectionElement(container, anchor);
+        expect(element, `Anchor #${anchor} from ${href} must resolve in DocMarkdownViewer`).not.toBeNull();
+      }
+    });
+
+    it('asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors', () => {
+      const chapter = getChapter('studio-configuration-reference');
+      expect(chapter).toBeDefined();
+      if (!chapter) {
+        throw new Error('Chapter studio-configuration-reference not found');
+      }
+
+      const { container } = render(
+        <DocMarkdownViewer content={chapter.content} />
+      );
+
+      const studioSectionHrefs = [
+        '/docs/studio-configuration-reference#8-ai-providers-studio',
+        '/docs/studio-configuration-reference#9-agent-definitions-studio',
+        '/docs/studio-configuration-reference#10-remote-runners-studio',
+      ];
+
+      for (const href of studioSectionHrefs) {
+        const { anchor } = parseDocHref(href);
+        expect(anchor).toBeDefined();
+        if (!anchor) {
+          throw new Error(`Anchor missing for ${href}`);
+        }
+        const element = resolveSectionElement(container, anchor);
+        expect(element, `Anchor #${anchor} from ${href} must resolve in DocMarkdownViewer`).not.toBeNull();
+      }
+    });
+      }
+    });
   });
 });

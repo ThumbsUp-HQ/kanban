@@ -1,0 +1,644 @@
+diff --git a/Multi-Provider-AI-Engine-and-Runners.md b/Multi-Provider-AI-Engine-and-Runners.md
+index 9486e48..52becee 100644
+--- a/Multi-Provider-AI-Engine-and-Runners.md
++++ b/Multi-Provider-AI-Engine-and-Runners.md
+@@ -5,7 +5,7 @@
+ Unlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, 👍kanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.
+ 
+ Supported provider ecosystems:
+-- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.
++- **Cloud LLMs:** Google Gemini (Gemini 2.5 Flash, Gemini 2.5 Pro), OpenAI (GPT-4o, GPT-4o-mini), and OpenAI-compatible gateways.
+ - **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.
+ - **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.
+ - **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.
+@@ -18,11 +18,11 @@ flowchart TD
+     end
+ 
+     subgraph Providers["Multi-Provider Implementations"]
+-        OpenAI["OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways"]
+-        Gemini["Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)"]
+-        Ollama["Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5"]
+-        CLIPipe["Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail"]
+-        Runner["Remote mTLS Runner<br/>Encrypted WSS, read-only repo"]
++        OpenAI["OpenAI Provider - GPT-4o, o3-mini, compatible gateways"]
++        Gemini["Google Gemini Provider - Gemini 2.5 Flash / Pro (native tools)"]
++        Ollama["Local Ollama Provider - Llama 3, DeepSeek-R1, Qwen 2.5"]
++        CLIPipe["Zero-Shell CLI Pipe - agy -p / codex -p in nsjail"]
++        Runner["Remote mTLS Runner - Encrypted WSS, read-only repo"]
+     end
+ 
+     App --> Protocol
+@@ -56,21 +56,23 @@ class LLMProvider(ABC):
+         """Generate vector embeddings for semantic search."""
+ ```
+ 
+-<a id="supported-runtimes"></a>
+-### Supported Providers Matrix
++## Supported Runtimes
++
++The platform provides first-class support for cloud, local air-gapped, CLI-piped, and distributed runner runtimes:
+ 
+ | Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |
+ | :--- | :--- | :---: | :---: | :--- |
+-| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |
+-| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |
+-| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |
+-| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |
+-| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |
++| `gemini` | Large context specs, vision, reasoning | Yes | Yes (Native Function Calling) | `egress_llm_net` |
++| `openai` | Complex planning, synthesis, code review | Yes | Yes (Native JSON Schema) | `egress_llm_net` |
++| `ollama` | Air-gapped workstations, strict data privacy | Yes | Yes (Model dependent) | `data_net` / local |
++| `cli_pipe` | Deterministic CI agents, bash-less execution | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |
++| `remote_runner` | Forensic code audits, Playwright test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |
+ 
+ ---
+ 
+-<a id="execution-harnesses"></a>
+-## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)
++## Execution Harnesses
++
++Autonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.
+ 
+ ```mermaid
+ sequenceDiagram
+@@ -87,8 +89,6 @@ sequenceDiagram
+     Engine->>Engine: Validate response against Pydantic schema
+ ```
+ 
+-Autonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.
+-
+ 👍kanban resolves this with **Zero-Shell CLI Pipes**:
+ - Agents do not receive an interactive shell or bash process.
+ - Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.
+@@ -105,7 +105,7 @@ cat prompt.json | agy -p --sandbox-jail > response.json
+ 
+ ---
+ 
+-## AI Providers and Token Caps Studio (`/admin/ai`)
++## AI Providers and Token Caps Studio
+ 
+ Workspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.
+ 
+@@ -113,63 +113,125 @@ Workspace and server administrators manage LLM provider registrations, write-onl
+ flowchart TD
+     subgraph AIStudio["AI Providers & Token Caps Architecture"]
+         AdminUser["Administrator (AAL2)"] --> Reg["Register / Edit Provider"]
+-        Reg --> ProvidersList["Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)"]
++        Reg --> ProvidersList["Configured Providers - OpenAI (Cloud, priority 10), Gemini (Cloud, priority 20), Ollama (Local Air-Gap, priority 5)"]
+         
+         ProvidersList --> AirGapCheck{"Air-Gap Policy Active?"}
+-        AirGapCheck -->|Yes| BlockCloud["Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed"]
++        AirGapCheck -->|Yes| BlockCloud["Cloud Providers Blocked - Only Local Zero-Egress Ollama Allowed"]
+         AirGapCheck -->|No| AllowCloud["Dispatched by Priority Tier"]
+         
+         AllowCloud --> BudgetGate{"Monthly Token Budget Gate"}
+         BlockCloud --> BudgetGate
+         
+         BudgetGate -->|Within Cap| Exec["Execute Completion / Tool Call"]
+-        BudgetGate -->|Cap Exceeded| Reject["429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap"]
++        BudgetGate -->|Cap Exceeded| Reject["429 Budget Exceeded - Alert Admin to Reset or Expand Cap"]
+     end
+ ```
+ 
+-![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)
++![AI Providers Studio - Desktop Light](images/slice2-ai-studio-1440x900-light.png)
++
++![AI Providers Studio - Desktop Dark](images/slice2-ai-studio-1440x900-dark.png)
++
++![AI Providers Studio - Tablet Landscape](images/slice2-ai-studio-1024x768-tablet-landscape.png)
++
++![AI Providers Studio - Tablet Portrait](images/slice2-ai-studio-768x1024-tablet-portrait.png)
++
++![AI Providers Studio - Mobile Portrait](images/slice2-ai-studio-390x844-mobile-portrait.png)
+ 
+ ### Key Provider Governance Features:
+-1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.
+-2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.
++1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database using envelope encryption, and never echoed back to the browser. The editor drawer contains 0 password inputs (`input[type="password"]`), completely eliminating DOM password sniffing.
++2. **Enterprise Air-Gap Mode:** When activated (`air_gap_mode: true`), all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions. Cloud provider creation and update requests return HTTP 409 `AIR_GAP_EGRESS_DENIED`, while model probing and connection test endpoints return HTTP 200 OK with `{"ok": false, "error_code": "AIR_GAP_EGRESS_DENIED", ...}`.
+ 3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.
+ 
+ ---
+ 
+-## Agent Definitions Studio (`/admin/agents`)
++## Budget Caps
++
++The Token Budget Modal (`AiBudgetModal.tsx`) provides granular control over organizational spending across each configured AI provider.
++
++![Token Budget Modal - Unlimited Quota](images/slice2-ai-budget-modal-unlimited.png)
++
++![Token Budget Modal - Hard AI Freeze](images/slice2-ai-budget-modal-freeze.png)
++
++### Token Cap Policies:
++- **Enforced Cap** (`cap-mode-enforce-btn`): Administrators define a monthly token quota (e.g. 1,000,000, 5,000,000, 25,000,000, or 100,000,000 tokens via quick presets). Once `tokens_used >= token_cap`, subsequent reservations fail closed with `BudgetExceeded`, and Sparkle FIM completions return status `budget`.
++- **Hard AI Freeze** (`preset-budget-0-freeze-btn`): Setting `token_cap = 0` immediately halts all model queries and agent transition checks for that provider. It serves as an instant financial circuit breaker.
++- **Unlimited Quota** (`cap-mode-unlimited-btn`): Sets the internal ceiling to `10_000_000_000` tokens, tracking ledger consumption without automated cutoffs.
++
++---
++
++## Sampling Parameters
++
++Sampling parameters calibrate model behavior across deterministic verification gates versus open-ended synthesis:
++
++| Parameter | UI Control | Range / Allowed Values | Default | Purpose & Invariant |
++| :--- | :--- | :--- | :--- | :--- |
++| `temperature` | `provider-temperature-input` | `0.0` to `2.0` | `0.7` | Governs randomness. Use low values (`0.1` to `0.3`) for deterministic code generation, test gates, and QA verdicts. |
++| `top_p` | `provider-top-p-input` | `0.0` to `1.0` | `1.0` | Nucleus sampling threshold pruning low-probability tokens from generation. |
++| `max_tokens` | `provider-max-tokens-input` | `1` to `128000` | `4096` | Upper bound on generation tokens for completion and reasoning traces. |
++| `timeout_ms` | `provider-timeout-ms-input` | `1000` to `300000` ms | `30000` ms | Hard ceiling on provider HTTP requests. Maximum 300s reasoning ceiling. |
++| `mtls_client_cert_pem` | `provider-mtls-cert-input` | PEM Certificate | Empty | Optional client certificate for mutual TLS provider connections. |
++
++---
++
++## Agent Definitions Studio
+ 
+-Administrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.
++Administrators author and manage autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.
+ 
+ ```mermaid
+ flowchart LR
+     subgraph AgentDefFlow["Agent Definition & Validation Lifecycle"]
+-        Def["Agent Definition<br/>Name, Slug, Model, Prompt Template"] --> Scope["Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)"]
+-        Scope --> Modal["Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema"]
++        Def["Agent Definition - Name, Slug, Model, Prompt Template"] --> Scope["Tool Allowlist Scoping - Permitted MCP Tools (read_ticket, search_tickets, etc.)"]
++        Scope --> Modal["Validation Modal (/admin/agents) - Simulate test prompt against agent schema"]
+         Modal --> Verdict{"Validation Passes?"}
+         Verdict -->|Yes| Active["Registered as Active Agent Principal"]
+         Verdict -->|No| Fix["Report Schema / Prompt Errors for Correction"]
+     end
+ ```
+ 
+-![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)
++![Agent Definitions Studio - Desktop Light](images/slice2-agent-studio-1440x900-light.png)
+ 
+-![Agent Validation Modal](images/60-agent-validation-modal.png)
++![Agent Definitions Studio - Desktop Dark](images/slice2-agent-studio-1440x900-dark.png)
++
++![Agent Definitions Studio - Tablet Landscape](images/slice2-agent-studio-1024x768-tablet-landscape.png)
++
++![Agent Definitions Studio - Tablet Portrait](images/slice2-agent-studio-768x1024-tablet-portrait.png)
++
++![Agent Definitions Studio - Mobile Portrait](images/slice2-agent-studio-390x844-mobile-portrait.png)
++
++![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)
+ 
+ ### Definition Capabilities:
+-- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).
+-- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.
++- **Role and Model Mapping:** Bind specific personas (such as `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).
++- **Harness Selection:** Select `in_app_sdk` (in-process LLM calling), `cli_pipe` (sandboxed zero-shell command pipe), or `remote_runner` (distributed mTLS build worker).
++- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`).
+ - **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.
+ 
++![Agent Validation Modal](images/60-agent-validation-modal.png)
++
++![Agent Validation Modal - Forensic Trace](images/slice2-agent-validation-modal-trace.png)
++
++---
++
++## Repository Access
++
++When configuring autonomous agents in `AgentDefinitionEditorDrawer.tsx`, administrators select the repository access mode granted to the agent during execution:
++
++| Mode | Allowed Values | Default | Operational & Security Boundary |
++| :--- | :--- | :--- | :--- |
++| `none` | Zero filesystem access | `none` | Agent operates purely on ticket metadata, comments, and in-app documents without cloning or mounting code. |
++| `ro_vfs_mount` | Read-Only VFS Mount | None | Mounts the Git repository strictly read-only within the execution container (`CLONE_NEWNS`). Ideal for forensic QA and static code review. |
++| `bare_git_tools` | Bare Git Read-Only Tools | None | Provides read-only bare Git inspection tools in an isolated tmpfs directory. Prevents repo modification while permitting fast commit, diff, and tree inspection. |
++
+ ---
+ 
+-## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)
++## Remote Runners
+ 
+-For heavy build verification, sandbox test execution, and isolated code review, 👍kanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.
++For heavy build verification, sandbox test execution, and isolated code review, 👍kanban deploys distributed **Remote Runners** managed through `/admin/agent-runners`.
+ 
+ ```mermaid
+ sequenceDiagram
+     autonumber
+-    actor Admin as Server Administrator
++    participant Admin as Admin
+     participant Studio as Runner Studio (/admin/agent-runners)
+     participant Server as 👍kanban Orchestrator
+     participant Daemon as Remote Runner Daemon
+@@ -184,26 +246,43 @@ sequenceDiagram
+     Daemon->>Server: Heartbeat ping every 15s over :8444 (CPU, RAM, active jobs)
+ ```
+ 
++![Remote Runners Studio - Desktop Light](images/slice2-runner-studio-1440x900-light.png)
++
++![Remote Runners Studio - Desktop Dark](images/slice2-runner-studio-1440x900-dark.png)
++
++![Remote Runners Studio - Tablet Landscape](images/slice2-runner-studio-1024x768-tablet-landscape.png)
++
++![Remote Runners Studio - Tablet Portrait](images/slice2-runner-studio-768x1024-tablet-portrait.png)
++
++![Remote Runners Studio - Mobile Portrait](images/slice2-runner-studio-390x844-mobile-portrait.png)
++
+ ![Agent Runner Studio Overview](images/45-admin-runner-studio.png)
+ 
+ ![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)
+ 
++![Runner Mint Token Modal - Masked](images/slice2-runner-mint-token-modal.png)
++
+ ### Runner Infrastructure and Protocol Security
+ 
+-- **Dedicated Port `:8444` and Proof-of-Possession Handshake:** Distributed runners connect exclusively over dedicated mutual TLS port `:8444`. Port `:8444` rejects standard HTTP requests and unauthenticated TLS handshakes, demanding a valid X.509 client certificate verified via a cryptographic Proof-of-Possession (PoP) challenge.
++- **Dedicated Port :8444 and Proof-of-Possession Handshake:** Distributed runners connect exclusively over dedicated mutual TLS port `:8444`. Port `:8444` rejects standard HTTP requests and unauthenticated TLS handshakes, demanding a valid X.509 client certificate verified via a cryptographic Proof-of-Possession (PoP) challenge format: `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}`.
+ - **Single-Use Enrollment Token (Max 15-Minute TTL):** When an administrator clicks `+ Mint Runner Token` in `/admin/agent-runners` (requiring AAL2 step-up authentication), the orchestrator mints an ephemeral enrollment token valid for at most 15 minutes (900 seconds). Upon first enrollment or expiration, the token is permanently invalidated.
++- **Unprivileged Non-Root Daemon Execution:** The daemon runs as a standard unprivileged user. Generated key material enforces strict POSIX file permissions:
++  - State directory: `0o700` (`drwx------`)
++  - Private key (`client.key`): `0o600` (`-rw-------`)
++  - CA certificate (`ca.pem`): `0o600` (`-rw-------`)
++  - Client certificate (`client.crt`): `0o644` (`-rw-r--r--`)
+ - **CLI Enrollment Syntax:** The studio generates an exact command to enroll the host daemon:
+   ```bash
+-  echo "${ENROLLMENT_TOKEN}" | uv run kanban-agent-runner enroll \
++  echo "$TOKEN" | uv run kanban-agent-runner enroll \
+     --server-url https://kanban.example.com \
+     --token-stdin \
+     --pool default
+   ```
+ - **Hardware-Bound Certificate Rotation Guidance:** Runner client certificates are hardware-bound to the host and cannot be renewed in place. To rotate a certificate or decommission a host:
+-  1. Revoke the existing runner in `/admin/agent-runners` (AAL2 challenge confirmed).
+-  2. Mint a fresh enrollment token (15-minute TTL).
+-  3. Re-enroll the runner daemon using the CLI command above.
+-- **Private `/internal/v1/mcp/*` Runner Ingress Isolation:** All daemon polling, task dispatch, and execution telemetry endpoints (`/internal/v1/mcp/*`) are strictly segregated from public edge networks. They are reachable only over the internal container network via authenticated mTLS.
++  - Revoke the existing runner in `/admin/agent-runners` via `POST /api/v1/admin/agent-runners/{id}:revoke`.
++  - Mint a fresh single-use enrollment token (15-minute TTL).
++  - Re-enroll the runner daemon using the CLI command above.
++- **Private Ingress Isolation:** All daemon polling, task dispatch, and execution telemetry endpoints are strictly segregated from public edge networks.
+ 
+ ---
+ 
+@@ -215,15 +294,6 @@ When an agent session exhibits anomalous activity or a credential leak is detect
+ 
+ ---
+ 
+-## Remote mTLS Repository Runners
+-
+-For long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:
+-- **Mutual TLS Authentication (mTLS):** Both the 👍kanban server and the runner verify cryptographic X.509 certificates over dedicated port `:8444`.
+-- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.
+-- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.
+-
+----
+-
+ ## Testable AI: Pluggable Fixtures and CLI Validation
+ 
+ AI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. 👍kanban enforces **100% Deterministic AI Testing**:
+@@ -247,16 +317,16 @@ kanban-agent validate-transition \
+ 
+ ---
+ 
+-## Multi-Provider Benchmark & Cutoff Timeout Guide
++## Multi-Provider Benchmark Cutoff Timeout Guide
+ 
+ Every AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.
+ 
+-### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)
++### Live Full-Stack In-Transition Benchmark Matrix (In Progress -> Done)
+ 
+ Measured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: "Build a rocket ship and serve ice cream on Saturn"`):
+ 
+ | Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |
+-| :--- | :---: | :--- | :---: | :--- | :---: | :--- |
++| :--- | :---: | :--- | :--- | :--- | :--- | :--- |
+ | **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |
+ | **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |
+ | **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |
+@@ -266,9 +336,70 @@ Measured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE R
+ | **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |
+ 
+ ### Choosing a Cutoff Timeout
+-- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.
+-- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).
+-- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.
++- **Fast Cloud Models** (`gpt-4o-mini`, `gemini-2.5-flash-lite`): `15000` to `20000` ms.
++- **Local 2B-4B Edge Models** (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`): `25000` to `35000` ms (covers occasional model reload or shared VRAM).
++- **Heavy Reasoning Models** (`nemotron-3-super:latest`, `deepseek-r1`): `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.
+ 
+-<a id="remote-runners"></a>
+-<a id="repository-access"></a>
++---
++
++## Step-by-Step Operational Guides
++
++### Guide A: Configuring Gemini, OpenAI and Air-Gapped Ollama Providers
++1. Open the AI Providers Studio at `/admin/ai` (or workspace settings at `/workspaces/{ws}/settings`).
++2. Click `+ Register Provider` (`register-provider-btn`) to open the `AiProviderEditorDrawer`.
++3. Choose the provider preset or set `provider_kind`: for Google Gemini, click `Gemini` preset (`preset-gemini-btn`), enter display name `Google Gemini Workspace`, base URL `https://generativelanguage.googleapis.com`, paste API key, click `Probe Models` (`probe-models-btn`) to populate the model list (`gemini-2.5-flash`, `gemini-2.5-pro`), and set timeout ceiling (`15000` to `20000` ms). For OpenAI / Compatible, click `OpenAI` preset (`preset-openai-btn`), enter display name, base URL `https://api.openai.com/v1`, paste API key, and probe or select models (`gpt-4o`, `gpt-4o-mini`). For Local Ollama, click `Ollama` preset (`preset-ollama-btn`), enter display name `Local Ollama Runtime`, base URL `http://127.0.0.1:11434`, residency tier `local_only`, and click `Probe Models` to discover locally hosted models (`llama3.2:latest`, `qwen2.5-coder:latest`). API key is optional for local runtimes.
++4. Expand `Advanced Settings` (`advanced-settings-details`) to adjust temperature (default `0.7`), top-p (default `1.0`), max tokens (default `4096`), and optional mTLS client certificates.
++5. Click `Register Provider` (`save-provider-btn` in create mode, or `Save Provider` when editing existing configs).
++6. Reorder failover priority stack using drag handles or Up/Down buttons (`move-up-btn-{id}`, `move-down-btn-{id}`). The system attempts providers in priority order, falling back cleanly on timeouts or HTTP 5xx errors.
++7. To enforce zero cloud egress, navigate to Workspace Settings and enable `air_gap_mode = true`. Outbound cloud connections and provider create/update attempts for `openai` and `gemini` are rejected with HTTP 409 `AIR_GAP_EGRESS_DENIED` (model probing and connection tests return HTTP 200 with `{"ok": false, "error_code": "AIR_GAP_EGRESS_DENIED", ...}`), while local zero-egress Ollama queries continue without interruption.
++
++### Guide B: Setting Monthly Token Caps and Budget Halting
++1. In `/admin/ai`, locate the target provider card and click `Token Budget` (`manage-budget-btn-{id}`) to open the `AiBudgetModal`.
++2. Select the budget mode: choose Enforce Token Cap (`cap-mode-enforce-btn`) with monthly period and an integer token allowance or preset (`1M`, `5M`, `25M`, `100M`); choose Unlimited Quota (No Cap) (`cap-mode-unlimited-btn`) for an internal cap of `10_000_000_000` tokens; or choose 0 (Freeze) (`preset-budget-0-freeze-btn`) to set monthly cap to `0`, immediately blocking all completion and agent transition requests with `BudgetExceeded` (Sparkle FIM completions return status `budget`).
++3. Click `Save Token Cap` (`save-budget-btn`).
++4. The studio displays real-time progress bars indicating token consumption against the configured ceiling.
++
++### Guide C: Managing Workspace and Project Autonomous Agents
++1. Navigate to Agent Definitions Studio at `/admin/agents` (or project settings `/projects/{proj}/settings/agents`).
++2. Click `+ Register Agent` (`register-agent-btn`) to open the `AgentDefinitionEditorDrawer`.
++3. Fill in agent metadata including slug (lowercase alphanumeric string with hyphens, e.g. `reality-checker`, `security-auditor`), display name, and harness kind (`in_app_sdk`, `cli_pipe`, or `remote_runner`).
++4. Configure harness specifics: for `in_app_sdk`, select `provider_kind` (`gemini`, `openai`, `ollama`) and `model_id`; for `cli_pipe`, select pre-approved binary (`agy` or `codex`) and CLI args (`["-p"]`); for `remote_runner`, select target pool slug (`default`).
++5. Select `repo_access_mode` (`none`, `ro_vfs_mount`, `bare_git_tools`) and check allowed MCP tools (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`).
++6. Enter System Instructions in Markdown directing agent persona and verification rules.
++7. Set timeout (`timeout_ms`, default 60000ms, up to 300000ms / 300s).
++8. Click `Save Agent` (`save-agent-btn`).
++9. Click `Test Validation` (`validate-agent-btn-{id}`) to open the `AgentValidationModal`. The system executes a non-destructive test trace and renders a 4-section report (`=== 1. RENDERED CONTEXT ===`, `=== 2. TOOL TRACE ===`, `=== 3. LATENCY & TOKENS ===`, `=== 4. SCHEMA & POLICY STATUS ===`).
++
++### Guide D: Enrolling Non-Root mTLS Runners
++1. Navigate to Remote Runners Studio at `/admin/agent-runners`.
++2. Click `+ Mint Enrollment Token` (`open-mint-modal-btn`) to open the `MintEnrollmentTokenModal`.
++3. Select pool slug (`default`) and token TTL (e.g. 600s, max 900s / 15 minutes), then click `Generate Single-Use Token` (`submit-mint-token-btn`).
++4. Copy the generated enrollment CLI snippet: `echo "$TOKEN" | uv run kanban-agent-runner enroll --server-url https://kanban.example.com --token-stdin --pool default`.
++5. On the runner host, execute the enrollment command as a standard non-root user. The runner daemon generates an EC P-256 private key and CSR (`CN=worker.internal.test`), posts the CSR to `/api/v1/agent-runners/enroll` with the single-use token, receives the signed client certificate (`O=👍kanban Remote Runner Node`), and persists state under strict POSIX file permissions: state directory `0o700` (`drwx------`), `client.key` `0o600`, `ca.pem` `0o600`, and `client.crt` `0o644`.
++6. Start the daemon with `uv run kanban-agent-runner run` (auto-detects runner config) or `uv run kanban-agent-runner run --config ~/.local/state/kanban-runner/runner.toml`.
++7. The runner connects to dedicated mTLS port `:8444` (or WebSocket `/api/v1/agent-runners/ws`), solves the cryptographic Proof-of-Possession challenge `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}`, and enters `online` state.
++8. To revoke a runner, click `1-Click Revoke (AAL2)` (`POST /api/v1/admin/agent-runners/{id}:revoke`). Reconnection attempts with the revoked certificate are immediately rejected with HTTP 403 Forbidden.
++
++The canonical multi-line enrollment snippet is formatted as:
++```bash
++echo "$TOKEN" | uv run kanban-agent-runner enroll \
++  --server-url https://kanban.example.com \
++  --token-stdin \
++  --pool default
++```
++
++### Guide E: Using the Local-Folder /llms.txt Onboarding Prompt
++1. Locate the Agent Onboarding Prompt card at `/docs`, `/about`, or `/settings/mcp`.
++2. Copy the standardized onboarding prompt: `Read https://kanban.example.com/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences strictly to the local project folder (.agents/skills/ and AGENTS.md) - do NOT modify global home/system directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents) unless I explicitly request global installation.`
++3. Paste the prompt into your coding assistant (Claude Code, OpenAI Codex, Gemini CLI / Antigravity).
++4. The assistant fetches `https://kanban.example.com/llms.txt` and discovers skills (`kanban-workflow-setup`, `kanban-ticket`, `kanban-agent-manager`, `reality-checker`).
++5. Complete the interactive interview. The assistant configures local instructions in `.agents/skills/` and persists user preferences via `PATCH /api/v1/users/me/preferences` (`agent_onboarding_prefs`).
++
++![Agent Onboarding Prompt Card - Desktop Light](images/slice2-onboarding-1440x900-light.png)
++
++![Agent Onboarding Prompt Card - Desktop Dark](images/slice2-onboarding-1440x900-dark.png)
++
++The complete verbatim prompt text for local clipboard copying:
++```text
++Read https://kanban.example.com/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences strictly to the local project folder (.agents/skills/ and AGENTS.md) - do NOT modify global home/system directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents) unless I explicitly request global installation.
++```
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+index 907f8ce..0bab2ae 100644
+--- a/Studio-Configuration-Reference.md
++++ b/Studio-Configuration-Reference.md
+@@ -143,58 +143,141 @@ The OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications,
+ ---
+ 
+ ## 8. AI Providers Studio
+-The AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.
++The AI Providers Studio (`/admin/ai` or `/workspaces/:ws/settings`) configures multi-provider LLM integrations, write-only envelope encryption for API credentials, failover priority ordering, and monthly token budgets with automated circuit breakers.
++
++![AI Providers Studio - Desktop Light](images/slice2-ai-studio-1440x900-light.png)
++
++![AI Provider Editor Drawer - 0 Password Inputs](images/slice2-ai-provider-drawer-create.png)
+ 
+ 
+ ### AI Providers Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |
+-| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |
+-| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |
+-| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |
+-| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |
+-| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |
+-| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |
++| `provider_kind` | Underlying AI runtime architecture | `gemini`, `openai`, `ollama` | Required | Governs protocol serialization, tool calling format, and streaming handlers |
++| `display_name` | Human-readable provider label | UTF-8 String (1 to 80 characters) | Required | Displayed on provider cards, failover stack, and token ledger |
++| `base_url` | Upstream API endpoint address | Valid HTTP or HTTPS URL | Provider default | Local Ollama uses `http://127.0.0.1:11434`; cloud requires HTTPS |
++| `api_key` | Secret cryptographic provider credential | String (Write-only custody) | None | Stored encrypted in PostgreSQL; zero password inputs in client DOM |
++| `model_allowlist` | Permitted model identifiers for dispatch | Array or comma-separated list of strings | Probed list | Only allowlisted models are accessible for completion and agent execution |
++| `timeout_ms` | Hard ceiling on provider HTTP transactions | Integer between 1000 and 300000 ms | 30000 ms | Upstream requests exceeding timeout fail closed with `GATE_TIMEOUT` (max 300s) |
++| `temperature` | Randomness parameter for model sampling | Float between 0.0 and 2.0 | 0.7 | Low values (`0.1` to `0.3`) ensure deterministic verification gate verdicts |
++| `top_p` | Nucleus sampling probability cutoff | Float between 0.0 and 1.0 | 1.0 | Filters tail tokens; 1.0 evaluates the full cumulative distribution |
++| `max_tokens` | Maximum generation token ceiling | Integer between 1 and 128000 tokens | 4096 | Constrains generation size to avoid runaway completion loops |
++| `mtls_client_cert_pem` | Client certificate for mutual TLS | Valid PEM certificate block or empty | None | Enables certificate-authenticated transport to private gateways |
++| `is_enabled` | Master active toggle for the provider | Boolean (`true` / `false`) | `true` | Disabled providers are skipped during model probing and runtime dispatch |
++| `period_kind` | Accounting duration for consumption caps | `daily` or `monthly` | `monthly` | Accounting period tier: daily or monthly (resets token consumption counter) |
++| `token_cap` | Monthly token consumption budget limit | Non-negative integer (0 to 10000000000) | 10000000000 | `0` enforces Hard AI Freeze; `10000000000` enables Unlimited Quota |
++
++![Token Budget Modal - Unlimited Quota](images/slice2-ai-budget-modal-unlimited.png)
++
++![Token Budget Modal - Hard AI Freeze Warning](images/slice2-ai-budget-modal-freeze.png)
++
++### Setting-by-Setting Technical Paragraphs: AI Providers and Token Budgets
++
++- **provider_kind:** Identifies the foundational AI provider protocol engine. Supported choices are `gemini` (Google Gemini 2.5 Flash/Pro with native function calling and multimodal spec support), `openai` (OpenAI GPT-4o, GPT-4o-mini, and compatible gateways implementing standard JSON schema tool definitions), and `ollama` (local air-gapped runtimes for private edge models like Llama 3 and DeepSeek-R1). Selecting a kind binds the request serializer, streaming parser, and error mapper.
++- **display_name:** The descriptive title assigned to the provider instance (for example, "Google Gemini Workspace" or "Local Ollama Runtime"). Scoped to the workspace or server tier, this label identifies the provider across cards in `/admin/ai`, the failover priority stack, and the audit ledger.
++- **base_url:** The root network URL for provider API communications. Cloud providers require secure HTTPS endpoints (`https://generativelanguage.googleapis.com` or `https://api.openai.com/v1`), whereas local Ollama deployments typically connect over internal loopback (`http://127.0.0.1:11434`). Outbound calls are subject to network policy and workspace air-gap restrictions.
++- **api_key:** The secret API key used to authenticate upstream cloud requests. Submitted over TLS, stored encrypted at rest via PostgreSQL envelope encryption, and never echoed back to client browsers. In `AiProviderEditorDrawer`, input fields adhere to strict security invariants by using standard masked inputs with 0 `input[type="password"]` elements, preventing browser credential managers from storing or sniffing AI keys.
++- **model_allowlist:** An explicit allowlist of model names permitted for execution under this provider configuration (e.g. `["gemini-2.5-flash", "gemini-2.5-pro"]` or `["llama3.2:latest"]`). Administrators can manually specify identifiers or click `Probe Models` to automatically query the upstream provider API and select discovered models via interactive search chips.
++- **timeout_ms:** The maximum wall-clock request duration allowed for provider calls, bounded between 1,000 ms and 300,000 ms (default 30,000 ms, with a 300-second reasoning ceiling). When combined with agent execution, the runtime enforces `min(provider.timeout_ms, agent.timeout_ms)`. If the upstream model exceeds this cutoff, the system aborts execution, fails closed, and records `GATE_TIMEOUT` without hanging worker threads.
++- **temperature:** Governs generation randomness on a scale from 0.0 to 2.0 (default 0.7). Lower temperatures (0.1 to 0.3) provide highly deterministic outputs recommended for code review, transition gates, and structured JSON parsing, while moderate values (0.7 to 1.0) support creative sticky synthesis and brainstorming.
++- **top_p:** Controls nucleus sampling by restricting generation to tokens comprising the top P probability mass (0.0 to 1.0, default 1.0). Decreasing this value eliminates low-probability generation branches, enhancing predictability in mission-critical QA workflows.
++- **max_tokens:** The upper bound on token output generated in a single completion or reasoning turn (configurable from 1 to 128,000 tokens, default 4,096). Protects against unbounded model loops and limits context window consumption.
++- **mtls_client_cert_pem:** An optional client certificate in PEM format used when establishing mutual TLS connections to enterprise AI gateways or private proxy infrastructure.
++- **is_enabled:** A boolean toggle that immediately activates or deactivates the provider without deleting its configuration or keys. Inactive providers are bypassed during live completion dispatch and sparkle routing.
++- **priority_and_order:** The failover dispatch sequence determined via `PUT /api/v1/admin/ai/providers/order` (or `PUT /api/v1/workspaces/:ws/ai-providers/order`). Providers are evaluated sequentially by priority. If a higher-tier provider encounters a 5xx error or rate limit, the router seamlessly falls back to the next active provider in the stack.
++- **token_cap_and_budgets:** Managed via `PUT /api/v1/admin/ai/budgets` (or `PUT /api/v1/workspaces/:ws/ai-providers/budgets`) across daily or monthly periods (`period_kind`). Setting `token_cap = 0` triggers a Hard AI Freeze, immediately rejecting reservations with `BudgetExceeded` and halting Sparkle completions with status `budget`. Selecting Unlimited Quota configures an internal ceiling of 10,000,000,000 tokens, recording ledger telemetry without automated cutoffs. Quick presets provide standard allowances of 1M, 5M, 25M, and 100M tokens.
+ 
+ ---
+ 
+ ## 9. Agent Definitions Studio
+-The Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.
++The Agent Definitions Studio (`/admin/agents` or `/projects/:proj/settings/agents`) configures autonomous agent personas, tool permission boundaries, execution harnesses, and developer onboarding prompts.
++
++![Agent Definitions Studio - Desktop Light](images/slice2-agent-studio-1440x900-light.png)
++
++![Agent Definitions Studio - Desktop Dark](images/slice2-agent-studio-1440x900-dark.png)
+ 
+ 
+ ### Agent Definitions Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |
+-| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |
+-| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |
+-| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |
+-| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |
+-| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |
++| `slug` | Unique URL-safe agent identifier | Lowercase alphanumeric ASCII with hyphens (1 to 64 chars) | Required | Used in ticket `@mentions`, API URLs, and activity logs |
++| `display_name` | Human-readable name of the agent | UTF-8 String (1 to 200 characters) | Required | Displayed on ticket assignment cards and inspection drawers |
++| `harness_kind` | Runtime execution environment | `in_app_sdk`, `cli_pipe`, `remote_runner` | `in_app_sdk` | Governs execution boundary, isolation model, and process privileges |
++| `provider_kind` | AI provider bound to the agent | `gemini`, `openai`, `ollama` | Provider default | Used when `harness_kind = in_app_sdk` to route LLM queries |
++| `model_id` | Model slug for agent reasoning | Valid model identifier string | Provider default | Controls reasoning depth and token processing speed |
++| `cli_binary_allowlist_id`| Pre-approved binary for CLI pipe harness | `agy`, `codex` | `agy` | Zero-shell execution over stdin/stdout inside hardened Linux jail |
++| `cli_args` | Command-line arguments for CLI pipe | Array of string arguments | `["-p"]` | Structured arguments passed directly via execve (never shell) |
++| `remote_runner_pool_slug`| Target pool for remote worker dispatch | Valid pool slug identifier | `default` | Routes heavy build tasks to distributed mTLS worker nodes |
++| `repo_access_mode` | Repository filesystem access permissions | `none`, `ro_vfs_mount`, `bare_git_tools` | `none` | `ro_vfs_mount` mounts Git repo read-only; prevents code tampering |
++| `mcp_allowed_tools` | Permitted Model Context Protocol tools | Array of tool names | Basic read set | Restricts capabilities to least privilege allowlist (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`) |
++| `system_instructions_md`| Persona prompt and operational charter | Canonical UTF-8 Markdown | Required | Directs reasoning behavior and verification requirements |
++| `timeout_ms` | Maximum execution time before cancellation | Integer between 1000 and 300000 ms | 60000 ms | Hard cutoff ceiling; uncompleted tasks fail closed safely (max 300s) |
++| `project_id` | Project scoping and tenancy binding | Valid UUID or null | Null (Workspace) | Enforces PostgreSQL `FORCE ROW LEVEL SECURITY` tenant isolation |
++| `agent_onboarding_prefs`| User preferences for agent onboarding | JSON object | `{}` | Stores execution mode, model strategy, and QA rigor from `/llms.txt` |
++
++![Agent Validation Modal - 4-Section Trace](images/slice2-agent-validation-modal-trace.png)
++
++![Agent Onboarding Card - Desktop Light](images/slice2-onboarding-1440x900-light.png)
++
++### Setting-by-Setting Technical Paragraphs: Agent Definitions and Onboarding
++
++- **slug:** The immutable machine identifier for the agent definition (e.g. `reality-checker`, `security-auditor`). Constrained to lowercase alphanumeric ASCII characters and hyphens. The slug forms the primary address for ticket comments, mention notifications, and REST endpoint routes (`/api/v1/admin/agent-definitions/:slug`).
++- **display_name:** The human-facing label rendered on board cards, ticket assignment selectors, peek drawers, and audit trails. Allows teams to provide intuitive persona titles (e.g. "Forensic QA Reality Checker" or "Architecture Auditor").
++- **harness_kind:** Specifies the runtime execution architecture. `in_app_sdk` executes in-process using configured cloud or local LLM providers. `cli_pipe` executes external command-line binaries (`agy`, `codex`) inside a zero-shell Linux namespace jail (`nsjail`), communicating strictly over standard input/output with 512 MB memory caps and zero network access. `remote_runner` dispatches tasks to distributed worker daemons connected over mutual TLS.
++- **provider_kind and model_id:** Applicable to `in_app_sdk` harnesses. Specifies the active provider backend (`gemini`, `openai`, `ollama`) and specific model (e.g. `gemini-2.5-flash`, `gpt-4o`, `llama3.2:latest`) utilized for the agent persona's completion and tool-calling cycles.
++- **cli_binary_allowlist_id and cli_args:** Governs `cli_pipe` execution. Restricts binary invocations to pre-vetted host binaries (`agy`, `codex`). Arguments are submitted as an array of safe flags (default `["-p"]`) executed directly via `execve`, eliminating shell injection hazards (`/bin/sh` is never spawned).
++- **remote_runner_pool_slug:** Designates the distributed worker pool (such as `default` or `gpu-compute`) responsible for accepting tasks when `harness_kind = remote_runner`.
++- **repo_access_mode:** Enforces Git repository access boundaries during task execution. In `none` mode, the agent operates solely on ticket prose. In `ro_vfs_mount` mode, the target repository is mounted strictly read-only (`CLONE_NEWNS`), allowing static code analysis while preventing unauthorized workspace writes. In `bare_git_tools` mode, read-only bare Git inspection tools are provisioned in an isolated tmpfs directory.
++- **mcp_allowed_tools:** An array of tool names defining the explicit Model Context Protocol allowlist for the agent. Tools outside this list (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`) are hidden from the agent's schema, enforcing strict privilege separation (submitting unlisted tools fails with HTTP 422 `HARNESS_FIELDS_INVALID`).
++- **system_instructions_md:** The core persona prompt formatted in canonical UTF-8 Markdown. Directs agent analysis, defines verification standards, and specifies output formats. Server-side sanitization strips lone surrogates and harmful prompt injection vectors before database storage.
++- **timeout_ms:** Maximum allowable execution time for agent invocations, configurable from 1,000 ms to 300,000 ms (default 60,000 ms, adhering to the 300-second reasoning ceiling from KAN-430). Tasks that exceed this threshold are terminated immediately, preserving thread pools and avoiding stuck workflows.
++- **project_id and rls_isolation:** Binds the agent definition to a specific project UUID or leaves it at workspace scope. PostgreSQL `FORCE ROW LEVEL SECURITY` strictly isolates project agents: administrators and members of other projects cannot view, mutate, or validate cross-project agents (returning HTTP 404 Not Found).
++- **agent_validation_modal:** Invoked via `POST /api/v1/admin/agent-definitions/:id:validate` or `POST /api/v1/agent-definitions/:id:validate`. Executes a live non-destructive test invocation returning a 4-section forensic verification report: 1. `=== 1. RENDERED CONTEXT ===`, 2. `=== 2. TOOL TRACE ===`, 3. `=== 3. LATENCY & TOKENS ===`, and 4. `=== 4. SCHEMA & POLICY STATUS ===`.
++- **llms_txt_and_onboarding_card:** Machine-readable agent capabilities and skill manifests served at `/llms.txt`. The onboarding card surfaces the canonical onboarding prompt that guides external agents (Claude Code, OpenAI Codex, Gemini CLI) through an interactive setup interview, persisting user preferences (`execution_mode`, `model_strategy`, `qa_rigor`, `custom_notes`) to `agent_onboarding_prefs` in `/api/v1/users/me/preferences` strictly within the local project folder without polluting global system paths.
+ 
+ ---
+ 
+ ## 10. Remote Runners Studio
+-The Remote Runners Studio (`/admin/agent-runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats over dedicated port `:8444`.
++The Remote Runners Studio (`/admin/agent-runners`) monitors distributed worker nodes, mints single-use enrollment tokens, and manages hardware-bound mutual TLS (mTLS) identities.
++
++![Remote Runners Studio - Desktop Light](images/slice2-runner-studio-1440x900-light.png)
++
++![Remote Runners Studio - Desktop Dark](images/slice2-runner-studio-1440x900-dark.png)
+ 
+ 
+ ### Remote Runners Studio Configuration Table
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |
+-| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 15 minutes (900 seconds max); grants certificate signing request (CSR) |
+-| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection over port :8444 |
+-| `runner_cli_command` | Standard enrollment invocation command | Shell command string | Generated on mint | Syntax: `echo "$TOKEN" \| uv run kanban-agent-runner enroll --server-url <origin> --token-stdin --pool <pool>` |
+-| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |
+-| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |
+-| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |
++| `hostname` | Unique network hostname of the runner node | String (1 to 64 characters) | Required | Displayed in runner health cards and active execution telemetry |
++| `pool_slug` | Resource pool grouping for runner fleet | Lowercase ASCII slug | `default` | Allows target assignment of jobs to specialized hardware fleets |
++| `enrollment_token` | Single-use cryptographic enrollment token | Base64-encoded HMAC string | Minted on demand | Expires in 60s to 900s (max 15 min); burns upon first enrollment |
++| `client_cert_sha256_hex`| SHA-256 fingerprint of client certificate | 64-char hexadecimal string | Computed at enroll | Binds hardware identity to mTLS WebSocket connection over port :8444 |
++| `cert_expires_at` | Client certificate expiration timestamp | ISO-8601 Timestamp | 30 days from mint | Enforces periodic hardware credential rotation |
++| `status` | Current operational connectivity state | `online`, `offline`, `revoked` | `offline` | Only `online` runners receive dispatched build and verification jobs |
++| `last_heartbeat_at` | Timestamp of most recent daemon ping | ISO-8601 Timestamp or null | Null | Heartbeat frame received every 15s; missing 45s marks runner offline (`DEAD_EVICTION_S = 45.0`) |
++| `runner_cli_command` | Canonical enrollment CLI invocation | Shell command string | Auto-generated | `echo "$TOKEN" | uv run kanban-agent-runner enroll --server-url <origin> --token-stdin --pool <pool>` |
++| `state_dir_permissions` | POSIX permissions on runner daemon host | Octal mode (`0o700`, `0o600`, `0o644`) | Strict defaults | `0o700` state dir, `0o600` `client.key` & `ca.pem`, `0o644` `client.crt` |
++| `mtls_pop_challenge` | Challenge format for Proof-of-Possession | Text challenge string | Auto-generated | Syntax: `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}` |
++
++![Runner Mint Token Modal](images/slice2-runner-mint-token-modal.png)
++
++### Setting-by-Setting Technical Paragraphs: Remote Runners Fleet
++
++- **hostname and pool_slug:** The runner hostname uniquely identifies the physical or virtual execution host (for example, `worker-01.internal.test`). The pool slug groups runners into specialized task fleets (such as `default` or `gpu-compute`), enabling workflows to direct heavy verification suites to properly provisioned worker infrastructure.
++- **enrollment_token:** Ephemeral, single-use authentication token minted via `POST /api/v1/admin/agent-runners/enrollment-tokens`. Token lifetime is strictly capped between 60 and 900 seconds (maximum 15 minutes). The token is consumed immediately upon successful certificate signing; replaying an expired or consumed token is rejected with HTTP 401 `ENROLLMENT_TOKEN_INVALID`.
++- **client_cert_sha256_hex:** The cryptographic SHA-256 digest of the X.509 client certificate generated during runner daemon enrollment. The orchestrator registers this fingerprint in the database, verifying that incoming mutual TLS connections match the approved hardware certificate.
++- **cert_expires_at:** The expiration timestamp for the signed client certificate (standard 30-day validity). When a certificate approaches expiration, the runner must be re-enrolled using a freshly minted token.
++- **status and heartbeats:** Reflects runner operational status (`online`, `offline`, or `revoked`). Active daemons send periodic `HeartbeatFrame` packets every 15 seconds over the established mTLS WebSocket channel. If no heartbeat is received within 45 seconds (`DEAD_EVICTION_S = 45.0`), the runner transitions to `offline`, and pending tasks are rescheduled.
++- **unprivileged_daemon_and_posix_permissions:** The runner daemon (`kanban-agent-runner`) executes as an unprivileged, non-root system account. Local cryptographic assets are created with strict POSIX file permissions: state directory `0o700` (`drwx------`), private key `client.key` `0o600` (`-rw-------`), root CA bundle `ca.pem` `0o600` (`-rw-------`), and client certificate `client.crt` `0o644` (`-rw-r--r--`).
++- **mtls_pop_handshake:** Mutual TLS connections connect to dedicated port `:8444` (or WebSocket route `/api/v1/agent-runners/ws`). During handshake, the orchestrator issues a `ChallengeHelloFrame` containing an ephemeral nonce. The runner signs the canonical challenge payload `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}` using its private EC key, proving certificate possession before transitioning to `online`.
++- **runner_revocation:** Administrators can instantly revoke rogue or decommissioned runners via `POST /api/v1/admin/agent-runners/:id:revoke`. Revocation immediately terminates active WebSocket connections and flags the certificate fingerprint as revoked. Subsequent connection attempts are rejected with HTTP 403 Forbidden.
+ 
+ > [!NOTE]
+-> **Runner Certificate Rotation Lifecycle:** Runner client certificates are hardware-bound and cannot be silently renewed. To rotate a certificate, revoke the runner in `/admin/agent-runners` (AAL2 challenge confirmed), mint a fresh enrollment token (15-minute TTL), and re-enroll the runner daemon.
++> **Runner Certificate Rotation Lifecycle:** Runner client certificates are hardware-bound and cannot be silently renewed in place. To rotate a certificate, revoke the runner in `/admin/agent-runners` (AAL2 challenge confirmed), mint a fresh enrollment token (15-minute TTL), and re-enroll the runner daemon.
++
+ 
+ ---
+ 
+diff --git a/images/slice2-agent-studio-1024x768-tablet-landscape.png b/images/slice2-agent-studio-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..4249d09
+Binary files /dev/null and b/images/slice2-agent-studio-1024x768-tablet-landscape.png differ
+diff --git a/images/slice2-agent-studio-1440x900-dark.png b/images/slice2-agent-studio-1440x900-dark.png
+new file mode 100644
+index 0000000..45a394d
+Binary files /dev/null and b/images/slice2-agent-studio-1440x900-dark.png differ
+diff --git a/images/slice2-agent-studio-1440x900-light.png b/images/slice2-agent-studio-1440x900-light.png
+new file mode 100644
+index 0000000..fa28200
+Binary files /dev/null and b/images/slice2-agent-studio-1440x900-light.png differ
+diff --git a/images/slice2-agent-studio-390x844-mobile-portrait.png b/images/slice2-agent-studio-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..c12cd6c
+Binary files /dev/null and b/images/slice2-agent-studio-390x844-mobile-portrait.png differ
+diff --git a/images/slice2-agent-studio-768x1024-tablet-portrait.png b/images/slice2-agent-studio-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..fab5dbe
+Binary files /dev/null and b/images/slice2-agent-studio-768x1024-tablet-portrait.png differ
+diff --git a/images/slice2-agent-validation-modal-trace.png b/images/slice2-agent-validation-modal-trace.png
+new file mode 100644
+index 0000000..9ce12ae
+Binary files /dev/null and b/images/slice2-agent-validation-modal-trace.png differ
+diff --git a/images/slice2-ai-budget-modal-freeze.png b/images/slice2-ai-budget-modal-freeze.png
+new file mode 100644
+index 0000000..340673f
+Binary files /dev/null and b/images/slice2-ai-budget-modal-freeze.png differ
+diff --git a/images/slice2-ai-budget-modal-unlimited.png b/images/slice2-ai-budget-modal-unlimited.png
+new file mode 100644
+index 0000000..df59a25
+Binary files /dev/null and b/images/slice2-ai-budget-modal-unlimited.png differ
+diff --git a/images/slice2-ai-provider-drawer-create.png b/images/slice2-ai-provider-drawer-create.png
+new file mode 100644
+index 0000000..6d25d48
+Binary files /dev/null and b/images/slice2-ai-provider-drawer-create.png differ
+diff --git a/images/slice2-ai-studio-1024x768-tablet-landscape.png b/images/slice2-ai-studio-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..5830f54
+Binary files /dev/null and b/images/slice2-ai-studio-1024x768-tablet-landscape.png differ
+diff --git a/images/slice2-ai-studio-1440x900-dark.png b/images/slice2-ai-studio-1440x900-dark.png
+new file mode 100644
+index 0000000..75d3586
+Binary files /dev/null and b/images/slice2-ai-studio-1440x900-dark.png differ
+diff --git a/images/slice2-ai-studio-1440x900-light.png b/images/slice2-ai-studio-1440x900-light.png
+new file mode 100644
+index 0000000..b60dcb2
+Binary files /dev/null and b/images/slice2-ai-studio-1440x900-light.png differ
+diff --git a/images/slice2-ai-studio-390x844-mobile-portrait.png b/images/slice2-ai-studio-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..6b2c7c5
+Binary files /dev/null and b/images/slice2-ai-studio-390x844-mobile-portrait.png differ
+diff --git a/images/slice2-ai-studio-768x1024-tablet-portrait.png b/images/slice2-ai-studio-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..20390bc
+Binary files /dev/null and b/images/slice2-ai-studio-768x1024-tablet-portrait.png differ
+diff --git a/images/slice2-onboarding-1440x900-dark.png b/images/slice2-onboarding-1440x900-dark.png
+new file mode 100644
+index 0000000..e1206ff
+Binary files /dev/null and b/images/slice2-onboarding-1440x900-dark.png differ
+diff --git a/images/slice2-onboarding-1440x900-light.png b/images/slice2-onboarding-1440x900-light.png
+new file mode 100644
+index 0000000..270aab8
+Binary files /dev/null and b/images/slice2-onboarding-1440x900-light.png differ
+diff --git a/images/slice2-runner-mint-token-modal.png b/images/slice2-runner-mint-token-modal.png
+new file mode 100644
+index 0000000..5c28d35
+Binary files /dev/null and b/images/slice2-runner-mint-token-modal.png differ
+diff --git a/images/slice2-runner-studio-1024x768-tablet-landscape.png b/images/slice2-runner-studio-1024x768-tablet-landscape.png
+new file mode 100644
+index 0000000..81fa3f3
+Binary files /dev/null and b/images/slice2-runner-studio-1024x768-tablet-landscape.png differ
+diff --git a/images/slice2-runner-studio-1440x900-dark.png b/images/slice2-runner-studio-1440x900-dark.png
+new file mode 100644
+index 0000000..68a3470
+Binary files /dev/null and b/images/slice2-runner-studio-1440x900-dark.png differ
+diff --git a/images/slice2-runner-studio-1440x900-light.png b/images/slice2-runner-studio-1440x900-light.png
+new file mode 100644
+index 0000000..4d07096
+Binary files /dev/null and b/images/slice2-runner-studio-1440x900-light.png differ
+diff --git a/images/slice2-runner-studio-390x844-mobile-portrait.png b/images/slice2-runner-studio-390x844-mobile-portrait.png
+new file mode 100644
+index 0000000..1df7811
+Binary files /dev/null and b/images/slice2-runner-studio-390x844-mobile-portrait.png differ
+diff --git a/images/slice2-runner-studio-768x1024-tablet-portrait.png b/images/slice2-runner-studio-768x1024-tablet-portrait.png
+new file mode 100644
+index 0000000..f5c946a
+Binary files /dev/null and b/images/slice2-runner-studio-768x1024-tablet-portrait.png differ
