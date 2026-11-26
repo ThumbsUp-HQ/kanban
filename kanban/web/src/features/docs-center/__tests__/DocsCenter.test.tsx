@@ -1924,6 +1924,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         '/docs/multi-card-authentication-studio#envelope-encryption-master-kek',
         '/docs/production-promotion-and-backup-runbook#restore-procedure',
         '/docs/scripted-workflows-and-transition-helpers#dry-run-simulation',
+        '/docs/universal-object-graph-and-link-auditor#state-deletion',
       ];
 
       for (const href of slice5DocHrefs) {
@@ -1945,6 +1946,26 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         expect(targetElement).not.toBeNull();
         unmount();
       }
+    });
+
+    it('resolves /docs/universal-object-graph-and-link-auditor#state-deletion to state-deletion-and-dependency-remapping heading (KAN-506)', () => {
+      const parsed = parseDocHref('/docs/universal-object-graph-and-link-auditor#state-deletion');
+      expect(parsed.slug).toBe('universal-object-graph-and-link-auditor');
+      expect(parsed.anchor).toBe('state-deletion');
+
+      const chapter = WIKI_CHAPTERS.find((c) => c.slug === parsed.slug);
+      expect(chapter).toBeDefined();
+      if (!chapter || !parsed.anchor) throw new Error('Chapter or anchor not found');
+
+      const { container, unmount } = render(
+        <DocMarkdownViewer content={chapter.content} />
+      );
+
+      const targetElement = resolveSectionElement(container, parsed.anchor);
+      expect(targetElement).not.toBeNull();
+      expect(targetElement?.id).toBe('state-deletion-and-dependency-remapping');
+      expect(targetElement?.textContent).toContain('State Deletion and Dependency Remapping');
+      unmount();
     });
   });
 });

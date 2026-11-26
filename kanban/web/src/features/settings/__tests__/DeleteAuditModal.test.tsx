@@ -3,8 +3,9 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 import { DeleteAuditModal } from '../DeleteAuditModal';
 import * as clientModule from '../../../api/client';
 
@@ -499,5 +500,160 @@ describe('DeleteAuditModal', () => {
     const select = screen.getByTestId<HTMLSelectElement>('audit-replacement-select');
     fireEvent.change(select, { target: { value: '' } });
     expect(confirmBtn.hasAttribute('disabled')).toBe(true);
+  });
+
+  describe('StudioDocLink Header Integration and ARIA Verification (KAN-506)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders delete-audit-doc-link with correct href, title, and aria-label in modal header actions group in Light and Dark themes', async () => {
+      for (const theme of ['light', 'dark'] as const) {
+        vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+          state_id: 'state-1',
+          state_name: 'In Progress',
+          issues_count: 0,
+          sample_issue_keys: [],
+          workflow_hooks: [],
+          pending_executions_count: 0,
+          historical_executions_count: 0,
+          saved_views: [],
+          is_default: false,
+          blocking_reasons: [],
+          valid_replacement_states: [],
+        });
+
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <DeleteAuditModal
+            isOpen={true}
+            onClose={vi.fn()}
+            onConfirmedDelete={vi.fn()}
+            kind="state"
+            item={{ id: 'state-1', name: 'In Progress' }}
+            projectKey="KAN"
+          />
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('delete-audit-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('delete-audit-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/universal-object-graph-and-link-auditor#state-deletion'
+        );
+        expect(docLink.getAttribute('aria-label')).toBe(
+          'State & Label Deletion and Dependency Remapping Documentation'
+        );
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        // Confirm modal accessibility attributes
+        const modal = screen.getByTestId('delete-audit-modal');
+        expect(modal.getAttribute('role')).toBe('dialog');
+        expect(modal.getAttribute('aria-modal')).toBe('true');
+
+        // Confirm header actions container wraps both doc link and close button
+        const headerActions = docLink.closest('.kb-modal-header-actions');
+        expect(headerActions).not.toBeNull();
+        if (!headerActions) throw new Error('headerActions is null');
+
+        const closeBtn = headerActions.querySelector('[data-testid="audit-close-x-btn"]');
+        expect(closeBtn).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('supports keyboard focus navigation to the doc link', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+        state_id: 'state-1',
+        state_name: 'In Progress',
+        issues_count: 0,
+        sample_issue_keys: [],
+        workflow_hooks: [],
+        pending_executions_count: 0,
+        historical_executions_count: 0,
+        saved_views: [],
+        is_default: false,
+        blocking_reasons: [],
+        valid_replacement_states: [],
+      });
+
+      render(
+        <DeleteAuditModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onConfirmedDelete={vi.fn()}
+          kind="state"
+          item={{ id: 'state-1', name: 'In Progress' }}
+          projectKey="KAN"
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('delete-audit-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('delete-audit-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+    });
+
+    it('opens in-app help panel via ShellPanelsProvider without closing modal state', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+        state_id: 'state-1',
+        state_name: 'In Progress',
+        issues_count: 0,
+        sample_issue_keys: [],
+        workflow_hooks: [],
+        pending_executions_count: 0,
+        historical_executions_count: 0,
+        saved_views: [],
+        is_default: false,
+        blocking_reasons: [],
+        valid_replacement_states: [],
+      });
+
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <DeleteAuditModal
+              isOpen={true}
+              onClose={vi.fn()}
+              onConfirmedDelete={vi.fn()}
+              kind="state"
+              item={{ id: 'state-1', name: 'In Progress' }}
+              projectKey="KAN"
+            />
+          </ShellPanelsProvider>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('delete-audit-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('delete-audit-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain(
+          '/docs/universal-object-graph-and-link-auditor#state-deletion'
+        );
+
+        // Modal title remains visible and functional
+        expect(screen.getByText('Delete Workflow State: In Progress')).toBeDefined();
+      } finally {
+        unregister();
+      }
+    });
   });
 });

@@ -43,6 +43,7 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   'envelope-encryption-master-kek': 'envelope-encryption',
   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
   'dry-run-simulation': 'the-non-persistent-dry-run-drawer',
+  'state-deletion': 'state-deletion-and-dependency-remapping',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {

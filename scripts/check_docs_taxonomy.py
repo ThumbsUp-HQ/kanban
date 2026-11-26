@@ -241,6 +241,12 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
                 "dry-run-simulation",
             }
         )
+    if "universal-object-graph-and-link-auditor" in chapter_anchors:
+        chapter_anchors["universal-object-graph-and-link-auditor"].update(
+            {
+                "state-deletion",
+            }
+        )
     if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
         chapter_anchors["enterprise-whitespace-and-kanban-board"].update(
             {
