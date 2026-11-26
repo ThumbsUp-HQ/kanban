@@ -281,7 +281,7 @@ export function ReportExportModal({
               >
                 {templates.map((t) => (
                   <option key={t.slug} value={t.slug}>
-                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}
+                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}{t.slug === 'security-assessment-report' ? ' (Default)' : ''}
                   </option>
                 ))}
               </select>
@@ -302,7 +302,7 @@ export function ReportExportModal({
                       aria-pressed={isActive}
                       onClick={() => { setSelectedFormat(fmt); }}
                     >
-                      {fmt}
+                      {fmt === 'PDF' ? 'PDF (Default)' : fmt}
                     </button>
                   );
                 })}

@@ -820,4 +820,90 @@ describe('ReportExportModal', () => {
       expect(textarea.value).toBe('');
     });
   });
+
+  describe('KAN-467: Default value indicators for formats and templates', () => {
+    it('labels PDF format pill as PDF (Default) and leaves other formats unmodified', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
+      });
+
+      const pdfPill = screen.getByTestId('report-format-pill-pdf');
+      expect(pdfPill.textContent).toBe('PDF (Default)');
+      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
+
+      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
+      expect(xlsxPill.textContent).toBe('XLSX');
+      expect(xlsxPill.getAttribute('aria-pressed')).toBe('false');
+
+      const csvPill = screen.getByTestId('report-format-pill-csv');
+      expect(csvPill.textContent).toBe('CSV');
+
+      const docxPill = screen.getByTestId('report-format-pill-docx');
+      expect(docxPill.textContent).toBe('DOCX');
+    });
+
+    it('appends (Default) to security-assessment-report option in template select', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-template-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId<HTMLSelectElement>('report-template-select');
+      const options = Array.from(select.querySelectorAll('option'));
+
+      const defaultOpt = options.find((opt) => opt.value === 'security-assessment-report');
+      expect(defaultOpt).toBeDefined();
+      expect(defaultOpt?.textContent).toContain('(Default)');
+      expect(defaultOpt?.textContent).toBe('Security Assessment Report (Built-in) (Default)');
+
+      const sprintOpt = options.find((opt) => opt.value === 'sprint-release-notes');
+      expect(sprintOpt).toBeDefined();
+      expect(sprintOpt?.textContent).not.toContain('(Default)');
+      expect(sprintOpt?.textContent).toBe('Sprint & Release Notes Report (Custom)');
+    });
+
+    it('clicking PDF (Default) format pill keeps PDF format active and updates submit button', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
+      });
+
+      const pdfPill = screen.getByTestId('report-format-pill-pdf');
+      const submitBtn = screen.getByTestId('reports-export-submit-btn');
+
+      // Click XLSX first, then click back to PDF
+      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
+      fireEvent.click(xlsxPill);
+      expect(submitBtn.textContent).toContain('Download XLSX');
+
+      fireEvent.click(pdfPill);
+      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
+      expect(submitBtn.textContent).toContain('Download PDF');
+    });
+  });
 });
