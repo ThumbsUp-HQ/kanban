@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
 import * as aiApi from '../../admin-ai/aiAdminApi';
@@ -484,8 +484,10 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       fireEvent.change(screen.getByTestId('agent-name-input'), { target: { value: 'Native Test' } });
 
       const textarea = screen.getByTestId<HTMLTextAreaElement>('agent-instructions-textarea');
-      textarea.value = customPrompt;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      act(() => {
+        textarea.value = customPrompt;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      });
 
       fireEvent.click(screen.getByTestId('save-agent-btn'));
 

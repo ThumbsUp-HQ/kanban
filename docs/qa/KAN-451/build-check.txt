@@ -1,18 +1,10 @@
-================================================================================
-COMMAND: pnpm --dir kanban/web exec tsc --noEmit
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
+=== tsc --noEmit ===
 EXIT_CODE=0
 
-================================================================================
-COMMAND: pnpm --dir kanban/web exec eslint src/features/admin-agents/ src/features/admin-ai/ src/features/admin-auth/
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
+=== eslint ===
 EXIT_CODE=0
 
-================================================================================
-COMMAND: pnpm --dir kanban/web exec vite build
---------------------------------------------------------------------------------
+=== vite build ===
 vite v8.3.8 building client environment for production...
 transforming...
 ✓ 767 modules transformed.
@@ -28,38 +20,27 @@ dist/assets/index-ByziK02D.js           3,175.83 kB │ gzip: 880.32 kB
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.71s
---------------------------------------------------------------------------------
+✓ built in 1.77s
 EXIT_CODE=0
 
-================================================================================
-COMMAND: pnpm --dir kanban/web exec vitest run src/styles/__tests__/cssTokensAudit.test.ts
---------------------------------------------------------------------------------
+=== cssTokensAudit.test.ts ===
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan451-34c60880/kanban/web
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 17ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 18ms
 
  Test Files  1 passed (1)
       Tests  7 passed (7)
-   Start at  18:13:28
-   Duration  1.03s (environment 94%, import 2%, tests 2%, worker 1%, transform 1%)
+   Start at  18:29:18
+   Duration  1.17s (environment 93%, import 2%, tests 2%, worker 2%, transform 1%)
 
---------------------------------------------------------------------------------
 EXIT_CODE=0
 
-================================================================================
-COMMAND: python3 scripts/check_no_dashes.py --all
---------------------------------------------------------------------------------
+=== check_no_dashes --all ===
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan451-34c60880/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
---------------------------------------------------------------------------------
 EXIT_CODE=0
 
-================================================================================
-COMMAND: python3 -m scripts.check_docs_taxonomy --wiki-dir /home/adamoutler/kanban/thumbs-up-kanban.wiki
---------------------------------------------------------------------------------
+=== check_docs_taxonomy ===
 Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
 OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
---------------------------------------------------------------------------------
 EXIT_CODE=0
-

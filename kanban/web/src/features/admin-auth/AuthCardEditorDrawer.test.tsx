@@ -2957,4 +2957,66 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(replaceSecretHelp.getAttribute('aria-label')).toBe('Help for Replace Stored Secret');
     });
   });
+
+  describe('Standardized Drawer Footer Cadence and HTML 4.10.4 (KAN-451)', () => {
+    it('standardizes footer action cadence with Test Handshake left and Cancel then Save Changes right', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const footer = document.querySelector('.auth-editor-actions');
+      expect(footer).not.toBeNull();
+
+      const leftActions = footer?.querySelector('.auth-editor-actions-left');
+      const rightActions = footer?.querySelector('.auth-editor-actions-right');
+      expect(leftActions).not.toBeNull();
+      expect(rightActions).not.toBeNull();
+
+      const leftButtons = leftActions?.querySelectorAll('button') ?? [];
+      expect(leftButtons.length).toBe(1);
+      expect(leftButtons[0]?.textContent).toContain('Test Handshake');
+
+      const rightButtons = rightActions?.querySelectorAll('button') ?? [];
+      expect(rightButtons.length).toBe(2);
+      expect(rightButtons[0]?.textContent).toContain('Cancel');
+      expect(rightButtons[1]?.textContent).toContain('Save Changes');
+
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+    });
+
+    it('standardizes footer action cadence for new card creation with Create Card primary action', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const footer = document.querySelector('.auth-editor-actions');
+      expect(footer).not.toBeNull();
+
+      const leftActions = footer?.querySelector('.auth-editor-actions-left');
+      const rightActions = footer?.querySelector('.auth-editor-actions-right');
+      expect(leftActions).not.toBeNull();
+      expect(rightActions).not.toBeNull();
+
+      const leftButtons = leftActions?.querySelectorAll('button') ?? [];
+      expect(leftButtons.length).toBe(1);
+      expect(leftButtons[0]?.textContent).toContain('Test Handshake');
+
+      const rightButtons = rightActions?.querySelectorAll('button') ?? [];
+      expect(rightButtons.length).toBe(2);
+      expect(rightButtons[0]?.textContent).toContain('Cancel');
+      expect(rightButtons[1]?.textContent).toContain('Create Card');
+
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+    });
+  });
 });

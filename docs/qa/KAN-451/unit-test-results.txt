@@ -1,59 +1,563 @@
 $ pnpm --dir kanban/web exec vitest run --coverage --coverage.include="src/features/admin-agents/AgentDefinitionEditorDrawer.tsx" --coverage.include="src/features/admin-ai/AiProviderEditorDrawer.tsx" --coverage.include="src/features/admin-auth/AuthCardEditorDrawer.tsx" src/features/admin-auth/AuthCardEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
 
+Command exited with code 0.
+
+Command output:
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan451-34c60880/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 20ms
-stderr | src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx > AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01) > System Instructions Preservation on Edit (KAN-431) > submits custom system_instructions_md updated via native DOM input event on create
-An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
 
-When testing, code that causes React state updates should be wrapped into act(...):
+ Test Files 0 passed (4)
+      Tests 0 passed (0)
+   Start at 18:29:43
+   Duration 903ms
 
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
 
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
+ Test Files 0 passed (4)
+      Tests 0 passed (0)
+   Start at 18:29:43
+   Duration 1.10s
 
-When testing, code that causes React state updates should be wrapped into act(...):
 
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
+ Test Files 0 passed (4)
+      Tests 0 passed (0)
+   Start at 18:29:43
+   Duration 1.34s
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 33ms
 
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
 
- ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (25 tests) 1276ms
- ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (60 tests) 2458ms
- ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (68 tests) 13439ms
-   ✓ AuthCardEditorDrawer (KB-P3-36) (68)
-     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 530ms
-     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 311ms
-     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 650ms
-     ✓ supports OAuth2 provider configuration with issuer_url 412ms
-     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 426ms
-     ✓ displays form error when onSave throws an error 363ms
-     ✓ edits an LDAP card with CA PEM, user filter, and replaces bind DN password 333ms
-     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 607ms
-     ✓ validates empty slug on create and allows typing secret on create 391ms
-     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 628ms
-     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 518ms
+ Test Files 1 passed (4)
+      Tests 7 passed (67)
+   Start at 18:29:43
+   Duration 1.44s
+
+
+
+ Test Files 1 passed (4)
+      Tests 7 passed (162)
+   Start at 18:29:43
+   Duration 1.64s
+
+
+
+ Test Files 1 passed (4)
+      Tests 8 passed (162)
+   Start at 18:29:43
+   Duration 1.74s
+
+
+
+ Test Files 1 passed (4)
+      Tests 11 passed (162)
+   Start at 18:29:43
+   Duration 1.94s
+
+
+
+ Test Files 1 passed (4)
+      Tests 15 passed (162)
+   Start at 18:29:43
+   Duration 2.04s
+
+
+
+ Test Files 1 passed (4)
+      Tests 18 passed (162)
+   Start at 18:29:43
+   Duration 2.14s
+
+
+ Test Files 1 passed (4)
+      Tests 24 passed (162)
+   Start at 18:29:43
+   Duration 2.24s
+
+
+ Test Files 1 passed (4)
+      Tests 27 passed (162)
+   Start at 18:29:43
+   Duration 2.34s
+
+
+ Test Files 1 passed (4)
+      Tests 29 passed (162)
+   Start at 18:29:43
+   Duration 2.54s
+
+
+ Test Files 1 passed (4)
+      Tests 37 passed (162)
+   Start at 18:29:43
+   Duration 2.64s
+
+
+ Test Files 1 passed (4)
+      Tests 41 passed (162)
+   Start at 18:29:43
+   Duration 2.84s
+
+
+ Test Files 1 passed (4)
+      Tests 48 passed (162)
+   Start at 18:29:43
+   Duration 2.94s
+
+
+ Test Files 1 passed (4)
+      Tests 52 passed (162)
+   Start at 18:29:43
+   Duration 3.04s
+
+
+ Test Files 1 passed (4)
+      Tests 54 passed (162)
+   Start at 18:29:43
+   Duration 3.24s
+
+
+ Test Files 1 passed (4)
+      Tests 56 passed (162)
+   Start at 18:29:43
+   Duration 3.34s
+
+
+ Test Files 1 passed (4)
+      Tests 57 passed (162)
+   Start at 18:29:43
+   Duration 3.44s
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (25 tests) 1913ms
+   ✓ AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01) (25)
+     ✓ FieldHelpHint and Explicit Default Values (KAN-453) (4)
+       ✓ renders agent-slug-help and agent-mcp-tools-help triggers with accessible labels 358ms
+
+
+ Test Files 2 passed (4)
+      Tests 62 passed (162)
+   Start at 18:29:43
+   Duration 3.64s
+
+
+ Test Files 2 passed (4)
+      Tests 65 passed (162)
+   Start at 18:29:43
+   Duration 3.74s
+
+
+ Test Files 2 passed (4)
+      Tests 67 passed (162)
+   Start at 18:29:43
+   Duration 3.84s
+
+
+ Test Files 2 passed (4)
+      Tests 69 passed (162)
+   Start at 18:29:43
+   Duration 3.94s
+
+
+ Test Files 2 passed (4)
+      Tests 72 passed (162)
+   Start at 18:29:43
+   Duration 4.14s
+
+
+ Test Files 2 passed (4)
+      Tests 77 passed (162)
+   Start at 18:29:43
+   Duration 4.25s
+
+
+ Test Files 2 passed (4)
+      Tests 79 passed (162)
+   Start at 18:29:43
+   Duration 4.35s
+
+
+ Test Files 2 passed (4)
+      Tests 81 passed (162)
+   Start at 18:29:43
+   Duration 4.45s
+
+
+ Test Files 2 passed (4)
+      Tests 82 passed (162)
+   Start at 18:29:43
+   Duration 4.65s
+
+
+ Test Files 2 passed (4)
+      Tests 84 passed (162)
+   Start at 18:29:43
+   Duration 4.75s
+
+
+ Test Files 2 passed (4)
+      Tests 86 passed (162)
+   Start at 18:29:43
+   Duration 4.95s
+
+
+ Test Files 2 passed (4)
+      Tests 89 passed (162)
+   Start at 18:29:43
+   Duration 5.05s
+
+
+ Test Files 2 passed (4)
+      Tests 91 passed (162)
+   Start at 18:29:43
+   Duration 5.25s
+
+
+ Test Files 2 passed (4)
+      Tests 92 passed (162)
+   Start at 18:29:43
+   Duration 5.35s
+
+
+ Test Files 2 passed (4)
+      Tests 94 passed (162)
+   Start at 18:29:43
+   Duration 5.45s
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (60 tests) 4018ms
+
+
+ Test Files 3 passed (4)
+      Tests 99 passed (162)
+   Start at 18:29:43
+   Duration 5.65s
+
+
+ Test Files 3 passed (4)
+      Tests 100 passed (162)
+   Start at 18:29:43
+   Duration 5.95s
+
+
+ Test Files 3 passed (4)
+      Tests 102 passed (162)
+   Start at 18:29:43
+   Duration 6.45s
+
+
+ Test Files 3 passed (4)
+      Tests 102 passed (162)
+   Start at 18:29:43
+   Duration 6.95s
+
+
+ Test Files 3 passed (4)
+      Tests 103 passed (162)
+   Start at 18:29:43
+   Duration 7.25s
+
+
+ Test Files 3 passed (4)
+      Tests 104 passed (162)
+   Start at 18:29:43
+   Duration 7.55s
+
+
+ Test Files 3 passed (4)
+      Tests 104 passed (162)
+   Start at 18:29:43
+   Duration 7.95s
+
+
+ Test Files 3 passed (4)
+      Tests 105 passed (162)
+   Start at 18:29:43
+   Duration 8.15s
+
+
+ Test Files 3 passed (4)
+      Tests 107 passed (162)
+   Start at 18:29:43
+   Duration 8.85s
+
+
+ Test Files 3 passed (4)
+      Tests 107 passed (162)
+   Start at 18:29:43
+   Duration 8.95s
+
+
+ Test Files 3 passed (4)
+      Tests 108 passed (162)
+   Start at 18:29:43
+   Duration 9.45s
+
+
+ Test Files 3 passed (4)
+      Tests 110 passed (162)
+   Start at 18:29:43
+   Duration 9.55s
+
+
+ Test Files 3 passed (4)
+      Tests 111 passed (162)
+   Start at 18:29:43
+   Duration 9.95s
+
+
+ Test Files 3 passed (4)
+      Tests 112 passed (162)
+   Start at 18:29:43
+   Duration 10.15s
+
+
+ Test Files 3 passed (4)
+      Tests 114 passed (162)
+   Start at 18:29:43
+   Duration 10.25s
+
+
+ Test Files 3 passed (4)
+      Tests 115 passed (162)
+   Start at 18:29:43
+   Duration 10.35s
+
+
+ Test Files 3 passed (4)
+      Tests 116 passed (162)
+   Start at 18:29:43
+   Duration 10.46s
+
+
+ Test Files 3 passed (4)
+      Tests 117 passed (162)
+   Start at 18:29:43
+   Duration 10.56s
+
+
+ Test Files 3 passed (4)
+      Tests 118 passed (162)
+   Start at 18:29:43
+   Duration 10.75s
+
+
+ Test Files 3 passed (4)
+      Tests 118 passed (162)
+   Start at 18:29:43
+   Duration 10.96s
+
+
+ Test Files 3 passed (4)
+      Tests 119 passed (162)
+   Start at 18:29:43
+   Duration 11.16s
+
+
+ Test Files 3 passed (4)
+      Tests 119 passed (162)
+   Start at 18:29:43
+   Duration 11.96s
+
+
+ Test Files 3 passed (4)
+      Tests 120 passed (162)
+   Start at 18:29:43
+   Duration 12.46s
+
+
+ Test Files 3 passed (4)
+      Tests 123 passed (162)
+   Start at 18:29:43
+   Duration 12.66s
+
+
+ Test Files 3 passed (4)
+      Tests 125 passed (162)
+   Start at 18:29:43
+   Duration 12.76s
+
+
+ Test Files 3 passed (4)
+      Tests 125 passed (162)
+   Start at 18:29:43
+   Duration 12.96s
+
+
+ Test Files 3 passed (4)
+      Tests 128 passed (162)
+   Start at 18:29:43
+   Duration 13.06s
+
+
+ Test Files 3 passed (4)
+      Tests 130 passed (162)
+   Start at 18:29:43
+   Duration 13.46s
+
+
+ Test Files 3 passed (4)
+      Tests 131 passed (162)
+   Start at 18:29:43
+   Duration 13.76s
+
+
+ Test Files 3 passed (4)
+      Tests 132 passed (162)
+   Start at 18:29:43
+   Duration 13.86s
+
+
+ Test Files 3 passed (4)
+      Tests 133 passed (162)
+   Start at 18:29:43
+   Duration 14.07s
+
+
+ Test Files 3 passed (4)
+      Tests 134 passed (162)
+   Start at 18:29:43
+   Duration 14.17s
+
+
+ Test Files 3 passed (4)
+      Tests 136 passed (162)
+   Start at 18:29:43
+   Duration 14.97s
+
+
+ Test Files 3 passed (4)
+      Tests 137 passed (162)
+   Start at 18:29:43
+   Duration 15.17s
+
+
+ Test Files 3 passed (4)
+      Tests 138 passed (162)
+   Start at 18:29:43
+   Duration 15.37s
+
+
+ Test Files 3 passed (4)
+      Tests 139 passed (162)
+   Start at 18:29:43
+   Duration 15.57s
+
+
+ Test Files 3 passed (4)
+      Tests 140 passed (162)
+   Start at 18:29:43
+   Duration 15.87s
+
+
+ Test Files 3 passed (4)
+      Tests 141 passed (162)
+   Start at 18:29:43
+   Duration 16.27s
+
+
+ Test Files 3 passed (4)
+      Tests 142 passed (162)
+   Start at 18:29:43
+   Duration 16.57s
+
+
+ Test Files 3 passed (4)
+      Tests 144 passed (162)
+   Start at 18:29:43
+   Duration 16.77s
+
+
+ Test Files 3 passed (4)
+      Tests 144 passed (162)
+   Start at 18:29:43
+   Duration 16.97s
+
+
+ Test Files 3 passed (4)
+      Tests 145 passed (162)
+   Start at 18:29:43
+   Duration 17.17s
+
+
+ Test Files 3 passed (4)
+      Tests 146 passed (162)
+   Start at 18:29:43
+   Duration 17.47s
+
+
+ Test Files 3 passed (4)
+      Tests 147 passed (162)
+   Start at 18:29:43
+   Duration 17.77s
+
+
+ Test Files 3 passed (4)
+      Tests 148 passed (162)
+   Start at 18:29:43
+   Duration 17.97s
+
+
+ Test Files 3 passed (4)
+      Tests 149 passed (162)
+   Start at 18:29:43
+   Duration 18.07s
+
+
+ Test Files 3 passed (4)
+      Tests 151 passed (162)
+   Start at 18:29:43
+   Duration 18.17s
+
+
+ Test Files 3 passed (4)
+      Tests 153 passed (162)
+   Start at 18:29:43
+   Duration 18.60s
+
+
+ Test Files 3 passed (4)
+      Tests 154 passed (162)
+   Start at 18:29:43
+   Duration 18.70s
+
+
+ Test Files 3 passed (4)
+      Tests 155 passed (162)
+   Start at 18:29:43
+   Duration 18.90s
+
+
+ Test Files 3 passed (4)
+      Tests 158 passed (162)
+   Start at 18:29:43
+   Duration 19.00s
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (70 tests) 17471ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (70)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 735ms
+     ✓ rejects OIDC with http:// URL and invalid slug before network call (Mandatory Test Case 3) 499ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 975ms
+     ✓ supports OAuth2 provider configuration with issuer_url 788ms
+     ✓ validates required LDAP fields: empty serverUrl, wrong protocol, missing DNs 628ms
+     ✓ displays form error when onSave throws an error 408ms
+     ✓ edits an LDAP card with CA PEM, user filter, and replaces bind DN password 433ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 781ms
+     ✓ validates maximum lengths for display name and button subtext 327ms
+     ✓ validates empty slug on create and allows typing secret on create 503ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 701ms
+     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 606ms
+     ✓ handles empty public_config gracefully when loading OIDC and LDAP cards 314ms
      ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
-       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 891ms
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 1303ms
+       ✓ covers access policy defaults from allowlists and default handshake functions 305ms
      ✓ Progressive Disclosure & AdvancedSection (KAN-319) (17)
-       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 748ms
-       ✓ allows editing AdvancedSection allowlists, attributes, and file upload trigger 344ms
-       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 332ms
-       ✓ covers payload construction and error handling branches 362ms
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 863ms
+       ✓ allows editing AdvancedSection allowlists, attributes, and file upload trigger 380ms
+       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 367ms
+       ✓ covers payload construction and error handling branches 430ms
+       ✓ validates CA PEM header requires -----BEGIN CERTIFICATE----- (KAN-407) 323ms
+     ✓ StudioDocLink Header Integration (KAN-450) (3)
+       ✓ preserves drawer close, cancel, and submit behavior alongside documentation link 366ms
 
  Test Files  4 passed (4)
-      Tests  160 passed (160)
-   Start at  18:06:56
-   Duration  14.86s (tests 82%, environment 14%, import 3%, worker 1%, transform 1%)
+      Tests  162 passed (162)
+   Start at  18:29:43
+   Duration  19.35s (tests 82%, environment 12%, import 3%, transform 1%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
