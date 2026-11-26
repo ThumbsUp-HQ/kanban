@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan409-6ed6f24d`  
 **Target Branch:** `docs/KAN-409-slice1-auth-docs`  
-**Target Commit:** `f3458a9e`  
+**Target Commit:** `f54c855c`  
 
 ---
 
