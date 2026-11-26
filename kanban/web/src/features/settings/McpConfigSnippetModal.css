@@ -164,12 +164,17 @@
 
 .kb-snippet-url-select {
   height: 32px;
-  background-color: #0d1117;
+  background-color: var(--bg-input, var(--kb-color-bg-surface, #ffffff));
   border: 1px solid var(--border-subtle, #30363d);
-  color: var(--kb-color-text-primary, var(--fg-primary, #c9d1d9));
+  color: var(--kb-color-text-primary, var(--fg-primary, #1f2328));
   border-radius: 6px;
   padding: 0 8px;
   font-size: 0.875rem;
+}
+
+[data-theme="dark"] .kb-snippet-url-select {
+  background-color: #0d1117;
+  color: #f0f6fc;
 }
 
 .kb-snippet-code-box {

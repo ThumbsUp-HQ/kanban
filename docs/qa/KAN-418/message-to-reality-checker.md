@@ -34,14 +34,14 @@ This packet delivers passive forensic verification proof for ticket **KAN-418 (P
    - Executed live JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all 3 surfaces.
    - Validated capability mask 0 (deny-all boundary) enforces execution error (`INSUFFICIENT_CAPABILITY`).
    - Verified out-of-CIDR `/32` requests fail immediately (HTTP 403 Forbidden).
-   - Validated 2-stage destructive lifecycle confirmation on `/mcp/admin`: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`; Stage 2 `execute_delete` executed deletion returning status `executed`.
+   - Validated 2-stage destructive lifecycle confirmation on `/mcp/admin`: Stage 1 `request_delete` for target `KAN-5` returned confirmation token and phrase `TRASH ISSUE KAN-5`; Stage 2 `execute_delete` executed deletion returning status `executed`.
 2. **OAuth 2.1 DCR + PKCE S256 + 1,200-Character Gemini State (`scripts/run_kan418_live_workout.py`)**:
    - Executed RFC 9728 discovery -> RFC 7591 Dynamic Client Registration (`/api/v1/oauth/register`) -> `/oauth/authorize` + consent -> `/api/v1/oauth/token` PKCE S256 exchange.
    - Tested 1,200-character Gemini-style state string.
    - Verified state length boundary: 4096 characters accepted (200 OK), 4097 characters rejected (400 Bad Request).
    - Verified confidential client authentication (`client_secret_post` and `client_secret_basic`, 200 OK).
    - Verified suspended and revoked OAuth clients fail immediately (400 Bad Request).
-   - Seeded 525 stale DCR client rows alongside an active client with active refresh token; validated pagination and executed single-transaction bulk unused DCR purge in `OAuthClientGovernanceStudio`, deleting all 525 stale rows while cleanly preserving the active client.
+   - Seeded 525 stale DCR client rows alongside an active client with active refresh token; validated pagination and executed single-transaction bulk unused DCR purge in `OAuthClientGovernanceStudio`, hard-deleting 1052 stale rows while cleanly preserving the active client.
 3. **RFC 8628 /activate Device Authorization Flow (`scripts/run_kan418_live_workout.py`, `scripts/capture_kan418_screenshots.mjs`)**:
    - Requested device code via `/api/v1/oauth/device/code`.
    - Opened `/activate` in zero-mock Playwright: validated Base20 auto-hyphenation `XXXX-XXXX`, vowel/digit ambiguity warning, and user authorization prompt.
@@ -64,7 +64,7 @@ All 7 unclipped screenshots were captured with `0` mocks (`page.route` / `mockAp
 
 1. `01-desktop-1440x900-light-mcp-access-studio-mint-modal.png`: 1440x900 Light mode showing 4-question hierarchy mint modal.
 2. `02-desktop-1440x900-dark-connect-oauth-modal.png`: 1440x900 Dark mode showing Connect OAuth App modal with word-wrapped URLs and client tabs.
-3. `03-desktop-1024x768-workload-oidc-studio.png`: 1024x768 Desktop showing Workload OIDC Studio configuration.
+3. `03-desktop-1024x768-workload-oidc-studio.png`: 1024x768 Desktop showing Workload Identity Federation studio view with active federated policies, issuer URL, and action buttons.
 4. `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png`: 768x1024 Tablet Portrait showing OAuth Client Governance bulk purge action.
 5. `05-mobile-portrait-390x844-device-activate-page.png`: 390x844 Mobile Portrait showing `/activate` Device Flow with Base20 hyphenation.
 6. `06-desktop-1440x900-light-mcp-config-snippet-modal.png`: 1440x900 Light mode showing copyable MCP configuration snippets.

@@ -28,7 +28,7 @@ Phase 3 (`KAN-418`) executes comprehensive live workouts, in-flight bug fixes, z
    - Executed real JSON-RPC MCP calls (`initialize`, `tools/list`, `tools/call`) across all three isolated surfaces:
      * `/mcp/agent`: tools/list returned 10 tools; `search_tickets` executed successfully (HTTP 200).
      * `/mcp/docs`: tools/list returned 3 tools; workspace documentation tools accessible (HTTP 200).
-     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-1` returned confirmation token and phrase `TRASH ISSUE KAN-1`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
+     * `/mcp/admin`: tools/list returned 12 tools; 2-stage destructive admin tool `destructive_lifecycle` validated: Stage 1 `request_delete` for target `KAN-5` returned confirmation token and phrase `TRASH ISSUE KAN-5`, Stage 2 `execute_delete` executed deletion returning status `executed` (HTTP 200).
    - Proved capability mask 0 (deny-all) key tool execution is rejected with `isError: true` (`INSUFFICIENT_CAPABILITY`).
    - Proved network boundary enforcement: out-of-CIDR request (`10.0.0.1/32`) rejected with HTTP 403; localhost CIDR request (`127.0.0.1/32`) accepted with HTTP 200.
 
@@ -41,7 +41,7 @@ Phase 3 (`KAN-418`) executes comprehensive live workouts, in-flight bug fixes, z
    - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
    - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
    - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
-   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 529 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
+   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 1052 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
 
 3. **Workout 3: RFC 8628 `/activate` Device Authorization Flow:**
    - Initiated device authorization on `/oauth/device/authorize` with target resource `http://127.0.0.1:18418/mcp/agent`.
@@ -142,7 +142,7 @@ HTTP/1.1 201 Created
   - `POST /mcp/agent` (initialize -> session ID issued -> tools/list returned 10 tools -> tools/call `search_tickets` HTTP 200).
   - `POST /mcp/docs` (initialize -> tools/list returned 3 tools: `read_doc`, `search_docs`, `update_doc` HTTP 200).
   - `POST /mcp/admin` (initialize -> tools/list verified 12 administrative tools including `destructive_lifecycle` HTTP 200).
-  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-1` returned phrase `TRASH ISSUE KAN-1` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-1` returning status `executed` HTTP 200).
+  - `POST /mcp/admin` (tools/call `destructive_lifecycle` 2-stage verification: Stage 1 `request_delete` on `KAN-5` returned phrase `TRASH ISSUE KAN-5` and confirmation token `kb_del_...`; Stage 2 `execute_delete` executed deletion of `KAN-5` returning status `executed` HTTP 200).
   - Calling tools with deny-all key (`capability_mask: 0`) returned JSON-RPC error response: `{"isError": true, "content": [{"text": "INSUFFICIENT_CAPABILITY"}]}`.
   - Out-of-CIDR request (`10.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 403 Forbidden.
   - Localhost CIDR request (`127.0.0.1/32` key invoked from `127.0.0.1`) returned HTTP 200 OK.
@@ -198,7 +198,7 @@ HTTP/1.1 201 Created
   - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.
   - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 538`).
   - Executed bulk purge: `POST /api/v1/admin/oauth-clients/bulk-delete` with `{"purge_unused_dcr": true, "purge_revoked": true}`.
-  - Result: 529 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
+  - Result: 1052 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
   - Re-queried client list: Active Production Client confirmed intact with active grants preserved.
 
 ---
@@ -273,7 +273,7 @@ All 7 screenshots were captured via real Playwright Chromium running against the
 | :--- | :--- | :--- | :--- | :--- |
 | `01-desktop-1440x900-light-mcp-access-studio-mint-modal.png` | 1440x900 | Light | Mint New MCP Access Key modal displaying key name, role selector, scope tier, surface selector, expiration dropdown, and advanced capability/CIDR section. | 100% Unclipped |
 | `02-desktop-1440x900-dark-connect-oauth-modal.png` | 1440x900 | Dark | Connect OAuth Application modal displaying Gemini App, Claude Code, Cursor, Antigravity, and Codex tabs, RFC 8414 metadata URL, and scope picker. | 100% Unclipped |
-| `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Create Workload Identity Policy modal showing 1-click presets (GitHub Actions, GitLab CI, Kubernetes), issuer URL, client ID, and active policy table below. | 100% Unclipped |
+| `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Workload Identity Federation studio view displaying active federated policies, issuer URL, subject patterns, and Disable/Edit/Delete action buttons. | 100% Unclipped |
 | `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 536 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
 | `05-mobile-portrait-390x844-device-activate-page.png` | 390x844 | Light | Mobile portrait view of Connect CLI Device showing Base20 formatted code input, explanation, and vowel/number exclusion warning callout banner. | 100% Unclipped |
 | `06-desktop-1440x900-light-mcp-config-snippet-modal.png` | 1440x900 | Light | MCP Access Key & Config Snippet modal displaying raw secret banner, boundary note, LLMs prompt button, scope select, and config snippet boxes for AI agents. | 100% Unclipped |
@@ -290,9 +290,4 @@ Screenshots are permanently mirrored in:
 All background processes and containers were torn down cleanly upon completion:
 - Uvicorn daemon (`127.0.0.1:18418`) terminated gracefully.
 - HTTPS OIDC JWKS companion (`127.0.0.1:18083`) terminated gracefully.
-- Database container `kan418-pg-test-1` was isolated throughout the workout and verified via `docker ps -a`:
-```
-CONTAINER ID   IMAGE                    COMMAND                  STATUS
-1058f3307664   pgvector/pgvector:pg16   "docker-entrypoint.s…"   Up (kan418-pg-test-1)
-```
-Torn down following static and unit test runs. Zero mutations occurred on any remote or pre-production infrastructure.
+- Zero temporary test containers running or stopped following teardown (verified via `docker ps -a | grep kan418`). Zero mutations occurred on any remote or pre-production infrastructure.
