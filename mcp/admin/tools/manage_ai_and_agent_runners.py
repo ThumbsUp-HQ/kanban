@@ -744,7 +744,7 @@ async def manage_ai_and_agent_runners(arguments: dict[str, Any]) -> str:  # noqa
             msg = "Unexpected response from runner enrollment tokens API"
             raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
 
-        return dump_yaml(res, strip_nulls=True)
+        return dump_yaml(res, strip_nulls=True, redact=False)
 
     if action == "list_remote_runners":
         params = {}

@@ -195,132 +195,146 @@ async def run_sparkle_pipeline(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR091
                 session_cm = session_factory
 
             async with session_cm as session:
-                budget_enforcer = BudgetEnforcer(session=session)
-                candidates = getattr(router, "_candidates", ())
-                candidate_cfg_id = candidates[0].provider_config_id if candidates else None
+                in_tx = hasattr(session, "in_transaction") and session.in_transaction()
+                trans_cm = (
+                    contextlib.nullcontext()
+                    if in_tx or not hasattr(session, "begin")
+                    else session.begin()
+                )
+                async with trans_cm:
+                    if hasattr(session, "info"):
+                        with contextlib.suppress(Exception):
+                            from database.rls.context import bind_rls_context  # noqa: PLC0415
 
-                # Resolve active provider_config_id:
-                # 1. If candidate_cfg_id is given, check if it exists in ai_provider_configs
-                provider_config_id = None
-                if candidate_cfg_id is not None:
-                    stmt_check = text(
-                        "SELECT id FROM ai_provider_configs "
-                        "WHERE workspace_id = :ws_id AND id = :cfg_id AND is_enabled = true LIMIT 1"
-                    )
-                    res_check = await session.execute(
-                        stmt_check,
-                        {"ws_id": principal_ctx.workspace_id, "cfg_id": candidate_cfg_id},
-                    )
-                    provider_config_id = res_check.scalar_one_or_none()
+                            await bind_rls_context(session, rls_ctx)
 
-                # 2. If not matched by ID, resolve by candidate provider kind
-                if provider_config_id is None and candidates:
-                    prov = getattr(candidates[0], "provider", None)
-                    prov_type = type(prov).__name__.lower() if prov else ""
-                    kind = None
-                    if "ollama" in prov_type:
-                        kind = "ollama"
-                    elif "openai" in prov_type:
-                        kind = "openai"
-                    elif "gemini" in prov_type:
-                        kind = "gemini"
+                    budget_enforcer = BudgetEnforcer(session=session)
+                    candidates = getattr(router, "_candidates", ())
+                    candidate_cfg_id = candidates[0].provider_config_id if candidates else None
 
-                    if kind is not None:
-                        stmt_kind = text(
+                    # Resolve active provider_config_id:
+                    # 1. If candidate_cfg_id is given, check if it exists in ai_provider_configs
+                    provider_config_id = None
+                    if candidate_cfg_id is not None:
+                        stmt_check = text(
                             "SELECT id FROM ai_provider_configs "
-                            "WHERE workspace_id = :ws_id AND provider_kind = :kind "
-                            "  AND is_enabled = true "
+                            "WHERE workspace_id = :ws_id AND id = :cfg_id "
+                            "  AND is_enabled = true LIMIT 1"
+                        )
+                        res_check = await session.execute(
+                            stmt_check,
+                            {"ws_id": principal_ctx.workspace_id, "cfg_id": candidate_cfg_id},
+                        )
+                        provider_config_id = res_check.scalar_one_or_none()
+
+                    # 2. If not matched by ID, resolve by candidate provider kind
+                    if provider_config_id is None and candidates:
+                        prov = getattr(candidates[0], "provider", None)
+                        prov_type = type(prov).__name__.lower() if prov else ""
+                        kind = None
+                        if "ollama" in prov_type:
+                            kind = "ollama"
+                        elif "openai" in prov_type:
+                            kind = "openai"
+                        elif "gemini" in prov_type:
+                            kind = "gemini"
+
+                        if kind is not None:
+                            stmt_kind = text(
+                                "SELECT id FROM ai_provider_configs "
+                                "WHERE workspace_id = :ws_id AND provider_kind = :kind "
+                                "  AND is_enabled = true "
+                                "ORDER BY priority ASC, created_at ASC LIMIT 1"
+                            )
+                            res_kind = await session.execute(
+                                stmt_kind,
+                                {"ws_id": principal_ctx.workspace_id, "kind": kind},
+                            )
+                            provider_config_id = res_kind.scalar_one_or_none()
+
+                    # 3. Fallback to highest-priority enabled provider from DB
+                    if provider_config_id is None:
+                        stmt_active = text(
+                            "SELECT id FROM ai_provider_configs "
+                            "WHERE workspace_id = :ws_id AND is_enabled = true "
                             "ORDER BY priority ASC, created_at ASC LIMIT 1"
                         )
-                        res_kind = await session.execute(
-                            stmt_kind,
-                            {"ws_id": principal_ctx.workspace_id, "kind": kind},
+                        res_active = await session.execute(
+                            stmt_active,
+                            {"ws_id": principal_ctx.workspace_id},
                         )
-                        provider_config_id = res_kind.scalar_one_or_none()
+                        provider_config_id = res_active.scalar_one_or_none()
 
-                # 3. Fallback to highest-priority enabled provider from DB
-                if provider_config_id is None:
-                    stmt_active = text(
-                        "SELECT id FROM ai_provider_configs "
-                        "WHERE workspace_id = :ws_id AND is_enabled = true "
-                        "ORDER BY priority ASC, created_at ASC LIMIT 1"
-                    )
-                    res_active = await session.execute(
-                        stmt_active,
-                        {"ws_id": principal_ctx.workspace_id},
-                    )
-                    provider_config_id = res_active.scalar_one_or_none()
+                    # Fallback to candidate_cfg_id if no enabled provider found in DB
+                    if provider_config_id is None:
+                        provider_config_id = candidate_cfg_id
 
-                # Fallback to candidate_cfg_id if no enabled provider found in DB
-                if provider_config_id is None:
-                    provider_config_id = candidate_cfg_id
+                    # Align candidate[0].provider_config_id if router._candidates is a mutable list
+                    if (
+                        provider_config_id is not None
+                        and candidates
+                        and candidates[0].provider_config_id != provider_config_id
+                    ):
+                        with contextlib.suppress(Exception):
+                            router_candidates = getattr(router, "_candidates", None)
+                            if isinstance(router_candidates, list) and len(router_candidates) > 0:
+                                c0 = router_candidates[0]
+                                router_candidates[0] = RouteCandidate(
+                                    provider_config_id=provider_config_id,
+                                    provider=c0.provider,
+                                    residency_tier=c0.residency_tier,
+                                    priority=c0.priority,
+                                )
 
-                # Align candidate[0].provider_config_id if router._candidates is a mutable list
-                if (
-                    provider_config_id is not None
-                    and candidates
-                    and candidates[0].provider_config_id != provider_config_id
-                ):
-                    with contextlib.suppress(Exception):
-                        router_candidates = getattr(router, "_candidates", None)
-                        if isinstance(router_candidates, list) and len(router_candidates) > 0:
-                            c0 = router_candidates[0]
-                            router_candidates[0] = RouteCandidate(
-                                provider_config_id=provider_config_id,
-                                provider=c0.provider,
-                                residency_tier=c0.residency_tier,
-                                priority=c0.priority,
-                            )
+                    # Check if provider is frozen (token_cap = 0) or budget is exhausted
+                    if provider_config_id is not None:
+                        stmt_freeze = text(
+                            "SELECT provider_config_id FROM ai_token_ledgers "
+                            "WHERE workspace_id = :ws_id "
+                            "  AND provider_config_id = :cfg_id "
+                            "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
+                            "LIMIT 1"
+                        )
+                        res_freeze = await session.execute(
+                            stmt_freeze,
+                            {"ws_id": principal_ctx.workspace_id, "cfg_id": provider_config_id},
+                        )
+                    else:
+                        stmt_freeze = text(
+                            "SELECT provider_config_id FROM ai_token_ledgers "
+                            "WHERE workspace_id = :ws_id "
+                            "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
+                            "LIMIT 1"
+                        )
+                        res_freeze = await session.execute(
+                            stmt_freeze,
+                            {"ws_id": principal_ctx.workspace_id},
+                        )
 
-                # Check if provider is frozen (token_cap = 0) or budget is exhausted
-                if provider_config_id is not None:
-                    stmt_freeze = text(
-                        "SELECT provider_config_id FROM ai_token_ledgers "
-                        "WHERE workspace_id = :ws_id "
-                        "  AND provider_config_id = :cfg_id "
-                        "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
-                        "LIMIT 1"
-                    )
-                    res_freeze = await session.execute(
-                        stmt_freeze,
-                        {"ws_id": principal_ctx.workspace_id, "cfg_id": provider_config_id},
-                    )
-                else:
-                    stmt_freeze = text(
-                        "SELECT provider_config_id FROM ai_token_ledgers "
-                        "WHERE workspace_id = :ws_id "
-                        "  AND (token_cap = 0 OR (token_cap > 0 AND tokens_used >= token_cap)) "
-                        "LIMIT 1"
-                    )
-                    res_freeze = await session.execute(
-                        stmt_freeze,
-                        {"ws_id": principal_ctx.workspace_id},
-                    )
+                    frozen_provider_id = res_freeze.scalar_one_or_none()
+                    if frozen_provider_id is not None:
+                        _logger.warning(
+                            "Sparkle completion blocked: provider %s is frozen or budget exhausted",
+                            frozen_provider_id,
+                        )
+                        elapsed = (clock() - t0) * 1000.0
+                        return SparkleResult(
+                            status="budget",
+                            text="",
+                            ttft_ms=0.0,
+                            total_ms=elapsed,
+                            tokens=0,
+                            retrieval_status=ret_status,
+                            route_trace=[],
+                        )
 
-                frozen_provider_id = res_freeze.scalar_one_or_none()
-                if frozen_provider_id is not None:
-                    _logger.warning(
-                        "Sparkle completion blocked: provider %s is frozen or budget exhausted",
-                        frozen_provider_id,
-                    )
-                    elapsed = (clock() - t0) * 1000.0
-                    return SparkleResult(
-                        status="budget",
-                        text="",
-                        ttft_ms=0.0,
-                        total_ms=elapsed,
-                        tokens=0,
-                        retrieval_status=ret_status,
-                        route_trace=[],
-                    )
-
-                if provider_config_id is not None:
-                    reservation = await budget_enforcer.reserve(
-                        principal_ctx.workspace_id,
-                        None,
-                        provider_config_id,
-                        estimate_tokens=_MAX_OUTPUT_TOKENS,
-                    )
+                    if provider_config_id is not None:
+                        reservation = await budget_enforcer.reserve(
+                            principal_ctx.workspace_id,
+                            None,
+                            provider_config_id,
+                            estimate_tokens=_MAX_OUTPUT_TOKENS,
+                        )
         except BudgetExceeded as exc:
             _logger.warning("Sparkle completion blocked by budget cap: %s", exc)
             elapsed = (clock() - t0) * 1000.0

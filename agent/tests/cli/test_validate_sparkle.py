@@ -792,12 +792,18 @@ def test_default_database_url_and_trace_error(
 ) -> None:
     """Verify default database URL resolution and graceful handling of trace query error."""
     orig_factory = RLSSessionFactory
+    call_count = 0
 
     class FailingSessionFactory:
         def __init__(self, engine: Any) -> None:  # noqa: ANN401
             self._real = orig_factory(engine)
 
         def sessionmaker(self) -> Any:  # noqa: ANN401
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return self._real.sessionmaker()
+
             class FailingContextManager:
                 async def __aenter__(self) -> Any:  # noqa: ANN401
                     msg = "Simulated trace failure"
