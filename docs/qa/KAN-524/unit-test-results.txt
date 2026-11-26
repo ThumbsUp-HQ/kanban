@@ -1,20 +1,23 @@
+=== pnpm --dir kanban/web exec vitest run src/features/admin/AdminDiagnosticsStudio.test.tsx --coverage --coverage.include=src/features/admin/AdminDiagnosticsStudio.tsx ===
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan524-946bfe11/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (19 tests) 2737ms
-   ✓ AdminDiagnosticsStudio Component (19)
-     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1538ms
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (20 tests) 3525ms
+   ✓ AdminDiagnosticsStudio Component (20)
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1555ms
+     ✓ handles probe success=false, empty err message, https wss scheme, bare metal runtime, and ws throws 330ms
 
  Test Files  1 passed (1)
-      Tests  19 passed (19)
-   Start at  15:33:09
-   Duration  5.15s (tests 57%, import 17%, environment 15%, transform 11%, worker 1%)
+      Tests  20 passed (20)
+   Start at  15:51:13
+   Duration  7.60s (tests 50%, import 20%, environment 16%, transform 13%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
 All files          |     100 |     96.5 |     100 |     100 |                   
- ...ticsStudio.tsx |     100 |     96.5 |     100 |     100 | ...56,367,405,489 
+ ...ticsStudio.tsx |     100 |     96.5 |     100 |     100 | ...56,367,405,506 
 -------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE=0

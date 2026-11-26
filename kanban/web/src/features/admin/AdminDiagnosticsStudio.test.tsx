@@ -889,12 +889,18 @@ describe('AdminDiagnosticsStudio Component', () => {
       });
     });
 
-    it('renders FieldHelpHint trigger on Subsystem Health header with required ARIA attributes', async () => {
+    it('renders FieldHelpHint triggers on System Summary and Subsystem Health headers with required ARIA attributes', async () => {
       renderStudio('/admin/diagnostics', 'health');
 
       await waitFor(() => {
+        expect(screen.getByTestId('system-summary-help')).toBeDefined();
         expect(screen.getByTestId('subsystem-health-help')).toBeDefined();
       });
+
+      const summaryTrigger = screen.getByTestId('system-summary-help');
+      expect(summaryTrigger.getAttribute('aria-label')).toBe('Help for System Operational Summary');
+      expect(summaryTrigger.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(summaryTrigger.getAttribute('aria-expanded')).toBe('false');
 
       const trigger = screen.getByTestId('subsystem-health-help');
       expect(trigger.getAttribute('aria-label')).toBe('Help for Subsystem Operational Health');
@@ -903,7 +909,7 @@ describe('AdminDiagnosticsStudio Component', () => {
       expect(trigger.className).toContain('field-help-hint');
     });
 
-    it('opens popover dialog on keyboard focus and closes on Escape', async () => {
+    it('opens popover dialog on keyboard focus and closes on Escape with thresholds and remediation', async () => {
       renderStudio('/admin/diagnostics', 'health');
 
       await waitFor(() => {
@@ -924,6 +930,10 @@ describe('AdminDiagnosticsStudio Component', () => {
       const dialog = screen.getByRole('dialog');
       expect(dialog.getAttribute('aria-label')).toBe('Subsystem Operational Health');
       expect(dialog.textContent).toContain('Real-time operational health telemetry across core subsystems');
+      expect(dialog.textContent).toContain('OK (<100ms)');
+      expect(dialog.textContent).toContain('DEGRADED');
+      expect(dialog.textContent).toContain('DOWN');
+      expect(dialog.textContent).toContain('Remediation: Run WS Ping / Refresh Diagnostics');
 
       // Verify doc link href
       const docLink = screen.getByTestId('subsystem-health-help-doc-link');
@@ -936,6 +946,36 @@ describe('AdminDiagnosticsStudio Component', () => {
       });
       expect(screen.queryByTestId('subsystem-health-help-popover')).toBeNull();
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('opens system-summary-help popover and displays connection thresholds and remediation', async () => {
+      renderStudio('/admin/diagnostics', 'health');
+
+      await waitFor(() => {
+        expect(screen.getByTestId('system-summary-help')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('system-summary-help');
+
+      act(() => {
+        trigger.focus();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('system-summary-help-popover')).toBeDefined();
+      });
+
+      const popover = screen.getByTestId('system-summary-help-popover');
+      expect(popover.textContent).toContain('System Operational Summary');
+      expect(popover.textContent).toContain('OK (<100ms)');
+      expect(popover.textContent).toContain('DEGRADED');
+      expect(popover.textContent).toContain('DOWN');
+      expect(popover.textContent).toContain('Remediation: Run WS Ping / Refresh Diagnostics');
+
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('system-summary-help-popover')).toBeNull();
     });
 
     it('renders FieldHelpHint and active tab across Light and Dark themes', async () => {

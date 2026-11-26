@@ -35,7 +35,7 @@ index 6bed8f69..0097deee 100644
  .admin-diag-filter-bar {
    display: flex;
 diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
-index 75e58170..224fa51d 100644
+index 75e58170..a8798174 100644
 --- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
 +++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.test.tsx
 @@ -2,8 +2,10 @@
@@ -50,7 +50,7 @@ index 75e58170..224fa51d 100644
  import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  import { MemoryRouter } from 'react-router';
  import { AdminDiagnosticsStudio } from './AdminDiagnosticsStudio';
-@@ -872,4 +874,199 @@ describe('AdminDiagnosticsStudio Component', () => {
+@@ -872,4 +874,239 @@ describe('AdminDiagnosticsStudio Component', () => {
      delete (window as unknown as { location?: unknown }).location;
      (window as unknown as { location: unknown }).location = origLocation;
    });
@@ -69,12 +69,18 @@ index 75e58170..224fa51d 100644
 +      });
 +    });
 +
-+    it('renders FieldHelpHint trigger on Subsystem Health header with required ARIA attributes', async () => {
++    it('renders FieldHelpHint triggers on System Summary and Subsystem Health headers with required ARIA attributes', async () => {
 +      renderStudio('/admin/diagnostics', 'health');
 +
 +      await waitFor(() => {
++        expect(screen.getByTestId('system-summary-help')).toBeDefined();
 +        expect(screen.getByTestId('subsystem-health-help')).toBeDefined();
 +      });
++
++      const summaryTrigger = screen.getByTestId('system-summary-help');
++      expect(summaryTrigger.getAttribute('aria-label')).toBe('Help for System Operational Summary');
++      expect(summaryTrigger.getAttribute('aria-haspopup')).toBe('dialog');
++      expect(summaryTrigger.getAttribute('aria-expanded')).toBe('false');
 +
 +      const trigger = screen.getByTestId('subsystem-health-help');
 +      expect(trigger.getAttribute('aria-label')).toBe('Help for Subsystem Operational Health');
@@ -83,7 +89,7 @@ index 75e58170..224fa51d 100644
 +      expect(trigger.className).toContain('field-help-hint');
 +    });
 +
-+    it('opens popover dialog on keyboard focus and closes on Escape', async () => {
++    it('opens popover dialog on keyboard focus and closes on Escape with thresholds and remediation', async () => {
 +      renderStudio('/admin/diagnostics', 'health');
 +
 +      await waitFor(() => {
@@ -104,6 +110,10 @@ index 75e58170..224fa51d 100644
 +      const dialog = screen.getByRole('dialog');
 +      expect(dialog.getAttribute('aria-label')).toBe('Subsystem Operational Health');
 +      expect(dialog.textContent).toContain('Real-time operational health telemetry across core subsystems');
++      expect(dialog.textContent).toContain('OK (<100ms)');
++      expect(dialog.textContent).toContain('DEGRADED');
++      expect(dialog.textContent).toContain('DOWN');
++      expect(dialog.textContent).toContain('Remediation: Run WS Ping / Refresh Diagnostics');
 +
 +      // Verify doc link href
 +      const docLink = screen.getByTestId('subsystem-health-help-doc-link');
@@ -116,6 +126,36 @@ index 75e58170..224fa51d 100644
 +      });
 +      expect(screen.queryByTestId('subsystem-health-help-popover')).toBeNull();
 +      expect(trigger.getAttribute('aria-expanded')).toBe('false');
++    });
++
++    it('opens system-summary-help popover and displays connection thresholds and remediation', async () => {
++      renderStudio('/admin/diagnostics', 'health');
++
++      await waitFor(() => {
++        expect(screen.getByTestId('system-summary-help')).toBeDefined();
++      });
++
++      const trigger = screen.getByTestId('system-summary-help');
++
++      act(() => {
++        trigger.focus();
++      });
++
++      await waitFor(() => {
++        expect(screen.getByTestId('system-summary-help-popover')).toBeDefined();
++      });
++
++      const popover = screen.getByTestId('system-summary-help-popover');
++      expect(popover.textContent).toContain('System Operational Summary');
++      expect(popover.textContent).toContain('OK (<100ms)');
++      expect(popover.textContent).toContain('DEGRADED');
++      expect(popover.textContent).toContain('DOWN');
++      expect(popover.textContent).toContain('Remediation: Run WS Ping / Refresh Diagnostics');
++
++      act(() => {
++        fireEvent.keyDown(trigger, { key: 'Escape' });
++      });
++      expect(screen.queryByTestId('system-summary-help-popover')).toBeNull();
 +    });
 +
 +    it('renders FieldHelpHint and active tab across Light and Dark themes', async () => {
@@ -251,7 +291,7 @@ index 75e58170..224fa51d 100644
 +  });
  });
 diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
-index 5d36fe43..d234b12a 100644
+index 5d36fe43..e70dc7ea 100644
 --- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
 +++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
 @@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
@@ -262,13 +302,53 @@ index 5d36fe43..d234b12a 100644
  import { StudioDocLink } from '../../components/help/StudioDocLink';
  import './AdminDiagnosticsStudio.css';
  
-@@ -588,6 +589,12 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+@@ -435,7 +436,24 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+       <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={user?.is_server_admin} />
+ 
+       {/* Top 4-Card Summary Strip */}
+-      <section className="admin-diag-summary-strip" aria-label="System Summary Strip">
++      <section className="admin-diag-summary-section" aria-labelledby="summary-heading">
++        <h2 id="summary-heading" className="admin-diag-panel-title">
++          <span aria-hidden="true">📊</span>
++          System Summary
++          <FieldHelpHint
++            title="System Operational Summary"
++            summary="Real-time operational health telemetry across core transports, runtime environments, configuration, and universal graph links."
++            validValues={[
++              { label: 'OK (<100ms)', description: 'Healthy connection across DB, Redis, and worker pool' },
++              { label: 'DEGRADED', description: 'Elevated latency, replica lag, or fallback channel active' },
++              { label: 'DOWN', description: 'Unreachable service, auth failure, or broker disconnected' },
++            ]}
++            caution="Remediation: Run WS Ping / Refresh Diagnostics, and check container logs & DB/Redis connectivity."
++            docHref="/docs/admin-diagnostics-and-link-inspector-studio"
++            testId="system-summary-help"
++          />
++        </h2>
++        <div className="admin-diag-summary-strip" aria-label="System Summary Strip">
+         {/* Card 1: Realtime Transport */}
+         <div className="admin-diag-summary-card" data-testid="summary-card-realtime">
+           <div className="admin-diag-summary-card-header">
+@@ -503,6 +521,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+             7-class Link Auditor &amp; Purger embedded
+           </div>
+         </div>
++        </div>
+       </section>
+ 
+       {/* Tabs */}
+@@ -588,6 +607,18 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
            <h2 id="health-heading" className="admin-diag-panel-title">
              <span aria-hidden="true">🏥</span>
              Subsystem Operational Health (7 Subsystems)
 +            <FieldHelpHint
 +              title="Subsystem Operational Health"
 +              summary="Real-time operational health telemetry across core subsystems (Database, Realtime Hub, Job Worker, Sandbox, Agents, Runners, Rate Limiter) with automated failover and RLS enforcement."
++              validValues={[
++                { label: 'OK (<100ms)', description: 'Healthy connection across DB, Redis, and worker pool' },
++                { label: 'DEGRADED', description: 'Elevated latency, replica lag, or fallback channel active' },
++                { label: 'DOWN', description: 'Unreachable service, auth failure, or broker disconnected' },
++              ]}
++              caution="Remediation: Run WS Ping / Refresh Diagnostics, and check container logs & DB/Redis connectivity."
 +              docHref="/docs/admin-diagnostics-and-link-inspector-studio"
 +              testId="subsystem-health-help"
 +            />
