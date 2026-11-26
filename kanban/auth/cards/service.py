@@ -685,7 +685,11 @@ class AuthCardAdminService:
                 logger.debug("Failed parsing google_oauth_json client secret")
 
         if secret_val and self._kek_provider is not None:
-            secret_buf = bytearray(secret_val.encode("utf-8"))
+            if draft.provider_kind == "LDAP" and not secret_val.strip().startswith("{"):
+                secret_bytes = json.dumps({"bind_dn_password": secret_val}).encode("utf-8")
+            else:
+                secret_bytes = secret_val.encode("utf-8")
+            secret_buf = bytearray(secret_bytes)
             try:
                 sealed = seal_card_secret(
                     card_id,
