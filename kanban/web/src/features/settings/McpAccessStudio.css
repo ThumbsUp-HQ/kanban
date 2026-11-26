@@ -382,9 +382,20 @@
 }
 
 .kb-mcp-form-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--kb-color-text-primary, var(--fg-primary));
+  width: fit-content;
+  max-width: 100%;
+}
+
+.kb-mcp-form-label .field-help-hint {
+  margin: 0;
+  margin-left: 0;
 }
 
 .kb-mcp-form-input,
@@ -794,4 +805,57 @@
     min-height: 44px;
   }
 }
+
+/* Workload OIDC Presets Bar & Label */
+.kb-mcp-presets-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.kb-mcp-presets-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #656d76));
+}
+
+[data-theme='dark'] .kb-mcp-presets-label {
+  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kb-mcp-presets-label {
+    color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
+  }
+}
+
+[data-theme='dark'] .kb-mcp-form-label {
+  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kb-mcp-form-label {
+    color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
+  }
+}
+
+@media (max-width: 480px) {
+  .kb-snippet-modal-card {
+    padding: 16px 12px;
+    max-height: 95vh;
+    max-height: 95dvh;
+  }
+
+  .kb-mcp-presets-bar {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .kb-mcp-form-label {
+    gap: 4px;
+  }
+}
+
 

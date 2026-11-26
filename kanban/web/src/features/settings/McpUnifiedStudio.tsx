@@ -408,9 +408,8 @@ export function WorkloadFederationSection({
                 <div
                   className="kb-mcp-presets-bar"
                   data-testid="workload-presets-bar"
-                  style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--kb-color-text-secondary, #8b949e)' }}>
+                  <span className="kb-mcp-presets-label">
                     1-Click Presets:
                   </span>
                   <button
@@ -458,7 +457,9 @@ export function WorkloadFederationSection({
                 </div>
               )}
               <div className="kb-mcp-form-row">
-                <label className="kb-mcp-form-label" htmlFor="wl-policy-name">Policy Name *</label>
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-name">
+                  <span>Policy Name *</span>
+                </label>
                 <input
                   id="wl-policy-name"
                   type="text"
@@ -471,7 +472,9 @@ export function WorkloadFederationSection({
               </div>
 
               <div className="kb-mcp-form-row">
-                <label className="kb-mcp-form-label" htmlFor="wl-policy-desc">Description</label>
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-desc">
+                  <span>Description</span>
+                </label>
                 <input
                   id="wl-policy-desc"
                   type="text"
@@ -485,7 +488,18 @@ export function WorkloadFederationSection({
               {!editingPolicy && (
                 <>
                   <div className="kb-mcp-form-row">
-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-issuer">Issuer URL *</label>
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-issuer">
+                      <span>Issuer URL *</span>
+                      <FieldHelpHint
+                        title="Issuer URL"
+                        summary="OpenID Connect issuer URL validating incoming JWT iss claims under RFC 8693 token exchange. Must use HTTPS."
+                        defaultValue="Preset or CI/CD IdP provider URL"
+                        validValues={['Strict HTTPS URL (1 to 500 characters)']}
+                        example="https://token.actions.githubusercontent.com"
+                        docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
+                        testId="policy-issuer-help"
+                      />
+                    </label>
                     <input
                       id="wl-policy-issuer"
                       type="url"
@@ -499,7 +513,18 @@ export function WorkloadFederationSection({
                   </div>
 
                   <div className="kb-mcp-form-row">
-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-client-id">Client ID / Audience *</label>
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-client-id">
+                      <span>Client ID / Audience *</span>
+                      <FieldHelpHint
+                        title="Client ID / Audience"
+                        summary="Expected audience claim matching the aud field in incoming OIDC tokens under RFC 8693 token exchange."
+                        defaultValue="Defaults to current server origin"
+                        validValues={['String (1 to 255 characters)']}
+                        example="https://kanban.example.com"
+                        docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
+                        testId="policy-client-id-help"
+                      />
+                    </label>
                     <input
                       id="wl-policy-client-id"
                       type="text"
@@ -513,7 +538,9 @@ export function WorkloadFederationSection({
                   </div>
 
                   <div className="kb-mcp-form-row">
-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-surface">Surface *</label>
+                    <label className="kb-mcp-form-label" htmlFor="wl-policy-surface">
+                      <span>Surface *</span>
+                    </label>
                     <select
                       id="wl-policy-surface"
                       className="kb-mcp-form-select"
@@ -529,7 +556,18 @@ export function WorkloadFederationSection({
               )}
 
               <div className="kb-mcp-form-row">
-                <label className="kb-mcp-form-label" htmlFor="wl-policy-subject-pattern">Subject Pattern *</label>
+                <label className="kb-mcp-form-label" htmlFor="wl-policy-subject-pattern">
+                  <span>Subject Pattern *</span>
+                  <FieldHelpHint
+                    title="Subject Pattern"
+                    summary="Glob or regex pattern matched against incoming OIDC JWT sub claims under RFC 8693 token exchange."
+                    defaultValue="repo:org/repo:* or system:serviceaccount:namespace:*"
+                    validValues={['Glob or Regex pattern (1 to 500 characters)']}
+                    example="repo:org/repo:ref:refs/heads/*"
+                    docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
+                    testId="policy-subject-pattern-help"
+                  />
+                </label>
                 <input
                   id="wl-policy-subject-pattern"
                   type="text"
@@ -555,7 +593,7 @@ export function WorkloadFederationSection({
               >
                 <div className="kb-mcp-form-row">
                   <label className="kb-mcp-form-label" htmlFor="wl-policy-cap-mask">
-                    Capability Mask (0-255)
+                    <span>Capability Mask (0-255)</span>
                     <FieldHelpHint
                       title="Capability Mask"
                       summary="Bitmask ceiling governing allowed Model Context Protocol operations."
@@ -578,7 +616,9 @@ export function WorkloadFederationSection({
                 </div>
 
                 <div className="kb-mcp-form-row">
-                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cidrs">Allowed CIDRs (comma-separated)</label>
+                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cidrs">
+                    <span>Allowed CIDRs (comma-separated)</span>
+                  </label>
                   <input
                     id="wl-policy-cidrs"
                     type="text"
@@ -592,7 +632,7 @@ export function WorkloadFederationSection({
 
                 <div className="kb-mcp-form-row">
                   <label className="kb-mcp-form-label" htmlFor="wl-policy-ttl">
-                    Max TTL Seconds
+                    <span>Max TTL Seconds</span>
                     <FieldHelpHint
                       title="Max TTL Seconds"
                       summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."

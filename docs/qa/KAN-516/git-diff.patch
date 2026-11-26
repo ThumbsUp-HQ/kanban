@@ -1,0 +1,395 @@
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 0c4a6816..82aae560 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -382,9 +382,20 @@
+ }
+ 
+ .kb-mcp-form-label {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 6px;
+   font-size: 0.8125rem;
+   font-weight: 500;
+   color: var(--kb-color-text-primary, var(--fg-primary));
++  width: fit-content;
++  max-width: 100%;
++}
++
++.kb-mcp-form-label .field-help-hint {
++  margin: 0;
++  margin-left: 0;
+ }
+ 
+ .kb-mcp-form-input,
+@@ -795,3 +806,56 @@
+   }
+ }
+ 
++/* Workload OIDC Presets Bar & Label */
++.kb-mcp-presets-bar {
++  display: flex;
++  gap: 8px;
++  margin-bottom: 16px;
++  align-items: center;
++  flex-wrap: wrap;
++}
++
++.kb-mcp-presets-label {
++  font-size: 12px;
++  font-weight: 600;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #656d76));
++}
++
++[data-theme='dark'] .kb-mcp-presets-label {
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .kb-mcp-presets-label {
++    color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  }
++}
++
++[data-theme='dark'] .kb-mcp-form-label {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .kb-mcp-form-label {
++    color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++  }
++}
++
++@media (max-width: 480px) {
++  .kb-snippet-modal-card {
++    padding: 16px 12px;
++    max-height: 95vh;
++    max-height: 95dvh;
++  }
++
++  .kb-mcp-presets-bar {
++    gap: 6px;
++    margin-bottom: 12px;
++  }
++
++  .kb-mcp-form-label {
++    gap: 4px;
++  }
++}
++
++
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index 4c0bc8b4..3eb5d9ac 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -408,9 +408,8 @@ export function WorkloadFederationSection({
+                 <div
+                   className="kb-mcp-presets-bar"
+                   data-testid="workload-presets-bar"
+-                  style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}
+                 >
+-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--kb-color-text-secondary, #8b949e)' }}>
++                  <span className="kb-mcp-presets-label">
+                     1-Click Presets:
+                   </span>
+                   <button
+@@ -458,7 +457,9 @@ export function WorkloadFederationSection({
+                 </div>
+               )}
+               <div className="kb-mcp-form-row">
+-                <label className="kb-mcp-form-label" htmlFor="wl-policy-name">Policy Name *</label>
++                <label className="kb-mcp-form-label" htmlFor="wl-policy-name">
++                  <span>Policy Name *</span>
++                </label>
+                 <input
+                   id="wl-policy-name"
+                   type="text"
+@@ -471,7 +472,9 @@ export function WorkloadFederationSection({
+               </div>
+ 
+               <div className="kb-mcp-form-row">
+-                <label className="kb-mcp-form-label" htmlFor="wl-policy-desc">Description</label>
++                <label className="kb-mcp-form-label" htmlFor="wl-policy-desc">
++                  <span>Description</span>
++                </label>
+                 <input
+                   id="wl-policy-desc"
+                   type="text"
+@@ -485,7 +488,18 @@ export function WorkloadFederationSection({
+               {!editingPolicy && (
+                 <>
+                   <div className="kb-mcp-form-row">
+-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-issuer">Issuer URL *</label>
++                    <label className="kb-mcp-form-label" htmlFor="wl-policy-issuer">
++                      <span>Issuer URL *</span>
++                      <FieldHelpHint
++                        title="Issuer URL"
++                        summary="OpenID Connect issuer URL validating incoming JWT iss claims under RFC 8693 token exchange. Must use HTTPS."
++                        defaultValue="Preset or CI/CD IdP provider URL"
++                        validValues={['Strict HTTPS URL (1 to 500 characters)']}
++                        example="https://token.actions.githubusercontent.com"
++                        docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
++                        testId="policy-issuer-help"
++                      />
++                    </label>
+                     <input
+                       id="wl-policy-issuer"
+                       type="url"
+@@ -499,7 +513,18 @@ export function WorkloadFederationSection({
+                   </div>
+ 
+                   <div className="kb-mcp-form-row">
+-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-client-id">Client ID / Audience *</label>
++                    <label className="kb-mcp-form-label" htmlFor="wl-policy-client-id">
++                      <span>Client ID / Audience *</span>
++                      <FieldHelpHint
++                        title="Client ID / Audience"
++                        summary="Expected audience claim matching the aud field in incoming OIDC tokens under RFC 8693 token exchange."
++                        defaultValue="Defaults to current server origin"
++                        validValues={['String (1 to 255 characters)']}
++                        example="https://kanban.example.com"
++                        docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
++                        testId="policy-client-id-help"
++                      />
++                    </label>
+                     <input
+                       id="wl-policy-client-id"
+                       type="text"
+@@ -513,7 +538,9 @@ export function WorkloadFederationSection({
+                   </div>
+ 
+                   <div className="kb-mcp-form-row">
+-                    <label className="kb-mcp-form-label" htmlFor="wl-policy-surface">Surface *</label>
++                    <label className="kb-mcp-form-label" htmlFor="wl-policy-surface">
++                      <span>Surface *</span>
++                    </label>
+                     <select
+                       id="wl-policy-surface"
+                       className="kb-mcp-form-select"
+@@ -529,7 +556,18 @@ export function WorkloadFederationSection({
+               )}
+ 
+               <div className="kb-mcp-form-row">
+-                <label className="kb-mcp-form-label" htmlFor="wl-policy-subject-pattern">Subject Pattern *</label>
++                <label className="kb-mcp-form-label" htmlFor="wl-policy-subject-pattern">
++                  <span>Subject Pattern *</span>
++                  <FieldHelpHint
++                    title="Subject Pattern"
++                    summary="Glob or regex pattern matched against incoming OIDC JWT sub claims under RFC 8693 token exchange."
++                    defaultValue="repo:org/repo:* or system:serviceaccount:namespace:*"
++                    validValues={['Glob or Regex pattern (1 to 500 characters)']}
++                    example="repo:org/repo:ref:refs/heads/*"
++                    docHref="/docs/studio-configuration-reference#workload-identity-federation-settings"
++                    testId="policy-subject-pattern-help"
++                  />
++                </label>
+                 <input
+                   id="wl-policy-subject-pattern"
+                   type="text"
+@@ -555,7 +593,7 @@ export function WorkloadFederationSection({
+               >
+                 <div className="kb-mcp-form-row">
+                   <label className="kb-mcp-form-label" htmlFor="wl-policy-cap-mask">
+-                    Capability Mask (0-255)
++                    <span>Capability Mask (0-255)</span>
+                     <FieldHelpHint
+                       title="Capability Mask"
+                       summary="Bitmask ceiling governing allowed Model Context Protocol operations."
+@@ -578,7 +616,9 @@ export function WorkloadFederationSection({
+                 </div>
+ 
+                 <div className="kb-mcp-form-row">
+-                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cidrs">Allowed CIDRs (comma-separated)</label>
++                  <label className="kb-mcp-form-label" htmlFor="wl-policy-cidrs">
++                    <span>Allowed CIDRs (comma-separated)</span>
++                  </label>
+                   <input
+                     id="wl-policy-cidrs"
+                     type="text"
+@@ -592,7 +632,7 @@ export function WorkloadFederationSection({
+ 
+                 <div className="kb-mcp-form-row">
+                   <label className="kb-mcp-form-label" htmlFor="wl-policy-ttl">
+-                    Max TTL Seconds
++                    <span>Max TTL Seconds</span>
+                     <FieldHelpHint
+                       title="Max TTL Seconds"
+                       summary="Maximum allowed token lifetime in seconds for exchanged workload identity tokens."
+diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+index 9414e9b6..31de2aa0 100644
+--- a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+@@ -1,6 +1,8 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
++import fs from 'node:fs';
++import path from 'node:path';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+ import React from 'react';
+@@ -1227,4 +1229,162 @@ describe('WorkloadFederationSection (KAN-74)', () => {
+ 
+     unmount();
+   });
++
++  it('renders FieldHelpHint on Issuer URL, Client ID / Audience, and Subject Pattern fields with full accessibility and theme support (KAN-516)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if ((path as string) === '/api/v1/admin/workload-identities') {
++        return [];
++      }
++      return undefined;
++    });
++
++    const { container, unmount } = render(<WorkloadFederationSection isAdmin={true} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
++    });
++
++    // Open create policy modal
++    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
++    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
++
++    // Verify 1-Click presets bar has zero inline styles
++    const presetsBar = screen.getByTestId('workload-presets-bar');
++    expect(presetsBar.style.length).toBe(0);
++
++    // Locate the 3 FieldHelpHint trigger buttons
++    const issuerHelp = screen.getByTestId('policy-issuer-help');
++    const clientIdHelp = screen.getByTestId('policy-client-id-help');
++    const subjectHelp = screen.getByTestId('policy-subject-pattern-help');
++
++    // Zero inline styles on triggers
++    expect(issuerHelp.style.length).toBe(0);
++    expect(clientIdHelp.style.length).toBe(0);
++    expect(subjectHelp.style.length).toBe(0);
++
++    // Initial ARIA semantics
++    expect(issuerHelp.getAttribute('aria-label')).toBe('Help for Issuer URL');
++    expect(issuerHelp.getAttribute('aria-haspopup')).toBe('dialog');
++    expect(issuerHelp.getAttribute('aria-expanded')).toBe('false');
++
++    expect(clientIdHelp.getAttribute('aria-label')).toBe('Help for Client ID / Audience');
++    expect(clientIdHelp.getAttribute('aria-haspopup')).toBe('dialog');
++    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('false');
++
++    expect(subjectHelp.getAttribute('aria-label')).toBe('Help for Subject Pattern');
++    expect(subjectHelp.getAttribute('aria-haspopup')).toBe('dialog');
++    expect(subjectHelp.getAttribute('aria-expanded')).toBe('false');
++
++    // 1. Focus Issuer URL Help trigger -> opens popover
++    act(() => {
++      issuerHelp.focus();
++    });
++    expect(issuerHelp.getAttribute('aria-expanded')).toBe('true');
++    const issuerPopover = screen.getByTestId('policy-issuer-help-popover');
++    expect(issuerPopover).toBeDefined();
++    expect(issuerPopover.getAttribute('role')).toBe('dialog');
++    expect(issuerPopover.textContent).toContain('Issuer URL');
++    expect(issuerPopover.textContent).toContain('OpenID Connect issuer URL');
++    expect(issuerPopover.textContent).toContain('RFC 8693');
++    expect(issuerPopover.textContent).toContain('https://token.actions.githubusercontent.com');
++    const issuerDocLink = screen.getByTestId('policy-issuer-help-doc-link');
++    expect(issuerDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
++
++    // Dismiss Issuer URL popover via Escape
++    act(() => {
++      fireEvent.keyDown(issuerHelp, { key: 'Escape' });
++    });
++    expect(issuerHelp.getAttribute('aria-expanded')).toBe('false');
++    expect(screen.queryByTestId('policy-issuer-help-popover')).toBeNull();
++
++    // 2. Focus Client ID / Audience Help trigger -> opens popover
++    act(() => {
++      clientIdHelp.focus();
++    });
++    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('true');
++    const clientIdPopover = screen.getByTestId('policy-client-id-help-popover');
++    expect(clientIdPopover).toBeDefined();
++    expect(clientIdPopover.getAttribute('role')).toBe('dialog');
++    expect(clientIdPopover.textContent).toContain('Client ID / Audience');
++    expect(clientIdPopover.textContent).toContain('Expected audience claim matching the aud field');
++    expect(clientIdPopover.textContent).toContain('RFC 8693');
++    expect(clientIdPopover.textContent).toContain('https://kanban.example.com');
++    const clientIdDocLink = screen.getByTestId('policy-client-id-help-doc-link');
++    expect(clientIdDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
++
++    // Dismiss Client ID popover via Escape
++    act(() => {
++      fireEvent.keyDown(clientIdHelp, { key: 'Escape' });
++    });
++    expect(clientIdHelp.getAttribute('aria-expanded')).toBe('false');
++    expect(screen.queryByTestId('policy-client-id-help-popover')).toBeNull();
++
++    // 3. Focus Subject Pattern Help trigger -> opens popover
++    act(() => {
++      subjectHelp.focus();
++    });
++    expect(subjectHelp.getAttribute('aria-expanded')).toBe('true');
++    const subjectPopover = screen.getByTestId('policy-subject-pattern-help-popover');
++    expect(subjectPopover).toBeDefined();
++    expect(subjectPopover.getAttribute('role')).toBe('dialog');
++    expect(subjectPopover.textContent).toContain('Subject Pattern');
++    expect(subjectPopover.textContent).toContain('Glob or regex pattern matched against incoming OIDC JWT sub claims');
++    expect(subjectPopover.textContent).toContain('RFC 8693');
++    expect(subjectPopover.textContent).toContain('repo:org/repo:ref:refs/heads/*');
++    const subjectDocLink = screen.getByTestId('policy-subject-pattern-help-doc-link');
++    expect(subjectDocLink.getAttribute('href')).toBe('/docs/studio-configuration-reference#workload-identity-federation-settings');
++
++    // Dismiss Subject Pattern popover via Escape
++    act(() => {
++      fireEvent.keyDown(subjectHelp, { key: 'Escape' });
++    });
++    expect(subjectHelp.getAttribute('aria-expanded')).toBe('false');
++    expect(screen.queryByTestId('policy-subject-pattern-help-popover')).toBeNull();
++
++    // 4. Verify Theme switching (Light & Dark)
++    document.documentElement.setAttribute('data-theme', 'light');
++    expect(container.querySelector('[data-testid="policy-issuer-help"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="policy-client-id-help"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="policy-subject-pattern-help"]')).not.toBeNull();
++
++    document.documentElement.setAttribute('data-theme', 'dark');
++    expect(container.querySelector('[data-testid="policy-issuer-help"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="policy-client-id-help"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="policy-subject-pattern-help"]')).not.toBeNull();
++    document.documentElement.removeAttribute('data-theme');
++
++    // Close modal
++    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
++    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
++
++    unmount();
++  });
++
++  it('verifies CSS rules in McpAccessStudio.css for label adjacency, themes, and mobile layout (KAN-516)', () => {
++    const cssPath = path.resolve(import.meta.dirname, '../McpAccessStudio.css');
++    const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++    // Form label adjacency and flex alignment
++    expect(cssContent).toContain('.kb-mcp-form-label');
++    expect(cssContent).toContain('display: inline-flex;');
++    expect(cssContent).toContain('gap: 6px;');
++    expect(cssContent).toContain('.kb-mcp-form-label .field-help-hint');
++    expect(cssContent).toContain('margin: 0;');
++    expect(cssContent).toContain('margin-left: 0;');
++
++    // Presets bar and label
++    expect(cssContent).toContain('.kb-mcp-presets-bar');
++    expect(cssContent).toContain('.kb-mcp-presets-label');
++
++    // Dark theme and prefers-color-scheme rules
++    expect(cssContent).toContain("[data-theme='dark'] .kb-mcp-form-label");
++    expect(cssContent).toContain(":root:not([data-theme='light']) .kb-mcp-form-label");
++    expect(cssContent).toContain("[data-theme='dark'] .kb-mcp-presets-label");
++    expect(cssContent).toContain(":root:not([data-theme='light']) .kb-mcp-presets-label");
++
++    // Mobile responsiveness
++    expect(cssContent).toContain('@media (max-width: 480px)');
++    expect(cssContent).toContain('.kb-snippet-modal-card');
++  });
+ });
