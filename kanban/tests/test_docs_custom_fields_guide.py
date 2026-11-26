@@ -16,7 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = (
     REPO_ROOT / "kanban" / "web" / "src" / "features" / "docs-center" / "wikiManifest.ts"
 )
-WIKI_DIR = Path(os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki"))
+WIKI_DIR = (
+    Path("thumbs-up-kanban.wiki")
+    if Path("thumbs-up-kanban.wiki").is_dir()
+    else Path(os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki"))
+)
 CHAPTER_SLUG = "guide-custom-fields"
 MARKDOWN_FILENAME = "Guide-Custom-Fields.md"
 
@@ -107,7 +111,7 @@ def test_custom_fields_guide_no_forbidden_dashes() -> None:
 
 
 def test_custom_fields_guide_sections_and_anchors() -> None:
-    """Verify field editor help anchors exist in markdown."""
+    """Verify field editor help anchors exist as real markdown heading slugs."""
     content, _ = load_chapter()
     required_anchors = [
         "display-name",
@@ -123,7 +127,15 @@ def test_custom_fields_guide_sections_and_anchors() -> None:
         "aal2-stepup",
         "approvals",
     ]
+    raw_headings = re.findall(r"^#{2,4}\s+(.+)$", content, re.MULTILINE)
+    heading_slugs: set[str] = set()
+    for h in raw_headings:
+        clean = re.sub(r"^[0-9]+\.\s*", "", h).strip().lower()
+        clean = re.sub(r"[^a-z0-9\s_-]", "", clean)
+        clean = re.sub(r"[\s_]+", "-", clean).strip("-")
+        if clean:
+            heading_slugs.add(clean)
     for anchor in required_anchors:
-        assert f'id="{anchor}"' in content or f"#{anchor}" in content, (
-            f"Missing required anchor '{anchor}' in custom fields guide"
+        assert anchor in heading_slugs, (
+            f"Missing required heading slug '{anchor}' in custom fields guide."
         )
