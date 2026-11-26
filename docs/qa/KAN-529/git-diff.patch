@@ -1,0 +1,232 @@
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.css b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+index 03c2ebf5..17b3fac8 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.css
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+@@ -74,12 +74,18 @@
+ }
+ 
+ .kb-plane-mode-active {
+-  background-color: rgba(56, 139, 253, 0.15);
+-  border-color: #388bfd;
+-  color: #58a6ff;
++  background-color: var(--bg-accent-subtle);
++  border-color: var(--badge-fg);
++  color: var(--badge-fg);
+   font-weight: 600;
+ }
+ 
++.kb-plane-mode-active:hover {
++  background-color: var(--bg-accent-subtle);
++  border-color: var(--badge-fg);
++  color: var(--badge-fg);
++}
++
+ .kb-plane-dropzone {
+   border: 2px dashed var(--kb-color-border-subtle, #30363d);
+   border-radius: 8px;
+@@ -206,17 +212,18 @@
+ }
+ 
+ .kb-plane-warnings-box {
+-  background-color: rgba(210, 153, 34, 0.12);
+-  border: 1px solid rgba(210, 153, 34, 0.4);
++  background-color: var(--warn-bg);
++  border: 1px solid var(--border-warning);
+   border-radius: 6px;
+   padding: 16px;
+   margin: 16px 0;
++  color: var(--warn-fg);
+ }
+ 
+ .kb-plane-warnings-title {
+   font-size: 0.875rem;
+   font-weight: 600;
+-  color: #d29922;
++  color: var(--warn-fg);
+   margin-bottom: 8px;
+ }
+ 
+@@ -224,7 +231,7 @@
+   margin: 0;
+   padding-left: 20px;
+   font-size: 0.825rem;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--warn-fg);
+ }
+ 
+ .kb-plane-alert {
+@@ -235,15 +242,15 @@
+ }
+ 
+ .kb-plane-alert-error {
+-  background-color: rgba(248, 81, 73, 0.15);
+-  border: 1px solid rgba(248, 81, 73, 0.4);
+-  color: #f85149;
++  background-color: var(--danger-bg);
++  border: 1px solid var(--border-danger);
++  color: var(--danger-fg);
+ }
+ 
+ .kb-plane-alert-success {
+-  background-color: rgba(35, 134, 54, 0.15);
+-  border: 1px solid rgba(63, 185, 80, 0.4);
+-  color: #3fb950;
++  background-color: var(--bg-success-subtle);
++  border: 1px solid var(--border-success);
++  color: var(--text-success);
+ }
+ 
+ .kb-plane-btn-row {
+@@ -269,23 +276,23 @@
+ }
+ 
+ .kb-plane-btn-primary {
+-  background-color: #238636;
+-  border: 1px solid rgba(240, 246, 252, 0.1);
+-  color: #ffffff;
++  background-color: var(--accent-primary);
++  border: 1px solid transparent;
++  color: var(--accent-primary-fg);
+ }
+ 
+ .kb-plane-btn-primary:hover:not(:disabled) {
+-  background-color: #2ea043;
++  background-color: var(--brand-primary-hover);
+ }
+ 
+ .kb-plane-btn-execute {
+-  background-color: #1f6feb;
+-  border: 1px solid rgba(240, 246, 252, 0.1);
+-  color: #ffffff;
++  background-color: var(--accent-primary);
++  border: 1px solid transparent;
++  color: var(--accent-primary-fg);
+ }
+ 
+ .kb-plane-btn-execute:hover:not(:disabled) {
+-  background-color: #388bfd;
++  background-color: var(--brand-primary-hover);
+ }
+ 
+ .kb-plane-btn-secondary {
+diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+index c2a4466a..bfe2b198 100644
+--- a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
++++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
+@@ -2,6 +2,8 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { MemoryRouter } from 'react-router';
+@@ -549,4 +551,107 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+       expect(screen.queryByRole('alert')).toBeNull();
+     });
+   });
++
++  it('binds .kb-plane-mode-active to semantic tokens without low-contrast hexes (KAN-529)', () => {
++    const cssPath = path.resolve(import.meta.dirname, '../PlaneImportStudio.css');
++    const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++    // Verify .kb-plane-mode-active uses semantic tokens
++    const activeRuleMatch = /\.kb-plane-mode-active\s*\{([^}]+)\}/.exec(cssContent);
++    expect(activeRuleMatch).not.toBeNull();
++    const activeRule = activeRuleMatch ? activeRuleMatch[1] : '';
++
++    expect(activeRule).toContain('background-color: var(--bg-accent-subtle);');
++    expect(activeRule).toContain('border-color: var(--badge-fg);');
++    expect(activeRule).toContain('color: var(--badge-fg);');
++    expect(activeRule).toContain('font-weight: 600;');
++
++    // Verify no low-contrast hex values in .kb-plane-mode-active
++    expect(activeRule).not.toContain('#58a6ff');
++    expect(activeRule).not.toContain('#388bfd');
++
++    // Verify .kb-plane-mode-active:hover prevents hover state from overriding active tab contrast
++    const hoverRuleMatch = /\.kb-plane-mode-active:hover\s*\{([^}]+)\}/.exec(cssContent);
++    expect(hoverRuleMatch).not.toBeNull();
++    const hoverRule = hoverRuleMatch ? hoverRuleMatch[1] : '';
++    expect(hoverRule).toContain('background-color: var(--bg-accent-subtle);');
++    expect(hoverRule).toContain('border-color: var(--badge-fg);');
++    expect(hoverRule).toContain('color: var(--badge-fg);');
++
++    // Verify alert, warning, and button tokens
++    expect(cssContent).toMatch(/\.kb-plane-warnings-box\s*\{[^}]*var\(--warn-bg\)/);
++    expect(cssContent).toMatch(/\.kb-plane-warnings-box\s*\{[^}]*var\(--border-warning\)/);
++    expect(cssContent).toMatch(/\.kb-plane-warnings-title\s*\{[^}]*var\(--warn-fg\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--danger-bg\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--border-danger\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-error\s*\{[^}]*var\(--danger-fg\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--bg-success-subtle\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--border-success\)/);
++    expect(cssContent).toMatch(/\.kb-plane-alert-success\s*\{[^}]*var\(--text-success\)/);
++    expect(cssContent).toMatch(/\.kb-plane-btn-primary\s*\{[^}]*var\(--accent-primary\)/);
++    expect(cssContent).toMatch(/\.kb-plane-btn-primary\s*\{[^}]*var\(--accent-primary-fg\)/);
++    expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary\)/);
++    expect(cssContent).toMatch(/\.kb-plane-btn-execute\s*\{[^}]*var\(--accent-primary-fg\)/);
++  });
++
++  it('switches import source and mode selection tabs cleanly across light and dark themes (KAN-529)', () => {
++    for (const theme of ['light', 'dark']) {
++      document.documentElement.setAttribute('data-theme', theme);
++
++      const { unmount } = render(
++        <MemoryRouter initialEntries={['/admin/imports']}>
++          <PlaneImportStudio />
++        </MemoryRouter>,
++      );
++
++      // Initially, plane source button is active
++      const planeBtn = screen.getByTestId('source-plane-btn');
++      const jiraBtn = screen.getByTestId('source-jira-btn');
++      const githubBtn = screen.getByTestId('source-github-btn');
++      const linearBtn = screen.getByTestId('source-linear-btn');
++
++      expect(planeBtn.className).toContain('kb-plane-mode-active');
++      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
++      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
++      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
++
++      // Switch to Jira
++      fireEvent.click(jiraBtn);
++      expect(jiraBtn.className).toContain('kb-plane-mode-active');
++      expect(planeBtn.className).not.toContain('kb-plane-mode-active');
++
++      // Switch to GitHub Issues
++      fireEvent.click(githubBtn);
++      expect(githubBtn.className).toContain('kb-plane-mode-active');
++      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
++
++      // Switch to Linear
++      fireEvent.click(linearBtn);
++      expect(linearBtn.className).toContain('kb-plane-mode-active');
++      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
++
++      // Switch back to Plane
++      fireEvent.click(planeBtn);
++      expect(planeBtn.className).toContain('kb-plane-mode-active');
++      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
++
++      // Test input mode tabs (Upload vs Paste)
++      const uploadModeBtn = screen.getByTestId('mode-upload-btn');
++      const pasteModeBtn = screen.getByTestId('mode-paste-btn');
++
++      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
++      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
++
++      fireEvent.click(pasteModeBtn);
++      expect(pasteModeBtn.className).toContain('kb-plane-mode-active');
++      expect(uploadModeBtn.className).not.toContain('kb-plane-mode-active');
++
++      fireEvent.click(uploadModeBtn);
++      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
++      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
++
++      unmount();
++    }
++    document.documentElement.removeAttribute('data-theme');
++  });
+ });
