@@ -1,0 +1,89 @@
+=== PYTEST: SLICE-3 EPIC TEST SUITE (118 PASSED, >=95% COVERAGE) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 118 items
+
+kanban/tests/oauth/test_device_flow.py ......                            [  5%]
+kanban/tests/oauth/test_oauth_coverage.py .........................      [ 26%]
+kanban/tests/oauth/test_oauth_flow.py ..................                 [ 41%]
+kanban/tests/oauth/test_oauth_unit.py .........................          [ 62%]
+kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 70%]
+kanban/tests/api/test_admin_mcp_keys_api.py ......                       [ 75%]
+kanban/tests/auth/test_workload_oidc_exchange.py .......                 [ 81%]
+mcp/tests/test_workload_jwt_auth.py .......                              [ 87%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py ........                  [ 94%]
+kanban/tests/test_wiki_bundle_sync.py .......                            [100%]
+
+============================= 118 passed in 46.47s =============================
+
+=== PYTEST COVERAGE REPORT (TOUCHED MODULES) ===
+Name                                         Stmts   Miss Branch BrPart  Cover
+------------------------------------------------------------------------------
+database/models/mcp_api_key.py                  42      0      0      0   100%
+kanban/api/v1/admin/mcp_keys.py                201      5     58      8    95%
+kanban/api/v1/admin/workload_identities.py     154      2     18      2    98%
+kanban/api/v1/mcp_keys.py                      210      3     80      5    97%
+kanban/api/v1/oauth.py                         921     30    268     22    95%
+mcp/app.py                                      60      0     18      4    95%
+------------------------------------------------------------------------------
+TOTAL                                         1588     40    442     41    96%
+
+=== VITEST: SLICE-3 EPIC TEST SUITE (206 PASSED, >=95% BRANCH COVERAGE) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan419-f31af3af/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 191ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (16 tests) 544ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (14 tests) 568ms
+Not implemented: navigation to another Document
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (30 tests) 3988ms
+   ✓ OAuthClientGovernanceStudio (30)
+     ✓ inspects client details in modal and closes modal 488ms
+     ✓ handles search input, status filter pills, and pagination controls 358ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (26 tests) 3196ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles AAL2 cancellation on minting and retries without error banners 649ms
+     ✓ handles MFA cancellation on minting without error banners 311ms
+     ✓ handles mint error reporting on generic failure 482ms
+     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 410ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (50 tests) 3950ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 6342ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 309ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 426ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1825ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 500ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 493ms
+
+ Test Files  7 passed (7)
+      Tests  206 passed (206)
+   Start at  21:57:07
+   Duration  8.09s (tests 63%, environment 20%, import 12%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.44 |    96.26 |     100 |   99.61 |                   
+ docs-center       |    99.6 |    96.44 |     100 |     100 |                   
+  ...ownViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+  ...enterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+  HelpDrawer.tsx   |     100 |    97.72 |     100 |     100 | 69                
+  docsService.ts   |     100 |    97.14 |     100 |     100 | 46                
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  wikiManifest.ts  |     100 |      100 |     100 |     100 |                   
+ oauth             |   98.91 |    96.28 |     100 |   98.88 |                   
+  ...ivatePage.tsx |     100 |    96.55 |     100 |     100 | 54-55,113         
+  ...nceStudio.tsx |   98.45 |    96.11 |     100 |   98.39 | 97-98,210,367,436 
+ settings          |    99.7 |    96.15 |     100 |   99.83 |                   
+  ...hAppModal.tsx |     100 |    96.07 |     100 |     100 | 78,87-90,98       
+  ...essStudio.tsx |   99.53 |    96.28 |     100 |   99.74 | 536               
+  ...iedStudio.tsx |     100 |     95.6 |     100 |     100 | 99-108,112,117    
+-------------------|---------|----------|---------|---------|-------------------
