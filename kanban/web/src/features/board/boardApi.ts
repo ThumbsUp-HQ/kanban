@@ -216,10 +216,14 @@ export async function moveIssueApi(params: IssueMoveParams): Promise<IssueMoveRe
     options: unknown,
   ) => Promise<IssueMoveResponse>;
 
-  return rawFetch('POST', '/api/v1/issues/{issue_ref}/move', {
+  const result = await rawFetch('POST', '/api/v1/issues/{issue_ref}/move', {
     params: { issue_ref: params.issueKey },
     body,
   });
+  if (result.gate_status === 'pending' && result.status_code === undefined) {
+    result.status_code = 202;
+  }
+  return result;
 }
 
 export interface AvailableStateRef {

@@ -1080,4 +1080,3 @@ async def test_agent_definition_service_coverage_branches(
         api_env.seed, pctx, "current", project_id=target_proj_id
     )
     assert res == []
-

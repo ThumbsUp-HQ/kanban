@@ -187,6 +187,30 @@ class LdapAuthService:
                     user_dn = user_entry.dn
                     attrs = user_entry.attributes
 
+                    # Discover nested group hierarchy for mapped groups
+                    group_parent_map: dict[str, list[str]] = {}
+                    if group_dn_map:
+                        try:
+                            group_entries = await search_client.search(
+                                config.base_dn,
+                                "(|(objectClass=group)(objectClass=groupOfNames)(cn=*))",
+                                ["cn", config.member_of_attribute],
+                                size_limit=100,
+                                time_limit=int(config.timeout_seconds),
+                            )
+                            attr_key = config.member_of_attribute.lower()
+                            for g_entry in group_entries:
+                                g_norm = normalize_dn(g_entry.dn)
+                                parents = [
+                                    normalize_dn(v.decode("utf-8", errors="replace"))
+                                    for v in g_entry.attributes.get(attr_key, [])
+                                    if v
+                                ]
+                                if parents:
+                                    group_parent_map[g_norm] = parents
+                        except Exception:
+                            logger.debug("Failed querying directory group hierarchy", exc_info=True)
+
                 finally:
                     await search_client.unbind()
 
@@ -300,6 +324,7 @@ class LdapAuthService:
                             resolved_login.principal_id,
                             member_of_dns,
                             group_dn_map,
+                            group_parent_map=group_parent_map,
                         )
 
                 return assertion, resolved_login

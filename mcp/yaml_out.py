@@ -133,7 +133,12 @@ InlineSafeDumper.add_representer(frozenset, _reject_non_primitive)
 InlineSafeDumper.add_representer(None, _reject_non_primitive)  # type: ignore[arg-type]
 
 
-def dump_yaml(data: object, *, strip_nulls: bool = True) -> str:
+def dump_yaml(
+    data: object,
+    *,
+    strip_nulls: bool = True,
+    redact: bool = True,
+) -> str:
     """Serialize data into canonical YAML using InlineSafeDumper.
 
     Optionally strips empty fields (None, '', [], {}) while preserving 0 and False.
@@ -142,7 +147,7 @@ def dump_yaml(data: object, *, strip_nulls: bool = True) -> str:
     if data is None:
         return ""
 
-    sanitized = redact_secrets(data)
+    sanitized = redact_secrets(data) if redact else data
     to_dump = strip_empty(sanitized) if strip_nulls else sanitized
     if to_dump is None:
         if isinstance(data, dict):

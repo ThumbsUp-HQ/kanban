@@ -128,12 +128,17 @@ class LdapTlsHardClient:
 
     def _create_ssl_context(self) -> ssl.SSLContext:
         """Create hardened SSL context enforcing TLS 1.2+ and certificate verification."""
-        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        ctx.check_hostname = True
-        ctx.verify_mode = ssl.CERT_REQUIRED
         if self._config.ca_cert_pem:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.check_hostname = True
+            ctx.verify_mode = ssl.CERT_REQUIRED
             ctx.load_verify_locations(cadata=self._config.ca_cert_pem)
+        else:
+            ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.check_hostname = True
+            ctx.verify_mode = ssl.CERT_REQUIRED
         return ctx
 
     def _verify_spki_pin(self, writer: asyncio.StreamWriter) -> None:

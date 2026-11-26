@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from database.models.auth import LdapGroupMapping
 from database.models.principals import Group, Principal, PrincipalGroupEdge
 from kanban.auth.cards.repository import admin_upsert
-from kanban.auth.ldap.sync import sync_ldap_groups
+from kanban.auth.ldap.sync import _reconcile_group_nesting_edges, sync_ldap_groups
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -292,3 +292,144 @@ async def test_ldap_group_mapping_table_model(db_session: AsyncSession) -> None:
     loaded = res.scalars().one()
     assert loaded.group_name == "Security Auditors"
     assert loaded.ldap_dn == "cn=security-auditors,ou=groups,dc=example,dc=com"
+
+
+@pytest.mark.asyncio
+async def test_group_sync_nested_group_parent_map(db_session: AsyncSession) -> None:
+    """Test group sync reconciles inter-group nesting edges and closure triggers."""
+    ws_id, _ = await _setup_workspace_and_admin(db_session)
+    user_id = await _create_test_user(db_session, ws_id)
+
+    child_dn = "cn=subteam,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    group_map = {
+        child_dn: "Subteam Group",
+        parent_dn: "Parent Group",
+    }
+    parent_map = {
+        child_dn: [parent_dn],
+    }
+
+    # User is only member of child group directly
+    matched = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched == ["Subteam Group"]
+
+    # Verify inter-group edge was created
+    child_stmt = select(Group).where(Group.name == "Subteam Group", Group.workspace_id == ws_id)
+    parent_stmt = select(Group).where(Group.name == "Parent Group", Group.workspace_id == ws_id)
+    child_grp = await db_session.scalar(child_stmt)
+    parent_grp = await db_session.scalar(parent_stmt)
+    assert child_grp is not None
+    assert parent_grp is not None
+
+    edge = await db_session.scalar(
+        select(PrincipalGroupEdge).where(
+            PrincipalGroupEdge.member_id == child_grp.id,
+            PrincipalGroupEdge.group_id == parent_grp.id,
+            PrincipalGroupEdge.workspace_id == ws_id,
+        )
+    )
+    assert edge is not None
+
+    # Verify closure depth in principal_group_closure
+    closure_depth = await db_session.scalar(
+        text(
+            "SELECT depth FROM principal_group_closure "
+            "WHERE member_id = :u_id AND ancestor_group_id = :p_id "
+            "ORDER BY depth DESC LIMIT 1"
+        ),
+        {"u_id": user_id, "p_id": parent_grp.id},
+    )
+    assert closure_depth is not None
+    assert closure_depth >= 2
+
+    # Second sync: idempotent, doesn't duplicate
+    matched2 = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched2 == ["Subteam Group"]
+
+
+async def test_sync_ldap_groups_parent_map_defensive_branches(
+    db_session: AsyncSession,
+) -> None:
+    """Test defensive branches in group nesting edge reconciliation (lines 35, 43, 47)."""
+    ws_id, _ = await _setup_workspace_and_admin(db_session)
+    user_id = await _create_test_user(db_session, ws_id)
+
+    child_dn = "cn=subteam,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    group_map = {
+        child_dn: "Subteam Group",
+        parent_dn: "Parent Group",
+    }
+    # Include:
+    # 1. Unmapped child DN (line 35)
+    # 2. Unmapped parent DN (line 43)
+    # 3. Self-referential parent DN (child == parent, line 47)
+    parent_map = {
+        "cn=unmapped_child,ou=groups,dc=example,dc=com": [parent_dn],
+        child_dn: [
+            "cn=unmapped_parent,ou=groups,dc=example,dc=com",
+            child_dn,
+            parent_dn,
+        ],
+    }
+
+    matched = await sync_ldap_groups(
+        db_session,
+        ws_id,
+        user_id,
+        [child_dn],
+        group_map,
+        group_parent_map=parent_map,
+    )
+    assert matched == ["Subteam Group"]
+
+
+async def test_reconcile_group_nesting_edges_missing_group_records(
+    db_session: AsyncSession,
+) -> None:
+    """Test _reconcile_group_nesting_edges when groups are missing in group_by_name."""
+    ws_id = uuid.uuid4()
+    child_dn = "cn=child,ou=groups,dc=example,dc=com"
+    parent_dn = "cn=parent,ou=groups,dc=example,dc=com"
+    canonical_map = {
+        child_dn: "Child Group",
+        parent_dn: "Parent Group",
+    }
+
+    # Case 1: c_name not in group_by_name (line 39)
+    await _reconcile_group_nesting_edges(
+        db_session,
+        ws_id,
+        group_parent_map={child_dn: [parent_dn]},
+        canonical_map=canonical_map,
+        group_by_name={},
+    )
+
+    # Case 2: p_name not in group_by_name (line 47: not p_grp)
+    mock_child = Group(
+        id=uuid.uuid4(),
+        workspace_id=ws_id,
+        name="Child Group",
+    )
+    await _reconcile_group_nesting_edges(
+        db_session,
+        ws_id,
+        group_parent_map={child_dn: [parent_dn]},
+        canonical_map=canonical_map,
+        group_by_name={"Child Group": mock_child},
+    )

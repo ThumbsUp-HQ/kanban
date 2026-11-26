@@ -14,19 +14,60 @@ from kanban.auth.ldap.escape import normalize_dn
 
 if TYPE_CHECKING:
     import uuid
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = ["sync_ldap_groups"]
 
 
-async def sync_ldap_groups(
+async def _reconcile_group_nesting_edges(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    group_parent_map: Mapping[str, Sequence[str]],
+    canonical_map: dict[str, str],
+    group_by_name: dict[str, Group],
+) -> None:
+    """Reconcile inter-group parent-child nesting edges in principal_group_edges."""
+    for child_raw_dn, parent_raw_dns in group_parent_map.items():
+        norm_c = normalize_dn(child_raw_dn)
+        if norm_c not in canonical_map:
+            continue
+        c_name = canonical_map[norm_c]
+        c_grp = group_by_name.get(c_name)
+        if not c_grp:
+            continue
+        for p_raw_dn in parent_raw_dns:
+            norm_p = normalize_dn(p_raw_dn)
+            if norm_p not in canonical_map:
+                continue
+            p_name = canonical_map[norm_p]
+            p_grp = group_by_name.get(p_name)
+            if not p_grp or p_grp.id == c_grp.id:
+                continue
+            chk_stmt = select(PrincipalGroupEdge.group_id).where(
+                PrincipalGroupEdge.workspace_id == workspace_id,
+                PrincipalGroupEdge.member_id == c_grp.id,
+                PrincipalGroupEdge.group_id == p_grp.id,
+            )
+            chk_res = await session.execute(chk_stmt)
+            if chk_res.scalar_one_or_none() is None:
+                session.add(
+                    PrincipalGroupEdge(
+                        member_id=c_grp.id,
+                        group_id=p_grp.id,
+                        workspace_id=workspace_id,
+                    )
+                )
+
+
+async def sync_ldap_groups(  # noqa: PLR0913, PLR0917
     session: AsyncSession,
     workspace_id: uuid.UUID,
     principal_id: uuid.UUID,
     raw_group_dns: Sequence[str],
     group_dn_map: dict[str, str],
+    group_parent_map: Mapping[str, Sequence[str]] | None = None,
 ) -> list[str]:
     """Synchronize user memberships for LDAP mapped groups.
 
@@ -127,6 +168,16 @@ async def sync_ldap_groups(
             PrincipalGroupEdge.group_id.in_(to_remove),
         )
         await session.execute(del_stmt)
+
+    # 8. Reconcile inter-group nesting edges if group_parent_map provided
+    if group_parent_map:
+        await _reconcile_group_nesting_edges(
+            session,
+            workspace_id,
+            group_parent_map,
+            canonical_map,
+            group_by_name,
+        )
 
     await session.flush()
 
