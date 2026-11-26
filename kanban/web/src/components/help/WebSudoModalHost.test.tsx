@@ -143,6 +143,82 @@ describe('WebSudoModalHost StudioDocLink Integration (KAN-474)', () => {
     unregister();
   });
 
+  it('yields Escape key to HelpDrawer when HelpDrawer is open, closing only HelpDrawer without dismissing WebSudo modal', async () => {
+    let helpDrawerClosed = false;
+    const DummyHelpDrawer = ({ onClose }: { onClose: () => void }) => {
+      React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent): void => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            helpDrawerClosed = true;
+            onClose();
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+        };
+      }, [onClose]);
+
+      return (
+        <div className="kb-help-drawer" data-testid="real-class-help-drawer">
+          <button type="button" onClick={onClose} data-testid="close-help-drawer-btn">
+            Close
+          </button>
+        </div>
+      );
+    };
+    const unregister = registerShellPanel('help', DummyHelpDrawer);
+
+    render(
+      <ShellPanelsProvider>
+        <WebSudoModalHost />
+      </ShellPanelsProvider>,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('kb:open-aal2-stepup', {
+          detail: { challengeId: 'ch-websudo-test', methods: ['totp'] },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+    });
+
+    // Click StudioDocLink to open HelpDrawer
+    const docLink = screen.getByTestId('websudo-doc-link');
+    fireEvent.click(docLink);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('real-class-help-drawer')).toBeDefined();
+    });
+
+    // Press Escape while HelpDrawer is open in the DOM
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // HelpDrawer received Escape and closed
+    expect(helpDrawerClosed).toBe(true);
+
+    // WebSudoModalHost remains open in DOM because it yielded to .kb-help-drawer
+    expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
+
+    unregister();
+  });
+
+  it('verifies z-index coordination between WebSudoModalHost, HelpDrawer, and FieldHelpHint', () => {
+    const helpDrawerCss = fs.readFileSync(path.resolve(__dirname, '../../features/docs-center/HelpDrawer.css'), 'utf8');
+    const fieldHelpCss = fs.readFileSync(path.resolve(__dirname, 'FieldHelpHint.css'), 'utf8');
+    const errorHelpCss = fs.readFileSync(path.resolve(__dirname, 'ErrorHelpHint.css'), 'utf8');
+
+    expect(errorHelpCss).toContain('z-index: 10050');
+    expect(helpDrawerCss).toContain('z-index: 10060');
+    expect(helpDrawerCss).toContain('z-index: 10061');
+    expect(fieldHelpCss).toContain('z-index: 10070');
+  });
+
   it('verifies static source AST invariants: zero <FieldHelpHint> nested inside <label htmlFor> and zero inline style={{}} props in WebSudoModalHost.tsx', () => {
     const filePath = path.resolve(__dirname, 'WebSudoModalHost.tsx');
     expect(fs.existsSync(filePath)).toBe(true);

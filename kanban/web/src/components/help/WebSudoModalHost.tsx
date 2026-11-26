@@ -125,6 +125,11 @@ export function WebSudoModalHost(): JSX.Element | null {
       ?.focus();
 
     const handleKeyDown = (e: KeyboardEvent): void => {
+      // Yield keyboard events (Escape, Tab focus) when HelpDrawer is open above modal (KAN-474)
+      if (document.querySelector('.kb-help-drawer')) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         e.preventDefault();
         handleCancel();

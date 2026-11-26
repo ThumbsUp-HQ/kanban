@@ -12,12 +12,25 @@ index 2b31c7de..9fc6dde0 100644
 +  align-items: center;
 +}
 +
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 600b184e..3ae1f4d4 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -85,7 +85,7 @@
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-lg);
+   box-shadow: var(--shadow-lg);
+-  z-index: 1220;
++  z-index: 10070;
+   user-select: text;
+   -webkit-user-select: text;
+   box-sizing: border-box;
 diff --git a/kanban/web/src/components/help/WebSudoModalHost.test.tsx b/kanban/web/src/components/help/WebSudoModalHost.test.tsx
 new file mode 100644
-index 00000000..a41c6ec6
+index 00000000..21479ff7
 --- /dev/null
 +++ b/kanban/web/src/components/help/WebSudoModalHost.test.tsx
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,311 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +
@@ -163,6 +176,82 @@ index 00000000..a41c6ec6
 +    unregister();
 +  });
 +
++  it('yields Escape key to HelpDrawer when HelpDrawer is open, closing only HelpDrawer without dismissing WebSudo modal', async () => {
++    let helpDrawerClosed = false;
++    const DummyHelpDrawer = ({ onClose }: { onClose: () => void }) => {
++      React.useEffect(() => {
++        const handleKeyDown = (e: KeyboardEvent): void => {
++          if (e.key === 'Escape') {
++            e.stopPropagation();
++            helpDrawerClosed = true;
++            onClose();
++          }
++        };
++        window.addEventListener('keydown', handleKeyDown);
++        return () => {
++          window.removeEventListener('keydown', handleKeyDown);
++        };
++      }, [onClose]);
++
++      return (
++        <div className="kb-help-drawer" data-testid="real-class-help-drawer">
++          <button type="button" onClick={onClose} data-testid="close-help-drawer-btn">
++            Close
++          </button>
++        </div>
++      );
++    };
++    const unregister = registerShellPanel('help', DummyHelpDrawer);
++
++    render(
++      <ShellPanelsProvider>
++        <WebSudoModalHost />
++      </ShellPanelsProvider>,
++    );
++
++    act(() => {
++      window.dispatchEvent(
++        new CustomEvent('kb:open-aal2-stepup', {
++          detail: { challengeId: 'ch-websudo-test', methods: ['totp'] },
++        }),
++      );
++    });
++
++    await waitFor(() => {
++      expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
++    });
++
++    // Click StudioDocLink to open HelpDrawer
++    const docLink = screen.getByTestId('websudo-doc-link');
++    fireEvent.click(docLink);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('real-class-help-drawer')).toBeDefined();
++    });
++
++    // Press Escape while HelpDrawer is open in the DOM
++    fireEvent.keyDown(window, { key: 'Escape' });
++
++    // HelpDrawer received Escape and closed
++    expect(helpDrawerClosed).toBe(true);
++
++    // WebSudoModalHost remains open in DOM because it yielded to .kb-help-drawer
++    expect(screen.getByTestId('websudo-stepup-modal')).toBeDefined();
++
++    unregister();
++  });
++
++  it('verifies z-index coordination between WebSudoModalHost, HelpDrawer, and FieldHelpHint', () => {
++    const helpDrawerCss = fs.readFileSync(path.resolve(__dirname, '../../features/docs-center/HelpDrawer.css'), 'utf8');
++    const fieldHelpCss = fs.readFileSync(path.resolve(__dirname, 'FieldHelpHint.css'), 'utf8');
++    const errorHelpCss = fs.readFileSync(path.resolve(__dirname, 'ErrorHelpHint.css'), 'utf8');
++
++    expect(errorHelpCss).toContain('z-index: 10050');
++    expect(helpDrawerCss).toContain('z-index: 10060');
++    expect(helpDrawerCss).toContain('z-index: 10061');
++    expect(fieldHelpCss).toContain('z-index: 10070');
++  });
++
 +  it('verifies static source AST invariants: zero <FieldHelpHint> nested inside <label htmlFor> and zero inline style={{}} props in WebSudoModalHost.tsx', () => {
 +    const filePath = path.resolve(__dirname, 'WebSudoModalHost.tsx');
 +    expect(fs.existsSync(filePath)).toBe(true);
@@ -254,7 +343,7 @@ index 00000000..a41c6ec6
 +  });
 +});
 diff --git a/kanban/web/src/components/help/WebSudoModalHost.tsx b/kanban/web/src/components/help/WebSudoModalHost.tsx
-index 5cba1276..f1fd133c 100644
+index 5cba1276..bc885cfa 100644
 --- a/kanban/web/src/components/help/WebSudoModalHost.tsx
 +++ b/kanban/web/src/components/help/WebSudoModalHost.tsx
 @@ -6,6 +6,7 @@ import { QueryClientContext } from '@tanstack/react-query';
@@ -265,7 +354,19 @@ index 5cba1276..f1fd133c 100644
  import './ErrorHelpHint.css';
  
  /**
-@@ -180,6 +181,13 @@ export function WebSudoModalHost(): JSX.Element | null {
+@@ -124,6 +125,11 @@ export function WebSudoModalHost(): JSX.Element | null {
+       ?.focus();
+ 
+     const handleKeyDown = (e: KeyboardEvent): void => {
++      // Yield keyboard events (Escape, Tab focus) when HelpDrawer is open above modal (KAN-474)
++      if (document.querySelector('.kb-help-drawer')) {
++        return;
++      }
++
+       if (e.key === 'Escape') {
+         e.preventDefault();
+         handleCancel();
+@@ -180,6 +186,13 @@ export function WebSudoModalHost(): JSX.Element | null {
              Your 15-minute Admin 2FA verification window (AAL2) has expired or is required.
              Verify with your Passkey or Authenticator app to continue without losing your edits.
            </p>
@@ -279,344 +380,25 @@ index 5cba1276..f1fd133c 100644
          </header>
          <SecondFactorStep
            challengeId={challengeId}
-diff --git a/scripts/capture_kan474_screenshots.mjs b/scripts/capture_kan474_screenshots.mjs
-new file mode 100644
-index 00000000..20abc6fe
---- /dev/null
-+++ b/scripts/capture_kan474_screenshots.mjs
-@@ -0,0 +1,335 @@
-+// Copyright 2026 Kanban Platform Contributors
-+// Apache-2.0 License. See LICENSE for details.
-+
-+import fs from 'node:fs';
-+import path from 'node:path';
-+import { spawn } from 'node:child_process';
-+
-+let chromium;
-+try {
-+  ({ chromium } = await import('@playwright/test'));
-+} catch {
-+  try {
-+    ({ chromium } = await import('/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs'));
-+  } catch {
-+    ({ chromium } = await import('playwright'));
-+  }
-+}
-+
-+const PORT = 18474;
-+const BASE_URL = `http://127.0.0.1:${PORT}`;
-+const OUT_DIR = path.resolve('docs/qa/KAN-474/screenshots');
-+
-+const VIEWPORTS = [
-+  {
-+    name: 'desktop-light-1440x900.png',
-+    width: 1440,
-+    height: 900,
-+    theme: 'light',
-+  },
-+  {
-+    name: 'desktop-dark-1440x900.png',
-+    width: 1440,
-+    height: 900,
-+    theme: 'dark',
-+  },
-+  {
-+    name: 'tablet-768x1024.png',
-+    width: 768,
-+    height: 1024,
-+    theme: 'light',
-+  },
-+  {
-+    name: 'tablet-dark-768x1024.png',
-+    width: 768,
-+    height: 1024,
-+    theme: 'dark',
-+  },
-+  {
-+    name: 'mobile-390x844.png',
-+    width: 390,
-+    height: 844,
-+    theme: 'light',
-+  },
-+  {
-+    name: 'mobile-dark-390x844.png',
-+    width: 390,
-+    height: 844,
-+    theme: 'dark',
-+  },
-+];
-+
-+async function waitForServer(url, timeoutMs = 30000) {
-+  const start = Date.now();
-+  while (Date.now() - start < timeoutMs) {
-+    try {
-+      const res = await fetch(url);
-+      if (res.ok || res.status === 200 || res.status === 404) {
-+        return;
-+      }
-+    } catch {
-+      // Retry
-+    }
-+    await new Promise((r) => setTimeout(r, 400));
-+  }
-+  throw new Error(`Timeout waiting for preview server at ${url}`);
-+}
-+
-+async function setupInterceptions(page) {
-+  await page.addInitScript(() => {
-+    class MockWS extends EventTarget {
-+      constructor(url, protocols) {
-+        super();
-+        this.url = url;
-+        this.protocols = protocols;
-+        this.readyState = 1;
-+        setTimeout(() => {
-+          this.dispatchEvent(new Event('open'));
-+        }, 10);
-+      }
-+      send() {}
-+      close() {
-+        this.readyState = 3;
-+        this.dispatchEvent(new Event('close'));
-+      }
-+    }
-+    window.WebSocket = MockWS;
-+  });
-+
-+  await page.route('**/*', async (route) => {
-+    const url = route.request().url();
-+
-+    if (url.includes('/api/v1/setup/status')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ initialized: true, is_initialized: true, requires_setup: false }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/notifications')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0, unread_count: 0 }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/users/me') || url.includes('/api/v1/auth/me')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'usr_admin_test_1',
-+          email: 'admin@kanban.local',
-+          username: 'admin',
-+          display_name: 'System Administrator',
-+          is_server_admin: true,
-+          is_workspace_admin: true,
-+          workspace_role: 'WORKSPACE_ADMIN',
-+          aal_level: 1,
-+          auth_aal: 'aal1',
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces/current')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'ws_default',
-+          name: 'Platform Engineering',
-+          slug: 'kanban',
-+          is_current: true,
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/auth/session')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          authenticated: true,
-+          mfa_pending: false,
-+          csrf_token: 'mock-csrf-token-12345',
-+          principal_id: 'usr_admin_test_1',
-+          workspace_id: 'ws_default',
-+          aal_level: 1,
-+          aal2_active: false,
-+          aal2_expires_at: null,
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'ws_default', slug: 'kanban', name: 'Platform Engineering' },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'proj_kan', key: 'KAN', name: 'Kanban Project' },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/admin/auth-cards')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          cards: [
-+            {
-+              id: 'card-local-1',
-+              provider_kind: 'LOCAL_ADMIN',
-+              slug: 'local-admin',
-+              display_name: 'Local Administrator',
-+              button_subtext: 'Built-in Superuser',
-+              icon_preset: 'shield',
-+              is_enabled: true,
-+              sort_rank: '999',
-+              auto_provision_users: false,
-+              allowed_email_domains: [],
-+              has_secret: true,
-+              dek_kid: null,
-+              last_health_status: 'HEALTHY',
-+              latency_ms: 1,
-+              public_config: {},
-+            },
-+          ],
-+        }),
-+      });
-+    }
-+
-+    return route.continue();
-+  });
-+}
-+
-+async function main() {
-+  fs.mkdirSync(OUT_DIR, { recursive: true });
-+
-+  console.log(`Starting preview server on port ${PORT}...`);
-+  const previewProc = spawn(
-+    'pnpm',
-+    ['--dir', 'kanban/web', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
-+    { stdio: 'inherit' }
-+  );
-+
-+  try {
-+    await waitForServer(BASE_URL);
-+    console.log(`Preview server ready at ${BASE_URL}`);
-+
-+    const browser = await chromium.launch({
-+      headless: true,
-+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-+    });
-+
-+    for (const vp of VIEWPORTS) {
-+      console.log(`Capturing ${vp.name}...`);
-+      const context = await browser.newContext({
-+        viewport: { width: vp.width, height: vp.height },
-+        colorScheme: vp.theme,
-+      });
-+      const page = await context.newPage();
-+      await setupInterceptions(page);
-+
-+      await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'networkidle' });
-+      await page.evaluate((theme) => {
-+        document.documentElement.dataset.theme = theme;
-+        localStorage.setItem('theme', theme);
-+      }, vp.theme);
-+
-+      // Trigger WebSudo step-up challenge modal
-+      await page.evaluate(() => {
-+        window.dispatchEvent(
-+          new CustomEvent('kb:open-aal2-stepup', {
-+            detail: { challengeId: 'ch-stepup-qa', methods: ['totp', 'webauthn'] },
-+          })
-+        );
-+      });
-+
-+      const modal = page.locator('[data-testid="websudo-stepup-modal"]');
-+      await modal.waitFor({ state: 'visible', timeout: 10000 });
-+
-+      const docLink = page.locator('[data-testid="websudo-doc-link"]');
-+      await docLink.waitFor({ state: 'visible', timeout: 5000 });
-+
-+      await page.waitForTimeout(400);
-+
-+      const targetPath = path.join(OUT_DIR, vp.name);
-+      await page.screenshot({ path: targetPath, fullPage: false });
-+      console.log(`Wrote ${targetPath}`);
-+
-+      await context.close();
-+    }
-+
-+    // 7. Interaction test screenshot: doc-link-interaction-after.png
-+    // Desktop 1440x900 light: Click StudioDocLink and verify HelpDrawer opens beside/over WebSudo modal without breaking modal state
-+    {
-+      console.log('Capturing doc-link-interaction-after.png...');
-+      const context = await browser.newContext({
-+        viewport: { width: 1440, height: 900 },
-+        colorScheme: 'light',
-+      });
-+      const page = await context.newPage();
-+      await setupInterceptions(page);
-+
-+      await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'networkidle' });
-+      await page.evaluate(() => {
-+        document.documentElement.dataset.theme = 'light';
-+        localStorage.setItem('theme', 'light');
-+      });
-+
-+      // Trigger WebSudo step-up challenge modal
-+      await page.evaluate(() => {
-+        window.dispatchEvent(
-+          new CustomEvent('kb:open-aal2-stepup', {
-+            detail: { challengeId: 'ch-stepup-qa', methods: ['totp', 'webauthn'] },
-+          })
-+        );
-+      });
-+
-+      const modal = page.locator('[data-testid="websudo-stepup-modal"]');
-+      await modal.waitFor({ state: 'visible', timeout: 10000 });
-+
-+      const docLink = page.locator('[data-testid="websudo-doc-link"]');
-+      await docLink.waitFor({ state: 'visible', timeout: 5000 });
-+
-+      // Click StudioDocLink
-+      await docLink.click();
-+
-+      // HelpDrawer opens
-+      const helpDrawer = page.locator('.kb-help-drawer, [data-testid="help-drawer"]');
-+      await helpDrawer.waitFor({ state: 'visible', timeout: 10000 });
-+
-+      // Wait a moment for transitions
-+      await page.waitForTimeout(500);
-+
-+      const interactionPath = path.join(OUT_DIR, 'doc-link-interaction-after.png');
-+      await page.screenshot({ path: interactionPath, fullPage: false });
-+      console.log(`Wrote ${interactionPath}`);
-+
-+      await context.close();
-+    }
-+
-+    await browser.close();
-+    console.log('All 7 screenshots captured successfully!');
-+  } finally {
-+    previewProc.kill('SIGTERM');
-+  }
-+}
-+
-+main().catch((err) => {
-+  console.error('Screenshot capture failed:', err);
-+  process.exit(1);
-+});
+diff --git a/kanban/web/src/features/docs-center/HelpDrawer.css b/kanban/web/src/features/docs-center/HelpDrawer.css
+index cedfa118..f8e2a503 100644
+--- a/kanban/web/src/features/docs-center/HelpDrawer.css
++++ b/kanban/web/src/features/docs-center/HelpDrawer.css
+@@ -5,7 +5,7 @@
+   position: fixed;
+   inset: 0;
+   background: rgba(17, 24, 39, 0.4);
+-  z-index: 1200;
++  z-index: 10060;
+   backdrop-filter: blur(2px);
+ }
+ 
+@@ -19,7 +19,7 @@
+   background: var(--bg-surface);
+   border-left: 1px solid var(--border-subtle);
+   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+-  z-index: 1210;
++  z-index: 10061;
+   display: flex;
+   flex-direction: column;
+   overflow: hidden;
