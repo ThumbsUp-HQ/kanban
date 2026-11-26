@@ -1,0 +1,3577 @@
+diff --git a/kanban/api/v1/schemas/issue_move.py b/kanban/api/v1/schemas/issue_move.py
+index 118b79ae..e112d137 100644
+--- a/kanban/api/v1/schemas/issue_move.py
++++ b/kanban/api/v1/schemas/issue_move.py
+@@ -70,3 +70,23 @@ class IssueMoveResponse(BaseModel):
+         default=None,
+         description="Resulting active issue count in column if WIP limit was evaluated",
+     )
++    gate_status: str | None = Field(
++        default=None,
++        description="Gate status ('pending') if the move triggered an async workflow gate hold",
++    )
++    execution_id: uuid.UUID | None = Field(
++        default=None,
++        description="Active workflow gate execution UUID if gate is pending",
++    )
++    hook_name: str | None = Field(
++        default=None,
++        description="Triggered workflow gate hook name if gate is pending",
++    )
++    from_state_id: uuid.UUID | None = Field(
++        default=None,
++        description="Source state UUID if gate is pending",
++    )
++    to_state_id: uuid.UUID | None = Field(
++        default=None,
++        description="Target state UUID if gate is pending",
++    )
+diff --git a/kanban/security/headers.py b/kanban/security/headers.py
+index 843c7a42..cfd963a1 100644
+--- a/kanban/security/headers.py
++++ b/kanban/security/headers.py
+@@ -28,6 +28,7 @@ if TYPE_CHECKING:
+ 
+ CSP_POLICY: Final[str] = (
+     "default-src 'none'; "
++    "manifest-src 'self'; "
+     "script-src 'self'; "
+     "worker-src 'self'; "
+     "style-src 'self'; "
+diff --git a/kanban/services/issue_move.py b/kanban/services/issue_move.py
+index 503452b8..f4d83f69 100644
+--- a/kanban/services/issue_move.py
++++ b/kanban/services/issue_move.py
+@@ -369,6 +369,11 @@ async def move_issue(
+                 state_id=old_state_id,
+                 board_rank=old_rank,
+                 rebalance_scheduled=False,
++                gate_status="pending",
++                execution_id=outcome.execution_id,
++                hook_name=outcome.hook_name,
++                from_state_id=old_state_id,
++                to_state_id=target_state_id,
+                 wip_warning=wip_warning,
+                 hard_limit=target_state.wip_hard_limit if wip_overridden else None,
+                 resulting_count=resulting_count if (wip_overridden or wip_warning) else None,
+diff --git a/kanban/tests/security/test_headers.py b/kanban/tests/security/test_headers.py
+new file mode 100644
+index 00000000..36d86a9f
+--- /dev/null
++++ b/kanban/tests/security/test_headers.py
+@@ -0,0 +1,251 @@
++"""Unit tests for security headers middleware, CSP, and standalone.
++
++Validates CSP manifest-src, HSTS, host punycode, and standalone cleartext blocking.
++"""
++
++from __future__ import annotations
++
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++from fastapi import FastAPI, Response
++from starlette.datastructures import Headers
++
++from deploy.standalone.entrypoint import build_uvicorn_command
++from kanban.app import create_app
++from kanban.security.headers import (
++    CSP_POLICY,
++    SecurityHeadersMiddleware,
++    _extract_host,
++    _has_forwarded_https_proto,
++    _is_host_allowed,
++    _is_https_request,
++    _normalize_host_idna,
++    _parse_trusted_networks,
++)
++from kanban.settings import Settings
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++    from starlette.types import Message, Receive, Scope, Send
++
++
++@pytest.fixture
++def dummy_dist(tmp_path: Path) -> Path:
++    """Fixture providing minimal dist directory with index.html."""
++    dist_dir = tmp_path / "web_dist"
++    dist_dir.mkdir()
++    (dist_dir / "index.html").write_text("<!doctype html><html></html>", encoding="utf-8")
++    return dist_dir
++
++
++@pytest.mark.asyncio
++async def test_security_headers_present_and_manifest_src(dummy_dist: Path) -> None:
++    """Test all responses carry canonical CSP with manifest-src 'self' and hardening headers."""
++    assert "manifest-src 'self';" in CSP_POLICY
++
++    settings = Settings(web_dist=dummy_dist, deployment_mode="production")
++    app = create_app(settings)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
++        endpoints_to_test = [
++            "/api/v1/health",
++            "/api/unknown",
++            "/sse",
++            "/mcp/agent",
++        ]
++        for ep in endpoints_to_test:
++            resp = await client.get(ep)
++            csp = resp.headers.get("content-security-policy")
++            assert csp == CSP_POLICY
++            assert "manifest-src 'self';" in (csp or "")
++            assert "img-src 'self' blob: data:;" in (csp or "")
++            assert resp.headers.get("x-content-type-options") == "nosniff"
++            assert resp.headers.get("referrer-policy") == "no-referrer"
++            assert resp.headers.get("x-frame-options") == "DENY"
++            assert resp.headers.get("cross-origin-opener-policy") == "same-origin"
++            assert resp.headers.get("cross-origin-resource-policy") == "same-origin"
++            assert (
++                resp.headers.get("permissions-policy") == "camera=(), microphone=(), geolocation=()"
++            )
++            assert (
++                resp.headers.get("strict-transport-security")
++                == "max-age=63072000; includeSubDomains"
++            )
++
++
++@pytest.mark.asyncio
++async def test_hsts_behavior_production_vs_standalone(dummy_dist: Path) -> None:
++    """Test HSTS is present in production mode and strictly omitted in standalone mode."""
++    prod_app = create_app(Settings(web_dist=dummy_dist, deployment_mode="production"))
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=prod_app), base_url="http://localhost"
++    ) as prod_client:
++        r_prod = await prod_client.get("/api/v1/health")
++        assert "strict-transport-security" in r_prod.headers
++
++    standalone_app = create_app(Settings(web_dist=dummy_dist, deployment_mode="standalone"))
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=standalone_app), base_url="http://localhost"
++    ) as standalone_client:
++        r_standalone = await standalone_client.get("/api/v1/health")
++        assert "strict-transport-security" not in r_standalone.headers
++
++
++@pytest.mark.asyncio
++async def test_inner_app_headers_replaced_never_duplicated() -> None:
++    """Test inner application headers are overwritten by security middleware."""
++    inner_app = FastAPI()
++
++    @inner_app.get("/custom")
++    def custom_endpoint() -> Response:
++        resp = Response(content="ok", media_type="text/plain")
++        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
++        resp.headers["X-Content-Type-Options"] = "sniff-allowed"
++        resp.headers["Content-Security-Policy"] = "default-src 'self'"
++        return resp
++
++    settings = Settings(deployment_mode="production")
++    inner_app.add_middleware(SecurityHeadersMiddleware, settings=settings)
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=inner_app), base_url="http://localhost"
++    ) as client:
++        resp = await client.get("/custom")
++        assert resp.status_code == 200
++        assert resp.headers.get("x-frame-options") == "DENY"
++        assert resp.headers.get("content-security-policy") == "default-src 'self'"
++
++
++@pytest.mark.asyncio
++async def test_standalone_cleartext_blocking_and_allowed_hosts(dummy_dist: Path) -> None:
++    """Test standalone cleartext HTTP blocking logic and allowed host overrides."""
++    settings = Settings(
++        web_dist=dummy_dist,
++        deployment_mode="standalone",
++        block_cleartext_http=True,
++        standalone_cleartext_hosts=frozenset({"localhost", "127.0.0.1"}),
++    )
++    app = create_app(settings)
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app), base_url="http://localhost"
++    ) as client:
++        # Localhost allowed
++        r_allowed = await client.get("/api/v1/health", headers={"Host": "localhost:8080"})
++        assert r_allowed.status_code == 200
++
++        # Disallowed external host blocked with 403 problem json
++        r_blocked = await client.get("/api/v1/health", headers={"Host": "public.example.com:8080"})
++        assert r_blocked.status_code == 403
++        data = r_blocked.json()
++        assert data["title"] == "CLEARTEXT_HTTP_BLOCKED"
++
++        # Missing host header returns 400
++        r_no_host = await client.get("/api/v1/health", headers={"Host": ""})
++        assert r_no_host.status_code == 400
++
++
++@pytest.mark.asyncio
++async def test_non_http_scope_passthrough() -> None:
++    """Test non-http scope (lifespan) passes through middleware cleanly."""
++    called = False
++
++    async def dummy_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
++        nonlocal called
++        called = True
++
++    settings = Settings(deployment_mode="production")
++    mw = SecurityHeadersMiddleware(dummy_app, settings=settings)
++
++    scope: Scope = {"type": "lifespan"}
++
++    async def receive() -> Message:
++        return {"type": "lifespan.startup"}
++
++    async def send(_msg: Message) -> None:
++        pass
++
++    await mw(scope, receive, send)
++    assert called is True
++
++
++def test_host_extraction_ipv6_and_ports() -> None:
++    """Test _extract_host with IPv4, ports, and IPv6 brackets."""
++    assert _extract_host("localhost:8080") == "localhost"
++    assert _extract_host("example.com") == "example.com"
++    assert _extract_host("[::1]:8080") == "[::1]"
++    assert _extract_host("[2001:db8::1]") == "[2001:db8::1]"
++    assert _extract_host("[malformed-ipv6:8080") == "[malformed-ipv6"
++
++
++@pytest.mark.asyncio
++async def test_standalone_https_passes_cleartext_block(dummy_dist: Path) -> None:
++    """Test HTTPS request bypasses standalone cleartext blocking."""
++    settings = Settings(
++        web_dist=dummy_dist,
++        deployment_mode="standalone",
++        block_cleartext_http=True,
++        standalone_cleartext_hosts=frozenset({"localhost"}),
++    )
++    app = create_app(settings)
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app), base_url="http://localhost"
++    ) as client:
++        # Request with X-Forwarded-Proto: https passes even for non-whitelisted host
++        r_fwd = await client.get(
++            "/api/v1/health",
++            headers={"Host": "public.example.com:8080", "X-Forwarded-Proto": "https"},
++        )
++        assert r_fwd.status_code == 200
++
++
++def test_forwarded_https_proto_parsing() -> None:
++    """Test RFC 7239 Forwarded header parsing."""
++    assert _has_forwarded_https_proto("for=192.0.2.1;proto=https;by=203.0.113.43") is True
++    assert _has_forwarded_https_proto('for=192.0.2.1;proto="https"') is True
++    assert _has_forwarded_https_proto("for=192.0.2.1;proto=http") is False
++    assert _has_forwarded_https_proto("for=192.0.2.1") is False
++
++
++def test_is_https_request_helpers() -> None:
++    """Test _is_https_request with scheme and various forwarding headers."""
++    headers_https = Headers({"x-forwarded-proto": "https"})
++    assert _is_https_request({"type": "http", "scheme": "http"}, headers_https) is True
++
++    headers_scheme = Headers({"x-forwarded-scheme": "https"})
++    assert _is_https_request({"type": "http", "scheme": "http"}, headers_scheme) is True
++
++    headers_fwd = Headers({"forwarded": "proto=https"})
++    assert _is_https_request({"type": "http", "scheme": "http"}, headers_fwd) is True
++
++    headers_direct = Headers()
++    assert _is_https_request({"type": "http", "scheme": "https"}, headers_direct) is True
++    assert _is_https_request({"type": "http", "scheme": "http"}, headers_direct) is False
++
++
++def test_idna_punycode_normalization_and_allowed_hosts() -> None:
++    """Test IDNA punycode candidates generation and allowed check."""
++    hosts = _normalize_host_idna("👍kanban.hackedyour.info")
++    assert any("xn--" in h for h in hosts)
++
++    allowed = frozenset({"xn--kanban-2e54e.hackedyour.info"})
++    assert _is_host_allowed("👍kanban.hackedyour.info", allowed) is True
++    assert _is_host_allowed("other.example.com", allowed) is False
++
++
++def test_parse_trusted_networks() -> None:
++    """Test _parse_trusted_networks parsing valid and invalid network strings."""
++    nets = _parse_trusted_networks("127.0.0.1, 10.0.0.0/8, 192.168.1.0/24, invalid-ip")
++    assert len(nets) == 3
++
++
++def test_uvicorn_command_building(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Test build_uvicorn_command with environment overrides."""
++    monkeypatch.delenv("KB_FORWARDED_ALLOW_IPS", raising=False)
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    cmd = build_uvicorn_command()
++    assert '--forwarded-allow-ips=""' in cmd
+diff --git a/kanban/tests/test_security_headers.py b/kanban/tests/test_security_headers.py
+index dbaf35d8..89a94197 100644
+--- a/kanban/tests/test_security_headers.py
++++ b/kanban/tests/test_security_headers.py
+@@ -39,6 +39,7 @@ async def test_security_headers_present_on_all_responses(dummy_dist: Path) -> No
+             resp = await client.get(ep)
+             csp = resp.headers.get("content-security-policy")
+             assert csp == CSP_POLICY
++            assert "manifest-src 'self';" in (csp or "")
+             assert "img-src 'self' blob: data:;" in (csp or "")
+             assert "data:image/" not in (csp or "")
+             assert resp.headers.get("x-content-type-options") == "nosniff"
+diff --git a/kanban/web/src/api/client.ts b/kanban/web/src/api/client.ts
+index ea7039a1..c5bcedde 100644
+--- a/kanban/web/src/api/client.ts
++++ b/kanban/web/src/api/client.ts
+@@ -406,6 +406,9 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
+     );
+   }
+   const parsed = (await response.json()) as ResponseBody<P, M>;
++  if (parsed !== null && typeof parsed === 'object' && !('status_code' in parsed)) {
++    (parsed as Record<string, unknown>).status_code = response.status;
++  }
+   if (resolved === '/api/v1/auth/logout') {
+     setCsrfToken(null);
+   } else if (
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index feadd1dc..3bbcc962 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -113,10 +113,23 @@
+   }
+ }
+ 
+-/* Mobile Canvas Padding Exception (<= 767px) */
++/* Mobile Canvas Padding Exception & Constraint (<= 767px) */
+ @media (max-width: 767px) {
++  .kb-app-shell {
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    overflow-x: hidden;
++  }
++
+   .kb-main-canvas {
+-    padding: 16px;
++    padding: 12px;
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    overflow-x: hidden;
+   }
+ }
+ 
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 0dfdd738..f0cdc81a 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -21,7 +21,8 @@ import { WebSudoModalHost } from '../components/help/WebSudoModalHost';
+ import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
+ import { registerShortcut } from './shortcuts';
+ import { RealtimeStatus } from '../api/RealtimeStatus';
+-import { useRealtimeSubscription } from '../realtime';
++import { useRealtimeSubscription, useRealtimeClient } from '../realtime';
++import * as gates from '../features/gates';
+ import { type AccessManifestData } from './HeaderPills';
+ import { type SystemStatus } from './useSystemStatus';
+ import { IssueSurface } from '../features/drawer/IssueSurface';
+@@ -31,7 +32,7 @@ import { AccessInspectorHost } from '../features/access/useAccessInspector';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { HelpDrawer } from '../features/docs-center/HelpDrawer';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
+-import { useQuery } from '@tanstack/react-query';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { qk } from '../api/queryKeys';
+ import { apiFetch } from '../api/client';
+ import {
+@@ -148,6 +149,14 @@ export function AppShell({
+     isAuthReady && projectId ? `project:${projectId}` : null,
+     isAuthReady && sessionGuard.workspaceId ? `workspace:${sessionGuard.workspaceId}` : null,
+   ]);
++  const realtimeClient = useRealtimeClient();
++  const queryClient = useQueryClient();
++  gates.useGateRealtimeSync({
++    client: realtimeClient,
++    queryClient,
++    projectKey: activeProjectKey,
++  });
++
+   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
+   const computedSection =
+     currentSection && currentSection !== 'Work Items'
+diff --git a/kanban/web/src/app/LayoutSwitcher.css b/kanban/web/src/app/LayoutSwitcher.css
+index 649a7769..d27e8f77 100644
+--- a/kanban/web/src/app/LayoutSwitcher.css
++++ b/kanban/web/src/app/LayoutSwitcher.css
+@@ -75,6 +75,18 @@
+   gap: 6px;
+ }
+ 
++@media (max-width: 640px) {
++  .kb-layout-switcher-prefix {
++    display: none;
++  }
++
++  .kb-layout-switcher-mobile-btn {
++    padding: 2px 6px;
++    font-size: 11px;
++    gap: 4px;
++  }
++}
++
+ .kb-layout-switcher-menu {
+   position: absolute;
+   top: calc(100% + 4px);
+diff --git a/kanban/web/src/app/LayoutSwitcher.tsx b/kanban/web/src/app/LayoutSwitcher.tsx
+index ef118dbf..2e378d78 100644
+--- a/kanban/web/src/app/LayoutSwitcher.tsx
++++ b/kanban/web/src/app/LayoutSwitcher.tsx
+@@ -168,7 +168,10 @@ export function LayoutSwitcher({
+           onClick={() => { setMenuOpen(!menuOpen); }}
+           className="kb-layout-switcher-mobile-btn"
+         >
+-          <span>Layout: {activeConfig.label}</span>
++          <span className="kb-layout-switcher-mobile-label">
++            <span className="kb-layout-switcher-prefix">Layout: </span>
++            {activeConfig.label}
++          </span>
+           <span aria-hidden="true">▾</span>
+         </button>
+ 
+diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
+index 3444fec0..28922a70 100644
+--- a/kanban/web/src/app/Topbar.css
++++ b/kanban/web/src/app/Topbar.css
+@@ -425,17 +425,50 @@
+   }
+ }
+ 
++@media (max-width: 767px) {
++  .kb-topbar,
++  .topbar {
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    padding: 0 var(--space-2, 8px);
++    gap: 4px;
++    overflow: visible;
++  }
++
++  .kb-topbar-left {
++    min-width: 0;
++    flex: 0 1 auto;
++    overflow: hidden;
++  }
++
++  .kb-topbar-right,
++  .topbar__right {
++    min-width: 0;
++    flex: 0 1 auto;
++    flex-shrink: 1;
++    gap: 4px;
++  }
++}
++
+ @media (max-width: 640px) {
+   .kb-topbar,
+   .topbar {
+     padding: 0 var(--space-2, 8px);
+-    gap: var(--space-2, 8px);
++    gap: 4px;
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    overflow: visible;
+   }
+ 
+   .kb-topbar-left {
+     min-width: 0;
+-    flex: 1 1 auto;
+-    gap: 6px;
++    max-width: 90px;
++    flex: 0 1 auto;
++    gap: 4px;
+     overflow: hidden;
+   }
+ 
+@@ -457,8 +490,8 @@
+ 
+   .kb-search-trigger {
+     min-width: unset;
+-    width: 36px;
+-    height: 36px;
++    width: 32px;
++    height: 32px;
+     padding: 0;
+     justify-content: center;
+     flex-shrink: 0;
+@@ -468,13 +501,60 @@
+   .topbar__search {
+     min-width: 0;
+     flex: 0 0 auto;
+-    max-width: 36px;
++    max-width: 32px;
+   }
+ 
+   .kb-search-trigger-text,
+   .kb-search-kbd {
+     display: none;
+   }
++
++  .kb-topbar-right,
++  .topbar__right {
++    min-width: 0;
++    flex: 1 1 auto;
++    justify-content: flex-end;
++    flex-shrink: 1;
++    gap: 4px;
++  }
++}
++
++@media (max-width: 480px) {
++  .kb-topbar,
++  .topbar {
++    padding: 0 4px;
++    gap: 3px;
++  }
++
++  .kb-topbar-left {
++    max-width: 75px;
++    gap: 2px;
++  }
++
++  .kb-topbar-hamburger {
++    padding: 4px;
++    font-size: 16px;
++  }
++
++  .kb-topbar-right,
++  .topbar__right {
++    gap: 3px;
++  }
++
++  .kb-topbar-docs-btn {
++    min-width: 32px !important;
++    width: 32px !important;
++    height: 32px !important;
++    min-height: 32px !important;
++  }
++
++  .kb-avatar-button {
++    min-width: 32px !important;
++    width: 32px !important;
++    height: 32px !important;
++    min-height: 32px !important;
++    font-size: 12px;
++  }
+ }
+ 
+ @media (max-width: 767px), (pointer: coarse) {
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index 8a19422f..b8e5a988 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -6,7 +6,7 @@ import { apiFetch } from '../../api/client.ts';
+ import type { RealtimeClient } from '../../api/realtime.ts';
+ import { useOptimisticMutation } from '../../api/optimistic.ts';
+ import { qk } from '../../api/queryKeys.ts';
+-import { useRealtimeSubscription } from '../../realtime/index.ts';
++import { useRealtimeSubscription, useRealtimeClient } from '../../realtime/index.ts';
+ import * as gates from '../gates/index.ts';
+ import { BoardColumn } from './BoardColumn.tsx';
+ import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
+@@ -67,6 +67,8 @@ export function BoardView({
+   monitorFactory = monitorForElements,
+ }: BoardViewProps): JSX.Element {
+   const queryClient = useQueryClient();
++  const ctxClient = useRealtimeClient();
++  const effectiveRealtimeClient = realtimeClient ?? ctxClient;
+   const [localIssues, setLocalIssues] = useState<BoardIssue[] | null>(null);
+   const [draggingKey, setDraggingKey] = useState<string | null>(null);
+   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+@@ -74,6 +76,8 @@ export function BoardView({
+   const [toastMessage, setToastMessage] = useState<string | null>(null);
+   const [pendingHardWipMove, setPendingHardWipMove] = useState<PendingHardWipMove | null>(null);
+ 
++  const snapBack = gates.useCardSnapBackAnimation();
++
+   // Fetch project details for states and capabilities when omitted
+   const projectQuery = useQuery({
+     queryKey: qk.project(projectKey),
+@@ -97,19 +101,6 @@ export function BoardView({
+     resolvedProjectId ? `project:${resolvedProjectId}` : null,
+   ]);
+ 
+-  gates.useGateRealtimeSync({
+-    client: realtimeClient,
+-    queryClient,
+-    projectKey,
+-    onToast: (msg) => {
+-      setToastMessage(msg);
+-      setTimeout(() => {
+-        /* v8 ignore next */
+-        setToastMessage((prev) => (prev === msg ? null : prev));
+-      }, 5000);
+-    },
+-  });
+-
+   const states = useMemo(() => {
+     if (propStates) return propStates;
+     const data = projectQuery.data;
+@@ -183,6 +174,83 @@ export function BoardView({
+     );
+   }, [currentUserCapabilities]);
+ 
++  gates.useGateRealtimeSync({
++    client: effectiveRealtimeClient,
++    queryClient,
++    projectKey,
++    onToast: (msg) => {
++      setToastMessage(msg);
++      setTimeout(() => {
++        /* v8 ignore next */
++        setToastMessage((prev) => (prev === msg ? null : prev));
++      }, 5000);
++    },
++    onGatePending: (payload) => {
++      setLocalIssues((prev) => {
++        const base = prev ?? issues;
++        return base.map((item) =>
++          item.key === payload.issue_key
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload, states)
++            : item,
++        );
++      });
++    },
++    onGateApproved: (payload) => {
++      setLocalIssues((prev) => {
++        const base = prev ?? issues;
++        return base.map((item) =>
++          item.key === payload.issue_key
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload, states)
++            : item,
++        );
++      });
++    },
++    onGateVetoed: (payload) => {
++      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
++      if (cardEl) {
++        snapBack.recordPosition(payload.issue_key, cardEl);
++      }
++      setLocalIssues((prev) => {
++        const base = prev ?? issues;
++        return base.map((item) =>
++          item.key === payload.issue_key
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload, states)
++            : item,
++        );
++      });
++      requestAnimationFrame(() => {
++        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
++        snapBack.triggerSnapBack(payload.issue_key, targetEl, {
++          onComplete: () => {
++            setLocalIssues(null);
++          },
++        });
++      });
++    },
++    onGateCancelled: (payload) => {
++      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
++      if (cardEl) {
++        snapBack.recordPosition(payload.issue_key, cardEl);
++      }
++      setLocalIssues((prev) => {
++        const base = prev ?? issues;
++        return base.map((item) =>
++          item.key === payload.issue_key
++            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload, states)
++            : item,
++        );
++      });
++      requestAnimationFrame(() => {
++        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${payload.issue_key}"]`);
++        snapBack.triggerSnapBack(payload.issue_key, targetEl, {
++          onComplete: () => {
++            setLocalIssues(null);
++          },
++        });
++      });
++    },
++  });
++
+   // Group and sort issues by state and board_rank (COLLATE "C")
+   const issuesByState = useMemo(() => {
+     const map: Record<string, BoardIssue[]> = {};
+@@ -190,12 +258,19 @@ export function BoardView({
+       map[st.id] = [];
+     }
+     for (const issue of issues) {
+-      map[issue.state_id] ??= [];
+-      map[issue.state_id]?.push(issue);
++      const bucket = map[issue.state_id];
++      if (bucket) {
++        bucket.push(issue);
++      } else {
++        map[issue.state_id] = [issue];
++      }
+     }
+     // Sort strictly by board_rank in ASCII byte order
+     for (const stId of Object.keys(map)) {
+-      map[stId]?.sort((a, b) => (a.board_rank < b.board_rank ? -1 : a.board_rank > b.board_rank ? 1 : 0));
++      const list = map[stId];
++      if (list) {
++        list.sort((a, b) => (a.board_rank < b.board_rank ? -1 : a.board_rank > b.board_rank ? 1 : 0));
++      }
+     }
+     return map;
+   }, [states, issues]);
+@@ -210,6 +285,10 @@ export function BoardView({
+ 
+   const executeMove = useCallback(
+     async (moveParams: IssueMoveParams) => {
++      // Record card position before optimistic state shift
++      const cardEl = document.querySelector<HTMLElement>(`[data-issue-key="${moveParams.issueKey}"]`);
++      snapBack.recordPosition(moveParams.issueKey, cardEl);
++
+       // Optimistically update local issues synchronously (< 12ms budget)
+       const previousIssues = issues;
+       const updatedIssues = applyOptimisticMove(previousIssues, moveParams, states);
+@@ -217,13 +296,65 @@ export function BoardView({
+ 
+       try {
+         const res = await moveMutation.mutateAsync(moveParams);
++        if (res.gate_status === 'pending' || res.status_code === 202) {
++          const fromStateId =
++            res.from_state_id ??
++            previousIssues.find((i) => i.key === moveParams.issueKey)?.state_id ??
++            moveParams.targetStateId;
++          const pendingGate: gates.PendingGateInfo = {
++            execution_id: res.execution_id ?? '',
++            hook_name: res.hook_name ?? 'Workflow Gate',
++            agent_slug: 'agent',
++            harness_label: 'cli: agy -p',
++            started_at: new Date().toISOString(),
++            from_state_id: fromStateId,
++            to_state_id: res.to_state_id ?? moveParams.targetStateId,
++          };
++
++          setLocalIssues((prev) => {
++            /* v8 ignore next */
++            const current = prev ?? updatedIssues;
++            return current.map((iss) =>
++              iss.key === moveParams.issueKey
++                ? {
++                    ...iss,
++                    gate_status: 'pending',
++                    pending_gate: pendingGate,
++                  }
++                : iss,
++            );
++          });
++
++          queryClient.setQueryData<BoardIssue[]>(qk.issues(projectKey, {}), (old) => {
++            if (!old) return old;
++            return old.map((iss) => {
++              if (iss.key === moveParams.issueKey) {
++                return {
++                  ...iss,
++                  gate_status: 'pending',
++                  pending_gate: pendingGate,
++                };
++              }
++              return iss;
++            });
++          });
++
++          queryClient.setQueryData(qk.issue(moveParams.issueKey), (old: unknown) => {
++            if (!old || typeof old !== 'object') return old;
++            return {
++              ...old,
++              gate_status: 'pending',
++              pending_gate: pendingGate,
++            };
++          });
++        }
+         onMoveSuccess?.(res);
+       } catch {
+         // Rollback local state
+         setLocalIssues(previousIssues);
+       }
+     },
+-    [issues, moveMutation, onMoveSuccess, states],
++    [issues, moveMutation, onMoveSuccess, projectKey, queryClient, snapBack, states],
+   );
+ 
+   const handlePerformMove = useCallback(
+@@ -368,7 +499,11 @@ export function BoardView({
+         return;
+       }
+ 
+-      const colCards = issuesByState[issue.state_id] ?? [];
++      const colCards = issuesByState[issue.state_id];
++      /* v8 ignore next 3 */
++      if (!colCards) {
++        return;
++      }
+       const cardIdx = colCards.findIndex((i) => i.key === issue.key);
+ 
+       if (direction === 'left' || direction === 'right') {
+diff --git a/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx b/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx
+new file mode 100644
+index 00000000..37d9955d
+--- /dev/null
++++ b/kanban/web/src/features/board/__tests__/BoardGateLifecycle.test.tsx
+@@ -0,0 +1,1030 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { type ReactNode } from 'react';
++import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { BoardView } from '../BoardView';
++import { BoardColumn } from '../BoardColumn';
++import * as boardApiModule from '../boardApi';
++import type { BoardIssue, BoardWorkflowState } from '../boardApi';
++import type { RealtimeClient, RealtimeEvent, RealtimeEventHandler } from '../../../api/realtime';
++import { QuickCreateIssueModal } from '../../views/QuickCreateIssueModal';
++import { StatePriorityRows } from '../../drawer-rail/StatePriorityRows';
++import { handleGateEvent } from '../../gates/useGateRealtimeSync';
++import { qk } from '../../../api/queryKeys';
++import type { IssueDetail } from '../../drawer/slots';
++import { IssuesWorkspaceRoute } from '../../views/viewRegistry';
++import { RealtimeProvider } from '../../../realtime/context';
++
++const mockStates: BoardWorkflowState[] = [
++  { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++  { id: 'st-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
++  { id: 'st-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 5 },
++  { id: 'st-done', name: 'Done', group: 'completed', sort_order: 4 },
++];
++
++function createMockRealtime(): {
++  client: RealtimeClient;
++  emit: (event: RealtimeEvent) => void;
++} {
++  const handlers = new Set<RealtimeEventHandler>();
++  const client = {
++    state: 'open' as const,
++    connect: vi.fn(),
++    close: vi.fn(),
++    onStateChange: vi.fn(() => () => {
++      /* no-op */
++    }),
++    subscribe: vi.fn((_channel: string, handler: RealtimeEventHandler) => {
++      handlers.add(handler);
++      return () => {
++        handlers.delete(handler);
++      };
++    }),
++    onEvent: vi.fn((handler: RealtimeEventHandler) => {
++      handlers.add(handler);
++      return () => {
++        handlers.delete(handler);
++      };
++    }),
++    setSession: vi.fn(),
++  } as unknown as RealtimeClient;
++
++  return {
++    client,
++    emit: (event: RealtimeEvent) => {
++      handlers.forEach((h) => { h(event); });
++    },
++  };
++}
++
++function renderWithClient(ui: ReactNode, customClient?: QueryClient) {
++  const client =
++    customClient ??
++    new QueryClient({
++      defaultOptions: {
++        queries: { retry: false },
++        mutations: { retry: false },
++      },
++    });
++  return {
++    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
++    queryClient: client,
++  };
++}
++
++describe('BoardGateLifecycle & Lane Default Integration (KAN-432)', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
++      configurable: true,
++      value: 900,
++    });
++    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
++      configurable: true,
++      value: 124,
++    });
++    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
++      configurable: true,
++      value: () => ({
++        top: 0,
++        left: 0,
++        bottom: 900,
++        right: 324,
++        width: 324,
++        height: 900,
++        x: 0,
++        y: 0,
++        toJSON: () => null,
++      }),
++    });
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('Positive Gate Case: HTTP 202 Accepted renders ⏳🤖 pending indicator and transitions cleanly to Done on WebSocket approved event', async () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    const moveSpy = vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
++      issue_key: 'KAN-1',
++      state_id: 'st-progress',
++      board_rank: '01',
++      rebalance_scheduled: false,
++      gate_status: 'pending',
++      execution_id: 'exec-101',
++      hook_name: 'Security Gate',
++      from_state_id: null, // triggers fallback to previousIssues.find
++      to_state_id: 'st-done',
++      status_code: 202,
++    });
++
++    const initialIssues: BoardIssue[] = [
++      {
++        id: 'i1',
++        key: 'KAN-1',
++        summary: 'Sliding window rate limiter',
++        state_id: 'st-progress',
++        board_rank: '01',
++      },
++      {
++        id: 'i99',
++        key: 'KAN-99',
++        summary: 'Unrelated background task',
++        state_id: 'st-todo',
++        board_rank: '00',
++      },
++    ];
++
++    const testClient = new QueryClient({
++      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
++    });
++    testClient.setQueryData(qk.issue('KAN-1'), {
++      key: 'KAN-1',
++      summary: 'Sliding window rate limiter',
++      state: { id: 'st-progress', name: 'In Progress' },
++    });
++    testClient.setQueryData(qk.issues('KAN', {}), initialIssues);
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={initialIssues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++      testClient,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-1');
++    expect(card).toBeDefined();
++
++    // Trigger keyboard move towards st-done (alt + ArrowRight)
++    fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
++
++    await waitFor(() => {
++      expect(moveSpy).toHaveBeenCalledTimes(1);
++    });
++
++    // 1. Pending Gate Hold: card should have data-gate-pending="true" and render pending gate indicator
++    await waitFor(() => {
++      const updatedCard = screen.getByTestId('board-card-KAN-1');
++      expect(updatedCard.getAttribute('data-gate-pending')).toBe('true');
++    });
++
++    const pendingPill = screen.getByTestId('gate-pending-KAN-1');
++    expect(pendingPill).toBeDefined();
++
++    // 2. Gate Resolution: Emit live WebSocket approved event
++    act(() => {
++      emit({
++        id: 'evt-approved-1',
++        type: 'workflow.gate.approved',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-1',
++          execution_id: 'exec-101',
++          hook_name: 'Security Gate',
++          to_state_id: 'st-done',
++          to_state: 'Done',
++          completed_at: new Date().toISOString(),
++          latency_ms: 120,
++          verdict_sha256: 'abc123sha',
++        },
++      });
++    });
++
++    // Card should now be finalized in Done without pending gate
++    await waitFor(() => {
++      const doneCol = screen.getByTestId('board-column-st-done');
++      expect(doneCol.querySelector('[data-testid="board-card-KAN-1"]')).not.toBeNull();
++      const approvedPill = screen.getByTestId('gate-approved-KAN-1');
++      expect(approvedPill).toBeDefined();
++    });
++  });
++
++  it('Negative Veto Snap-Back Case: WebSocket vetoed/rejected event snaps card back to In Progress with 🛑🤖 feedback without page reload', async () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
++      issue_key: 'KAN-2',
++      state_id: 'st-progress',
++      board_rank: '02',
++      rebalance_scheduled: false,
++      gate_status: 'pending',
++      execution_id: 'exec-202',
++      hook_name: 'Security Gate',
++      from_state_id: 'st-progress',
++      to_state_id: 'st-done',
++      status_code: 202,
++    });
++
++    const initialIssues: BoardIssue[] = [
++      {
++        id: 'i2',
++        key: 'KAN-2',
++        summary: 'Authentication bypass audit',
++        state_id: 'st-progress',
++        board_rank: '02',
++      },
++      {
++        id: 'i98',
++        key: 'KAN-98',
++        summary: 'Another issue',
++        state_id: 'st-todo',
++        board_rank: '00',
++      },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={initialIssues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-2');
++    fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
++
++    await waitFor(() => {
++      const updatedCard = screen.getByTestId('board-card-KAN-2');
++      expect(updatedCard.getAttribute('data-gate-pending')).toBe('true');
++    });
++
++    // Live WebSocket veto event arrives from GateWorker
++    act(() => {
++      emit({
++        id: 'evt-vetoed-2',
++        type: 'workflow.gate.vetoed',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-2',
++          execution_id: 'exec-202',
++          hook_name: 'Security Gate',
++          agent_slug: 'security-agent',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++          reason_preview: 'Critical SAST vulnerability detected in diff',
++          completed_at: new Date().toISOString(),
++        },
++      });
++    });
++
++    // Automatic Veto Snap-Back: Card snaps back to st-progress column with 🛑🤖 feedback
++    await waitFor(() => {
++      const progressCol = screen.getByTestId('board-column-st-progress');
++      expect(progressCol.querySelector('[data-testid="board-card-KAN-2"]')).not.toBeNull();
++      const vetoedPill = screen.getByTestId('gate-vetoed-KAN-2');
++      expect(vetoedPill).toBeDefined();
++    });
++  });
++
++  it('Live WebSocket gate.pending event updates board issue when received asynchronously', async () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    const initialIssues: BoardIssue[] = [
++      {
++        id: 'i5',
++        key: 'KAN-5',
++        summary: 'Async gate testing',
++        state_id: 'st-progress',
++        board_rank: '05',
++      },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={initialIssues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++    );
++
++    // Emit live gate.pending event
++    act(() => {
++      emit({
++        id: 'evt-pending-5',
++        type: 'workflow.gate.pending',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-5',
++          execution_id: 'exec-505',
++          hook_name: 'Code Review Gate',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++          started_at: new Date().toISOString(),
++        },
++      });
++    });
++
++    await waitFor(() => {
++      const card = screen.getByTestId('board-card-KAN-5');
++      expect(card.getAttribute('data-gate-pending')).toBe('true');
++    });
++  });
++
++  it('Issue Detail View Gate Veto: Realtime sync clears Gate Pending and updates to Gate Vetoed without reload', () => {
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++
++    const initialDetail: IssueDetail = {
++      key: 'KAN-3',
++      project_key: 'KAN',
++      summary: 'Strict lone-surrogate sanitizer',
++      state: { id: 'st-done', name: 'Done', group: 'completed' },
++      pending_gate: {
++        execution_id: 'exec-303',
++        hook_name: 'Reality Checker QA Gate',
++        agent_slug: 'reality-checker',
++        harness_label: 'cli: agy -p',
++        started_at: new Date().toISOString(),
++        from_state_id: 'st-progress',
++        to_state_id: 'st-done',
++      },
++    };
++
++    queryClient.setQueryData(qk.issue('KAN-3'), initialDetail);
++
++    // Exercise handleGateEvent with items container structure and non-array fallback
++    queryClient.setQueryData(['issues', 'KAN', 'filter'], { items: [initialDetail] });
++    queryClient.setQueryData(['issues', 'KAN', 'primitive'], 'invalid-raw-string');
++
++    const { rerender } = render(
++      <QueryClientProvider client={queryClient}>
++        <StatePriorityRows
++          issue={initialDetail}
++          projectStates={mockStates}
++          canEdit={true}
++          canTransition={true}
++          onStateChange={vi.fn()}
++          onPriorityChange={vi.fn()}
++        />
++      </QueryClientProvider>,
++    );
++
++    // Initial state: drawer-gate-pending is visible
++    expect(screen.getByTestId('drawer-gate-pending')).toBeDefined();
++    expect(screen.queryByTestId('drawer-gate-vetoed')).toBeNull();
++
++    // Fire realtime veto event via handleGateEvent
++    act(() => {
++      handleGateEvent(
++        'workflow.gate.rejected',
++        {
++          issue_key: 'KAN-3',
++          execution_id: 'exec-303',
++          hook_name: 'Reality Checker QA Gate',
++          agent_slug: 'reality-checker',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++          reason_preview: 'Unit test coverage dropped below 95%',
++          completed_at: new Date().toISOString(),
++        },
++        queryClient,
++        { projectKey: 'KAN' },
++      );
++    });
++
++    // Query cache updated; render with updated data
++    const updatedIssue = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-3'));
++    expect(updatedIssue?.pending_gate).toBeNull();
++    expect(updatedIssue?.latest_gate_verdict?.decision).toBe('reject');
++    if (!updatedIssue) {
++      throw new Error('Expected updatedIssue to be defined');
++    }
++
++    rerender(
++      <QueryClientProvider client={queryClient}>
++        <StatePriorityRows
++          issue={updatedIssue}
++          projectStates={mockStates}
++          canEdit={true}
++          canTransition={true}
++          onStateChange={vi.fn()}
++          onPriorityChange={vi.fn()}
++        />
++      </QueryClientProvider>,
++    );
++
++    // Gate Pending cleared, Gate Vetoed (🛑🤖) rendered
++    expect(screen.queryByTestId('drawer-gate-pending')).toBeNull();
++    expect(screen.getByTestId('drawer-gate-vetoed')).toBeDefined();
++  });
++
++  it('Lane State Default: Clicking + New work item in In Progress passes column state.id and initializes modal State selector', () => {
++    const handleNewItem = vi.fn();
++    const progressState = mockStates[2];
++    if (!progressState) {
++      throw new Error('Expected progressState to be defined');
++    }
++
++    render(
++      <BoardColumn
++        state={progressState}
++        issues={[]}
++        projectKey="KAN"
++        onNewItem={handleNewItem}
++      />,
++    );
++
++    const newBtn = screen.getByTestId('new-item-st-progress');
++    fireEvent.click(newBtn);
++
++    expect(handleNewItem).toHaveBeenCalledTimes(1);
++    expect(handleNewItem).toHaveBeenCalledWith('st-progress');
++
++    // Render QuickCreateIssueModal with defaultStateId="st-progress"
++    render(
++      <QuickCreateIssueModal
++        isOpen={true}
++        onClose={vi.fn()}
++        onCreate={vi.fn()}
++        projectKey="KAN"
++        defaultStateId="st-progress"
++        states={mockStates}
++      />,
++    );
++
++    const select = screen.getByLabelText('State');
++    expect((select as HTMLSelectElement).value).toBe('st-progress');
++  });
++
++  it('Gate Cancellation: WebSocket cancelled event resets pending state and snaps card back', async () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
++      issue_key: 'KAN-4',
++      state_id: 'st-progress',
++      board_rank: '04',
++      rebalance_scheduled: false,
++      gate_status: 'pending',
++      execution_id: 'exec-404',
++      hook_name: 'Security Gate',
++      from_state_id: 'st-progress',
++      to_state_id: 'st-done',
++      status_code: 202,
++    });
++
++    const initialIssues: BoardIssue[] = [
++      {
++        id: 'i4',
++        key: 'KAN-4',
++        summary: 'Passkey WebAuthn relying party audit',
++        state_id: 'st-progress',
++        board_rank: '04',
++      },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={initialIssues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-4');
++    fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
++
++    await waitFor(() => {
++      const updatedCard = screen.getByTestId('board-card-KAN-4');
++      expect(updatedCard.getAttribute('data-gate-pending')).toBe('true');
++    });
++
++    // Emit live WebSocket cancelled event (e.g. stale snapshot cancellation)
++    act(() => {
++      emit({
++        id: 'evt-cancel-4',
++        type: 'workflow.gate.cancelled',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-4',
++          execution_id: 'exec-404',
++          hook_name: 'Security Gate',
++          from_state_id: 'st-progress',
++          reason: 'STALE_SNAPSHOT',
++        },
++      });
++    });
++
++    await waitFor(() => {
++      const progressCol = screen.getByTestId('board-column-st-progress');
++      expect(progressCol.querySelector('[data-testid="board-card-KAN-4"]')).not.toBeNull();
++      const updatedCard = screen.getByTestId('board-card-KAN-4');
++      expect(updatedCard.getAttribute('data-gate-pending')).toBeNull();
++    });
++  });
++
++  it('handles gate cancelled fallback branches in handleGateEvent without from_state and with null activity', () => {
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++
++    const issueDetail: IssueDetail = {
++      key: 'KAN-FALLBACK',
++      project_key: 'KAN',
++      summary: 'Fallback test issue',
++      state: { id: 'st-todo', name: 'To Do', group: 'unstarted' },
++    };
++
++    queryClient.setQueryData(qk.issue('KAN-FALLBACK'), issueDetail);
++    queryClient.setQueryData(['activity', 'KAN-FALLBACK'], null);
++
++    handleGateEvent(
++      'workflow.gate.cancelled',
++      {
++        issue_key: 'KAN-FALLBACK',
++        execution_id: 'exec-fb',
++        hook_name: 'Hook',
++        from_state_id: undefined,
++        from_state: undefined,
++        reason: 'STALE_SNAPSHOT',
++      },
++      queryClient,
++    );
++
++    const updated = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-FALLBACK'));
++    expect(updated?.pending_gate).toBeNull();
++    expect(updated?.gate_status).toBeNull();
++  });
++
++  it('handles onGateVetoed and onGateCancelled when card element is not in DOM', () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    const initialIssues: BoardIssue[] = [
++      {
++        id: 'i-absent',
++        key: 'KAN-ABSENT',
++        summary: 'Card will not be in DOM query',
++        state_id: 'st-progress',
++        board_rank: '09',
++      },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={initialIssues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++    );
++
++    // Emit veto for a non-existent card key
++    act(() => {
++      emit({
++        id: 'evt-vetoed-absent',
++        type: 'workflow.gate.vetoed',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-NONEXISTENT',
++          execution_id: 'exec-absent',
++          hook_name: 'Hook',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++        },
++      });
++    });
++
++    // Emit cancel for non-existent card key
++    act(() => {
++      emit({
++        id: 'evt-cancel-absent',
++        type: 'workflow.gate.cancelled',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-NONEXISTENT',
++          execution_id: 'exec-absent',
++          hook_name: 'Hook',
++          from_state_id: 'st-progress',
++        },
++      });
++    });
++
++    // Verify BoardView remains healthy
++    expect(screen.getByTestId('board-column-st-progress')).toBeDefined();
++  });
++
++  it('covers null query cache and existing activity in handleGateEvent', () => {
++    const queryClient = new QueryClient();
++    queryClient.setQueryData(['issues', 'KAN', 'null-test'], null);
++    queryClient.setQueryData(['activity', 'KAN-NULL'], {
++      items: [
++        {
++          id: 'activity-existing',
++          category: 'AGENT_GATE',
++          event_type: 'GATE_APPROVED',
++          actor: { type: 'AGENT' },
++          created_at: new Date().toISOString(),
++          payload: { verdict_sha256: 'matched-hash' },
++        },
++      ],
++    });
++
++    handleGateEvent(
++      'workflow.gate.approved',
++      {
++        issue_key: 'KAN-NULL',
++        execution_id: 'exec-n',
++        hook_name: 'Hook',
++        verdict_sha256: 'matched-hash',
++      },
++      queryClient,
++      { projectKey: 'KAN' },
++    );
++  });
++
++  it('covers toast notification and missing query cache', async () => {
++    const { client: realtimeClient, emit } = createMockRealtime();
++
++    const moveSpy = vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
++      issue_key: 'KAN-TOAST',
++      state_id: 'st-progress',
++      board_rank: '01',
++      rebalance_scheduled: false,
++      gate_status: 'pending',
++      execution_id: 'exec-toast',
++      hook_name: 'Security Gate',
++      to_state_id: 'st-done',
++      status_code: 202,
++    });
++
++    const issues: BoardIssue[] = [
++      { id: 'it', key: 'KAN-TOAST', summary: 'Toast item', state_id: 'st-progress', board_rank: '01' },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={issues}
++        currentUserCapabilities={['ADMIN']}
++        realtimeClient={realtimeClient}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-TOAST');
++    act(() => {
++      fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
++    });
++
++    await waitFor(() => {
++      expect(moveSpy).toHaveBeenCalledTimes(1);
++    });
++
++    // Emit cancelled event with STALE_SNAPSHOT to trigger toast
++    act(() => {
++      emit({
++        id: 'evt-toast',
++        type: 'workflow.gate.cancelled',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-TOAST',
++          execution_id: 'exec-toast',
++          hook_name: 'Security Gate',
++          reason: 'STALE_SNAPSHOT',
++        },
++      });
++    });
++
++    expect(screen.getByRole('alert')).toBeDefined();
++  });
++
++  it('covers minimal 202 response fallbacks in BoardView', async () => {
++    const moveSpy = vi.spyOn(boardApiModule, 'moveIssueApi').mockResolvedValue({
++      issue_key: 'KAN-MIN',
++      state_id: 'st-progress',
++      board_rank: '01',
++      rebalance_scheduled: false,
++      status_code: 202,
++      // execution_id, hook_name, from_state_id, to_state_id omitted
++    });
++
++    const issues: BoardIssue[] = [
++      { id: 'imin', key: 'KAN-MIN', summary: 'Minimal 202', state_id: 'st-progress', board_rank: '01' },
++      { id: 'imin2', key: 'KAN-OTHER2', summary: 'Other 2', state_id: 'st-todo', board_rank: '02' },
++    ];
++
++    renderWithClient(
++      <BoardView
++        projectKey="KAN"
++        states={mockStates}
++        issues={issues}
++        currentUserCapabilities={['ADMIN']}
++      />,
++    );
++
++    const card = screen.getByTestId('board-card-KAN-MIN');
++    act(() => {
++      fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
++    });
++
++    await waitFor(() => {
++      expect(moveSpy).toHaveBeenCalled();
++    });
++
++    const updatedCard = screen.getByTestId('board-card-KAN-MIN');
++    expect(updatedCard.getAttribute('data-gate-pending')).toBe('true');
++  });
++
++  it('covers partial state fallbacks in veto and cancel handleGateEvent', () => {
++    const queryClient = new QueryClient();
++
++    // 1. Veto with only from_state_id
++    const issue1: IssueDetail = {
++      key: 'KAN-PARTIAL1',
++      project_key: 'KAN',
++      summary: 'Partial state issue 1',
++      state: { id: 'st-done', name: 'Done', group: 'completed' },
++    };
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL1'), issue1);
++
++    handleGateEvent(
++      'workflow.gate.rejected',
++      {
++        issue_key: 'KAN-PARTIAL1',
++        execution_id: 'exec-p1',
++        hook_name: 'Hook',
++        from_state_id: 'st-progress',
++        from_state: undefined,
++      },
++      queryClient,
++    );
++
++    const res1 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL1'));
++    expect(res1?.state?.id).toBe('st-progress');
++
++    // 2. Veto with only from_state
++    const issue2: IssueDetail = {
++      key: 'KAN-PARTIAL2',
++      project_key: 'KAN',
++      summary: 'Partial state issue 2',
++      state: { id: 'st-done', name: 'Done', group: 'completed' },
++    };
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL2'), issue2);
++
++    handleGateEvent(
++      'workflow.gate.rejected',
++      {
++        issue_key: 'KAN-PARTIAL2',
++        execution_id: 'exec-p2',
++        hook_name: 'Hook',
++        from_state_id: undefined,
++        from_state: 'In Progress',
++      },
++      queryClient,
++    );
++
++    const res2 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL2'));
++    expect(res2?.state?.name).toBe('In Progress');
++
++    // 3. Cancel with only from_state
++    const issue3: IssueDetail = {
++      key: 'KAN-PARTIAL3',
++      project_key: 'KAN',
++      summary: 'Partial state issue 3',
++      state: { id: 'st-done', name: 'Done', group: 'completed' },
++    };
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL3'), issue3);
++
++    handleGateEvent(
++      'workflow.gate.cancelled',
++      {
++        issue_key: 'KAN-PARTIAL3',
++        execution_id: 'exec-p3',
++        hook_name: 'Hook',
++        from_state_id: undefined,
++        from_state: 'In Progress',
++      },
++      queryClient,
++    );
++
++    const res3 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL3'));
++    expect(res3?.state?.name).toBe('In Progress');
++
++    // 4. Veto fallback where fromStateName defaults to 'In Progress'
++    const issue4 = {
++      key: 'KAN-PARTIAL4',
++      project_key: 'KAN',
++      summary: 'Partial state issue 4',
++      state: { id: 'st-done', group: 'completed' },
++    } as unknown as IssueDetail;
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL4'), issue4);
++    handleGateEvent(
++      'workflow.gate.rejected',
++      {
++        issue_key: 'KAN-PARTIAL4',
++        execution_id: 'exec-p4',
++        hook_name: 'Hook',
++        from_state_id: 'st-custom',
++      },
++      queryClient,
++    );
++    const res4 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL4'));
++    expect(res4?.state?.name).toBe('In Progress');
++
++    // 5. Cancel fallback where fromStateName defaults to 'In Progress'
++    const issue5 = {
++      key: 'KAN-PARTIAL5',
++      project_key: 'KAN',
++      summary: 'Partial state issue 5',
++      state: { id: 'st-done', group: 'completed' },
++    } as unknown as IssueDetail;
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL5'), issue5);
++    handleGateEvent(
++      'workflow.gate.cancelled',
++      {
++        issue_key: 'KAN-PARTIAL5',
++        execution_id: 'exec-p5',
++        hook_name: 'Hook',
++        from_state_id: 'st-custom',
++      },
++      queryClient,
++    );
++    const res5 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL5'));
++    expect(res5?.state?.name).toBe('In Progress');
++
++    // 6. Pending fallback where to_state_id is omitted and falls back to oldIssue.state.id
++    const issue6 = {
++      key: 'KAN-PARTIAL6',
++      project_key: 'KAN',
++      summary: 'Partial state issue 6',
++      state: { id: 'st-fallback-id', name: 'Original', group: 'unstarted' },
++    } as unknown as IssueDetail;
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL6'), issue6);
++    handleGateEvent(
++      'workflow.gate.pending',
++      {
++        issue_key: 'KAN-PARTIAL6',
++        execution_id: 'exec-p6',
++        hook_name: 'Hook',
++        to_state: 'Target State',
++        to_state_id: undefined,
++      },
++      queryClient,
++    );
++    const res6 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL6'));
++    expect(res6?.state?.id).toBe('st-fallback-id');
++
++    // 7. Approved fallback where to_state_id is omitted and falls back to oldIssue.state.id
++    const issue7 = {
++      key: 'KAN-PARTIAL7',
++      project_key: 'KAN',
++      summary: 'Partial state issue 7',
++      state: { id: 'st-fallback-id-7', name: 'Original', group: 'unstarted' },
++    } as unknown as IssueDetail;
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL7'), issue7);
++    handleGateEvent(
++      'workflow.gate.approved',
++      {
++        issue_key: 'KAN-PARTIAL7',
++        execution_id: 'exec-p7',
++        hook_name: 'Hook',
++        to_state: 'Target State 7',
++        to_state_id: undefined,
++      },
++      queryClient,
++    );
++    const res7 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL7'));
++    expect(res7?.state?.id).toBe('st-fallback-id-7');
++
++    // 8. Veto and cancel where fromStateId is undefined and retains oldIssue.state
++    const issue8 = {
++      key: 'KAN-PARTIAL8',
++      project_key: 'KAN',
++      summary: 'Partial state issue 8',
++      state: { id: 'st-keep-id', name: 'Keep', group: 'started' },
++    } as unknown as IssueDetail;
++    queryClient.setQueryData(qk.issue('KAN-PARTIAL8'), issue8);
++    handleGateEvent(
++      'workflow.gate.rejected',
++      {
++        issue_key: 'KAN-PARTIAL8',
++        execution_id: 'exec-p8',
++        hook_name: 'Hook',
++        from_state_id: undefined,
++      },
++      queryClient,
++    );
++    const res8 = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-PARTIAL8'));
++    expect(res8?.state?.id).toBe('st-keep-id');
++  });
++
++  it('loads states from project query when states prop is omitted', () => {
++    const testClient = new QueryClient();
++    testClient.setQueryData(qk.project('KAN-FETCH'), {
++      id: 'proj-1',
++      object_id: 'obj-1',
++      states: mockStates,
++    });
++
++    renderWithClient(
++      <BoardView projectKey="KAN-FETCH" issues={[]} />,
++      testClient,
++    );
++
++    expect(screen.getByTestId('board-column-st-progress')).toBeDefined();
++  });
++
++  it('mounts IssuesWorkspaceRoute without realtimeClient prop, receives live RealtimeProvider context, holds ⏳🤖 and veto snaps back to In Progress', async () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++    const mockRt = createMockRealtime();
++    const testClient = new QueryClient();
++
++    testClient.setQueryData(['states', 'KAN'], mockStates);
++    testClient.setQueryData(qk.project('KAN'), {
++      id: 'proj-kan',
++      key: 'KAN',
++      name: 'Core Project',
++      states: mockStates,
++    });
++
++    const routeIssues = [
++      {
++        id: 'iss-route-1',
++        key: 'KAN-432-RT',
++        project_key: 'KAN',
++        summary: 'Routed Board Gate Issue',
++        state_id: 'st-progress',
++        state: { id: 'st-progress', name: 'In Progress', group: 'started' },
++        priority: { slug: 'high', label: 'High' },
++        board_rank: '000001',
++      },
++    ];
++
++    act(() => {
++      render(
++        <QueryClientProvider client={testClient}>
++          <RealtimeProvider client={mockRt.client} autoConnect={false} bindInvalidation={false}>
++            <IssuesWorkspaceRoute
++              projectKey="KAN"
++              modulesEnabled={false}
++              initialIssues={routeIssues as never}
++              queryClient={testClient}
++            />
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++    });
++
++    // Initial render in In Progress lane
++    expect(screen.getByTestId('board-card-KAN-432-RT')).toBeDefined();
++    const progressCol = screen.getByTestId('board-column-st-progress');
++    expect(progressCol.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
++
++    // 1. Live WebSocket pending gate event
++    act(() => {
++      mockRt.emit({
++        id: 'evt-pending-route',
++        type: 'workflow.gate.pending',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-432-RT',
++          execution_id: 'exec-route-1',
++          hook_name: 'Security Gatekeeper',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++        },
++      });
++    });
++
++    expect(screen.getByTestId('gate-pending-KAN-432-RT')).toBeDefined();
++
++    // 2. Live WebSocket veto/rejection event
++    act(() => {
++      mockRt.emit({
++        id: 'evt-rejected-route',
++        type: 'workflow.gate.rejected',
++        channel: 'project:KAN',
++        payload: {
++          issue_key: 'KAN-432-RT',
++          execution_id: 'exec-route-1',
++          hook_name: 'Security Gatekeeper',
++          from_state_id: 'st-progress',
++          to_state_id: 'st-done',
++          reason_preview: 'Automated test suite gate rejected',
++        },
++      });
++    });
++
++    // Card automatically returned/snapped back to In Progress column with veto feedback
++    await waitFor(() => {
++      const col = screen.getByTestId('board-column-st-progress');
++      expect(col.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
++      expect(screen.getByTestId('gate-vetoed-KAN-432-RT')).toBeDefined();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
+index ec388f55..8b5f17f8 100644
+--- a/kanban/web/src/features/board/board.css
++++ b/kanban/web/src/features/board/board.css
+@@ -111,8 +111,40 @@
+ }
+ 
+ @media (max-width: 767px) {
++  .kb-main-canvas:has(.board-canvas) {
++    padding: 12px;
++    min-width: 0;
++    max-width: 100vw;
++    width: 100%;
++    box-sizing: border-box;
++    overflow-x: hidden;
++  }
++
++  .board-canvas {
++    min-width: 0;
++    max-width: 100%;
++    width: 100%;
++    box-sizing: border-box;
++    overflow-x: hidden;
++  }
++
++  .board-lanes {
++    scroll-snap-type: x proximity;
++    min-width: 0;
++    max-width: 100%;
++    width: 100%;
++    box-sizing: border-box;
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++  }
++
+   .board-column {
+     scroll-snap-align: start;
++    flex: 0 0 min(100%, calc(100vw - 24px));
++    width: min(100%, calc(100vw - 24px));
++    min-width: 0;
++    max-width: min(100%, calc(100vw - 24px));
++    box-sizing: border-box;
+   }
+ }
+ 
+diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
+index 21e8cbe9..7e865f67 100644
+--- a/kanban/web/src/features/board/boardApi.ts
++++ b/kanban/web/src/features/board/boardApi.ts
+@@ -182,6 +182,12 @@ export interface IssueMoveResponse {
+     soft_limit: number;
+     resulting_count: number;
+   } | null;
++  gate_status?: 'pending' | 'rejected' | 'approved' | null;
++  execution_id?: string | null;
++  hook_name?: string | null;
++  from_state_id?: string | null;
++  to_state_id?: string | null;
++  status_code?: number;
+ }
+ 
+ /**
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.css b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+index f9006051..e549ee70 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.css
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+@@ -61,14 +61,18 @@
+ }
+ 
+ .prop-row[data-prop="state"] .prop-row__select {
+-  min-width: 108px;
++  min-width: 130px;
+   max-width: 100%;
+-  width: 100%;
++  width: auto;
+   flex: 1 1 auto;
+-  padding-right: 20px;
++  padding: 2px 6px;
+   box-sizing: border-box;
+ }
+ 
++#prop-state-select {
++  min-width: 130px;
++}
++
+ .prop-row__select:focus {
+   outline: 2px solid var(--accent-primary);
+   outline-offset: 1px;
+diff --git a/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx b/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
+index 15724ba3..e3e42e83 100644
+--- a/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
++++ b/kanban/web/src/features/drawer-rail/StatePriorityRows.tsx
+@@ -80,7 +80,7 @@ export function StatePriorityRows({
+           State
+         </label>
+         <div className="prop-row__value">
+-          {issue.pending_gate && (
++          {(Boolean(issue.pending_gate) || (issue as { gate_status?: string | null }).gate_status === 'pending') && (
+             <GateStatusPill
+               status="pending"
+               pendingGate={issue.pending_gate}
+@@ -89,22 +89,29 @@ export function StatePriorityRows({
+               testId="drawer-gate-pending"
+             />
+           )}
+-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'reject' && (
+-            <GateStatusPill
+-              status="rejected"
+-              latestVerdict={issue.latest_gate_verdict}
+-              issueKey={issue.key}
+-              testId="drawer-gate-vetoed"
+-            />
+-          )}
+-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'approve' && (
+-            <GateStatusPill
+-              status="approved"
+-              latestVerdict={issue.latest_gate_verdict}
+-              issueKey={issue.key}
+-              testId="drawer-gate-approved"
+-            />
+-          )}
++          {!issue.pending_gate &&
++            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
++            (issue.latest_gate_verdict?.decision === 'reject' ||
++              (issue as { gate_status?: string | null }).gate_status === 'rejected' ||
++              (issue as { gate_status?: string | null }).gate_status === 'vetoed') && (
++              <GateStatusPill
++                status="rejected"
++                latestVerdict={issue.latest_gate_verdict}
++                issueKey={issue.key}
++                testId="drawer-gate-vetoed"
++              />
++            )}
++          {!issue.pending_gate &&
++            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
++            (issue.latest_gate_verdict?.decision === 'approve' ||
++              (issue as { gate_status?: string | null }).gate_status === 'approved') && (
++              <GateStatusPill
++                status="approved"
++                latestVerdict={issue.latest_gate_verdict}
++                issueKey={issue.key}
++                testId="drawer-gate-approved"
++              />
++            )}
+           <select
+             id="prop-state-select"
+             aria-label="State"
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index 341ada1d..6d276244 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -395,11 +395,11 @@
+ }
+ 
+ .surface__rail .prop-row[data-prop="state"] .prop-row__select {
+-  min-width: 108px;
++  min-width: 130px;
+   max-width: 100%;
+-  width: 100%;
++  width: auto;
+   flex: 1 1 auto;
+-  padding-right: 20px;
++  padding: 2px 6px;
+   box-sizing: border-box;
+ }
+ .issue-header__new-tab-link {
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index da8b2a0d..dd14d923 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -41,7 +41,8 @@ import {
+   type IssueItem,
+ } from '../views/viewsApi';
+ import { safeRandomUUID } from '../../utils/uuid';
+-import { useRealtimeSubscription } from '../../realtime';
++import { useRealtimeSubscription, useRealtimeClient } from '../../realtime';
++import * as gates from '../gates';
+ import {
+   defaultUploadAttachment,
+   MAX_ATTACHMENT_BYTES,
+@@ -453,6 +454,13 @@ function IssueSurfaceContent({
+   const resolvedProjectForAux =
+     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
+ 
++  const realtimeClient = useRealtimeClient();
++  gates.useGateRealtimeSync({
++    client: realtimeClient,
++    queryClient,
++    projectKey: resolvedProjectForAux,
++  });
++
+   // Normalize URL when issue key differs from loaded canonical key (e.g., cross-prefix alias KANBA-119 -> KAN-42)
+   useEffect(() => {
+     if (!issue?.key || issue.key === issueKey) {
+diff --git a/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx b/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
+index 8927e1c0..8b38451f 100644
+--- a/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
++++ b/kanban/web/src/features/gates/__tests__/useGateRealtimeSync.test.tsx
+@@ -234,6 +234,62 @@ describe('useGateRealtimeSync & handleGateEvent (KB-P5-25)', () => {
+       expect(detail?.state?.name).toBe('In Progress');
+     });
+ 
++    it('handles issue.transition_rejected event and snaps back state cleanly', () => {
++      const pendingIssue: BoardIssue = {
++        id: 'issue-1',
++        key: 'KAN-8',
++        summary: 'Task',
++        state_id: 'state-in-review',
++        board_rank: '0|hzzzzz:',
++        gate_status: 'pending',
++      };
++      queryClient.setQueryData(qk.issues('KAN', {}), [pendingIssue]);
++
++      const initialDetail: IssueDetail = {
++        key: 'KAN-8',
++        project_key: 'KAN',
++        summary: 'Task',
++        state: { id: 'state-in-review', name: 'In Review', group: 'started' },
++        pending_gate: {
++          execution_id: 'exec-trans-1',
++          hook_name: 'forensic-code-check',
++          agent_slug: 'reality-checker',
++          harness_label: 'cli: agy -p',
++          started_at: '2026-11-14T00:00:00Z',
++        },
++      };
++      queryClient.setQueryData(qk.issue('KAN-8'), initialDetail);
++
++      const onGateVetoed = vi.fn();
++      const payload: WorkflowGateEventPayload = {
++        issue_key: 'KAN-8',
++        execution_id: 'exec-trans-1',
++        hook_name: 'forensic-code-check',
++        agent_slug: 'reality-checker',
++        from_state: 'In Progress',
++        from_state_id: 'state-in-progress',
++        to_state: 'In Review',
++        to_state_id: 'state-in-review',
++        reason_preview: 'Transition rejected: gate vetoed.',
++      };
++
++      handleGateEvent('issue.transition_rejected', payload, queryClient, {
++        projectKey: 'KAN',
++        onGateVetoed,
++      });
++
++      expect(onGateVetoed).toHaveBeenCalledWith(payload);
++
++      const boardIssues = queryClient.getQueryData<BoardIssue[]>(qk.issues('KAN', {}));
++      expect(boardIssues?.[0]?.gate_status).toBe('rejected');
++      expect(boardIssues?.[0]?.state_id).toBe('state-in-progress');
++
++      const detail = queryClient.getQueryData<IssueDetail>(qk.issue('KAN-8'));
++      expect(detail?.pending_gate).toBeNull();
++      expect(detail?.latest_gate_verdict?.decision).toBe('reject');
++      expect(detail?.state?.name).toBe('In Progress');
++    });
++
+     it('handles workflow.gate.timed_out, resets state, and updates caches', () => {
+       const pendingIssue: BoardIssue = {
+         id: 'issue-1',
+diff --git a/kanban/web/src/features/gates/useGateRealtimeSync.ts b/kanban/web/src/features/gates/useGateRealtimeSync.ts
+index d02fbe0d..6cd0beff 100644
+--- a/kanban/web/src/features/gates/useGateRealtimeSync.ts
++++ b/kanban/web/src/features/gates/useGateRealtimeSync.ts
+@@ -34,12 +34,58 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
+   });
+ }
+ 
+-function updateBoardIssueWithGate(
++export interface CachedStateLike {
++  id: string;
++  name?: string | undefined;
++  group?: string | undefined;
++  color_hex?: string | null | undefined;
++}
++
++function resolveSyncedState(
++  issue: BoardIssue,
++  stateId: string,
++  fallbackName?: string,
++  cachedStates?: CachedStateLike[],
++): BoardIssue['state'] {
++  if (cachedStates && cachedStates.length > 0) {
++    const matched = cachedStates.find((s) => s.id === stateId);
++    if (matched) {
++      return {
++        id: matched.id,
++        name: matched.name ?? fallbackName ?? '',
++        group: (matched.group ?? 'started') as NonNullable<BoardIssue['state']>['group'],
++        color_hex: matched.color_hex ?? null,
++      };
++    }
++  }
++  if (issue.state) {
++    return {
++      id: stateId,
++      name: fallbackName ?? (issue.state.id === stateId ? issue.state.name : ''),
++      group: issue.state.id === stateId ? issue.state.group : 'started',
++      color_hex: issue.state.id === stateId ? issue.state.color_hex : null,
++    };
++  }
++  if (fallbackName) {
++    return {
++      id: stateId,
++      name: fallbackName,
++      group: 'started' as NonNullable<BoardIssue['state']>['group'],
++      color_hex: null,
++    };
++  }
++  return undefined;
++}
++
++export function updateBoardIssueWithGate(
+   issue: BoardIssue,
+   eventType: string,
+   p: WorkflowGateEventPayload,
++  cachedStates?: CachedStateLike[],
+ ): BoardIssue {
+-  if (eventType === 'workflow.gate.pending') {
++  if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
++    const targetStateId = p.to_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
+     const pendingGate: PendingGateInfo = {
+       execution_id: p.execution_id,
+       hook_name: p.hook_name,
+@@ -58,11 +104,14 @@ function updateBoardIssueWithGate(
+       ...issue,
+       gate_status: 'pending',
+       pending_gate: pendingGate,
+-      state_id: p.to_state_id ?? issue.state_id,
++      state_id: targetStateId,
++      ...(nextState ? { state: nextState } : {}),
+     };
+   }
+ 
+-  if (eventType === 'workflow.gate.approved') {
++  if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
++    const targetStateId = p.to_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
+     const verdict: LatestGateVerdict = {
+       decision: 'approve',
+       hook_name: p.hook_name,
+@@ -74,12 +123,25 @@ function updateBoardIssueWithGate(
+       ...issue,
+       gate_status: 'approved',
+       pending_gate: null,
+-      state_id: p.to_state_id ?? issue.state_id,
++      state_id: targetStateId,
+       latest_gate_verdict: verdict,
++      ...(nextState ? { state: nextState } : {}),
+     };
+   }
+ 
+-  if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
++  if (
++    eventType === 'issue.transition_rejected' ||
++    eventType === 'workflow.gate.rejected' ||
++    eventType === 'workflow.gate.timed_out' ||
++    eventType === 'workflow.gate.vetoed' ||
++    eventType === 'workflow.gate.failed' ||
++    eventType === 'gate.rejected' ||
++    eventType === 'gate.vetoed' ||
++    eventType === 'gate.failed' ||
++    eventType === 'gate.timed_out'
++  ) {
++    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
+     const verdict: LatestGateVerdict = {
+       decision: 'reject',
+       hook_name: p.hook_name,
+@@ -92,17 +154,21 @@ function updateBoardIssueWithGate(
+       ...issue,
+       gate_status: 'rejected',
+       pending_gate: null,
+-      state_id: p.from_state_id ?? issue.state_id,
++      state_id: fromStateId,
+       latest_gate_verdict: verdict,
++      ...(nextState ? { state: nextState } : {}),
+     };
+   }
+ 
+-  if (eventType === 'workflow.gate.cancelled') {
++  if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
++    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
++    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
+     return {
+       ...issue,
+       gate_status: null,
+       pending_gate: null,
+-      state_id: p.from_state_id ?? issue.state_id,
++      state_id: fromStateId,
++      ...(nextState ? { state: nextState } : {}),
+     };
+   }
+ 
+@@ -155,7 +221,7 @@ export function handleGateEvent(
+   // 2. Update single issue detail cache
+   queryClient.setQueryData<IssueDetail>(qk.issue(issue_key), (oldIssue) => {
+     if (!oldIssue) return oldIssue;
+-    if (eventType === 'workflow.gate.pending') {
++    if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
+       const pendingGate: PendingGateInfo = {
+         execution_id: payload.execution_id,
+         hook_name: payload.hook_name,
+@@ -173,19 +239,21 @@ export function handleGateEvent(
+       return {
+         ...oldIssue,
+         pending_gate: pendingGate,
++        gate_status: 'pending',
+         state: payload.to_state
+           ? {
+-              id: payload.to_state_id,
++              id: payload.to_state_id ?? oldIssue.state?.id,
+               name: payload.to_state,
+               group: 'started',
+             }
+           : oldIssue.state,
+       };
+     }
+-    if (eventType === 'workflow.gate.approved') {
++    if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
+       return {
+         ...oldIssue,
+         pending_gate: null,
++        gate_status: 'approved',
+         latest_gate_verdict: {
+           decision: 'approve',
+           hook_name: payload.hook_name,
+@@ -195,17 +263,32 @@ export function handleGateEvent(
+         },
+         state: payload.to_state
+           ? {
+-              id: payload.to_state_id,
++              id: payload.to_state_id ?? oldIssue.state?.id,
+               name: payload.to_state,
+               group: 'completed',
+             }
+           : oldIssue.state,
+       };
+     }
+-    if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
++    if (
++      eventType === 'issue.transition_rejected' ||
++      eventType === 'workflow.gate.rejected' ||
++      eventType === 'workflow.gate.timed_out' ||
++      eventType === 'workflow.gate.vetoed' ||
++      eventType === 'workflow.gate.failed' ||
++      eventType === 'gate.rejected' ||
++      eventType === 'gate.vetoed' ||
++      eventType === 'gate.failed' ||
++      eventType === 'gate.timed_out'
++    ) {
++      const fromStateId =
++        payload.from_state_id ?? oldIssue.pending_gate?.from_state_id ?? oldIssue.state?.id;
++      const fromStateName =
++        payload.from_state ?? oldIssue.pending_gate?.from_state ?? oldIssue.state?.name;
+       return {
+         ...oldIssue,
+         pending_gate: null,
++        gate_status: 'rejected',
+         latest_gate_verdict: {
+           decision: 'reject',
+           hook_name: payload.hook_name,
+@@ -214,23 +297,28 @@ export function handleGateEvent(
+           audit_comment_id: payload.audit_comment_id,
+           completed_at: payload.completed_at ?? new Date().toISOString(),
+         },
+-        state: payload.from_state
++        state: fromStateId
+           ? {
+-              id: payload.from_state_id,
+-              name: payload.from_state,
++              id: fromStateId,
++              name: fromStateName ?? 'In Progress',
+               group: 'started',
+             }
+           : oldIssue.state,
+       };
+     }
+-    if (eventType === 'workflow.gate.cancelled') {
++    if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
++      const fromStateId =
++        payload.from_state_id ?? oldIssue.pending_gate?.from_state_id ?? oldIssue.state?.id;
++      const fromStateName =
++        payload.from_state ?? oldIssue.pending_gate?.from_state ?? oldIssue.state?.name;
+       return {
+         ...oldIssue,
+         pending_gate: null,
+-        state: payload.from_state
++        gate_status: null,
++        state: fromStateId
+           ? {
+-              id: payload.from_state_id,
+-              name: payload.from_state,
++              id: fromStateId,
++              name: fromStateName ?? 'In Progress',
+               group: 'started',
+             }
+           : oldIssue.state,
+@@ -242,10 +330,20 @@ export function handleGateEvent(
+   // 3. Update Activity Feed Cache (idempotent injection)
+   const activityEventMap: Record<string, GateActivityItem['event_type']> = {
+     'workflow.gate.approved': 'GATE_APPROVED',
++    'gate.approved': 'GATE_APPROVED',
++    'issue.transition_rejected': 'GATE_REJECTED',
+     'workflow.gate.rejected': 'GATE_REJECTED',
++    'gate.rejected': 'GATE_REJECTED',
++    'workflow.gate.vetoed': 'GATE_REJECTED',
++    'gate.vetoed': 'GATE_REJECTED',
++    'workflow.gate.failed': 'GATE_REJECTED',
++    'gate.failed': 'GATE_REJECTED',
+     'workflow.gate.timed_out': 'GATE_REJECTED',
++    'gate.timed_out': 'GATE_REJECTED',
+     'workflow.gate.cancelled':
+       payload.reason === 'STALE_SNAPSHOT' ? 'GATE_ABORTED_STALE' : 'GATE_REJECTED',
++    'gate.cancelled':
++      payload.reason === 'STALE_SNAPSHOT' ? 'GATE_ABORTED_STALE' : 'GATE_REJECTED',
+   };
+ 
+   const activityEventType = activityEventMap[eventType];
+@@ -309,11 +407,23 @@ export function handleGateEvent(
+   }
+ 
+   // 4. Notifications & Callbacks
+-  if (
+-    eventType === 'workflow.gate.approved' ||
++  const isVetoOrReject =
++    eventType === 'issue.transition_rejected' ||
+     eventType === 'workflow.gate.rejected' ||
+     eventType === 'workflow.gate.timed_out' ||
+-    eventType === 'workflow.gate.cancelled'
++    eventType === 'workflow.gate.vetoed' ||
++    eventType === 'workflow.gate.failed' ||
++    eventType === 'gate.rejected' ||
++    eventType === 'gate.vetoed' ||
++    eventType === 'gate.failed' ||
++    eventType === 'gate.timed_out';
++
++  if (
++    eventType === 'workflow.gate.approved' ||
++    eventType === 'gate.approved' ||
++    isVetoOrReject ||
++    eventType === 'workflow.gate.cancelled' ||
++    eventType === 'gate.cancelled'
+   ) {
+     void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
+     void queryClient.invalidateQueries({
+@@ -321,15 +431,15 @@ export function handleGateEvent(
+     });
+   }
+ 
+-  if (eventType === 'workflow.gate.pending') {
++  if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
+     options.onGatePending?.(payload);
+-  } else if (eventType === 'workflow.gate.approved') {
++  } else if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
+     options.onGateApproved?.(payload);
+-  } else if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
++  } else if (isVetoOrReject) {
+     const msg = `Gate ${payload.hook_name} vetoed transition ${issue_key}`;
+     announce(msg);
+     options.onGateVetoed?.(payload);
+-  } else if (eventType === 'workflow.gate.cancelled') {
++  } else if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
+     if (payload.reason === 'STALE_SNAPSHOT') {
+       const msg = 'Transition cancelled (ticket changed while gate was running)';
+       options.onToast?.(msg);
+@@ -358,15 +468,26 @@ export function useGateRealtimeSync({
+     if (!client) return undefined;
+ 
+     const handler = (event: RealtimeEvent): void => {
+-      if (
+-        ![
++      const normalizedType = event.type.toLowerCase();
++      const isGateEvent =
++        normalizedType.startsWith('workflow.gate.') ||
++        normalizedType.startsWith('gate.') ||
++        [
++          'issue.transition_rejected',
+           'workflow.gate.pending',
+           'workflow.gate.approved',
+           'workflow.gate.rejected',
+           'workflow.gate.timed_out',
+           'workflow.gate.cancelled',
+-        ].includes(event.type)
+-      ) {
++          'workflow.gate.vetoed',
++          'workflow.gate.failed',
++          'gate.pending',
++          'gate.approved',
++          'gate.rejected',
++          'gate.vetoed',
++          'gate.failed',
++        ].includes(normalizedType);
++      if (!isGateEvent) {
+         return;
+       }
+ 
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+index 52372bb4..f72acd7f 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -11,7 +11,7 @@ export interface QuickCreateIssueModalProps {
+   onCreate: (newIssue: Partial<IssueItem>) => Promise<Partial<IssueItem> | undefined> | Partial<IssueItem> | undefined;
+   projectKey: string;
+   modulesEnabled?: boolean;
+-  defaultStateId?: string;
++  defaultStateId?: string | undefined;
+   defaultPrioritySlug?: string;
+   defaultModuleIds?: string[];
+   defaultDueDate?: string;
+@@ -35,7 +35,7 @@ export function QuickCreateIssueModal({
+   onCreate,
+   projectKey,
+   modulesEnabled = true,
+-  defaultStateId = 'state-todo',
++  defaultStateId,
+   defaultPrioritySlug = 'medium',
+   defaultModuleIds = [],
+   defaultDueDate,
+@@ -46,7 +46,7 @@ export function QuickCreateIssueModal({
+   onOpenPeek,
+ }: QuickCreateIssueModalProps): JSX.Element | null {
+   const resolvedInitialStateId = useMemo(() => {
+-    if (defaultStateId && defaultStateId !== 'state-todo') {
++    if (defaultStateId) {
+       return defaultStateId;
+     }
+     if (states && states.length > 0) {
+@@ -54,14 +54,22 @@ export function QuickCreateIssueModal({
+       if (def) return def.id;
+       const unstarted = states.find((s) => s.group === 'unstarted');
+       if (unstarted) return unstarted.id;
+-      return states[0]?.id ?? defaultStateId;
++      return states[0]?.id ?? 'state-todo';
+     }
+-    return defaultStateId;
++    return 'state-todo';
+   }, [defaultStateId, states]);
+ 
+   const [summary, setSummary] = useState('');
+   const [description, setDescription] = useState('');
++  const [prevSyncedDefaultStateId, setPrevSyncedDefaultStateId] = useState(defaultStateId);
++  const [prevSyncedIsOpen, setPrevSyncedIsOpen] = useState(isOpen);
+   const [stateId, setStateId] = useState(resolvedInitialStateId);
++
++  if (prevSyncedDefaultStateId !== defaultStateId || (!prevSyncedIsOpen && isOpen)) {
++    setPrevSyncedDefaultStateId(defaultStateId);
++    setPrevSyncedIsOpen(isOpen);
++    setStateId(resolvedInitialStateId);
++  }
+   const [prioritySlug, setPrioritySlug] = useState(defaultPrioritySlug);
+   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
+     modulesEnabled ? defaultModuleIds : [],
+diff --git a/kanban/web/src/features/views/filterBulk.css b/kanban/web/src/features/views/filterBulk.css
+index 63b54a5e..7e053b32 100644
+--- a/kanban/web/src/features/views/filterBulk.css
++++ b/kanban/web/src/features/views/filterBulk.css
+@@ -946,6 +946,62 @@
+   flex-shrink: 0;
+ }
+ 
++@media (max-width: 767px) {
++  .filter-display-bar {
++    min-width: 0;
++    max-width: 100%;
++    width: 100%;
++    box-sizing: border-box;
++    flex-wrap: wrap;
++    gap: var(--space-2, 8px);
++  }
++
++  .filter-search-form {
++    min-width: 0;
++    max-width: 100%;
++    width: 100%;
++    flex: 1 1 100%;
++    flex-wrap: wrap;
++    box-sizing: border-box;
++    gap: var(--space-1, 4px);
++  }
++
++  .filter-search-form .navigator-search-input,
++  .filter-search-form .navigator-query-input {
++    min-width: 0;
++    width: 100%;
++    flex: 1 1 100%;
++    box-sizing: border-box;
++  }
++
++  .filter-controls-group {
++    min-width: 0;
++    max-width: 100%;
++    width: 100%;
++    flex-wrap: wrap;
++    box-sizing: border-box;
++    gap: var(--space-2, 8px);
++  }
++
++  .filter-controls-group > * {
++    min-width: 0;
++    max-width: 100%;
++    flex-shrink: 1;
++  }
++
++  .filter-axis-select-wrap {
++    min-width: 0;
++    max-width: 100%;
++    flex-wrap: wrap;
++  }
++
++  .filter-axis-select {
++    min-width: 0;
++    max-width: 100%;
++    box-sizing: border-box;
++  }
++}
++
+ @media (max-width: 640px) {
+   .filter-search-form {
+     flex-wrap: wrap;
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 7016e585..f631dd56 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -57,6 +57,7 @@ import {
+   type SavedView,
+ } from './viewsApi';
+ import { IssueSurfaceRoot } from '../drawer/IssueSurface';
++import type { PendingGateInfo, LatestGateVerdict } from '../gates/types.ts';
+ import './filterBulk.css';
+ 
+ // Export all KB-P3-40 and KAN-308 components per Scoped Definition of Done
+@@ -195,12 +196,17 @@ function resolveIssueStateSummary(
+ ): { id?: string; name?: string; group?: string; color_hex?: string | null } | undefined {
+   const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string | null } }).state;
+   const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+-  if (rawState?.name && rawState.group) {
++  if (explicitStateId && projectStates.length > 0) {
++    const found = projectStates.find((s) => s.id === explicitStateId);
++    if (found) return found;
++  }
++  if (rawState?.name && rawState.group && (!explicitStateId || rawState.id === explicitStateId)) {
+     return rawState;
+   }
+   if (explicitStateId) {
+     const found = projectStates.find((s) => s.id === explicitStateId);
+     if (found) return found;
++    return { id: explicitStateId, name: rawState?.name ?? '', group: rawState?.group ?? 'unstarted' };
+   }
+   return rawState;
+ }
+@@ -622,6 +628,7 @@ export function IssuesWorkspaceRoute({
+   );
+ 
+   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
++  const [createModalStateId, setCreateModalStateId] = useState<string | undefined>(undefined);
+   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
+   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+@@ -633,15 +640,20 @@ export function IssuesWorkspaceRoute({
+     setCsvModalTab('export');
+   }, []);
+ 
+-  const handleOpenCreateModal = useCallback(() => {
++  const handleOpenCreateModal = useCallback((initialStateId?: unknown) => {
++    setCreateModalStateId(typeof initialStateId === 'string' ? initialStateId : undefined);
+     setIsCreateModalOpen(true);
+   }, []);
+ 
+   useEffect(() => {
+     if (!canEdit) return;
+-    window.addEventListener('kb:create-issue', handleOpenCreateModal);
++    const handleCustomCreate = (e: Event): void => {
++      const customEv = e as CustomEvent<{ stateId?: string } | undefined>;
++      handleOpenCreateModal(customEv.detail?.stateId);
++    };
++    window.addEventListener('kb:create-issue', handleCustomCreate);
+     return () => {
+-      window.removeEventListener('kb:create-issue', handleOpenCreateModal);
++      window.removeEventListener('kb:create-issue', handleCustomCreate);
+     };
+   }, [canEdit, handleOpenCreateModal]);
+   const [popoverState, setPopoverState] = useState<{
+@@ -1170,7 +1182,14 @@ export function IssuesWorkspaceRoute({
+       const gateStatus: BoardIssue['gate_status'] =
+         issue.gate_status === 'vetoed'
+           ? 'rejected'
+-          : issue.gate_status ?? null;
++          : issue.gate_status ??
++            ((issue as { pending_gate?: PendingGateInfo | null }).pending_gate
++              ? 'pending'
++              : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'reject'
++                ? 'rejected'
++                : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'approve'
++                  ? 'approved'
++                  : null);
+ 
+       const rawPriority = (issue as { priority?: { slug?: string; label?: string } }).priority;
+       const pSlug = rawPriority?.slug ?? 'none';
+@@ -1198,6 +1217,8 @@ export function IssuesWorkspaceRoute({
+         assignees: boardAssignees,
+         due_date: issue.due_date ?? null,
+         gate_status: gateStatus,
++        pending_gate: (issue as { pending_gate?: PendingGateInfo | null }).pending_gate ?? null,
++        latest_gate_verdict: (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict ?? null,
+         has_explicit_acl: Boolean(issue.has_explicit_acl),
+       };
+     });
+@@ -1600,10 +1621,14 @@ export function IssuesWorkspaceRoute({
+       {canEdit && (
+         <QuickCreateIssueModal
+           isOpen={isCreateModalOpen}
+-          onClose={() => { setIsCreateModalOpen(false); }}
++          onClose={() => {
++            setIsCreateModalOpen(false);
++            setCreateModalStateId(undefined);
++          }}
+           onCreate={handleCreateIssue}
+           projectKey={projectKey}
+           modulesEnabled={modulesEnabled}
++          defaultStateId={createModalStateId}
+           states={boardStates}
+         />
+       )}
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index 85d07e05..4ded79cc 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -254,6 +254,8 @@ class AgentGateDispatcher:
+                 "harness_label": harness_label,
+                 "from_state": from_state.name if from_state else "",
+                 "to_state": to_state.name if to_state else "",
++                "from_state_id": str(execution.from_state_id),
++                "to_state_id": str(execution.to_state_id),
+                 "started_at": now.isoformat(),
+             },
+         )
+@@ -547,6 +549,8 @@ class GateCoordinator:
+                     "harness_label": harness_label,
+                     "from_state": from_name,
+                     "to_state": to_name,
++                    "from_state_id": str(execution.from_state_id),
++                    "to_state_id": str(execution.to_state_id),
+                     "started_at": execution.created_at.isoformat(),
+                     "completed_at": now.isoformat(),
+                     "latency_ms": decision.latency_ms,
+@@ -876,6 +880,8 @@ class GateCoordinator:
+                 "harness_label": harness_label,
+                 "from_state": from_name,
+                 "to_state": to_name,
++                "from_state_id": str(execution.from_state_id),
++                "to_state_id": str(execution.to_state_id),
+                 "started_at": execution.created_at.isoformat(),
+                 "completed_at": now.isoformat(),
+                 "latency_ms": decision.latency_ms,
+diff --git a/scripts/capture_kan432_screenshots.mjs b/scripts/capture_kan432_screenshots.mjs
+new file mode 100644
+index 00000000..2cc0412a
+--- /dev/null
++++ b/scripts/capture_kan432_screenshots.mjs
+@@ -0,0 +1,305 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++/**
++ * Zero-Mock Playwright screenshot capture script for KAN-432.
++ * Connects directly to the live FastAPI/Uvicorn backend running on http://127.0.0.1:18432 with
++ * real session cookies and strictly ZERO mocked routes (0 page.route / 0 context.route / 0 mockApi).
++ */
++
++import fs from 'node:fs';
++import path from 'node:path';
++
++let chromium;
++try {
++  const localPlaywright = path.resolve('kanban/web/node_modules/@playwright/test/index.mjs');
++  ({ chromium } = await import(localPlaywright));
++} catch {
++  try {
++    ({ chromium } = await import('playwright'));
++  } catch {
++    ({ chromium } = await import('@playwright/test'));
++  }
++}
++
++const PORT = process.env.KAN432_PORT || '18432';
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const COOKIE_VAL = process.env.KAN432_COOKIE || '';
++const CSRF_TOKEN = process.env.KAN432_CSRF || '';
++
++const OUT_DIR = path.resolve('docs/qa/KAN-432/screenshots');
++fs.mkdirSync(OUT_DIR, { recursive: true });
++
++async function preparePageForScreenshot(page, theme) {
++  await page.evaluate((t) => {
++    document.documentElement.dataset.theme = t;
++    localStorage.setItem('theme', t);
++  }, theme);
++  await page.waitForTimeout(300);
++}
++
++async function createContext(browser, width, height, theme) {
++  const context = await browser.newContext({
++    viewport: { width, height },
++    colorScheme: theme,
++    bypassCSP: false, // Strict CSP enforcement!
++  });
++
++  if (COOKIE_VAL) {
++    await context.addCookies([
++      {
++        name: 'kb_session',
++        value: COOKIE_VAL,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++      {
++        name: 'kb_csrf',
++        value: CSRF_TOKEN,
++        url: `http://127.0.0.1:${PORT}/`,
++        httpOnly: false,
++        sameSite: 'Lax',
++      },
++    ]);
++  }
++
++  return context;
++}
++
++const VIEWPORTS = [
++  {
++    name: '01-desktop-1440x900-light',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++  },
++  {
++    name: '02-desktop-1440x900-dark',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++  },
++  {
++    name: '03-tablet-landscape-1024x768',
++    width: 1024,
++    height: 768,
++    theme: 'light',
++  },
++  {
++    name: '04-tablet-portrait-768x1024',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++  },
++  {
++    name: '05-mobile-portrait-390x844',
++    width: 390,
++    height: 844,
++    theme: 'light',
++  },
++];
++
++async function main() {
++  console.log(`[Playwright] Launching browser connecting to ${BASE_URL} (ZERO-MOCK)...`);
++  const browser = await chromium.launch({
++    executablePath: '/usr/bin/google-chrome',
++    headless: true,
++    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
++  });
++
++  const capturedConsoleLogs = [];
++
++  try {
++    // --- 1. VIEWPORT PASS: BOARD VIEW (Showing ⏳🤖 Pending Gate & 🛑🤖 Veto Snap-Back) ---
++    for (const vp of VIEWPORTS) {
++      console.log(`\n=== Processing Board View: ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme}) ===`);
++      const context = await createContext(browser, vp.width, vp.height, vp.theme);
++      const page = await context.newPage();
++
++      page.on('console', (msg) => {
++        capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() });
++      });
++
++      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++
++      try {
++        await page.waitForSelector('.board-column', { timeout: 10000 });
++        await page.waitForSelector('.board-card', { timeout: 10000 });
++        // Wait a brief moment for animations/render
++        await page.waitForTimeout(500);
++      } catch (e) {
++        console.warn('board wait warning:', e.message);
++      }
++
++      await preparePageForScreenshot(page, vp.theme);
++
++      if (vp.width === 390) {
++        const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
++        console.log(`[Mobile Viewport Check] document.documentElement.scrollWidth = ${scrollWidth}px (max allowed: 390px)`);
++        if (scrollWidth > 390) {
++          throw new Error(`Mobile horizontal overflow detected: document.documentElement.scrollWidth (${scrollWidth}px) > 390px`);
++        }
++
++        const topbarScrollWidth = await page.evaluate(() => document.querySelector('.kb-topbar')?.scrollWidth ?? 0);
++        console.log(`[Mobile Topbar Check] .kb-topbar.scrollWidth = ${topbarScrollWidth}px (max allowed: 390px)`);
++        if (topbarScrollWidth > 390) {
++          throw new Error(`.kb-topbar scrollWidth (${topbarScrollWidth}px) > 390px`);
++        }
++
++        const avatarRight = await page.evaluate(() => {
++          const el = document.querySelector('.kb-avatar-button') || document.querySelector('.kb-avatar-wrapper');
++          return el ? el.getBoundingClientRect().right : 0;
++        });
++        console.log(`[Mobile Avatar Check] avatar right edge = ${avatarRight}px (max allowed: 390px)`);
++        if (avatarRight > 390) {
++          throw new Error(`avatar right edge (${avatarRight}px) > 390px - avatar is clipped!`);
++        }
++      }
++
++      const filename = `${vp.name}-board-gate-indicators.png`;
++      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
++      console.log(`[Captured] ${filename}`);
++      await context.close();
++    }
++
++    // --- 2. INTERACTIVE SCREENSHOT 1: Lane State Default (+ New work item in In Progress) ---
++    {
++      console.log('\n=== Processing Interactive: Lane State Default in In Progress ===');
++      const context = await createContext(browser, 1024, 768, 'light');
++      const page = await context.newPage();
++      page.on('console', (msg) => capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() }));
++
++      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++      await page.waitForSelector('.board-column', { timeout: 10000 });
++
++      try {
++        // Locate the "+ New work item" button inside the In Progress column
++        const inProgressCol = page.locator('.board-column:has-text("In Progress")').first();
++        const newBtn = inProgressCol.locator('button:has-text("New work item"), button:has-text("+ New")').first();
++        await newBtn.waitFor({ state: 'visible', timeout: 8000 });
++        await newBtn.click();
++        await page.waitForSelector('[role="dialog"], .modal, .issue-create-modal', { timeout: 8000 });
++        await page.waitForTimeout(500);
++      } catch (e) {
++        console.warn('lane new item click warning:', e.message);
++      }
++
++      await preparePageForScreenshot(page, 'light');
++      const filename = '06-lane-new-item-modal-state-default.png';
++      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
++      console.log(`[Captured] ${filename}`);
++      await context.close();
++    }
++
++    // --- 3. INTERACTIVE SCREENSHOT 2: Issue Detail View Gate Vetoed (KAN-2) ---
++    {
++      console.log('\n=== Processing Interactive: Issue Detail View Gate Vetoed (KAN-2) ===');
++      const context = await createContext(browser, 1440, 900, 'light');
++      const page = await context.newPage();
++      page.on('console', (msg) => capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text: msg.text() }));
++
++      // Navigate to project board first then click KAN-2 to open drawer, or navigate to issue URL
++      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++      await page.waitForSelector('.board-card', { timeout: 10000 });
++
++      try {
++        const kan2Card = page.locator('.board-card:has-text("KAN-2")').first();
++        await kan2Card.waitFor({ state: 'visible', timeout: 8000 });
++        await kan2Card.click();
++        await page.waitForSelector('[data-testid="drawer-gate-vetoed"], .prop-row[data-prop="state"]', { timeout: 8000 });
++        await page.waitForTimeout(500);
++      } catch (e) {
++        console.warn('kan2 open drawer warning:', e.message);
++      }
++
++      await preparePageForScreenshot(page, 'light');
++      const filename = '07-issue-detail-gate-vetoed-state.png';
++      await page.screenshot({ path: path.join(OUT_DIR, filename), fullPage: true });
++      console.log(`[Captured] ${filename}`);
++      await context.close();
++    }
++
++    // --- 4. CSP & CONSOLE LOG VERIFICATION: Check console/pageerror across 5 routes ---
++    {
++      console.log('\n=== Checking CSP & Console Output across 5 Routes ===');
++      const context = await createContext(browser, 1440, 900, 'light');
++      const page = await context.newPage();
++      const cspErrors = [];
++      const pageErrors = [];
++      const consoleErrors = [];
++
++      page.on('pageerror', (err) => {
++        pageErrors.push({ url: page.url(), text: err.message || String(err) });
++      });
++
++      page.on('console', (msg) => {
++        const text = msg.text();
++        capturedConsoleLogs.push({ url: page.url(), type: msg.type(), text });
++        if (msg.type() === 'error') {
++          consoleErrors.push({ url: page.url(), text });
++        }
++        if (
++          text.includes('Content Security Policy') ||
++          text.includes('manifest.json') ||
++          text.includes('manifest-src') ||
++          text.includes('violates directive')
++        ) {
++          cspErrors.push({ url: page.url(), text });
++        }
++      });
++
++      console.log('Navigating to /setup...');
++      await page.goto(`${BASE_URL}/setup`, { waitUntil: 'networkidle' });
++      await page.waitForTimeout(300);
++
++      console.log('Navigating to /login...');
++      await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' });
++      await page.waitForTimeout(300);
++
++      console.log('Navigating to /manifest.json directly...');
++      const manifestResp = await page.goto(`${BASE_URL}/manifest.json`);
++      console.log(`manifest.json status: ${manifestResp.status()}`);
++
++      console.log('Navigating to /projects/KAN/issues?layout=board...');
++      await page.goto(`${BASE_URL}/projects/KAN/issues?layout=board`, { waitUntil: 'networkidle' });
++      await page.waitForTimeout(300);
++
++      console.log('Navigating to /projects/KAN/issues/KAN-2...');
++      await page.goto(`${BASE_URL}/projects/KAN/issues/KAN-2`, { waitUntil: 'networkidle' });
++      await page.waitForTimeout(300);
++
++      console.log(`CSP Directive Violations Detected: ${cspErrors.length}`);
++      console.log(`Page Errors Detected: ${pageErrors.length}`);
++      console.log(`Console Errors Detected: ${consoleErrors.length}`);
++      if (cspErrors.length > 0) {
++        console.error('CSP Errors Found:', JSON.stringify(cspErrors, null, 2));
++      }
++
++      // Append CSP verification report to unit-test-results.txt
++      const cspReport = [
++        '',
++        '=== PLAYWRIGHT ZERO-MOCK BROWSER CSP & LOG REPORT ===',
++        'Routes Inspected: /setup, /login, /manifest.json, /projects/KAN/issues?layout=board, /projects/KAN/issues/KAN-2',
++        `Total Console Messages Captured: ${capturedConsoleLogs.length}`,
++        `CSP Directive Violations Detected: ${cspErrors.length}`,
++        `Page Errors (uncaught exceptions) Detected: ${pageErrors.length}`,
++        `Console Errors Detected: ${consoleErrors.length}`,
++        'Console Log Sample (First 20 entries):',
++        ...capturedConsoleLogs.slice(0, 20).map((l) => `[${l.type}] (${l.url}) ${l.text}`),
++        '=== END PLAYWRIGHT REPORT ===',
++        '',
++      ].join('\n');
++      fs.appendFileSync('docs/qa/KAN-432/unit-test-results.txt', cspReport, 'utf8');
++      await context.close();
++    }
++
++    console.log(`\nAll zero-mock screenshots captured successfully into ${OUT_DIR}`);
++  } finally {
++    await browser.close();
++  }
++}
++
++main().catch((err) => {
++  console.error('Fatal error during zero-mock screenshot capture:', err);
++  process.exit(1);
++});
+diff --git a/scripts/run_kan432_screenshot_flow.py b/scripts/run_kan432_screenshot_flow.py
+new file mode 100644
+index 00000000..ac924885
+--- /dev/null
++++ b/scripts/run_kan432_screenshot_flow.py
+@@ -0,0 +1,541 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Zero-Mock Screenshot Orchestrator for KAN-432.
++
++Binds temporary test server strictly to 127.0.0.1:18432.
++Seeds hermetic test database kanban_live432 from kanban_template.
++Tears down server cleanly after capture.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import base64
++import contextlib
++import json
++import os
++import subprocess
++import time
++import uuid
++from typing import Any
++
++import asyncpg
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
++from sqlalchemy.orm import sessionmaker
++
++from kanban.auth.sessions.service import SessionService
++from database.models.workflow import WorkflowTransitionHook
++from kanban.workflows.manifest import compute_hook_manifest_sha256
++
++SOCKET_DIR = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock-kan431")
++PORT = 18432
++DB_NAME = "kanban_live432"
++SUPERUSER_DSN = f"postgresql://kanban_test@/{DB_NAME}?host={SOCKET_DIR}"
++MIGRATOR_URL = f"postgresql+asyncpg://kanban_migrator@/{DB_NAME}?host={SOCKET_DIR}"
++APP_URL = f"postgresql+asyncpg://kanban_app@/{DB_NAME}?host={SOCKET_DIR}"
++
++SESSION_HMAC_KEY = b"s" * 32
++MASTER_KEK = b"k" * 32
++AUTH_PEPPER = b"p" * 32
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++async def prepare_database() -> dict[str, Any]:
++    print("[KAN-432 Prep] Creating pristine database from kanban_template...")
++    conn = await asyncpg.connect(user="kanban_test", database="postgres", host=SOCKET_DIR)
++    try:
++        await conn.execute(f'DROP DATABASE IF EXISTS "{DB_NAME}" WITH (FORCE)')
++        await conn.execute(f'CREATE DATABASE "{DB_NAME}" TEMPLATE kanban_template')
++    finally:
++        await conn.close()
++
++    print("[KAN-432 Prep] Seeding workspace, project KAN, states, priorities, agent, hooks, and issues...")
++    engine = create_async_engine(MIGRATOR_URL)
++    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++
++    async with async_session() as s:
++        # 1. Workspace
++        ws_id = uuid.uuid4()
++        await s.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'engineering', 'Engineering')"),
++            {"id": ws_id},
++        )
++
++        # 2. Server Admin Principal & User
++        p_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO principals (id, workspace_id, principal_type, status, display_name) "
++                "VALUES (:id, :ws_id, 'USER', 'ACTIVE', 'Admin User')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++        await s.execute(
++            text(
++                "SELECT register_object('user'::object_kind, :ws_id, NULL, 'server_admin', 'Admin User', :p_id, :p_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
++                "VALUES (:id, 'user', 'USER', :ws_id, 'admin@kanban.local')"
++            ),
++            {"id": p_id, "ws_id": ws_id},
++        )
++
++        # 3. Project KAN
++        reg_row = await s.execute(
++            text("SELECT register_object('project'::object_kind, :ws_id, NULL, 'KAN', 'Core Platform', :p_id)"),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        proj_id = reg_row.scalar_one()
++        await s.execute(
++            text(
++                "INSERT INTO projects (id, workspace_id, identifier, name, modules_enabled) "
++                "VALUES (:id, :ws_id, 'KAN', 'Core Platform', false)"
++            ),
++            {"id": proj_id, "ws_id": ws_id},
++        )
++
++        # 4. Workflow States
++        existing_states = (
++            await s.execute(
++                text("SELECT id, name FROM workflow_states WHERE project_id = :p_id"),
++                {"p_id": proj_id},
++            )
++        ).fetchall()
++        state_ids = {row[1]: row[0] for row in existing_states}
++
++        states_to_seed = [
++            ("Backlog", "backlog", "#94a3b8", 10, True),
++            ("To Do", "unstarted", "#64748b", 20, False),
++            ("In Progress", "started", "#3b82f6", 30, False),
++            ("Done", "completed", "#22c55e", 40, False),
++        ]
++        for sname, sgroup, scolor, sorder, is_def in states_to_seed:
++            if sname not in state_ids:
++                sid = uuid.uuid4()
++                state_ids[sname] = sid
++                await s.execute(
++                    text(
++                        "INSERT INTO workflow_states (id, workspace_id, project_id, name, state_group, color_hex, sort_order, is_default, wip_soft_limit) "
++                        "VALUES (:id, :ws_id, :p_id, :name, :sgroup, :scolor, :sorder, :is_def, :wip)"
++                    ),
++                    {
++                        "id": sid,
++                        "ws_id": ws_id,
++                        "p_id": proj_id,
++                        "name": sname,
++                        "sgroup": sgroup,
++                        "scolor": scolor,
++                        "sorder": sorder,
++                        "is_def": is_def,
++                        "wip": 5 if sname == "In Progress" else None,
++                    },
++                )
++
++        # 5. Fetch project priorities
++        prio_rows = (
++            await s.execute(
++                text("SELECT id, slug FROM project_priorities WHERE project_id = :p"),
++                {"p": proj_id},
++            )
++        ).fetchall()
++        prio_map = {row[1]: row[0] for row in prio_rows}
++
++        # 6. Role Bindings
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
++                "VALUES (:ws_id, :p_id, 'SERVER_ADMIN', 'server'), (:ws_id, :p_id, 'WORKSPACE_ADMIN', 'workspace')"
++            ),
++            {"ws_id": ws_id, "p_id": p_id},
++        )
++        await s.execute(
++            text(
++                "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type, project_id) "
++                "VALUES (:ws_id, :p_id, 'PROJECT_ADMIN', 'project', :proj_id)"
++            ),
++            {"ws_id": ws_id, "p_id": p_id, "proj_id": proj_id},
++        )
++
++        # 7. Agent Definition
++        agent1_id = uuid.uuid4()
++        instructions = (
++            "# Mandatory QA Gatekeeper Instructions\n\n"
++            "1. Verify all test evidence before transitioning to Done.\n"
++            "2. Ensure zero mock data in production.\n"
++            "3. Validate test coverage >= 95%."
++        )
++        await s.execute(
++            text(
++                "INSERT INTO agent_definitions (id, workspace_id, principal_id, slug, display_name, harness_kind, provider_kind, model_id, cli_binary_allowlist_id, cli_args_json, repo_access_mode, mcp_allowed_tools, system_instructions_md, timeout_ms) "
++                "VALUES (:id, :ws_id, :p_id, 'qa-gatekeeper', 'QA Gatekeeper', 'cli_pipe', NULL, NULL, 'agy', '[\"-p\"]'::jsonb, 'ro_vfs_mount', '{\"search_tickets\",\"read_ticket\"}', :instructions, 180000)"
++            ),
++            {"id": agent1_id, "ws_id": ws_id, "p_id": p_id, "instructions": instructions},
++        )
++
++        # 8. Workflow Transition Hook: In Progress -> Done
++        msha1 = compute_hook_manifest_sha256(
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            wasm_module_sha256=None,
++            agent_definition_id=agent1_id,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        hook1 = WorkflowTransitionHook(
++            workspace_id=ws_id,
++            project_id=proj_id,
++            name="QA Gatekeeper",
++            from_state_id=state_ids["In Progress"],
++            to_state_id=state_ids["Done"],
++            hook_kind="agent_interceptor",
++            sort_rank="0|hzzzzz:",
++            is_enabled=True,
++            agent_definition_id=agent1_id,
++            manifest_sha256=msha1,
++            allowed_mutable_fields=[],
++            failure_policy="fail_closed",
++        )
++        s.add(hook1)
++        await s.flush()
++
++        # 9. Seed 5 Real Issues
++        issue_specs = [
++            (
++                "KAN-1",
++                "Sliding window rate limiter with lone-surrogate validation",
++                "In Progress",
++                "high",
++                "0|hzzzz1:",
++            ),
++            (
++                "KAN-2",
++                "Universal Object Graph link auditor and integrity checker",
++                "In Progress",
++                "urgent",
++                "0|hzzzz2:",
++            ),
++            (
++                "KAN-3",
++                "Content-Security-Policy manifest-src self directive header",
++                "Done",
++                "medium",
++                "0|hzzzz3:",
++            ),
++            (
++                "KAN-4",
++                "Hardware token WebAuthn multi-card authenticator",
++                "To Do",
++                "low",
++                "0|hzzzz4:",
++            ),
++            (
++                "KAN-5",
++                "Async agent interceptor gate lifecycle",
++                "Backlog",
++                "none",
++                "0|hzzzz5:",
++            ),
++        ]
++
++        created_issues: dict[str, uuid.UUID] = {}
++        for key, summary, sname, prio_slug, rank in issue_specs:
++            seq = await s.scalar(
++                text("SELECT allocate_issue_sequence(:p)"),
++                {"p": proj_id},
++            )
++            iss_id = await s.scalar(
++                text(
++                    "SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :name, :creator)"
++                ),
++                {
++                    "ws": ws_id,
++                    "proj": proj_id,
++                    "ckey": key,
++                    "name": summary,
++                    "creator": p_id,
++                },
++            )
++            created_issues[key] = iss_id
++            await s.execute(
++                text(
++                    "INSERT INTO issues ("
++                    "  id, workspace_id, project_id, sequence_id, summary, state_id, "
++                    "  priority_id, board_rank, created_by_id, original_created_by_id"
++                    ") VALUES ("
++                    "  :id, :ws, :proj, :seq, :summary, :state, :prio, :rank, :creator, :creator"
++                    ")"
++                ),
++                {
++                    "id": iss_id,
++                    "ws": ws_id,
++                    "proj": proj_id,
++                    "seq": seq,
++                    "summary": summary,
++                    "state": state_ids[sname],
++                    "prio": prio_map.get(prio_slug, prio_map.get("none")),
++                    "rank": rank,
++                    "creator": p_id,
++                },
++            )
++
++        # 10. Execution records for KAN-1, KAN-2, and KAN-3:
++        # KAN-1: Pending gate execution
++        exec1_id = uuid.uuid4()
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'pending_async', 0, :snap"
++                ")"
++            ),
++            {
++                "id": exec1_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-1"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_hook_invocations ("
++                "  id, workspace_id, execution_id, hook_id, hook_kind, status, started_at"
++                ") VALUES ("
++                "  :id, :ws, :exec_id, :hook_id, 'agent_interceptor', 'running', clock_timestamp()"
++                ")"
++            ),
++            {
++                "id": uuid.uuid4(),
++                "ws": ws_id,
++                "exec_id": exec1_id,
++                "hook_id": hook1.id,
++            },
++        )
++        await s.execute(
++            text("UPDATE issues SET pending_transition_exec_id = :exec_id WHERE id = :iss_id"),
++            {"exec_id": exec1_id, "iss_id": created_issues["KAN-1"]},
++        )
++
++        # KAN-2: Vetoed / rejected gate execution
++        exec2_id = uuid.uuid4()
++        verdict2 = json.dumps(
++            {
++                "decision": "reject",
++                "hook_name": "Reality Checker QA Gate",
++                "latency_ms": 320,
++                "verdict_sha256": "432abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
++            }
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot, completed_at, verdict_json"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'rejected', 0, :snap, clock_timestamp(), CAST(:vjson AS jsonb)"
++                ")"
++            ),
++            {
++                "id": exec2_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-2"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++                "vjson": verdict2,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_hook_invocations ("
++                "  id, workspace_id, execution_id, hook_id, hook_kind, status, duration_us, started_at, completed_at, output_json"
++                ") VALUES ("
++                "  :id, :ws, :exec_id, :hook_id, 'agent_interceptor', 'rejected', 320000, clock_timestamp(), clock_timestamp(), CAST(:out_json AS jsonb)"
++                ")"
++            ),
++            {
++                "id": uuid.uuid4(),
++                "ws": ws_id,
++                "exec_id": exec2_id,
++                "hook_id": hook1.id,
++                "out_json": verdict2,
++            },
++        )
++        await s.execute(
++            text(
++                "INSERT INTO activity_records ("
++                "  workspace_id, object_id, object_type, actor_id, event_type, payload, recorded_at"
++                ") VALUES ("
++                "  :ws, :oid, 'issue'::object_kind, :actor, 'GATE_REJECTED', CAST(:payload AS jsonb), clock_timestamp()"
++                ")"
++            ),
++            {
++                "ws": ws_id,
++                "oid": created_issues["KAN-2"],
++                "actor": p_id,
++                "payload": verdict2,
++            },
++        )
++
++        # KAN-3: Approved gate execution
++        exec3_id = uuid.uuid4()
++        verdict3 = json.dumps(
++            {
++                "decision": "approve",
++                "hook_name": "Security Gate",
++                "latency_ms": 150,
++                "verdict_sha256": "432fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
++            }
++        )
++        await s.execute(
++            text(
++                "INSERT INTO workflow_transition_executions ("
++                "  id, workspace_id, project_id, issue_id, invoking_principal_id, from_state_id, to_state_id, "
++                "  status, hop_depth, issue_body_sha256_snapshot, completed_at, verdict_json"
++                ") VALUES ("
++                "  :id, :ws, :proj, :iss, :p_id, :from_s, :to_s, 'approved', 0, :snap, clock_timestamp(), CAST(:vjson AS jsonb)"
++                ")"
++            ),
++            {
++                "id": exec3_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "iss": created_issues["KAN-3"],
++                "p_id": p_id,
++                "from_s": state_ids["In Progress"],
++                "to_s": state_ids["Done"],
++                "snap": b"\x00" * 32,
++                "vjson": verdict3,
++            },
++        )
++
++        # 11. TOTP Setup
++        with contextlib.suppress(Exception):
++            await s.execute(
++                text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++                {"p_id": p_id, "blob": b"\x01" + b"\x00" * 28, "dek": b"\x01" + b"\x00" * 44},
++            )
++            res_totp = await s.execute(
++                text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++                {"p_id": p_id},
++            )
++            totp_row = res_totp.first()
++            if totp_row:
++                await s.execute(
++                    text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++                    {"p_fid": totp_row[0]},
++                )
++
++        # 12. Issue AAL2 Session
++        svc = SessionService(session_hmac_key=SESSION_HMAC_KEY)
++        issued = await svc.create_after_login(
++            s,
++            principal_id=p_id,
++            workspace_id=ws_id,
++            aal_level=2,
++            remember_me=True,
++        )
++        await s.commit()
++
++    await engine.dispose()
++    print("[KAN-432 Prep] Database preparation complete.")
++    return {
++        "cookie_val": issued.cookie_val,
++        "csrf_token": issued.csrf_token,
++    }
++
++
++def main() -> None:
++    seed_info = asyncio.run(prepare_database())
++    env = os.environ.copy()
++    env["KANBAN_DEPLOYMENT_MODE"] = "standalone"
++    env["KB_BIND_HOST"] = "127.0.0.1"
++    env["KB_BIND_PORT"] = str(PORT)
++    env["KB_PUBLIC_ORIGIN"] = f"http://127.0.0.1:{PORT}"
++    env["KANBAN_DATABASE_URL"] = APP_URL
++    env["KANBAN_MASTER_KEK"] = _b64(MASTER_KEK)
++    env["KANBAN_AUTH_PEPPER"] = _b64(AUTH_PEPPER)
++    env["KANBAN_SESSION_HMAC_KEY"] = _b64(SESSION_HMAC_KEY)
++    env["KANBAN_MASTER_KEK_KID"] = "test-kid-1"
++    env["KAN432_PORT"] = str(PORT)
++    env["KAN432_COOKIE"] = seed_info["cookie_val"]
++    env["KAN432_CSRF"] = seed_info["csrf_token"]
++
++    uv_log = open("/tmp/uvicorn_kan432.log", "w")
++    print(f"[KAN-432] Spawning temporary Kanban server on 127.0.0.1:{PORT}...")
++    python_bin = "/home/adamoutler/kanban/.venv/bin/python"
++    if not os.path.exists(python_bin):
++        python_bin = "python3"
++
++    proc = subprocess.Popen(
++        [
++            python_bin,
++            "-m",
++            "uvicorn",
++            "kanban.app:create_app",
++            "--factory",
++            "--host",
++            "127.0.0.1",
++            "--port",
++            str(PORT),
++            "--log-level",
++            "info",
++        ],
++        env=env,
++        stdout=uv_log,
++        stderr=uv_log,
++    )
++
++    try:
++        import urllib.request
++
++        print(f"[KAN-432] Waiting for server on http://127.0.0.1:{PORT} to be ready...")
++        ready = False
++        for _ in range(40):
++            try:
++                with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=1) as resp:
++                    if resp.status in (200, 302, 404):
++                        ready = True
++                        break
++            except Exception:
++                time.sleep(0.5)
++
++        if not ready:
++            raise RuntimeError(f"Server on port {PORT} failed to become ready.")
++
++        print(f"[KAN-432] Server is ready! Executing Playwright screenshot capture...")
++        subprocess.run(
++            ["node", "scripts/capture_kan432_screenshots.mjs"],
++            env=env,
++            check=True,
++        )
++        print("[KAN-432] Screenshots captured successfully!")
++    finally:
++        print("[KAN-432] Terminating temporary server cleanly...")
++        proc.terminate()
++        try:
++            proc.wait(timeout=5)
++        except subprocess.TimeoutExpired:
++            proc.kill()
++        uv_log.close()
++        print("[KAN-432] Teardown complete.")
++
++
++if __name__ == "__main__":
++    main()

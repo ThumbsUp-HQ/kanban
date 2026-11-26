@@ -21,7 +21,8 @@ import { WebSudoModalHost } from '../components/help/WebSudoModalHost';
 import { registerShellPanel, ShellPanelsProvider } from './shellPanels';
 import { registerShortcut } from './shortcuts';
 import { RealtimeStatus } from '../api/RealtimeStatus';
-import { useRealtimeSubscription } from '../realtime';
+import { useRealtimeSubscription, useRealtimeClient } from '../realtime';
+import * as gates from '../features/gates';
 import { type AccessManifestData } from './HeaderPills';
 import { type SystemStatus } from './useSystemStatus';
 import { IssueSurface } from '../features/drawer/IssueSurface';
@@ -31,7 +32,7 @@ import { AccessInspectorHost } from '../features/access/useAccessInspector';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { HelpDrawer } from '../features/docs-center/HelpDrawer';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 import { apiFetch } from '../api/client';
 import {
@@ -148,6 +149,14 @@ export function AppShell({
     isAuthReady && projectId ? `project:${projectId}` : null,
     isAuthReady && sessionGuard.workspaceId ? `workspace:${sessionGuard.workspaceId}` : null,
   ]);
+  const realtimeClient = useRealtimeClient();
+  const queryClient = useQueryClient();
+  gates.useGateRealtimeSync({
+    client: realtimeClient,
+    queryClient,
+    projectKey: activeProjectKey,
+  });
+
   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
   const computedSection =
     currentSection && currentSection !== 'Work Items'

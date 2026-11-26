@@ -406,6 +406,9 @@ export async function apiFetch<P extends keyof paths, M extends Method>(
     );
   }
   const parsed = (await response.json()) as ResponseBody<P, M>;
+  if (parsed !== null && typeof parsed === 'object' && !('status_code' in parsed)) {
+    (parsed as Record<string, unknown>).status_code = response.status;
+  }
   if (resolved === '/api/v1/auth/logout') {
     setCsrfToken(null);
   } else if (

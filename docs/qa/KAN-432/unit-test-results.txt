@@ -1,0 +1,92 @@
+=== BACKEND PYTEST SECURITY & HEADERS COVERAGE ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 285 items
+
+kanban/tests/security/test_access_manifest.py ....                       [  1%]
+kanban/tests/security/test_admin_routes_protected.py ..                  [  2%]
+kanban/tests/security/test_ai_provider_kek_enforcement.py ....           [  3%]
+kanban/tests/security/test_audit_crypto_shred.py ....                    [  4%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py ................ [ 10%]
+..                                                                       [ 11%]
+kanban/tests/security/test_client_ip.py ..........                       [ 14%]
+kanban/tests/security/test_credential_boundary_rest.py ...........       [ 18%]
+kanban/tests/security/test_docs_stickies_read_taint.py ...               [ 19%]
+kanban/tests/security/test_envelope.py ........                          [ 22%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py .......               [ 24%]
+kanban/tests/security/test_flow_metrics_dos_bounds.py ...                [ 25%]
+kanban/tests/security/test_headers.py ............                       [ 30%]
+kanban/tests/security/test_importer_push_protection.py ........          [ 32%]
+kanban/tests/security/test_internal_route_isolation.py ....              [ 34%]
+kanban/tests/security/test_keyring_permissions.py ...................... [ 42%]
+....                                                                     [ 43%]
+kanban/tests/security/test_keys.py ...............                       [ 48%]
+kanban/tests/security/test_mcp_keys.py .........                         [ 51%]
+kanban/tests/security/test_mcp_scopable_keys.py ......                   [ 54%]
+kanban/tests/security/test_permissions_and_obo.py ......                 [ 56%]
+kanban/tests/security/test_push_protection.py ............               [ 60%]
+kanban/tests/security/test_ratelimit_decorator.py ..........             [ 63%]
+kanban/tests/security/test_ratelimit_pg.py ........                      [ 66%]
+kanban/tests/security/test_ratelimit_valkey.py .....                     [ 68%]
+kanban/tests/security/test_read_taint.py .......                         [ 70%]
+kanban/tests/security/test_redteam_attacker_audit.py ...............     [ 76%]
+kanban/tests/security/test_runner_hub_frame_ownership.py ....            [ 77%]
+kanban/tests/security/test_scheduled_backup_kek_guard.py ....            [ 78%]
+kanban/tests/security/test_scrubber.py .........                         [ 82%]
+kanban/tests/security/test_scrubber_entropy.py .....                     [ 83%]
+kanban/tests/security/test_secret_push_protection.py ............        [ 88%]
+kanban/tests/security/test_security_model_contract.py ..........         [ 91%]
+kanban/tests/security/test_shared_ssrf_transport.py ............         [ 95%]
+kanban/tests/security/test_totp_re_enrollment_protection.py ...          [ 96%]
+kanban/tests/security/test_untrusted_content_taint.py .....              [ 98%]
+kanban/tests/security/test_workspace_switch_isolation.py ....            [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                         Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------
+kanban/security/headers.py     214      3     96      3    98%   125, 191, 230
+------------------------------------------------------------------------
+TOTAL                          214      3     96      3    98%
+============================= 285 passed in 41.76s =============================
+
+=== FRONTEND VITEST COVERAGE (>=95% BRANCHES) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/gates/__tests__/useGateRealtimeSync.test.tsx (14 tests) 75ms
+ ✓ src/features/board/BoardColumn.test.tsx (10 tests) 290ms
+ ✓ src/features/board/__tests__/BoardGateLifecycle.test.tsx (14 tests) 664ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1347ms
+
+ Test Files  4 passed (4)
+      Tests  60 passed (60)
+   Duration  2.92s
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.75 |    95.87 |     100 |     100 |                   
+ board             |   99.65 |    96.08 |     100 |     100 |                   
+  BoardColumn.tsx  |     100 |      100 |     100 |     100 |                   
+  BoardView.tsx    |   99.57 |    95.18 |     100 |     100 | ...29,384,395-403 
+ gates             |     100 |    95.67 |     100 |     100 |                   
+  ...altimeSync.ts |     100 |    95.67 |     100 |     100 | ...13,231,300,318 
+-------------------|---------|----------|---------|---------|-------------------
+
+
+=== PLAYWRIGHT ZERO-MOCK BROWSER CSP & LOG REPORT ===
+Routes Inspected: /setup, /login, /manifest.json, /projects/KAN/issues?layout=board, /projects/KAN/issues/KAN-2
+Total Console Messages Captured: 0
+CSP Directive Violations Detected: 0
+Page Errors (uncaught exceptions) Detected: 0
+Console Errors Detected: 0
+Console Log Sample (First 20 entries):
+=== END PLAYWRIGHT REPORT ===

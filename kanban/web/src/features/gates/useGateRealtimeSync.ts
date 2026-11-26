@@ -34,12 +34,58 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
   });
 }
 
-function updateBoardIssueWithGate(
+export interface CachedStateLike {
+  id: string;
+  name?: string | undefined;
+  group?: string | undefined;
+  color_hex?: string | null | undefined;
+}
+
+function resolveSyncedState(
+  issue: BoardIssue,
+  stateId: string,
+  fallbackName?: string,
+  cachedStates?: CachedStateLike[],
+): BoardIssue['state'] {
+  if (cachedStates && cachedStates.length > 0) {
+    const matched = cachedStates.find((s) => s.id === stateId);
+    if (matched) {
+      return {
+        id: matched.id,
+        name: matched.name ?? fallbackName ?? '',
+        group: (matched.group ?? 'started') as NonNullable<BoardIssue['state']>['group'],
+        color_hex: matched.color_hex ?? null,
+      };
+    }
+  }
+  if (issue.state) {
+    return {
+      id: stateId,
+      name: fallbackName ?? (issue.state.id === stateId ? issue.state.name : ''),
+      group: issue.state.id === stateId ? issue.state.group : 'started',
+      color_hex: issue.state.id === stateId ? issue.state.color_hex : null,
+    };
+  }
+  if (fallbackName) {
+    return {
+      id: stateId,
+      name: fallbackName,
+      group: 'started' as NonNullable<BoardIssue['state']>['group'],
+      color_hex: null,
+    };
+  }
+  return undefined;
+}
+
+export function updateBoardIssueWithGate(
   issue: BoardIssue,
   eventType: string,
   p: WorkflowGateEventPayload,
+  cachedStates?: CachedStateLike[],
 ): BoardIssue {
-  if (eventType === 'workflow.gate.pending') {
+  if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
+    const targetStateId = p.to_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
     const pendingGate: PendingGateInfo = {
       execution_id: p.execution_id,
       hook_name: p.hook_name,
@@ -58,11 +104,14 @@ function updateBoardIssueWithGate(
       ...issue,
       gate_status: 'pending',
       pending_gate: pendingGate,
-      state_id: p.to_state_id ?? issue.state_id,
+      state_id: targetStateId,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
-  if (eventType === 'workflow.gate.approved') {
+  if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
+    const targetStateId = p.to_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
     const verdict: LatestGateVerdict = {
       decision: 'approve',
       hook_name: p.hook_name,
@@ -74,12 +123,25 @@ function updateBoardIssueWithGate(
       ...issue,
       gate_status: 'approved',
       pending_gate: null,
-      state_id: p.to_state_id ?? issue.state_id,
+      state_id: targetStateId,
       latest_gate_verdict: verdict,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
-  if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
+  if (
+    eventType === 'issue.transition_rejected' ||
+    eventType === 'workflow.gate.rejected' ||
+    eventType === 'workflow.gate.timed_out' ||
+    eventType === 'workflow.gate.vetoed' ||
+    eventType === 'workflow.gate.failed' ||
+    eventType === 'gate.rejected' ||
+    eventType === 'gate.vetoed' ||
+    eventType === 'gate.failed' ||
+    eventType === 'gate.timed_out'
+  ) {
+    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
     const verdict: LatestGateVerdict = {
       decision: 'reject',
       hook_name: p.hook_name,
@@ -92,17 +154,21 @@ function updateBoardIssueWithGate(
       ...issue,
       gate_status: 'rejected',
       pending_gate: null,
-      state_id: p.from_state_id ?? issue.state_id,
+      state_id: fromStateId,
       latest_gate_verdict: verdict,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
-  if (eventType === 'workflow.gate.cancelled') {
+  if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
+    const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
     return {
       ...issue,
       gate_status: null,
       pending_gate: null,
-      state_id: p.from_state_id ?? issue.state_id,
+      state_id: fromStateId,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
@@ -155,7 +221,7 @@ export function handleGateEvent(
   // 2. Update single issue detail cache
   queryClient.setQueryData<IssueDetail>(qk.issue(issue_key), (oldIssue) => {
     if (!oldIssue) return oldIssue;
-    if (eventType === 'workflow.gate.pending') {
+    if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
       const pendingGate: PendingGateInfo = {
         execution_id: payload.execution_id,
         hook_name: payload.hook_name,
@@ -173,19 +239,21 @@ export function handleGateEvent(
       return {
         ...oldIssue,
         pending_gate: pendingGate,
+        gate_status: 'pending',
         state: payload.to_state
           ? {
-              id: payload.to_state_id,
+              id: payload.to_state_id ?? oldIssue.state?.id,
               name: payload.to_state,
               group: 'started',
             }
           : oldIssue.state,
       };
     }
-    if (eventType === 'workflow.gate.approved') {
+    if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
       return {
         ...oldIssue,
         pending_gate: null,
+        gate_status: 'approved',
         latest_gate_verdict: {
           decision: 'approve',
           hook_name: payload.hook_name,
@@ -195,17 +263,32 @@ export function handleGateEvent(
         },
         state: payload.to_state
           ? {
-              id: payload.to_state_id,
+              id: payload.to_state_id ?? oldIssue.state?.id,
               name: payload.to_state,
               group: 'completed',
             }
           : oldIssue.state,
       };
     }
-    if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
+    if (
+      eventType === 'issue.transition_rejected' ||
+      eventType === 'workflow.gate.rejected' ||
+      eventType === 'workflow.gate.timed_out' ||
+      eventType === 'workflow.gate.vetoed' ||
+      eventType === 'workflow.gate.failed' ||
+      eventType === 'gate.rejected' ||
+      eventType === 'gate.vetoed' ||
+      eventType === 'gate.failed' ||
+      eventType === 'gate.timed_out'
+    ) {
+      const fromStateId =
+        payload.from_state_id ?? oldIssue.pending_gate?.from_state_id ?? oldIssue.state?.id;
+      const fromStateName =
+        payload.from_state ?? oldIssue.pending_gate?.from_state ?? oldIssue.state?.name;
       return {
         ...oldIssue,
         pending_gate: null,
+        gate_status: 'rejected',
         latest_gate_verdict: {
           decision: 'reject',
           hook_name: payload.hook_name,
@@ -214,23 +297,28 @@ export function handleGateEvent(
           audit_comment_id: payload.audit_comment_id,
           completed_at: payload.completed_at ?? new Date().toISOString(),
         },
-        state: payload.from_state
+        state: fromStateId
           ? {
-              id: payload.from_state_id,
-              name: payload.from_state,
+              id: fromStateId,
+              name: fromStateName ?? 'In Progress',
               group: 'started',
             }
           : oldIssue.state,
       };
     }
-    if (eventType === 'workflow.gate.cancelled') {
+    if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
+      const fromStateId =
+        payload.from_state_id ?? oldIssue.pending_gate?.from_state_id ?? oldIssue.state?.id;
+      const fromStateName =
+        payload.from_state ?? oldIssue.pending_gate?.from_state ?? oldIssue.state?.name;
       return {
         ...oldIssue,
         pending_gate: null,
-        state: payload.from_state
+        gate_status: null,
+        state: fromStateId
           ? {
-              id: payload.from_state_id,
-              name: payload.from_state,
+              id: fromStateId,
+              name: fromStateName ?? 'In Progress',
               group: 'started',
             }
           : oldIssue.state,
@@ -242,9 +330,19 @@ export function handleGateEvent(
   // 3. Update Activity Feed Cache (idempotent injection)
   const activityEventMap: Record<string, GateActivityItem['event_type']> = {
     'workflow.gate.approved': 'GATE_APPROVED',
+    'gate.approved': 'GATE_APPROVED',
+    'issue.transition_rejected': 'GATE_REJECTED',
     'workflow.gate.rejected': 'GATE_REJECTED',
+    'gate.rejected': 'GATE_REJECTED',
+    'workflow.gate.vetoed': 'GATE_REJECTED',
+    'gate.vetoed': 'GATE_REJECTED',
+    'workflow.gate.failed': 'GATE_REJECTED',
+    'gate.failed': 'GATE_REJECTED',
     'workflow.gate.timed_out': 'GATE_REJECTED',
+    'gate.timed_out': 'GATE_REJECTED',
     'workflow.gate.cancelled':
+      payload.reason === 'STALE_SNAPSHOT' ? 'GATE_ABORTED_STALE' : 'GATE_REJECTED',
+    'gate.cancelled':
       payload.reason === 'STALE_SNAPSHOT' ? 'GATE_ABORTED_STALE' : 'GATE_REJECTED',
   };
 
@@ -309,11 +407,23 @@ export function handleGateEvent(
   }
 
   // 4. Notifications & Callbacks
-  if (
-    eventType === 'workflow.gate.approved' ||
+  const isVetoOrReject =
+    eventType === 'issue.transition_rejected' ||
     eventType === 'workflow.gate.rejected' ||
     eventType === 'workflow.gate.timed_out' ||
-    eventType === 'workflow.gate.cancelled'
+    eventType === 'workflow.gate.vetoed' ||
+    eventType === 'workflow.gate.failed' ||
+    eventType === 'gate.rejected' ||
+    eventType === 'gate.vetoed' ||
+    eventType === 'gate.failed' ||
+    eventType === 'gate.timed_out';
+
+  if (
+    eventType === 'workflow.gate.approved' ||
+    eventType === 'gate.approved' ||
+    isVetoOrReject ||
+    eventType === 'workflow.gate.cancelled' ||
+    eventType === 'gate.cancelled'
   ) {
     void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
     void queryClient.invalidateQueries({
@@ -321,15 +431,15 @@ export function handleGateEvent(
     });
   }
 
-  if (eventType === 'workflow.gate.pending') {
+  if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
     options.onGatePending?.(payload);
-  } else if (eventType === 'workflow.gate.approved') {
+  } else if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
     options.onGateApproved?.(payload);
-  } else if (eventType === 'workflow.gate.rejected' || eventType === 'workflow.gate.timed_out') {
+  } else if (isVetoOrReject) {
     const msg = `Gate ${payload.hook_name} vetoed transition ${issue_key}`;
     announce(msg);
     options.onGateVetoed?.(payload);
-  } else if (eventType === 'workflow.gate.cancelled') {
+  } else if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
     if (payload.reason === 'STALE_SNAPSHOT') {
       const msg = 'Transition cancelled (ticket changed while gate was running)';
       options.onToast?.(msg);
@@ -358,15 +468,26 @@ export function useGateRealtimeSync({
     if (!client) return undefined;
 
     const handler = (event: RealtimeEvent): void => {
-      if (
-        ![
+      const normalizedType = event.type.toLowerCase();
+      const isGateEvent =
+        normalizedType.startsWith('workflow.gate.') ||
+        normalizedType.startsWith('gate.') ||
+        [
+          'issue.transition_rejected',
           'workflow.gate.pending',
           'workflow.gate.approved',
           'workflow.gate.rejected',
           'workflow.gate.timed_out',
           'workflow.gate.cancelled',
-        ].includes(event.type)
-      ) {
+          'workflow.gate.vetoed',
+          'workflow.gate.failed',
+          'gate.pending',
+          'gate.approved',
+          'gate.rejected',
+          'gate.vetoed',
+          'gate.failed',
+        ].includes(normalizedType);
+      if (!isGateEvent) {
         return;
       }
 

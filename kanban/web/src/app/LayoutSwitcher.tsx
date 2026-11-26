@@ -168,7 +168,10 @@ export function LayoutSwitcher({
           onClick={() => { setMenuOpen(!menuOpen); }}
           className="kb-layout-switcher-mobile-btn"
         >
-          <span>Layout: {activeConfig.label}</span>
+          <span className="kb-layout-switcher-mobile-label">
+            <span className="kb-layout-switcher-prefix">Layout: </span>
+            {activeConfig.label}
+          </span>
           <span aria-hidden="true">▾</span>
         </button>
 

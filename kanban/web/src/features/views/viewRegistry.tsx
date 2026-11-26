@@ -57,6 +57,7 @@ import {
   type SavedView,
 } from './viewsApi';
 import { IssueSurfaceRoot } from '../drawer/IssueSurface';
+import type { PendingGateInfo, LatestGateVerdict } from '../gates/types.ts';
 import './filterBulk.css';
 
 // Export all KB-P3-40 and KAN-308 components per Scoped Definition of Done
@@ -195,12 +196,17 @@ function resolveIssueStateSummary(
 ): { id?: string; name?: string; group?: string; color_hex?: string | null } | undefined {
   const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string | null } }).state;
   const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
-  if (rawState?.name && rawState.group) {
+  if (explicitStateId && projectStates.length > 0) {
+    const found = projectStates.find((s) => s.id === explicitStateId);
+    if (found) return found;
+  }
+  if (rawState?.name && rawState.group && (!explicitStateId || rawState.id === explicitStateId)) {
     return rawState;
   }
   if (explicitStateId) {
     const found = projectStates.find((s) => s.id === explicitStateId);
     if (found) return found;
+    return { id: explicitStateId, name: rawState?.name ?? '', group: rawState?.group ?? 'unstarted' };
   }
   return rawState;
 }
@@ -622,6 +628,7 @@ export function IssuesWorkspaceRoute({
   );
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalStateId, setCreateModalStateId] = useState<string | undefined>(undefined);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
@@ -633,15 +640,20 @@ export function IssuesWorkspaceRoute({
     setCsvModalTab('export');
   }, []);
 
-  const handleOpenCreateModal = useCallback(() => {
+  const handleOpenCreateModal = useCallback((initialStateId?: unknown) => {
+    setCreateModalStateId(typeof initialStateId === 'string' ? initialStateId : undefined);
     setIsCreateModalOpen(true);
   }, []);
 
   useEffect(() => {
     if (!canEdit) return;
-    window.addEventListener('kb:create-issue', handleOpenCreateModal);
+    const handleCustomCreate = (e: Event): void => {
+      const customEv = e as CustomEvent<{ stateId?: string } | undefined>;
+      handleOpenCreateModal(customEv.detail?.stateId);
+    };
+    window.addEventListener('kb:create-issue', handleCustomCreate);
     return () => {
-      window.removeEventListener('kb:create-issue', handleOpenCreateModal);
+      window.removeEventListener('kb:create-issue', handleCustomCreate);
     };
   }, [canEdit, handleOpenCreateModal]);
   const [popoverState, setPopoverState] = useState<{
@@ -1170,7 +1182,14 @@ export function IssuesWorkspaceRoute({
       const gateStatus: BoardIssue['gate_status'] =
         issue.gate_status === 'vetoed'
           ? 'rejected'
-          : issue.gate_status ?? null;
+          : issue.gate_status ??
+            ((issue as { pending_gate?: PendingGateInfo | null }).pending_gate
+              ? 'pending'
+              : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'reject'
+                ? 'rejected'
+                : (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict?.decision === 'approve'
+                  ? 'approved'
+                  : null);
 
       const rawPriority = (issue as { priority?: { slug?: string; label?: string } }).priority;
       const pSlug = rawPriority?.slug ?? 'none';
@@ -1198,6 +1217,8 @@ export function IssuesWorkspaceRoute({
         assignees: boardAssignees,
         due_date: issue.due_date ?? null,
         gate_status: gateStatus,
+        pending_gate: (issue as { pending_gate?: PendingGateInfo | null }).pending_gate ?? null,
+        latest_gate_verdict: (issue as { latest_gate_verdict?: LatestGateVerdict | null }).latest_gate_verdict ?? null,
         has_explicit_acl: Boolean(issue.has_explicit_acl),
       };
     });
@@ -1600,10 +1621,14 @@ export function IssuesWorkspaceRoute({
       {canEdit && (
         <QuickCreateIssueModal
           isOpen={isCreateModalOpen}
-          onClose={() => { setIsCreateModalOpen(false); }}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setCreateModalStateId(undefined);
+          }}
           onCreate={handleCreateIssue}
           projectKey={projectKey}
           modulesEnabled={modulesEnabled}
+          defaultStateId={createModalStateId}
           states={boardStates}
         />
       )}

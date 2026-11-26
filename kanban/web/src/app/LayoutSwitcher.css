@@ -75,6 +75,18 @@
   gap: 6px;
 }
 
+@media (max-width: 640px) {
+  .kb-layout-switcher-prefix {
+    display: none;
+  }
+
+  .kb-layout-switcher-mobile-btn {
+    padding: 2px 6px;
+    font-size: 11px;
+    gap: 4px;
+  }
+}
+
 .kb-layout-switcher-menu {
   position: absolute;
   top: calc(100% + 4px);

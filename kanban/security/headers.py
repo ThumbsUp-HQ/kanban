@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 CSP_POLICY: Final[str] = (
     "default-src 'none'; "
+    "manifest-src 'self'; "
     "script-src 'self'; "
     "worker-src 'self'; "
     "style-src 'self'; "

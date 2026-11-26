@@ -182,6 +182,12 @@ export interface IssueMoveResponse {
     soft_limit: number;
     resulting_count: number;
   } | null;
+  gate_status?: 'pending' | 'rejected' | 'approved' | null;
+  execution_id?: string | null;
+  hook_name?: string | null;
+  from_state_id?: string | null;
+  to_state_id?: string | null;
+  status_code?: number;
 }
 
 /**
