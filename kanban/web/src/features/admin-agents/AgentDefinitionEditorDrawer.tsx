@@ -331,6 +331,16 @@ function AgentDefinitionEditorContent({
         <div className="kb-form-group">
           <label htmlFor="agent-slug-input" className="kb-form-label">
             Agent Slug (Permanent Handle)
+            <FieldHelpHint
+              title="Agent Slug (Permanent Handle)"
+              fieldKey="agent_slug"
+              summary="Immutable lowercase @handle used for @mentions and immutable audit trails."
+              defaultValue="None (Required on creation)"
+              example="reality-checker"
+              caution="Permanent once created; cannot be edited later."
+              docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+              testId="agent-slug-help"
+            />
           </label>
           <input
             id="agent-slug-input"
@@ -589,7 +599,26 @@ function AgentDefinitionEditorContent({
           </div>
 
           <div className="kb-form-group">
-            <label className="kb-form-label">Allowed MCP Agent Tools</label>
+            <label className="kb-form-label">
+              Allowed MCP Agent Tools
+              <FieldHelpHint
+                title="Allowed MCP Agent Tools"
+                fieldKey="agent_mcp_allowed_tools"
+                summary="Least-privilege MCP tools this agent is permitted to invoke."
+                defaultValue="All 4 read-only tools (search_tickets, read_ticket, search_knowledge, read_doc)"
+                validValues={[
+                  'search_tickets: Search project work items',
+                  'read_ticket: Read full work item context',
+                  'search_knowledge: Search workspace docs',
+                  'read_doc: Read full doc content',
+                ]}
+                docHref="/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio"
+                testId="agent-mcp-tools-help"
+              />
+            </label>
+            <span className="kb-form-hint">
+              Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).
+            </span>
             <div className="kb-agent-tools-grid">
               {ALL_MCP_TOOLS.map((tool) => (
                 <label key={tool} className="kb-agent-tool-item">
