@@ -1,0 +1,191 @@
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 1ff8320e..0c4a6816 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -18,6 +18,11 @@
+   flex-wrap: wrap;
+ }
+ 
++.kb-mcp-studio-header > div:first-child {
++  flex: 1 1 320px;
++  min-width: 0;
++}
++
+ .kb-mcp-studio-title {
+   font-size: 1.75rem;
+   font-weight: 600;
+@@ -96,10 +101,15 @@
+   margin: 0 0 16px;
+   display: flex;
+   align-items: center;
+-  gap: 10px;
++  gap: 6px;
+   color: var(--kb-color-text-primary, var(--fg-primary));
+ }
+ 
++.kb-mcp-section-title .field-help-hint {
++  margin: 0;
++  margin-left: 0;
++}
++
+ .kb-mcp-table-wrap {
+   overflow-x: auto;
+   width: 100%;
+@@ -621,6 +631,13 @@
+   align-items: center;
+   gap: 8px;
+   flex-wrap: wrap;
++  flex-shrink: 0;
++  max-width: 100%;
++}
++
++.kb-mcp-header-actions .kb-studio-doc-link {
++  min-height: 38px;
++  box-sizing: border-box;
+ }
+ 
+ .kb-mcp-connect-btn {
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+index 08ceb8c7..4c0bc8b4 100644
+--- a/kanban/web/src/features/settings/McpUnifiedStudio.tsx
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -4,6 +4,7 @@
+ import React, { useState, useEffect, useCallback, useRef, type JSX } from 'react';
+ import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { useAal2DirtyKeepalive } from '../../components/help/WebSudoModalHost';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { McpAccessStudio } from './McpAccessStudio';
+@@ -253,19 +254,32 @@ export function WorkloadFederationSection({
+         <div>
+           <h2 className="kb-mcp-section-title">
+             <span>Workload Identity Federation (RFC 8693)</span>
++            <FieldHelpHint
++              title="Workload Identity Federation"
++              summary="Enables keyless OIDC JWT token exchange (RFC 8693) for CI/CD pipelines (GitHub Actions, GitLab CI) and Kubernetes workloads to acquire scoped MCP credentials without long-lived static secrets."
++              docHref="/docs/zero-trust-service-auth-and-workload-oidc"
++              testId="workload-federation-header-help"
++            />
+           </h2>
+           <p className="kb-mcp-studio-subtitle">
+             Configure headless CI/CD runners (GitHub Actions, GitLab CI, Kubernetes) to exchange OIDC JWT tokens for scoped MCP credentials without long-lived static secrets.
+           </p>
+         </div>
+-        <button
+-          type="button"
+-          className="kb-mcp-studio-mint-btn"
+-          data-testid="add-workload-policy-btn"
+-          onClick={handleOpenCreate}
+-        >
+-          + Add Workload Policy
+-        </button>
++        <div className="kb-mcp-header-actions">
++          <StudioDocLink
++            href="/docs/zero-trust-service-auth-and-workload-oidc"
++            title="Workload Identity Federation Documentation"
++            testId="workload-federation-doc-link"
++          />
++          <button
++            type="button"
++            className="kb-mcp-studio-mint-btn"
++            data-testid="add-workload-policy-btn"
++            onClick={handleOpenCreate}
++          >
++            + Add Workload Policy
++          </button>
++        </div>
+       </div>
+ 
+       {error && (
+diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+index 591ae2ea..9414e9b6 100644
+--- a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
+@@ -2,7 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+ import React from 'react';
+ import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
+ import { McpAccessStudio } from '../McpAccessStudio';
+@@ -1154,4 +1154,77 @@ describe('WorkloadFederationSection (KAN-74)', () => {
+     });
+     unmount();
+   });
++
++  it('renders StudioDocLink and header FieldHelpHint in Light and Dark themes without breaking Add Workload Policy (KAN-515)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if ((path as string) === '/api/v1/admin/workload-identities') {
++        return [];
++      }
++      return undefined;
++    });
++
++    const { container, unmount } = render(<WorkloadFederationSection isAdmin={true} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
++    });
++
++    // 1. Verify StudioDocLink rendering, href, title, and label
++    const docLink = screen.getByTestId('workload-federation-doc-link');
++    expect(docLink).toBeDefined();
++    expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
++    expect(docLink.getAttribute('aria-label')).toBe('Workload Identity Federation Documentation');
++    expect(docLink.textContent).toContain('Documentation ->');
++
++    // 2. Verify header FieldHelpHint trigger, ARIA semantics, popover contents, and Escape dismissal
++    const helpBtn = screen.getByTestId('workload-federation-header-help');
++    expect(helpBtn).toBeDefined();
++    expect(helpBtn.getAttribute('aria-label')).toBe('Help for Workload Identity Federation');
++    expect(helpBtn.getAttribute('aria-haspopup')).toBe('dialog');
++    expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
++
++    act(() => {
++      helpBtn.focus();
++    });
++    expect(helpBtn.getAttribute('aria-expanded')).toBe('true');
++
++    const helpPopover = screen.getByTestId('workload-federation-header-help-popover');
++    expect(helpPopover).toBeDefined();
++    expect(helpPopover.getAttribute('role')).toBe('dialog');
++    expect(helpPopover.textContent).toContain('Workload Identity Federation');
++    expect(helpPopover.textContent).toContain('keyless OIDC JWT token exchange (RFC 8693)');
++    expect(helpPopover.textContent).toContain('Kubernetes workloads');
++    const helpDocLink = screen.getByTestId('workload-federation-header-help-doc-link');
++    expect(helpDocLink.getAttribute('href')).toBe('/docs/zero-trust-service-auth-and-workload-oidc');
++
++    // Dismiss popover via Escape key on trigger
++    act(() => {
++      fireEvent.keyDown(helpBtn, { key: 'Escape' });
++    });
++    expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
++    expect(screen.queryByTestId('workload-federation-header-help-popover')).toBeNull();
++
++    // 3. Verify + Add Workload Policy button renders alongside docLink and opens create modal cleanly
++    const addBtn = screen.getByTestId('add-workload-policy-btn');
++    expect(addBtn).toBeDefined();
++    expect(addBtn.textContent).toContain('+ Add Workload Policy');
++    fireEvent.click(addBtn);
++
++    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
++    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
++    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
++
++    // 4. Verify Theme switching (Light & Dark) retains valid structure
++    document.documentElement.setAttribute('data-theme', 'light');
++    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
++
++    document.documentElement.setAttribute('data-theme', 'dark');
++    expect(container.querySelector('[data-testid="workload-federation-doc-link"]')).not.toBeNull();
++    expect(container.querySelector('[data-testid="workload-federation-header-help"]')).not.toBeNull();
++    document.documentElement.removeAttribute('data-theme');
++
++    unmount();
++  });
+ });

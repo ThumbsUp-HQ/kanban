@@ -18,6 +18,11 @@
   flex-wrap: wrap;
 }
 
+.kb-mcp-studio-header > div:first-child {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
 .kb-mcp-studio-title {
   font-size: 1.75rem;
   font-weight: 600;
@@ -96,8 +101,13 @@
   margin: 0 0 16px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   color: var(--kb-color-text-primary, var(--fg-primary));
+}
+
+.kb-mcp-section-title .field-help-hint {
+  margin: 0;
+  margin-left: 0;
 }
 
 .kb-mcp-table-wrap {
@@ -621,6 +631,13 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.kb-mcp-header-actions .kb-studio-doc-link {
+  min-height: 38px;
+  box-sizing: border-box;
 }
 
 .kb-mcp-connect-btn {
