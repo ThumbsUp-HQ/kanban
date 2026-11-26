@@ -67,7 +67,7 @@ The live workouts were executed against an isolated PostgreSQL container (`kan41
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 119 tests passed in 68.66s across `test_device_flow.py`, `test_oauth_coverage.py`, `test_oauth_flow.py`, `test_oauth_unit.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`, `test_feature_comparison_parity.py`, and `test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py`.
+   - 119 tests passed in 374.74s across `test_device_flow.py`, `test_oauth_coverage.py`, `test_oauth_flow.py`, `test_oauth_unit.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`, `test_feature_comparison_parity.py`, and `test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py`.
    - Coverage on touched modules: 95% total across 1,731 statements (`admin/mcp_keys.py` 95%, `admin/workload_identities.py` 98%, `mcp_keys.py` 97%, `oauth.py` 95%, `mcp/app.py` 95%, `database/models/mcp_api_key.py` 100%).
    - 0 failures, 0 errors, 0 warnings.
 
@@ -94,7 +94,7 @@ The live workouts were executed against an isolated PostgreSQL container (`kan41
   - `ui-specialist-review.md`: **APPROVED** (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 119 Pytest (95% coverage) and 108 Vitest tests (95.56% branch coverage).
+  - `unit-test-results.txt`: Documents 119 Pytest (95% coverage) and 110 Vitest tests (95.79% branch coverage).
   - `screenshots/`: 7 zero-mock PNG captures across 5 viewports and live workflow states.
   - `03-live-workout-report.md`: Complete live workout report with secret sanitization.
 
