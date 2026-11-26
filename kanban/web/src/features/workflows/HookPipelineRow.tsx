@@ -7,13 +7,15 @@ import {
   dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
-import type { WorkflowHook } from './api';
+import type { AgentDefinitionSummary, WorkflowHook } from './api';
 
 export interface HookPipelineRowProps {
   hook: WorkflowHook;
   index: number;
   total: number;
   projectKey: string;
+  agentTimeoutMs?: number | undefined;
+  agents?: AgentDefinitionSummary[] | undefined;
   onMove?: (hookId: string, direction: 'up' | 'down') => void;
   onToggle?: (hookId: string, isEnabled: boolean) => void;
   onEdit?: (hook: WorkflowHook) => void;
@@ -28,6 +30,8 @@ export function HookPipelineRow({
   index,
   total,
   projectKey,
+  agentTimeoutMs,
+  agents,
   onMove,
   onToggle,
   onEdit,
@@ -132,9 +136,15 @@ export function HookPipelineRow({
     : 'sha256:none';
 
   // Format latency or timeout
+  const matchingAgent = agents?.find((a) => a.slug === hook.agent_slug);
+  const resolvedAgentTimeout =
+    agentTimeoutMs ??
+    hook.timeout_ms ??
+    matchingAgent?.timeout_ms;
+
   const latencyOrTimeout =
     hook.hook_kind === 'agent_interceptor'
-      ? `${String(Math.round((hook.timeout_ms ?? 60000) / 1000))}s`
+      ? (resolvedAgentTimeout ? `${String(Math.round(resolvedAgentTimeout / 1000))}s` : '')
       : (hook.target_latency_budget ?? '<25ms');
 
   const isSync = hook.hook_kind === 'sync_validator' || hook.hook_kind === 'sync_mutator';
@@ -183,7 +193,7 @@ export function HookPipelineRow({
                   <div>
                     <strong>{hook.name}</strong>
                     <div>Harness: {hook.harness_kind ?? 'cli_pipe'}</div>
-                    {hook.repo_binding_slug && (
+                    {Boolean(hook.repo_binding_slug) && hook.repo_access_mode !== 'none' && (
                       <div>Repo: {hook.repo_binding_slug} (:ro mount)</div>
                     )}
                     <div>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</div>
@@ -201,9 +211,11 @@ export function HookPipelineRow({
 
         <div className="hook-pipeline-right">
           {/* Latency / Timeout metric pill */}
-          <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
-            {latencyOrTimeout}
-          </span>
+          {latencyOrTimeout && (
+            <span className="hook-metric-pill" data-testid={`hook-latency-${hook.id}`}>
+              {latencyOrTimeout}
+            </span>
+          )}
 
           {/* Failure Policy badge */}
           <span
@@ -285,8 +297,12 @@ export function HookPipelineRow({
       <div className="hook-pipeline-subtitle">
         {hook.hook_kind === 'agent_interceptor' ? (
           <>
-            <span>Repo: <code>{hook.repo_binding_slug ?? 'kanban-main'}</code> (:ro mount)</span>
-            <span>|</span>
+            {Boolean(hook.repo_binding_slug) && hook.repo_access_mode !== 'none' && (
+              <>
+                <span>Repo: <code>{hook.repo_binding_slug}</code> (:ro mount)</span>
+                <span>|</span>
+              </>
+            )}
             <span>MCP: {hook.mcp_access_summary ?? `Read-Only (${projectKey})`}</span>
             <span>|</span>
             <span>Mutable Fields:</span>

@@ -446,4 +446,109 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(screen.getByTestId('custom-field-test-panel')).toBeDefined();
     });
   });
+
+  describe('HookPipelineRow Metadata & Timeout (KAN-431)', () => {
+    it('omits kanban-main when repo_binding_slug is null and displays 180s real agent timeout', async () => {
+      const customRules: api.TransitionRule[] = [
+        {
+          from_state: 'In Progress',
+          to_state: 'Done',
+          active_hook_count: 1,
+          hooks: [
+            {
+              id: 'hook-custom-timeout',
+              name: 'long-thinking-agent',
+              from_state: 'In Progress',
+              to_state: 'Done',
+              hook_kind: 'agent_interceptor',
+              sort_rank: '0000000000000001',
+              failure_policy: 'fail_closed',
+              manifest_sha256: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945',
+              is_enabled: true,
+              agent_slug: 'ollama-reasoner',
+              agent_display_name: 'Ollama Reasoner',
+              harness_kind: 'in_app_sdk',
+              provider_kind: 'ollama',
+              model_id: 'nemotron-3-super:latest',
+              timeout_ms: 180000,
+              repo_binding_slug: null,
+              repo_access_mode: 'none',
+              mcp_access_summary: 'Read-Only (KAN)',
+              allowed_mutable_fields: [],
+            },
+          ],
+        },
+      ];
+
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(customRules);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('long-thinking-agent')).toBeDefined();
+      });
+
+      // Assert 180s is displayed instead of 60s
+      const latencyPill = screen.getByTestId('hook-latency-hook-custom-timeout');
+      expect(latencyPill.textContent).toBe('180s');
+
+      // Assert kanban-main and Repo badge are NOT rendered in this hook row
+      const hookRow = screen.getByTestId('hook-pipeline-row-hook-custom-timeout');
+      expect(hookRow.textContent).not.toContain('kanban-main');
+      expect(hookRow.textContent).not.toContain('Repo:');
+    });
+
+    it('resolves agent timeout from agents query when hook timeout_ms is absent and omits repo badge when access mode is none', async () => {
+      const customRules: api.TransitionRule[] = [
+        {
+          from_state: 'In Progress',
+          to_state: 'Done',
+          active_hook_count: 1,
+          hooks: [
+            {
+              id: 'hook-agent-lookup',
+              name: 'lookup-agent-gate',
+              from_state: 'In Progress',
+              to_state: 'Done',
+              hook_kind: 'agent_interceptor',
+              sort_rank: '0000000000000001',
+              failure_policy: 'fail_closed',
+              manifest_sha256: '7b52009b64fd0a2a49e6d8a939753077792b055425eee527861182c611383145',
+              is_enabled: true,
+              agent_slug: 'forensic-code-check',
+              harness_kind: 'cli_pipe',
+              repo_binding_slug: 'my-repo',
+              repo_access_mode: 'none', // Mode is none -> should NOT render badge
+            },
+          ],
+        },
+      ];
+
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue(customRules);
+      vi.spyOn(api, 'fetchAgentDefinitions').mockResolvedValue([
+        {
+          id: 'agent-1',
+          slug: 'forensic-code-check',
+          display_name: 'Forensic Code Check',
+          harness_kind: 'cli_pipe',
+          timeout_ms: 300000,
+          cli_args: [],
+          repo_access_mode: 'none',
+        },
+      ]);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('lookup-agent-gate')).toBeDefined();
+      });
+
+      // Resolved 300s from agent definition
+      const latencyPill = screen.getByTestId('hook-latency-hook-agent-lookup');
+      expect(latencyPill.textContent).toBe('300s');
+
+      // repo_access_mode === 'none' -> repo badge omitted
+      expect(screen.queryByText('my-repo')).toBeNull();
+    });
+  });
 });

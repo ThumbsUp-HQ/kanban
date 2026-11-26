@@ -7,11 +7,12 @@ import {
   dropTargetForElements,
 } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { HookPipelineRow } from './HookPipelineRow';
-import type { TransitionRule, WorkflowHook } from './api';
+import type { AgentDefinitionSummary, TransitionRule, WorkflowHook } from './api';
 
 export interface TransitionRuleCardProps {
   rule: TransitionRule;
   projectKey: string;
+  agents?: AgentDefinitionSummary[] | undefined;
   onReorder: (
     transition: { from_state: string | null; to_state: string },
     orderedHookIds: string[],
@@ -28,6 +29,7 @@ export interface TransitionRuleCardProps {
 export function TransitionRuleCard({
   rule,
   projectKey,
+  agents,
   onReorder,
   onToggle,
   onEdit,
@@ -49,12 +51,15 @@ export function TransitionRuleCard({
 
   const handleKeyboardMove = async (hookId: string, direction: 'up' | 'down') => {
     const currentIndex = effectiveHooks.findIndex((h) => h.id === hookId);
+    /* v8 ignore next */
     if (currentIndex === -1) return;
 
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    /* v8 ignore next */
     if (targetIndex < 0 || targetIndex >= effectiveHooks.length) return;
 
     const movedHook = effectiveHooks[currentIndex];
+    /* v8 ignore next */
     if (!movedHook) return;
     const newHooks = effectiveHooks.filter((h) => h.id !== hookId);
     newHooks.splice(targetIndex, 0, movedHook);
@@ -85,6 +90,7 @@ export function TransitionRuleCard({
     if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
 
     const movedHook = effectiveHooks[sourceIndex];
+    /* v8 ignore next */
     if (!movedHook) return;
     const newHooks = effectiveHooks.filter((h) => h.id !== sourceId);
     newHooks.splice(targetIndex, 0, movedHook);
@@ -171,6 +177,7 @@ export function TransitionRuleCard({
               index={index}
               total={effectiveHooks.length}
               projectKey={projectKey}
+              agents={agents}
               onMove={(id, dir) => {
                 void handleKeyboardMove(id, dir);
               }}

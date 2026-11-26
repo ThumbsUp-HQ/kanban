@@ -461,4 +461,126 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     fireEvent.change(agentSelect, { target: { value: 'gemini-fallback' } });
     expect(screen.getByText(/Gemini Direct \(gemini\)/i)).toBeDefined();
   });
+
+  it('auto-selects single agent and permits immediate submission without 422 (KAN-431)', async () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+    const singleAgent: AgentDefinitionSummary[] = [
+      {
+        id: 'agent-single',
+        slug: 'solitary-qa-agent',
+        display_name: 'Solitary QA Agent',
+        harness_kind: 'cli_pipe',
+        cli_binary_allowlist_id: 'agy',
+        cli_args: ['-p'],
+        repo_access_mode: 'ro_vfs_mount',
+        timeout_ms: 180000,
+      },
+    ];
+
+    render(
+      <AttachHookDialog
+        isOpen={true}
+        projectKey="KAN"
+        states={DEFAULT_PROJECT_STATES}
+        agentDefinitions={singleAgent}
+        onSave={handleSave}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Switch to agent_interceptor
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+
+    // Agent definition should be visible at top-level outside collapsed advanced section
+    const agentSelect = screen.getByLabelText<HTMLSelectElement>(/Agent Definition/i);
+    expect(agentSelect).toBeDefined();
+    expect(agentSelect.value).toBe('solitary-qa-agent');
+
+    // Advanced section remains collapsed
+    const advSection = screen.getByTestId<HTMLDetailsElement>('attach-hook-advanced-section');
+    expect(advSection.open).toBe(false);
+
+    // Fill hook name and submit immediately without touching agent select
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'single-agent-hook' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+
+    await waitFor(() => {
+      expect(handleSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'single-agent-hook',
+          hook_kind: 'agent_interceptor',
+          agent: 'solitary-qa-agent',
+          timeout_ms: 180000,
+        }),
+      );
+    });
+  });
+
+  it('auto-syncs agent state when agentDefinitions load asynchronously in single-agent workspace (KAN-431)', async () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+    const singleAgent: AgentDefinitionSummary[] = [
+      {
+        id: 'agent-single',
+        slug: 'solitary-qa-agent',
+        display_name: 'Solitary QA Agent',
+        harness_kind: 'cli_pipe',
+        cli_binary_allowlist_id: 'agy',
+        cli_args: ['-p'],
+        repo_access_mode: 'ro_vfs_mount',
+        timeout_ms: 180000,
+      },
+    ];
+
+    // Initially render with empty agents array (as occurs while query is loading)
+    const { rerender } = render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={[]}
+          onSave={handleSave}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to agent_interceptor while agents are still empty
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+    expect(screen.getByTestId('no-agents-warning')).toBeDefined();
+
+    // Query resolves with single agent
+    rerender(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={singleAgent}
+          onSave={handleSave}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Agent definition should be visible at top-level outside collapsed advanced section
+    const agentSelect = screen.getByLabelText<HTMLSelectElement>(/Agent Definition/i);
+    expect(agentSelect).toBeDefined();
+    expect(agentSelect.value).toBe('solitary-qa-agent');
+
+    // Fill hook name and submit immediately without touching agent select
+    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'async-single-agent-hook' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
+
+    await waitFor(() => {
+      expect(handleSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'async-single-agent-hook',
+          hook_kind: 'agent_interceptor',
+          agent: 'solitary-qa-agent',
+          timeout_ms: 180000,
+        }),
+      );
+    });
+  });
 });

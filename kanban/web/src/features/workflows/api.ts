@@ -45,9 +45,9 @@ export interface WorkflowHook {
   model_id?: string | undefined;
   cli_binary_allowlist_id?: string | undefined;
   cli_args?: string[] | undefined;
-  timeout_ms?: number | undefined;
-  repo_binding_slug?: string | undefined;
-  repo_access_mode?: string | undefined;
+  timeout_ms?: number | null | undefined;
+  repo_binding_slug?: string | null | undefined;
+  repo_access_mode?: string | null | undefined;
   mcp_access_summary?: string | undefined;
   allowed_mutable_fields?: string[] | undefined;
   last_execution_log?: string | undefined;

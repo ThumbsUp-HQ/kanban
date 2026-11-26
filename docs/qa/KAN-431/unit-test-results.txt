@@ -1,0 +1,67 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan431-3dea3e2c/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (12 tests) 814ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 776ms
+   ✓ DryRunDrawer (KB-P5-24) (6)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 378ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1269ms
+   ✓ GitRepoBindingsSection (18)
+     ✓ opens modal, validates slug and URL, and submits successfully 357ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (30 tests) 1312ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (15 tests) 2149ms
+   ✓ AttachHookDialog (KB-P5-24) (15)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 630ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (16 tests) 1687ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (16)
+     ✓ renders In Review -> Done card with the 3 S14.4 hooks matching wireframe (Mandatory Test Case 1) 307ms
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 323ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 5478ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ renders different hook kinds and failure policies 317ms
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2090ms
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 658ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 477ms
+
+ Test Files  7 passed (7)
+      Tests  127 passed (127)
+   Start at  19:52:07
+   Duration  8.95s (tests 51%, environment 28%, import 14%, transform 5%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.29 |    98.09 |     100 |    99.5 |                   
+ admin-agents      |     100 |    96.98 |     100 |     100 |                   
+  ...torDrawer.tsx |     100 |    96.98 |     100 |     100 | ...10-112,209,242 
+ workflows         |   99.02 |    98.69 |     100 |    99.3 |                   
+  ...ookDialog.tsx |   97.59 |    99.14 |     100 |   97.36 | 131-132           
+  ...pelineRow.tsx |   98.57 |    97.72 |     100 |     100 | 58,93             
+  ...nRuleCard.tsx |     100 |      100 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    98.63 |     100 |     100 | 294               
+-------------------|---------|----------|---------|---------|-------------------
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan431-3dea3e2c
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 42 items
+
+kanban/tests/workflows/test_workflow_hooks_api.py .................      [ 40%]
+kanban/tests/agents/test_agent_definitions_api.py ...................... [ 92%]
+...                                                                      [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/workflows/hooks_service.py     409     14    118     12    95%   200->180, 325->328, 346->369, 353->355, 524->580, 560-563, 596-597, 600, 694->698, 727-728, 739, 765-768, 778->790
+-------------------------------------------------------------------------------
+TOTAL                                 409     14    118     12    95%
+============================= 42 passed in 32.05s ==============================
