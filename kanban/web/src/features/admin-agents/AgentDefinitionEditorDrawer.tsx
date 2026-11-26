@@ -668,23 +668,25 @@ function AgentDefinitionEditorContent({
           </div>
         </AdvancedSection>
 
-        <div className="kb-modal-footer">
-          <button
-            type="button"
-            className="kb-btn kb-btn-secondary"
-            onClick={onClose}
-            data-testid="cancel-agent-drawer-btn"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="kb-btn kb-btn-primary"
-            disabled={isSaving || (harnessKind === 'cli_pipe' && !cliValidation.valid)}
-            data-testid="save-agent-btn"
-          >
-            {isSaving ? 'Saving...' : isEditing ? 'Save Agent' : 'Register Agent'}
-          </button>
+        <div className="kb-modal-footer kb-drawer-footer">
+          <div className="kb-drawer-footer-actions-right">
+            <button
+              type="button"
+              className="kb-btn kb-btn-secondary"
+              onClick={onClose}
+              data-testid="cancel-agent-drawer-btn"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="kb-btn kb-btn-primary"
+              disabled={isSaving || (harnessKind === 'cli_pipe' && !cliValidation.valid)}
+              data-testid="save-agent-btn"
+            >
+              {isSaving ? 'Saving...' : isEditing ? 'Save Agent' : 'Register Agent'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

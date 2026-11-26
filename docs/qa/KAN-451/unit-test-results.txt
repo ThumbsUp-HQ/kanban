@@ -1,0 +1,51 @@
+$ pnpm --dir kanban/web exec vitest run --coverage --coverage.include="src/features/admin-agents/AgentDefinitionEditorDrawer.tsx" --coverage.include="src/features/admin-ai/AiProviderEditorDrawer.tsx" src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan451-34c60880/kanban/web
+      Coverage enabled with v8
+
+stderr | src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx > AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01) > System Instructions Preservation on Edit (KAN-431) > submits custom system_instructions_md updated via native DOM input event on create
+An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (25 tests) 2286ms
+   ✓ AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01) (25)
+     ✓ FieldHelpHint and Explicit Default Values (KAN-453) (4)
+       ✓ renders agent-slug-help and agent-mcp-tools-help triggers with accessible labels 302ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (60 tests) 4413ms
+
+ Test Files  2 passed (2)
+      Tests  85 passed (85)
+   Start at  17:41:30
+   Duration  6.29s (tests 70%, environment 21%, import 5%, transform 3%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.51 |    95.47 |     100 |   99.75 |                   
+ admin-agents      |   99.28 |    96.13 |     100 |   99.27 |                   
+  ...torDrawer.tsx |   99.28 |    96.13 |     100 |   99.27 | 113               
+ admin-ai          |   99.63 |    95.14 |     100 |     100 |                   
+  ...torDrawer.tsx |   99.63 |    95.14 |     100 |     100 | ...77,385,404,438 
+-------------------|---------|----------|---------|---------|-------------------
+
+EXIT_CODE=0

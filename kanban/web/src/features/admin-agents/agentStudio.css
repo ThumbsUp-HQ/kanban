@@ -460,3 +460,57 @@
     align-items: stretch;
   }
 }
+
+/* Drawer and Modal Footers (KAN-451) */
+.kb-drawer-footer,
+.kb-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  margin-top: var(--space-6, 24px);
+  flex-wrap: wrap;
+}
+
+.kb-drawer-footer-actions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.kb-drawer-footer-actions-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  margin-left: auto;
+}
+
+@media (max-width: 767px) {
+  .kb-modal-footer,
+  .kb-drawer-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-3, 12px) 0 calc(var(--space-3, 12px) + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    flex-direction: column-reverse;
+  }
+
+  .kb-modal-footer button,
+  .kb-drawer-footer button,
+  .kb-drawer-footer-actions-left,
+  .kb-drawer-footer-actions-right,
+  .kb-drawer-footer-actions-left button,
+  .kb-drawer-footer-actions-right button {
+    width: 100%;
+    min-height: var(--tap-min, 44px);
+  }
+
+  .kb-drawer-footer-actions-right {
+    margin-left: 0;
+    flex-direction: column-reverse;
+    gap: var(--space-3, 12px);
+  }
+}
+

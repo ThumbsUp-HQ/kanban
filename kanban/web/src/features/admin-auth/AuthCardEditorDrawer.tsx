@@ -2024,31 +2024,35 @@ export function AuthCardEditorDrawer({
           )}
 
           <div className="auth-editor-actions">
-            <button
-              type="button"
-              className="auth-btn-secondary"
-              onClick={() => { void handleTestHandshake(); }}
-              disabled={isSubmitting || isTestingHandshake}
-              data-testid="drawer-test-handshake-btn"
-            >
-              {isTestingHandshake ? 'Testing Handshake...' : 'Test Handshake'}
-            </button>
-            <button
-              type="button"
-              className="auth-btn-secondary"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="auth-studio-add-btn"
-              disabled={isSubmitting}
-              data-testid="drawer-save-btn"
-            >
-              {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
-            </button>
+            <div className="auth-editor-actions-left">
+              <button
+                type="button"
+                className="auth-btn-secondary"
+                onClick={() => { void handleTestHandshake(); }}
+                disabled={isSubmitting || isTestingHandshake}
+                data-testid="drawer-test-handshake-btn"
+              >
+                {isTestingHandshake ? 'Testing Handshake...' : 'Test Handshake'}
+              </button>
+            </div>
+            <div className="auth-editor-actions-right">
+              <button
+                type="button"
+                className="auth-btn-secondary"
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="auth-studio-add-btn"
+                disabled={isSubmitting}
+                data-testid="drawer-save-btn"
+              >
+                {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Card'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

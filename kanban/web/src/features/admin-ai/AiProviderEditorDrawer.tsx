@@ -1141,32 +1141,36 @@ function AiProviderEditorContent({
           </div>
         )}
 
-        <div className="kb-modal-footer">
-          <button
-            type="button"
-            className="kb-btn kb-btn-secondary"
-            onClick={onClose}
-            data-testid="cancel-provider-drawer-btn"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="kb-btn kb-btn-secondary"
-            onClick={() => { void handleTestConnection(); }}
-            disabled={isTestingConnection}
-            data-testid="drawer-test-connection-btn"
-          >
-            {isTestingConnection ? 'Testing...' : 'Test Connection'}
-          </button>
-          <button
-            type="submit"
-            className="kb-btn kb-btn-primary"
-            disabled={isSaving}
-            data-testid="save-provider-btn"
-          >
-            {isSaving ? 'Saving...' : isEditing ? 'Save Provider' : 'Register Provider'}
-          </button>
+        <div className="kb-modal-footer kb-drawer-footer">
+          <div className="kb-drawer-footer-actions-left">
+            <button
+              type="button"
+              className="kb-btn kb-btn-secondary"
+              onClick={() => { void handleTestConnection(); }}
+              disabled={isTestingConnection}
+              data-testid="drawer-test-connection-btn"
+            >
+              {isTestingConnection ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
+          <div className="kb-drawer-footer-actions-right">
+            <button
+              type="button"
+              className="kb-btn kb-btn-secondary"
+              onClick={onClose}
+              data-testid="cancel-provider-drawer-btn"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="kb-btn kb-btn-primary"
+              disabled={isSaving}
+              data-testid="save-provider-btn"
+            >
+              {isSaving ? 'Saving...' : isEditing ? 'Save Provider' : 'Register Provider'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

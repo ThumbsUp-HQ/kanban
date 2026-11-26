@@ -570,7 +570,7 @@
 .auth-editor-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
   margin-top: 24px;
   position: sticky;
@@ -579,6 +579,20 @@
   z-index: 10;
   padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.auth-editor-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-editor-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 /* 1-Click Presets Bar */
@@ -986,6 +1000,24 @@
     border-top: 1px solid var(--border-subtle);
     padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 10;
+  }
+
+  .auth-editor-actions {
+    flex-direction: column-reverse;
+  }
+
+  .auth-editor-actions-left,
+  .auth-editor-actions-right,
+  .auth-editor-actions-left button,
+  .auth-editor-actions-right button {
+    width: 100%;
+    min-height: var(--tap-min, 44px);
+  }
+
+  .auth-editor-actions-right {
+    margin-left: 0;
+    flex-direction: column-reverse;
+    gap: 12px;
   }
 
   .auth-editor-drawer {
