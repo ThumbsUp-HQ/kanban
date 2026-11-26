@@ -6,30 +6,24 @@
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan532-ef916714/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 35ms
- ✓ src/features/admin/LinkAuditorStudio.test.tsx (25 tests) 3210ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 22ms
+ ✓ src/features/admin/LinkAuditorStudio.test.tsx (25 tests) 2517ms
    ✓ LinkAuditorStudio (25)
-     ✓ handles inspect drawer view with JSON snapshots 571ms
-     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 677ms
- ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (21 tests) 3734ms
+     ✓ handles inspect drawer view with JSON snapshots 446ms
+     ✓ covers interactive drawer and modal backdrops, drawer purge, and alert dismissals 600ms
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (21 tests) 3072ms
    ✓ AdminDiagnosticsStudio Component (21)
-     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1562ms
-     ✓ handles probe success=false, empty err message, https wss scheme, bare metal runtime, and ws throws 398ms
- ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (41 tests) 6211ms
+     ✓ handles WebSocket probe timeout and non-pong or invalid message payload 1551ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (41 tests) 4432ms
    ✓ OAuthClientGovernanceStudio (41)
-     ✓ inspects client details in modal and closes modal 577ms
-     ✓ opens register OAuth client modal and registers a new client successfully 334ms
-     ✓ handles search input, status filter pills, and pagination controls 379ms
-     ✓ ignores Aal2StepUpCancelledError gracefully in loadClients and actions 349ms
- ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (57 tests) 5962ms
-   ✓ McpAccessStudio & McpConfigSnippetModal (KB-P4-16) (57)
-     ✓ renders scope tiers correctly across all 4 mount routes 378ms
-     ✓ covers custom preset selection, project datalist fallback, and snippet modal projectKey branch 311ms
+     ✓ inspects client details in modal and closes modal 458ms
+     ✓ handles search input, status filter pills, and pagination controls 388ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (57 tests) 4312ms
 
  Test Files  5 passed (5)
       Tests  151 passed (151)
-   Start at  17:41:21
-   Duration  9.87s (tests 59%, environment 17%, import 13%, transform 9%, worker 1%)
+   Start at  17:56:38
+   Duration  7.18s (tests 61%, environment 18%, import 14%, transform 6%, worker 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------

@@ -951,23 +951,21 @@ export function McpAccessStudio({
                     </td>
                     <td className="kb-mcp-td">
                       <div>{getTierBadge(k.scope_tier, k.allowed_projects)}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                      <div className="kb-mcp-key-meta-badges">
                         {k.capability_mask !== undefined && (
                           <span
-                            className="kb-mcp-unlimited-pill"
+                            className="kb-mcp-unlimited-pill kb-mcp-unlimited-pill-small"
                             data-testid={`key-cap-mask-${k.id}`}
                             title={`Capability Mask: ${String(k.capability_mask)}`}
-                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
                           >
                             Mask: {k.capability_mask}
                           </span>
                         )}
                         {k.allowed_cidrs && k.allowed_cidrs.length > 0 && (
                           <span
-                            className="kb-mcp-unlimited-pill"
+                            className="kb-mcp-unlimited-pill kb-mcp-unlimited-pill-small"
                             data-testid={`key-cidr-badge-${k.id}`}
                             title={`Allowed CIDRs: ${k.allowed_cidrs.join(', ')}`}
-                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
                           >
                             CIDR: {k.allowed_cidrs.join(', ')}
                           </span>
@@ -1240,8 +1238,10 @@ export function McpAccessStudio({
 
               {/* Question 2: Unified Key Type & Scope Tier Selector */}
               <div className="kb-mcp-form-row">
-                <label htmlFor="mint-key-scope-type-select" className="kb-mcp-form-label">
-                  <span className="kb-mcp-question-num">2.</span> Who is this key for & what can it access?
+                <div className="kb-mcp-form-label-row">
+                  <label htmlFor="mint-key-scope-type-select" className="kb-mcp-form-label">
+                    <span className="kb-mcp-question-num">2.</span> Who is this key for & what can it access?
+                  </label>
                   <FieldHelpHint
                     title="Key Type & Scope"
                     summary="Security boundary and ownership model governing whether this token belongs to your personal account or an automated service bot, and which workspace or project resources it can access."
@@ -1255,10 +1255,10 @@ export function McpAccessStudio({
                     docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
                     testId="mint-scope-help"
                   />
-                </label>
+                </div>
 
                 {/* Streamlined Segmented Role & Scope Selectors */}
-                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <div className="kb-mcp-segmented-group" data-testid="mint-role-selector">
                   <button
                     type="button"
                     className={`kb-mcp-filter-pill ${newKeyOwnerKind === 'personal_user' ? 'kb-mcp-filter-pill-active' : ''}`}
@@ -1284,7 +1284,7 @@ export function McpAccessStudio({
                   </button>
                 </div>
 
-                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector" style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                <div className="kb-mcp-segmented-group" data-testid="mint-scope-tier-selector">
                   <button
                     type="button"
                     className={`kb-mcp-filter-pill ${newKeyScopeTier === 'project' ? 'kb-mcp-filter-pill-active' : ''}`}
@@ -1402,8 +1402,10 @@ export function McpAccessStudio({
               </div>
 
               <div className="kb-mcp-form-row">
-                <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
-                  Expiration:
+                <div className="kb-mcp-form-label-row">
+                  <label htmlFor="mint-expiry-select" className="kb-mcp-form-label">
+                    Expiration:
+                  </label>
                   <FieldHelpHint
                     title="Token Expiration"
                     summary="Lifetime duration before newly minted MCP access key expires."
@@ -1415,12 +1417,11 @@ export function McpAccessStudio({
                     <span
                       className="kb-mcp-policy-badge"
                       data-testid="policy-ttl-badge"
-                      style={{ marginLeft: '8px', fontSize: '0.8rem', color: 'var(--kb-color-text-secondary, #8b949e)' }}
                     >
                       Workspace policy enforces maximum {maxKeyTtlDays}-day TTL
                     </span>
                   )}
-                </label>
+                </div>
                 <select
                   id="mint-expiry-select"
                   className="kb-mcp-form-select"
@@ -1488,8 +1489,10 @@ export function McpAccessStudio({
                 }
               >
                 <div className="kb-mcp-form-row">
-                  <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
-                    Capability Ceiling:
+                  <div className="kb-mcp-form-label-row">
+                    <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
+                      Capability Ceiling:
+                    </label>
                     <FieldHelpHint
                       title="Capability Ceiling"
                       summary="Maximum permission ceiling bitmask allocated to the client."
@@ -1497,7 +1500,7 @@ export function McpAccessStudio({
                       docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
                       testId="mcp-capability-ceiling-help"
                     />
-                  </label>
+                  </div>
                   <select
                     id="capability-preset-select"
                     className="kb-mcp-form-select"
@@ -1583,7 +1586,6 @@ export function McpAccessStudio({
                       className="kb-mcp-warning-text"
                       role="alert"
                       data-testid="cidr-error-message"
-                      style={{ color: '#ef4444', marginTop: '4px' }}
                     >
                       {cidrError}
                     </div>

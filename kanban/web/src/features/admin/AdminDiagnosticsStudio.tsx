@@ -871,24 +871,16 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             </table>
           </div>
 
-          <div style={{ marginTop: '16px' }}>
+          <div className="admin-diag-advanced-wrap">
             <AdvancedSection
               title="Advanced Technical Details"
               summary="Raw sanitized JSON configuration dump and internal runtime subsystem metadata"
               testId="admin-diag-advanced-technical-details"
             >
-              <div style={{ marginTop: '12px' }}>
+              <div className="admin-diag-raw-dump-wrap">
                 <pre
                   data-testid="admin-diag-raw-config-dump"
-                  style={{
-                    maxHeight: '300px',
-                    overflow: 'auto',
-                    background: 'var(--kb-color-bg-subtle, #1e293b)',
-                    padding: '12px',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontFamily: 'monospace',
-                  }}
+                  className="admin-diag-raw-dump"
                 >
                   {JSON.stringify(diag?.config, null, 2)}
                 </pre>

@@ -795,6 +795,11 @@
     gap: var(--space-3, 12px);
   }
 
+  .kb-mcp-studio-header > div:first-child {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
   .kb-mcp-header-actions {
     display: flex;
     flex-wrap: wrap;
@@ -893,5 +898,43 @@
     gap: 4px;
   }
 }
+
+.kb-mcp-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kb-mcp-segmented-group {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-mcp-policy-badge {
+  margin-left: 8px;
+  font-size: 0.8rem;
+  color: var(--fg-secondary);
+}
+
+.kb-mcp-warning-text {
+  color: var(--danger-fg);
+  margin-top: 4px;
+}
+
+.kb-mcp-key-meta-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.kb-mcp-unlimited-pill-small {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+}
+
 
 
