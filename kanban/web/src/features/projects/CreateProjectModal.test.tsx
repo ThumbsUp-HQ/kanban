@@ -87,7 +87,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
     );
 
     const nameInput = screen.getByLabelText('Project Name');
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     const descInput = screen.getByLabelText('Description (Markdown)');
 
     // Auto-derived identifier from name
@@ -150,7 +150,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
     );
 
     const nameInput = screen.getByLabelText('Project Name');
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
     fireEvent.change(idInput, { target: { value: '1' } });
     if (form) {
@@ -371,7 +371,7 @@ describe('CreateProjectModal & useSessionGuard', () => {
 
     const nameInput = screen.getByLabelText('Project Name');
     fireEvent.change(nameInput, { target: { value: 'Safe Sequences Project' } });
-    const idInput = screen.getByLabelText('Identifier (Key)');
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     fireEvent.change(idInput, { target: { value: 'SAFE' } });
 
     const skipCheckbox = screen.getByTestId<HTMLInputElement>('create-project-skip-loaded-seq');

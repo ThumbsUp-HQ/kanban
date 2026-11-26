@@ -99,7 +99,7 @@ describe('Browser QA Branch Coverage Booster', () => {
       expect(screen.queryByTestId('create-project-error')).toBeNull();
 
       // Invalid identifier (1 char)
-      const idInput = screen.getByLabelText('Identifier (Key)');
+      const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
       fireEvent.change(idInput, { target: { value: 'S' } });
       fireEvent.submit(form);
       expect((await screen.findByTestId('create-project-error')).textContent).toContain(

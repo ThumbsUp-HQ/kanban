@@ -319,12 +319,6 @@ export function CreateProjectModal({
               >
                 Project Key
               </label>
-              <label
-                htmlFor="create-project-identifier"
-                className="kb-visually-hidden"
-              >
-                Identifier (Key)
-              </label>
               <FieldHelpHint
                 title="Project Key"
                 summary="Uppercase alphanumeric prefix used for all work item keys (e.g. KAN-123)."

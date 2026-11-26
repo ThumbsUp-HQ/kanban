@@ -130,18 +130,6 @@
   font-family: var(--font-mono, monospace);
 }
 
-.kb-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .kb-create-project-textarea {
   padding: 8px 12px;
   border-radius: 6px;
@@ -201,7 +189,7 @@
   border-radius: 6px;
   border: 1px solid var(--kb-create-project-border);
   background: transparent;
-  color: var(--fg-secondary, #cbd5e1);
+  color: var(--fg-secondary, #4b5563);
   font-size: 13px;
   cursor: pointer;
 }
@@ -244,6 +232,6 @@
 
   .kb-create-project-cancel-btn,
   .kb-create-project-submit-btn {
-    min-height: 40px;
+    min-height: 44px;
   }
 }
