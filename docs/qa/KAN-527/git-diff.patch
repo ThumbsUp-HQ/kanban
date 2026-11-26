@@ -1,0 +1,317 @@
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
+index 7f8062e7..bbf57461 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.css
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.css
+@@ -93,13 +93,13 @@
+ }
+ 
+ .link-auditor-btn--danger {
+-  background-color: #da3633;
+-  color: #ffffff;
++  background-color: var(--bg-danger);
++  color: var(--accent-primary-fg);
+   border-color: rgba(255, 255, 255, 0.15);
+ }
+ 
+ .link-auditor-btn--danger:hover:not(:disabled) {
+-  background-color: #f85149;
++  background-color: var(--bg-danger-hover);
+ }
+ 
+ .link-auditor-btn--danger:disabled {
+@@ -120,15 +120,15 @@
+ }
+ 
+ .link-auditor-alert--success {
+-  background-color: rgba(46, 160, 67, 0.15);
+-  border: 1px solid rgba(46, 160, 67, 0.4);
+-  color: #3fb950;
++  background-color: var(--bg-success-subtle);
++  color: var(--text-success);
++  border: 1px solid var(--border-success);
+ }
+ 
+ .link-auditor-alert--error {
+-  background-color: rgba(248, 81, 73, 0.15);
+-  border: 1px solid rgba(248, 81, 73, 0.4);
+-  color: #f85149;
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--border-danger);
+ }
+ 
+ .link-auditor-alert__close {
+@@ -160,13 +160,13 @@
+ }
+ 
+ .metric-card:hover {
+-  border-color: var(--accent-primary, #58a6ff);
++  border-color: var(--accent-primary);
+   background-color: var(--bg-hover, #1c2128);
+ }
+ 
+ .metric-card--active {
+-  border-color: var(--accent-primary, #58a6ff);
+-  background-color: rgba(56, 139, 253, 0.08);
++  border-color: var(--accent-primary);
++  background-color: var(--bg-accent-subtle);
+ }
+ 
+ .metric-card__header {
+@@ -209,27 +209,28 @@
+ }
+ 
+ .badge-danger {
+-  background-color: rgba(248, 81, 73, 0.15);
+-  color: #ff7b72;
+-  border: 1px solid rgba(248, 81, 73, 0.3);
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--border-danger);
+ }
+ 
+ .badge-warning {
+-  background-color: rgba(210, 153, 34, 0.15);
+-  color: #d29922;
+-  border: 1px solid rgba(210, 153, 34, 0.3);
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++  border: 1px solid var(--border-warning);
+ }
+ 
+ .badge-critical {
+-  background-color: rgba(187, 128, 9, 0.25);
+-  color: #f0883e;
+-  border: 1px solid rgba(240, 136, 62, 0.4);
++  background-color: var(--warn-bg);
++  color: var(--warn-fg);
++  border: 1px solid var(--warn-fg);
++  font-weight: 700;
+ }
+ 
+ .badge-info {
+-  background-color: rgba(56, 139, 253, 0.15);
+-  color: #58a6ff;
+-  border: 1px solid rgba(56, 139, 253, 0.3);
++  background-color: var(--badge-bg);
++  color: var(--badge-fg);
++  border: 1px solid var(--badge-border);
+ }
+ 
+ .status-badge {
+@@ -240,18 +241,21 @@
+ }
+ 
+ .status-badge--flagged {
+-  background-color: rgba(248, 81, 73, 0.15);
+-  color: #f85149;
++  background-color: var(--danger-bg);
++  color: var(--danger-fg);
++  border: 1px solid var(--border-danger);
+ }
+ 
+ .status-badge--purged {
+-  background-color: rgba(139, 148, 158, 0.15);
+-  color: #8b949e;
++  background-color: var(--bg-secondary);
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
+ }
+ 
+ .status-badge--resolved {
+-  background-color: rgba(46, 160, 67, 0.15);
+-  color: #3fb950;
++  background-color: var(--bg-success-subtle);
++  color: var(--text-success);
++  border: 1px solid var(--border-success);
+ }
+ 
+ .link-type-pill {
+@@ -440,12 +444,12 @@
+ }
+ 
+ .link-auditor-action-btn--danger {
+-  color: #ff7b72;
+-  border-color: rgba(248, 81, 73, 0.3);
++  color: var(--danger-fg);
++  border-color: var(--border-danger);
+ }
+ 
+ .link-auditor-action-btn--danger:hover {
+-  background-color: rgba(248, 81, 73, 0.15);
++  background-color: var(--danger-bg);
+ }
+ 
+ /* Backdrop */
+@@ -604,7 +608,7 @@
+   display: flex;
+   align-items: center;
+   gap: 8px;
+-  color: #ff7b72;
++  color: var(--danger-fg);
+ }
+ 
+ .purge-modal__body {
+@@ -616,11 +620,11 @@
+ 
+ .purge-warning {
+   padding: 12px;
+-  background-color: rgba(248, 81, 73, 0.1);
+-  border: 1px solid rgba(248, 81, 73, 0.25);
++  background-color: var(--danger-bg);
++  border: 1px solid var(--border-danger);
+   border-radius: 6px;
+   font-size: 0.875rem;
+-  color: #ff7b72;
++  color: var(--danger-fg);
+   line-height: 1.45;
+ }
+ 
+@@ -652,13 +656,13 @@
+ 
+ .purge-textarea:focus {
+   outline: none;
+-  border-color: var(--focus-ring, #58a6ff);
++  border-color: var(--focus-ring);
+ }
+ 
+ .purge-textarea:focus-visible {
+-  outline: 2px solid var(--focus-ring, #58a6ff);
++  outline: 2px solid var(--focus-ring);
+   outline-offset: 2px;
+-  border-color: var(--focus-ring, #58a6ff);
++  border-color: var(--focus-ring);
+ }
+ 
+ .char-count {
+@@ -670,7 +674,7 @@
+ .validation-error {
+   margin: 4px 0 0;
+   font-size: 0.8125rem;
+-  color: var(--danger-fg, #ff7b72);
++  color: var(--danger-fg);
+ }
+ 
+ .purge-modal__footer {
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+index 484c67ed..025a5024 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
+@@ -2,6 +2,8 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+@@ -779,4 +781,108 @@ describe('LinkAuditorStudio', () => {
+       expect(screen.queryByRole('alert')).toBeNull();
+     });
+   });
++
++  describe('KAN-527: Link Auditor badge contrast and semantic theme tokens', () => {
++    it('verifies LinkAuditorStudio.css eliminates dark-only hardcoded hexes and uses semantic variables', () => {
++      const cssPath = path.resolve(__dirname, 'LinkAuditorStudio.css');
++      const cssContent = fs.readFileSync(cssPath, 'utf8');
++
++      // Assert removal of dark-only hardcoded badge hexes
++      expect(cssContent).not.toMatch(/#ff7b72/i);
++      expect(cssContent).not.toMatch(/#d29922/i);
++      expect(cssContent).not.toMatch(/#f0883e/i);
++      expect(cssContent).not.toMatch(/#58a6ff/i);
++      expect(cssContent).not.toMatch(/#3fb950/i);
++
++      // Assert presence of WCAG AA semantic tokens
++      expect(cssContent).toContain('var(--danger-fg)');
++      expect(cssContent).toContain('var(--warn-fg)');
++      expect(cssContent).toContain('var(--badge-fg)');
++      expect(cssContent).toContain('var(--text-success)');
++
++      // Verify specific class assignments
++      expect(cssContent).toMatch(/\.badge-danger\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-danger\);/s);
++      expect(cssContent).toMatch(/\.badge-warning\s*\{[^}]*background-color:\s*var\(--warn-bg\);[^}]*color:\s*var\(--warn-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-warning\);/s);
++      expect(cssContent).toMatch(/\.badge-critical\s*\{[^}]*background-color:\s*var\(--warn-bg\);[^}]*color:\s*var\(--warn-fg\);[^}]*border:\s*1px\s+solid\s+var\(--warn-fg\);[^}]*font-weight:\s*700;/s);
++      expect(cssContent).toMatch(/\.badge-info\s*\{[^}]*background-color:\s*var\(--badge-bg\);[^}]*color:\s*var\(--badge-fg\);[^}]*border:\s*1px\s+solid\s+var\(--badge-border\);/s);
++      expect(cssContent).toMatch(/\.status-badge--purged\s*\{[^}]*background-color:\s*var\(--bg-secondary\);[^}]*color:\s*var\(--fg-secondary\);[^}]*border:\s*1px\s+solid\s+var\(--border-subtle\);/s);
++      expect(cssContent).toMatch(/\.status-badge--resolved\s*\{[^}]*background-color:\s*var\(--bg-success-subtle\);[^}]*color:\s*var\(--text-success\);[^}]*border:\s*1px\s+solid\s+var\(--border-success\);/s);
++      expect(cssContent).toMatch(/\.link-auditor-btn--danger\s*\{[^}]*background-color:\s*var\(--bg-danger\);[^}]*color:\s*var\(--accent-primary-fg\);/s);
++      expect(cssContent).toMatch(/\.metric-card--active\s*\{[^}]*border-color:\s*var\(--accent-primary\);[^}]*background-color:\s*var\(--bg-accent-subtle\);/s);
++    });
++
++    it('renders dangling endpoint badges cleanly in Light theme', async () => {
++      document.documentElement.removeAttribute('data-theme');
++      vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        if (path === '/api/v1/auth/me') return mockAdminUser;
++        if (path === '/api/v1/admin/object-links/audits') {
++          return { items: mockAuditItems, has_more: false };
++        }
++        return [];
++      });
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/admin/link-auditor']}>
++            <LinkAuditorStudio />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
++      });
++
++      await waitFor(() => {
++        // Verify dangling and reason badges are present
++        expect(screen.getAllByText('Dangling Target').length).toBeGreaterThan(0);
++        expect(screen.getAllByText('Soft-Deleted Endpoint').length).toBeGreaterThan(0);
++        expect(screen.getAllByText('Cross-Workspace Leak').length).toBeGreaterThan(0);
++        expect(screen.getAllByText('Flagged').length).toBeGreaterThan(0);
++        expect(screen.getAllByText('Purged').length).toBeGreaterThan(0);
++      });
++
++      // Verify badges have expected CSS classes
++      const danglingTargetBadge = screen.getByTestId('metric-card-DANGLING_TARGET');
++      expect(danglingTargetBadge).toBeDefined();
++
++      const purgeSelectedBtn = screen.getByTestId('purge-selected-btn');
++      expect(purgeSelectedBtn.className).toContain('link-auditor-btn--danger');
++    });
++
++    it('renders dangling endpoint badges cleanly in Dark theme', async () => {
++      document.documentElement.setAttribute('data-theme', 'dark');
++      try {
++        vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++          await Promise.resolve();
++          if (path === '/api/v1/auth/me') return mockAdminUser;
++          if (path === '/api/v1/admin/object-links/audits') {
++            return { items: mockAuditItems, has_more: false };
++          }
++          return [];
++        });
++
++        render(
++          <QueryClientProvider client={queryClient}>
++            <MemoryRouter initialEntries={['/admin/link-auditor']}>
++              <LinkAuditorStudio />
++            </MemoryRouter>
++          </QueryClientProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('link-auditor-studio')).toBeDefined();
++        });
++
++        await waitFor(() => {
++          expect(screen.getAllByText('Dangling Target').length).toBeGreaterThan(0);
++          expect(screen.getAllByText('Soft-Deleted Endpoint').length).toBeGreaterThan(0);
++          expect(screen.getAllByText('Flagged').length).toBeGreaterThan(0);
++        });
++      } finally {
++        document.documentElement.removeAttribute('data-theme');
++      }
++    });
++  });
+ });

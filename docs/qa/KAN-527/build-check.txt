@@ -1,0 +1,24 @@
+$ cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan527-0b8ec5a0/kanban/web
+> eslint . --max-warnings 0
+
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan527-0b8ec5a0/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 765 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-C-_UhLXk.css            640.71 kB │ gzip:  89.79 kB
+dist/assets/index-MuJhtnux.js           3,108.53 kB │ gzip: 865.40 kB
+
+✓ built in 1.42s
+Exit code: 0
+
+$ uv run python -m scripts.check_no_dashes --all
+Exit code: 0
