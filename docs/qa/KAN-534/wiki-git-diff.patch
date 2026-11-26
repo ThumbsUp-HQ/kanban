@@ -1,0 +1,135 @@
+commit cab6f4d0a31d6797f0b819e7058acbf231c52913
+Author: Adam Outler <adamoutler@gmail.com>
+Date:   Thu Nov 26 15:51:29 2026 -0500
+
+    docs(wiki): add Workload Identity Federation settings reference (KAN-534)
+
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+index e15a143..83f759c 100644
+--- a/Studio-Configuration-Reference.md
++++ b/Studio-Configuration-Reference.md
+@@ -460,44 +460,87 @@ The MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Pr
+ 
+ ![Workload OIDC Federation Studio](images/slice3-workload-oidc-studio.png)
+ 
+-### Workload Identity Federation Studio (`/settings/mcp` and `/admin/mcp`)
++### Workload Identity Federation Settings
+ 
+-The Workload Identity Federation Studio allows administrators to author and manage RFC 8693 token exchange policies for headless CI/CD runners:
++The Workload Identity Federation settings govern RFC 8693 token exchange policies minted for automated CI/CD runners, Kubernetes pods, and distributed pipeline workers. Administrators author and manage these policies at `/settings/mcp` (personal workload policies) and `/admin/mcp` (workspace and global workload policies) to eliminate static secrets and long-lived API tokens.
+ 
+ | Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
+ | :--- | :--- | :--- | :--- | :--- |
+-| `name` | Descriptive policy identifier | String (1 to 120 characters) | Required | Displayed in workload policy table and audit ledger |
++| `name` | Descriptive policy identifier | String (1 to 120 characters) | Required at creation | Displayed in workload policy table and audit ledger |
+ | `description` | Human-readable explanation of policy purpose | String (up to 500 characters) or None | None | Documents workload integration context and team ownership |
+-| `issuer` | OpenID Connect token issuer URL | Strict HTTPS URL (1 to 500 characters) | Required | Validates incoming JWT `iss` claim; plaintext HTTP rejected |
+-| `client_id` | Expected audience claim | String (1 to 255 characters) | Required | Matches incoming JWT `aud` claim |
+-| `subject_pattern` | Subject matching pattern | Glob or Regex (1 to 500 characters) | Required | Matches incoming JWT `sub` claim (e.g. `repo:org/repo:*`) |
++| `issuer` | OpenID Connect token issuer URL (`Issuer URL`) | Strict HTTPS URL (1 to 500 characters) | Required at creation | Validates incoming JWT `iss` claim; plaintext HTTP rejected |
++| `client_id` | Expected audience claim (`Client ID / Audience`) | String (1 to 255 characters) | Required at creation | Matches incoming JWT `aud` claim to prevent token cross-use |
++| `subject_pattern` | Subject matching pattern (`Subject Pattern`) | Glob or Regex (1 to 500 characters) | Required at creation | Matches incoming JWT `sub` claim (e.g. `repo:org/repo:*`) |
+ | `required_claims_json` | Exact claim match constraints | JSON Object | `{}` | Enforces additional claims (e.g. `{"environment": "production"}`) |
+-| `surface` | Target MCP surface | `agent` or `docs` | `agent` | Determines which MCP endpoint the federated token can invoke |
++| `surface` | Target streamable MCP surface (`Surface`) | `agent` or `docs` | `agent` | Determines which MCP endpoint the federated token can invoke |
+ | `scopes` | Allowed OAuth privilege scopes | List of `SURFACE_SCOPES` strings | `[]` (Empty) | Bounds the granted scopes (e.g. `["agent:read", "agent:write"]`) |
+ | `allowed_project_ids` | Permitted project UUID boundaries | List of UUIDs or None | None (All accessible) | Limits workload token authority strictly to designated project IDs |
+-| `allowed_cidrs` | Subnet IP allowlist for token exchange | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Restricts token exchange to specific runner network IP blocks |
++| `allowed_cidrs` | Subnet IP allowlist for token exchange (`Allowed CIDRs`) | Comma or whitespace separated IPv4/IPv6 CIDRs | None (Allow all) | Restricts token exchange to specific runner network IP blocks |
+ | `capability_mask` | Capability bitmask ceiling | Integer between 0 and 255 | 255 | Monotonic capability ceiling enforced by RLS |
+-| `max_ttl_seconds` | Lifespan of issued ephemeral token | Integer between 60 and 86400 seconds | 3600 (1 hour) | Limits exposure window of federated workload credentials |
++| `max_ttl_seconds` | Lifespan of issued ephemeral token (`Max TTL`) | Integer between 60 and 86400 seconds | 3600 (1 hour) | Limits exposure window of federated workload credentials |
+ | `is_enabled` | Policy active toggle | Boolean (`true` / `false`) | `true` | Disabled policies immediately reject token exchange |
+ 
+-- **Setting-by-Setting Workload Technical Details:**
+-  - **`name`:** Descriptive name assigned to the workload identity policy (1 to 120 characters). Displayed in governance tables and audit records.
+-  - **`description`:** Optional documentation field (up to 500 characters) explaining the pipeline context, team owner, or workflow triggering the token exchange.
+-  - **`issuer`:** The trusted OpenID Connect issuer URL. Must use a strict HTTPS scheme (e.g. `https://token.actions.githubusercontent.com`). Plaintext HTTP URLs are rejected.
+-  - **`client_id`:** Expected audience identifier (`aud`) matching the workload runner configuration (1 to 255 characters).
+-  - **`subject_pattern`:** Glob pattern or regex matched against the incoming OIDC JWT `sub` claim (1 to 500 characters). Evaluated using POSIX pattern matching.
+-  - **`required_claims_json`:** Arbitrary JSON dictionary of required key-value claims that must match exactly in the incoming token (e.g. branch, environment, or repository slug).
+-  - **`surface`:** The target MCP surface granted to the federated token (`agent` or `docs`).
+-  - **`scopes`:** List of allowed scopes granted upon successful exchange, restricted strictly to valid surface scopes (such as `agent:read`, `agent:write`, or `docs:read`).
+-  - **`allowed_project_ids`:** Optional list of project UUIDs restricting where the exchanged token can query or mutate work items.
+-  - **`allowed_cidrs`:** Optional network boundary allowlist restricting token exchange requests to authorized runner subnet IP addresses.
+-  - **`capability_mask`:** Monotonic capability bitmask ceiling (0 to 255, default 255). Further constrains the operations permitted by the resulting token.
+-  - **`max_ttl_seconds`:** Maximum validity period for issued short-lived access tokens (60 to 86,400 seconds, default 3,600 seconds / 1 hour).
+-  - **`is_enabled`:** Administrative master switch for the policy. When set to `false`, token exchange requests matching this policy are rejected immediately.
+-- **Built-in Presets:** The Studio provides one-click presets for common automated environments:
+-  - **GitHub Actions:** Pre-fills issuer `https://token.actions.githubusercontent.com` and pattern `repo:org/repo:ref:refs/heads/*`.
+-  - **GitLab CI:** Pre-fills issuer `https://gitlab.com` and pattern `project_path:group/project:ref:*:ref_type:branch`.
+-  - **Kubernetes:** Pre-fills in-cluster issuer `https://kubernetes.default.svc.cluster.local` and pattern `system:serviceaccount:default:*`.
++#### Setting-by-Setting Technical Paragraphs: Workload Identity Federation
++
++- **Issuer URL (`issuer`):** Authoritative OpenID Connect identity provider URL. Must use a strict HTTPS scheme (e.g. `https://token.actions.githubusercontent.com`). Plaintext HTTP URLs are rejected with validation errors to prevent cleartext credential interception over untrusted networks.
++- **Client ID / Audience (`client_id`):** The expected audience claim (`aud`) configured within the workload runner (1 to 255 characters). The 👍kanban token endpoint verifies that the incoming token audience matches this configured identifier, ensuring tokens generated for other services cannot be repurposed.
++- **Surface (`surface`):** Designates the target Model Context Protocol surface granted to the federated token. Choices are `agent` (grants access to `/mcp/agent` execution and verification tools with a <= 1,850 token prompt ceiling) or `docs` (grants access to `/mcp/docs` knowledge tools with a <= 1,350 token ceiling). Default value is `agent`.
++- **Subject Pattern (`subject_pattern`):** POSIX glob pattern or regular expression evaluated against the incoming OIDC JWT subject (`sub`) claim (1 to 500 characters). Evaluated using POSIX pattern matching to bind token issuance strictly to specific repositories, branches, environments, or Kubernetes service accounts.
++- **Allowed CIDRs (`allowed_cidrs`):** Optional network boundary allowlist restricting token exchange requests to authorized runner subnet IP addresses. Supports comma- or whitespace-delimited IPv4 and IPv6 CIDR notations (e.g. `10.0.0.0/8, 192.168.1.0/24`). Requests originating from unlisted IP addresses are rejected with `403 FORBIDDEN_CIDR`. Default is `None` (all network origins permitted).
++- **Max TTL (`max_ttl_seconds`):** Maximum validity period for issued short-lived ephemeral access tokens (`kb_eat_*`). Enforced between 60 seconds (1 minute) and 86,400 seconds (24 hours), defaulting to `3600` seconds (1 hour). Caps the exposure window if an ephemeral bearer token is leaked in runner logs.
++- **name:** Descriptive policy name (1 to 120 characters) displayed in administration tables and immutable audit logs.
++- **description:** Optional documentation string (up to 500 characters) describing the CI/CD pipeline, team ownership, or repository context.
++- **required_claims_json:** Arbitrary JSON dictionary of required key-value claims that must match exactly in the incoming token payload (e.g. `{"environment": "production"}`).
++- **scopes:** List of granted OAuth scopes (e.g. `["agent:read", "agent:write"]`), strictly validated against the target surface.
++- **allowed_project_ids:** Optional list of project UUIDs restricting where the exchanged token can query or mutate work items.
++- **capability_mask:** Monotonic capability bitmask ceiling (0 to 255, default 255). Further constrains operations permitted by the resulting token.
++- **is_enabled:** Master administrative toggle for the policy. When set to `false`, token exchange requests matching this policy fail closed immediately.
++
++#### RFC 8693 Subject Claim Patterns and Pipeline Examples
++
++Automated runners authenticate by presenting their signed OIDC identity token to `/oauth/token` using the RFC 8693 token exchange grant:
++
++1. **GitHub Actions Workflow Example:**
++   - **Issuer URL:** `https://token.actions.githubusercontent.com`
++   - **Client ID / Audience:** `https://kanban.example.com`
++   - **Subject Claim Pattern:** `repo:ThumbsUp-HQ/kanban:ref:refs/heads/*` (or `repo:ThumbsUp-HQ/kanban:environment:production`)
++   - **Default Surface:** `agent`
++   - **Default Max TTL:** `3600` seconds (1 hour)
++   - **Sample Incoming Subject Claim:** `repo:ThumbsUp-HQ/kanban:ref:refs/heads/main`
++
++2. **Kubernetes In-Cluster Workload Example:**
++   - **Issuer URL:** `https://kubernetes.default.svc.cluster.local`
++   - **Client ID / Audience:** `https://kanban.example.com`
++   - **Subject Claim Pattern:** `system:serviceaccount:kanban-ci:*` (or `system:serviceaccount:production:release-bot`)
++   - **Default Surface:** `agent`
++   - **Default Max TTL:** `1800` seconds (30 minutes)
++   - **Sample Incoming Subject Claim:** `system:serviceaccount:kanban-ci:builder`
++
++3. **GitLab CI/CD Pipeline Example:**
++   - **Issuer URL:** `https://gitlab.com`
++   - **Client ID / Audience:** `https://kanban.example.com`
++   - **Subject Claim Pattern:** `project_path:thumbs-up-hq/kanban:ref:*:ref_type:branch`
++   - **Default Surface:** `docs`
++   - **Default Max TTL:** `3600` seconds (1 hour)
++   - **Sample Incoming Subject Claim:** `project_path:thumbs-up-hq/kanban:ref:main:ref_type:branch`
++
++#### RFC 8693 Token Exchange Request Format
++
++Headless pipelines exchange their OIDC token by submitting an HTTP `POST` request to `/oauth/token`:
++
++```http
++POST /oauth/token HTTP/1.1
++Host: kanban.example.com
++Content-Type: application/x-www-form-urlencoded
++
++grant_type=urn:ietf:params:oauth:grant-type:token-exchange
++&subject_token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
++&subject_token_type=urn:ietf:params:oauth:token-type:jwt
++&requested_token_type=urn:ietf:params:oauth:token-type:access_token
++&audience=https://kanban.example.com
++```
++
++Upon cryptographic signature verification against upstream issuer JWKS and policy pattern evaluation, 👍kanban issues an ephemeral bearer token (`kb_eat_*`) bound by `CredentialBoundary` and PostgreSQL Row-Level Security.
+ 
+ ---
+ 
+@@ -606,6 +649,9 @@ The AI Providers Studio (`/admin/ai` or `/workspaces/:ws/settings`) configures m
+ - **priority_and_order:** The failover dispatch sequence determined via `PUT /api/v1/admin/ai/providers/order` (or `PUT /api/v1/workspaces/:ws/ai-providers/order`). Providers are evaluated sequentially by priority. If a higher-tier provider encounters a 5xx error or rate limit, the router seamlessly falls back to the next active provider in the stack.
+ - **token_cap_and_budgets:** Managed via `PUT /api/v1/admin/ai/budgets` (or `PUT /api/v1/workspaces/:ws/ai-providers/budgets`) across daily or monthly periods (`period_kind`). Setting `token_cap = 0` triggers a Hard AI Freeze, immediately rejecting reservations with `BudgetExceeded` and halting Sparkle completions with status `budget`. Selecting Unlimited Quota configures an internal ceiling of 10,000,000,000 tokens, recording ledger telemetry without automated cutoffs. Quick presets provide standard allowances of 1M, 5M, 25M, and 100M tokens.
+ 
++> [!NOTE]
++> For headless CI/CD pipelines, automated runners, and external agents authenticating via RFC 8693 token exchange without static API keys, configure Workload Identity Federation policies in the MCP Access Studio. See [Workload Identity Federation Settings](#workload-identity-federation-settings) for parameter specifications, valid formats, and subject claim examples.
++
+ ---
+ 
+ ## 9. Agent Definitions Studio
