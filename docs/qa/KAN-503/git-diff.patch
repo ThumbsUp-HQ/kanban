@@ -382,10 +382,48 @@ index f8102912..099103b8 100644
 +  });
  });
 diff --git a/kanban/web/src/features/projects/CreateProjectModal.tsx b/kanban/web/src/features/projects/CreateProjectModal.tsx
-index 7066d8ad..f39bc57d 100644
+index 7066d8ad..e9307ab6 100644
 --- a/kanban/web/src/features/projects/CreateProjectModal.tsx
 +++ b/kanban/web/src/features/projects/CreateProjectModal.tsx
-@@ -312,12 +312,21 @@ export function CreateProjectModal({
+@@ -82,6 +82,10 @@ export function CreateProjectModal({
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
+   const nameInputRef = useRef<HTMLInputElement | null>(null);
++  const onCloseRef = useRef(onClose);
++  useEffect(() => {
++    onCloseRef.current = onClose;
++  });
+ 
+   let navigateFn: ((to: string) => void) | null = null;
+   try {
+@@ -141,7 +145,7 @@ export function CreateProjectModal({
+       if (e.key === 'Escape') {
+         e.preventDefault();
+         resetForm();
+-        onClose();
++        onCloseRef.current();
+       }
+     };
+ 
+@@ -151,7 +155,7 @@ export function CreateProjectModal({
+       clearTimeout(timer);
+       window.removeEventListener('keydown', handleKeyDown);
+     };
+-  }, [isOpen, onClose]);
++  }, [isOpen]);
+ 
+   if (!isOpen) {
+     return null;
+@@ -256,7 +260,7 @@ export function CreateProjectModal({
+ 
+   return (
+     <div
+-      className="kb-palette-scrim kb-create-project-scrim"
++      className="kb-create-project-scrim"
+       data-testid="create-project-scrim"
+       onClick={(e) => {
+         if (e.target === e.currentTarget) {
+@@ -312,12 +316,21 @@ export function CreateProjectModal({
            </div>
  
            <div className="kb-create-project-field">
@@ -413,7 +451,7 @@ index 7066d8ad..f39bc57d 100644
              <input
                id="create-project-identifier"
                type="text"
-@@ -330,9 +339,6 @@ export function CreateProjectModal({
+@@ -330,9 +343,6 @@ export function CreateProjectModal({
                }}
                className="kb-create-project-input kb-create-project-input-mono"
              />
