@@ -7,8 +7,8 @@
   gap: 0.375rem;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--accent-primary);
-  background: var(--bg-hover);
+  color: var(--badge-fg);
+  background: var(--bg-surface-raised);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 0.375rem 0.75rem;
@@ -17,33 +17,12 @@
 }
 
 .kb-studio-doc-link:hover {
-  background: var(--border-subtle);
+  background: var(--bg-hover);
   border-color: var(--border-strong);
-  color: var(--focus-ring);
+  color: var(--badge-fg);
 }
 
-[data-theme='dark'] .kb-studio-doc-link {
-  background-color: #374151;
-  border-color: #4b5563;
-  color: #93c5fd;
-}
-
-[data-theme='dark'] .kb-studio-doc-link:hover {
-  background-color: #4b5563;
-  border-color: #6b7280;
-  color: #bfdbfe;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .kb-studio-doc-link {
-    background-color: #374151;
-    border-color: #4b5563;
-    color: #93c5fd;
-  }
-
-  :root:not([data-theme='light']) .kb-studio-doc-link:hover {
-    background-color: #4b5563;
-    border-color: #6b7280;
-    color: #bfdbfe;
-  }
+.kb-studio-doc-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }

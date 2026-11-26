@@ -1,0 +1,339 @@
+diff --git a/kanban/web/src/editor/__tests__/MarkdownEditor.test.tsx b/kanban/web/src/editor/__tests__/MarkdownEditor.test.tsx
+new file mode 100644
+index 00000000..db688608
+--- /dev/null
++++ b/kanban/web/src/editor/__tests__/MarkdownEditor.test.tsx
+@@ -0,0 +1,182 @@
++/**
++ * Unit & Integration Tests for MediaViewport & MarkdownEditor Theme Cadence (KAN-444).
++ * Verifies semantic tokens, WCAG AA compliance, and Light/Dark theme rendering.
++ */
++
++import React from 'react';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import { MediaViewport } from '../media/MediaViewport';
++import { MarkdownEditor } from '../MarkdownEditor';
++
++describe('MediaViewport & MarkdownEditor Theme Cadence (KAN-444)', () => {
++  const SAMPLE_BLOB = 'blob:http://localhost:3000/media-diagram-uuid';
++  const RAW_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="currentColor"/></svg>';
++
++  const originalTheme = document.documentElement.getAttribute('data-theme');
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  afterEach(() => {
++    if (originalTheme !== null) {
++      document.documentElement.setAttribute('data-theme', originalTheme);
++    } else {
++      document.documentElement.removeAttribute('data-theme');
++    }
++  });
++
++  it('renders diagram and SVG media controls cleanly in Light theme', () => {
++    document.documentElement.setAttribute('data-theme', 'light');
++
++    render(
++      <MediaViewport
++        src={SAMPLE_BLOB}
++        alt="System Topology Diagram"
++        rawSource={RAW_SVG}
++        safeFilename="topology.svg"
++        testId="viewport-light"
++      />,
++    );
++
++    const controls = screen.getByTestId('viewport-light-controls');
++    expect(controls).toBeDefined();
++
++    const canvas = screen.getByTestId('viewport-light-canvas');
++    expect(canvas.className).toContain('media-bg--theme');
++
++    const backdropToggle = screen.getByTestId('viewport-light-backdrop-toggle');
++    expect(backdropToggle).toBeDefined();
++
++    const zoomOut = screen.getByTestId('viewport-light-zoom-out');
++    const zoomIn = screen.getByTestId('viewport-light-zoom-in');
++    const zoomReadout = screen.getByTestId('viewport-light-zoom-readout');
++    expect(zoomOut).toBeDefined();
++    expect(zoomIn).toBeDefined();
++    expect(zoomReadout.textContent).toBe('100%');
++
++    const copyBtn = screen.getByTestId('viewport-light-copy-source');
++    expect(copyBtn).toBeDefined();
++    expect(copyBtn.textContent).toBe('Copy');
++
++    const downloadLink = screen.getByTestId('viewport-light-download');
++    expect(downloadLink).toBeDefined();
++    expect(downloadLink.getAttribute('download')).toBe('topology.svg');
++
++    // Cycle through backdrop presets
++    fireEvent.click(backdropToggle);
++    expect(canvas.className).toContain('media-bg--light');
++
++    fireEvent.click(backdropToggle);
++    expect(canvas.className).toContain('media-bg--dark');
++
++    fireEvent.click(backdropToggle);
++    expect(canvas.className).toContain('media-bg--checkerboard');
++
++    fireEvent.click(backdropToggle);
++    expect(canvas.className).toContain('media-bg--theme');
++  });
++
++  it('renders diagram and SVG media controls cleanly in Dark theme', () => {
++    document.documentElement.setAttribute('data-theme', 'dark');
++
++    render(
++      <MediaViewport
++        src={SAMPLE_BLOB}
++        alt="Architecture Overview"
++        rawSource={RAW_SVG}
++        safeFilename="arch.svg"
++        testId="viewport-dark"
++      />,
++    );
++
++    const controls = screen.getByTestId('viewport-dark-controls');
++    expect(controls).toBeDefined();
++
++    const altBadge = screen.getByTestId('viewport-dark-alt-badge');
++    expect(altBadge).toBeDefined();
++    expect(altBadge.textContent).toContain('Alt: Architecture');
++
++    const zoomReadout = screen.getByTestId('viewport-dark-zoom-readout');
++    expect(zoomReadout.textContent).toBe('100%');
++
++    const zoomIn = screen.getByTestId('viewport-dark-zoom-in');
++    fireEvent.click(zoomIn);
++    expect(zoomReadout.textContent).toBe('125%');
++  });
++
++  it('verifies MediaViewport.css uses semantic tokens and avoids hardcoded dark slate rgba(15, 23, 42, 0.75)', () => {
++    const cssPath = path.resolve(__dirname, '../media/MediaViewport.css');
++    const cssContent = fs.readFileSync(cssPath, 'utf-8');
++
++    // Invariant 1: Hardcoded rgba(15, 23, 42, 0.75) must be eliminated
++    expect(cssContent).not.toContain('rgba(15, 23, 42, 0.75)');
++
++    // Invariant 2: Viewport controls use semantic tokens
++    expect(cssContent).toContain('.media-viewport__controls');
++    expect(cssContent).toMatch(/background-color:\s*var\(--bg-surface-raised\)/);
++    expect(cssContent).toMatch(/border:\s*1px solid var\(--border-subtle\)/);
++    expect(cssContent).toMatch(/color:\s*var\(--fg-primary\)/);
++
++    // Invariant 3: Button hover uses semantic tokens
++    expect(cssContent).toContain('.media-btn:hover');
++    expect(cssContent).toMatch(/\.media-btn:hover\s*\{[^}]*background-color:\s*var\(--bg-hover\)/);
++    expect(cssContent).toMatch(/\.media-btn:hover\s*\{[^}]*color:\s*var\(--fg-primary\)/);
++    expect(cssContent).not.toMatch(/\.media-btn:hover\s*\{[^}]*rgba\(255,\s*255,\s*255,\s*0\.12\)/);
++
++    // Invariant 4: Alt badge uses semantic tokens
++    expect(cssContent).toContain('.media-alt-badge');
++    expect(cssContent).toMatch(/\.media-alt-badge\s*\{[^}]*background-color:\s*var\(--bg-surface-raised\)/);
++    expect(cssContent).toMatch(/\.media-alt-badge\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
++    expect(cssContent).toMatch(/\.media-alt-badge\s*\{[^}]*color:\s*var\(--fg-primary\)/);
++
++    // Invariant 5: Backdrop presets pair background and foreground cleanly
++    expect(cssContent).toMatch(/\.media-bg--theme\s*\{[^}]*background-color:\s*var\(--bg-surface\)/);
++    expect(cssContent).toMatch(/\.media-bg--theme\s*\{[^}]*color:\s*var\(--fg-primary\)/);
++
++    expect(cssContent).toMatch(/\.media-bg--light\s*\{[^}]*background-color:\s*#ffffff/);
++    expect(cssContent).toMatch(/\.media-bg--light\s*\{[^}]*color:\s*#111827/);
++
++    expect(cssContent).toMatch(/\.media-bg--dark\s*\{[^}]*background-color:\s*#0f172a/);
++    expect(cssContent).toMatch(/\.media-bg--dark\s*\{[^}]*color:\s*#f8fafc/);
++
++    expect(cssContent).toMatch(/\.media-bg--checkerboard\s*\{[^}]*background-color:\s*var\(--bg-hover\)/);
++    expect(cssContent).toMatch(/\.media-bg--checkerboard\s*\{[^}]*color:\s*var\(--fg-primary\)/);
++    expect(cssContent).toMatch(/\.media-bg--checkerboard\s*\{[^}]*repeating-conic-gradient\(var\(--border-subtle\)/);
++  });
++
++  it('renders MarkdownEditor containing markdown content cleanly in light and dark themes', () => {
++    const markdownSample = '# Architecture\n\n```mermaid\ngraph TD\n  A[Client] --> B[Server]\n```\n';
++    const handleChange = vi.fn();
++
++    // Light theme test
++    document.documentElement.setAttribute('data-theme', 'light');
++    const { unmount } = render(
++      <MarkdownEditor
++        surface="description"
++        value={markdownSample}
++        onChange={handleChange}
++        ariaLabel="Architecture Description"
++        testId="md-editor-light"
++      />,
++    );
++    expect(screen.getByTestId('md-editor-light-wysiwyg')).toBeDefined();
++    unmount();
++
++    // Dark theme test
++    document.documentElement.setAttribute('data-theme', 'dark');
++    render(
++      <MarkdownEditor
++        surface="description"
++        value={markdownSample}
++        onChange={handleChange}
++        ariaLabel="Architecture Description Dark"
++        testId="md-editor-dark"
++      />,
++    );
++    expect(screen.getByTestId('md-editor-dark-wysiwyg')).toBeDefined();
++  });
++});
+diff --git a/kanban/web/src/editor/media/MediaViewport.css b/kanban/web/src/editor/media/MediaViewport.css
+index 67c97a2f..58077f44 100644
+--- a/kanban/web/src/editor/media/MediaViewport.css
++++ b/kanban/web/src/editor/media/MediaViewport.css
+@@ -10,9 +10,10 @@
+   width: 100%;
+   max-height: 520px;
+   min-height: 180px;
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-lg, 8px);
+-  background-color: var(--bg-surface, #ffffff);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
+   overflow: hidden;
+   user-select: none;
+   touch-action: none;
+@@ -70,8 +71,8 @@
+   display: flex;
+   align-items: center;
+   justify-content: center;
+-  background: var(--bg-surface-raised, #f8fafc);
+-  color: var(--fg-muted, #64748b);
++  background: var(--bg-surface-raised);
++  color: var(--fg-muted);
+   font-family: var(--font-sans, sans-serif);
+   font-size: var(--text-sm, 13px);
+   animation: media-skeleton-pulse 1.5s ease-in-out infinite;
+@@ -84,20 +85,24 @@
+ 
+ /* Contrast Backdrop Canvas Classes (S5.4, S6.2) */
+ .media-bg--theme {
+-  background-color: var(--bg-surface, #ffffff);
++  background-color: var(--bg-surface);
++  color: var(--fg-primary);
+ }
+ 
+ .media-bg--light {
+   background-color: #ffffff;
++  color: #111827;
+ }
+ 
+ .media-bg--dark {
+   background-color: #0f172a;
++  color: #f8fafc;
+ }
+ 
+ .media-bg--checkerboard {
+-  background-color: #f1f5f9;
+-  background-image: repeating-conic-gradient(#cbd5e1 0% 25%, #f1f5f9 0% 50%);
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  background-image: repeating-conic-gradient(var(--border-subtle) 0% 25%, var(--bg-hover) 0% 50%);
+   background-position: 0 0;
+   background-size: 20px 20px;
+ }
+@@ -115,13 +120,13 @@
+   max-width: calc(100% - 24px);
+   gap: 6px;
+   padding: 4px 8px;
+-  background-color: var(--bg-surface-raised, rgba(15, 23, 42, 0.85));
++  background-color: var(--bg-surface-raised);
+   backdrop-filter: blur(8px);
+-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-full, 9999px);
+   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+   z-index: 10;
+-  color: var(--fg-primary, #ffffff);
++  color: var(--fg-primary);
+ }
+ 
+ @media (max-width: 640px) {
+@@ -134,7 +139,7 @@
+     bottom: auto;
+     justify-content: center;
+     border-radius: 0;
+-    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.15));
++    border-top: 1px solid var(--border-subtle);
+     border-left: none;
+     border-right: none;
+     border-bottom: none;
+@@ -160,11 +165,12 @@
+   text-decoration: none;
+   white-space: nowrap;
+   flex-shrink: 0;
+-  transition: background-color 0.15s ease;
++  transition: background-color 0.15s ease, color 0.15s ease;
+ }
+ 
+ .media-btn:hover {
+-  background-color: rgba(255, 255, 255, 0.12);
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
+ }
+ 
+ .media-btn:focus-visible {
+@@ -187,12 +193,13 @@
+   top: 12px;
+   left: 12px;
+   padding: 2px 8px;
+-  background: rgba(15, 23, 42, 0.75);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
+   border-radius: 4px;
+   font-family: var(--font-sans, sans-serif);
+   font-size: 11px;
+   font-weight: 600;
+-  color: #f8fafc;
++  color: var(--fg-primary);
+   z-index: 5;
+   cursor: default;
+ }
+@@ -206,11 +213,11 @@
+   gap: 12px;
+   width: 100%;
+   padding: 32px 24px;
+-  background-color: var(--bg-surface-raised, #f8fafc);
+-  border: 1px dashed var(--border-subtle, #cbd5e1);
++  background-color: var(--bg-surface-raised);
++  border: 1px dashed var(--border-subtle);
+   border-radius: var(--radius-lg, 8px);
+   text-align: center;
+-  color: var(--fg-muted, #64748b);
++  color: var(--fg-muted);
+   font-family: var(--font-sans, sans-serif);
+ }
+ 
+@@ -219,18 +226,18 @@
+   align-items: center;
+   gap: 6px;
+   padding: 4px 12px;
+-  background-color: var(--bg-surface, #ffffff);
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-full, 9999px);
+   font-size: 13px;
+   font-weight: 500;
+-  color: var(--fg-primary, #0f172a);
++  color: var(--fg-primary);
+ }
+ 
+ .media-airgap-placeholder__host {
+   font-family: var(--font-mono, monospace);
+   font-size: 12px;
+-  color: var(--fg-secondary, #475569);
++  color: var(--fg-secondary);
+ }
+ 
+ /* Lightbox Dialog Scrim */

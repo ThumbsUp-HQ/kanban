@@ -2,9 +2,12 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { FieldHelpHint } from './FieldHelpHint';
+import { StudioDocLink } from './StudioDocLink';
 import { createHintController, type HintClock } from '../emoji/hintTiming';
 import { registerShellPanel, ShellPanelsProvider, useShellPanels } from '../../app/shellPanels';
 
@@ -816,5 +819,122 @@ describe('FieldHelpHint Component', () => {
       trigger.focus();
     });
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('StudioDocLink Component and Theme Tokens (KAN-441)', () => {
+  it('renders cleanly with default props and .kb-studio-doc-link class', () => {
+    render(<StudioDocLink href="/wiki/agents" />);
+
+    const link = screen.getByTestId('studio-doc-link');
+    expect(link).toBeDefined();
+    expect(link.className).toBe('kb-studio-doc-link');
+    expect(link.getAttribute('href')).toBe('/wiki/agents');
+    expect(link.getAttribute('aria-label')).toBe('Documentation ->');
+    expect(link.textContent).toContain('Documentation ->');
+  });
+
+  it('renders with custom title, label, testId, and className', () => {
+    render(
+      <StudioDocLink
+        href="/wiki/governance"
+        title="Custom Governance Title"
+        label="Learn Governance ->"
+        testId="custom-studio-link"
+        className="kb-studio-doc-link custom-modifier"
+      />,
+    );
+
+    const link = screen.getByTestId('custom-studio-link');
+    expect(link).toBeDefined();
+    expect(link.className).toContain('kb-studio-doc-link');
+    expect(link.className).toContain('custom-modifier');
+    expect(link.getAttribute('href')).toBe('/wiki/governance');
+    expect(link.getAttribute('aria-label')).toBe('Custom Governance Title');
+    expect(link.textContent).toContain('Learn Governance ->');
+  });
+
+  it('preserves link navigation behavior inside ShellPanelsProvider', () => {
+    function TestConsumer() {
+      const { activePanel } = useShellPanels();
+      return (
+        <div>
+          <StudioDocLink
+            href="/wiki/ai-providers"
+            title="AI Providers Guide"
+            testId="panel-studio-link"
+          />
+          <div data-testid="help-panel-id">{activePanel?.id ?? 'none'}</div>
+          <div data-testid="help-panel-arg">{JSON.stringify(activePanel?.arg ?? {})}</div>
+        </div>
+      );
+    }
+
+    render(
+      <ShellPanelsProvider>
+        <TestConsumer />
+      </ShellPanelsProvider>,
+    );
+
+    const link = screen.getByTestId('panel-studio-link');
+    const idElem = screen.getByTestId('help-panel-id');
+    expect(idElem.textContent).toBe('none');
+
+    act(() => {
+      fireEvent.click(link);
+    });
+
+    expect(idElem.textContent).toBe('help');
+    const argElem = screen.getByTestId('help-panel-arg');
+    expect(JSON.parse(argElem.textContent || '{}')).toEqual({
+      href: '/wiki/ai-providers',
+      title: 'AI Providers Guide',
+    });
+  });
+
+  it('preserves link navigation behavior outside ShellPanelsProvider in Light and Dark themes', () => {
+    for (const theme of ['light', 'dark']) {
+      document.documentElement.setAttribute('data-theme', theme);
+
+      const { unmount } = render(
+        <StudioDocLink
+          href="/wiki/security"
+          title="Security Guide"
+          testId={`theme-test-${theme}`}
+        />,
+      );
+
+      const link = screen.getByTestId(`theme-test-${theme}`);
+      expect(link.getAttribute('href')).toBe('/wiki/security');
+
+      act(() => {
+        fireEvent.click(link);
+      });
+
+      expect(link.getAttribute('href')).toBe('/wiki/security');
+      unmount();
+    }
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  it('verifies StudioDocLink.css contains zero raw hex color literals and uses semantic tokens', () => {
+    const cssPath = path.resolve(__dirname, 'StudioDocLink.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    // Asserts zero raw hex color literals (e.g. #374151, #4b5563, #93c5fd, #6b7280, #bfdbfe)
+    const hexMatches = cssContent.match(/#[0-9a-fA-F]{3,8}/g);
+    expect(hexMatches).toBeNull();
+
+    // Asserts semantic tokens are used
+    expect(cssContent).toContain('var(--bg-surface-raised)');
+    expect(cssContent).toContain('var(--border-subtle)');
+    expect(cssContent).toContain('var(--badge-fg)');
+    expect(cssContent).toContain('var(--bg-hover)');
+    expect(cssContent).toContain('var(--border-strong)');
+    expect(cssContent).toContain('var(--focus-ring)');
+
+    // Asserts hardcoded dark mode overrides are removed
+    expect(cssContent).not.toContain("[data-theme='dark']");
+    expect(cssContent).not.toContain('@media (prefers-color-scheme: dark)');
   });
 });
