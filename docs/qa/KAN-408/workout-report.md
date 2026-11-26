@@ -48,15 +48,15 @@ The following wire exchanges were recorded via httpx event hooks during live exe
 POST /api/v1/auth/local/login HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: FQyaKzdc7bMFq9eiXqX4Zw.7Nbe2ksh1RN8WfF0VjhgsvHATPdOUIfao9MEGAnET3E
+X-Csrf-Token: 7TK7PBwdUrET1JQcmSfFFA.RRm3m4FzApzpYzCS8aUsg9HE_YQ-aBEkXIHLOC8byKA
 
 {"username":"admin","password":"AdminPassword123!"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=qDncwDMaNr53_adVRyfzOoZqo5WIk4BV-effVryfbgg.8pOdNo-lbhks_EJ-eFjUZldct6jzgB0MDhLL4xVqLD8; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=wJC3zFyBm0rd9Xu7pWQF-A.1EkeKPxoqK1HWEuphWMVvatrWgmQI_6tab_uHY-E8g0; Path=/; Secure; SameSite=Strict, kb_session=qDncwDMaNr53_adVRyfzOoZqo5WIk4BV-effVryfbgg.8pOdNo-lbhks_EJ-eFjUZldct6jzgB0MDhLL4xVqLD8; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=wJC3zFyBm0rd9Xu7pWQF-A.1EkeKPxoqK1HWEuphWMVvatrWgmQI_6tab_uHY-E8g0; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=oYljOUX7eTEvtWf6wngpzesGq5WKwJH9gdpAWUPsTWQ.TtOcMwJTLdcd846wJpCrXnCaqJIZjAe3ZaoXmqC-tf0; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=smuBY-yvp7uezG0DaWfS4A.ITczpJggRFFKHa7rWatOSmgT7ItTrWZ1S-V_gkbhVsA; Path=/; Secure; SameSite=Strict, kb_session=oYljOUX7eTEvtWf6wngpzesGq5WKwJH9gdpAWUPsTWQ.TtOcMwJTLdcd846wJpCrXnCaqJIZjAe3ZaoXmqC-tf0; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=smuBY-yvp7uezG0DaWfS4A.ITczpJggRFFKHa7rWatOSmgT7ItTrWZ1S-V_gkbhVsA; Path=/; SameSite=Strict
 
-{"authenticated":true,"status":"mfa_required","challenge_id":"809d7992-63ff-433e-9c6c-ad4db1ae8482","methods":["webauthn","totp","recovery"],"preferred_method":"totp","session_id":"809d7992-63ff-433e-9c6c-ad4db1ae8482","aal_level":1,"mfa_pending":true,"csrf_token":"wJC3zFyBm0rd9Xu7pWQF-A.1EkeKPxoqK1HWEuphWMVvatrWgmQI_6tab_uHY-E8g0"}
+{"authenticated":true,"status":"mfa_required","challenge_id":"74fc2d31-2c8e-4e08-8bfa-cd9b1431b25f","methods":["webauthn","totp","recovery"],"preferred_method":"totp","session_id":"74fc2d31-2c8e-4e08-8bfa-cd9b1431b25f","aal_level":1,"mfa_pending":true,"csrf_token":"smuBY-yvp7uezG0DaWfS4A.ITczpJggRFFKHa7rWatOSmgT7ItTrWZ1S-V_gkbhVsA"}
 ```
 
 - **WebAuthn Registration Options (rp.name = "👍kanban", rp.id = "127.0.0.1"):**
@@ -64,14 +64,14 @@ Set-Cookie: __Host-kb_session=qDncwDMaNr53_adVRyfzOoZqo5WIk4BV-effVryfbgg.8pOdNo
 POST /api/v1/auth/webauthn/register/options HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: wJC3zFyBm0rd9Xu7pWQF-A.1EkeKPxoqK1HWEuphWMVvatrWgmQI_6tab_uHY-E8g0
+X-Csrf-Token: smuBY-yvp7uezG0DaWfS4A.ITczpJggRFFKHa7rWatOSmgT7ItTrWZ1S-V_gkbhVsA
 
 {"authenticator_attachment":"platform"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"rp":{"name":"👍kanban","id":"127.0.0.1"},"user":{"id":"AZMQAAACcACAAAAAAAAAAQ","name":"admin","displayName":"System Administrator"},"challenge":"Tt5Jdj87j0vk8hOFt-jjEy-9Ez_TcpQnm8nXG9AVW6o","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[],"authenticatorSelection":{"authenticatorAttachment":"platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
+{"rp":{"name":"👍kanban","id":"127.0.0.1"},"user":{"id":"AZMQAAACcACAAAAAAAAAAQ","name":"admin","displayName":"System Administrator"},"challenge":"kQOKvHmz3oHQTmB3EnemIZy1_NEYcQnbi7B0b4BKazo","pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-8},{"type":"public-key","alg":-257}],"timeout":300000,"excludeCredentials":[],"authenticatorSelection":{"authenticatorAttachment":"platform","residentKey":"preferred","requireResidentKey":false,"userVerification":"preferred"},"attestation":"none"}
 ```
 
 - **WebAuthn Registration Verification (AAL2 Step-Up):**
@@ -79,27 +79,27 @@ Content-Type: application/json
 POST /api/v1/auth/webauthn/register/verify HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: wJC3zFyBm0rd9Xu7pWQF-A.1EkeKPxoqK1HWEuphWMVvatrWgmQI_6tab_uHY-E8g0
+X-Csrf-Token: smuBY-yvp7uezG0DaWfS4A.ITczpJggRFFKHa7rWatOSmgT7ItTrWZ1S-V_gkbhVsA
 
-{"credential":{"id":"G77a8qtmTe370Ls7dRkmriAO7s4YyZhNb-mJEwf7ZtI","rawId":"G77a8qtmTe370Ls7dRkmriAO7s4YyZhNb-mJEwf7ZtI","type":"public-key","response":{"clientDataJSON":"eyJ0eXBlIjogIndlYmF1dGhuLmNyZWF0ZSIsICJjaGFsbGVuZ2UiOiAiVHQ1SmRqODdqMHZrOGhPRnQtampFeS05RXpfVGNwUW5tOG5YRzlBVlc2byIsICJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMToxODQwOCIsICJjcm9zc09yaWdpbiI6IGZhbHNlfQ","attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVikEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAIBu-2vKrZk3t-9C7O3UZJq4gDu7OGMmYTW_piRMH-2bSpQECAyYgASFYIFmbdd1xwLMtjk0eXBZVYstJ_9OI8UUYxehtkQoSB3a3IlggoWe0jEpG6yhQL8ZNXldrkb5ZLhQj4SKYG643x3L-1dQ","transports":["internal"]}},"nickname":"Workout Admin Passkey"}
+{"credential":{"id":"2vPDEoTocMbUmdMQZ4VHGaLdJd0tnZFjrg662Ja5kBs","rawId":"2vPDEoTocMbUmdMQZ4VHGaLdJd0tnZFjrg662Ja5kBs","type":"public-key","response":{"clientDataJSON":"eyJ0eXBlIjogIndlYmF1dGhuLmNyZWF0ZSIsICJjaGFsbGVuZ2UiOiAia1FPS3ZIbXozb0hRVG1CM0VuZW1JWnkxX05FWWNRbmJpN0IwYjRCS2F6byIsICJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMToxODQwOCIsICJjcm9zc09yaWdpbiI6IGZhbHNlfQ","attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVikEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAINrzwxKE6HDG1JnTEGeFRxmi3SXdLZ2RY64OutiWuZAbpQECAyYgASFYIKr_-kgqBonn6WMCwmHN2HgF0dw5gonmCpXEDHxCuT1dIlggR2-kooILl0TQtXZerXr-OwRwe5pCmn76rG8RRwKTo8M","transports":["internal"]}},"nickname":"Workout Admin Passkey"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=vzL3qTZQ4QBeixLBsy615HvgzkgMWDrxXpEBWfiEyBA.qAOTpldOvMZ8VIgQfkWdZJzzW9fILNVwa4nPc72bXYA; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=WLY9G56M6JhIHFHio3c1Sg.wpdPUVzRwhPCb09uT9QHkLnidWKIeaTRRN5uUcZzieI; Path=/; Secure; SameSite=Strict, kb_session=vzL3qTZQ4QBeixLBsy615HvgzkgMWDrxXpEBWfiEyBA.qAOTpldOvMZ8VIgQfkWdZJzzW9fILNVwa4nPc72bXYA; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=WLY9G56M6JhIHFHio3c1Sg.wpdPUVzRwhPCb09uT9QHkLnidWKIeaTRRN5uUcZzieI; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=Iy3DGqwlTQ29UiUb4Ifpu0DeA-aaTs5PaRfWYGnhH8o.PN1RJJZuaOeTFY9h8z9wlSyJsfQ2MZ3hUxkAo5XIWdQ; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=8oPuN1jIcXpZjQAQiM-NCg.pyEUButBg8JdfXc5k0k7wjYuFIJiCSYkB8ooMqNcuR8; Path=/; Secure; SameSite=Strict, kb_session=Iy3DGqwlTQ29UiUb4Ifpu0DeA-aaTs5PaRfWYGnhH8o.PN1RJJZuaOeTFY9h8z9wlSyJsfQ2MZ3hUxkAo5XIWdQ; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=8oPuN1jIcXpZjQAQiM-NCg.pyEUButBg8JdfXc5k0k7wjYuFIJiCSYkB8ooMqNcuR8; Path=/; SameSite=Strict
 
-{"verified":true,"aal_level":2,"session_id":"01a21595-e47e-7f40-98a9-d03445b4888e","csrf_token":"WLY9G56M6JhIHFHio3c1Sg.wpdPUVzRwhPCb09uT9QHkLnidWKIeaTRRN5uUcZzieI","credential_id":"01a21595-e470-7361-a9a6-d8f695111ba2","nickname":"Workout Admin Passkey","recovery_codes":["FAVJA-FY9SE","D59B0-4XQ04","670SY-NFARW","K5XZN-7BA5Q","TG8QK-R76RT","6AD3E-Z9C2N","FGCJ9-3GXY4","2NV7K-XVWJQ","GRG91-KB228","3XH2V-R3DSW"]}
+{"verified":true,"aal_level":2,"session_id":"01a215ce-59a5-73b7-bbf1-034566de14da","csrf_token":"8oPuN1jIcXpZjQAQiM-NCg.pyEUButBg8JdfXc5k0k7wjYuFIJiCSYkB8ooMqNcuR8","credential_id":"01a215ce-5998-7b15-a0ba-3ec8183afdad","nickname":"Workout Admin Passkey","recovery_codes":["B1QKN-M67K3","VSZKE-YR1D9","AB40E-RCJRF","B7QDT-7NHV0","53XH1-DQ02Y","Y3CE4-7XDPS","HNTQD-69NZG","KGZA4-AJ51V","EZBT1-QGJ89","Y6EZ0-T1ESH"]}
 ```
 
 - **WebAuthn Assertion Authentication Options:**
 ```http
 POST /api/v1/auth/webauthn/authenticate/options HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: WLY9G56M6JhIHFHio3c1Sg.wpdPUVzRwhPCb09uT9QHkLnidWKIeaTRRN5uUcZzieI
+X-Csrf-Token: 8oPuN1jIcXpZjQAQiM-NCg.pyEUButBg8JdfXc5k0k7wjYuFIJiCSYkB8ooMqNcuR8
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"challenge":"L2iWFGmag3iDkRJKPD6-ey1wfj3cAcSBR90yhevHDWw","timeout":300000,"rpId":"127.0.0.1","allowCredentials":[{"id":"G77a8qtmTe370Ls7dRkmriAO7s4YyZhNb-mJEwf7ZtI","type":"public-key"}],"userVerification":"preferred"}
+{"challenge":"vlXND3P4I8P8tWpY0LKoZI13d4Gn_flw2vZq0TjwKvo","timeout":300000,"rpId":"127.0.0.1","allowCredentials":[{"id":"2vPDEoTocMbUmdMQZ4VHGaLdJd0tnZFjrg662Ja5kBs","type":"public-key"}],"userVerification":"preferred"}
 ```
 
 - **WebAuthn Assertion Verification (AAL2 Step-Up):**
@@ -107,27 +107,27 @@ Content-Type: application/json
 POST /api/v1/auth/webauthn/authenticate/verify HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: WLY9G56M6JhIHFHio3c1Sg.wpdPUVzRwhPCb09uT9QHkLnidWKIeaTRRN5uUcZzieI
+X-Csrf-Token: 8oPuN1jIcXpZjQAQiM-NCg.pyEUButBg8JdfXc5k0k7wjYuFIJiCSYkB8ooMqNcuR8
 
-{"credential":{"id":"G77a8qtmTe370Ls7dRkmriAO7s4YyZhNb-mJEwf7ZtI","rawId":"G77a8qtmTe370Ls7dRkmriAO7s4YyZhNb-mJEwf7ZtI","type":"public-key","response":{"clientDataJSON":"eyJ0eXBlIjogIndlYmF1dGhuLmdldCIsICJjaGFsbGVuZ2UiOiAiTDJpV0ZHbWFnM2lEa1JKS1BENi1leTF3ZmozY0FjU0JSOTB5aGV2SERXdyIsICJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMToxODQwOCIsICJjcm9zc09yaWdpbiI6IGZhbHNlfQ","authenticatorData":"EsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaAFAAAAAQ","signature":"MEQCIFUaTQDnkA8ynh2qIcrJUCKPnK-hvSw6wCWZIqaamy7NAiAkD5TlQlL-f6T224b2oa76GKmIveSuxRWpa6OgmB8VNg"}}}
+{"credential":{"id":"2vPDEoTocMbUmdMQZ4VHGaLdJd0tnZFjrg662Ja5kBs","rawId":"2vPDEoTocMbUmdMQZ4VHGaLdJd0tnZFjrg662Ja5kBs","type":"public-key","response":{"clientDataJSON":"eyJ0eXBlIjogIndlYmF1dGhuLmdldCIsICJjaGFsbGVuZ2UiOiAidmxYTkQzUDRJOFA4dFdwWTBMS29aSTEzZDRHbl9mbHcydlpxMFRqd0t2byIsICJvcmlnaW4iOiAiaHR0cDovLzEyNy4wLjAuMToxODQwOCIsICJjcm9zc09yaWdpbiI6IGZhbHNlfQ","authenticatorData":"EsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaAFAAAAAQ","signature":"MEMCH0K0DCyztLYH_H_8ihSAE31LBonUZR4W7X0NVOrSOxoCIEEOYBuBdDZYGtovOm6wyQA8VKKHwghbCOHlt_aKmXzZ"}}}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=j9dhBwvW5GlGcauA6k6STMtf1Le8n1gvZHSFroWrbGw.6iXWO_wJTd_C3v4TkdplIohuU9fzFbR3DqWsQLlyYes; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=I7h_adsLAo8ACxmMSoAGxg.T040rLE5NDFVcji_TjexFX4cTwygKBiXlTgxDG4Dgfk; Path=/; Secure; SameSite=Strict, kb_session=j9dhBwvW5GlGcauA6k6STMtf1Le8n1gvZHSFroWrbGw.6iXWO_wJTd_C3v4TkdplIohuU9fzFbR3DqWsQLlyYes; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=I7h_adsLAo8ACxmMSoAGxg.T040rLE5NDFVcji_TjexFX4cTwygKBiXlTgxDG4Dgfk; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=P9r_zHcM9kT7nI3V-yU-L-PePQg3JLBzNCHBn5WXut0.y_spAk75IfMGUIJDCgLsMySGmiUz1UvZPDeNOGwvIns; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=P8G4GrffCd5Tk1b_7-FynA.AUHTfpwiU7wyWJaiCB_dUX6MJnaBL3oQTcZ-k6jHVOI; Path=/; Secure; SameSite=Strict, kb_session=P9r_zHcM9kT7nI3V-yU-L-PePQg3JLBzNCHBn5WXut0.y_spAk75IfMGUIJDCgLsMySGmiUz1UvZPDeNOGwvIns; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=P8G4GrffCd5Tk1b_7-FynA.AUHTfpwiU7wyWJaiCB_dUX6MJnaBL3oQTcZ-k6jHVOI; Path=/; SameSite=Strict
 
-{"verified":true,"aal_level":2,"session_id":"01a21595-e49b-7f4f-9b6b-c80f63c313d4","csrf_token":"I7h_adsLAo8ACxmMSoAGxg.T040rLE5NDFVcji_TjexFX4cTwygKBiXlTgxDG4Dgfk","credential_id":"01a21595-e470-7361-a9a6-d8f695111ba2"}
+{"verified":true,"aal_level":2,"session_id":"01a215ce-59c1-7622-98cc-a76c46e6bccf","csrf_token":"P8G4GrffCd5Tk1b_7-FynA.AUHTfpwiU7wyWJaiCB_dUX6MJnaBL3oQTcZ-k6jHVOI","credential_id":"01a215ce-5998-7b15-a0ba-3ec8183afdad"}
 ```
 
 - **TOTP MFA Enrollment:**
 ```http
 POST /api/v1/auth/mfa/totp/enroll HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: I7h_adsLAo8ACxmMSoAGxg.T040rLE5NDFVcji_TjexFX4cTwygKBiXlTgxDG4Dgfk
+X-Csrf-Token: P8G4GrffCd5Tk1b_7-FynA.AUHTfpwiU7wyWJaiCB_dUX6MJnaBL3oQTcZ-k6jHVOI
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"otpauth_uri":"otpauth://totp/Kanban:admin?secret=RYSE5OJ7SEPGIEBSRVDHWDB4UHMTGYPP&issuer=Kanban&algorithm=SHA1&digits=6&period=30","secret":"RYSE5OJ7SEPGIEBSRVDHWDB4UHMTGYPP","secret_base32":"RYSE5OJ7SEPGIEBSRVDHWDB4UHMTGYPP"}
+{"otpauth_uri":"otpauth://totp/Kanban:admin?secret=PHPKTJEGJETPK3SUSJT37UIHR4K7522Z&issuer=Kanban&algorithm=SHA1&digits=6&period=30","secret":"PHPKTJEGJETPK3SUSJT37UIHR4K7522Z","secret_base32":"PHPKTJEGJETPK3SUSJT37UIHR4K7522Z"}
 ```
 
 - **TOTP MFA Confirmation:**
@@ -135,15 +135,15 @@ Content-Type: application/json
 POST /api/v1/auth/mfa/totp/confirm HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: I7h_adsLAo8ACxmMSoAGxg.T040rLE5NDFVcji_TjexFX4cTwygKBiXlTgxDG4Dgfk
+X-Csrf-Token: P8G4GrffCd5Tk1b_7-FynA.AUHTfpwiU7wyWJaiCB_dUX6MJnaBL3oQTcZ-k6jHVOI
 
-{"code":"365098","enrollment_id":"setup"}
+{"code":"634557","enrollment_id":"setup"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=6MTQvxBDG7cAHmV7r8qdml6phX-6YE72yvXGgB2wj6Y.urupq0Ny06h1TnTUAhZQMerr_SNhoygv38H4pMNhPmo; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=lIQhGreHhiW9a6wz1Cnurg.UARoECiLF6U7iJdABMBZJpxCU6bn7R-5mIesCw2G9_0; Path=/; Secure; SameSite=Strict, kb_session=6MTQvxBDG7cAHmV7r8qdml6phX-6YE72yvXGgB2wj6Y.urupq0Ny06h1TnTUAhZQMerr_SNhoygv38H4pMNhPmo; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=lIQhGreHhiW9a6wz1Cnurg.UARoECiLF6U7iJdABMBZJpxCU6bn7R-5mIesCw2G9_0; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=2VRVfjQXk6rpaUgJx0WI7meTdncV-GZDO8-8z_KJ9GA.CnVEBHT2aclK9b2S93EWgQfvMxqVnVgk55msyI08Igc; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=oGz785kZ3RvcuQcCrNzBXQ.Z8TjRwVyqFqHy_YFw8g21r7I_2KOvjtp78Hv15_hNx0; Path=/; Secure; SameSite=Strict, kb_session=2VRVfjQXk6rpaUgJx0WI7meTdncV-GZDO8-8z_KJ9GA.CnVEBHT2aclK9b2S93EWgQfvMxqVnVgk55msyI08Igc; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=oGz785kZ3RvcuQcCrNzBXQ.Z8TjRwVyqFqHy_YFw8g21r7I_2KOvjtp78Hv15_hNx0; Path=/; SameSite=Strict
 
-{"confirmed":true,"status":"enrolled","verified":true,"aal_level":2,"session_id":"01a21595-e4ae-7d33-97cf-2b127acfb3e7","csrf_token":"lIQhGreHhiW9a6wz1Cnurg.UARoECiLF6U7iJdABMBZJpxCU6bn7R-5mIesCw2G9_0","recovery_codes":["P89GW-EWSTQ","HH5EQ-Q5XS4","NC4KN-TT3X4","P4XE4-3DBWV","3FXAP-K5A8P","44CTX-P81AV","GRDN5-6Q5JR","BRKGF-JRXX7","47X7Z-TZFYD","R8107-F1W6K"]}
+{"confirmed":true,"status":"enrolled","verified":true,"aal_level":2,"session_id":"01a215ce-59d2-72b4-b0a5-414f76f76306","csrf_token":"oGz785kZ3RvcuQcCrNzBXQ.Z8TjRwVyqFqHy_YFw8g21r7I_2KOvjtp78Hv15_hNx0","recovery_codes":["72NNS-EXSJF","2FVCA-WFWEF","4YCRA-V9PGZ","4VQT9-WCCQR","RNXES-1416M","2CJPV-Q4AG5","HJC7Z-7ZNYC","RHRBF-HB605","TVRPK-SXKDH","MP6VH-2RT61"]}
 ```
 
 - **Recovery Code Step-Up Verification:**
@@ -151,39 +151,39 @@ Set-Cookie: __Host-kb_session=6MTQvxBDG7cAHmV7r8qdml6phX-6YE72yvXGgB2wj6Y.urupq0
 POST /api/v1/auth/mfa/verify HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: lIQhGreHhiW9a6wz1Cnurg.UARoECiLF6U7iJdABMBZJpxCU6bn7R-5mIesCw2G9_0
+X-Csrf-Token: oGz785kZ3RvcuQcCrNzBXQ.Z8TjRwVyqFqHy_YFw8g21r7I_2KOvjtp78Hv15_hNx0
 
-{"method":"recovery","code":"P89GW-EWSTQ"}
+{"method":"recovery","code":"72NNS-EXSJF"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=qXx--FYdC90D3p6zHdtUsM3016esC1ZXw_6K0C9aLBs.JyCa5fcriJGfyyXVoT3W8YfPTwBcCbRoj8MzrXdnoj0; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054; Path=/; Secure; SameSite=Strict, kb_session=qXx--FYdC90D3p6zHdtUsM3016esC1ZXw_6K0C9aLBs.JyCa5fcriJGfyyXVoT3W8YfPTwBcCbRoj8MzrXdnoj0; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=4lCKan9h-tm7CFiwBJ6qLotnjXjaU7l8H1HgRPl1bDY.olsHkIZUeA_4iZNF5yXCTInnx8T5yukObZ98X69-030; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU; Path=/; Secure; SameSite=Strict, kb_session=4lCKan9h-tm7CFiwBJ6qLotnjXjaU7l8H1HgRPl1bDY.olsHkIZUeA_4iZNF5yXCTInnx8T5yukObZ98X69-030; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU; Path=/; SameSite=Strict
 
-{"verified":true,"status":"authenticated","aal_level":2,"session_id":"01a21595-e4bd-7b10-b571-151d8c090076","csrf_token":"4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054"}
+{"verified":true,"status":"authenticated","aal_level":2,"session_id":"01a215ce-59e2-7c32-8f4b-5d22f70298f7","csrf_token":"vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU"}
 ```
 
 - **Recovery Code Regeneration (10 Fresh Single-Use Codes):**
 ```http
 POST /api/v1/auth/mfa/recovery/regenerate HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"status":"enrolled","recovery_codes":["GXS25-935DK","Z8R4D-FA6SC","JMB2C-4RCVE","X54HC-C1YXQ","C4XTQ-TXXS8","03CRH-HB41P","G9WJV-2K85Z","CMA26-XKTFJ","K4WY6-9A5Y9","R1M9E-8DYAW"]}
+{"status":"enrolled","recovery_codes":["SXM2Y-4HG7T","J6DW1-M9QHP","RRPR4-YPDCE","F2TA6-QSRAG","S7SA9-833S6","EYXGG-3QZYT","XMSN4-KM4J0","RBFE4-VT25P","A47WN-FW43J","RGJYE-BVXQD"]}
 ```
 
 - **Break-Glass Lockout Guard Refusal (HTTP 409 LOCKOUT_PREVENTED):**
 ```http
 POST /api/v1/admin/auth-cards/local-admin/disable HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
 HTTP/1.1 409 Conflict
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:lockout-prevented","title":"Lockout Prevented","status":409,"code":"LOCKOUT_PREVENTED","detail":"disabling LOCAL_ADMIN requires a verified external SERVER_ADMIN login within 15 minutes","request_id":"b8128e91b0d548f6a02777e368b77c2c","doc_href":"/docs/multi-card-authentication-studio#lockout-prevention","help_summary":"Cannot disable or delete the last active administrator authentication card.","layer":"handshake_probe_15m"}
+{"type":"urn:kanban:problem:lockout-prevented","title":"Lockout Prevented","status":409,"code":"LOCKOUT_PREVENTED","detail":"disabling LOCAL_ADMIN requires a verified external SERVER_ADMIN login within 15 minutes","request_id":"2a701a05f4fa4c2c8f5e76dfc95b50eb","doc_href":"/docs/multi-card-authentication-studio#lockout-prevention","help_summary":"Cannot disable or delete the last active administrator authentication card.","layer":"handshake_probe_15m"}
 ```
 
 #### Workout 2: LDAPS / StartTLS Handshake + Nested AD Group Sync + Dirty-Drawer WebSudo Replay
@@ -193,14 +193,14 @@ Content-Type: application/problem+json
 POST /api/v1/admin/auth-cards/test-handshake HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"provider_kind":"LDAP","slug":"untrusted-ca-ldap","display_name":"Untrusted CA LDAP","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIICwjCCAaqgAwIBAgICJw8wDQYJKoZIhvcNAQELBQAwJDEiMCAGA1UEAwwZVW50\ncnVzdGVkIFdvcmtvdXQgUm9vdCBDQTAeFw0yNjExMjYwMTAxMTRaFw0yNjExMjcw\nMjAxMTRaMCQxIjAgBgNVBAMMGVVudHJ1c3RlZCBXb3Jrb3V0IFJvb3QgQ0EwggEi\nMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDYWjLRDjze+bTKEniFMh+OCW+A\nTKXWSbK6KKdoIRJn5/Hm7i6qZ8olXVut0Yu/EZoAm7pAdXFOuTkblDW3tGTbC+qb\nEIZRSJQs8xn/XA3OeQqBxhGbBAQ60MrRQYwJeTjlz3beLhn+8ykzmRWa8c6PlNjv\noRQ7tsS7mdEaxRKT7s2NWOYQeuTHO9TNqBQhLJIYtezorUzHKKCOKih38EZtwLJl\n1IDKlkZ/wTxji2PjPbnDB9peWlJtAYUWkPvwoVWr1wl6KlA5+lDytf9CV/ZZCxsb\ne5xIGxmoRMgf3fBJkQATfsPK9xKqLWbtxnGVjtK3hSPjypo3W3nCRxPqrlHXAgMB\nAAEwDQYJKoZIhvcNAQELBQADggEBAIt2YBAIqQPk9cOVK1QUfFGMUujlpozqIgxW\nOquOP3aSLG7OFh/smxZZ02VOVq1NFok0fAx+P90HkFZ15LzgXqYgfMCJyMirOSPu\nSdA95Yqap8MbjBmnwOVSz662DtMgpGFzQypMg/dxlFXVoNnx3cuhMGoa4lddDKBE\nzjesEmaSBVDJ/xLwNvfn7h28l4ThUByWRpDFM6Nn3bxn3e+tTtRjmg03CMmMrZ7x\nOI4LFpo5qkfifShA+Gis+rJ3YtNzXF56ZRoyGLqhuAA0ofhA4CZB07Y759Ip55Io\nxRGvYzyioCVkMtHIHcbQuedyblBM4THTNnCn+yOhaXlRkBZRpMk=\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
+{"provider_kind":"LDAP","slug":"untrusted-ca-ldap","display_name":"Untrusted CA LDAP","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIICwjCCAaqgAwIBAgICJw8wDQYJKoZIhvcNAQELBQAwJDEiMCAGA1UEAwwZVW50\ncnVzdGVkIFdvcmtvdXQgUm9vdCBDQTAeFw0yNjExMjYwMjAyNTRaFw0yNjExMjcw\nMzAyNTRaMCQxIjAgBgNVBAMMGVVudHJ1c3RlZCBXb3Jrb3V0IFJvb3QgQ0EwggEi\nMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDf7YKa0e+pSjVm4VjnoUUCiNgV\njQBHkJFKBTdi3ldUnhNPksvWG+DcLHwhiqydIOTQd347nyueBaRMrsOzbreUtv/m\nvfod5/1DSFzSUlbTrRCbOvPLyu8AWU1FICYVHvWfRuObMopqaESXRkQC7TGrKyQk\nKszmN0txv7zXm3SiMAUBC4OCGkNsBhwfo6UYOhGRwAzTUWfSfx42RAyWtI1J8kRG\nNwIxLITr69O6aeC6mVBcRv/TF9zgk2CduqIW6VRUuElLT8FmqaLNpg75AtJp2vGC\nPaTQ1yCQj1XoPLOPRePKm6r3NZpHTRSckZZe7vocPtrIUPbPQBu4Ztl/wqxXAgMB\nAAEwDQYJKoZIhvcNAQELBQADggEBACXPAii5knqvkEbMVI184o8WnbtXtU/mlnXB\nsiPuF3Rl+5zhaYQSMCXGnk3YxuwIrkkhnSTctV/faKKkH5125+2lH/Qw4g/fKlsv\nw2x4Rtzmf32cq7S4dzF6x8KPIcLqLSVa5VXnDMRAc5ugj1vBRn+A06/mKGhzLeuS\n55m8y5rqX//gC7+yQ+1h5GSGCDFXkBMKV8s71nACsZauY4tZYWfoqMgrTHBDL72c\n6KcbWc7heYZxnXOKiu0RSd0l2Qk3/RtfdR9ow8Ms7Nurn54r8tzy9IzhTEinUYF9\nelHEnQkja/Hvg0UcT8ZTXK3ZNNJyfDaRI5eKAljSZXWx/13CxOc=\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"ok":false,"status":"FAILED:SSLCERTVERIFICATIONERROR","latency_ms":2,"error_code":"SSLCERTVERIFICATIONERROR"}
+{"ok":false,"status":"FAILED:SSLCERTVERIFICATIONERROR","latency_ms":3,"error_code":"SSLCERTVERIFICATIONERROR"}
 ```
 
 - **StartTLS Port 10389 Handshake Probe (Succeeds):**
@@ -208,9 +208,9 @@ Content-Type: application/json
 POST /api/v1/admin/auth-cards/test-handshake HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"provider_kind":"LDAP","slug":"starttls-ldap","display_name":"Planet Express StartTLS","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldap://127.0.0.1:10389","transport_mode":"starttls","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
+{"provider_kind":"LDAP","slug":"starttls-ldap","display_name":"Planet Express StartTLS","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldap://127.0.0.1:10389","transport_mode":"starttls","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
@@ -223,9 +223,9 @@ Content-Type: application/json
 POST /api/v1/admin/auth-cards/test-handshake HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"provider_kind":"LDAP","slug":"bad-ldap","display_name":"Bad LDAP","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"WrongPassword123!\"}"}
+{"provider_kind":"LDAP","slug":"bad-ldap","display_name":"Bad LDAP","is_enabled":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","service_bind_dn":"cn=admin,dc=planetexpress,dc=com"},"secret":"{\"bind_dn_password\": \"WrongPassword123!\"}"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
@@ -238,14 +238,14 @@ Content-Type: application/json
 POST /api/v1/admin/auth-cards/test-handshake HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","is_enabled":true,"auto_provision_users":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
+{"provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","is_enabled":true,"auto_provision_users":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"ok":true,"status":"OK","latency_ms":2,"error_code":null}
+{"ok":true,"status":"OK","latency_ms":3,"error_code":null}
 ```
 
 - **Persist LDAP Card Configuration:**
@@ -253,14 +253,14 @@ Content-Type: application/json
 POST /api/v1/admin/auth-cards HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","is_enabled":true,"auto_provision_users":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
+{"provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","is_enabled":true,"auto_provision_users":true,"public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}},"secret":"{\"bind_dn_password\": \"GoodNewsEveryone\"}"}
 
 HTTP/1.1 201 Created
 Content-Type: application/json
 
-{"id":"908d3836-f0d5-4e6e-8d55-a8c1b3ac1549","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"V00V","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"url":"ldaps://127.0.0.1:10636","kind":"LDAP","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"},"transport_mode":"ldaps","email_attribute":"mail","service_bind_dn":"cn=admin,dc=planetexpress,dc=com","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"subject_attribute":"entryUUID","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","display_name_attribute":"displayName"},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T02:01:15.001052Z","updated_at":"2026-11-26T02:01:15.001052Z","has_secret":true}
+{"id":"04c48c74-cd94-4890-92c5-f44cfaf1a421","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"V00V","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"url":"ldaps://127.0.0.1:10636","kind":"LDAP","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"},"transport_mode":"ldaps","email_attribute":"mail","service_bind_dn":"cn=admin,dc=planetexpress,dc=com","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"subject_attribute":"entryUUID","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","display_name_attribute":"displayName"},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T03:02:54.920759Z","updated_at":"2026-11-26T03:02:54.920759Z","has_secret":true}
 ```
 
 - **Hermes Conrad LDAPS Login & Organic 2-Hop Group Sync:**
@@ -268,15 +268,15 @@ Content-Type: application/json
 POST /api/v1/auth/ldap/planetexpress-ldap/login HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: zlJaUTAXZzfRjMS-wfFWlA.66A34ee1gdp-ShNypMUu9V9nryBsxumnT2omL_FnLXw
+X-Csrf-Token: U0wQ0e00dvRLMRMWrAd18Q.yQflizH8P-Q86EYGEaw0qh1R8pWT0RVlPlEgOqMeas8
 
 {"username":"hermes","password":"hermespassword"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=SzsML7hDQivAi4MymWFtzX6ksESaUuFyMKPH1hjJWvg.xt2dmUpM4FHcfRuQTdKZSagY3_ygEaShc3atlCCOmSw; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, __Host-kb_csrf=D3mUE5gAhZJhYh-oi3HVrg.eBn0c2kjZQ2lCdjibsTK0TvDQiE-yyqajB6FJlItg3g; Path=/; Secure; SameSite=Strict, kb_session=SzsML7hDQivAi4MymWFtzX6ksESaUuFyMKPH1hjJWvg.xt2dmUpM4FHcfRuQTdKZSagY3_ygEaShc3atlCCOmSw; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, kb_csrf=D3mUE5gAhZJhYh-oi3HVrg.eBn0c2kjZQ2lCdjibsTK0TvDQiE-yyqajB6FJlItg3g; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=DkqFzzfhlfSz2ZhOyHRxk5HxXMnrHaU35KrZNK553aQ.nvM1MFPDj9InemWkrjfqOFaMEzLtCBX9CRUwwX3uiJ4; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, __Host-kb_csrf=MZp1jN8-tULMKnEw6B_8cQ.icxrkUqXBngjaqJj-CWOqD7-RScP0YPwTpjUcoEuJVA; Path=/; Secure; SameSite=Strict, kb_session=DkqFzzfhlfSz2ZhOyHRxk5HxXMnrHaU35KrZNK553aQ.nvM1MFPDj9InemWkrjfqOFaMEzLtCBX9CRUwwX3uiJ4; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, kb_csrf=MZp1jN8-tULMKnEw6B_8cQ.icxrkUqXBngjaqJj-CWOqD7-RScP0YPwTpjUcoEuJVA; Path=/; SameSite=Strict
 
-{"status":"authenticated","card_id":"908d3836-f0d5-4e6e-8d55-a8c1b3ac1549","subject":"01a21408-0001-7000-8000-000000000001","email":"hermes@planetexpress.com","display_name":"Hermes Conrad","groups":["Delivery Subteam"],"principal_id":"01a21595-e619-7cc8-93da-dc52b95d94a0","workspace_id":"01931000-0000-7000-8000-000000000001","aal_level":1,"session_id":"fec9c24e-0485-4c25-9999-268311543820","csrf_token":"D3mUE5gAhZJhYh-oi3HVrg.eBn0c2kjZQ2lCdjibsTK0TvDQiE-yyqajB6FJlItg3g"}
+{"status":"authenticated","card_id":"04c48c74-cd94-4890-92c5-f44cfaf1a421","subject":"01a21408-0001-7000-8000-000000000001","email":"hermes@planetexpress.com","display_name":"Hermes Conrad","groups":["Delivery Subteam"],"principal_id":"01a215ce-5aec-7f06-aa61-7be457a58634","workspace_id":"01931000-0000-7000-8000-000000000001","aal_level":1,"session_id":"c45fb0e3-ec35-4a2d-9f9c-100352ab7ec6","csrf_token":"MZp1jN8-tULMKnEw6B_8cQ.icxrkUqXBngjaqJj-CWOqD7-RScP0YPwTpjUcoEuJVA"}
 ```
 
 - **Dirty-Drawer Stale WebSudo Attempt (HTTP 403 AAL2_STALE):**
@@ -284,14 +284,14 @@ Set-Cookie: __Host-kb_session=SzsML7hDQivAi4MymWFtzX6ksESaUuFyMKPH1hjJWvg.xt2dmU
 PATCH /api/v1/admin/auth-cards/planetexpress-ldap HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"display_name":"Planet Express LDAPS Enterprise","public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}}}
+{"display_name":"Planet Express LDAPS Enterprise","public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}}}
 
 HTTP/1.1 403 Forbidden
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:AAL2_STALE","title":"AAL2 Session Stale","status":403,"code":"AAL2_STALE","detail":"Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue.","request_id":"a546b559241a48d9b830b923ebd7a22f","methods":["webauthn","totp","recovery"],"preferred_method":"webauthn","doc_href":"/docs/multi-card-authentication-studio#aal2-step-up","help_summary":"Your 15-minute (900s) Admin 2FA verification window (AAL2) has expired. Re-verify with your Passkey or TOTP Authenticator app to continue."}
+{"type":"urn:kanban:problem:AAL2_STALE","title":"AAL2 Session Stale","status":403,"code":"AAL2_STALE","detail":"Your 15-minute Admin 2FA security window (Authenticator Assurance Level 2) has expired; please re-verify with your Passkey or Authenticator app (TOTP) to continue.","request_id":"b0470ca13eec4808af39c9b836ad8422","methods":["webauthn","totp","recovery"],"preferred_method":"webauthn","doc_href":"/docs/multi-card-authentication-studio#aal2-step-up","help_summary":"Your 15-minute (900s) Admin 2FA verification window (AAL2) has expired. Re-verify with your Passkey or TOTP Authenticator app to continue."}
 ```
 
 - **In-Modal Recovery Code Step-Up (HTTP 200 OK):**
@@ -299,15 +299,15 @@ Content-Type: application/problem+json
 POST /api/v1/auth/mfa/verify HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 4WPGnn407FiKYAME6CO33Q.sAGJtt3OcvIicDG-hhucriqweA5Yz1-Vj37g-tbQ054
+X-Csrf-Token: vpPhO3UYZCR0igt1M1qpIQ.WpZO3NiNC2a3MsZqdwNj9aqhpXreRDtCKcHc1Ri8SPU
 
-{"method":"recovery","code":"Z8R4D-FA6SC"}
+{"method":"recovery","code":"J6DW1-M9QHP"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=6-bvLB4V2VrEguA72ObRaSMDLRKf465moiU51vFjKfU.P-MMcnhRZuGV6N6slYeSKZOwhdLEQjHYckJLZ2-3KHM; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, __Host-kb_csrf=SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo; Path=/; Secure; SameSite=Strict, kb_session=6-bvLB4V2VrEguA72ObRaSMDLRKf465moiU51vFjKfU.P-MMcnhRZuGV6N6slYeSKZOwhdLEQjHYckJLZ2-3KHM; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:14 GMT; Max-Age=2591999, kb_csrf=SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=vrfCZJGp5encyCC3FqeTcQ687jhRfW3ODKMVVJZ3GBk.S-1sn0BOw-MUGXEZ9Vk1vEHxDoE_JBxYUqmMf2wkzfk; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, __Host-kb_csrf=mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU; Path=/; Secure; SameSite=Strict, kb_session=vrfCZJGp5encyCC3FqeTcQ687jhRfW3ODKMVVJZ3GBk.S-1sn0BOw-MUGXEZ9Vk1vEHxDoE_JBxYUqmMf2wkzfk; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:54 GMT; Max-Age=2591999, kb_csrf=mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU; Path=/; SameSite=Strict
 
-{"verified":true,"status":"authenticated","aal_level":2,"session_id":"01a21595-e6a2-7a9d-af4e-6f328ba59775","csrf_token":"SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo"}
+{"verified":true,"status":"authenticated","aal_level":2,"session_id":"01a215ce-5b72-755e-98c4-0f31814e6b2e","csrf_token":"mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU"}
 ```
 
 - **First-Attempt Request Replay Preserving Typed Inputs (HTTP 200 OK):**
@@ -315,14 +315,14 @@ Set-Cookie: __Host-kb_session=6-bvLB4V2VrEguA72ObRaSMDLRKf465moiU51vFjKfU.P-MMcn
 PATCH /api/v1/admin/auth-cards/planetexpress-ldap HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
-{"display_name":"Planet Express LDAPS Enterprise","public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}}}
+{"display_name":"Planet Express LDAPS Enterprise","public_config":{"kind":"LDAP","url":"ldaps://127.0.0.1:10636","transport_mode":"ldaps","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"service_bind_dn":"cn=admin,dc=planetexpress,dc=com","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","subject_attribute":"entryUUID","email_attribute":"mail","display_name_attribute":"displayName","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"}}}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"id":"908d3836-f0d5-4e6e-8d55-a8c1b3ac1549","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS Enterprise","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"V00V","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"url":"ldaps://127.0.0.1:10636","kind":"LDAP","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAxMDExM1oXDTI2MTIwMzAyMDEx\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBAMJ4MEbrpZSU5HEXUurb9IbSjdikjLnfBZV4\nT9wCupGHlyW48dUS6TOA4lKN0EGwvOAHePdSiN9zrTpxODE7PKj25UxK4vLhCA20\nSYuPtP5b0ZohrhbaQ8zZQTJLxk/ZSeKB6ocVCZAv4PngVkREYt+1x0ZYyAzAsuNS\nCq1h8RpQiSPpFR7c2FQdPcq0upmdmDiiBnMyoancFW1xP/XZkYNtX/SwNMnYEpJt\nwi6GAuwS9fDPQXgs4txe6ezHH+099AJpNUZyERyL+Hw6yit7L61wH7qIawLze0Mm\nlQ3e5rEpsGeDJ5m1/y2xgtLlHrj5KlksZDXr330TGWPNC/nPpTsCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAc8NVOBTHhPcgxXWE\n9c9aCT+mgxijGGFuznicswaokRVNRpwb2ft5gaFll0UTYYG0C2hV8mlm1HJQS+Zd\n8l6Kb66brfpv0g3a0TIbnnGI2hFn+OlxZcBRt7zPMJq5aZPD40J7TxedeL8DmdyF\nMWTcmzUbGeMHT733jkGILy/Tq45gbDU3j3AYDtovzqfdWa+iR3fUd0eFJgbdql+H\nl5/rz0G4nFfmzr1It4lAV67CSzdL8Z+kk1UC4B3WbW2jjRuU/MGCstFZjX6wL1UK\n+v9GYYqGAY/26PuYQt8bVwZIy+e7iW1vb1bOq6esisFJPPEzKelQx/I04KBBzbq7\naFg17w==\n-----END CERTIFICATE-----\n","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"},"transport_mode":"ldaps","email_attribute":"mail","service_bind_dn":"cn=admin,dc=planetexpress,dc=com","spki_sha256_pins":["2ae1582f4173441ddca194b19e2dcf79c1c195e2b5b0a69f5689364886ac4ee3"],"subject_attribute":"entryUUID","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","display_name_attribute":"displayName"},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T02:01:15.001052Z","updated_at":"2026-11-26T02:01:15.184957Z","has_secret":true}
+{"id":"04c48c74-cd94-4890-92c5-f44cfaf1a421","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"LDAP","slug":"planetexpress-ldap","display_name":"Planet Express LDAPS Enterprise","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"V00V","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"url":"ldaps://127.0.0.1:10636","kind":"LDAP","base_dn":"dc=planetexpress,dc=com","ca_cert_pem":"-----BEGIN CERTIFICATE-----\nMIIC0DCCAbigAwIBAgIBATANBgkqhkiG9w0BAQsFADAhMR8wHQYDVQQDDBZLYW5i\nYW4gV29ya291dCBSb290IENBMB4XDTI2MTEyNjAyMDI1M1oXDTI2MTIwMzAzMDI1\nM1owITEfMB0GA1UEAwwWS2FuYmFuIFdvcmtvdXQgUm9vdCBDQTCCASIwDQYJKoZI\nhvcNAQEBBQADggEPADCCAQoCggEBALdC1/8iw3GAD9SyZLjBKvtQtvsURQHl8x0z\n2Znr5G5eNEfcNpyXUdSV+CZD7pmAWMXzLM/bZfVMg9t/pGt+Frrdqv/1AdxYGaHW\nt93W32n1NDyrwLuHx6plYct//cZyXqsxo+RLqx4Q2YbAYUUEe+d9f7zxAdOG1Gox\ns0itrx67eauLjMJD3X0/BIQsgL7WmncmKxKIpsup5W4lZi8e83ly/5fScGNReKCH\nWY7cfZNdmLRAnodrjKvNF6e7wPT+2vQcG8VH/39MJUUJPThAaTNaUyD78hH7WF5j\nbBZjJX8DxbwNgMzw30qCAeXhZ93TDtvckZe9UOuBGypSThJYhKkCAwEAAaMTMBEw\nDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEANw+WpgAFphYrHQeS\nP/5GMgKcAY/HrfVyxg8ofJcPUJLr3gCkVpzaXK8/D/oN7rHOnNnXo5ojvG9m/47z\nVLjwKKcdCJhkFqaYmsNimA+ac/If0Yi9ywsRqb5q43PIbFPrRQko19LUbc2jsFhg\n5pX03jSNUyjFUkMlQPBcRSD0xdeBdOZjpO4sUgE2JguG4OH/76yrJ3X3BCbubTKc\nALsK1Ubt9VPvDLcmIpWWEt+mxuuGAmk8V9OT2BMFPk14Fu73lsD1+gXB7QFmTtLV\nVwj/G7KqwhysRmNBDHe67UnWUP+c8owl/Igjh84gj56MrFDES4wqq67OZE+nXW5e\nl7k0BQ==\n-----END CERTIFICATE-----\n","group_dn_map":{"cn=delivery-subteam,ou=groups,dc=planetexpress,dc=com":"Delivery Subteam","cn=bureaucrats-parent,ou=groups,dc=planetexpress,dc=com":"Bureaucrats Parent"},"transport_mode":"ldaps","email_attribute":"mail","service_bind_dn":"cn=admin,dc=planetexpress,dc=com","spki_sha256_pins":["ccd5ab3c8a309659c8dbb48d7e0302dcebbed3cf99e96c5954e1fbc96ffd0557"],"subject_attribute":"entryUUID","user_search_filter":"(&(objectClass=user)(sAMAccountName={username}))","display_name_attribute":"displayName"},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T03:02:54.920759Z","updated_at":"2026-11-26T03:02:55.103600Z","has_secret":true}
 ```
 
 #### Workout 3: OIDC PKCE Login + Verified-Claim Account Linking + Unverified Email Block 403
@@ -332,35 +332,35 @@ Content-Type: application/json
 POST /api/v1/admin/auth-cards HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
 {"provider_kind":"OIDC","slug":"test-oidc","display_name":"Test OIDC IdP","is_enabled":true,"auto_provision_users":true,"public_config":{"kind":"OIDC","issuer":"https://127.0.0.1:18081","client_id":"kanban-test","client_auth":"client_secret_basic","scopes":["openid","profile","email"],"allowed_algs":["RS256"]},"secret":"kanban-test-secret-12345"}
 
 HTTP/1.1 201 Created
 Content-Type: application/json
 
-{"id":"9ea42020-daeb-4328-a88e-3b4b65fd7ce7","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"OIDC","slug":"test-oidc","display_name":"Test OIDC IdP","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"kV0FV","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"kind":"OIDC","issuer":"https://127.0.0.1:18081","scopes":["openid","profile","email"],"client_id":"kanban-test","client_auth":"client_secret_basic","allowed_algs":["RS256"]},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T02:01:15.200341Z","updated_at":"2026-11-26T02:01:15.200341Z","has_secret":true}
+{"id":"028c9ea5-3ef9-4249-9631-78f9c85e9e4b","workspace_id":"01931000-0000-7000-8000-000000000001","provider_kind":"OIDC","slug":"test-oidc","display_name":"Test OIDC IdP","button_subtext":null,"icon_preset":"key","is_enabled":true,"sort_rank":"kV0FV","auto_provision_users":true,"allowed_email_domains":[],"public_config":{"kind":"OIDC","issuer":"https://127.0.0.1:18081","scopes":["openid","profile","email"],"client_id":"kanban-test","client_auth":"client_secret_basic","allowed_algs":["RS256"]},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-26T03:02:55.117315Z","updated_at":"2026-11-26T03:02:55.117315Z","has_secret":true}
 ```
 
 - **Verified Email Claim Login Callback (Amy Wong, HTTP 302 / 200):**
 ```http
-GET /api/v1/auth/oidc/test-oidc/callback?code=code-32c2c0a0286e716c&state=GS4LeOa5A7GqwFisWDRE_Q HTTP/1.1
+GET /api/v1/auth/oidc/test-oidc/callback?code=code-d908abc8476f89cb&state=lh-tnVvOovZvPWwihQIJ6Q HTTP/1.1
 Host: 127.0.0.1:18408
 
 HTTP/1.1 302 Found
 Location: /
-Set-Cookie: __Host-kb_oidc=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure, kb_oidc=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax, __Host-kb_session=lHtMTO4kEcq28KPf7hAWsnD7GRxHkzJC7DkqKVkQROg.Q_IZ6eOfDmoUXoAZjTnLoRHS0XLL94l3YaSVaYeUnts; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, __Host-kb_csrf=-Dk2-8GrGuTuRkSuoThDDQ.ghWMaHpITa983L6JcANQJTSWw0D1WSiIYrj-XdGu3ME; Path=/; Secure; SameSite=Strict, kb_session=lHtMTO4kEcq28KPf7hAWsnD7GRxHkzJC7DkqKVkQROg.Q_IZ6eOfDmoUXoAZjTnLoRHS0XLL94l3YaSVaYeUnts; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, kb_csrf=-Dk2-8GrGuTuRkSuoThDDQ.ghWMaHpITa983L6JcANQJTSWw0D1WSiIYrj-XdGu3ME; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_oidc=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure, kb_oidc=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax, __Host-kb_session=Fh9qY6K6t5j9gjuSpfnD5tfu382ylhutvC9EesBjsHA.TOUkLaduSWH2-ks1WByZotke1EcVeUQSP3AYJVS3T6Y; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, __Host-kb_csrf=VkEzLOEasVgiVjLIq1cfbQ.YcpplJSfMEQWnjX_AYmQcT1IEQ60CN0TPUWrOMCVUuw; Path=/; Secure; SameSite=Strict, kb_session=Fh9qY6K6t5j9gjuSpfnD5tfu382ylhutvC9EesBjsHA.TOUkLaduSWH2-ks1WByZotke1EcVeUQSP3AYJVS3T6Y; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, kb_csrf=VkEzLOEasVgiVjLIq1cfbQ.YcpplJSfMEQWnjX_AYmQcT1IEQ60CN0TPUWrOMCVUuw; Path=/; SameSite=Strict
 ```
 
 - **Unverified Email Claim Block Callback (HTTP 403 EMAIL_NOT_VERIFIED):**
 ```http
-GET /api/v1/auth/oidc/test-oidc/callback?code=code-1f8e33f60cfdcd3d&state=m2amSz6Au_OqFXxTIaxxnA HTTP/1.1
+GET /api/v1/auth/oidc/test-oidc/callback?code=code-32d674aea4fca14a&state=g8PMik8vFa9f5v2U_vDWTg HTTP/1.1
 Host: 127.0.0.1:18408
 
 HTTP/1.1 403 Forbidden
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:EMAIL_NOT_VERIFIED","title":"Email Not Verified","status":403,"code":"EMAIL_NOT_VERIFIED","detail":"IdP assertion email must be verified to auto-provision account","request_id":"98a3f1d6b1894a4288d8c3457974c8e7","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
+{"type":"urn:kanban:problem:EMAIL_NOT_VERIFIED","title":"Email Not Verified","status":403,"code":"EMAIL_NOT_VERIFIED","detail":"IdP assertion email must be verified to auto-provision account","request_id":"606dd3e922a644799fde1c41e4bfd73f","doc_href":"/docs/admin-diagnostics-and-link-inspector-studio","help_summary":"Review the error details and open the platform documentation for troubleshooting steps."}
 ```
 
 #### Workout 4: Custom RBAC Role Enforcement
@@ -370,29 +370,29 @@ Content-Type: application/problem+json
 POST /api/v1/admin/rbac/roles HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
 {"name":"Quality Auditor Lead","slug":"quality-auditor-lead","color_hex":"#10b981","description":"Read-only auditor with workspace and issue visibility"}
 
 HTTP/1.1 201 Created
 Content-Type: application/json
 
-{"id":"322fc28e-03f5-4c9b-8bff-0ecdca3eae51","workspace_id":"01931000-0000-7000-8000-000000000001","slug":"quality-auditor-lead","name":"Quality Auditor Lead","color_hex":"#10b981","description":"Read-only auditor with workspace and issue visibility","is_system":false,"system_role":null,"scope_tier":"workspace","base_capability_mask":0,"project_id":null,"permissions":[],"created_at":"2026-11-26T02:01:15.492448Z","updated_at":"2026-11-26T02:01:15.492448Z"}
+{"id":"febc1134-d5d4-47a2-aa30-33904ed49eec","workspace_id":"01931000-0000-7000-8000-000000000001","slug":"quality-auditor-lead","name":"Quality Auditor Lead","color_hex":"#10b981","description":"Read-only auditor with workspace and issue visibility","is_system":false,"system_role":null,"scope_tier":"workspace","base_capability_mask":0,"project_id":null,"permissions":[],"created_at":"2026-11-26T03:02:55.413317Z","updated_at":"2026-11-26T03:02:55.413317Z"}
 ```
 
 - **Assign Capabilities (issue:view, issue:comment):**
 ```http
-PUT /api/v1/admin/rbac/roles/322fc28e-03f5-4c9b-8bff-0ecdca3eae51/permissions HTTP/1.1
+PUT /api/v1/admin/rbac/roles/febc1134-d5d4-47a2-aa30-33904ed49eec/permissions HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
 {"permissions":["issue:view","issue:comment"]}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"role_id":"322fc28e-03f5-4c9b-8bff-0ecdca3eae51","base_capability_mask":3,"permissions":["issue:comment","issue:view"]}
+{"role_id":"febc1134-d5d4-47a2-aa30-33904ed49eec","base_capability_mask":3,"permissions":["issue:comment","issue:view"]}
 ```
 
 - **Assign Role to Philip J. Fry:**
@@ -400,14 +400,14 @@ Content-Type: application/json
 POST /api/v1/admin/principals/01931000-0003-7000-8000-000000000001/role-labels HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
-{"role_id":"322fc28e-03f5-4c9b-8bff-0ecdca3eae51"}
+{"role_id":"febc1134-d5d4-47a2-aa30-33904ed49eec"}
 
 HTTP/1.1 201 Created
 Content-Type: application/json
 
-{"id":"01a21595-e810-7377-a953-a07787ba5730","workspace_id":"01931000-0000-7000-8000-000000000001","principal_id":"01931000-0003-7000-8000-000000000001","role_id":"322fc28e-03f5-4c9b-8bff-0ecdca3eae51","role_slug":"quality-auditor-lead","role_name":"Quality Auditor Lead","color_hex":"#10b981","scope_tier":"workspace","project_id":null,"created_at":"2026-11-26T02:01:15.536590Z"}
+{"id":"01a215ce-5ce5-7d4e-9108-db08cf29d950","workspace_id":"01931000-0000-7000-8000-000000000001","principal_id":"01931000-0003-7000-8000-000000000001","role_id":"febc1134-d5d4-47a2-aa30-33904ed49eec","role_slug":"quality-auditor-lead","role_name":"Quality Auditor Lead","color_hex":"#10b981","scope_tier":"workspace","project_id":null,"created_at":"2026-11-26T03:02:55.461446Z"}
 ```
 
 - **Create Target Issue KAN-1:**
@@ -415,7 +415,7 @@ Content-Type: application/json
 POST /api/v1/projects/KAN/issues HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: SmTtcfgaUgxzpRQTW6tjrg._km8C2mJ_9CoH8shaEAqwvd68XAVdcM7npikBxVwcNo
+X-Csrf-Token: mRsGINhzx-AppaG4Wpoyyw.eJ-aXkV3Ils6HQnVUcHAQYa9RrF73etfeyE3ffKI5wU
 
 {"summary":"Audit RBAC Capabilities","description_markdown":"Test RBAC capabilities"}
 
@@ -423,7 +423,7 @@ HTTP/1.1 201 Created
 Content-Type: application/json
 Location: /api/v1/issues/KAN-1
 
-{"id":"01a21595-e82c-7f55-b1e4-16b6a3fe4d7d","object_id":"01a21595-e82c-7f55-b1e4-16b6a3fe4d7d","key":"KAN-1","summary":"Audit RBAC Capabilities","description_markdown":"Test RBAC capabilities","description_sha256":"13993e235563ec3a6a65b8ce7ac4ea46b4fc0fa3b830032f76df476c26d968ab","etag":"\"f19a562ff05346e669d83483ec956084ef1737acd1280cfa618f54282b36795b\"","state":{"id":"01a21595-e1de-7fd2-a58f-39778286a363","name":"Backlog","group":"backlog","color_hex":"#A3A3A3"},"priority":{"slug":"none","label":"None","emoji":null},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01931000-0002-7000-8000-000000000001","provenance":{"created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"original_created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01931000-0000-7000-8000-000000000001","workspace_name":"Platform Engineering","project_id":"01931000-0001-7000-8000-000000000001","project_key":"KAN","project_name":"Platform Architecture"},"users":[{"principal_id":"01931000-0002-7000-8000-000000000001","handle":"@usr-01931000000270008000000000000001","display_name":"System Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"workspace_role"},{"principal_id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a21595-e619-7cc8-93da-dc52b95d94a0","handle":"@hermes@planetexpress.com","display_name":"Hermes Conrad","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a21595-e6e7-7037-b859-c9d3cf557ffa","handle":"@amy@planetexpress.com","display_name":"User usr-amy-wong","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[{"principal_id":"29d3faaf-b0a7-4850-814d-c12e1042210f","name":"Bureaucrats Parent","member_count":1,"external_source":"LDAP","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN-1","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"editable_fields":["assignees","attachments","custom_fields","cycle","dates","description","labels","modules","parent","priority","state","summary"],"issue_permissions":["issue:archive","issue:comment","issue:copy","issue:create","issue:delete","issue:link","issue:manage_acl","issue:move_rank","issue:transition","issue:view"],"created_at":"2026-11-26T02:01:15.564912Z","updated_at":"2026-11-26T02:01:15.564912Z","archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
+{"id":"01a215ce-5d0a-7159-8820-6cb96cc341b7","object_id":"01a215ce-5d0a-7159-8820-6cb96cc341b7","key":"KAN-1","summary":"Audit RBAC Capabilities","description_markdown":"Test RBAC capabilities","description_sha256":"13993e235563ec3a6a65b8ce7ac4ea46b4fc0fa3b830032f76df476c26d968ab","etag":"\"26aa5583a6411e3bd457ad44b5b13538cb058980168c4fafe7159a4f8b97c2a1\"","state":{"id":"01a215ce-56ec-7837-a072-3fb44f1093ea","name":"Backlog","group":"backlog","color_hex":"#A3A3A3"},"priority":{"slug":"none","label":"None","emoji":null},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01931000-0002-7000-8000-000000000001","provenance":{"created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"original_created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01931000-0000-7000-8000-000000000001","workspace_name":"Platform Engineering","project_id":"01931000-0001-7000-8000-000000000001","project_key":"KAN","project_name":"Platform Architecture"},"users":[{"principal_id":"01931000-0002-7000-8000-000000000001","handle":"@usr-01931000000270008000000000000001","display_name":"System Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"workspace_role"},{"principal_id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a215ce-5aec-7f06-aa61-7be457a58634","handle":"@hermes@planetexpress.com","display_name":"Hermes Conrad","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a215ce-5bb4-79aa-9a4a-f6a7bf889b44","handle":"@amy@planetexpress.com","display_name":"User usr-amy-wong","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[{"principal_id":"7f3cc399-c41c-4824-978a-080e5668561c","name":"Bureaucrats Parent","member_count":1,"external_source":"LDAP","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN-1","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"editable_fields":["assignees","attachments","custom_fields","cycle","dates","description","labels","modules","parent","priority","state","summary"],"issue_permissions":["issue:archive","issue:comment","issue:copy","issue:create","issue:delete","issue:link","issue:manage_acl","issue:move_rank","issue:transition","issue:view"],"created_at":"2026-11-26T03:02:55.498918Z","updated_at":"2026-11-26T03:02:55.498918Z","archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
 ```
 
 - **Philip J. Fry Local Login:**
@@ -431,22 +431,22 @@ Location: /api/v1/issues/KAN-1
 POST /api/v1/auth/local/login HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: vFDvTPvM5VTS5Gw8sjRNiw.GflSt2PiJBHNjIw0riKEZiZTPDle1aGubgntSRdKePY
+X-Csrf-Token: BNHyh_uf6s6G-rd3JAz9Rw.fC1bBeW4_sPnydtBxQIsmu_2xblTlvAovzZOAtcYmFU
 
 {"username":"fry","password":"frypassword"}
 
 HTTP/1.1 200 OK
 Content-Type: application/json
-Set-Cookie: __Host-kb_session=55KTWSPb3g9v3BXUEoC2m9aSQdBMoisyfk85FVbjVpc._QRi8D6G1-ZzSARZHh4rIUAUPRo_BmLlGJ9jSnyKvzk; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, __Host-kb_csrf=9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI; Path=/; Secure; SameSite=Strict, kb_session=55KTWSPb3g9v3BXUEoC2m9aSQdBMoisyfk85FVbjVpc._QRi8D6G1-ZzSARZHh4rIUAUPRo_BmLlGJ9jSnyKvzk; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 02:01:15 GMT; Max-Age=2591999, kb_csrf=9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI; Path=/; SameSite=Strict
+Set-Cookie: __Host-kb_session=7AEkh053JvgbgXhydmi2gPp5qz_hXE6hPw2kvRFJJXg.5vd5S0m45-XJ2Q_LwGxxQjeU8sGRks85E51GzDKikeM; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, __Host-kb_csrf=wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4; Path=/; Secure; SameSite=Strict, kb_session=7AEkh053JvgbgXhydmi2gPp5qz_hXE6hPw2kvRFJJXg.5vd5S0m45-XJ2Q_LwGxxQjeU8sGRks85E51GzDKikeM; Path=/; HttpOnly; SameSite=Lax; Expires=Sat, 26 Dec 2026 03:02:55 GMT; Max-Age=2591999, kb_csrf=wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4; Path=/; SameSite=Strict
 
-{"authenticated":true,"status":"authenticated","challenge_id":"099c9976-098f-41af-86e1-e7e6aa287bd6","methods":["webauthn","totp","recovery"],"preferred_method":"totp","session_id":"099c9976-098f-41af-86e1-e7e6aa287bd6","aal_level":1,"mfa_pending":false,"csrf_token":"9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI"}
+{"authenticated":true,"status":"authenticated","challenge_id":"08f89d2a-22be-4517-a24b-59246662ebd2","methods":["webauthn","totp","recovery"],"preferred_method":"totp","session_id":"08f89d2a-22be-4517-a24b-59246662ebd2","aal_level":1,"mfa_pending":false,"csrf_token":"wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4"}
 ```
 
 - **Read Own Profile (Granted, HTTP 200 OK):**
 ```http
 GET /api/v1/auth/me HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 
 HTTP/1.1 200 OK
 Content-Type: application/json
@@ -458,12 +458,12 @@ Content-Type: application/json
 ```http
 GET /api/v1/issues/KAN-1 HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"id":"01a21595-e82c-7f55-b1e4-16b6a3fe4d7d","object_id":"01a21595-e82c-7f55-b1e4-16b6a3fe4d7d","key":"KAN-1","summary":"Audit RBAC Capabilities","description_markdown":"Test RBAC capabilities","description_sha256":"13993e235563ec3a6a65b8ce7ac4ea46b4fc0fa3b830032f76df476c26d968ab","etag":"\"f19a562ff05346e669d83483ec956084ef1737acd1280cfa618f54282b36795b\"","state":{"id":"01a21595-e1de-7fd2-a58f-39778286a363","name":"Backlog","group":"backlog","color_hex":"#A3A3A3"},"priority":{"slug":"none","label":"None","emoji":null},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01931000-0002-7000-8000-000000000001","provenance":{"created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"original_created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01931000-0000-7000-8000-000000000001","workspace_name":"Platform Engineering","project_id":"01931000-0001-7000-8000-000000000001","project_key":"KAN","project_name":"Platform Architecture"},"users":[{"principal_id":"01931000-0002-7000-8000-000000000001","handle":"@usr-01931000000270008000000000000001","display_name":"System Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"workspace_role"},{"principal_id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a21595-e619-7cc8-93da-dc52b95d94a0","handle":"@hermes@planetexpress.com","display_name":"Hermes Conrad","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a21595-e6e7-7037-b859-c9d3cf557ffa","handle":"@amy@planetexpress.com","display_name":"User usr-amy-wong","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[{"principal_id":"29d3faaf-b0a7-4850-814d-c12e1042210f","name":"Bureaucrats Parent","member_count":1,"external_source":"LDAP","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"canonical_key":"KAN-1","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"editable_fields":["assignees","attachments","custom_fields","cycle","dates","description","labels","modules","parent","priority","state","summary"],"issue_permissions":["issue:comment","issue:copy","issue:create","issue:link","issue:move_rank","issue:transition","issue:view"],"created_at":"2026-11-26T02:01:15.564912Z","updated_at":"2026-11-26T02:01:15.564912Z","archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
+{"id":"01a215ce-5d0a-7159-8820-6cb96cc341b7","object_id":"01a215ce-5d0a-7159-8820-6cb96cc341b7","key":"KAN-1","summary":"Audit RBAC Capabilities","description_markdown":"Test RBAC capabilities","description_sha256":"13993e235563ec3a6a65b8ce7ac4ea46b4fc0fa3b830032f76df476c26d968ab","etag":"\"26aa5583a6411e3bd457ad44b5b13538cb058980168c4fafe7159a4f8b97c2a1\"","state":{"id":"01a215ce-56ec-7837-a072-3fb44f1093ea","name":"Backlog","group":"backlog","color_hex":"#A3A3A3"},"priority":{"slug":"none","label":"None","emoji":null},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01931000-0002-7000-8000-000000000001","provenance":{"created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"original_created_by":{"id":"01931000-0002-7000-8000-000000000001","handle":"usr-01931000000270008000000000000001"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01931000-0000-7000-8000-000000000001","workspace_name":"Platform Engineering","project_id":"01931000-0001-7000-8000-000000000001","project_key":"KAN","project_name":"Platform Architecture"},"users":[{"principal_id":"01931000-0002-7000-8000-000000000001","handle":"@usr-01931000000270008000000000000001","display_name":"System Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"workspace_role"},{"principal_id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a215ce-5aec-7f06-aa61-7be457a58634","handle":"@hermes@planetexpress.com","display_name":"Hermes Conrad","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"01a215ce-5bb4-79aa-9a4a-f6a7bf889b44","handle":"@amy@planetexpress.com","display_name":"User usr-amy-wong","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[{"principal_id":"7f3cc399-c41c-4824-978a-080e5668561c","name":"Bureaucrats Parent","member_count":1,"external_source":"LDAP","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"canonical_key":"KAN-1","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"editable_fields":["assignees","attachments","custom_fields","cycle","dates","description","labels","modules","parent","priority","state","summary"],"issue_permissions":["issue:comment","issue:copy","issue:create","issue:link","issue:move_rank","issue:transition","issue:view"],"created_at":"2026-11-26T03:02:55.498918Z","updated_at":"2026-11-26T03:02:55.498918Z","archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
 ```
 
 - **Add Comment to Issue KAN-1 (Granted issue:comment, HTTP 201 Created):**
@@ -471,40 +471,40 @@ Content-Type: application/json
 POST /api/v1/issues/KAN-1/comments HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 
 {"body_markdown":"Audited and verified by Fry with issue:comment permission."}
 
 HTTP/1.1 201 Created
 Content-Type: application/json
-Location: /projects/KAN/issues/KAN-1#comment-01a21595-e8d7-7238-8567-e4af8c0c5797
+Location: /projects/KAN/issues/KAN-1#comment-01a215ce-5ddf-7763-849b-4782f9cc7910
 
-{"id":"01a21595-e8d7-7238-8567-e4af8c0c5797","issue_id":"01a21595-e82c-7f55-b1e4-16b6a3fe4d7d","parent_comment_id":null,"author_id":"01931000-0003-7000-8000-000000000001","author":{"id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","redacted":false,"label":null},"body_markdown":"Audited and verified by Fry with issue:comment permission.","body_sha256":"bdf5cbaf695e4a284f982606e9b3391ca45f0a88d02b77dddf0125ca1b23d326","permalink":"/projects/KAN/issues/KAN-1#comment-01a21595-e8d7-7238-8567-e4af8c0c5797","created_at":"2026-11-26T02:01:15.735447Z","edited_at":null,"deleted":false,"reactions":[],"replies":[],"replies_next_cursor":null,"mentions":[],"unnotified_mentions":[]}
+{"id":"01a215ce-5ddf-7763-849b-4782f9cc7910","issue_id":"01a215ce-5d0a-7159-8820-6cb96cc341b7","parent_comment_id":null,"author_id":"01931000-0003-7000-8000-000000000001","author":{"id":"01931000-0003-7000-8000-000000000001","handle":"@usr-01931000000370008000000000000001","display_name":"Philip J. Fry","redacted":false,"label":null},"body_markdown":"Audited and verified by Fry with issue:comment permission.","body_sha256":"bdf5cbaf695e4a284f982606e9b3391ca45f0a88d02b77dddf0125ca1b23d326","permalink":"/projects/KAN/issues/KAN-1#comment-01a215ce-5ddf-7763-849b-4782f9cc7910","created_at":"2026-11-26T03:02:55.711367Z","edited_at":null,"deleted":false,"reactions":[],"replies":[],"replies_next_cursor":null,"mentions":[],"unnotified_mentions":[]}
 ```
 
 - **Delete Preview Attempt (Denied issue:delete, HTTP 403 INSUFFICIENT_CAPABILITY):**
 ```http
 GET /api/v1/issues/KAN-1/delete-preview HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 
 HTTP/1.1 403 Forbidden
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Missing required capability: DELETE (requires Project Admin, Workspace Admin, or Server Admin role).","request_id":"9b64a031d5584776ae3cbf529d235ebf","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your effective role or capability bitmask does not include the required capability."}
+{"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Missing required capability: DELETE (requires Project Admin, Workspace Admin, or Server Admin role).","request_id":"cc375e8e4fc64d67b29826cc543d247f","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your effective role or capability bitmask does not include the required capability."}
 ```
 
 - **Delete Issue Attempt (Denied issue:delete, HTTP 403 INSUFFICIENT_CAPABILITY):**
 ```http
 DELETE /api/v1/issues/KAN-1 HTTP/1.1
 Host: 127.0.0.1:18408
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 Kb-Blast-Hash: 0000000000000000000000000000000000000000000000000000000000000000
 
 HTTP/1.1 403 Forbidden
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Missing required capability: DELETE (requires Project Admin, Workspace Admin, or Server Admin role).","request_id":"39dd1c4114244a77924155548cddd779","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your effective role or capability bitmask does not include the required capability."}
+{"type":"urn:kanban:problem:INSUFFICIENT_CAPABILITY","title":"Insufficient Capability","status":403,"code":"INSUFFICIENT_CAPABILITY","detail":"Missing required capability: DELETE (requires Project Admin, Workspace Admin, or Server Admin role).","request_id":"3df238370bb84a839251129d79b418ab","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your effective role or capability bitmask does not include the required capability."}
 ```
 
 - **Administrative Role Creation Attempt (Denied, HTTP 403 FORBIDDEN):**
@@ -512,14 +512,14 @@ Content-Type: application/problem+json
 POST /api/v1/admin/rbac/roles HTTP/1.1
 Host: 127.0.0.1:18408
 Content-Type: application/json
-X-Csrf-Token: 9DpktpgF6TGO3LgaQ0U42w.sSzG-1rGlpuHjH5uCXWPXXN5-4CoFPo8kmMch9t46JI
+X-Csrf-Token: wdlZKdzx_YTzetjzgTsU7Q.7wSTa81Cef3PAyTihFPvnGZH8uVkBg70zBJIAkTLYv4
 
 {"name":"Rogue Role","slug":"rogue-role"}
 
 HTTP/1.1 403 Forbidden
 Content-Type: application/problem+json
 
-{"type":"urn:kanban:problem:FORBIDDEN","title":"Forbidden","status":403,"code":"FORBIDDEN","detail":"Principal does not possess an administrative role.","request_id":"e203f5f34dce45bda61dd4e555a6c6ac","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your account role or token lacks permission for this operation."}
+{"type":"urn:kanban:problem:FORBIDDEN","title":"Forbidden","status":403,"code":"FORBIDDEN","detail":"Principal does not possess an administrative role.","request_id":"debc2615855f4f53bee7505727086f6f","doc_href":"/docs/role-and-permission-matrix","help_summary":"Your account role or token lacks permission for this operation."}
 ```
 
 ---
@@ -551,22 +551,24 @@ Screenshots are mirrored in:
 ### Automated Test Coverage & Static Gates
 
 - **Unit Test Execution (`docs/qa/KAN-408/unit-test-results.txt`):**
-  - Pytest Backend Suites: **98 passed in 34.85s** (100% pass rate, zero warnings).
+  - Pytest Backend Suites: **106 passed in 33.87s** (100% pass rate, zero warnings).
     - `kanban/tests/auth/test_auth_cards_admin_api.py`: 8 passed.
     - `kanban/tests/auth/test_auth_cards_handshake_unit.py`: 12 passed.
     - `kanban/tests/auth/test_auth_cards_public_api.py`: 4 passed.
     - `kanban/tests/auth/test_auth_cards_service_unit.py`: 12 passed.
     - `kanban/tests/auth/test_ldap_tls_and_bind.py`: 26 passed.
-    - `kanban/tests/auth/test_ldap_group_sync.py`: 5 passed.
+    - `kanban/tests/auth/test_ldap_service_unit.py`: 6 passed.
+    - `kanban/tests/auth/test_ldap_group_sync.py`: 7 passed.
     - `kanban/tests/auth/test_oidc_flow.py`: 23 passed.
     - `kanban/tests/auth/test_identity_linking_real_pg_e2e.py`: 1 passed.
     - `kanban/tests/api/test_granular_rbac_api.py`: 7 passed.
   - Touched Module Backend Coverage:
+    - `kanban/auth/ldap/service.py`: **99%** (147 stmts, 0 missed, 2 partial branches).
+    - `kanban/auth/ldap/sync.py`: **100%** (74 stmts, 0 missed, 0 missed branches).
     - `kanban/auth/cards/service.py`: **98%** (328 stmts, 3 missed, 4 partial branches).
     - `kanban/auth/cards/handshake.py`: **96%** (94 stmts, 2 missed).
     - `kanban/auth/cards/schemas.py`: **100%** (100 stmts, 0 missed).
     - `kanban/auth/ldap/client.py`: **97%** (233 stmts, 6 missed).
-    - `kanban/auth/ldap/sync.py`: **92%** (74 stmts, 4 missed).
   - Vitest Frontend Suites: **122 passed in 8.92s** (100% pass rate, zero act warnings).
     - `AuthStudioPage.test.tsx`: 55 passed.
     - `AuthCardEditorDrawer.test.tsx`: 59 passed.

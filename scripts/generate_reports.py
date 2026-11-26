@@ -260,22 +260,24 @@ Screenshots are mirrored in:
 ### Automated Test Coverage & Static Gates
 
 - **Unit Test Execution (`docs/qa/KAN-408/unit-test-results.txt`):**
-  - Pytest Backend Suites: **98 passed in 34.85s** (100% pass rate, zero warnings).
+  - Pytest Backend Suites: **106 passed in 33.87s** (100% pass rate, zero warnings).
     - `kanban/tests/auth/test_auth_cards_admin_api.py`: 8 passed.
     - `kanban/tests/auth/test_auth_cards_handshake_unit.py`: 12 passed.
     - `kanban/tests/auth/test_auth_cards_public_api.py`: 4 passed.
     - `kanban/tests/auth/test_auth_cards_service_unit.py`: 12 passed.
     - `kanban/tests/auth/test_ldap_tls_and_bind.py`: 26 passed.
-    - `kanban/tests/auth/test_ldap_group_sync.py`: 5 passed.
+    - `kanban/tests/auth/test_ldap_service_unit.py`: 6 passed.
+    - `kanban/tests/auth/test_ldap_group_sync.py`: 7 passed.
     - `kanban/tests/auth/test_oidc_flow.py`: 23 passed.
     - `kanban/tests/auth/test_identity_linking_real_pg_e2e.py`: 1 passed.
     - `kanban/tests/api/test_granular_rbac_api.py`: 7 passed.
   - Touched Module Backend Coverage:
+    - `kanban/auth/ldap/service.py`: **99%** (147 stmts, 0 missed, 2 partial branches).
+    - `kanban/auth/ldap/sync.py`: **100%** (74 stmts, 0 missed, 0 missed branches).
     - `kanban/auth/cards/service.py`: **98%** (328 stmts, 3 missed, 4 partial branches).
     - `kanban/auth/cards/handshake.py`: **96%** (94 stmts, 2 missed).
     - `kanban/auth/cards/schemas.py`: **100%** (100 stmts, 0 missed).
     - `kanban/auth/ldap/client.py`: **97%** (233 stmts, 6 missed).
-    - `kanban/auth/ldap/sync.py`: **92%** (74 stmts, 4 missed).
   - Vitest Frontend Suites: **122 passed in 8.92s** (100% pass rate, zero act warnings).
     - `AuthStudioPage.test.tsx`: 55 passed.
     - `AuthCardEditorDrawer.test.tsx`: 59 passed.

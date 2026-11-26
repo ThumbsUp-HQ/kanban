@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from database.models.auth import LdapGroupMapping
 from database.models.principals import Group, Principal, PrincipalGroupEdge
 from kanban.auth.cards.repository import admin_upsert
-from kanban.auth.ldap.sync import sync_ldap_groups
+from kanban.auth.ldap.sync import _reconcile_group_nesting_edges, sync_ldap_groups
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -402,9 +402,7 @@ async def test_sync_ldap_groups_parent_map_defensive_branches(
 async def test_reconcile_group_nesting_edges_missing_group_records(
     db_session: AsyncSession,
 ) -> None:
-    """Directly test _reconcile_group_nesting_edges when groups are missing in group_by_name (lines 39, 47)."""
-    from kanban.auth.ldap.sync import _reconcile_group_nesting_edges
-
+    """Test _reconcile_group_nesting_edges when groups are missing in group_by_name."""
     ws_id = uuid.uuid4()
     child_dn = "cn=child,ou=groups,dc=example,dc=com"
     parent_dn = "cn=parent,ou=groups,dc=example,dc=com"

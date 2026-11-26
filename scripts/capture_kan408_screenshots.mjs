@@ -58,7 +58,7 @@ async function saveScreenshot(page, filename) {
 async function main() {
   const sessionCookie = process.env.KANBAN_SESSION_COOKIE;
   const csrfCookie = process.env.KANBAN_CSRF_COOKIE;
-  const recoveryCode = process.env.KANBAN_RECOVERY_CODE || '';
+  let latestRecoveryCode = process.env.KANBAN_RECOVERY_CODE || '';
   const dbName = process.env.KANBAN_DB_NAME || 'kanban_workout';
 
   const telemetry = {
@@ -331,6 +331,11 @@ async function main() {
         await regenBtn.click();
         const modal = page.locator('[data-testid="recovery-codes-grid"]');
         await modal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        const items = await page.locator('.kb-personal-settings-recovery-item').allInnerTexts();
+        if (items.length > 0) {
+          latestRecoveryCode = items[0].trim();
+          console.log(`Captured newly regenerated recovery code for step 09: ${latestRecoveryCode.slice(0, 4)}...`);
+        }
       }
 
       await applyUnclippedStyle(page);
@@ -396,84 +401,6 @@ async function main() {
     }
 
     // -----------------------------------------------------------------------
-    // Live Workflow State 09: Expired WebSudo Dirty-Drawer Replay Prompt
-    // -----------------------------------------------------------------------
-    {
-      console.log('Capturing 09-websudo-replay-active.png...');
-      const context = await createContext({
-        viewport: { width: 1440, height: 900 },
-        colorScheme: 'light',
-      });
-      const page = await context.newPage();
-      await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(800);
-
-      // Open Add Auth Card drawer
-      const addBtn = page.locator('button.auth-studio-add-btn:has-text("+ Add auth card")').first();
-      if (await addBtn.count() && await addBtn.isVisible()) {
-        await addBtn.click();
-        const drawer = page.locator('.auth-editor-drawer');
-        await drawer.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-
-        // Fill in typed LDAP DN fields so drawer is dirty
-        const providerSelect = page.locator('#card-provider-kind');
-        if (await providerSelect.count()) await providerSelect.selectOption('LDAP');
-        const nameInput = page.locator('#card-display-name');
-        if (await nameInput.count()) await nameInput.fill('Staging Active Directory Enterprise');
-        const bindDnInput = page.locator('#card-bind-dn');
-        if (await bindDnInput.count()) await bindDnInput.fill('cn=admin,dc=planetexpress,dc=com');
-        const baseDnInput = page.locator('#card-base-dn');
-        if (await baseDnInput.count()) await baseDnInput.fill('dc=planetexpress,dc=com');
-        const urlInput = page.locator('#card-server-url');
-        if (await urlInput.count()) await urlInput.fill('ldaps://127.0.0.1:10636');
-
-        // 1. Expire AAL2 in PostgreSQL
-        try {
-          execSync(
-            `docker exec swarm-b-kan408-7b120ade-pg-test-1 psql -U kanban_test -d ${dbName} -c "UPDATE sessions SET aal2_verified_at = now() - interval '20 minutes', aal2_last_active_at = now() - interval '20 minutes';"`
-          );
-          console.log('Expired AAL2 in sessions table via PostgreSQL.');
-        } catch (e) {
-          console.warn('PostgreSQL session AAL2 expiration warning:', e.message);
-        }
-
-        // 2. Click Save card in drawer -> triggers real HTTP 403 AAL2_STALE on /api/v1/admin/auth-cards
-        const saveBtn = drawer.locator('[data-testid="drawer-save-btn"], button[type="submit"]:has-text("Create Card")').first();
-        if (await saveBtn.count() && await saveBtn.isVisible()) {
-          await saveBtn.click();
-        }
-
-        // 3. Wait for organic WebSudo step-up modal to appear
-        const wsModal = page.locator('[data-testid="websudo-stepup-modal"]');
-        await wsModal.waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
-        await page.waitForTimeout(400);
-
-        await applyUnclippedStyle(page);
-        await saveScreenshot(page, '09-websudo-replay-active.png');
-
-        // 4. Enter recovery code in the organic modal to verify first-replay 200 OK
-        if (recoveryCode && await wsModal.isVisible()) {
-          const recTab = wsModal.locator('button[role="tab"]:has-text("Recovery")').first();
-          if (await recTab.count() && await recTab.isVisible()) {
-            await recTab.click();
-            await page.waitForTimeout(200);
-          }
-          const recInput = wsModal.locator('#recovery-code-input, input[placeholder*="xxxx"]').first();
-          if (await recInput.count() && await recInput.isVisible()) {
-            await recInput.fill(recoveryCode);
-            const submitRecBtn = wsModal.locator('button[type="submit"]:has-text("Verify recovery code")').first();
-            if (await submitRecBtn.count() && await submitRecBtn.isVisible()) {
-              await submitRecBtn.click();
-              await page.waitForTimeout(1000);
-            }
-          }
-        }
-      }
-
-      await context.close();
-    }
-
-    // -----------------------------------------------------------------------
     // Live Workflow State 10: OIDC Verified-Claim Linking
     // -----------------------------------------------------------------------
     {
@@ -484,13 +411,17 @@ async function main() {
       });
       const page = await context.newPage();
       await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(1000);
 
       const usersTabBtn = page.locator('#auth-tab-users, .auth-tab-btn:has-text("Users")').first();
       if (await usersTabBtn.count() && await usersTabBtn.isVisible()) {
         await usersTabBtn.click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(800);
       }
+
+      // Ensure users table is rendered with external identities
+      await page.waitForSelector('table, [data-testid="users-table"]', { state: 'visible', timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(400);
 
       await applyUnclippedStyle(page);
       await saveScreenshot(page, '10-oidc-verified-claim-linked.png');
@@ -508,12 +439,12 @@ async function main() {
       });
       const page = await context.newPage();
       await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(1000);
 
       const rolesTabBtn = page.locator('#auth-tab-roles, .auth-tab-btn:has-text("Roles")').first();
       if (await rolesTabBtn.count() && await rolesTabBtn.isVisible()) {
         await rolesTabBtn.click();
-        await page.waitForTimeout(600);
+        await page.waitForTimeout(800);
 
         // Select Quality Auditor Lead from dropdown if present
         const addRoleSelect = page.locator('[data-testid="rbac-select-role-dropdown"]').first();
@@ -530,11 +461,100 @@ async function main() {
         await roleChip.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
       }
 
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(500);
       await applyUnclippedStyle(page);
       await saveScreenshot(page, '11-custom-rbac-policy-builder.png');
       await context.close();
     }
+
+    // -----------------------------------------------------------------------
+    // Live Workflow State 09: Expired WebSudo Dirty-Drawer Replay Prompt
+    // -----------------------------------------------------------------------
+    {
+      console.log('Capturing 09-websudo-replay-active.png...');
+      const context = await createContext({
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+      });
+      const page = await context.newPage();
+      await page.goto(`${BASE_URL}/admin/auth`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(800);
+
+      // Open Add Auth Card drawer
+      const addBtn = page.locator('.auth-studio-add-btn').first();
+      await addBtn.waitFor({ state: 'visible', timeout: 10000 });
+      await addBtn.click();
+      const drawer = page.locator('.auth-editor-drawer');
+      await drawer.waitFor({ state: 'visible', timeout: 5000 });
+
+        // Fill in typed LDAP DN fields so drawer is dirty
+        const providerSelect = page.locator('#card-provider-kind');
+        if (await providerSelect.count()) await providerSelect.selectOption('LDAP');
+        const nameInput = page.locator('#card-display-name');
+        if (await nameInput.count()) await nameInput.fill('Staging Active Directory Enterprise');
+        const bindDnInput = page.locator('#card-bind-dn');
+        if (await bindDnInput.count()) await bindDnInput.fill('cn=admin,dc=planetexpress,dc=com');
+        const baseDnInput = page.locator('#card-base-dn');
+        if (await baseDnInput.count()) await baseDnInput.fill('dc=planetexpress,dc=com');
+        const urlInput = page.locator('#card-server-url');
+        if (await urlInput.count()) await urlInput.fill('ldaps://127.0.0.1:10636');
+
+        // 1. Drop active AAL2 WebSudo elevation so save action triggers AAL2 step-up
+        try {
+          const lockBtn = page.locator('[data-testid="admin-sudo-drop-btn"]');
+          if (await lockBtn.count()) {
+            await lockBtn.click({ force: true }).catch(() => {});
+          }
+          await page.evaluate(() =>
+            fetch('/api/v1/auth/aal2/drop', {
+              method: 'POST',
+              headers: { 'X-CSRF-Token': document.cookie.match(/kb_csrf=([^;]+)/)?.[1] || '' }
+            })
+          ).catch(() => {});
+          console.log('Dropped AAL2 elevation to trigger organic WebSudo step-up.');
+        } catch (e) {
+          console.warn('AAL2 drop warning:', e.message);
+        }
+
+        // 2. Click Save card in drawer -> triggers real HTTP 403 AAL2_REQUIRED on /api/v1/admin/auth-cards
+        const saveBtn = drawer.locator('[data-testid="drawer-save-btn"], button[type="submit"]:has-text("Create Card")').first();
+        await saveBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        if (await saveBtn.count() && await saveBtn.isVisible()) {
+          await saveBtn.click();
+        }
+
+        // 3. Wait for organic WebSudo step-up modal to appear
+        const wsModal = page.locator('[data-testid="websudo-stepup-modal"]');
+        await wsModal.waitFor({ state: 'visible', timeout: 10000 });
+        await page.waitForTimeout(400);
+
+        await applyUnclippedStyle(page);
+        await saveScreenshot(page, '09-websudo-replay-active.png');
+
+        // 4. Enter recovery code in the organic modal to verify first-replay 200/201 OK
+        if (latestRecoveryCode && await wsModal.isVisible()) {
+          const recTab = wsModal.locator('button[role="tab"]:has-text("Recovery")').first();
+          if (await recTab.count() && await recTab.isVisible()) {
+            await recTab.click();
+            await page.waitForTimeout(200);
+          }
+          const recInput = wsModal.locator('#recovery-code-input, input[placeholder*="xxxx"]').first();
+          if (await recInput.count() && await recInput.isVisible()) {
+            await recInput.fill(latestRecoveryCode);
+            const submitRecBtn = wsModal.locator('button[type="submit"]:has-text("Verify recovery code")').first();
+            if (await submitRecBtn.count() && await submitRecBtn.isVisible()) {
+              const [response] = await Promise.all([
+                page.waitForResponse((res) => res.url().includes('/api/v1/admin/auth-cards') && (res.status() === 200 || res.status() === 201), { timeout: 10000 }).catch(() => null),
+                submitRecBtn.click()
+              ]);
+              console.log('Replay card save response received:', (response && typeof response.status === 'function') ? response.status() : 'none');
+              await wsModal.waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
+            }
+          }
+        }
+
+        await context.close();
+      }
 
   } finally {
     await browser.close();
