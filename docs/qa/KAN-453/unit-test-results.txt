@@ -1,6 +1,6 @@
-$ pnpm --dir kanban/web exec vitest run src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-agents/__tests__/AgentStudioPage.test.tsx
 
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan453-9c272a4e/kanban/web
+      Coverage enabled with v8
 
 stderr | src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx > AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01) > System Instructions Preservation on Edit (KAN-431) > submits custom system_instructions_md updated via native DOM input event on create
 An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
@@ -24,7 +24,7 @@ act(() => {
 
 This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
 
- ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (18 tests) 810ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (18 tests) 851ms
 stderr | src/features/admin-agents/__tests__/AgentStudioPage.test.tsx > AgentStudioPage & Components (KANBA-219) > AgentStudioPage & ValidationModal non-Error fallback coverage > creating an agent with custom system_instructions_md submits custom prompt and opening Edit displays saved custom prompt
 An update to AgentDefinitionEditorContent inside a test was not wrapped in act(...).
 
@@ -47,14 +47,21 @@ act(() => {
 
 This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
 
- ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (36 tests) 1457ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (36 tests) 1285ms
    ✓ AgentStudioPage & Components (KANBA-219) (36)
      ✓ AgentStudioPage & ValidationModal non-Error fallback coverage (17)
-       ✓ request-storm guard: mounting AgentStudioPage with active AAL2 session returning x-kb-aal2-expires-at headers and opening drawer invokes GET /api/v1/auth/session <= 2 times over 300ms 350ms
+       ✓ request-storm guard: mounting AgentStudioPage with active AAL2 session returning x-kb-aal2-expires-at headers and opening drawer invokes GET /api/v1/auth/session <= 2 times over 300ms 340ms
 
  Test Files  2 passed (2)
       Tests  54 passed (54)
-   Start at  14:31:45
-   Duration  3.07s (tests 46%, environment 40%, import 11%, transform 3%)
+   Start at  15:03:07
+   Duration  2.54s (tests 54%, environment 34%, import 9%, worker 2%, transform 2%)
 
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   97.85 |    95.58 |     100 |   97.82 |                   
+ ...itorDrawer.tsx |   97.85 |    95.58 |     100 |   97.82 | 113,239-240       
+-------------------|---------|----------|---------|---------|-------------------
 exit code: 0
