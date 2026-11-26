@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
 **Target Branch:** `feat/KAN-413-slice2-ai-workout`  
-**Target Commit:** `3868cbb6`  
+**Target Commit:** `fa3ea25d`  
 
 ---
 
@@ -17,7 +17,7 @@ This UI Specialist Review audits the Round 4 re-tested and updated zero-mock vis
 
 All 22 re-captured visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key interactive workflow states were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience under real companion services (Local OpenAI-compatible mock server, Local Ollama runtime, Token Budget Ledger, Agent Studio execution trace modal, Runner Mint Token dialog, and interactive `/llms.txt` onboarding wizard) is robust, unclipped, and fully aligned with 👍kanban UX standards.
 
-Automated test metrics verify 165/165 Vitest tests passed across 6 test files in 4.41s with 0 `act(...)` warnings and 96.60% branch coverage with full V8 coverage table recorded, and 76/76 Pytest tests passed in 38.39s with 97% overall coverage across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
+Automated test metrics verify 165/165 Vitest tests passed across 6 test files in 4.41s with 0 `act(...)` warnings and 96.60% branch coverage with full V8 coverage table recorded, and 105/105 Pytest tests passed in 37.69s with 97% overall coverage across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
 
 Key findings:
 1. **Dark Mode Secondary Button & Link Contrast**: Dark mode secondary buttons (`Documentation ->`, `Enabled`, `Test Connection`, `Token Budget`, `Edit`, `▲`, `▼`) and `StudioDocLink` now feature crisp high-contrast foreground text (> 7.5:1 ratio against `#16181d`/`#1f2937` backgrounds), resolving previous low-contrast gray text.
