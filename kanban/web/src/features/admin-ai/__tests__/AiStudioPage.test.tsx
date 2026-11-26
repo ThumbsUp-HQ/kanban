@@ -1,6 +1,8 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, createEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
@@ -2248,6 +2250,125 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
         expect(screen.queryByRole('alert')).toBeNull();
         expect(screen.queryByTestId('ai-studio-error')).toBeNull();
       });
+    });
+  });
+
+  describe('KAN-442: Semantic CSS Variable Tokens in aiStudio.css (WCAG AA Contrast)', () => {
+    it('renders provider cards, badges, and air-gap banner cleanly in Light and Dark themes', async () => {
+      const mockCustomProvider: ProviderConfigPublic = {
+        id: 'prov-custom-5',
+        provider_kind: 'custom',
+        display_name: 'Enterprise Custom Proxy',
+        base_url: 'https://ai.internal.corp/v1',
+        model_allowlist: ['internal-model'],
+        residency_tier: 'local_only',
+        priority: 50,
+        settings: {},
+        api_key_set: true,
+        is_enabled: true,
+        project_id: null,
+      };
+
+      vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue([
+        mockProvider,
+        mockGeminiProvider,
+        mockOllamaProvider,
+        mockCustomProvider,
+      ]);
+      vi.spyOn(aiApi, 'fetchAirGapMode').mockResolvedValue(true);
+
+      // 1. Verify in light mode
+      document.documentElement.setAttribute('data-theme', 'light');
+      const { unmount } = render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('air-gap-active-banner')).toBeDefined();
+        expect(screen.getByText('Production OpenAI')).toBeDefined();
+        expect(screen.getByText('Google Gemini Cloud')).toBeDefined();
+        expect(screen.getByText('Local Ollama Runtime')).toBeDefined();
+        expect(screen.getByText('Enterprise Custom Proxy')).toBeDefined();
+      });
+
+      // Verify kind badges exist with correct text
+      expect(screen.getByText('openai')).toBeDefined();
+      expect(screen.getByText('gemini')).toBeDefined();
+      expect(screen.getByText('ollama')).toBeDefined();
+      expect(screen.getByText('custom')).toBeDefined();
+      unmount();
+
+      // 2. Verify in dark mode
+      document.documentElement.setAttribute('data-theme', 'dark');
+      render(<AiStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('air-gap-active-banner')).toBeDefined();
+        expect(screen.getByText('Production OpenAI')).toBeDefined();
+        expect(screen.getByText('Google Gemini Cloud')).toBeDefined();
+        expect(screen.getByText('Local Ollama Runtime')).toBeDefined();
+        expect(screen.getByText('Enterprise Custom Proxy')).toBeDefined();
+      });
+
+      expect(screen.getByText('openai')).toBeDefined();
+      expect(screen.getByText('gemini')).toBeDefined();
+      expect(screen.getByText('ollama')).toBeDefined();
+      expect(screen.getByText('custom')).toBeDefined();
+
+      // Reset attribute
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('verifies aiStudio.css binds banner, cards, and provider kind badges to semantic CSS variables with zero raw hexes', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../aiStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Assert zero raw hex palette declarations in aiStudio.css
+      expect(cssContent).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+      expect(cssContent).not.toContain('#3b2a09');
+      expect(cssContent).not.toContain('#1f2937');
+      expect(cssContent).not.toContain('#ecfdf5');
+      expect(cssContent).not.toContain('#065f46');
+      expect(cssContent).not.toContain('#eff6ff');
+      expect(cssContent).not.toContain('#1e40af');
+      expect(cssContent).not.toContain('#f5f3ff');
+      expect(cssContent).not.toContain('#5b21b6');
+      expect(cssContent).not.toContain('#f3f4f6');
+      expect(cssContent).not.toContain('#374151');
+
+      // Assert banner bindings
+      expect(cssContent).toMatch(/\.kb-air-gap-banner\s*\{[^}]*background-color:\s*var\(--warn-bg\)/);
+      expect(cssContent).toMatch(/\.kb-air-gap-banner\s*\{[^}]*border:\s*1px solid var\(--border-warning\)/);
+      expect(cssContent).toMatch(/\.kb-air-gap-banner\s*\{[^}]*color:\s*var\(--warn-fg\)/);
+
+      // Assert provider card bindings
+      expect(cssContent).toMatch(/\.kb-provider-card\s*\{[^}]*background-color:\s*var\(--bg-surface-raised\)/);
+      expect(cssContent).toMatch(/\.kb-provider-card\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
+
+      // Assert provider kind badge bindings
+      expect(cssContent).toMatch(/\.kb-provider-kind--openai\s*\{[^}]*background-color:\s*var\(--bg-success-subtle\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--openai\s*\{[^}]*color:\s*var\(--ok-fg\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--openai\s*\{[^}]*border:\s*1px solid var\(--border-success\)/);
+
+      expect(cssContent).toMatch(/\.kb-provider-kind--gemini\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--gemini\s*\{[^}]*color:\s*var\(--badge-fg\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--gemini\s*\{[^}]*border:\s*1px solid var\(--badge-border\)/);
+
+      expect(cssContent).toMatch(/\.kb-provider-kind--ollama\s*\{[^}]*background-color:\s*var\(--sticky-lavender\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--ollama\s*\{[^}]*color:\s*var\(--fg-primary\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--ollama\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
+
+      expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*background-color:\s*var\(--bg-secondary\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*color:\s*var\(--fg-secondary\)/);
+      expect(cssContent).toMatch(/\.kb-provider-kind--custom\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
+
+      // Assert provider meta row code and flex wrapping
+      expect(cssContent).toMatch(/\.kb-provider-meta-row\s*\{[^}]*flex-wrap:\s*wrap/);
+      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*background-color:\s*var\(--bg-secondary\)/);
+      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*color:\s*var\(--fg-primary\)/);
+      expect(cssContent).toMatch(/\.kb-provider-meta-row code\s*\{[^}]*border:\s*1px solid var\(--border-subtle\)/);
+
+      // Assert high contrast text tokens for dark mode WCAG AA
+      expect(cssContent).toMatch(/\.kb-key-status--no-key\s*\{[^}]*color:\s*var\(--badge-fg\)/);
+      expect(cssContent).toMatch(/\.kb-advanced-settings-summary:hover\s*\{[^}]*color:\s*var\(--badge-fg\)/);
     });
   });
 });
