@@ -1,3 +1,16 @@
+diff --git a/kanban/web/src/components/help/FieldHelpHint.css b/kanban/web/src/components/help/FieldHelpHint.css
+index 2c7135ea..9f8e38c0 100644
+--- a/kanban/web/src/components/help/FieldHelpHint.css
++++ b/kanban/web/src/components/help/FieldHelpHint.css
+@@ -74,6 +74,8 @@
+   left: -9999px;
+   max-width: var(--hint-max-w);
+   width: max-content;
++  max-height: calc(100vh - 24px);
++  overflow-y: auto;
+   padding: var(--hint-pad);
+   font-family: var(--font-sans);
+   font-size: var(--text-sm);
 diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
 index 4bcc1c24..59ed269d 100644
 --- a/kanban/web/src/features/admin/LinkAuditorStudio.css
@@ -41,7 +54,7 @@ index 4bcc1c24..59ed269d 100644
  
  .metric-card {
 diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
-index ae33b71d..0ba79e25 100644
+index ae33b71d..bd82cc1d 100644
 --- a/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
 +++ b/kanban/web/src/features/admin/LinkAuditorStudio.test.tsx
 @@ -5,7 +5,7 @@ import React from 'react';
@@ -53,7 +66,7 @@ index ae33b71d..0ba79e25 100644
  import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  import { MemoryRouter } from 'react-router';
  import { LinkAuditorStudio, formatEntitySummary } from './LinkAuditorStudio';
-@@ -971,4 +971,254 @@ describe('LinkAuditorStudio', () => {
+@@ -971,4 +971,253 @@ describe('LinkAuditorStudio', () => {
        expect(statusPillAll).toBeDefined();
      });
    });
@@ -138,15 +151,14 @@ index ae33b71d..0ba79e25 100644
 +      // Verify summary and default value
 +      expect(
 +        screen.getByText(
-+          /Link verification detects non-referential integrity failures across the Universal Object Graph/i,
++          /Detects non-referential integrity failures across the Universal Object Graph/i,
 +        ),
 +      ).toBeDefined();
 +      const defaultVal = screen.getByTestId('integrity-metrics-help-default');
 +      expect(defaultVal.textContent).toContain('ALL (No reason filter active)');
 +
 +      // Verify valid values dl list
-+      expect(screen.getByText('DANGLING_SOURCE')).toBeDefined();
-+      expect(screen.getByText('DANGLING_TARGET')).toBeDefined();
++      expect(screen.getByText('DANGLING_SOURCE / DANGLING_TARGET')).toBeDefined();
 +      expect(screen.getByText('SOFT_DELETED_ENDPOINT')).toBeDefined();
 +      expect(screen.getByText('ARCHIVED_POLICY_VIOLATION')).toBeDefined();
 +      expect(screen.getByText('TYPE_MATRIX_VIOLATION')).toBeDefined();
@@ -309,7 +321,7 @@ index ae33b71d..0ba79e25 100644
 +  });
  });
 diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
-index 5521eb78..b4aee635 100644
+index 5521eb78..8d1b2fe5 100644
 --- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
 +++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
 @@ -8,6 +8,7 @@ import { qk } from '../../api/queryKeys';
@@ -320,7 +332,7 @@ index 5521eb78..b4aee635 100644
  import './LinkAuditorStudio.css';
  
  export type InvalidLinkReason =
-@@ -383,33 +384,85 @@ export function LinkAuditorStudio(): JSX.Element {
+@@ -383,33 +384,72 @@ export function LinkAuditorStudio(): JSX.Element {
        )}
  
        {/* Reason Breakdown Overview Cards */}
@@ -356,47 +368,34 @@ index 5521eb78..b4aee635 100644
 +          <h2 className="link-auditor-metrics-title">Integrity Metrics</h2>
 +          <FieldHelpHint
 +            title="Integrity Metrics"
-+            summary="Link verification detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
++            summary="Detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
 +            defaultValue="ALL (No reason filter active)"
 +            validValues={[
 +              {
-+                label: 'DANGLING_SOURCE',
-+                description:
-+                  'Source entity does not exist in universal object graph',
-+              },
-+              {
-+                label: 'DANGLING_TARGET',
-+                description:
-+                  'Target entity does not exist in universal object graph',
++                label: 'DANGLING_SOURCE / DANGLING_TARGET',
++                description: 'Missing source or target entity',
 +              },
 +              {
 +                label: 'SOFT_DELETED_ENDPOINT',
-+                description:
-+                  'Endpoint entity is marked soft-deleted while link remains active',
++                description: 'Active link to soft-deleted endpoint',
 +              },
 +              {
 +                label: 'ARCHIVED_POLICY_VIOLATION',
-+                description:
-+                  'Link references an archived entity in violation of linkage policy',
++                description: 'Link to archived entity violating policy',
 +              },
 +              {
 +                label: 'TYPE_MATRIX_VIOLATION',
-+                description:
-+                  'Link connects object kinds prohibited by the universal type matrix',
++                description: 'Disallowed object kind relationship',
 +              },
 +              {
 +                label: 'CROSS_WORKSPACE_LEAK',
-+                description:
-+                  'Link crosses workspace boundaries without multi-tenant grant',
++                description: 'Crosses workspace tenant boundary',
 +              },
 +              {
 +                label: 'PERMISSION_SEVERED',
-+                description:
-+                  'Access boundary severed between linked entities',
++                description: 'Severed entity access boundary',
 +              },
 +            ]}
-+            caution="Automated purges delete invalid links permanently with an immutable audit entry. Manually inspect cross-workspace leaks or severed permissions before purging."
-+            example="Click 'Dangling Target' to inspect only links whose target object is missing."
 +            docHref="/docs/universal-object-graph-and-link-auditor"
 +            testId="integrity-metrics-help"
 +            ariaLabel="Help: Integrity Metrics"
@@ -433,344 +432,3 @@ index 5521eb78..b4aee635 100644
        </section>
  
        {/* Audit List Controls */}
-diff --git a/scripts/capture_kan526_screenshots.mjs b/scripts/capture_kan526_screenshots.mjs
-new file mode 100644
-index 00000000..a288fa3d
---- /dev/null
-+++ b/scripts/capture_kan526_screenshots.mjs
-@@ -0,0 +1,335 @@
-+// Copyright 2026 Kanban Platform Contributors
-+// Apache-2.0 License. See LICENSE for details.
-+
-+import fs from 'node:fs';
-+import path from 'node:path';
-+import { spawn } from 'node:child_process';
-+
-+let chromium;
-+try {
-+  ({ chromium } = await import('@playwright/test'));
-+} catch {
-+  try {
-+    ({ chromium } = await import('/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs'));
-+  } catch {
-+    ({ chromium } = await import('playwright'));
-+  }
-+}
-+
-+const PORT = 18956;
-+const BASE_URL = `http://127.0.0.1:${PORT}`;
-+const OUT_DIR = path.resolve('docs/qa/KAN-526/screenshots');
-+
-+async function waitForServer(url, timeoutMs = 30000) {
-+  const start = Date.now();
-+  while (Date.now() - start < timeoutMs) {
-+    try {
-+      const res = await fetch(url);
-+      if (res.ok || res.status === 200 || res.status === 404) {
-+        return;
-+      }
-+    } catch {
-+      // Retry
-+    }
-+    await new Promise((r) => setTimeout(r, 400));
-+  }
-+  throw new Error(`Timeout waiting for preview server at ${url}`);
-+}
-+
-+async function setupInterceptions(page) {
-+  await page.addInitScript(() => {
-+    class MockWS extends EventTarget {
-+      constructor(url, protocols) {
-+        super();
-+        this.url = url;
-+        this.protocols = protocols;
-+        this.readyState = 1;
-+        setTimeout(() => {
-+          this.dispatchEvent(new Event('open'));
-+        }, 10);
-+      }
-+      send() {}
-+      close() {
-+        this.readyState = 3;
-+        this.dispatchEvent(new Event('close'));
-+      }
-+    }
-+    window.WebSocket = MockWS;
-+  });
-+
-+  const mockAdminUser = {
-+    id: 'usr_admin_1',
-+    email: 'admin@kanban.local',
-+    username: 'admin',
-+    display_name: 'Adam Architect',
-+    is_server_admin: true,
-+    is_workspace_admin: true,
-+    workspace_role: 'WORKSPACE_ADMIN',
-+    aal_level: 2,
-+    auth_aal: 'aal2',
-+    aal2_active: true,
-+  };
-+
-+  const mockAudits = [
-+    {
-+      id: 'aud-1',
-+      workspace_id: 'ws-1',
-+      link_id: 'lnk-1',
-+      reason: 'DANGLING_TARGET',
-+      detected_at: '2026-11-18T12:00:00Z',
-+      purged_at: null,
-+      resolved_at: null,
-+      link_snapshot: {
-+        source_id: 'iss-1',
-+        target_id: 'iss-999-dangling',
-+        link_type: 'BLOCKS',
-+      },
-+      source_snapshot: {
-+        id: 'iss-1',
-+        canonical_key: 'KAN-142',
-+        title: 'Fix access checks',
-+        kind: 'issue',
-+      },
-+      target_snapshot: null,
-+    },
-+    {
-+      id: 'aud-2',
-+      workspace_id: 'ws-1',
-+      link_id: 'lnk-2',
-+      reason: 'SOFT_DELETED_ENDPOINT',
-+      detected_at: '2026-11-18T13:00:00Z',
-+      purged_at: null,
-+      resolved_at: null,
-+      link_snapshot: {
-+        source_id: 'iss-2',
-+        target_id: 'iss-3',
-+        link_type: 'RELATES_TO',
-+      },
-+      source_snapshot: {
-+        id: 'iss-2',
-+        canonical_key: 'KAN-143',
-+        title: 'Active issue',
-+        kind: 'issue',
-+      },
-+      target_snapshot: {
-+        id: 'iss-3',
-+        canonical_key: 'KAN-99',
-+        title: 'Soft-deleted ticket',
-+        kind: 'issue',
-+        deleted_at: '2026-11-17T00:00:00Z',
-+      },
-+    },
-+    {
-+      id: 'aud-3',
-+      workspace_id: 'ws-1',
-+      link_id: 'lnk-3',
-+      reason: 'CROSS_WORKSPACE_LEAK',
-+      detected_at: '2026-11-18T14:00:00Z',
-+      purged_at: null,
-+      resolved_at: null,
-+      link_snapshot: {
-+        source_id: 'iss-4',
-+        target_id: 'iss-5',
-+        link_type: 'BLOCKS',
-+      },
-+      source_snapshot: {
-+        id: 'iss-4',
-+        canonical_key: 'KAN-201',
-+        title: 'Export engine',
-+        kind: 'issue',
-+      },
-+      target_snapshot: {
-+        id: 'iss-5',
-+        canonical_key: 'SEC-12',
-+        title: 'External reference',
-+        kind: 'issue',
-+      },
-+    },
-+  ];
-+
-+  await page.route('**/*', async (route) => {
-+    const url = route.request().url();
-+
-+    if (url.includes('/api/v1/setup/status')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ initialized: true, is_initialized: true, requires_setup: false }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/notifications')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({ items: [], total: 0, unread_count: 0 }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/auth/session')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          authenticated: true,
-+          mfa_pending: false,
-+          csrf_token: 'mock-csrf-token',
-+          principal_id: 'usr_admin_1',
-+          workspace_id: 'ws_default',
-+          aal_level: 2,
-+          aal2_active: true,
-+          aal2_expires_at: new Date(Date.now() + 890_000).toISOString(),
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/auth/me') || url.includes('/api/v1/users/me')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify(mockAdminUser),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces/current')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          id: 'ws_default',
-+          name: 'Platform Engineering',
-+          slug: 'kanban',
-+          is_current: true,
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/workspaces')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'ws_default', slug: 'kanban', name: 'Kanban Workspace' },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/projects')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify([
-+          { id: 'proj_kan', key: 'KAN', name: 'Kanban Project' },
-+        ]),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/admin/object-links/audits/scan') || url.includes('/api/v1/admin/object-links:audit')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          flagged_total: 3,
-+          by_reason: {
-+            DANGLING_TARGET: 1,
-+            SOFT_DELETED_ENDPOINT: 1,
-+            CROSS_WORKSPACE_LEAK: 1,
-+          },
-+        }),
-+      });
-+    }
-+
-+    if (url.includes('/api/v1/admin/object-links/audits')) {
-+      return route.fulfill({
-+        status: 200,
-+        contentType: 'application/json',
-+        body: JSON.stringify({
-+          items: mockAudits,
-+          has_more: false,
-+          total: mockAudits.length,
-+        }),
-+      });
-+    }
-+
-+    return route.continue();
-+  });
-+}
-+
-+async function captureViewports() {
-+  fs.mkdirSync(OUT_DIR, { recursive: true });
-+
-+  console.log(`Starting preview server on port ${PORT}...`);
-+  const previewProc = spawn(
-+    'pnpm',
-+    ['--dir', 'kanban/web', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
-+    { stdio: 'inherit' }
-+  );
-+
-+  try {
-+    await waitForServer(BASE_URL);
-+    console.log(`Preview server ready at ${BASE_URL}`);
-+
-+    const browser = await chromium.launch({
-+      headless: true,
-+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-+    });
-+
-+    const configs = [
-+      { name: 'desktop-light-1440x900.png', width: 1440, height: 900, theme: 'light', openPopover: false },
-+      { name: 'desktop-dark-1440x900.png', width: 1440, height: 900, theme: 'dark', openPopover: false },
-+      { name: 'tablet-768x1024.png', width: 768, height: 1024, theme: 'light', openPopover: false },
-+      { name: 'tablet-dark-768x1024.png', width: 768, height: 1024, theme: 'dark', openPopover: false },
-+      { name: 'mobile-390x844.png', width: 390, height: 844, theme: 'light', openPopover: false },
-+      { name: 'mobile-dark-390x844.png', width: 390, height: 844, theme: 'dark', openPopover: false },
-+      { name: 'popover-open-light-1440x900.png', width: 1440, height: 900, theme: 'light', openPopover: true },
-+      { name: 'popover-open-dark-1440x900.png', width: 1440, height: 900, theme: 'dark', openPopover: true },
-+    ];
-+
-+    for (const cfg of configs) {
-+      console.log(`Capturing ${cfg.name}...`);
-+      const context = await browser.newContext({
-+        viewport: { width: cfg.width, height: cfg.height },
-+        colorScheme: cfg.theme,
-+      });
-+      const page = await context.newPage();
-+      await setupInterceptions(page);
-+
-+      await page.goto(`${BASE_URL}/admin/link-auditor`, { waitUntil: 'networkidle' });
-+
-+      await page.evaluate((theme) => {
-+        document.documentElement.dataset.theme = theme;
-+        document.documentElement.setAttribute('data-theme', theme);
-+        localStorage.setItem('theme', theme);
-+        localStorage.setItem('kb:theme', theme);
-+      }, cfg.theme);
-+
-+      const studio = page.locator('[data-testid="link-auditor-studio"]');
-+      await studio.waitFor({ state: 'visible', timeout: 8000 });
-+      await page.waitForTimeout(300);
-+
-+      if (cfg.openPopover) {
-+        const hintBtn = page.locator('[data-testid="integrity-metrics-help"]');
-+        await hintBtn.waitFor({ state: 'visible', timeout: 5000 });
-+        await hintBtn.click();
-+        const popover = page.locator('[data-testid="integrity-metrics-help-popover"]');
-+        await popover.waitFor({ state: 'visible', timeout: 5000 });
-+        await page.waitForTimeout(300);
-+      }
-+
-+      const outPath = path.join(OUT_DIR, cfg.name);
-+      await page.screenshot({ path: outPath, fullPage: false });
-+      console.log(`Saved ${outPath}`);
-+      await context.close();
-+    }
-+
-+    await browser.close();
-+    console.log(`All 8 screenshots successfully captured in ${OUT_DIR}`);
-+  } finally {
-+    previewProc.kill();
-+  }
-+}
-+
-+captureViewports().catch((err) => {
-+  console.error('Screenshot capture failed:', err);
-+  process.exit(1);
-+});
