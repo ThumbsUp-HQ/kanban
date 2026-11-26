@@ -131,6 +131,10 @@ export function WorkflowStudioPage({
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
 
   const handleSaveProjectTimeout = async (val: number | null) => {
+    if (val !== null && (Number.isNaN(val) || val < 1000 || val > 600000)) {
+      setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+      return;
+    }
     try {
       setIsSavingTimeout(true);
       setTimeoutError(null);
@@ -378,46 +382,53 @@ export function WorkflowStudioPage({
       <section
         className="workflow-project-timeout-panel"
         data-testid="project-gate-timeout-panel"
-        style={{
-          background: 'var(--kb-surface-card, #ffffff)',
-          border: '1px solid var(--kb-border-subtle, #e5e7eb)',
-          borderRadius: '8px',
-          padding: '1rem',
-          marginBottom: '1.5rem',
-        }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="workflow-project-timeout-row">
+          <div className="workflow-project-timeout-title-group">
+            <h2 className="workflow-project-timeout-heading">
               <span>⏱️ Project Default Gate Timeout</span>
               <span className="workflow-studio-title-badge" data-testid="project-timeout-current-badge">
                 {projectDefaultTimeout !== null ? `${String(projectDefaultTimeout)} ms` : 'Agent Default'}
               </span>
             </h2>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--kb-text-secondary, #6b7280)' }}>
+            <p className="workflow-project-timeout-description">
               Inherited timeout for all workflow interceptor gates in this project unless overridden by a hook. Max 10 minutes (600,000 ms).
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="workflow-project-timeout-controls">
             <input
               type="number"
               min="1000"
               max="600000"
               step="1000"
-              className="workflow-input"
+              className="workflow-form-control"
               style={{ width: '130px' }}
               placeholder="Inherit agent"
               value={projectDefaultTimeout !== null ? String(projectDefaultTimeout) : ''}
               onChange={(e) => {
                 const v = e.target.value.trim();
-                setOverrideTimeout(v === '' ? null : parseInt(v, 10));
+                if (v === '') {
+                  setOverrideTimeout(null);
+                  setTimeoutError(null);
+                } else {
+                  const parsed = parseInt(v, 10);
+                  setOverrideTimeout(Number.isNaN(parsed) ? null : parsed);
+                  if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
+                    setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
+                  } else {
+                    setTimeoutError(null);
+                  }
+                }
               }}
               data-testid="project-default-gate-timeout-input"
             />
             <button
               type="button"
               className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-              onClick={() => { setOverrideTimeout(60000); }}
+              onClick={() => {
+                setOverrideTimeout(60000);
+                setTimeoutError(null);
+              }}
               data-testid="project-timeout-preset-60s"
             >
               60s
@@ -425,7 +436,10 @@ export function WorkflowStudioPage({
             <button
               type="button"
               className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-              onClick={() => { setOverrideTimeout(180000); }}
+              onClick={() => {
+                setOverrideTimeout(180000);
+                setTimeoutError(null);
+              }}
               data-testid="project-timeout-preset-3m"
             >
               3m
@@ -433,7 +447,10 @@ export function WorkflowStudioPage({
             <button
               type="button"
               className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-              onClick={() => { setOverrideTimeout(300000); }}
+              onClick={() => {
+                setOverrideTimeout(300000);
+                setTimeoutError(null);
+              }}
               data-testid="project-timeout-preset-5m"
             >
               5m
@@ -441,7 +458,10 @@ export function WorkflowStudioPage({
             <button
               type="button"
               className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-              onClick={() => { setOverrideTimeout(600000); }}
+              onClick={() => {
+                setOverrideTimeout(600000);
+                setTimeoutError(null);
+              }}
               data-testid="project-timeout-preset-10m"
             >
               10m
@@ -449,7 +469,10 @@ export function WorkflowStudioPage({
             <button
               type="button"
               className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-              onClick={() => { setOverrideTimeout(null); }}
+              onClick={() => {
+                setOverrideTimeout(null);
+                setTimeoutError(null);
+              }}
               data-testid="project-timeout-preset-clear"
             >
               Inherit
@@ -466,12 +489,12 @@ export function WorkflowStudioPage({
           </div>
         </div>
         {timeoutSuccess && (
-          <div style={{ marginTop: '0.5rem', color: '#059669', fontSize: '0.85rem' }} data-testid="project-timeout-success">
+          <div className="workflow-project-timeout-success" role="status" data-testid="project-timeout-success">
             {timeoutSuccess}
           </div>
         )}
         {timeoutError && (
-          <div style={{ marginTop: '0.5rem', color: '#dc2626', fontSize: '0.85rem' }} data-testid="project-timeout-error">
+          <div className="workflow-project-timeout-error" role="alert" data-testid="project-timeout-error">
             {timeoutError}
           </div>
         )}

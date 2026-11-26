@@ -1127,7 +1127,11 @@ class GateCoordinator:
 
         # Fail closed: reject/time out
         final_status = "timed_out" if is_timeout else "rejected"
-        timeout_ms = agent_def.timeout_ms if agent_def else 60000
+        timeout_ms = resolve_effective_gate_timeout_ms(
+            hook_timeout_ms=hook.timeout_ms,
+            project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
+            agent_timeout_ms=agent_def.timeout_ms if agent_def else None,
+        )
         if is_timeout:
             reason_text = detail or f"Gate timed out after {timeout_ms} ms"
         else:

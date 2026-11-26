@@ -586,5 +586,32 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
         expect(screen.getByTestId('project-timeout-success').textContent).toContain('600000 ms');
       });
     });
+
+    it('validates client-side [1000, 600000] range and rejects out-of-range project timeout with alert (KAN-437)', async () => {
+      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
+      const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({});
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('project-default-gate-timeout-input')).toBeDefined();
+      });
+
+      const input = screen.getByTestId<HTMLInputElement>('project-default-gate-timeout-input');
+
+      // Enter value below 1000
+      fireEvent.change(input, { target: { value: '500' } });
+      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
+
+      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
+      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
+
+      // Enter value above 600000
+      fireEvent.change(input, { target: { value: '700000' } });
+      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
+
+      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
+      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
+    });
   });
 });

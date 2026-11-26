@@ -1,5 +1,5 @@
 diff --git a/agent/gates/runner.py b/agent/gates/runner.py
-index 962f7cc8..1fc142b6 100644
+index 962f7cc8..20d810a3 100644
 --- a/agent/gates/runner.py
 +++ b/agent/gates/runner.py
 @@ -25,6 +25,7 @@ from database.models.workflow import (
@@ -167,7 +167,7 @@ index 962f7cc8..1fc142b6 100644
                  }
                  if deadline is not None and deadline < now:
                      expired_candidates.append(info)
-@@ -626,18 +651,110 @@ class GateWorkerRunner:
+@@ -626,18 +651,112 @@ class GateWorkerRunner:
                  "admin_principal_id": (
                      str(item["admin_principal_id"]) if item.get("admin_principal_id") else ""
                  ),
@@ -238,6 +238,8 @@ index 962f7cc8..1fc142b6 100644
 +        """Periodically renew worker claim lease on workflow_hook_invocations."""
 +        while True:
 +            await asyncio.sleep(self.heartbeat_interval_s)
++            if invocation_id not in self._active_invocations:
++                break
 +            now = dt.datetime.now(dt.UTC)
 +            if deadline_at is not None and now >= deadline_at:
 +                logger.debug("Stopping heartbeat for %s: deadline_at exceeded", invocation_id)
@@ -1481,7 +1483,7 @@ index 00000000..95e48143
 +    await session.refresh(inv)
 +    assert inv.status == "timed_out"
 diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
-index b0164c19..1c0c66a3 100644
+index b0164c19..3cc0687e 100644
 --- a/kanban/web/openapi.json
 +++ b/kanban/web/openapi.json
 @@ -1,6 +1,22 @@
@@ -1875,7 +1877,7 @@ index b0164c19..1c0c66a3 100644
 +                "type": "null"
 +              }
 +            ],
-+            "description": "Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)",
++            "description": "Updated default workflow gate timeout in milliseconds (1000..600000, or null)",
 +            "title": "Default Gate Timeout Ms"
 +          },
            "description_markdown": {
@@ -1894,7 +1896,7 @@ index b0164c19..1c0c66a3 100644
 +                "type": "null"
 +              }
 +            ],
-+            "description": "Configured default workflow transition gate timeout in milliseconds, if enabled",
++            "description": "Configured default workflow gate timeout in milliseconds",
 +            "title": "Default Gate Timeout Ms"
 +          },
            "default_module_ids": {
@@ -2127,9 +2129,9 @@ index b0164c19..1c0c66a3 100644
 -    "version": "0.2.1524",
 -    "x-build-commit": "71b847bab941",
 -    "x-openapi-bundle-hash": "6f583f629ae2cedb9f94867196b5bfe9586be9752b3b43ff9e2a4c56d1454295"
-+    "version": "0.2.1869",
-+    "x-build-commit": "7e161c070c48",
-+    "x-openapi-bundle-hash": "208b77d47e5910a5ec789571bb747d46331d9e95e816187a84247084e384de31"
++    "version": "0.2.1870",
++    "x-build-commit": "a6967d0fc893",
++    "x-openapi-bundle-hash": "5dc0880e775f968eab4735e0153a60ad7d5bf46595462c54124a312e0698c8f8"
    },
    "openapi": "3.1.0",
    "paths": {
@@ -4592,7 +4594,7 @@ index b0164c19..1c0c66a3 100644
        }
      },
 diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
-index cc266b72..c93fc2de 100644
+index cc266b72..d545d992 100644
 --- a/kanban/web/src/api/schema.gen.ts
 +++ b/kanban/web/src/api/schema.gen.ts
 @@ -154,7 +154,7 @@ export interface paths {
@@ -5563,7 +5565,7 @@ index cc266b72..c93fc2de 100644
              auto_archive_days?: number | null;
 +            /**
 +             * Default Gate Timeout Ms
-+             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
++             * @description Updated default workflow gate timeout in milliseconds (1000..600000, or null)
 +             */
 +            default_gate_timeout_ms?: number | null;
              /**
@@ -5575,7 +5577,7 @@ index cc266b72..c93fc2de 100644
              capabilities: string[];
 +            /**
 +             * Default Gate Timeout Ms
-+             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
++             * @description Configured default workflow gate timeout in milliseconds
 +             */
 +            default_gate_timeout_ms?: number | null;
              /**
@@ -7890,10 +7892,22 @@ index cc266b72..c93fc2de 100644
              };
              /** @description Unauthorized - authentication required */
 diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-index 2bfcd45c..6c15356b 100644
+index 2bfcd45c..d85644cd 100644
 --- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
-@@ -532,12 +532,12 @@ function AgentDefinitionEditorContent({
+@@ -235,6 +235,11 @@ function AgentDefinitionEditorContent({
+       return;
+     }
+ 
++    if (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
++      setError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++      return;
++    }
++
+     try {
+       setIsSaving(true);
+       setError(null);
+@@ -532,12 +537,12 @@ function AgentDefinitionEditorContent({
  
            <div className="kb-form-group">
              <label htmlFor="agent-timeout-input" className="kb-form-label">
@@ -7908,7 +7922,7 @@ index 2bfcd45c..6c15356b 100644
                  docHref="/docs/multi-provider-ai-engine-and-runners"
                  testId="agent-timeout-help"
                />
-@@ -546,7 +546,7 @@ function AgentDefinitionEditorContent({
+@@ -546,11 +551,14 @@ function AgentDefinitionEditorContent({
                id="agent-timeout-input"
                type="number"
                min="1000"
@@ -7917,11 +7931,31 @@ index 2bfcd45c..6c15356b 100644
                step="1000"
                className="kb-form-input"
                value={timeoutMs}
+-              onChange={(e) => { setTimeoutMs(parseInt(e.target.value, 10) || 60000); }}
++              onChange={(e) => {
++                const val = parseInt(e.target.value, 10);
++                setTimeoutMs(Number.isNaN(val) ? 60000 : val);
++              }}
+               data-testid="agent-timeout-input"
+             />
+           </div>
 diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-index 12388e34..f6fcd733 100644
+index 12388e34..7c2c1e3d 100644
 --- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
 +++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
-@@ -789,7 +789,7 @@ function AiProviderEditorContent({
+@@ -456,6 +456,11 @@ function AiProviderEditorContent({
+ 
+     const models = getSelectedModelsList();
+ 
++    if (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000) {
++      setError('Cutoff timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++      return;
++    }
++
+     try {
+       setIsSaving(true);
+       setError(null);
+@@ -789,7 +794,7 @@ function AiProviderEditorContent({
                title="Cutoff Timeout (ms)"
                summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
                defaultValue="30000 ms (30 seconds)"
@@ -7930,7 +7964,7 @@ index 12388e34..f6fcd733 100644
                docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
                testId="provider-timeout-help"
              />
-@@ -798,7 +798,7 @@ function AiProviderEditorContent({
+@@ -798,13 +803,13 @@ function AiProviderEditorContent({
              id="provider-timeout-ms-input"
              type="number"
              min="1000"
@@ -7939,6 +7973,13 @@ index 12388e34..f6fcd733 100644
              step="1000"
              className="kb-form-input"
              value={timeoutMs}
+             onChange={(e) => {
+               const val = parseInt(e.target.value, 10);
+-              setTimeoutMs(isNaN(val) ? 30000 : val);
++              setTimeoutMs(Number.isNaN(val) ? 30000 : val);
+             }}
+             placeholder="30000"
+             data-testid="provider-timeout-ms-input"
 diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
 index cd478519..1594e960 100644
 --- a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
@@ -7953,7 +7994,7 @@ index cd478519..1594e960 100644
  
      // Change timeout to 15000
 diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-index 7c5a00a8..d4dd2d0f 100644
+index 7c5a00a8..25738c3b 100644
 --- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 @@ -42,6 +42,7 @@ export interface ProjectDetail {
@@ -7984,15 +8025,32 @@ index 7c5a00a8..d4dd2d0f 100644
          }
  
          // Load project members
-@@ -538,6 +545,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -532,12 +539,24 @@ export function ProjectSettingsPage(): JSX.Element {
+         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+         if (csrf) headers['X-CSRF-Token'] = csrf;
+ 
++        let parsedTimeout: number | null = null;
++        if (defaultGateTimeoutMs.trim()) {
++          const parsed = parseInt(defaultGateTimeoutMs.trim(), 10);
++          if (Number.isNaN(parsed) || parsed < 1000 || parsed > 600000) {
++            setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++            setIsSaving(false);
++            return;
++          }
++          parsedTimeout = parsed;
++        }
++
+         const payload = {
+           name: name.trim(),
+           description_markdown: description,
            modules_enabled: modulesEnabled,
            skip_loaded_sequence_numbers: skipLoadedSeq,
            auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
-+          default_gate_timeout_ms: defaultGateTimeoutMs ? parseInt(defaultGateTimeoutMs, 10) : null,
++          default_gate_timeout_ms: parsedTimeout,
          };
  
          const updated = (await apiFetch(
-@@ -1612,7 +1620,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1612,7 +1631,7 @@ export function ProjectSettingsPage(): JSX.Element {
                title="Advanced Project Options"
                summary="Agent-Safe sequence numbering and work item auto-archival policies"
                testId="project-general-advanced-section"
@@ -8001,7 +8059,7 @@ index 7c5a00a8..d4dd2d0f 100644
                defaultOpen={false}
              >
                <div className="kb-form-group kb-form-group-checkbox">
-@@ -1660,6 +1668,78 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1660,6 +1679,91 @@ export function ProjectSettingsPage(): JSX.Element {
                    placeholder="e.g. 30"
                  />
                </div>
@@ -8029,7 +8087,20 @@ index 7c5a00a8..d4dd2d0f 100644
 +                    max="600000"
 +                    step="1000"
 +                    value={defaultGateTimeoutMs}
-+                    onChange={(e) => { setDefaultGateTimeoutMs(e.target.value); }}
++                    onChange={(e) => {
++                      const v = e.target.value;
++                      setDefaultGateTimeoutMs(v);
++                      if (v.trim()) {
++                        const parsed = parseInt(v.trim(), 10);
++                        if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
++                          setErrorMessage('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++                        } else {
++                          setErrorMessage(null);
++                        }
++                      } else {
++                        setErrorMessage(null);
++                      }
++                    }}
 +                    placeholder="Inherit agent default"
 +                    style={{ flex: 1 }}
 +                  />
@@ -8101,7 +8172,7 @@ index ead336bb..b30dd21f 100644
    });
  
 diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
-index e4c866c9..58a23dac 100644
+index e4c866c9..2d29f90d 100644
 --- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
 +++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
 @@ -64,6 +64,7 @@ function AttachHookDialogInner({
@@ -8112,18 +8183,33 @@ index e4c866c9..58a23dac 100644
  
    const validSelectedSlug = agentDefinitions.some((a) => a.slug === selectedAgentSlug)
      ? selectedAgentSlug
-@@ -132,9 +133,7 @@ function AttachHookDialogInner({
+@@ -131,10 +132,12 @@ function AttachHookDialogInner({
+         setError('Agent definition is required.');
          return;
        }
-       payload.agent = effectiveAgentSlug;
+-      payload.agent = effectiveAgentSlug;
 -      if (selectedAgent?.timeout_ms) {
 -        payload.timeout_ms = selectedAgent.timeout_ms;
--      }
++      if (timeoutMs !== null && (Number.isNaN(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000)) {
++        setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
++        return;
+       }
++      payload.agent = effectiveAgentSlug;
 +      payload.timeout_ms = timeoutMs;
      }
  
      try {
-@@ -445,6 +444,86 @@ function AttachHookDialogInner({
+@@ -394,7 +397,8 @@ function AttachHookDialogInner({
+               activeOverridesCount={
+                 (failurePolicy === 'fail_closed' ? 1 : 0) +
+                 ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
+-                (allowedMutableFields.length > 0 ? 1 : 0)
++                (allowedMutableFields.length > 0 ? 1 : 0) +
++                (hookKind === 'agent_interceptor' && timeoutMs !== null ? 1 : 0)
+               }
+               defaultOpen={false}
+             >
+@@ -445,6 +449,112 @@ function AttachHookDialogInner({
                  </div>
                )}
  
@@ -8148,12 +8234,23 @@ index e4c866c9..58a23dac 100644
 +                      min="1000"
 +                      max="600000"
 +                      step="1000"
-+                      className="workflow-input"
++                      className="workflow-form-control"
 +                      placeholder="Inherit project/agent default"
 +                      value={timeoutMs ?? ''}
 +                      onChange={(e) => {
 +                        const val = e.target.value.trim();
-+                        setTimeoutMs(val === '' ? null : parseInt(val, 10));
++                        if (val === '') {
++                          setTimeoutMs(null);
++                          setError(null);
++                        } else {
++                          const parsed = parseInt(val, 10);
++                          setTimeoutMs(Number.isNaN(parsed) ? null : parsed);
++                          if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
++                            setError('Hook timeout override must be between 1,000 and 600,000 ms (up to 10 minutes).');
++                          } else {
++                            setError(null);
++                          }
++                        }
 +                      }}
 +                      data-testid="hook-timeout-input"
 +                      style={{ flex: 1 }}
@@ -8161,7 +8258,10 @@ index e4c866c9..58a23dac 100644
 +                    <button
 +                      type="button"
 +                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+                      onClick={() => { setTimeoutMs(null); }}
++                      onClick={() => {
++                        setTimeoutMs(null);
++                        setError(null);
++                      }}
 +                      data-testid="hook-timeout-preset-inherit"
 +                    >
 +                      Inherit
@@ -8171,7 +8271,10 @@ index e4c866c9..58a23dac 100644
 +                    <button
 +                      type="button"
 +                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+                      onClick={() => { setTimeoutMs(60000); }}
++                      onClick={() => {
++                        setTimeoutMs(60000);
++                        setError(null);
++                      }}
 +                      data-testid="hook-timeout-preset-60s"
 +                    >
 +                      60s
@@ -8179,7 +8282,10 @@ index e4c866c9..58a23dac 100644
 +                    <button
 +                      type="button"
 +                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+                      onClick={() => { setTimeoutMs(180000); }}
++                      onClick={() => {
++                        setTimeoutMs(180000);
++                        setError(null);
++                      }}
 +                      data-testid="hook-timeout-preset-3m"
 +                    >
 +                      3m
@@ -8187,7 +8293,10 @@ index e4c866c9..58a23dac 100644
 +                    <button
 +                      type="button"
 +                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+                      onClick={() => { setTimeoutMs(300000); }}
++                      onClick={() => {
++                        setTimeoutMs(300000);
++                        setError(null);
++                      }}
 +                      data-testid="hook-timeout-preset-5m"
 +                    >
 +                      5m
@@ -8195,7 +8304,10 @@ index e4c866c9..58a23dac 100644
 +                    <button
 +                      type="button"
 +                      className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+                      onClick={() => { setTimeoutMs(600000); }}
++                      onClick={() => {
++                        setTimeoutMs(600000);
++                        setError(null);
++                      }}
 +                      data-testid="hook-timeout-preset-10m"
 +                    >
 +                      10m
@@ -8304,7 +8416,7 @@ index 1189d29a..3463d1c0 100644
                onMove={(id, dir) => {
                  void handleKeyboardMove(id, dir);
 diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-index b4753e28..fd8c2d77 100644
+index b4753e28..9f293e17 100644
 --- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 +++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 @@ -65,7 +65,7 @@ export function WorkflowStudioPage({
@@ -8316,7 +8428,7 @@ index b4753e28..fd8c2d77 100644
        } catch {
          return null;
        }
-@@ -115,6 +115,44 @@ export function WorkflowStudioPage({
+@@ -115,6 +115,48 @@ export function WorkflowStudioPage({
      to_state: string;
    } | null>(null);
  
@@ -8331,6 +8443,10 @@ index b4753e28..fd8c2d77 100644
 +  const [timeoutError, setTimeoutError] = useState<string | null>(null);
 +
 +  const handleSaveProjectTimeout = async (val: number | null) => {
++    if (val !== null && (Number.isNaN(val) || val < 1000 || val > 600000)) {
++      setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++      return;
++    }
 +    try {
 +      setIsSavingTimeout(true);
 +      setTimeoutError(null);
@@ -8361,7 +8477,7 @@ index b4753e28..fd8c2d77 100644
  
    // Auxiliary data queries
    const statesQuery = useQuery({
-@@ -278,6 +316,109 @@ export function WorkflowStudioPage({
+@@ -278,6 +320,128 @@ export function WorkflowStudioPage({
          </div>
        )}
  
@@ -8369,46 +8485,53 @@ index b4753e28..fd8c2d77 100644
 +      <section
 +        className="workflow-project-timeout-panel"
 +        data-testid="project-gate-timeout-panel"
-+        style={{
-+          background: 'var(--kb-surface-card, #ffffff)',
-+          border: '1px solid var(--kb-border-subtle, #e5e7eb)',
-+          borderRadius: '8px',
-+          padding: '1rem',
-+          marginBottom: '1.5rem',
-+        }}
 +      >
-+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-+          <div>
-+            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
++        <div className="workflow-project-timeout-row">
++          <div className="workflow-project-timeout-title-group">
++            <h2 className="workflow-project-timeout-heading">
 +              <span>⏱️ Project Default Gate Timeout</span>
 +              <span className="workflow-studio-title-badge" data-testid="project-timeout-current-badge">
 +                {projectDefaultTimeout !== null ? `${String(projectDefaultTimeout)} ms` : 'Agent Default'}
 +              </span>
 +            </h2>
-+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--kb-text-secondary, #6b7280)' }}>
++            <p className="workflow-project-timeout-description">
 +              Inherited timeout for all workflow interceptor gates in this project unless overridden by a hook. Max 10 minutes (600,000 ms).
 +            </p>
 +          </div>
-+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
++          <div className="workflow-project-timeout-controls">
 +            <input
 +              type="number"
 +              min="1000"
 +              max="600000"
 +              step="1000"
-+              className="workflow-input"
++              className="workflow-form-control"
 +              style={{ width: '130px' }}
 +              placeholder="Inherit agent"
 +              value={projectDefaultTimeout !== null ? String(projectDefaultTimeout) : ''}
 +              onChange={(e) => {
 +                const v = e.target.value.trim();
-+                setOverrideTimeout(v === '' ? null : parseInt(v, 10));
++                if (v === '') {
++                  setOverrideTimeout(null);
++                  setTimeoutError(null);
++                } else {
++                  const parsed = parseInt(v, 10);
++                  setOverrideTimeout(Number.isNaN(parsed) ? null : parsed);
++                  if (!Number.isNaN(parsed) && (parsed < 1000 || parsed > 600000)) {
++                    setTimeoutError('Timeout must be between 1,000 and 600,000 ms (up to 10 minutes).');
++                  } else {
++                    setTimeoutError(null);
++                  }
++                }
 +              }}
 +              data-testid="project-default-gate-timeout-input"
 +            />
 +            <button
 +              type="button"
 +              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+              onClick={() => { setOverrideTimeout(60000); }}
++              onClick={() => {
++                setOverrideTimeout(60000);
++                setTimeoutError(null);
++              }}
 +              data-testid="project-timeout-preset-60s"
 +            >
 +              60s
@@ -8416,7 +8539,10 @@ index b4753e28..fd8c2d77 100644
 +            <button
 +              type="button"
 +              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+              onClick={() => { setOverrideTimeout(180000); }}
++              onClick={() => {
++                setOverrideTimeout(180000);
++                setTimeoutError(null);
++              }}
 +              data-testid="project-timeout-preset-3m"
 +            >
 +              3m
@@ -8424,7 +8550,10 @@ index b4753e28..fd8c2d77 100644
 +            <button
 +              type="button"
 +              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+              onClick={() => { setOverrideTimeout(300000); }}
++              onClick={() => {
++                setOverrideTimeout(300000);
++                setTimeoutError(null);
++              }}
 +              data-testid="project-timeout-preset-5m"
 +            >
 +              5m
@@ -8432,7 +8561,10 @@ index b4753e28..fd8c2d77 100644
 +            <button
 +              type="button"
 +              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+              onClick={() => { setOverrideTimeout(600000); }}
++              onClick={() => {
++                setOverrideTimeout(600000);
++                setTimeoutError(null);
++              }}
 +              data-testid="project-timeout-preset-10m"
 +            >
 +              10m
@@ -8440,7 +8572,10 @@ index b4753e28..fd8c2d77 100644
 +            <button
 +              type="button"
 +              className="workflow-btn workflow-btn-secondary workflow-btn-xs"
-+              onClick={() => { setOverrideTimeout(null); }}
++              onClick={() => {
++                setOverrideTimeout(null);
++                setTimeoutError(null);
++              }}
 +              data-testid="project-timeout-preset-clear"
 +            >
 +              Inherit
@@ -8457,12 +8592,12 @@ index b4753e28..fd8c2d77 100644
 +          </div>
 +        </div>
 +        {timeoutSuccess && (
-+          <div style={{ marginTop: '0.5rem', color: '#059669', fontSize: '0.85rem' }} data-testid="project-timeout-success">
++          <div className="workflow-project-timeout-success" role="status" data-testid="project-timeout-success">
 +            {timeoutSuccess}
 +          </div>
 +        )}
 +        {timeoutError && (
-+          <div style={{ marginTop: '0.5rem', color: '#dc2626', fontSize: '0.85rem' }} data-testid="project-timeout-error">
++          <div className="workflow-project-timeout-error" role="alert" data-testid="project-timeout-error">
 +            {timeoutError}
 +          </div>
 +        )}
@@ -8471,7 +8606,7 @@ index b4753e28..fd8c2d77 100644
        {/* Loading State */}
        {isLoading ? (
          <div className="empty-hooks-cta">Loading workflow helper rules...</div>
-@@ -291,6 +432,7 @@ export function WorkflowStudioPage({
+@@ -291,6 +455,7 @@ export function WorkflowStudioPage({
              key={`${rule.from_state ?? 'any'}-${rule.to_state}`}
              rule={rule}
              projectKey={projectKey}
@@ -8480,7 +8615,7 @@ index b4753e28..fd8c2d77 100644
              onReorder={handleReorder}
              onToggle={handleToggle}
 diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
-index dc2471ad..11bc9fab 100644
+index dc2471ad..31cef7f1 100644
 --- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
 +++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
 @@ -183,7 +183,7 @@ describe('AttachHookDialog (KB-P5-24)', () => {
@@ -8501,16 +8636,16 @@ index dc2471ad..11bc9fab 100644
          }),
        );
      });
-@@ -578,7 +578,65 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+@@ -578,9 +578,105 @@ describe('AttachHookDialog (KB-P5-24)', () => {
            name: 'async-single-agent-hook',
            hook_kind: 'agent_interceptor',
            agent: 'solitary-qa-agent',
 -          timeout_ms: 180000,
 +          timeout_ms: null,
-+        }),
-+      );
-+    });
-+  });
+         }),
+       );
+     });
+   });
 +
 +  it('supports setting per-hook timeout override up to 600,000 ms with quick presets (KAN-437)', async () => {
 +    const handleSave = vi.fn().mockResolvedValue(undefined);
@@ -8565,11 +8700,51 @@ index dc2471ad..11bc9fab 100644
 +          name: 'long-eval-hook',
 +          hook_kind: 'agent_interceptor',
 +          timeout_ms: 600000,
-         }),
-       );
-     });
++        }),
++      );
++    });
++  });
++
++  it('validates client-side [1000, 600000] range and increments activeOverridesCount on hook timeout (KAN-437)', () => {
++    const handleSave = vi.fn().mockResolvedValue(undefined);
++
++    render(
++      <MemoryRouter>
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={mockAgents}
++          onSave={handleSave}
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Switch to agent_interceptor
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
++    fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'validation-test-hook' } });
++
++    // Open advanced section
++    const advancedToggle = screen.getByRole('button', { name: /Advanced Hook Settings/i });
++    fireEvent.click(advancedToggle);
++
++    const timeoutInput = screen.getByTestId<HTMLInputElement>('hook-timeout-input');
++
++    // Enter out of range timeout < 1000
++    fireEvent.change(timeoutInput, { target: { value: '500' } });
++    fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
++
++    expect(handleSave).not.toHaveBeenCalled();
++    expect(screen.getByRole('alert').textContent).toContain('1,000 and 600,000 ms');
++
++    // Set valid timeout 600000 ms and check active overrides count pill
++    fireEvent.click(screen.getByTestId('hook-timeout-preset-10m'));
++    expect(screen.getByText(/1 custom setting active|2 custom settings active/i)).toBeDefined();
++  });
+ });
 diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
-index 3ae64d86..066b3746 100644
+index 3ae64d86..98511d13 100644
 --- a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
 +++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
 @@ -10,6 +10,7 @@ import { WorkflowStudioPage } from '../WorkflowStudioPage';
@@ -8592,7 +8767,7 @@ index 3ae64d86..066b3746 100644
  
        // Assert kanban-main and Repo badge are NOT rendered in this hook row
        const hookRow = screen.getByTestId('hook-pipeline-row-hook-custom-timeout');
-@@ -543,12 +544,47 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
+@@ -543,12 +544,74 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
          expect(screen.getByText('lookup-agent-gate')).toBeDefined();
        });
  
@@ -8640,6 +8815,33 @@ index 3ae64d86..066b3746 100644
 +        expect(screen.getByTestId('project-timeout-success').textContent).toContain('600000 ms');
 +      });
 +    });
++
++    it('validates client-side [1000, 600000] range and rejects out-of-range project timeout with alert (KAN-437)', async () => {
++      vi.spyOn(api, 'fetchWorkflowHooks').mockResolvedValue([]);
++      const fetchSpy = vi.spyOn(client, 'apiFetch').mockResolvedValue({});
++
++      renderPage();
++
++      await waitFor(() => {
++        expect(screen.getByTestId('project-default-gate-timeout-input')).toBeDefined();
++      });
++
++      const input = screen.getByTestId<HTMLInputElement>('project-default-gate-timeout-input');
++
++      // Enter value below 1000
++      fireEvent.change(input, { target: { value: '500' } });
++      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
++
++      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
++      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
++
++      // Enter value above 600000
++      fireEvent.change(input, { target: { value: '700000' } });
++      fireEvent.click(screen.getByTestId('save-project-gate-timeout-btn'));
++
++      expect(fetchSpy).not.toHaveBeenCalledWith('PATCH', '/api/v1/projects/KAN', expect.anything());
++      expect(screen.getByTestId('project-timeout-error').textContent).toContain('1,000 and 600,000 ms');
++    });
    });
  });
 diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
@@ -8672,6 +8874,102 @@ index 290f2b4c..9a4c10ac 100644
  }
  
  export interface ReorderHooksPayload {
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+index 53722255..f15f7da8 100644
+--- a/kanban/web/src/features/workflows/workflows.css
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -56,6 +56,7 @@
+   padding: 2px 8px;
+   border-radius: 4px;
+   border: 1px solid var(--border-subtle);
++  white-space: nowrap;
+ }
+ 
+ /* Primary actions */
+@@ -602,6 +603,72 @@
+   outline-offset: -1px;
+ }
+ 
++.workflow-form-hint {
++  font-size: 0.78rem;
++  color: var(--fg-secondary);
++  line-height: 1.4;
++  margin-top: 4px;
++}
++
++.workflow-project-timeout-panel {
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: 8px;
++  padding: 1rem;
++  margin-bottom: 1.5rem;
++  color: var(--fg-primary);
++}
++
++.workflow-project-timeout-row {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 0.75rem;
++}
++
++.workflow-project-timeout-title-group {
++  display: flex;
++  flex-direction: column;
++  gap: 0.25rem;
++}
++
++.workflow-project-timeout-heading {
++  font-size: 1rem;
++  font-weight: 600;
++  margin: 0 0 0.25rem 0;
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 0.5rem;
++  color: var(--fg-primary);
++}
++
++.workflow-project-timeout-description {
++  margin: 0;
++  font-size: 0.85rem;
++  color: var(--fg-secondary);
++}
++
++.workflow-project-timeout-controls {
++  display: flex;
++  align-items: center;
++  gap: 0.5rem;
++  flex-wrap: wrap;
++}
++
++.workflow-project-timeout-success {
++  margin-top: 0.5rem;
++  color: var(--ok-fg);
++  font-size: 0.85rem;
++}
++
++.workflow-project-timeout-error {
++  margin-top: 0.5rem;
++  color: var(--danger-fg);
++  font-size: 0.85rem;
++}
++
+ .workflow-radiogroup {
+   display: flex;
+   gap: 12px;
+@@ -838,6 +905,10 @@
+   .workflow-btn {
+     min-height: 44px;
+   }
++
++  .workflow-form-control {
++    min-height: 44px;
++  }
+ }
+ 
+ .workflow-dialog-form {
 diff --git a/kanban/workflows/__init__.py b/kanban/workflows/__init__.py
 index 2d0baf0b..57b4f3a8 100644
 --- a/kanban/workflows/__init__.py
@@ -8698,7 +8996,7 @@ index 2d0baf0b..57b4f3a8 100644
      "validate_field_updates",
  ]
 diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
-index 4ded79cc..39fe6230 100644
+index 4ded79cc..d8b78cd5 100644
 --- a/kanban/workflows/async_gate.py
 +++ b/kanban/workflows/async_gate.py
 @@ -29,7 +29,12 @@ from kanban.security.permissions import Capability, evaluate_capabilities
@@ -8793,6 +9091,19 @@ index 4ded79cc..39fe6230 100644
                      output_json={"deadline_at": next_deadline.isoformat()},
                  )
                  session.add(next_inv)
+@@ -1101,7 +1127,11 @@ class GateCoordinator:
+ 
+         # Fail closed: reject/time out
+         final_status = "timed_out" if is_timeout else "rejected"
+-        timeout_ms = agent_def.timeout_ms if agent_def else 60000
++        timeout_ms = resolve_effective_gate_timeout_ms(
++            hook_timeout_ms=hook.timeout_ms,
++            project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
++            agent_timeout_ms=agent_def.timeout_ms if agent_def else None,
++        )
+         if is_timeout:
+             reason_text = detail or f"Gate timed out after {timeout_ms} ms"
+         else:
 diff --git a/kanban/workflows/gate_sweeper.py b/kanban/workflows/gate_sweeper.py
 index 974dbffb..3ea66a10 100644
 --- a/kanban/workflows/gate_sweeper.py

@@ -717,6 +717,8 @@ class GateWorkerRunner:
         """Periodically renew worker claim lease on workflow_hook_invocations."""
         while True:
             await asyncio.sleep(self.heartbeat_interval_s)
+            if invocation_id not in self._active_invocations:
+                break
             now = dt.datetime.now(dt.UTC)
             if deadline_at is not None and now >= deadline_at:
                 logger.debug("Stopping heartbeat for %s: deadline_at exceeded", invocation_id)

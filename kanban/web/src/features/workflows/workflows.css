@@ -56,6 +56,7 @@
   padding: 2px 8px;
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
 
 /* Primary actions */
@@ -616,6 +617,72 @@
   outline-offset: -1px;
 }
 
+.workflow-form-hint {
+  font-size: 0.78rem;
+  color: var(--fg-secondary);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.workflow-project-timeout-panel {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--fg-primary);
+}
+
+.workflow-project-timeout-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.workflow-project-timeout-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.workflow-project-timeout-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--fg-primary);
+}
+
+.workflow-project-timeout-description {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--fg-secondary);
+}
+
+.workflow-project-timeout-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.workflow-project-timeout-success {
+  margin-top: 0.5rem;
+  color: var(--ok-fg);
+  font-size: 0.85rem;
+}
+
+.workflow-project-timeout-error {
+  margin-top: 0.5rem;
+  color: var(--danger-fg);
+  font-size: 0.85rem;
+}
+
 .workflow-radiogroup {
   display: flex;
   gap: 12px;
@@ -850,6 +917,10 @@
   }
 
   .workflow-btn {
+    min-height: 44px;
+  }
+
+  .workflow-form-control {
     min-height: 44px;
   }
 }

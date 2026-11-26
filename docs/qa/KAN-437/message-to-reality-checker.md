@@ -32,29 +32,39 @@
   - `agent/providers/base.py`, `ollama.py`, `openai_provider.py`, `gemini.py`: Raised deadline and timeout limits to `600000` ms / `600.0` s.
   - `mcp/admin/tools/manage_ai_and_agent_runners.py`: Raised JSON schema max to `600000`.
 - **Async Gate Deadline & Sweeper:**
-  - `kanban/workflows/async_gate.py`: Computes `effective_timeout_ms` via `resolve_effective_gate_timeout_ms` and sets both `inv.deadline_at = now + timedelta(milliseconds=effective_timeout_ms)` and `inv.output_json["deadline_at"]`.
+  - `kanban/workflows/async_gate.py`: Computes `effective_timeout_ms` via `resolve_effective_gate_timeout_ms` and sets both `inv.deadline_at = now + timedelta(milliseconds=effective_timeout_ms)` and `inv.output_json["deadline_at"]`. In `GateCoordinator.record_failure`, resolves effective timeout via `resolve_effective_gate_timeout_ms` ensuring sweeper vetoes report the true effective timeout.
   - `kanban/workflows/gate_sweeper.py`: Joins `Project`, `WorkflowTransitionHook`, and `AgentDefinition` to resolve fallback deadlines, and never expires running invocations whose `deadline_at` is still in the future.
 - **Worker Claim-Lease Heartbeat Renewal (`agent/gates/runner.py`):**
   - Resolves `effective_timeout_ms` following the full precedence hierarchy.
   - Starts background `_heartbeat_lease` task during invocation handling that opens short-lived RLS DB sessions at configurable interval (`heartbeat_interval_s`, default `20.0`s) to renew `claim_expires_at = now + 60s`, preventing duplicate worker claim across long-running gates up to 10 minutes.
-  - Deterministically cancels and awaits heartbeat task in `finally:`.
+  - Deterministically cancels and awaits heartbeat task in `finally:`, with fast-exit check `if invocation_id not in self._active_invocations: break`.
   - If `deadline_at <= now`, stops renewal and marks failure with `GATE_TIMEOUT` (Fail-Closed veto).
 
 ### 3. Frontend UI & OpenAPI Parity (`kanban/web/`)
-- `WorkflowStudioPage.tsx`: Added Project Default Gate Timeout control panel (`data-testid="project-gate-timeout-panel"`) with input, `60s`/`3m`/`5m`/`10m` presets, Inherit button, and Save button.
-- `ProjectSettingsPage.tsx`: Added Project Default Gate Timeout control under General Advanced section with presets and save integration.
-- `AttachHookDialog.tsx`: Removed agent default overwrite bug, added Per-Hook Timeout Override input with `60s`/`3m`/`5m`/`10m`/`Inherit` presets inside Advanced Hook Settings.
+- `WorkflowStudioPage.tsx`: Added Project Default Gate Timeout control panel (`data-testid="project-gate-timeout-panel"`) with input, `60s`/`3m`/`5m`/`10m` presets, Inherit button, and Save button. Styled using CSS variables in `workflows.css` for consistent dark/light themes. Includes client-side validation for `[1000, 600000]` range with `role="alert"` errors.
+- `ProjectSettingsPage.tsx`: Added Project Default Gate Timeout control under General Advanced section with presets and client-side bounds validation.
+- `AttachHookDialog.tsx`: Removed agent default overwrite bug, added Per-Hook Timeout Override input with `60s`/`3m`/`5m`/`10m`/`Inherit` presets inside Advanced Hook Settings. Added client bounds validation and updated `activeOverridesCount` calculation.
 - `HookPipelineRow.tsx`: Formats human-readable durations (`60s`, `3m`, `5m`, `10m`) with source tooltip (`hook override` / `project default` / `agent default`).
-- `AgentDefinitionEditorDrawer.tsx` & `AiProviderEditorDrawer.tsx`: Updated max to `600000` ms.
-- OpenAPI & TypeScript Parity: Regenerated `kanban/web/openapi.json` and `kanban/web/src/api/schema.gen.ts`. All 21 OpenAPI parity tests pass.
+- `AgentDefinitionEditorDrawer.tsx` & `AiProviderEditorDrawer.tsx`: Updated max to `600000` ms with client-side bounds validation.
+- OpenAPI & TypeScript Parity: Regenerated `kanban/web/openapi.json` and `kanban/web/src/api/schema.gen.ts`. All OpenAPI parity tests pass.
+
+## Round-1 Specialist Review Feedback Addressed (CHANGES_REQUESTED -> Fixed)
+1. **API Specialist Item 1 (Effective Timeout in Failure Records):** In `kanban/workflows/async_gate.py` (`GateCoordinator.record_failure`), updated timeout resolution to `resolve_effective_gate_timeout_ms` using hook, project default, and agent definition timeouts so sweeper veto comments accurately reflect the effective timeout.
+2. **API Specialist Item 2 (OpenAPI Parity & Heartbeat Exit Guard):** Re-exported `kanban/web/openapi.json` and regenerated `schema.gen.ts`. Added invocation check in `runner.py` `_heartbeat_lease` loop to exit immediately when invocation is no longer active.
+3. **UI Specialist Item 3 (Dark-Mode Semantic Variables):** Removed inline styling on `.workflow-project-timeout-panel` in `WorkflowStudioPage.tsx`, replacing it with CSS variables (`var(--bg-surface)`, `var(--border-subtle)`, `var(--fg-primary)`, `var(--fg-secondary)`) in `workflows.css`.
+4. **UI Specialist Item 4 (Form Control Styling & Mobile Ergonomics):** Replaced `.workflow-input` with `.workflow-form-control` and added `.workflow-form-hint`. Set mobile control min-height to 44px for touch ergonomics.
+5. **UI Specialist Item 5 (Mobile Title Badge No-Wrap):** Added `white-space: nowrap` to `.workflow-studio-title-badge` to prevent awkward line breaks on mobile viewports.
+6. **UI Specialist Item 6 (Client Bounds Validation & NaN Guards):** Added `[1000, 600000]` range validation with visible `role="alert"` messages across `WorkflowStudioPage.tsx`, `AttachHookDialog.tsx`, `ProjectSettingsPage.tsx`, `AgentDefinitionEditorDrawer.tsx`, and `AiProviderEditorDrawer.tsx`.
+7. **UI Specialist Item 7 (Advanced Overrides Count):** Included per-hook timeout override in `activeOverridesCount` pill in `AttachHookDialog.tsx`.
+8. **Screenshots Refreshed:** Re-captured all 12 responsive Playwright screenshots with the new dark-mode tokens and client validation active.
 
 ## Verification Evidence and Quality Metrics
-- **Pytest Unit & Migration Tests:** 47 of 47 tests passed (see `unit-test-results.txt`).
-- **Vitest Frontend Unit Tests:** 128 of 128 tests passed (see `unit-test-results.txt`).
+- **Pytest Unit & Migration Tests:** 65 of 65 tests passed (see `unit-test-results.txt`).
+- **Vitest Frontend Unit Tests:** 130 of 130 tests passed across 4 test suites (see `unit-test-results.txt`).
 - **Playwright Responsive Screenshots:** 12 screenshots captured in `docs/qa/KAN-437/screenshots/` for light and dark modes across desktop, tablet, and mobile viewports.
 - **Codebase Checks:** `make check` passed with 0 errors, 0 warnings:
   - `ruff`: all checks passed
-  - `ruff format`: 2896 files formatted cleanly
+  - `ruff format`: all files formatted cleanly
   - `mypy`: 1378 source files clean
   - `lint-imports`: 2 kept, 0 broken
   - `check_no_dashes`: 0 dash violations across all files
