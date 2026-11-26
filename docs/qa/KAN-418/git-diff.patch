@@ -131,7 +131,7 @@ index 00000000..d306c184
 +        await harness.upgrade("p6_22_mcp_api_keys_capability_mask_boundary")
 diff --git a/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
 new file mode 100644
-index 00000000..16273873
+index 00000000..14ef33da
 --- /dev/null
 +++ b/docs/workouts/slice-3-mcp-oauth/03-live-workout-report.md
 @@ -0,0 +1,293 @@
@@ -177,7 +177,7 @@ index 00000000..16273873
 +   - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods, and proved successful token exchange (HTTP 200).
 +   - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
 +   - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
-+   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
++   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 528 total).
 +   - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 1052 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
 +
 +3. **Workout 3: RFC 8628 `/activate` Device Authorization Flow:**
@@ -333,7 +333,7 @@ index 00000000..16273873
 +
 +- **500+ DCR Rows Bulk Purge in 1 Transaction:**
 +  - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.
-+  - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 538`).
++  - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 528`).
 +  - Executed bulk purge: `POST /api/v1/admin/oauth-clients/bulk-delete` with `{"purge_unused_dcr": true, "purge_revoked": true}`.
 +  - Result: 1052 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
 +  - Re-queried client list: Active Production Client confirmed intact with active grants preserved.
@@ -411,10 +411,10 @@ index 00000000..16273873
 +| `01-desktop-1440x900-light-mcp-access-studio-mint-modal.png` | 1440x900 | Light | Mint New MCP Access Key modal displaying key name, role selector, scope tier, surface selector, expiration dropdown, and advanced capability/CIDR section. | 100% Unclipped |
 +| `02-desktop-1440x900-dark-connect-oauth-modal.png` | 1440x900 | Dark | Connect OAuth Application modal displaying Gemini App, Claude Code, Cursor, Antigravity, and Codex tabs, RFC 8414 metadata URL, and scope picker. | 100% Unclipped |
 +| `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Workload Identity Federation studio view displaying active federated policies, issuer URL, subject patterns, and Disable/Edit/Delete action buttons. | 100% Unclipped |
-+| `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 536 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
++| `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 528 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
 +| `05-mobile-portrait-390x844-device-activate-page.png` | 390x844 | Light | Mobile portrait view of Connect CLI Device showing Base20 formatted code input, explanation, and vowel/number exclusion warning callout banner. | 100% Unclipped |
 +| `06-desktop-1440x900-light-mcp-config-snippet-modal.png` | 1440x900 | Light | MCP Access Key & Config Snippet modal displaying raw secret banner, boundary note, LLMs prompt button, scope select, and config snippet boxes for AI agents. | 100% Unclipped |
-+| `07-desktop-1440x900-dark-oauth-governance-paginated-500.png` | 1440x900 | Dark | Dark mode OAuth 2.1 Client Governance showing 536 registered clients, pagination bar showing "Showing 1-50 of 536" and Next/Previous buttons. | 100% Unclipped |
++| `07-desktop-1440x900-dark-oauth-governance-paginated-500.png` | 1440x900 | Dark | Dark mode OAuth 2.1 Client Governance showing 528 registered clients, pagination bar showing "Showing 1-50 of 528" and Next/Previous buttons. | 100% Unclipped |
 +
 +Screenshots are permanently mirrored in:
 +- `docs/workouts/slice-3-mcp-oauth/screenshots/`
@@ -430,19 +430,19 @@ index 00000000..16273873
 +- Zero temporary test containers running or stopped following teardown (verified via `docker ps -a | grep kan418`). Zero mutations occurred on any remote or pre-production infrastructure.
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png
 new file mode 100644
-index 00000000..2c6aa568
+index 00000000..97fb379a
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/01-desktop-1440x900-light-mcp-access-studio-mint-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png
 new file mode 100644
-index 00000000..8cda4148
+index 00000000..836289ca
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/02-desktop-1440x900-dark-connect-oauth-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png
 new file mode 100644
-index 00000000..d30a132a
+index 00000000..f8eaf369
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/03-desktop-1024x768-workload-oidc-studio.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png
 new file mode 100644
-index 00000000..5d8d67be
+index 00000000..3cbe5712
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png
 new file mode 100644
@@ -450,14 +450,14 @@ index 00000000..e2441421
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/05-mobile-portrait-390x844-device-activate-page.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png
 new file mode 100644
-index 00000000..771a42a0
+index 00000000..890f2c54
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/06-desktop-1440x900-light-mcp-config-snippet-modal.png differ
 diff --git a/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png
 new file mode 100644
-index 00000000..892acb97
+index 00000000..fb66d50f
 Binary files /dev/null and b/docs/workouts/slice-3-mcp-oauth/screenshots/07-desktop-1440x900-dark-oauth-governance-paginated-500.png differ
 diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
-index 55cc208f..4cc7ee27 100644
+index 55cc208f..3e80d28a 100644
 --- a/kanban/web/src/features/settings/McpAccessStudio.css
 +++ b/kanban/web/src/features/settings/McpAccessStudio.css
 @@ -3,7 +3,7 @@
@@ -563,7 +563,15 @@ index 55cc208f..4cc7ee27 100644
  }
  
  .kb-mcp-key-hint {
-@@ -196,6 +254,9 @@
+@@ -156,6 +214,7 @@
+   background-color: rgba(56, 139, 253, 0.15);
+   color: var(--accent-primary, #58a6ff);
+   border: 1px solid rgba(56, 139, 253, 0.3);
++  white-space: nowrap;
+ }
+ 
+ .kb-mcp-tier-global {
+@@ -196,6 +255,9 @@
    border-radius: 4px;
    font-size: 0.75rem;
    cursor: pointer;
@@ -573,7 +581,7 @@ index 55cc208f..4cc7ee27 100644
  }
  
  .kb-mcp-action-btn:hover {
-@@ -203,6 +264,25 @@
+@@ -203,6 +265,25 @@
    border-color: var(--text-danger, #b91c1c);
  }
  
@@ -599,7 +607,7 @@ index 55cc208f..4cc7ee27 100644
  .kb-mcp-confirm-bar {
    display: inline-flex;
    align-items: center;
-@@ -265,7 +345,7 @@
+@@ -265,7 +346,7 @@
  .kb-mcp-mint-form {
    display: flex;
    flex-direction: column;
@@ -608,7 +616,7 @@ index 55cc208f..4cc7ee27 100644
  }
  
  .kb-mcp-mint-error {
-@@ -285,7 +365,7 @@
+@@ -285,7 +366,7 @@
  .kb-mcp-form-row {
    display: flex;
    flex-direction: column;
@@ -617,7 +625,7 @@ index 55cc208f..4cc7ee27 100644
  }
  
  .kb-mcp-form-label {
-@@ -327,7 +407,7 @@
+@@ -327,7 +408,7 @@
    font-size: 0.875rem;
    font-weight: 600;
    color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
@@ -626,7 +634,7 @@ index 55cc208f..4cc7ee27 100644
    margin-bottom: 2px;
    display: flex;
    align-items: center;
-@@ -335,16 +415,17 @@
+@@ -335,16 +416,17 @@
  }
  
  .kb-mcp-key-summary-row {
@@ -647,7 +655,7 @@ index 55cc208f..4cc7ee27 100644
    color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
  }
  
-@@ -353,12 +434,11 @@
+@@ -353,12 +435,11 @@
    justify-content: flex-end;
    gap: 12px;
    margin-top: 8px;
@@ -663,9 +671,26 @@ index 55cc208f..4cc7ee27 100644
  
  .kb-mcp-unlimited-warning {
 diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.css b/kanban/web/src/features/settings/McpConfigSnippetModal.css
-index 1719aec4..d812fa89 100644
+index 1719aec4..b5bb90f3 100644
 --- a/kanban/web/src/features/settings/McpConfigSnippetModal.css
 +++ b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+@@ -23,14 +23,14 @@
+   background-color: var(--bg-surface);
+   border: 1px solid var(--border-subtle, #30363d);
+   border-radius: 8px;
+-  padding: 32px 40px;
++  padding: 16px 20px;
+   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+   display: flex;
+   flex-direction: column;
+   overflow-y: auto;
+   overscroll-behavior: contain;
+   box-sizing: border-box;
+-  gap: 20px;
++  gap: 10px;
+   color: var(--fg-primary);
+   font-family: var(--font-sans);
+ }
 @@ -120,7 +120,7 @@
  
  .kb-snippet-warning-note {
@@ -675,7 +700,7 @@ index 1719aec4..d812fa89 100644
    margin: 0;
  }
  
-@@ -164,14 +164,19 @@
+@@ -164,37 +164,43 @@
  
  .kb-snippet-url-select {
    height: 32px;
@@ -697,11 +722,21 @@ index 1719aec4..d812fa89 100644
  .kb-snippet-code-box {
    background-color: #0d1117;
    border: 1px solid var(--border-subtle, #30363d);
-@@ -184,17 +189,16 @@
+   border-radius: 6px;
+-  padding: 16px;
++  padding: 14px;
+   font-family: var(--font-mono);
+   font-size: 0.8125rem;
+   line-height: 1.5;
+   color: #e6edf3;
    overflow-x: auto;
-   max-height: 200px;
-   white-space: pre;
-+  margin-bottom: 16px;
+-  max-height: 200px;
+-  white-space: pre;
++  flex-shrink: 0;
++  max-height: none;
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
++  margin-bottom: 8px;
  }
  
  .kb-snippet-footer-row {
@@ -718,7 +753,7 @@ index 1719aec4..d812fa89 100644
    background: var(--bg-surface);
  }
  
-@@ -242,7 +246,7 @@
+@@ -242,7 +248,7 @@
  
  .kb-snippet-llms-callout-text {
    font-size: 0.8125rem;
@@ -856,10 +891,10 @@ index dd2e0c67..51c03a7d 100644
  });
 diff --git a/scripts/capture_kan418_screenshots.mjs b/scripts/capture_kan418_screenshots.mjs
 new file mode 100644
-index 00000000..4fd23269
+index 00000000..ffd9cc1f
 --- /dev/null
 +++ b/scripts/capture_kan418_screenshots.mjs
-@@ -0,0 +1,257 @@
+@@ -0,0 +1,260 @@
 +// Copyright 2026 Kanban Platform Contributors
 +// Apache-2.0 License. See LICENSE for details.
 +/**
@@ -909,6 +944,9 @@ index 00000000..4fd23269
 +        height: auto !important;
 +        max-height: none !important;
 +        overflow: visible !important;
++      }
++      .kb-snippet-modal-card {
++        max-height: none !important;
 +      }
 +      .kb-topbar, header {
 +        position: static !important;
@@ -1062,7 +1100,7 @@ index 00000000..4fd23269
 +    // Screenshot 6: Desktop 1440x900 Light McpConfigSnippetModal
 +    // -------------------------------------------------------------------------
 +    {
-+      const context = await createContext(browser, 1440, 900, 'light');
++      const context = await createContext(browser, 1440, 1100, 'light');
 +      const page = await context.newPage();
 +      await page.goto(`${BASE_URL}/settings/mcp`, { waitUntil: 'domcontentloaded' });
 +      await page.waitForSelector('[data-testid="mint-key-button"]', { timeout: 10000 });
@@ -1088,7 +1126,7 @@ index 00000000..4fd23269
 +        }
 +      });
 +
-+      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
++      await preparePageForScreenshot(page, { width: 1440, height: 1100 }, 'light');
 +      await saveScreenshot(page, '06-desktop-1440x900-light-mcp-config-snippet-modal.png');
 +      await context.close();
 +    }
