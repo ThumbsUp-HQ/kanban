@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648`  
 **Target Branch:** `docs/KAN-429-slice5-governance-docs`  
-**Target Commit:** `9c7ede02`  
+**Target Commit:** `b8ae742c`  
 
 ---
 
@@ -17,7 +17,7 @@ This UI Specialist Review audits the published in-app documentation chapters, mu
 
 All 30 captured visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key documentation views were inspected directly via `read_file` binary image analysis against the built Docs Center application. The visual evidence proves that the user experience of browsing governance guides, inspecting scripted custom field sandboxes, and navigating workflow helper references is fluid, readable, unclipped, and fully compliant with 👍kanban UX standards.
 
-Automated test metrics verify 70/70 Vitest tests passed in 7.33s with 0 `act(...)` warnings and 96.44% branch coverage with full V8 coverage table recorded, and 11/11 Pytest tests passed in 0.45s covering offline wiki bundle synchronization and custom field doc examples.
+Automated test metrics verify 71/71 Vitest tests passed in 7.26s with 0 `act(...)` warnings and 96.44% branch coverage with full V8 coverage table recorded, and 11/11 Pytest tests passed in 0.45s covering offline wiki bundle synchronization and custom field doc examples.
 
 Key findings:
 1. **Multi-Viewport Reflow**: The Docs Center layout reflows seamlessly from wide 1440px desktop down to 390px mobile portrait (`01-admin-custom-scripted-390x844-mobile-portrait.png`). Navigation headers, search input, track badges, and chapter contents stack cleanly without horizontal overflow (`scrollWidth <= viewportWidth`).
