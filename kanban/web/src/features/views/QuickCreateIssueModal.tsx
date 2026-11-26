@@ -89,6 +89,7 @@ export function QuickCreateIssueModal({
     activeAdvancedCount > 0 || defaultModuleIds.length > 0;
 
   const summaryInputRef = useRef<HTMLInputElement>(null);
+  const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
 
@@ -175,6 +176,32 @@ export function QuickCreateIssueModal({
     };
   }, [isOpen, handleClose]);
 
+  // Sync programmatic .value and native input/change events for automation / DevTools fill()
+  useEffect(() => {
+    if (!isOpen) return;
+    const summaryEl = summaryInputRef.current;
+    const descEl = descriptionInputRef.current;
+
+    const handleSummaryNative = (): void => {
+      setSummary(summaryEl ? summaryEl.value : '');
+    };
+    const handleDescNative = (): void => {
+      setDescription(descEl ? descEl.value : '');
+    };
+
+    summaryEl?.addEventListener('input', handleSummaryNative);
+    summaryEl?.addEventListener('change', handleSummaryNative);
+    descEl?.addEventListener('input', handleDescNative);
+    descEl?.addEventListener('change', handleDescNative);
+
+    return () => {
+      summaryEl?.removeEventListener('input', handleSummaryNative);
+      summaryEl?.removeEventListener('change', handleSummaryNative);
+      descEl?.removeEventListener('input', handleDescNative);
+      descEl?.removeEventListener('change', handleDescNative);
+    };
+  }, [isOpen]);
+
   if (!isOpen) {
     return null;
   }
@@ -182,6 +209,12 @@ export function QuickCreateIssueModal({
   const handleDone = (): void => {
     setSummary('');
     setDescription('');
+    if (summaryInputRef.current) {
+      summaryInputRef.current.value = '';
+    }
+    if (descriptionInputRef.current) {
+      descriptionInputRef.current.value = '';
+    }
     setDueDate('');
     setParentKey('');
     setIsDraft(false);
@@ -192,6 +225,12 @@ export function QuickCreateIssueModal({
   const handleCreateAnother = (): void => {
     setSummary('');
     setDescription('');
+    if (summaryInputRef.current) {
+      summaryInputRef.current.value = '';
+    }
+    if (descriptionInputRef.current) {
+      descriptionInputRef.current.value = '';
+    }
     setDueDate('');
     setParentKey('');
     setIsDraft(false);
@@ -218,13 +257,15 @@ export function QuickCreateIssueModal({
 
   const handleSubmit = async (e: React.SyntheticEvent): Promise<void> => {
     e.preventDefault();
-    if (!summary.trim() || isSubmitting) return;
+    const liveSummary = (summaryInputRef.current?.value ?? summary).trim();
+    const liveDescription = (descriptionInputRef.current?.value ?? description).trim();
+    if (!liveSummary || isSubmitting) return;
 
     if (isDraft) {
       const draft = saveDraft({
         projectKey,
-        summary: summary.trim(),
-        description: description.trim() || undefined,
+        summary: liveSummary,
+        description: liveDescription || undefined,
         stateId,
         prioritySlug,
         moduleIds: modulesEnabled ? selectedModuleIds : undefined,
@@ -241,7 +282,7 @@ export function QuickCreateIssueModal({
 
     const matchedState = states?.find((s) => s.id === stateId);
     const payload: Partial<IssueItem> = {
-      summary: summary.trim(),
+      summary: liveSummary,
       state: matchedState
         ? {
             id: matchedState.id,
@@ -289,8 +330,8 @@ export function QuickCreateIssueModal({
       },
     };
 
-    if (description.trim()) {
-      payload.description_markdown = description.trim();
+    if (liveDescription) {
+      payload.description_markdown = liveDescription;
     }
     if (modulesEnabled) {
       payload.module_ids = selectedModuleIds;
@@ -315,7 +356,7 @@ export function QuickCreateIssueModal({
 
         setPostCreateData({
           key: resolvedKey,
-          summary: summary.trim(),
+          summary: liveSummary,
           isDraft: false,
         });
       } else {
@@ -327,7 +368,7 @@ export function QuickCreateIssueModal({
 
         setPostCreateData({
           key: resolvedKey,
-          summary: summary.trim(),
+          summary: liveSummary,
           isDraft: false,
         });
       }
@@ -460,6 +501,9 @@ export function QuickCreateIssueModal({
               onChange={(e) => {
                 setSummary(e.target.value);
               }}
+              onInput={(e) => {
+                setSummary((e.target as HTMLInputElement).value);
+              }}
               required
               aria-invalid={Boolean(submitError)}
               aria-describedby={submitError ? 'quick-create-error-msg' : undefined}
@@ -474,12 +518,16 @@ export function QuickCreateIssueModal({
               Description (Markdown)
             </label>
             <textarea
+              ref={descriptionInputRef}
               id="quick-create-description"
               className="quick-create-textarea"
               placeholder="Add details, acceptance criteria, or Mermaid diagrams..."
               value={description}
               onChange={(e) => {
                 setDescription(e.target.value);
+              }}
+              onInput={(e) => {
+                setDescription((e.target as HTMLTextAreaElement).value);
               }}
             />
           </div>

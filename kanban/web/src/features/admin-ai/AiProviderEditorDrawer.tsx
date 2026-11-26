@@ -24,7 +24,7 @@ interface AiProviderEditorDrawerProps {
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
-  onSaved: () => void;
+  onSaved?: ((saved?: ProviderConfigPublic) => void) | undefined;
   providersCount?: number | undefined;
   projectId?: string | null | undefined;
   workspaceSlug?: string | undefined;
@@ -100,7 +100,7 @@ function AiProviderEditorContent({
   onClose: () => void;
   provider: ProviderConfigPublic | null;
   airGapMode: boolean;
-  onSaved: () => void;
+  onSaved?: ((saved?: ProviderConfigPublic) => void) | undefined;
   providersCount?: number | undefined;
   projectId?: string | null | undefined;
   workspaceSlug?: string | undefined;
@@ -480,6 +480,7 @@ function AiProviderEditorContent({
         return s;
       };
 
+      let saved: ProviderConfigPublic | undefined;
       if (provider) {
         const payload: ProviderConfigUpdate = {
           display_name: displayName.trim(),
@@ -497,9 +498,9 @@ function AiProviderEditorContent({
         }
 
         if (workspaceSlug) {
-          await updateAiProvider(provider.id, payload, workspaceSlug);
+          saved = await updateAiProvider(provider.id, payload, workspaceSlug);
         } else {
-          await updateAiProvider(provider.id, payload);
+          saved = await updateAiProvider(provider.id, payload);
         }
       } else {
         const nextPriority = providersCount !== undefined ? (providersCount + 1) * 10 : 100;
@@ -517,14 +518,14 @@ function AiProviderEditorContent({
         };
 
         if (workspaceSlug) {
-          await createAiProvider(payload, workspaceSlug);
+          saved = await createAiProvider(payload, workspaceSlug);
         } else {
-          await createAiProvider(payload);
+          saved = await createAiProvider(payload);
         }
       }
 
       setIsSaving(false);
-      onSaved();
+      onSaved?.(saved);
       onClose();
     } catch (err: unknown) {
       setIsSaving(false);
