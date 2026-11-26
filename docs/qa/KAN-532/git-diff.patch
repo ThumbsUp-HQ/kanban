@@ -337,7 +337,7 @@ index 8d1b2fe5..0c44e83f 100644
        </header>
  
 diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index ce589e44..183096aa 100644
+index ce589e44..753a7dd0 100644
 --- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 +++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
 @@ -46,6 +46,15 @@
@@ -487,7 +487,7 @@ index ce589e44..183096aa 100644
    min-height: 36px;
 -  background-color: #da3633;
 -  color: #ffffff;
-+  background-color: var(--danger-fg);
++  background-color: var(--bg-danger);
 +  color: var(--accent-primary-fg, #ffffff);
    border: 1px solid transparent;
    border-radius: 6px;
@@ -497,8 +497,8 @@ index ce589e44..183096aa 100644
  
  .kb-oauth-gov-confirm-revoke-btn:hover {
 -  background-color: #b62324;
-+  background-color: var(--danger-bg);
-+  color: var(--danger-fg);
++  background-color: var(--bg-danger-hover);
++  color: var(--accent-primary-fg, #ffffff);
  }
  
  .kb-oauth-gov-confirm-delete-btn {
@@ -506,7 +506,7 @@ index ce589e44..183096aa 100644
    min-height: 36px;
 -  background-color: #da3633;
 -  color: #ffffff;
-+  background-color: var(--danger-fg);
++  background-color: var(--bg-danger);
 +  color: var(--accent-primary-fg, #ffffff);
    border: 1px solid transparent;
    border-radius: 6px;
@@ -516,8 +516,8 @@ index ce589e44..183096aa 100644
  
  .kb-oauth-gov-confirm-delete-btn:hover {
 -  background-color: #b62324;
-+  background-color: var(--danger-bg);
-+  color: var(--danger-fg);
++  background-color: var(--bg-danger-hover);
++  color: var(--accent-primary-fg, #ffffff);
  }
  
  .kb-oauth-gov-cancel-btn {
