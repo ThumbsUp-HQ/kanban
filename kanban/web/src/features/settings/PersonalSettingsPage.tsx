@@ -742,6 +742,12 @@ export function PersonalSettingsPage(): JSX.Element {
           <div className="kb-personal-settings-field">
             <label htmlFor="display-name" className="kb-personal-settings-label">
               Display Name
+              <FieldHelpHint
+                title="Display Name"
+                summary="Public name rendered on assigned cards, audit trails, and mentions."
+                defaultValue="Defaults to account username"
+                testId="personal-display-name-help"
+              />
             </label>
             <input
               id="display-name"

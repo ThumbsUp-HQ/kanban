@@ -2,8 +2,10 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { PersonalSettingsPage } from '../PersonalSettingsPage';
@@ -2688,6 +2690,130 @@ describe('PersonalSettingsPage', () => {
 
       const docLink = screen.getByTestId('personal-settings-doc-link');
       expect(docLink.getAttribute('href')).toBe('/docs/user-profile-and-personal-settings');
+    });
+  });
+
+  describe('Display Name FieldHelpHint Integration (KAN-497)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders personal-display-name-help trigger adjacent to Display Name label in Light and Dark themes', async () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <MemoryRouter>
+            <QueryClientProvider client={queryClient}>
+              <PersonalSettingsPage />
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId('personal-display-name-help')).toBeDefined();
+        });
+
+        const trigger = screen.getByTestId('personal-display-name-help');
+        expect(trigger.getAttribute('aria-label')).toBe('Help for Display Name');
+        expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(trigger.textContent).toBe('?');
+
+        // Verify zero inline style props
+        expect(trigger.getAttribute('style')).toBeNull();
+
+        // Verify proximity to label
+        const label = trigger.closest('label');
+        expect(label).not.toBeNull();
+        expect(label?.getAttribute('for')).toBe('display-name');
+        expect(label?.className).toContain('kb-personal-settings-label');
+        expect(label?.textContent).toContain('Display Name');
+
+        unmount();
+      }
+    });
+
+    it('opens popover with title, summary, and default value on focus/click, and closes on Escape with focus restored', async () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <PersonalSettingsPage />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-display-name-help')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('personal-display-name-help');
+      expect(screen.queryByTestId('personal-display-name-help-popover')).toBeNull();
+
+      act(() => {
+        trigger.focus();
+      });
+
+      const popover = screen.getByTestId('personal-display-name-help-popover');
+      expect(popover).toBeDefined();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(popover.textContent).toContain('Display Name');
+      expect(popover.textContent).toContain('Public name rendered on assigned cards, audit trails, and mentions.');
+      expect(popover.textContent).toContain('Default:');
+      expect(popover.textContent).toContain('Defaults to account username');
+
+      // Dismiss via Escape
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape' });
+      });
+
+      expect(screen.queryByTestId('personal-display-name-help-popover')).toBeNull();
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('opens popover on click and toggles close on second click', async () => {
+      render(
+        <MemoryRouter>
+          <QueryClientProvider client={queryClient}>
+            <PersonalSettingsPage />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('personal-display-name-help')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('personal-display-name-help');
+
+      act(() => {
+        fireEvent.click(trigger);
+      });
+
+      expect(screen.getByTestId('personal-display-name-help-popover')).toBeDefined();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+
+      act(() => {
+        fireEvent.click(trigger);
+      });
+
+      expect(screen.queryByTestId('personal-display-name-help-popover')).toBeNull();
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('verifies CSS rules in PersonalSettingsPage.css keep (?) adjacent to label without floating far right', () => {
+      const cssPath = path.resolve(__dirname, '../PersonalSettingsPage.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      expect(cssContent).toContain('.kb-personal-settings-label');
+      expect(cssContent).toContain('display: inline-flex;');
+      expect(cssContent).toContain('align-items: center;');
+      expect(cssContent).toContain('gap: 6px;');
+      expect(cssContent).toContain('width: fit-content;');
+      expect(cssContent).toContain('.kb-personal-settings-label .field-help-hint');
+      expect(cssContent).toContain('margin: 0;');
+      expect(cssContent).toContain('@media (prefers-color-scheme: dark)');
+      expect(cssContent).toContain(":root:not([data-theme='light']) .kb-personal-settings-label");
     });
   });
 });
