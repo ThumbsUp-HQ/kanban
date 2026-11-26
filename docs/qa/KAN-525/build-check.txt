@@ -1,4 +1,4 @@
-$ cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build
+$ (cd kanban/web && pnpm tsc --noEmit && pnpm run lint && pnpm run build)
 
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan525-60166c3b/kanban/web
 > eslint . --max-warnings 0
@@ -12,19 +12,27 @@ transforming...
 ✓ 765 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-BJOLNh9X.css            633.49 kB │ gzip:  89.20 kB
-dist/assets/index-DI8D8FN8.js           3,109.25 kB │ gzip: 865.51 kB
+dist/assets/index-CfcwohXx.css            633.42 kB │ gzip:  89.10 kB
+dist/assets/index-DjDr75kB.js           3,109.25 kB │ gzip: 865.51 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.33s
+✓ built in 1.40s
 exit code: 0
 
 $ uv run python -m scripts.check_no_dashes --all
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan525-60166c3b/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 exit code: 0
+
+--- Playwright Computed Style Verification Proof ---
+[ComputedStyle Proof] desktop-light-1440x900.png: color=rgb(37, 99, 235), borderBottomColor=rgb(37, 99, 235)
+[ComputedStyle Proof] desktop-dark-1440x900.png: color=rgb(147, 197, 253), borderBottomColor=rgb(147, 197, 253)
+[ComputedStyle Proof] tablet-768x1024.png: color=rgb(37, 99, 235), borderBottomColor=rgb(37, 99, 235)
+[ComputedStyle Proof] tablet-dark-768x1024.png: color=rgb(147, 197, 253), borderBottomColor=rgb(147, 197, 253)
+[ComputedStyle Proof] mobile-390x844.png: color=rgb(37, 99, 235), borderBottomColor=rgb(37, 99, 235)
+[ComputedStyle Proof] mobile-dark-390x844.png: color=rgb(147, 197, 253), borderBottomColor=rgb(147, 197, 253)
