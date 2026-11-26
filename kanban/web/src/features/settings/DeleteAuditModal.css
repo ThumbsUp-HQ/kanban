@@ -31,6 +31,18 @@
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  gap: var(--space-3, 12px);
+}
+
+.kb-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+.kb-modal-header-actions .kb-studio-doc-link {
+  white-space: nowrap;
 }
 
 .kb-modal-title {
@@ -182,4 +194,38 @@
   gap: 10px;
   background-color: var(--bg-canvas);
   flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .kb-modal-backdrop {
+    padding: var(--space-2, 8px);
+  }
+
+  .kb-modal-dialog {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .kb-modal-header {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-modal-title {
+    font-size: var(--text-base, 15px);
+  }
+
+  .kb-audit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-modal-footer {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .kb-modal-footer .kb-btn {
+    min-height: var(--tap-min, 44px);
+  }
 }

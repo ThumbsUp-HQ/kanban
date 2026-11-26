@@ -1,0 +1,42 @@
+diff --git a/Universal-Object-Graph-and-Link-Auditor.md b/Universal-Object-Graph-and-Link-Auditor.md
+index b5c498d..6220068 100644
+--- a/Universal-Object-Graph-and-Link-Auditor.md
++++ b/Universal-Object-Graph-and-Link-Auditor.md
+@@ -193,3 +193,37 @@ Cloning work items, hierarchical sub-tasks, and attachments is governed by an at
+    - Executes inside an atomic nested transaction (`session.begin_nested()`).
+    - Cloned issues and sub-issues invoke `register_object(CAST('issue' AS object_kind), ...)` to bind spine records.
+    - Copies attachments when requested (`include_attachments=true`), links relates-to edges (`link_as_relates_to=true`), and emits `ISSUE_CREATED` and `ISSUE_COPIED` activity records.
++
++
++---
++
++## State Deletion and Dependency Remapping
++
++<a id="state-deletion"></a>
++
++Deleting a workflow state or label carries significant blast radius across active tickets, automation pipelines, and filtered dashboards. Rather than allowing cascade deletions to orphan references or create dangling graph edges, the platform enforces atomic pre-delete reverse-auditing and safe dependency remapping via the Pre-Delete Reverse-Audit Modal (`DeleteAuditModal`, `KB-P3-AUDIT-23`).
++
++### 1. Pre-Delete Reverse-Audit Inspection
++
++Before deletion can be authorized, the administrative client requests an audit impact evaluation from `/api/v1/projects/:key/states/:id/audit-impact`. The auditor calculates the exact blast radius:
++
++- **Active Issues:** Count and sample keys of all active work items assigned to the target state.
++- **Automation Hooks:** Inspection of workflow automation hooks referencing the target state as either source (`from_state_id`) or destination (`to_state_id`), distinguishing enabled from disabled hooks.
++- **In-Flight Executions:** Active transitions executing in the background runtime.
++- **Historical Executions:** Past execution records requiring referential preservation.
++- **Saved Views:** Project and user filter views referencing the state in query criteria.
++
++### 2. Non-Bypassable Hard Deletion Blocks
++
++Deletion is strictly blocked under three safety invariants:
++- **`DEFAULT_STATE`:** The state is configured as the default intake state for new issues in the project. Another state must be designated as default prior to deletion.
++- **`LAST_STATE_IN_GROUP`:** The state is the sole member of its workflow group (e.g. `backlog`, `unstarted`, `started`, `completed`, `cancelled`). Deleting it would leave the group unpopulated.
++- **`TRANSITION_IN_FLIGHT`:** Background workflow transition helpers or AI agent gates are currently executing against issues in this state. Deletion is deferred until pending jobs complete.
++
++### 3. Dependency Remapping Rules
++
++When dependencies exist, deletion requires explicit remapping to an eligible target replacement state:
++- **Issue Reassignment:** All issues currently in the target state are atomically reassigned to the chosen replacement state within the same project. If issues exist, selecting a replacement state is mandatory.
++- **Filter Saved Views:** Queries and saved filter configurations referencing the deleted state are inspected, ensuring dashboards and project boards do not encounter broken query predicates.
++- **Workflow Hook Migration:** Administrators can toggle the `Migrate workflow automation hooks` option (`migrate_hooks: true`). When enabled, inbound and outbound hook transition rules are remapped to the replacement state. If unmigrated, active hooks must be reassigned or disabled before state deletion can proceed.
++- **Audited Ledger Trail:** The state deletion and all accompanying reassignments execute inside an atomic PostgreSQL transaction, emitting structured activity records to the immutable audit ledger.

@@ -8,6 +8,7 @@
 
 import React, { useEffect, useState, type JSX } from 'react';
 import { apiFetch } from '../../api/client';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './DeleteAuditModal.css';
 
 export interface WorkflowHookSummary {
@@ -202,16 +203,23 @@ export function DeleteAuditModal({
           <h2 className="kb-modal-title">
             Delete {kind === 'state' ? 'Workflow State' : 'Label'}: {item.name}
           </h2>
-          <button
-            type="button"
-            className="kb-modal-close-btn"
-            data-testid="audit-close-x-btn"
-            onClick={handleClose}
-            disabled={isDeleting}
-            aria-label="Close"
-          >
-            x
-          </button>
+          <div className="kb-modal-header-actions">
+            <StudioDocLink
+              href="/docs/universal-object-graph-and-link-auditor#state-deletion"
+              title="State Deletion and Dependency Remapping Documentation"
+              testId="delete-audit-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-modal-close-btn"
+              data-testid="audit-close-x-btn"
+              onClick={handleClose}
+              disabled={isDeleting}
+              aria-label="Close"
+            >
+              x
+            </button>
+          </div>
         </div>
 
         <div className="kb-modal-body">
