@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_ESTIMATE_TOKENS",
+    "DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS",
     "HARDENED_GATE_PREAMBLE",
     "MAX_TOOL_CALLS_LIMIT",
     "MAX_TURNS_LIMIT",
@@ -42,6 +43,7 @@ __all__ = [
 MAX_TURNS_LIMIT: Final[int] = 8
 MAX_TOOL_CALLS_LIMIT: Final[int] = 20
 DEFAULT_ESTIMATE_TOKENS: Final[int] = 1024
+DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS: Final[int] = 4096
 CODE_TOOL_LOOP_LIMIT_EXCEEDED: Final[str] = "TOOL_LOOP_LIMIT_EXCEEDED"
 FATAL_POLICY_CODES: Final[frozenset[str]] = frozenset(
     {"TOOL_NOT_PERMITTED", "MCP_CALL_CAP_EXCEEDED", "TOOL_LOOP_LIMIT_EXCEEDED"}
@@ -358,6 +360,7 @@ class InAppSdkHarness:
                 prompt=user_message,
                 system_prompt=system_prompt,
                 response_model=StrictVerdictSchema,
+                max_output_tokens=DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
                 metadata={"agent_slug": agent_slug, "transition_to": "Done"},
                 ttft_deadline_ms=cutoff_ms,
             )

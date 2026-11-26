@@ -138,7 +138,7 @@ class StructuredRequest[TModel: BaseModel](BaseModel):
     response_model: type[TModel]
     system_prompt: str | None = None
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
-    max_output_tokens: int = Field(default=1024, ge=1, le=32768)
+    max_output_tokens: int = Field(default=4096, ge=1, le=32768)
     ttft_deadline_ms: int | None = Field(default=None, ge=1, le=300000)
     metadata: dict[str, str] = Field(default_factory=dict)
 

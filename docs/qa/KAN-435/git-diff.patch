@@ -1,0 +1,272 @@
+diff --git a/agent/harnesses/in_app_sdk.py b/agent/harnesses/in_app_sdk.py
+index c07ef8c5..4fa9e96f 100644
+--- a/agent/harnesses/in_app_sdk.py
++++ b/agent/harnesses/in_app_sdk.py
+@@ -29,6 +29,7 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "DEFAULT_ESTIMATE_TOKENS",
++    "DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS",
+     "HARDENED_GATE_PREAMBLE",
+     "MAX_TOOL_CALLS_LIMIT",
+     "MAX_TURNS_LIMIT",
+@@ -42,6 +43,7 @@ __all__ = [
+ MAX_TURNS_LIMIT: Final[int] = 8
+ MAX_TOOL_CALLS_LIMIT: Final[int] = 20
+ DEFAULT_ESTIMATE_TOKENS: Final[int] = 1024
++DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS: Final[int] = 4096
+ CODE_TOOL_LOOP_LIMIT_EXCEEDED: Final[str] = "TOOL_LOOP_LIMIT_EXCEEDED"
+ FATAL_POLICY_CODES: Final[frozenset[str]] = frozenset(
+     {"TOOL_NOT_PERMITTED", "MCP_CALL_CAP_EXCEEDED", "TOOL_LOOP_LIMIT_EXCEEDED"}
+@@ -358,6 +360,7 @@ class InAppSdkHarness:
+                 prompt=user_message,
+                 system_prompt=system_prompt,
+                 response_model=StrictVerdictSchema,
++                max_output_tokens=DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
+                 metadata={"agent_slug": agent_slug, "transition_to": "Done"},
+                 ttft_deadline_ms=cutoff_ms,
+             )
+diff --git a/agent/providers/base.py b/agent/providers/base.py
+index 7659c506..d8ae9728 100644
+--- a/agent/providers/base.py
++++ b/agent/providers/base.py
+@@ -138,7 +138,7 @@ class StructuredRequest[TModel: BaseModel](BaseModel):
+     response_model: type[TModel]
+     system_prompt: str | None = None
+     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+-    max_output_tokens: int = Field(default=1024, ge=1, le=32768)
++    max_output_tokens: int = Field(default=4096, ge=1, le=32768)
+     ttft_deadline_ms: int | None = Field(default=None, ge=1, le=300000)
+     metadata: dict[str, str] = Field(default_factory=dict)
+ 
+diff --git a/agent/providers/ollama.py b/agent/providers/ollama.py
+index 57387e5c..6c7b457b 100644
+--- a/agent/providers/ollama.py
++++ b/agent/providers/ollama.py
+@@ -402,10 +402,17 @@ class OllamaProvider(LLMProvider):
+             msg_obj = data.get("message", {})
+             content_str = str(msg_obj.get("content", ""))
+             cleaned_content = strip_think_tags(content_str)
++            done_reason = data.get("done_reason")
+ 
+             try:
+                 parsed_json = json.loads(cleaned_content)
+             except json.JSONDecodeError as err:
++                if done_reason == "length":
++                    msg = (
++                        f"Ollama structured output truncated: done_reason=length "
++                        f"(truncated at num_predict={req.max_output_tokens}): {content_str!r}"
++                    )
++                    raise ProviderSchemaError(msg) from err
+                 msg = f"Ollama message content is not valid JSON: {content_str!r}"
+                 raise ProviderSchemaError(msg) from err
+ 
+diff --git a/agent/tests/harnesses/test_in_app_sdk.py b/agent/tests/harnesses/test_in_app_sdk.py
+index 9ffaf21f..15225ecf 100644
+--- a/agent/tests/harnesses/test_in_app_sdk.py
++++ b/agent/tests/harnesses/test_in_app_sdk.py
+@@ -352,12 +352,15 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
+     assert redacted["nested"]["num"] == 42
+     assert redacted["clean"] == "hello"
+ 
++    captured_requests: list[StructuredRequest[Any]] = []
++
+     class GenericMockProvider:
+         @property
+         def residency_tier(self) -> str:
+             return "fixture"
+ 
+         async def generate_structured(self, req: StructuredRequest[Any]) -> StructuredResponse[Any]:
++            captured_requests.append(req)
+             payload = TransitionVerdictPayload(
+                 decision="approve",
+                 reason_markdown="General approval reason",
+@@ -386,11 +389,57 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
+     raw_output = await harness.run(ctx, agent_def)
+     result = parse_verdict_output(raw_output, ctx)
+     assert result.decision.decision == "approve"
++    assert len(captured_requests) == 1
++    assert captured_requests[0].max_output_tokens == 4096
+     assert harness.last_report is not None
+     assert harness.last_report.prompt_tokens == 100
+     assert harness.last_report.completion_tokens == 50
+ 
+ 
++async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
++    """Verify InAppSdkHarness.run() passes max_output_tokens == 4096 (>= 4096) on StructuredRequest."""
++    from agent.harnesses.in_app_sdk import (
++        DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
++        TransitionVerdictPayload,
++    )
++    from agent.providers.base import StructuredRequest, StructuredResponse
++
++    captured: list[StructuredRequest[Any]] = []
++
++    class MockProvider:
++        @property
++        def residency_tier(self) -> str:
++            return "fixture"
++
++        async def generate_structured(self, req: StructuredRequest[Any]) -> StructuredResponse[Any]:
++            captured.append(req)
++            payload = TransitionVerdictPayload(
++                decision="approve",
++                reason_markdown="Token limit check passed",
++            )
++            return StructuredResponse(
++                parsed=payload,
++                raw_json=payload.model_dump_json(by_alias=True),
++                tool_trace=(),
++                ttft_ms=1.0,
++                total_latency_ms=2.0,
++                prompt_tokens=10,
++                completion_tokens=5,
++            )
++
++    harness = InAppSdkHarness(provider=MockProvider())  # type: ignore[arg-type]
++    execution = {"id": "exec-token-test", "project_key": "KAN", "allowed_mutable_fields": ()}
++    issue = {"key": "KAN-435", "summary": "Token test"}
++    agent_def = {"slug": "token-tester", "system_instructions_md": "Check tokens"}
++    ctx = build_transition_context(execution, issue, agent_def)
++
++    await harness.run(ctx, agent_def)
++    assert len(captured) == 1
++    assert captured[0].max_output_tokens == DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS
++    assert captured[0].max_output_tokens == 4096
++    assert captured[0].max_output_tokens >= 4096
++
++
+ async def test_in_app_sdk_invalid_repo_and_undeclared_tools() -> None:
+     """Test InAppSdkHarness handling of invalid repo mirror and undeclared tool dispatch."""
+     harness = InAppSdkHarness()
+diff --git a/agent/tests/providers/test_base_protocol.py b/agent/tests/providers/test_base_protocol.py
+index a924ec7c..daf2d2b9 100644
+--- a/agent/tests/providers/test_base_protocol.py
++++ b/agent/tests/providers/test_base_protocol.py
+@@ -399,3 +399,48 @@ def test_runtime_protocols() -> None:
+         assert res.exit_code == 0
+ 
+     asyncio.run(_exercise())
++
++
++def test_structured_request_token_bounds_and_defaults() -> None:
++    """Verify StructuredRequest defaults max_output_tokens to 4096 and enforces bounds."""
++    req_default = StructuredRequest(
++        model="reasoning-model",
++        prompt="Classify code",
++        response_model=DummyOutput,
++    )
++    assert req_default.max_output_tokens == 4096
++
++    req_min = StructuredRequest(
++        model="m",
++        prompt="p",
++        response_model=DummyOutput,
++        max_output_tokens=1,
++    )
++    assert req_min.max_output_tokens == 1
++
++    req_max = StructuredRequest(
++        model="m",
++        prompt="p",
++        response_model=DummyOutput,
++        max_output_tokens=32768,
++    )
++    assert req_max.max_output_tokens == 32768
++
++    with pytest.raises(ValidationError):
++        StructuredRequest(
++            model="m",
++            prompt="p",
++            response_model=DummyOutput,
++            max_output_tokens=0,
++        )
++
++    with pytest.raises(ValidationError):
++        StructuredRequest(
++            model="m",
++            prompt="p",
++            response_model=DummyOutput,
++            max_output_tokens=32769,
++        )
++
++    comp_default = CompletionRequest(model="m", prompt="p")
++    assert comp_default.max_output_tokens == 256
+diff --git a/agent/tests/providers/test_ollama.py b/agent/tests/providers/test_ollama.py
+index 6ccfa1f5..2f25b3ae 100644
+--- a/agent/tests/providers/test_ollama.py
++++ b/agent/tests/providers/test_ollama.py
+@@ -904,3 +904,73 @@ async def test_ollama_generate_structured_strips_think_tags() -> None:
+     assert res.parsed.ok is True
+     assert "<think>" not in res.raw_json
+     assert res.raw_json == '{"echo": "verified", "ok": true}'
++
++
++@pytest.mark.asyncio
++async def test_ollama_generate_structured_sends_default_num_predict() -> None:
++    """Verify OllamaProvider.generate_structured() sends num_predict=4096 by default."""
++    from typing import Any  # noqa: PLC0415
++
++    captured_payload: dict[str, Any] = {}
++
++    class MockCaptureTransport(httpx.AsyncBaseTransport):
++        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
++            nonlocal captured_payload
++            captured_payload = json.loads(request.content.decode("utf-8"))
++            resp_data = {
++                "message": {
++                    "role": "assistant",
++                    "content": json.dumps({"echo": "ok", "ok": True}),
++                },
++                "prompt_eval_count": 10,
++                "eval_count": 5,
++            }
++            return httpx.Response(200, json=resp_data)
++
++    settings = _make_settings()
++    provider = OllamaProvider(settings, transport=MockCaptureTransport())
++
++    req = StructuredRequest(
++        model="qwen2.5-coder:7b",
++        prompt="Hello",
++        response_model=DummyStructuredOutput,
++    )
++
++    resp = await provider.generate_structured(req)
++    assert resp.parsed.ok is True
++    assert captured_payload["options"]["num_predict"] == 4096
++
++
++@pytest.mark.asyncio
++async def test_ollama_generate_structured_done_reason_length_diagnostic() -> None:
++    """Verify done_reason=length on JSON error raises ProviderSchemaError with diagnostic."""
++
++    class MockLengthTruncatedTransport(httpx.AsyncBaseTransport):
++        async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
++            resp_data = {
++                "done_reason": "length",
++                "message": {
++                    "role": "assistant",
++                    "content": '{"decision":"approve","cited_files":["foo',
++                },
++                "prompt_eval_count": 100,
++                "eval_count": 4096,
++            }
++            return httpx.Response(200, json=resp_data)
++
++    settings = _make_settings()
++    provider = OllamaProvider(settings, transport=MockLengthTruncatedTransport())
++
++    req = StructuredRequest(
++        model="qwen2.5-coder:7b",
++        prompt="Classify changes",
++        response_model=DummyStructuredOutput,
++    )
++
++    with pytest.raises(ProviderSchemaError) as exc_info:
++        await provider.generate_structured(req)
++
++    err_msg = str(exc_info.value)
++    assert "done_reason=length" in err_msg
++    assert "num_predict=4096" in err_msg
++    assert '{"decision":"approve","cited_files":["foo' in err_msg

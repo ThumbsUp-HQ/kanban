@@ -1,0 +1,41 @@
+........................................................................ [ 11%]
+........................................................................ [ 22%]
+........................................................................ [ 34%]
+........................................................................ [ 45%]
+........................................................................ [ 57%]
+........................................................................ [ 68%]
+........................................................................ [ 79%]
+........................................................................ [ 91%]
+......................................................./home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/coverage/inorout.py:560: CoverageWarning: Module agent/harnesses/in_app_sdk was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/coverage/inorout.py:560: CoverageWarning: Module agent/providers/base was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/coverage/inorout.py:560: CoverageWarning: Module agent/providers/ollama was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-imported
+  self.warn(f"Module {pkg} was never imported.", slug="module-not-imported")
+                  [100%]
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+agent/tests/remote_runner/test_daemon_e2e.py::test_daemon_server_revocation_4003_halts_with_exit_code_78
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/websockets/exceptions.py:139: DeprecationWarning: ConnectionClosed.code is deprecated; use Protocol.close_code or ConnectionClosed.rcvd.code
+    warnings.warn(  # deprecated in 13.1 - 2024-09-21
+
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan435-69f3b094/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                            Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------
+agent/harnesses/in_app_sdk.py     185      0     44      3    99%   334->346, 377->379, 379->381
+agent/providers/base.py           119      1     14      0    99%   105
+agent/providers/ollama.py         309     10     80      5    96%   90->104, 94->104, 111-112, 244->249, 272-273, 354-355, 445-446, 498-499
+---------------------------------------------------------------------------
+TOTAL                             613     11    138      8    97%
+631 passed, 4 warnings in 38.38s
