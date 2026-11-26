@@ -1,8 +1,8 @@
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index 15b7659f..5d189d37 100644
+index 15b7659f..75e9eacc 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
-@@ -422,11 +422,22 @@
+@@ -422,6 +422,11 @@
    gap: var(--space-3);
  }
  
@@ -14,17 +14,18 @@ index 15b7659f..5d189d37 100644
  .kb-personal-settings-header-actions {
    display: flex;
    align-items: center;
-   gap: var(--space-2);
+@@ -429,6 +434,11 @@
    flex-wrap: wrap;
-+  white-space: nowrap;
-+}
-+
+ }
+ 
 +.kb-personal-settings-header-actions .kb-studio-doc-link {
 +  white-space: nowrap;
 +  flex-shrink: 0;
- }
- 
++}
++
  .kb-table-scroll-container {
+   width: 100%;
+   max-width: 100%;
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 index 84856960..e6b6f4c2 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
