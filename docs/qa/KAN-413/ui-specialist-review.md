@@ -7,21 +7,21 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
 **Target Branch:** `feat/KAN-413-slice2-ai-workout`  
-**Target Commit:** `91cda472`  
+**Target Commit:** `51e20c98`  
 
 ---
 
 ## 1. Executive Summary & Verdict
 
-This UI Specialist Review audits the re-tested and updated zero-mock visual artifacts, dark-mode contrast tokens, responsive design fidelity, interaction design, accessibility (WCAG 2.2 AA), and live workout states of **KAN-413: Live Verification & Forensic Workout for AI Providers, Token Caps, Agent Studio, Remote Runners & /llms.txt Onboarding**.
+This UI Specialist Review audits the Round 3 re-tested and updated zero-mock visual artifacts, dark-mode contrast tokens, responsive design fidelity, interaction design, accessibility (WCAG 2.2 AA), and live workout states of **KAN-413: Live Verification & Forensic Workout for AI Providers, Token Caps, Agent Studio, Remote Runners & /llms.txt Onboarding**.
 
 All 22 re-captured visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key interactive workflow states were inspected directly via `read_file` binary image analysis. The visual evidence proves that the user experience under real companion services (Local OpenAI-compatible mock server, Local Ollama runtime, Token Budget Ledger, Agent Studio execution trace modal, Runner Mint Token dialog, and interactive `/llms.txt` onboarding wizard) is robust, unclipped, and fully aligned with 👍kanban UX standards.
 
-Automated test metrics verify 165/165 Vitest tests passed across 6 test files in 4.54s with 0 `act(...)` warnings and 96.60% branch coverage with full V8 coverage table recorded, and 67/67 Pytest tests passed in 40.43s with 97% overall coverage across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%).
+Automated test metrics verify 165/165 Vitest tests passed across 6 test files in 4.41s with 0 `act(...)` warnings and 96.60% branch coverage with full V8 coverage table recorded, and 76/76 Pytest tests passed in 38.39s with 97% overall coverage across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
 
 Key findings:
 1. **Dark Mode Secondary Button & Link Contrast**: Dark mode secondary buttons (`Documentation ->`, `Enabled`, `Test Connection`, `Token Budget`, `Edit`, `▲`, `▼`) and `StudioDocLink` now feature crisp high-contrast foreground text (> 7.5:1 ratio against `#16181d`/`#1f2937` backgrounds), resolving previous low-contrast gray text.
-2. **Mobile Priority Pill Wrapping**: In `slice2-ai-studio-390x844-mobile-portrait.png`, the `#1 (Priority 10)` pill enforces `white-space: nowrap` and fits within mobile card boundaries without awkward breaking or clipping.
+2. **Mobile Priority Pill Wrapping**: In `slice2-ai-studio-390x844-mobile-portrait.png`, the `#1 (Priority 10)` pill enforces `white-space: nowrap` and fits within mobile card boundaries on a single line without awkward breaking or clipping.
 3. **Responsive Viewport Reflow**: The AI Studio, Agent Studio, and Runner Studio reflow cleanly from wide desktop screens down to narrow mobile viewports. On `390x844` mobile portrait, provider cards stack neatly with clear priority badges, zero-egress pills, and minimum 44px touch targets.
 4. **Token Budget & Usage Ledger**: The Token Budget modal accurately reflects both `Hard AI Freeze (cap=0)` with prominent danger styling and `Unlimited Quota (No Cap)` states, offering clean preset buttons (`1M`, `5M`, `25M`, `100M`, `0 Freeze`).
 5. **Agent Execution Trace Modal**: The Test Validation modal renders the real-time 4-section forensic validation report (`RENDERED CONTEXT`, `TOOL TRACE`, `LATENCY & TOKENS`, `SCHEMA & POLICY STATUS`) with monospace syntax-highlighted dark container, zero horizontal overflow, and precise latency badges.
@@ -37,7 +37,7 @@ Key findings:
 | :--- | :--- | :--- | :--- |
 | `slice2-ai-studio-1440x900-light.png` | 1440x900 Light Desktop | AI Providers & Token Caps Studio; OpenAI and Ollama cards active; failover priorities and zero-egress badges rendered; zero clipping. | PASS (WCAG AA > 4.5:1) |
 | `slice2-ai-studio-1440x900-dark.png` | 1440x900 Dark Desktop | Dark theme active; secondary buttons and doc link updated with high contrast (>7.5:1); crisp typography. | PASS (WCAG AA > 7.5:1) |
-| `slice2-ai-studio-390x844-mobile-portrait.png` | 390x844 Mobile Portrait | Mobile portrait view; priority pill nowrap; provider cards stack vertically; action buttons reflow cleanly without overflow. | PASS (Zero overflow) |
+| `slice2-ai-studio-390x844-mobile-portrait.png` | 390x844 Mobile Portrait | Mobile portrait view; priority pill nowrap on single line; provider cards stack vertically; action buttons reflow cleanly without overflow. | PASS (Zero overflow) |
 | `slice2-ai-provider-drawer-create.png` | Desktop Modal State | Register AI Provider drawer; 1-click presets; masked secret key; probe models button aligned. | PASS (Inputs unclipped) |
 | `slice2-ai-budget-modal-freeze.png` | Desktop Modal State | Token Budget modal with cap=0; Hard AI Freeze warning callout; preset pills aligned. | PASS (Warning banner visible) |
 | `slice2-ai-budget-modal-unlimited.png` | Desktop Modal State | Token Budget modal with unlimited quota; active toggle indicator; helper explanation. | PASS (Clear state toggle) |
