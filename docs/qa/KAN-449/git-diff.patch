@@ -2043,7 +2043,7 @@ index 01f01bf8..621f3d03 100644
                        <textarea
                          id="card-ca-pem"
 diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
-index dd922eaa..40787803 100644
+index dd922eaa..fc92577f 100644
 --- a/kanban/web/src/features/admin-auth/adminAuth.css
 +++ b/kanban/web/src/features/admin-auth/adminAuth.css
 @@ -424,7 +424,7 @@
@@ -2055,6 +2055,15 @@ index dd922eaa..40787803 100644
    display: flex;
    justify-content: flex-end;
  }
+@@ -433,7 +433,7 @@
+   width: min(640px, 100vw);
+   height: 100vh;
+   background: var(--bg-surface);
+-  padding: var(--prose-pad, 32px 40px);
++  padding: 32px 40px 0;
+   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+   display: flex;
+   flex-direction: column;
 @@ -477,7 +477,12 @@
    font-size: 0.875rem;
    font-weight: 500;
@@ -2082,7 +2091,7 @@ index dd922eaa..40787803 100644
    border-top: 1px solid var(--border-subtle);
  }
  
-@@ -945,6 +954,7 @@
+@@ -945,19 +954,20 @@
      justify-content: center;
    }
  
@@ -2090,15 +2099,22 @@ index dd922eaa..40787803 100644
    .auth-editor-drawer-actions,
    .auth-card-editor-footer {
      position: sticky;
-@@ -952,7 +962,7 @@
+     bottom: 0;
      background: var(--bg-surface);
      border-top: 1px solid var(--border-subtle);
-     padding: var(--space-3, 12px) 0;
+-    padding: var(--space-3, 12px) 0;
 -    z-index: 5;
++    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
 +    z-index: 10;
    }
  
    .auth-editor-drawer {
+     width: 100vw;
+-    padding: var(--space-6, 24px) var(--space-5, 20px);
++    padding: var(--space-6, 24px) var(--space-5, 20px) 0;
+   }
+ 
+   .auth-editor-prop-row {
 @@ -970,6 +980,12 @@
    .auth-editor-label {
      width: 100%;
