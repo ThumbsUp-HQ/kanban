@@ -1,9 +1,12 @@
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectSavedViewsView, ProjectSavedViewsViewInner } from './ProjectSavedViewsView';
+import { ShellPanelsProvider, registerShellPanel, useShellPanels } from '../../app/shellPanels';
 import * as clientModule from '../../api/client';
 
 vi.mock('../../api/client', () => ({
@@ -229,5 +232,106 @@ describe('ProjectSavedViewsView (KANBA-221)', () => {
 
     expect(await screen.findByTestId('error-views')).toBeDefined();
     expect(screen.getByTestId('error-views').textContent).toContain('Failed to load saved views');
+  });
+
+  it('renders StudioDocLink in kb-views-header pointing to views guide (KAN-472)', async () => {
+    const apiFetchMock = vi.mocked(clientModule.apiFetch);
+    apiFetchMock.mockResolvedValueOnce({ views: [] });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/views']}>
+          <Routes>
+            <Route path="/projects/:projectKey/views" element={<ProjectSavedViewsView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const docLink = await screen.findByTestId('saved-views-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/enterprise-whitespace-and-kanban-board');
+    expect(docLink.textContent).toContain('Views Guide ->');
+    expect(docLink.className).toContain('kb-studio-doc-link');
+  });
+
+  it('renders StudioDocLink in fallback mode without QueryClient (KAN-472)', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN/views']}>
+        <ProjectSavedViewsView />
+      </MemoryRouter>,
+    );
+
+    const docLink = screen.getByTestId('saved-views-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/enterprise-whitespace-and-kanban-board');
+    expect(docLink.textContent).toContain('Views Guide ->');
+  });
+
+  it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider (KAN-472)', async () => {
+    const unregister = registerShellPanel('help', () => <div data-testid="mock-help-drawer" />);
+    const apiFetchMock = vi.mocked(clientModule.apiFetch);
+    apiFetchMock.mockResolvedValueOnce({ views: [] });
+
+    function PanelStateWatcher() {
+      const { activePanel } = useShellPanels();
+      return (
+        <div>
+          <div data-testid="help-panel-id">{activePanel?.id ?? 'none'}</div>
+          <div data-testid="help-panel-arg">{JSON.stringify(activePanel?.arg ?? {})}</div>
+        </div>
+      );
+    }
+
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/projects/KAN/views']}>
+              <ProjectSavedViewsViewInner projectKey="KAN" />
+              <PanelStateWatcher />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </QueryClientProvider>,
+      );
+
+      const docLink = await screen.findByTestId('saved-views-doc-link');
+      const idElem = screen.getByTestId('help-panel-id');
+      expect(idElem.textContent).toBe('none');
+
+      act(() => {
+        fireEvent.click(docLink);
+      });
+
+      expect(idElem.textContent).toBe('help');
+      const argElem = screen.getByTestId('help-panel-arg');
+      expect(JSON.parse(argElem.textContent || '{}')).toEqual({
+        href: '/docs/enterprise-whitespace-and-kanban-board',
+        title: 'Views Guide ->',
+      });
+    } finally {
+      unregister();
+    }
+  });
+
+  it('enforces zero inline style={{}} props and zero FieldHelpHint nested in label (KAN-472)', () => {
+    const tsxPath = path.resolve(__dirname, 'ProjectSavedViewsView.tsx');
+    const content = fs.readFileSync(tsxPath, 'utf8');
+
+    // Zero inline style={{...}}
+    expect(content).not.toMatch(/style=\{\{/);
+
+    // Zero FieldHelpHint nested inside label
+    expect(content).not.toMatch(/<label[^>]*>[^<]*<FieldHelpHint/i);
+  });
+
+  it('verifies ProjectSavedViewsView.css enforces canonical tokens and mobile 44px tap target (KAN-472)', () => {
+    const cssPath = path.resolve(__dirname, 'ProjectSavedViewsView.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    expect(cssContent).toContain('.kb-views-header-actions');
+    expect(cssContent).toContain('@media (max-width: 767px)');
+    expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
+    expect(cssContent).toContain('.kb-views-header-actions .kb-studio-doc-link');
   });
 });

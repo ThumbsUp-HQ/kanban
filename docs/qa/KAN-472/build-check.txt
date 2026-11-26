@@ -1,0 +1,38 @@
+=== 1. TypeScript Typecheck ===
+TypeScript OK
+=== 2. ESLint ===
+ESLint OK (0 warnings)
+=== 3. CSS Tokens Audit ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan472-ce8dcb9b/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 27ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  18:25:51
+   Duration  1.39s (environment 93%, tests 2%, import 2%, worker 2%, transform 1%)
+
+=== 4. Check Docs Taxonomy ===
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+=== 5. Check No Dashes ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan472-ce8dcb9b/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== 6. Frontend Production Build ===
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 767 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-Druh33dY.css            661.00 kB │ gzip:  92.62 kB
+dist/assets/index-BEAZxJv6.js           3,191.42 kB │ gzip: 885.07 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2.45s
+ALL CHECKS PASSED

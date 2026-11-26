@@ -8,6 +8,7 @@ import { useParams, Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient, QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { qk } from '../../api/queryKeys';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import type { ViewLayout } from './viewRegistry';
 import './ProjectSavedViewsView.css';
 
@@ -65,16 +66,23 @@ export function ProjectSavedViewsViewInner({ projectKey }: { projectKey: string 
   return (
     <section data-testid="project-views-view" className="kb-workspace-section kb-views-view">
       <div className="kb-views-header">
-        <div>
+        <div className="kb-views-header-info">
           <h1>Views ({projectKey})</h1>
           <p>Switch between saved layouts and filter presets for {projectKey}:</p>
         </div>
-        <div className="kb-views-links-row">
-          <Link to={`/projects/${projectKey}/issues?layout=list`}>List View</Link>
-          <Link to={`/projects/${projectKey}/issues?layout=board`}>Board View</Link>
-          <Link to={`/projects/${projectKey}/issues?layout=table`}>Table View</Link>
-          <Link to={`/projects/${projectKey}/issues?layout=calendar`}>Calendar View</Link>
-          <Link to={`/projects/${projectKey}/issues?layout=timeline`}>Timeline View</Link>
+        <div className="kb-views-header-actions">
+          <div className="kb-views-links-row">
+            <Link to={`/projects/${projectKey}/issues?layout=list`}>List View</Link>
+            <Link to={`/projects/${projectKey}/issues?layout=board`}>Board View</Link>
+            <Link to={`/projects/${projectKey}/issues?layout=table`}>Table View</Link>
+            <Link to={`/projects/${projectKey}/issues?layout=calendar`}>Calendar View</Link>
+            <Link to={`/projects/${projectKey}/issues?layout=timeline`}>Timeline View</Link>
+          </div>
+          <StudioDocLink
+            href="/docs/enterprise-whitespace-and-kanban-board"
+            label="Views Guide ->"
+            testId="saved-views-doc-link"
+          />
         </div>
       </div>
 
@@ -161,15 +169,26 @@ export function ProjectSavedViewsView(): JSX.Element {
 
   if (!client) {
     return (
-      <section data-testid="project-views-view" className="kb-workspace-section">
-        <h1>Views ({key})</h1>
-        <p>Switch between saved layouts and filter presets for {key}:</p>
-        <div className="kb-views-links-row">
-          <Link to={`/projects/${key}/issues?layout=list`}>List View</Link>
-          <Link to={`/projects/${key}/issues?layout=board`}>Board View</Link>
-          <Link to={`/projects/${key}/issues?layout=table`}>Table View</Link>
-          <Link to={`/projects/${key}/issues?layout=calendar`}>Calendar View</Link>
-          <Link to={`/projects/${key}/issues?layout=timeline`}>Timeline View</Link>
+      <section data-testid="project-views-view" className="kb-workspace-section kb-views-view">
+        <div className="kb-views-header">
+          <div className="kb-views-header-info">
+            <h1>Views ({key})</h1>
+            <p>Switch between saved layouts and filter presets for {key}:</p>
+          </div>
+          <div className="kb-views-header-actions">
+            <div className="kb-views-links-row">
+              <Link to={`/projects/${key}/issues?layout=list`}>List View</Link>
+              <Link to={`/projects/${key}/issues?layout=board`}>Board View</Link>
+              <Link to={`/projects/${key}/issues?layout=table`}>Table View</Link>
+              <Link to={`/projects/${key}/issues?layout=calendar`}>Calendar View</Link>
+              <Link to={`/projects/${key}/issues?layout=timeline`}>Timeline View</Link>
+            </div>
+            <StudioDocLink
+              href="/docs/enterprise-whitespace-and-kanban-board"
+              label="Views Guide ->"
+              testId="saved-views-doc-link"
+            />
+          </div>
         </div>
       </section>
     );
