@@ -1920,6 +1920,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         // UX Simplification Studio & Security Section Anchor Aliases
         '/docs/studio-configuration-reference#workspaces',
         '/docs/studio-configuration-reference#projects',
+        '/docs/studio-configuration-reference#workflow-states',
         '/docs/multi-card-authentication-studio#passkeys',
         '/docs/multi-card-authentication-studio#envelope-encryption-master-kek',
         '/docs/production-promotion-and-backup-runbook#restore-procedure',

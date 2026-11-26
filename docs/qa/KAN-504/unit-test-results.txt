@@ -1,0 +1,31 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan504-f60b0c3d/kanban/web
+      Coverage enabled with v8
+
+stderr | src/features/settings/__tests__/ProjectSettingsPage.test.tsx > ProjectSettingsPage (KANBA-202) > covers all remaining corner cases, null fallbacks, and boundary conditions
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `div`. It was passed a child from RoleLabelPicker. See https://react.dev/link/warning-keys for more information.
+
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (46 tests) 6786ms
+   ✓ ProjectSettingsPage (KANBA-202) (46)
+     ✓ renders project settings page tabs and switches between them 447ms
+     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 308ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 458ms
+     ✓ covers fallback error messages when error object has no message property 461ms
+     ✓ supports inline row edit for workflow states and labels (KAN-29 Problem 1) 364ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 471ms
+     ✓ supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1) 321ms
+
+ Test Files  1 passed (1)
+      Tests  46 passed (46)
+   Start at  17:46:36
+   Duration  8.94s (tests 80%, environment 11%, import 4%, transform 4%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.17 |    95.05 |     100 |   99.55 |                   
+ ...ttingsPage.tsx |   99.17 |    95.05 |     100 |   99.55 | 546-548           
+-------------------|---------|----------|---------|---------|-------------------

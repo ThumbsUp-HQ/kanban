@@ -1529,8 +1529,10 @@ export function ProjectSettingsPage(): JSX.Element {
           <>
             <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
             <div className="kb-form-group">
-              <label htmlFor="proj-name-input">
-                Project Name
+              <div className="kb-settings-label-row">
+                <label htmlFor="proj-name-input">
+                  Project Name
+                </label>
                 <FieldHelpHint
                   title="Project Name"
                   summary="Human-readable project name displayed across project boards and navigation."
@@ -1538,7 +1540,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   docHref="/docs/ticket-screen-and-work-item-features"
                   testId="proj-name-help"
                 />
-              </label>
+              </div>
               <input
                 id="proj-name-input"
                 data-testid="project-name-input"
@@ -1551,8 +1553,10 @@ export function ProjectSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="proj-desc-input">
-                Description (Markdown)
+              <div className="kb-settings-label-row">
+                <label htmlFor="proj-desc-input">
+                  Description (Markdown)
+                </label>
                 <FieldHelpHint
                   title="Description"
                   summary="Markdown-formatted project summary and scope guidelines."
@@ -1560,7 +1564,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   docHref="/docs/ticket-screen-and-work-item-features"
                   testId="proj-desc-help"
                 />
-              </label>
+              </div>
               <textarea
                 id="proj-desc-input"
                 data-testid="project-desc-input"
@@ -1655,8 +1659,10 @@ export function ProjectSettingsPage(): JSX.Element {
               </div>
 
               <div className="kb-form-group">
-                <label htmlFor="proj-auto-archive-input">
-                  Auto-Archive Days (optional, Default: Off)
+                <div className="kb-settings-label-row">
+                  <label htmlFor="proj-auto-archive-input">
+                    Auto-Archive Days (optional, Default: Off)
+                  </label>
                   <FieldHelpHint
                     title="Auto-Archive Days"
                     summary="Number of days after completion or cancellation before work items are automatically archived from active views."
@@ -1666,7 +1672,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
                     testId="proj-auto-archive-help"
                   />
-                </label>
+                </div>
                 <input
                   id="proj-auto-archive-input"
                   data-testid="project-auto-archive-input"
@@ -1680,9 +1686,11 @@ export function ProjectSettingsPage(): JSX.Element {
                 />
               </div>
 
-              <div className="kb-form-group" style={{ marginTop: '1rem' }}>
-                <label className="kb-form-label" htmlFor="project-gate-timeout-input">
-                  Default Workflow Gate Timeout (ms)
+              <div className="kb-form-group kb-form-group-spaced">
+                <div className="kb-settings-label-row">
+                  <label className="kb-form-label" htmlFor="project-gate-timeout-input">
+                    Default Workflow Gate Timeout (ms)
+                  </label>
                   <FieldHelpHint
                     title="Default Workflow Gate Timeout"
                     summary="Execution timeout in milliseconds for all workflow interceptor gates in this project (1000..600000). Leave blank to inherit agent default."
@@ -1692,12 +1700,12 @@ export function ProjectSettingsPage(): JSX.Element {
                     docHref="/docs/scripted-workflows-and-transition-helpers"
                     testId="proj-default-gate-timeout-help"
                   />
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                </div>
+                <div className="kb-gate-timeout-input-row">
                   <input
                     id="project-gate-timeout-input"
                     data-testid="project-default-gate-timeout-input"
-                    className="kb-input"
+                    className="kb-input kb-gate-timeout-input"
                     type="number"
                     min="1000"
                     max="600000"
@@ -1718,7 +1726,6 @@ export function ProjectSettingsPage(): JSX.Element {
                       }
                     }}
                     placeholder="Inherit agent default"
-                    style={{ flex: 1 }}
                   />
                   <button
                     type="button"
@@ -1729,7 +1736,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     Inherit
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                <div className="kb-gate-timeout-presets-row">
                   <button
                     type="button"
                     className="kb-btn kb-btn-secondary kb-btn-xs"
@@ -1876,55 +1883,92 @@ export function ProjectSettingsPage(): JSX.Element {
                 defaultOpen={false}
               >
                 <div className="kb-form-row kb-form-row-advanced">
-                  <label htmlFor="state-sort-order-input" className="kb-visually-hidden">
-                    Sort order
-                  </label>
-                  <input
-                    type="number"
-                    id="state-sort-order-input"
-                    aria-label="Sort order"
-                    data-testid="state-sort-order-input"
-                    className="kb-input"
-                    placeholder="Order (0)"
-                    value={stateSortOrder}
-                    onChange={(e) => { setStateSortOrder(e.target.value); }}
-                  />
-                  <label htmlFor="state-wip-soft-input" className="kb-visually-hidden">
-                    Soft WIP
-                  </label>
-                  <input
-                    type="number"
-                    id="state-wip-soft-input"
-                    aria-label="Soft WIP limit"
-                    aria-invalid={Boolean(wipLimitError)}
-                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
-                    data-testid="state-wip-soft-input"
-                    className="kb-input"
-                    placeholder="Soft WIP"
-                    value={stateWipSoft}
-                    onChange={(e) => {
-                      setStateWipSoft(e.target.value);
-                      setWipLimitError(null);
-                    }}
-                  />
-                  <label htmlFor="state-wip-hard-input" className="kb-visually-hidden">
-                    Hard WIP
-                  </label>
-                  <input
-                    type="number"
-                    id="state-wip-hard-input"
-                    aria-label="Hard WIP limit"
-                    aria-invalid={Boolean(wipLimitError)}
-                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
-                    data-testid="state-wip-hard-input"
-                    className="kb-input"
-                    placeholder="Hard WIP"
-                    value={stateWipHard}
-                    onChange={(e) => {
-                      setStateWipHard(e.target.value);
-                      setWipLimitError(null);
-                    }}
-                  />
+                  <div className="kb-state-field-group">
+                    <div className="kb-state-label-row">
+                      <label htmlFor="state-sort-order-input">
+                        Sort Order
+                      </label>
+                      <FieldHelpHint
+                        title="Sort Order"
+                        summary="Numeric sequence ordering determining column position on the Kanban board (lower numbers appear first)."
+                        defaultValue="0"
+                        docHref="/docs/studio-configuration-reference#workflow-states"
+                        testId="state-sort-order-help"
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      id="state-sort-order-input"
+                      aria-label="Sort order"
+                      data-testid="state-sort-order-input"
+                      className="kb-input"
+                      placeholder="Order (0)"
+                      value={stateSortOrder}
+                      onChange={(e) => { setStateSortOrder(e.target.value); }}
+                    />
+                  </div>
+
+                  <div className="kb-state-field-group">
+                    <div className="kb-state-label-row">
+                      <label htmlFor="state-wip-soft-input">
+                        Soft WIP Limit
+                      </label>
+                      <FieldHelpHint
+                        title="Soft WIP Limit"
+                        summary="Soft WIP limit provides a visual warning indicator when card concurrency exceeds the threshold without blocking issue transitions."
+                        defaultValue="0 (unconstrained / unlimited)"
+                        validValues={['0 for unlimited, or positive integer (e.g. 5)']}
+                        docHref="/docs/studio-configuration-reference#workflow-states"
+                        testId="state-wip-soft-help"
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      id="state-wip-soft-input"
+                      aria-label="Soft WIP limit"
+                      aria-invalid={Boolean(wipLimitError)}
+                      aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
+                      data-testid="state-wip-soft-input"
+                      className="kb-input"
+                      placeholder="Soft WIP (0 = unlimited)"
+                      value={stateWipSoft}
+                      onChange={(e) => {
+                        setStateWipSoft(e.target.value);
+                        setWipLimitError(null);
+                      }}
+                    />
+                  </div>
+
+                  <div className="kb-state-field-group">
+                    <div className="kb-state-label-row">
+                      <label htmlFor="state-wip-hard-input">
+                        Hard WIP Limit
+                      </label>
+                      <FieldHelpHint
+                        title="Hard WIP Limit"
+                        summary="Hard WIP limit enforces a strict concurrency gate that actively blocks transitions into this state once reached."
+                        defaultValue="0 (unconstrained / unlimited)"
+                        validValues={['0 for unlimited, or positive integer >= soft WIP limit']}
+                        docHref="/docs/studio-configuration-reference#workflow-states"
+                        testId="state-wip-hard-help"
+                      />
+                    </div>
+                    <input
+                      type="number"
+                      id="state-wip-hard-input"
+                      aria-label="Hard WIP limit"
+                      aria-invalid={Boolean(wipLimitError)}
+                      aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
+                      data-testid="state-wip-hard-input"
+                      className="kb-input"
+                      placeholder="Hard WIP (0 = unlimited)"
+                      value={stateWipHard}
+                      onChange={(e) => {
+                        setStateWipHard(e.target.value);
+                        setWipLimitError(null);
+                      }}
+                    />
+                  </div>
                 </div>
                 {wipLimitError && (
                   <div className="kb-error-text" role="alert" id="wip-limit-error" data-testid="wip-limit-error">
@@ -2889,7 +2933,7 @@ export function ProjectSettingsPage(): JSX.Element {
         {activeTab === 'ai-agents' && (
           <div className="kb-project-ai-agents-section" data-testid="project-ai-agents-section">
             <AiStudioPage projectId={project?.id} showSubnav={false} />
-            <div style={{ marginTop: '2rem' }}>
+            <div className="kb-project-agents-container">
               <AgentStudioPage projectId={project?.id} />
             </div>
           </div>

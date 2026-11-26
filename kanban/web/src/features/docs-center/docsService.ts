@@ -39,6 +39,7 @@ export function slugifyAnchor(text: string): string {
 const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   workspaces: 'workspace-studio',
   projects: 'project-studio-personal-settings',
+  'workflow-states': 'step-by-step-guide-setting-project-wip-limits-and-workflow-states',
   passkeys: 'webauthn-passkeys-and-totp-enrollment',
   'envelope-encryption-master-kek': 'envelope-encryption',
   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',

@@ -1,0 +1,558 @@
+diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+index c8960933..e1968348 100644
+--- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
++++ b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+@@ -1920,6 +1920,7 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
+         // UX Simplification Studio & Security Section Anchor Aliases
+         '/docs/studio-configuration-reference#workspaces',
+         '/docs/studio-configuration-reference#projects',
++        '/docs/studio-configuration-reference#workflow-states',
+         '/docs/multi-card-authentication-studio#passkeys',
+         '/docs/multi-card-authentication-studio#envelope-encryption-master-kek',
+         '/docs/production-promotion-and-backup-runbook#restore-procedure',
+diff --git a/kanban/web/src/features/docs-center/docsService.ts b/kanban/web/src/features/docs-center/docsService.ts
+index 5830fe64..71bdbb93 100644
+--- a/kanban/web/src/features/docs-center/docsService.ts
++++ b/kanban/web/src/features/docs-center/docsService.ts
+@@ -39,6 +39,7 @@ export function slugifyAnchor(text: string): string {
+ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
+   workspaces: 'workspace-studio',
+   projects: 'project-studio-personal-settings',
++  'workflow-states': 'step-by-step-guide-setting-project-wip-limits-and-workflow-states',
+   passkeys: 'webauthn-passkeys-and-totp-enrollment',
+   'envelope-encryption-master-kek': 'envelope-encryption',
+   'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index 4a961e42..aa8ab7fa 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -228,6 +228,71 @@
+   flex-wrap: wrap;
+ }
+ 
++.kb-form-row-advanced {
++  display: flex;
++  gap: 1rem;
++  align-items: flex-start;
++  flex-wrap: wrap;
++  width: 100%;
++}
++
++.kb-state-field-group {
++  display: flex;
++  flex-direction: column;
++  gap: 0.35rem;
++  flex: 1 1 140px;
++  min-width: 120px;
++}
++
++.kb-settings-label-row,
++.kb-state-label-row {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  margin: 0;
++}
++
++.kb-settings-label-row .field-help-hint,
++.kb-state-label-row .field-help-hint {
++  margin: 0;
++}
++
++.kb-settings-label-row label,
++.kb-settings-label-row .kb-label,
++.kb-state-label-row label,
++.kb-state-label-row .kb-label {
++  margin: 0;
++  font-size: 0.85rem;
++  font-weight: 600;
++  color: var(--kb-color-text-primary, var(--text-primary, #0f172a));
++  white-space: nowrap;
++}
++
++.kb-form-group-spaced {
++  margin-top: 1rem;
++}
++
++.kb-gate-timeout-input-row {
++  display: flex;
++  gap: 0.5rem;
++  align-items: center;
++  margin-bottom: 0.5rem;
++}
++
++.kb-gate-timeout-input {
++  flex: 1;
++}
++
++.kb-gate-timeout-presets-row {
++  display: flex;
++  gap: 0.25rem;
++  flex-wrap: wrap;
++}
++
++.kb-project-agents-container {
++  margin-top: 2rem;
++}
++
+ .kb-table-scroll-container,
+ .kb-members-table-wrapper,
+ .kb-group-members-table-wrapper {
+@@ -591,6 +656,17 @@
+     width: 100%;
+     box-sizing: border-box;
+   }
++
++  .kb-form-row-advanced {
++    flex-direction: column;
++    align-items: stretch;
++  }
++
++  .kb-state-field-group {
++    width: 100%;
++    min-width: 100%;
++    flex: 1 1 100%;
++  }
+ }
+ 
+ .kb-groups-list-sidebar {
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 25738c3b..e6663df5 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -1529,8 +1529,10 @@ export function ProjectSettingsPage(): JSX.Element {
+           <>
+             <form className="kb-settings-form" onSubmit={handleSaveGeneral}>
+             <div className="kb-form-group">
+-              <label htmlFor="proj-name-input">
+-                Project Name
++              <div className="kb-settings-label-row">
++                <label htmlFor="proj-name-input">
++                  Project Name
++                </label>
+                 <FieldHelpHint
+                   title="Project Name"
+                   summary="Human-readable project name displayed across project boards and navigation."
+@@ -1538,7 +1540,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                   docHref="/docs/ticket-screen-and-work-item-features"
+                   testId="proj-name-help"
+                 />
+-              </label>
++              </div>
+               <input
+                 id="proj-name-input"
+                 data-testid="project-name-input"
+@@ -1551,8 +1553,10 @@ export function ProjectSettingsPage(): JSX.Element {
+             </div>
+ 
+             <div className="kb-form-group">
+-              <label htmlFor="proj-desc-input">
+-                Description (Markdown)
++              <div className="kb-settings-label-row">
++                <label htmlFor="proj-desc-input">
++                  Description (Markdown)
++                </label>
+                 <FieldHelpHint
+                   title="Description"
+                   summary="Markdown-formatted project summary and scope guidelines."
+@@ -1560,7 +1564,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                   docHref="/docs/ticket-screen-and-work-item-features"
+                   testId="proj-desc-help"
+                 />
+-              </label>
++              </div>
+               <textarea
+                 id="proj-desc-input"
+                 data-testid="project-desc-input"
+@@ -1655,8 +1659,10 @@ export function ProjectSettingsPage(): JSX.Element {
+               </div>
+ 
+               <div className="kb-form-group">
+-                <label htmlFor="proj-auto-archive-input">
+-                  Auto-Archive Days (optional, Default: Off)
++                <div className="kb-settings-label-row">
++                  <label htmlFor="proj-auto-archive-input">
++                    Auto-Archive Days (optional, Default: Off)
++                  </label>
+                   <FieldHelpHint
+                     title="Auto-Archive Days"
+                     summary="Number of days after completion or cancellation before work items are automatically archived from active views."
+@@ -1666,7 +1672,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                     docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
+                     testId="proj-auto-archive-help"
+                   />
+-                </label>
++                </div>
+                 <input
+                   id="proj-auto-archive-input"
+                   data-testid="project-auto-archive-input"
+@@ -1680,9 +1686,11 @@ export function ProjectSettingsPage(): JSX.Element {
+                 />
+               </div>
+ 
+-              <div className="kb-form-group" style={{ marginTop: '1rem' }}>
+-                <label className="kb-form-label" htmlFor="project-gate-timeout-input">
+-                  Default Workflow Gate Timeout (ms)
++              <div className="kb-form-group kb-form-group-spaced">
++                <div className="kb-settings-label-row">
++                  <label className="kb-form-label" htmlFor="project-gate-timeout-input">
++                    Default Workflow Gate Timeout (ms)
++                  </label>
+                   <FieldHelpHint
+                     title="Default Workflow Gate Timeout"
+                     summary="Execution timeout in milliseconds for all workflow interceptor gates in this project (1000..600000). Leave blank to inherit agent default."
+@@ -1692,12 +1700,12 @@ export function ProjectSettingsPage(): JSX.Element {
+                     docHref="/docs/scripted-workflows-and-transition-helpers"
+                     testId="proj-default-gate-timeout-help"
+                   />
+-                </label>
+-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
++                </div>
++                <div className="kb-gate-timeout-input-row">
+                   <input
+                     id="project-gate-timeout-input"
+                     data-testid="project-default-gate-timeout-input"
+-                    className="kb-input"
++                    className="kb-input kb-gate-timeout-input"
+                     type="number"
+                     min="1000"
+                     max="600000"
+@@ -1718,7 +1726,6 @@ export function ProjectSettingsPage(): JSX.Element {
+                       }
+                     }}
+                     placeholder="Inherit agent default"
+-                    style={{ flex: 1 }}
+                   />
+                   <button
+                     type="button"
+@@ -1729,7 +1736,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                     Inherit
+                   </button>
+                 </div>
+-                <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
++                <div className="kb-gate-timeout-presets-row">
+                   <button
+                     type="button"
+                     className="kb-btn kb-btn-secondary kb-btn-xs"
+@@ -1876,55 +1883,92 @@ export function ProjectSettingsPage(): JSX.Element {
+                 defaultOpen={false}
+               >
+                 <div className="kb-form-row kb-form-row-advanced">
+-                  <label htmlFor="state-sort-order-input" className="kb-visually-hidden">
+-                    Sort order
+-                  </label>
+-                  <input
+-                    type="number"
+-                    id="state-sort-order-input"
+-                    aria-label="Sort order"
+-                    data-testid="state-sort-order-input"
+-                    className="kb-input"
+-                    placeholder="Order (0)"
+-                    value={stateSortOrder}
+-                    onChange={(e) => { setStateSortOrder(e.target.value); }}
+-                  />
+-                  <label htmlFor="state-wip-soft-input" className="kb-visually-hidden">
+-                    Soft WIP
+-                  </label>
+-                  <input
+-                    type="number"
+-                    id="state-wip-soft-input"
+-                    aria-label="Soft WIP limit"
+-                    aria-invalid={Boolean(wipLimitError)}
+-                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
+-                    data-testid="state-wip-soft-input"
+-                    className="kb-input"
+-                    placeholder="Soft WIP"
+-                    value={stateWipSoft}
+-                    onChange={(e) => {
+-                      setStateWipSoft(e.target.value);
+-                      setWipLimitError(null);
+-                    }}
+-                  />
+-                  <label htmlFor="state-wip-hard-input" className="kb-visually-hidden">
+-                    Hard WIP
+-                  </label>
+-                  <input
+-                    type="number"
+-                    id="state-wip-hard-input"
+-                    aria-label="Hard WIP limit"
+-                    aria-invalid={Boolean(wipLimitError)}
+-                    aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
+-                    data-testid="state-wip-hard-input"
+-                    className="kb-input"
+-                    placeholder="Hard WIP"
+-                    value={stateWipHard}
+-                    onChange={(e) => {
+-                      setStateWipHard(e.target.value);
+-                      setWipLimitError(null);
+-                    }}
+-                  />
++                  <div className="kb-state-field-group">
++                    <div className="kb-state-label-row">
++                      <label htmlFor="state-sort-order-input">
++                        Sort Order
++                      </label>
++                      <FieldHelpHint
++                        title="Sort Order"
++                        summary="Numeric sequence ordering determining column position on the Kanban board (lower numbers appear first)."
++                        defaultValue="0"
++                        docHref="/docs/studio-configuration-reference#workflow-states"
++                        testId="state-sort-order-help"
++                      />
++                    </div>
++                    <input
++                      type="number"
++                      id="state-sort-order-input"
++                      aria-label="Sort order"
++                      data-testid="state-sort-order-input"
++                      className="kb-input"
++                      placeholder="Order (0)"
++                      value={stateSortOrder}
++                      onChange={(e) => { setStateSortOrder(e.target.value); }}
++                    />
++                  </div>
++
++                  <div className="kb-state-field-group">
++                    <div className="kb-state-label-row">
++                      <label htmlFor="state-wip-soft-input">
++                        Soft WIP Limit
++                      </label>
++                      <FieldHelpHint
++                        title="Soft WIP Limit"
++                        summary="Soft WIP limit provides a visual warning indicator when card concurrency exceeds the threshold without blocking issue transitions."
++                        defaultValue="0 (unconstrained / unlimited)"
++                        validValues={['0 for unlimited, or positive integer (e.g. 5)']}
++                        docHref="/docs/studio-configuration-reference#workflow-states"
++                        testId="state-wip-soft-help"
++                      />
++                    </div>
++                    <input
++                      type="number"
++                      id="state-wip-soft-input"
++                      aria-label="Soft WIP limit"
++                      aria-invalid={Boolean(wipLimitError)}
++                      aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
++                      data-testid="state-wip-soft-input"
++                      className="kb-input"
++                      placeholder="Soft WIP (0 = unlimited)"
++                      value={stateWipSoft}
++                      onChange={(e) => {
++                        setStateWipSoft(e.target.value);
++                        setWipLimitError(null);
++                      }}
++                    />
++                  </div>
++
++                  <div className="kb-state-field-group">
++                    <div className="kb-state-label-row">
++                      <label htmlFor="state-wip-hard-input">
++                        Hard WIP Limit
++                      </label>
++                      <FieldHelpHint
++                        title="Hard WIP Limit"
++                        summary="Hard WIP limit enforces a strict concurrency gate that actively blocks transitions into this state once reached."
++                        defaultValue="0 (unconstrained / unlimited)"
++                        validValues={['0 for unlimited, or positive integer >= soft WIP limit']}
++                        docHref="/docs/studio-configuration-reference#workflow-states"
++                        testId="state-wip-hard-help"
++                      />
++                    </div>
++                    <input
++                      type="number"
++                      id="state-wip-hard-input"
++                      aria-label="Hard WIP limit"
++                      aria-invalid={Boolean(wipLimitError)}
++                      aria-describedby={wipLimitError ? 'wip-limit-error' : undefined}
++                      data-testid="state-wip-hard-input"
++                      className="kb-input"
++                      placeholder="Hard WIP (0 = unlimited)"
++                      value={stateWipHard}
++                      onChange={(e) => {
++                        setStateWipHard(e.target.value);
++                        setWipLimitError(null);
++                      }}
++                    />
++                  </div>
+                 </div>
+                 {wipLimitError && (
+                   <div className="kb-error-text" role="alert" id="wip-limit-error" data-testid="wip-limit-error">
+@@ -2889,7 +2933,7 @@ export function ProjectSettingsPage(): JSX.Element {
+         {activeTab === 'ai-agents' && (
+           <div className="kb-project-ai-agents-section" data-testid="project-ai-agents-section">
+             <AiStudioPage projectId={project?.id} showSubnav={false} />
+-            <div style={{ marginTop: '2rem' }}>
++            <div className="kb-project-agents-container">
+               <AgentStudioPage projectId={project?.id} />
+             </div>
+           </div>
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index b30dd21f..fdaf54e0 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -3827,5 +3827,154 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       fireEvent.change(wipHardInput, { target: { value: '10' } });
+       expect((sortInput as HTMLInputElement).value).toBe('25');
+     });
++
++    it('renders unhidden FieldHelpHints for Sort Order, Soft WIP, and Hard WIP as adjacent label siblings (KAN-504)', async () => {
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        const url = path;
++        if (url.includes('/api/v1/auth/me')) {
++          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
++        }
++        if (url.includes('/api/v1/projects/KAN/states')) {
++          return [{ id: 'st-1', name: 'Backlog', key: 'backlog', category: 'BACKLOG', sort_order: 10 }];
++        }
++        if (url.includes('/api/v1/projects/KAN/cycles')) return [];
++        if (url.includes('/api/v1/projects/KAN/modules')) return [];
++        if (url.includes('/api/v1/projects/KAN/labels')) return [];
++        if (url.includes('/api/v1/projects/KAN/members')) return [];
++        if (url.includes('/api/v1/projects/KAN')) {
++          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
++        }
++        return {};
++      });
++
++      renderComponent('KAN');
++      fireEvent.click(await screen.findByTestId('tab-states'));
++
++      // Toggle open the Add Workflow State advanced section
++      const advToggle = await screen.findByTestId('state-advanced-section-toggle');
++      fireEvent.click(advToggle);
++
++      // Verify unhidden labels and FieldHelpHints are adjacent siblings inside .kb-state-label-row
++      const sortHelp = await screen.findByTestId('state-sort-order-help');
++      const softHelp = await screen.findByTestId('state-wip-soft-help');
++      const hardHelp = await screen.findByTestId('state-wip-hard-help');
++
++      expect(sortHelp).toBeDefined();
++      expect(softHelp).toBeDefined();
++      expect(hardHelp).toBeDefined();
++
++      // Ensure FieldHelpHint buttons are not nested inside label elements (HTML A11y invariant)
++      expect(sortHelp.closest('label')).toBeNull();
++      expect(softHelp.closest('label')).toBeNull();
++      expect(hardHelp.closest('label')).toBeNull();
++
++      // Verify parent container is .kb-state-label-row
++      expect(sortHelp.closest('.kb-state-label-row')).not.toBeNull();
++      expect(softHelp.closest('.kb-state-label-row')).not.toBeNull();
++      expect(hardHelp.closest('.kb-state-label-row')).not.toBeNull();
++
++      // Open Soft WIP Help popover
++      fireEvent.focus(softHelp);
++      const softPopover = await screen.findByTestId('state-wip-soft-help-popover');
++      expect(softPopover.textContent).toContain('Soft WIP Limit');
++      expect(softPopover.textContent).toContain('visual warning');
++      expect(softPopover.textContent).toContain('0 (unconstrained / unlimited)');
++      fireEvent.blur(softHelp);
++
++      // Open Hard WIP Help popover
++      fireEvent.focus(hardHelp);
++      const hardPopover = await screen.findByTestId('state-wip-hard-help-popover');
++      expect(hardPopover.textContent).toContain('Hard WIP Limit');
++      expect(hardPopover.textContent).toContain('blocks transitions');
++      expect(hardPopover.textContent).toContain('0 (unconstrained / unlimited)');
++      fireEvent.blur(hardHelp);
++
++      // Open Sort Order Help popover
++      fireEvent.focus(sortHelp);
++      const sortPopover = await screen.findByTestId('state-sort-order-help-popover');
++      expect(sortPopover.textContent).toContain('Sort Order');
++      expect(sortPopover.textContent).toContain('0');
++      fireEvent.blur(sortHelp);
++    });
++
++    it('covers default workflow gate timeout boundaries and presets', async () => {
++      let patchPayload: Record<string, unknown> | null = null;
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
++        await Promise.resolve();
++        const url = path;
++        const m = method.toUpperCase();
++        if (url.includes('/api/v1/auth/me')) {
++          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
++        }
++        if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
++          const bodyStr = (options as { body?: string }).body;
++          patchPayload = bodyStr ? (JSON.parse(bodyStr) as Record<string, unknown>) : null;
++          return { id: 'p1', identifier: 'KAN', name: 'My Project', is_project_admin: true };
++        }
++        if (url.includes('/api/v1/projects/KAN')) {
++          return {
++            id: 'p1',
++            identifier: 'KAN',
++            name: 'My Project',
++            is_project_admin: true,
++            default_gate_timeout_ms: 120000,
++          };
++        }
++        return {};
++      });
++
++      renderComponent('KAN');
++      fireEvent.click(await screen.findByTestId('project-general-advanced-section-toggle'));
++
++      const timeoutInput = await screen.findByTestId('project-default-gate-timeout-input');
++      expect(timeoutInput).toBeDefined();
++
++      // Test preset button: 60s
++      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-60s'));
++      expect((timeoutInput as HTMLInputElement).value).toBe('60000');
++
++      // Test preset button: 3m
++      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-3m'));
++      expect((timeoutInput as HTMLInputElement).value).toBe('180000');
++
++      // Test preset button: 5m
++      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-5m'));
++      expect((timeoutInput as HTMLInputElement).value).toBe('300000');
++
++      // Test preset button: 10m
++      fireEvent.click(screen.getByTestId('project-gate-timeout-preset-10m'));
++      expect((timeoutInput as HTMLInputElement).value).toBe('600000');
++
++      // Test clear/inherit button
++      fireEvent.click(screen.getByTestId('project-gate-timeout-clear-btn'));
++      expect((timeoutInput as HTMLInputElement).value).toBe('');
++
++      // Test invalid timeout < 1000 triggers inline error and blocks save in handleSaveGeneral
++      fireEvent.change(timeoutInput, { target: { value: '500' } });
++      expect(await screen.findByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeDefined();
++      fireEvent.click(screen.getByTestId('save-general-btn'));
++      expect(patchPayload).toBeNull();
++
++      // Test clearing invalid input via onChange clears the error (hits line 1725)
++      fireEvent.change(timeoutInput, { target: { value: '' } });
++      await waitFor(() => {
++        expect(screen.queryByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeNull();
++      });
++
++      // Test invalid timeout > 600000
++      fireEvent.change(timeoutInput, { target: { value: '700000' } });
++      expect(await screen.findByText('Default gate timeout must be between 1,000 and 600,000 ms (up to 10 minutes).')).toBeDefined();
++      fireEvent.click(screen.getByTestId('save-general-btn'));
++      expect(patchPayload).toBeNull();
++
++      // Fix timeout and save
++      fireEvent.change(timeoutInput, { target: { value: '60000' } });
++      fireEvent.click(screen.getByTestId('save-general-btn'));
++      await waitFor(() => {
++        expect(patchPayload).not.toBeNull();
++      });
++      expect((patchPayload as Record<string, unknown> | null)?.default_gate_timeout_ms).toBe(60000);
++    });
+   });
+ });
+diff --git a/scripts/check_docs_taxonomy.py b/scripts/check_docs_taxonomy.py
+index bfc86864..09f40738 100644
+--- a/scripts/check_docs_taxonomy.py
++++ b/scripts/check_docs_taxonomy.py
+@@ -221,6 +221,7 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
+             {
+                 "workspaces",
+                 "projects",
++                "workflow-states",
+             }
+         )
+     if "production-promotion-and-backup-runbook" in chapter_anchors:

@@ -221,6 +221,7 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
             {
                 "workspaces",
                 "projects",
+                "workflow-states",
             }
         )
     if "production-promotion-and-backup-runbook" in chapter_anchors:
