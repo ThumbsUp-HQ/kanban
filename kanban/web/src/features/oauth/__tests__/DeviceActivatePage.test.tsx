@@ -5,8 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
+import fs from 'node:fs';
+import path from 'node:path';
 import { DeviceActivatePage, formatUserCodeInput } from '../DeviceActivatePage';
 import * as oauthApi from '../oauthApi';
+import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
 
 describe('DeviceActivatePage (KB-P4-16)', () => {
   beforeEach(() => {
@@ -692,5 +695,123 @@ describe('DeviceActivatePage (KB-P4-16)', () => {
     });
 
     vi.unstubAllGlobals();
+  });
+
+  describe('StudioDocLink Header Integration (KAN-456)', () => {
+    it('renders device-activate-doc-link with correct href and title in header across Light and Dark themes', () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <MemoryRouter initialEntries={['/activate']}>
+            <DeviceActivatePage />
+          </MemoryRouter>,
+        );
+
+        const docLink = screen.getByTestId('device-activate-doc-link');
+        expect(docLink).toBeDefined();
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/studio-configuration-reference#rfc-8628-activate-device-flow-and-bulk-purge',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe('RFC 8628 Device Flow Documentation');
+        expect(docLink.textContent).toContain('Documentation ->');
+
+        const headerTop = docLink.closest('.kb-device-activate-header-top');
+        expect(headerTop).not.toBeNull();
+        expect(headerTop?.querySelector('h1')?.textContent).toBe('Connect CLI Device');
+
+        unmount();
+      }
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('supports keyboard focus and proper anchor semantics', () => {
+      render(
+        <MemoryRouter initialEntries={['/activate']}>
+          <DeviceActivatePage />
+        </MemoryRouter>,
+      );
+
+      const docLink = screen.getByTestId<HTMLAnchorElement>('device-activate-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+      expect(docLink.tagName).toBe('A');
+    });
+
+    it('opens in-app help panel when wrapped in ShellPanelsProvider and clicked', () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-panel">
+          Help Drawer for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <MemoryRouter initialEntries={['/activate']}>
+              <DeviceActivatePage />
+            </MemoryRouter>
+          </ShellPanelsProvider>,
+        );
+
+        const docLink = screen.getByTestId('device-activate-doc-link');
+        fireEvent.click(docLink);
+
+        const helpPanel = screen.getByTestId('in-app-help-panel');
+        expect(helpPanel).toBeDefined();
+        expect(helpPanel.textContent).toContain(
+          '/docs/studio-configuration-reference#rfc-8628-activate-device-flow-and-bulk-purge',
+        );
+      } finally {
+        unregister();
+      }
+    });
+
+    it('enforces white-space: nowrap and responsive wrapping in DeviceActivatePage.css', () => {
+      const cssPath = path.resolve(__dirname, '../DeviceActivatePage.css');
+      const css = fs.readFileSync(cssPath, 'utf8');
+
+      // .kb-device-activate-doc-link must enforce white-space: nowrap
+      expect(css).toMatch(/\.kb-device-activate-doc-link\s*\{[^}]*white-space:\s*nowrap;/);
+
+      // .kb-device-activate-header-top must use flex layout with space-between
+      expect(css).toMatch(/\.kb-device-activate-header-top\s*\{[^}]*display:\s*flex;/);
+      expect(css).toMatch(/\.kb-device-activate-header-top\s*\{[^}]*justify-content:\s*space-between;/);
+
+      // Mobile media query must stack header-top with column direction
+      expect(css).toMatch(/@media\s*\(max-width:\s*480px\)\s*\{[\s\S]*?\.kb-device-activate-header-top\s*\{[^}]*flex-direction:\s*column;/);
+    });
+
+    it('validates WCAG AA contrast for badge-fg against light and dark surfaces', () => {
+      const themeCssPath = path.resolve(__dirname, '../../../styles/theme.css');
+      const themeCss = fs.readFileSync(themeCssPath, 'utf8');
+
+      // Light theme: --badge-fg: #2563eb; Dark theme: --badge-fg: #93c5fd;
+      expect(themeCss).toContain('--badge-fg: #2563eb;');
+      expect(themeCss).toContain('--badge-fg: #93c5fd;');
+
+      // Luminance & contrast check:
+      // #2563eb on #ffffff (Light): 5.17:1 >= 4.5:1
+      // #93c5fd on #0d1117 (Dark): 8.74:1 >= 4.5:1
+      const calcLuminance = (r: number, g: number, b: number): number => {
+        const [rs, gs, bs] = [r, g, b].map((c) => {
+          const val = c / 255;
+          return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * (rs ?? 0) + 0.7152 * (gs ?? 0) + 0.0722 * (bs ?? 0);
+      };
+      const contrastRatio = (l1: number, l2: number): number => {
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+
+      const lumWhite = calcLuminance(255, 255, 255);
+      const lumDarkBg = calcLuminance(13, 17, 23);
+      const lumBlueLight = calcLuminance(37, 99, 235); // #2563eb
+      const lumBlueDark = calcLuminance(147, 197, 253); // #93c5fd
+
+      expect(contrastRatio(lumWhite, lumBlueLight)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(lumDarkBg, lumBlueDark)).toBeGreaterThanOrEqual(4.5);
+    });
   });
 });
