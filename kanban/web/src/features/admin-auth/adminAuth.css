@@ -433,7 +433,7 @@
   width: min(640px, 100vw);
   height: 100vh;
   background: var(--bg-surface);
-  padding: var(--prose-pad, 32px 40px);
+  padding: 32px 40px 0;
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
@@ -961,13 +961,13 @@
     bottom: 0;
     background: var(--bg-surface);
     border-top: 1px solid var(--border-subtle);
-    padding: var(--space-3, 12px) 0;
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 10;
   }
 
   .auth-editor-drawer {
     width: 100vw;
-    padding: var(--space-6, 24px) var(--space-5, 20px);
+    padding: var(--space-6, 24px) var(--space-5, 20px) 0;
   }
 
   .auth-editor-prop-row {
