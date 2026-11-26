@@ -19,6 +19,8 @@ import {
   generateReport,
   type ReportTemplate,
 } from './reportsApi';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { ReportTemplateStudioModal } from './ReportTemplateStudioModal';
 import './reports.css';
 
@@ -239,15 +241,22 @@ export function ReportExportModal({
             <h2 id="report-export-title" className="reports-modal-title">
               <span>📄</span> Export Report
             </h2>
-            <button
-              type="button"
-              className="reports-modal-close-btn"
-              data-testid="report-export-close-btn"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <div className="reports-modal-header-actions">
+              <StudioDocLink
+                href="/docs/studio-configuration-reference"
+                label="Reports Documentation ->"
+                testId="report-export-doc-link"
+              />
+              <button
+                type="button"
+                className="reports-modal-close-btn"
+                data-testid="report-export-close-btn"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <div className="reports-modal-body">
@@ -336,18 +345,28 @@ export function ReportExportModal({
 
             {/* AES-256 ZIP Password Toggle */}
             <div className="reports-encryption-box">
-              <label className="reports-checkbox-row">
-                <input
-                  type="checkbox"
-                  data-testid="reports-zip-toggle"
-                  className="reports-checkbox"
-                  checked={isZipEncrypted}
-                  onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
+              <div className="reports-checkbox-row-wrapper">
+                <label className="reports-checkbox-row" htmlFor="reports-zip-toggle">
+                  <input
+                    id="reports-zip-toggle"
+                    type="checkbox"
+                    data-testid="reports-zip-toggle"
+                    className="reports-checkbox"
+                    checked={isZipEncrypted}
+                    onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
+                  />
+                  <span className="reports-checkbox-label">
+                    🔒 Encrypt report in AES-256 password-protected ZIP archive
+                  </span>
+                </label>
+                <FieldHelpHint
+                  title="Report Encryption"
+                  summary="Encrypts generated report artifacts inside an AES-256 password-protected ZIP archive."
+                  defaultValue="Disabled"
+                  docHref="/docs/studio-configuration-reference"
+                  testId="report-encryption-help-hint"
                 />
-                <span className="reports-checkbox-label">
-                  🔒 Encrypt report in AES-256 password-protected ZIP archive
-                </span>
-              </label>
+              </div>
 
               {isZipEncrypted && (
                 <div className="reports-form-group">

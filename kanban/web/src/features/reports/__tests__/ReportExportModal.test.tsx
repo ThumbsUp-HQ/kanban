@@ -731,4 +731,93 @@ describe('ReportExportModal', () => {
       expect(select.getAttribute('style')).toBeNull();
     });
   });
+
+  describe('KAN-466: StudioDocLink and FieldHelpHint integration', () => {
+    it('renders report-export-doc-link with correct href and label in header', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-export-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('report-export-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/studio-configuration-reference');
+      expect(docLink.textContent).toContain('Reports Documentation ->');
+    });
+
+    it('renders report-encryption-help-hint adjacent to AES-256 checkbox and satisfies HTML 4.10.4', async () => {
+      const { container } = render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-encryption-help-hint')).toBeDefined();
+      });
+
+      const hintTrigger = screen.getByTestId('report-encryption-help-hint');
+      expect(hintTrigger).toBeDefined();
+
+      // HTML 4.10.4: NEVER nest <FieldHelpHint> inside <label>!
+      const nestedTriggers = container.querySelectorAll('label button.field-help-hint, label .kb-field-help-trigger');
+      expect(nestedTriggers.length).toBe(0);
+
+      // Verify hint is a sibling to the checkbox row inside wrapper
+      const wrapper = hintTrigger.closest('.reports-checkbox-row-wrapper');
+      expect(wrapper).not.toBeNull();
+      const label = wrapper?.querySelector('label.reports-checkbox-row');
+      expect(label).not.toBeNull();
+      expect(label?.contains(hintTrigger)).toBe(false);
+    });
+
+    it('falls back to items[0] when security-assessment-report is not in templates and covers empty param fallback', async () => {
+      const customTemplates: reportsApi.ReportTemplate[] = [
+        {
+          id: 'tpl-custom-1',
+          workspace_id: 'ws-1',
+          slug: 'custom-only-report',
+          name: 'Custom Only Report',
+          is_builtin: false,
+          template_markdown: '# Custom Report',
+          parameters_schema_json: [
+            {
+              name: 'notes',
+              label: 'Audit Notes',
+              type: 'textarea',
+            },
+          ],
+          csv_columns_json: [],
+          allowed_formats: ['PDF'],
+          created_at: '2026-11-22T00:00:00Z',
+          updated_at: '2026-11-22T00:00:00Z',
+        },
+      ];
+      vi.spyOn(reportsApi, 'fetchReportTemplates').mockResolvedValueOnce(customTemplates);
+
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-param-input-notes')).toBeDefined();
+      });
+      const textarea = screen.getByTestId<HTMLTextAreaElement>('report-param-input-notes');
+      expect(textarea.value).toBe('');
+    });
+  });
 });
