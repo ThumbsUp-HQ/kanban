@@ -4,7 +4,7 @@
 **Target Ticket:** `KAN-413` (`[SLICE-2-P3][KB-AI-WORKOUT] Phase 3: Live Gemini/Ollama AI Provider, Autonomous Agent & mTLS Runner Workout + Screenshots`)  
 **Parent Epic:** `KAN-410` (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`)  
 **Target Documentation Ticket:** `KAN-414` (`[SLICE-2-P4][KB-AI-DOCS]`)  
-**Branch:** `feat/KAN-413-slice2-ai-workout` (base `1bbc9981`, implementation commit `3868cbb6`, specialist re-stamps `62882e42` and `066022ea`)  
+**Branch:** `feat/KAN-413-slice2-ai-workout` (base `1bbc9981`, implementation commit `fa3ea25d`, specialist re-stamps `9f6d3b6d` and `1fe908fa`)  
 **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
 **Status:** **READY FOR REALITY-CHECKER AUDIT**  
 **Pre-Prod Safety Invariant:** Absolute zero mutations on protected pre-production (`192.168.1.101` / `k.hackedyour.info` / `inferrence1`). All live workouts executed hermetically against isolated local PostgreSQL container `kan413-pg-test-1`, companion fixture `127.0.0.1:11435`, and dedicated local Kanban server `127.0.0.1:18413`.
@@ -43,8 +43,8 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
 ### Dark-Mode Theme Contrast & Mobile Pill Nowrap
 - **Fix:** Added `--border-color: #374151; --text-primary: #f9fafb; --text-secondary: #d1d5db;` inside `theme.css` under `@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { ... } }`, plus matching dark styles in `StudioDocLink.css`, `aiStudio.css`, `agentStudio.css`, `runnerStudio.css`. Ensured web dist rebuild occurred prior to screenshot capture. Verified priority pill `#1 (Priority 10)` renders on 1 single line in `slice2-ai-studio-390x844-mobile-portrait.png`.
 
-### Sparkle Provider Routing & Budget Cap Halting
-- **Fix:** Wired `ProviderRouter` and route candidate pointing to companion `127.0.0.1:11435`. Live `POST /api/v1/sparkle/complete` streams real `event: completion` + `event: done` (`status: "ok"`). Verified Sparkle completion under `token_cap=0` and exhausted monthly cap (`tokens_used >= token_cap`) halts cleanly with `event: done` `status: "budget"` and no completion chunks in `workout-transcript.txt`.
+### Sparkle Provider Routing & Budget Cap Halting (`agent/sparkle/pipeline.py`)
+- **Fix:** Wired `ProviderRouter` and route candidate pointing to companion `127.0.0.1:11435`. Resolved candidate provider configuration ID against DB by (1) config ID, (2) candidate provider kind (`ollama`, `openai`, `gemini`), and (3) highest-priority enabled provider in DB. Wrapped Step 4 in fail-closed error handling returning `status: "budget"` on unexpected DB exceptions. Added 18 unit tests in `agent/tests/test_sparkle_pipeline.py` achieving 97% coverage on `agent/sparkle/pipeline.py`. Live `POST /api/v1/sparkle/complete` streams real `event: completion` + `event: done` (`status: "ok"`). Verified Sparkle completion under `token_cap=0` and exhausted monthly cap (`tokens_used >= token_cap`) halts cleanly with `event: done` `status: "budget"` and no completion chunks in `workout-transcript.txt`.
 
 ### Scrubber Hardening & Verbatim Report Parity
 - **Fix:** Added `rnr_enroll` (`kb_rnr_enroll_*`) to `_RE_KANBAN_KEY` in `kanban/security/scrubber.py`. Redacted CSRF tokens, `sk-*`, and `AIza*` in workout runner transcript. Copied 100% verbatim HTTP blocks into `03-live-workout-report.md`. Clean container & port teardown verified (`docker ps -a` shows 0 containers).
@@ -54,22 +54,22 @@ Phase 3 executes comprehensive end-to-end verification, in-flight bug fixes, zer
 ## 3. Automated Test Verification & Static Quality Gates
 
 1. **Backend Unit Tests (Pytest):**
-   - Command: `PYTHONPATH=. uv run coverage run -m pytest kanban/tests/api/admin/test_ai_providers_api.py kanban/tests/ai_config/test_net_guard.py kanban/tests/agents/test_agent_definitions_api.py kanban/tests/api/test_llms_txt.py agent/tests/test_remote_runner.py kanban/tests/security/test_scrubber.py -v`
-   - Result: **76 passed in 38.39s**, 0 warnings, **97% overall coverage** across touched modules (`agent/remote_runner/cli.py` 96%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
+   - Command: `KB_TEST_PGHOST=/tmp/kb-pgsock-kan413 PYTHONPATH=. uv run coverage run -m pytest kanban/tests/api/admin/test_ai_providers_api.py kanban/tests/ai_config/test_net_guard.py kanban/tests/agents/test_agent_definitions_api.py kanban/tests/api/test_llms_txt.py agent/tests/test_remote_runner.py kanban/tests/security/test_scrubber.py agent/tests/test_sparkle_pipeline.py agent/tests/sparkle/test_pipeline.py -v`
+   - Result: **105 passed in 37.69s**, 0 warnings, **97% overall coverage** across touched modules (`agent/remote_runner/cli.py` 96%, `agent/sparkle/pipeline.py` 97%, `kanban/agents/service.py` 97%, `kanban/ops/llms_txt.py` 100%, `kanban/security/scrubber.py` 95%).
    - Verbatim scrubbed logs: `docs/qa/KAN-413/unit-test-results.txt`.
 
 2. **Frontend Unit Tests (Vitest):**
    - Command: `(cd kanban/web && COVERAGE_INCLUDE="src/features/admin-ai/**,src/features/admin-agents/**,src/features/admin-runners/**" npx vitest run src/features/admin-ai/__tests__/AiStudioPage.test.tsx src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx src/features/admin-ai/__tests__/aiAdminApi.test.ts src/features/admin-agents/__tests__/AgentStudioPage.test.tsx src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx --coverage --coverage.thresholds.branches=95)`
-   - Result: **165 passed across 6 test files in 4.41s**, 0 `act(...)` warnings, **96.60% branch coverage** with complete V8 branch coverage table (all files >= 95.48%).
+   - Result: **165 passed across 6 test files in 4.55s**, 0 `act(...)` warnings, **96.60% branch coverage** with complete V8 branch coverage table (all files >= 95.48%).
    - Verbatim scrubbed logs: `docs/qa/KAN-413/unit-test-results.txt`.
 
 3. **Static Build Gates:**
    - Ruff lint: `uv run --no-sync ruff check kanban/ agent/` -> **All checks passed!**
-   - Mypy typecheck: `uv run --no-sync mypy kanban/ agent/` -> **Success: no issues found in 815 source files**
+   - Mypy typecheck: `uv run --no-sync mypy kanban/ agent/` -> **Success: no issues found in 816 source files**
    - Dash check: `python3 scripts/check_no_dashes.py --all` -> **0 violations**
    - Frontend TypeScript: `pnpm --dir kanban/web typecheck` -> **0 errors**
    - Frontend ESLint: `pnpm --dir kanban/web lint` -> **0 warnings**
-   - Frontend Production Build: `pnpm --dir kanban/web build` -> **Built in 1.23s**
+   - Frontend Production Build: `pnpm --dir kanban/web build` -> **Built in 1.26s**
    - Verbatim scrubbed logs: `docs/qa/KAN-413/build-check.txt`.
 
 ---
