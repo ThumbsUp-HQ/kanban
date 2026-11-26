@@ -779,12 +779,14 @@ async def test_draft_handshake_ldap_and_google_json() -> None:
             "issuer": "https://accounts.google.com",
             "client_id": "google-client-id",
         },
-        google_oauth_json=json.dumps({
-            "web": {
-                "client_id": "google-client-id",
-                "client_secret": "web-extracted-secret",
+        google_oauth_json=json.dumps(
+            {
+                "web": {
+                    "client_id": "google-client-id",
+                    "client_secret": "web-extracted-secret",
+                }
             }
-        }),
+        ),
     )
     with patch(
         "kanban.auth.cards.service.probe_auth_card_handshake",
@@ -813,12 +815,14 @@ async def test_draft_handshake_ldap_and_google_json() -> None:
             "token_endpoint": "https://oauth2.googleapis.com/token",
             "client_id": "google-client-id-inst",
         },
-        google_oauth_json=json.dumps({
-            "installed": {
-                "client_id": "google-client-id-inst",
-                "client_secret": "installed-extracted-secret",
+        google_oauth_json=json.dumps(
+            {
+                "installed": {
+                    "client_id": "google-client-id-inst",
+                    "client_secret": "installed-extracted-secret",
+                }
             }
-        }),
+        ),
     )
     with patch(
         "kanban.auth.cards.service.probe_auth_card_handshake",
@@ -923,13 +927,15 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
     service = AuthCardAdminService(kek_provider=kek)
     admin_ctx = RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=2)
 
-    google_json = json.dumps({
-        "web": {
-            "client_id": "1234567890-test.apps.googleusercontent.com",
-            "client_secret": "GOCSPX-testsecret12345",
-            "redirect_uris": ["https://kanban.example.com/api/v1/auth/oidc/google/callback"],
+    google_json = json.dumps(
+        {
+            "web": {
+                "client_id": "1234567890-test.apps.googleusercontent.com",
+                "client_secret": "GOCSPX-testsecret12345",
+                "redirect_uris": ["https://kanban.example.com/api/v1/auth/oidc/google/callback"],
+            }
         }
-    })
+    )
 
     async with factory.session(admin_ctx) as sess:
         # 1. create_card with plaintext LDAP secret
@@ -947,7 +953,9 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
             },
             secret="plaintext-password",
         )
-        created_ldap = await service.create_card(sess, ldap_data, actor_id=admin_id, workspace_id=ws_id)
+        created_ldap = await service.create_card(
+            sess, ldap_data, actor_id=admin_id, workspace_id=ws_id
+        )
         assert created_ldap.has_secret is True
 
         # 2. create_card with google_oauth_json and sort_rank=None (tests rank ending with 0 branch)
@@ -958,7 +966,9 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
             public_config={},
             google_oauth_json=google_json,
         )
-        created_g = await service.create_card(sess, create_google, actor_id=admin_id, workspace_id=ws_id)
+        created_g = await service.create_card(
+            sess, create_google, actor_id=admin_id, workspace_id=ws_id
+        )
         assert created_g.provider_kind == "OIDC"
         assert created_g.has_secret is True
 
@@ -970,7 +980,9 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
             public_config={},
             google_oauth_json=google_json,
         )
-        created_same = await service.create_card(sess, create_same_slug, actor_id=admin_id, workspace_id=ws_id)
+        created_same = await service.create_card(
+            sess, create_same_slug, actor_id=admin_id, workspace_id=ws_id
+        )
         assert created_same.slug == "google-created-card"
 
         # 3. update_card with valid LDAP config (line 357-360)
@@ -982,14 +994,21 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
                 "base_dn": "dc=example,dc=com",
             }
         )
-        updated_ldap = await service.update_card(sess, created_ldap.id, up_valid_ldap, actor_id=admin_id)
+        updated_ldap = await service.update_card(
+            sess, created_ldap.id, up_valid_ldap, actor_id=admin_id
+        )
         assert updated_ldap.public_config.get("url") == "ldaps://ldap2.example.com:636"
 
         # update_card with google_oauth_json and clean public_config
         up_google = AuthCardUpdate(public_config={}, google_oauth_json=google_json)
-        updated_google = await service.update_card(sess, created_ldap.id, up_google, actor_id=admin_id)
+        updated_google = await service.update_card(
+            sess, created_ldap.id, up_google, actor_id=admin_id
+        )
         assert updated_google.provider_kind == "OIDC"
-        assert updated_google.public_config.get("client_id") == "1234567890-test.apps.googleusercontent.com"
+        assert (
+            updated_google.public_config.get("client_id")
+            == "1234567890-test.apps.googleusercontent.com"
+        )
 
         # 4. update_card disabling sole LOCAL_ADMIN -> LockoutPreventedError (lines 417-424)
         local_admin_card = await service.create_card(
@@ -1010,7 +1029,9 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
             )
 
         # 4. update_card with invalid email domains (> 50) using model_construct to test service-level check
-        up_bad_domains = AuthCardUpdate.model_construct(allowed_email_domains=[f"d{i}.com" for i in range(55)])
+        up_bad_domains = AuthCardUpdate.model_construct(
+            allowed_email_domains=[f"d{i}.com" for i in range(55)]
+        )
         with pytest.raises(ProblemException) as exc_domains:
             await service.update_card(sess, created_ldap.id, up_bad_domains, actor_id=admin_id)
         assert exc_domains.value.status == 422
@@ -1031,7 +1052,9 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
         assert exc_ldap.value.code == "INVALID_CARD_CONFIG"
 
         # 7. set_enabled when state is already matching -> returns immediately
-        res_already = await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+        res_already = await service.set_enabled(
+            sess, created_ldap.id, is_enabled=False, actor_id=admin_id
+        )
         assert res_already.is_enabled is False
 
         # 8. test_handshake on nonexistent card -> 404 ProblemException
@@ -1067,21 +1090,29 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
             assert exc_up_lockout.value.layer == "db_trigger"
 
             with pytest.raises(LockoutPreventedError) as exc_set_lockout:
-                await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+                await service.set_enabled(
+                    sess, created_ldap.id, is_enabled=False, actor_id=admin_id
+                )
             assert exc_set_lockout.value.layer == "db_trigger"
 
             with pytest.raises(LockoutPreventedError) as exc_del_lockout:
-                await service.delete_card(sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id)
+                await service.delete_card(
+                    sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id
+                )
             assert exc_del_lockout.value.layer == "db_trigger"
 
         # 11. Test admin_get returning None in create, update, set_enabled, reorder (lines 274, 461, 521, 613)
-        with patch("kanban.auth.cards.service.admin_get", new_callable=AsyncMock, return_value=None):
+        with patch(
+            "kanban.auth.cards.service.admin_get", new_callable=AsyncMock, return_value=None
+        ):
             with pytest.raises(ProblemException) as exc_cg:
                 await service.create_card(sess, ldap_data, actor_id=admin_id, workspace_id=ws_id)
             assert exc_cg.value.status == 404
 
             with pytest.raises(ProblemException) as exc_ug:
-                await service.update_card(sess, created_ldap.id, AuthCardUpdate(display_name="New"), actor_id=admin_id)
+                await service.update_card(
+                    sess, created_ldap.id, AuthCardUpdate(display_name="New"), actor_id=admin_id
+                )
             assert exc_ug.value.status == 404
 
             with pytest.raises(ProblemException) as exc_sg:
@@ -1111,7 +1142,10 @@ async def test_admin_service_validation_and_lockout_branches(db_session: AsyncSe
                     sess, created_ldap.id, AuthCardUpdate(is_enabled=False), actor_id=admin_id
                 )
             with pytest.raises(_UnexpectedDbError):
-                await service.set_enabled(sess, created_ldap.id, is_enabled=False, actor_id=admin_id)
+                await service.set_enabled(
+                    sess, created_ldap.id, is_enabled=False, actor_id=admin_id
+                )
             with pytest.raises(_UnexpectedDbError):
-                await service.delete_card(sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id)
-
+                await service.delete_card(
+                    sess, created_ldap.id, confirm_slug="ldap-plain-create", actor_id=admin_id
+                )

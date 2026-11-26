@@ -55,6 +55,9 @@ extend-exclude = [
     "scripts/setup_*.py",
     "scripts/kan413_*.py",
     "scripts/*_companion.py",
+    "scripts/*_companion*.py",
+    "scripts/generate_*.py",
+    "scripts/slice1_*.py",
 ]
 
 [tool.ruff.lint]
@@ -86,6 +89,9 @@ exclude = [
     "^scripts/setup_.*\\.py$",
     "^scripts/kan413_.*\\.py$",
     "^scripts/.*_companion\\.py$",
+    "^scripts/.*_companion.*\\.py$",
+    "^scripts/generate_.*\\.py$",
+    "^scripts/slice1_.*\\.py$",
 ]
 
 [[tool.mypy.overrides]]

@@ -433,5 +433,3 @@ async def test_reconcile_group_nesting_edges_missing_group_records(
         canonical_map=canonical_map,
         group_by_name={"Child Group": mock_child},
     )
-
-
