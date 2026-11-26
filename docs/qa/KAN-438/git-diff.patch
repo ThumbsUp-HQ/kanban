@@ -1,0 +1,3745 @@
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 24ace811..854cc7f0 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -102,6 +102,7 @@ from database.models.webhooks import (
+     WebhookSubscription,
+ )
+ from database.models.workflow import (
++    DefaultWorkflowHook,
+     WorkflowHookInvocation,
+     WorkflowTransitionExecution,
+     WorkflowTransitionHook,
+@@ -129,6 +130,7 @@ __all__ = [
+     "CustomFieldDefinition",
+     "CustomFieldValue",
+     "Cycle",
++    "DefaultWorkflowHook",
+     "DestructiveConfirmationToken",
+     "Doc",
+     "EffectiveResourceAccess",
+diff --git a/database/models/workflow.py b/database/models/workflow.py
+index 086042cf..d6efe67e 100644
+--- a/database/models/workflow.py
++++ b/database/models/workflow.py
+@@ -68,6 +68,10 @@ class WorkflowTransitionHook(Base):
+             "sort_rank",
+             postgresql_where=text("is_enabled"),
+         ),
++        Index(
++            "idx_workflow_transition_hooks_inherited_from_template_id",
++            "inherited_from_template_id",
++        ),
+     )
+ 
+     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+@@ -104,6 +108,9 @@ class WorkflowTransitionHook(Base):
+         SmallInteger, nullable=False, default=3, server_default=text("3")
+     )
+     timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    inherited_from_template_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("default_workflow_hooks.id", ondelete="SET NULL"), nullable=True
++    )
+ 
+ 
+ class WorkflowTransitionExecution(Base):
+@@ -214,3 +221,97 @@ class WorkflowHookInvocation(Base):
+     )
+     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
++
++
++class DefaultWorkflowHook(Base):
++    """System-wide and workspace default workflow hook template."""
++
++    __tablename__ = "default_workflow_hooks"
++    __table_args__ = (
++        CheckConstraint(
++            "scope_kind IN ('system', 'workspace')",
++            name="chk_default_workflow_hooks_scope_kind",
++        ),
++        CheckConstraint(
++            "(scope_kind = 'system' AND workspace_id IS NULL) "
++            "OR (scope_kind = 'workspace' AND workspace_id IS NOT NULL)",
++            name="chk_default_workflow_hooks_scope",
++        ),
++        CheckConstraint(
++            "char_length(name) BETWEEN 1 AND 120",
++            name="chk_default_workflow_hooks_name_len",
++        ),
++        CheckConstraint(
++            "from_state_name IS NULL OR char_length(from_state_name) BETWEEN 1 AND 80",
++            name="chk_default_workflow_hooks_from_state_len",
++        ),
++        CheckConstraint(
++            "char_length(to_state_name) BETWEEN 1 AND 80",
++            name="chk_default_workflow_hooks_to_state_len",
++        ),
++        CheckConstraint(
++            "hook_kind IN ('wasm_sync', 'agent_async', 'builtin')",
++            name="chk_default_workflow_hooks_kind",
++        ),
++        CheckConstraint("sort_rank >= 0", name="chk_default_workflow_hooks_sort_rank"),
++        CheckConstraint(
++            "agent_slug IS NULL OR char_length(agent_slug) BETWEEN 1 AND 80",
++            name="chk_default_workflow_hooks_agent_slug_len",
++        ),
++        CheckConstraint(
++            "failure_policy IN ('fail_closed', 'fail_open_warn')",
++            name="chk_default_workflow_hooks_failure_policy",
++        ),
++        CheckConstraint(
++            "timeout_ms IS NULL OR timeout_ms BETWEEN 1000 AND 600000",
++            name="chk_default_workflow_hooks_timeout_ms",
++        ),
++        CheckConstraint(
++            "max_rework_attempts BETWEEN 0 AND 20",
++            name="chk_default_workflow_hooks_max_rework",
++        ),
++        Index("idx_default_workflow_hooks_scope", "scope_kind", "workspace_id"),
++        Index("idx_default_workflow_hooks_workspace_id", "workspace_id"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        primary_key=True, server_default=text("gen_random_uuid()")
++    )
++    scope_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True
++    )
++    name: Mapped[str] = mapped_column(Text, nullable=False)
++    from_state_name: Mapped[str | None] = mapped_column(Text, nullable=True)
++    to_state_name: Mapped[str] = mapped_column(Text, nullable=False)
++    hook_kind: Mapped[str] = mapped_column(Text, nullable=False)
++    sort_rank: Mapped[int] = mapped_column(
++        Integer, nullable=False, default=100, server_default=text("100")
++    )
++    is_enabled: Mapped[bool] = mapped_column(
++        Boolean, nullable=False, default=True, server_default=text("true")
++    )
++    wasm_module_sha256: Mapped[bytes | None] = mapped_column(LargeBinary(32), nullable=True)
++    agent_definition_id: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=True
++    )
++    agent_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
++    allowed_mutable_fields: Mapped[list[Any]] = mapped_column(
++        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
++    )
++    failure_policy: Mapped[str] = mapped_column(
++        Text, nullable=False, default="fail_closed", server_default=text("'fail_closed'")
++    )
++    timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    max_rework_attempts: Mapped[int] = mapped_column(
++        Integer, nullable=False, default=3, server_default=text("3")
++    )
++    created_by: Mapped[uuid.UUID | None] = mapped_column(
++        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("now()")
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=text("now()")
++    )
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 4b1b02b0..76465354 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -14,6 +14,12 @@ from kanban.api.v1.admin.ai_providers import (
+ )
+ from kanban.api.v1.admin.audit_shred import router as admin_audit_shred_router
+ from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
++from kanban.api.v1.admin.default_workflow_hooks import (
++    router as admin_default_workflow_hooks_router,
++)
++from kanban.api.v1.admin.default_workflow_hooks import (
++    workspace_router as workspace_default_workflow_hooks_router,
++)
+ from kanban.api.v1.admin.destructive import router as admin_destructive_router
+ from kanban.api.v1.admin.diagnostics import router as admin_diagnostics_router
+ from kanban.api.v1.admin.exports import router as admin_exports_router
+@@ -149,6 +155,8 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(custom_field_execution_router)
+     v1.include_router(auth_cards_public_router)
+     v1.include_router(admin_auth_cards_router)
++    v1.include_router(admin_default_workflow_hooks_router)
++    v1.include_router(workspace_default_workflow_hooks_router)
+     v1.include_router(admin_audit_shred_router)
+     v1.include_router(admin_ai_router)
+     v1.include_router(workspace_ai_router)
+diff --git a/kanban/api/v1/admin/__init__.py b/kanban/api/v1/admin/__init__.py
+index 8597b017..88f1e72c 100644
+--- a/kanban/api/v1/admin/__init__.py
++++ b/kanban/api/v1/admin/__init__.py
+@@ -2,6 +2,16 @@
+ # Apache-2.0 License. See LICENSE for details.
+ """Admin REST API router package."""
+ 
++from kanban.api.v1.admin.default_workflow_hooks import (
++    router as default_workflow_hooks_router,
++)
++from kanban.api.v1.admin.default_workflow_hooks import (
++    workspace_router as workspace_default_workflow_hooks_router,
++)
+ from kanban.api.v1.admin.link_auditor import router as link_auditor_router
+ 
+-__all__ = ["link_auditor_router"]
++__all__ = [
++    "default_workflow_hooks_router",
++    "link_auditor_router",
++    "workspace_default_workflow_hooks_router",
++]
+diff --git a/kanban/api/v1/workflow_hooks.py b/kanban/api/v1/workflow_hooks.py
+index 8ea03a1a..9d908dee 100644
+--- a/kanban/api/v1/workflow_hooks.py
++++ b/kanban/api/v1/workflow_hooks.py
+@@ -197,3 +197,31 @@ async def list_approved_wasm_modules(
+         )
+         await session.commit()
+         return modules
++
++
++@router.post(
++    "/projects/{project}/workflow-hooks/sync-defaults",
++    response_model=list[WorkflowHookResponse],
++    summary="Sync missing default workflow hook templates to project",
++)
++async def sync_default_workflow_hooks(
++    project: str,
++    caller: Caller,
++    session: Session,
++) -> list[WorkflowHookResponse]:
++    """Apply missing default hook templates onto an existing project.
++
++    Does not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
++    """
++    async with timing_floor(floor_ms=25.0):
++        project_obj = await get_project_or_404(session, caller, project)
++        await WorkflowHookService.require_admin(session, caller, project_obj.id)
++        WorkflowHookService.require_aal2(caller)
++        created = await WorkflowHookService.materialize_default_workflow_hooks(
++            session,
++            project_obj.workspace_id,
++            project_obj.id,
++            skip_existing=True,
++        )
++        await session.commit()
++        return [await WorkflowHookService.serialize_hook(session, h) for h in created]
+diff --git a/kanban/projects/blueprint_service.py b/kanban/projects/blueprint_service.py
+index a099a6d7..6b383fdf 100644
+--- a/kanban/projects/blueprint_service.py
++++ b/kanban/projects/blueprint_service.py
+@@ -46,6 +46,7 @@ from kanban.services.projects import (
+     _require_project_creator,
+     get_project_or_404,
+ )
++from kanban.workflows.default_hooks import materialize_default_workflow_hooks
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -498,6 +499,7 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
+             Project.identifier == blueprint.identifier,
+         )
+         project = (await session.execute(stmt)).scalar_one_or_none()
++        is_new_project = project is None
+ 
+         project_id: uuid.UUID
+         if project is None:
+@@ -589,6 +591,11 @@ async def apply_blueprint(  # noqa: C901, PLR0912, PLR0915
+                 curr_state_map[bp_st.name] = new_st
+         await session.flush()
+ 
++        if is_new_project:
++            await materialize_default_workflow_hooks(
++                session, caller.workspace_id, project_id, skip_existing=True
++            )
++
+         # 2. State migrations
+         for old_name, new_name in blueprint.state_migrations.items():
+             if old_name in curr_state_map and new_name in curr_state_map:
+diff --git a/kanban/services/projects.py b/kanban/services/projects.py
+index 2d2074eb..ace7b1a2 100644
+--- a/kanban/services/projects.py
++++ b/kanban/services/projects.py
+@@ -43,6 +43,7 @@ from kanban.security.permissions import (
+     require_capability,
+ )
+ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
++from kanban.workflows.default_hooks import materialize_default_workflow_hooks
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -253,6 +254,7 @@ async def create_project(
+                 ),
+                 {"ws": caller.workspace_id, "pid": caller.principal_id, "proj": project_id},
+             )
++            await materialize_default_workflow_hooks(session, caller.workspace_id, project_id)
+     except IntegrityError as exc:
+         if _is_unique_violation(exc):
+             raise _problem(
+diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
+index 1c0c66a3..3a4b57e0 100644
+--- a/kanban/web/openapi.json
++++ b/kanban/web/openapi.json
+@@ -5631,6 +5631,517 @@
+         "title": "DatabasePoolInfo",
+         "type": "object"
+       },
++      "DefaultWorkflowHookCreateRequest": {
++        "additionalProperties": false,
++        "description": "Payload for creating a default workflow hook template.",
++        "properties": {
++          "agent": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Agent definition UUID or slug (e.g. @reality-checker)",
++            "title": "Agent"
++          },
++          "agent_definition_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Agent definition UUID",
++            "title": "Agent Definition Id"
++          },
++          "agent_slug": {
++            "anyOf": [
++              {
++                "maxLength": 80,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Agent slug",
++            "title": "Agent Slug"
++          },
++          "allowed_mutable_fields": {
++            "description": "Fields this hook is permitted to modify",
++            "items": {
++              "type": "string"
++            },
++            "title": "Allowed Mutable Fields",
++            "type": "array"
++          },
++          "failure_policy": {
++            "default": "fail_closed",
++            "description": "Failure policy: fail_closed or fail_open_warn",
++            "enum": [
++              "fail_closed",
++              "fail_open_warn"
++            ],
++            "title": "Failure Policy",
++            "type": "string"
++          },
++          "from_state_name": {
++            "anyOf": [
++              {
++                "maxLength": 80,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Source state name, or null/'*' for Any State wildcard",
++            "title": "From State Name"
++          },
++          "hook_kind": {
++            "default": "agent_async",
++            "description": "Hook kind: agent_async, wasm_sync, builtin (or agent_interceptor)",
++            "title": "Hook Kind",
++            "type": "string"
++          },
++          "is_enabled": {
++            "default": true,
++            "description": "Whether template is enabled",
++            "title": "Is Enabled",
++            "type": "boolean"
++          },
++          "max_rework_attempts": {
++            "default": 3,
++            "description": "Maximum rework attempts (0..20)",
++            "maximum": 20.0,
++            "minimum": 0.0,
++            "title": "Max Rework Attempts",
++            "type": "integer"
++          },
++          "name": {
++            "description": "Unique template name",
++            "maxLength": 120,
++            "minLength": 1,
++            "title": "Name",
++            "type": "string"
++          },
++          "scope_kind": {
++            "description": "Scope kind: system or workspace",
++            "enum": [
++              "system",
++              "workspace"
++            ],
++            "title": "Scope Kind",
++            "type": "string"
++          },
++          "sort_rank": {
++            "default": 100,
++            "description": "Sort rank ordering (>= 0)",
++            "minimum": 0.0,
++            "title": "Sort Rank",
++            "type": "integer"
++          },
++          "timeout_ms": {
++            "anyOf": [
++              {
++                "maximum": 600000.0,
++                "minimum": 1000.0,
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Optional timeout in ms (1000..600000)",
++            "title": "Timeout Ms"
++          },
++          "to_state_name": {
++            "description": "Target state name (e.g. Done)",
++            "maxLength": 80,
++            "minLength": 1,
++            "title": "To State Name",
++            "type": "string"
++          },
++          "wasm_module_sha256": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Hex SHA-256 of approved WASM module",
++            "title": "Wasm Module Sha256"
++          },
++          "workspace_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Workspace ID (required for workspace scope, null for system)",
++            "title": "Workspace Id"
++          }
++        },
++        "required": [
++          "name",
++          "scope_kind",
++          "to_state_name"
++        ],
++        "title": "DefaultWorkflowHookCreateRequest",
++        "type": "object"
++      },
++      "DefaultWorkflowHookResponse": {
++        "description": "Serialized representation of a default workflow hook template.",
++        "properties": {
++          "agent_definition_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Agent Definition Id"
++          },
++          "agent_slug": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Agent Slug"
++          },
++          "allowed_mutable_fields": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Allowed Mutable Fields",
++            "type": "array"
++          },
++          "created_at": {
++            "format": "date-time",
++            "title": "Created At",
++            "type": "string"
++          },
++          "created_by": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Created By"
++          },
++          "failure_policy": {
++            "title": "Failure Policy",
++            "type": "string"
++          },
++          "from_state_name": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "From State Name"
++          },
++          "hook_kind": {
++            "title": "Hook Kind",
++            "type": "string"
++          },
++          "id": {
++            "format": "uuid",
++            "title": "Id",
++            "type": "string"
++          },
++          "is_enabled": {
++            "title": "Is Enabled",
++            "type": "boolean"
++          },
++          "max_rework_attempts": {
++            "title": "Max Rework Attempts",
++            "type": "integer"
++          },
++          "name": {
++            "title": "Name",
++            "type": "string"
++          },
++          "scope_kind": {
++            "enum": [
++              "system",
++              "workspace"
++            ],
++            "title": "Scope Kind",
++            "type": "string"
++          },
++          "sort_rank": {
++            "title": "Sort Rank",
++            "type": "integer"
++          },
++          "timeout_ms": {
++            "anyOf": [
++              {
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Timeout Ms"
++          },
++          "to_state_name": {
++            "title": "To State Name",
++            "type": "string"
++          },
++          "updated_at": {
++            "format": "date-time",
++            "title": "Updated At",
++            "type": "string"
++          },
++          "wasm_module_sha256": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Wasm Module Sha256"
++          },
++          "workspace_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Workspace Id"
++          }
++        },
++        "required": [
++          "id",
++          "scope_kind",
++          "name",
++          "to_state_name",
++          "hook_kind",
++          "sort_rank",
++          "is_enabled",
++          "allowed_mutable_fields",
++          "failure_policy",
++          "max_rework_attempts",
++          "created_at",
++          "updated_at"
++        ],
++        "title": "DefaultWorkflowHookResponse",
++        "type": "object"
++      },
++      "DefaultWorkflowHookUpdateRequest": {
++        "additionalProperties": false,
++        "description": "Payload for updating an existing default workflow hook template.",
++        "properties": {
++          "agent": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Agent"
++          },
++          "agent_definition_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Agent Definition Id"
++          },
++          "agent_slug": {
++            "anyOf": [
++              {
++                "maxLength": 80,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Agent Slug"
++          },
++          "allowed_mutable_fields": {
++            "anyOf": [
++              {
++                "items": {
++                  "type": "string"
++                },
++                "type": "array"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Allowed Mutable Fields"
++          },
++          "failure_policy": {
++            "anyOf": [
++              {
++                "enum": [
++                  "fail_closed",
++                  "fail_open_warn"
++                ],
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Failure Policy"
++          },
++          "from_state_name": {
++            "anyOf": [
++              {
++                "maxLength": 80,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "From State Name"
++          },
++          "hook_kind": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Hook Kind"
++          },
++          "is_enabled": {
++            "anyOf": [
++              {
++                "type": "boolean"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Is Enabled"
++          },
++          "max_rework_attempts": {
++            "anyOf": [
++              {
++                "maximum": 20.0,
++                "minimum": 0.0,
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Max Rework Attempts"
++          },
++          "name": {
++            "anyOf": [
++              {
++                "maxLength": 120,
++                "minLength": 1,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Name"
++          },
++          "sort_rank": {
++            "anyOf": [
++              {
++                "minimum": 0.0,
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Sort Rank"
++          },
++          "timeout_ms": {
++            "anyOf": [
++              {
++                "maximum": 600000.0,
++                "minimum": 1000.0,
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Timeout Ms"
++          },
++          "to_state_name": {
++            "anyOf": [
++              {
++                "maxLength": 80,
++                "minLength": 1,
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "To State Name"
++          },
++          "wasm_module_sha256": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Wasm Module Sha256"
++          }
++        },
++        "title": "DefaultWorkflowHookUpdateRequest",
++        "type": "object"
++      },
+       "DestructiveExecuteIn": {
+         "additionalProperties": false,
+         "description": "Payload for Stage 2 delete execution.",
+@@ -14441,7 +14952,7 @@
+                 "type": "null"
+               }
+             ],
+-            "description": "Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)",
++            "description": "Updated default workflow gate timeout in milliseconds (1000..600000, or null)",
+             "title": "Default Gate Timeout Ms"
+           },
+           "description_markdown": {
+@@ -14547,7 +15058,7 @@
+                 "type": "null"
+               }
+             ],
+-            "description": "Configured default workflow transition gate timeout in milliseconds, if enabled",
++            "description": "Configured default workflow gate timeout in milliseconds",
+             "title": "Default Gate Timeout Ms"
+           },
+           "default_module_ids": {
+@@ -21690,6 +22201,33 @@
+             "title": "Id",
+             "type": "string"
+           },
++          "inherited_from_scope": {
++            "anyOf": [
++              {
++                "enum": [
++                  "system",
++                  "workspace"
++                ],
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Inherited From Scope"
++          },
++          "inherited_from_template_id": {
++            "anyOf": [
++              {
++                "format": "uuid",
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "title": "Inherited From Template Id"
++          },
+           "is_enabled": {
+             "title": "Is Enabled",
+             "type": "boolean"
+@@ -22833,9 +23371,9 @@
+   },
+   "info": {
+     "title": "\ud83d\udc4dkanban API",
+-    "version": "0.2.1869",
+-    "x-build-commit": "7e161c070c48",
+-    "x-openapi-bundle-hash": "208b77d47e5910a5ec789571bb747d46331d9e95e816187a84247084e384de31"
++    "version": "0.2.1870",
++    "x-build-commit": "a6967d0fc893",
++    "x-openapi-bundle-hash": "c74657a708877eef3f148e47515ff0a98a23c194beeb171901f1b879bf1b896b"
+   },
+   "openapi": "3.1.0",
+   "paths": {
+@@ -24552,34 +25090,316 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Test connection to saved AI provider configuration",
++        "summary": "Test connection to saved AI provider configuration",
++        "tags": [
++          "admin-ai"
++        ]
++      }
++    },
++    "/api/v1/admin/ai/providers/{provider_id}:disable": {
++      "post": {
++        "description": "Disable an active AI provider configuration, preventing subsequent completions.",
++        "operationId": "disable_provider_api_v1_admin_ai_providers__provider_id__disable_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "provider_id",
++            "required": true,
++            "schema": {
++              "format": "uuid",
++              "title": "Provider Id",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProviderConfigPublic"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Disable AI provider configuration",
++        "tags": [
++          "admin-ai"
++        ]
++      }
++    },
++    "/api/v1/admin/audit-ledger/execute-shred": {
++      "post": {
++        "description": "Consume single-use token and permanently overwrite wrapped DEKs with NULL.",
++        "operationId": "api_admin_audit_ledger_execute_shred_api_v1_admin_audit_ledger_execute_shred_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AuditShredExecuteIn"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuditShredExecuteOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Stage 2: Execute audit ledger crypto-shredding under AAL2",
++        "tags": [
++          "admin-audit-shred"
++        ]
++      }
++    },
++    "/api/v1/admin/audit-ledger/request-shred": {
++      "post": {
++        "description": "Compute blast radius and mint single-use confirmation token for crypto-shredding.",
++        "operationId": "api_admin_audit_ledger_request_shred_api_v1_admin_audit_ledger_request_shred_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AuditShredRequestIn"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuditShredRequestOut"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Stage 1: Request audit ledger crypto-shred blast token under AAL2",
++        "tags": [
++          "admin-audit-shred"
++        ]
++      }
++    },
++    "/api/v1/admin/auth-cards": {
++      "get": {
++        "description": "List all authentication cards in sort_rank order without exposing secrets.",
++        "operationId": "list_admin_cards_api_v1_admin_auth_cards_get",
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuthCardAdminListResponse"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          }
++        },
++        "security": [
++          {
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "List all authentication cards",
++        "tags": [
++          "admin-auth-cards"
++        ]
++      },
++      "post": {
++        "description": "Create a new authentication card with envelope-encrypted credentials.",
++        "operationId": "create_admin_card_api_v1_admin_auth_cards_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AuthCardCreate"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuthCardAdmin"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Create authentication card",
+         "tags": [
+-          "admin-ai"
++          "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/ai/providers/{provider_id}:disable": {
++    "/api/v1/admin/auth-cards/parse-google-json": {
+       "post": {
+-        "description": "Disable an active AI provider configuration, preventing subsequent completions.",
+-        "operationId": "disable_provider_api_v1_admin_ai_providers__provider_id__disable_post",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "provider_id",
+-            "required": true,
+-            "schema": {
+-              "format": "uuid",
+-              "title": "Provider Id",
+-              "type": "string"
++        "description": "Parse Google Cloud Console client_secret_*.json and return preview without secrets.",
++        "operationId": "parse_google_json_api_v1_admin_auth_cards_parse_google_json_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/GoogleOAuthJsonPreviewRequest"
++              }
+             }
+-          }
+-        ],
++          },
++          "required": true
++        },
+         "responses": {
+           "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/ProviderConfigPublic"
++                  "$ref": "#/components/schemas/GoogleOAuthJsonPreviewResponse"
+                 }
+               }
+             },
+@@ -24615,21 +25435,21 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Disable AI provider configuration",
++        "summary": "Parse and preview Google OAuth client JSON",
+         "tags": [
+-          "admin-ai"
++          "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/audit-ledger/execute-shred": {
++    "/api/v1/admin/auth-cards/test-handshake": {
+       "post": {
+-        "description": "Consume single-use token and permanently overwrite wrapped DEKs with NULL.",
+-        "operationId": "api_admin_audit_ledger_execute_shred_api_v1_admin_audit_ledger_execute_shred_post",
++        "description": "Execute live reachability and cryptographic probe on draft auth card.",
++        "operationId": "test_draft_card_handshake_api_v1_admin_auth_cards_test_handshake_post",
+         "requestBody": {
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/AuditShredExecuteIn"
++                "$ref": "#/components/schemas/AuthCardCreate"
+               }
+             }
+           },
+@@ -24640,7 +25460,7 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/AuditShredExecuteOut"
++                  "$ref": "#/components/schemas/HandshakeProbeResult"
+                 }
+               }
+             },
+@@ -24676,33 +25496,33 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Stage 2: Execute audit ledger crypto-shredding under AAL2",
++        "summary": "Test authentication card draft handshake probe",
+         "tags": [
+-          "admin-audit-shred"
++          "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/audit-ledger/request-shred": {
++    "/api/v1/admin/auth-cards/{card_id}/ldap-test": {
+       "post": {
+-        "description": "Compute blast radius and mint single-use confirmation token for crypto-shredding.",
+-        "operationId": "api_admin_audit_ledger_request_shred_api_v1_admin_audit_ledger_request_shred_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/AuditShredRequestIn"
+-              }
++        "description": "Test LDAP/StartTLS handshake, CA trust, SPKI pinning, and optional service bind.",
++        "operationId": "ldap_test_connection_api_v1_admin_auth_cards__card_id__ldap_test_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "card_id",
++            "required": true,
++            "schema": {
++              "format": "uuid",
++              "title": "Card Id",
++              "type": "string"
+             }
+-          },
+-          "required": true
+-        },
++          }
++        ],
+         "responses": {
+           "200": {
+             "content": {
+               "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/AuditShredRequestOut"
+-                }
++                "schema": {}
+               }
+             },
+             "description": "Successful Response"
+@@ -24737,25 +25557,39 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Stage 1: Request audit ledger crypto-shred blast token under AAL2",
++        "summary": "Test LDAP card connection",
+         "tags": [
+-          "admin-audit-shred"
++          "auth"
+         ]
+       }
+     },
+-    "/api/v1/admin/auth-cards": {
+-      "get": {
+-        "description": "List all authentication cards in sort_rank order without exposing secrets.",
+-        "operationId": "list_admin_cards_api_v1_admin_auth_cards_get",
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdminListResponse"
+-                }
++    "/api/v1/admin/auth-cards/{card_ref}": {
++      "delete": {
++        "description": "Permanently delete an authentication card after confirmation and anti-lockout checks.",
++        "operationId": "delete_admin_card_api_v1_admin_auth_cards__card_ref__delete",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "card_ref",
++            "required": true,
++            "schema": {
++              "title": "Card Ref",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AuthCardDeleteRequest"
+               }
+-            },
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "204": {
+             "description": "Successful Response"
+           },
+           "401": {
+@@ -24767,36 +25601,48 @@
+               }
+             },
+             "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
+           }
+         },
+         "security": [
+           {
++            "CsrfHeaderAuth": [],
+             "SessionCookieAuth": []
+           },
+           {
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "List all authentication cards",
++        "summary": "Delete authentication card",
+         "tags": [
+           "admin-auth-cards"
+         ]
+       },
+-      "post": {
+-        "description": "Create a new authentication card with envelope-encrypted credentials.",
+-        "operationId": "create_admin_card_api_v1_admin_auth_cards_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/AuthCardCreate"
+-              }
++      "get": {
++        "description": "Retrieve non-secret metadata for a specific card by slug or UUID.",
++        "operationId": "get_admin_card_api_v1_admin_auth_cards__card_ref__get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "card_ref",
++            "required": true,
++            "schema": {
++              "title": "Card Ref",
++              "type": "string"
+             }
+-          },
+-          "required": true
+-        },
++          }
++        ],
+         "responses": {
+-          "201": {
++          "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+@@ -24829,28 +25675,36 @@
+         },
+         "security": [
+           {
+-            "CsrfHeaderAuth": [],
+             "SessionCookieAuth": []
+           },
+           {
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Create authentication card",
++        "summary": "Get authentication card details",
+         "tags": [
+           "admin-auth-cards"
+         ]
+-      }
+-    },
+-    "/api/v1/admin/auth-cards/parse-google-json": {
+-      "post": {
+-        "description": "Parse Google Cloud Console client_secret_*.json and return preview without secrets.",
+-        "operationId": "parse_google_json_api_v1_admin_auth_cards_parse_google_json_post",
++      },
++      "patch": {
++        "description": "Update metadata, configuration, or credentials on an existing card.",
++        "operationId": "update_admin_card_api_v1_admin_auth_cards__card_ref__patch",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "card_ref",
++            "required": true,
++            "schema": {
++              "title": "Card Ref",
++              "type": "string"
++            }
++          }
++        ],
+         "requestBody": {
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/GoogleOAuthJsonPreviewRequest"
++                "$ref": "#/components/schemas/AuthCardUpdate"
+               }
+             }
+           },
+@@ -24861,7 +25715,7 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/GoogleOAuthJsonPreviewResponse"
++                  "$ref": "#/components/schemas/AuthCardAdmin"
+                 }
+               }
+             },
+@@ -24897,32 +25751,33 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Parse and preview Google OAuth client JSON",
++        "summary": "Update authentication card",
+         "tags": [
+           "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/auth-cards/test-handshake": {
++    "/api/v1/admin/auth-cards/{card_ref}/disable": {
+       "post": {
+-        "description": "Execute live reachability and cryptographic probe on draft auth card.",
+-        "operationId": "test_draft_card_handshake_api_v1_admin_auth_cards_test_handshake_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/AuthCardCreate"
+-              }
++        "description": "Disable card sign-in under 3-layer anti-lockout safeguards.\n\nPrevents administrative lockout.",
++        "operationId": "disable_admin_card_api_v1_admin_auth_cards__card_ref__disable_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "card_ref",
++            "required": true,
++            "schema": {
++              "title": "Card Ref",
++              "type": "string"
+             }
+-          },
+-          "required": true
+-        },
++          }
++        ],
+         "responses": {
+           "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/HandshakeProbeResult"
++                  "$ref": "#/components/schemas/AuthCardAdmin"
+                 }
+               }
+             },
+@@ -24958,24 +25813,23 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Test authentication card draft handshake probe",
++        "summary": "Disable authentication card",
+         "tags": [
+           "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/auth-cards/{card_id}/ldap-test": {
++    "/api/v1/admin/auth-cards/{card_ref}/enable": {
+       "post": {
+-        "description": "Test LDAP/StartTLS handshake, CA trust, SPKI pinning, and optional service bind.",
+-        "operationId": "ldap_test_connection_api_v1_admin_auth_cards__card_id__ldap_test_post",
++        "description": "Enable card sign-in for users and administrators while auditing the action.",
++        "operationId": "enable_admin_card_api_v1_admin_auth_cards__card_ref__enable_post",
+         "parameters": [
+           {
+             "in": "path",
+-            "name": "card_id",
++            "name": "card_ref",
+             "required": true,
+             "schema": {
+-              "format": "uuid",
+-              "title": "Card Id",
++              "title": "Card Ref",
+               "type": "string"
+             }
+           }
+@@ -24984,7 +25838,9 @@
+           "200": {
+             "content": {
+               "application/json": {
+-                "schema": {}
++                "schema": {
++                  "$ref": "#/components/schemas/AuthCardAdmin"
++                }
+               }
+             },
+             "description": "Successful Response"
+@@ -25019,16 +25875,16 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Test LDAP card connection",
++        "summary": "Enable authentication card",
+         "tags": [
+-          "auth"
++          "admin-auth-cards"
+         ]
+       }
+     },
+-    "/api/v1/admin/auth-cards/{card_ref}": {
+-      "delete": {
+-        "description": "Permanently delete an authentication card after confirmation and anti-lockout checks.",
+-        "operationId": "delete_admin_card_api_v1_admin_auth_cards__card_ref__delete",
++    "/api/v1/admin/auth-cards/{card_ref}/reorder": {
++      "post": {
++        "description": "Reposition card in the sign-in sequence using fractional indexing.",
++        "operationId": "reorder_admin_card_api_v1_admin_auth_cards__card_ref__reorder_post",
+         "parameters": [
+           {
+             "in": "path",
+@@ -25044,14 +25900,21 @@
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/AuthCardDeleteRequest"
++                "$ref": "#/components/schemas/AuthCardReorderRequest"
+               }
+             }
+           },
+           "required": true
+         },
+         "responses": {
+-          "204": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AuthCardAdmin"
++                }
++              }
++            },
+             "description": "Successful Response"
+           },
+           "401": {
+@@ -25084,14 +25947,16 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Delete authentication card",
++        "summary": "Reorder authentication card",
+         "tags": [
+           "admin-auth-cards"
+         ]
+-      },
+-      "get": {
+-        "description": "Retrieve non-secret metadata for a specific card by slug or UUID.",
+-        "operationId": "get_admin_card_api_v1_admin_auth_cards__card_ref__get",
++      }
++    },
++    "/api/v1/admin/auth-cards/{card_ref}/test-handshake": {
++      "post": {
++        "description": "Execute live reachability and cryptographic probe within an 8.0s timeout.",
++        "operationId": "test_card_handshake_api_v1_admin_auth_cards__card_ref__test_handshake_post",
+         "parameters": [
+           {
+             "in": "path",
+@@ -25108,7 +25973,7 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdmin"
++                  "$ref": "#/components/schemas/HandshakeProbeResult"
+                 }
+               }
+             },
+@@ -25137,47 +26002,72 @@
+         },
+         "security": [
+           {
++            "CsrfHeaderAuth": [],
+             "SessionCookieAuth": []
+           },
+           {
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Get authentication card details",
++        "summary": "Test authentication card handshake",
+         "tags": [
+           "admin-auth-cards"
+         ]
+-      },
+-      "patch": {
+-        "description": "Update metadata, configuration, or credentials on an existing card.",
+-        "operationId": "update_admin_card_api_v1_admin_auth_cards__card_ref__patch",
++      }
++    },
++    "/api/v1/admin/default-workflow-hooks": {
++      "get": {
++        "description": "List default workflow hook templates. Requires admin role and AAL2.",
++        "operationId": "admin_list_default_hooks_api_v1_admin_default_workflow_hooks_get",
+         "parameters": [
+           {
+-            "in": "path",
+-            "name": "card_ref",
+-            "required": true,
++            "in": "query",
++            "name": "scope_kind",
++            "required": false,
+             "schema": {
+-              "title": "Card Ref",
+-              "type": "string"
++              "anyOf": [
++                {
++                  "enum": [
++                    "system",
++                    "workspace"
++                  ],
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Scope Kind"
++            }
++          },
++          {
++            "in": "query",
++            "name": "workspace_id",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "format": "uuid",
++                  "type": "string"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "title": "Workspace Id"
+             }
+           }
+         ],
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/AuthCardUpdate"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+         "responses": {
+           "200": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdmin"
++                  "items": {
++                    "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
++                  },
++                  "title": "Response Admin List Default Hooks Api V1 Admin Default Workflow Hooks Get",
++                  "type": "array"
+                 }
+               }
+             },
+@@ -25206,40 +26096,36 @@
+         },
+         "security": [
+           {
+-            "CsrfHeaderAuth": [],
+             "SessionCookieAuth": []
+           },
+           {
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Update authentication card",
++        "summary": "List default workflow hook templates",
+         "tags": [
+-          "admin-auth-cards"
++          "admin-default-workflow-hooks"
+         ]
+-      }
+-    },
+-    "/api/v1/admin/auth-cards/{card_ref}/disable": {
++      },
+       "post": {
+-        "description": "Disable card sign-in under 3-layer anti-lockout safeguards.\n\nPrevents administrative lockout.",
+-        "operationId": "disable_admin_card_api_v1_admin_auth_cards__card_ref__disable_post",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "card_ref",
+-            "required": true,
+-            "schema": {
+-              "title": "Card Ref",
+-              "type": "string"
++        "description": "Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.",
++        "operationId": "admin_create_default_hook_api_v1_admin_default_workflow_hooks_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/DefaultWorkflowHookCreateRequest"
++              }
+             }
+-          }
+-        ],
++          },
++          "required": true
++        },
+         "responses": {
+-          "200": {
++          "201": {
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdmin"
++                  "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
+                 }
+               }
+             },
+@@ -25275,36 +26161,30 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Disable authentication card",
++        "summary": "Create a default workflow hook template",
+         "tags": [
+-          "admin-auth-cards"
++          "admin-default-workflow-hooks"
+         ]
+       }
+     },
+-    "/api/v1/admin/auth-cards/{card_ref}/enable": {
+-      "post": {
+-        "description": "Enable card sign-in for users and administrators while auditing the action.",
+-        "operationId": "enable_admin_card_api_v1_admin_auth_cards__card_ref__enable_post",
++    "/api/v1/admin/default-workflow-hooks/{template_id}": {
++      "delete": {
++        "description": "Delete a default workflow hook template. Requires appropriate admin role and AAL2.",
++        "operationId": "admin_delete_default_hook_api_v1_admin_default_workflow_hooks__template_id__delete",
+         "parameters": [
+           {
+             "in": "path",
+-            "name": "card_ref",
++            "name": "template_id",
+             "required": true,
+             "schema": {
+-              "title": "Card Ref",
++              "format": "uuid",
++              "title": "Template Id",
+               "type": "string"
+             }
+           }
+         ],
+         "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdmin"
+-                }
+-              }
+-            },
++          "204": {
+             "description": "Successful Response"
+           },
+           "401": {
+@@ -25337,23 +26217,22 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Enable authentication card",
++        "summary": "Delete a default workflow hook template",
+         "tags": [
+-          "admin-auth-cards"
++          "admin-default-workflow-hooks"
+         ]
+-      }
+-    },
+-    "/api/v1/admin/auth-cards/{card_ref}/reorder": {
+-      "post": {
+-        "description": "Reposition card in the sign-in sequence using fractional indexing.",
+-        "operationId": "reorder_admin_card_api_v1_admin_auth_cards__card_ref__reorder_post",
++      },
++      "patch": {
++        "description": "Update an existing default workflow hook template. Requires appropriate admin role and AAL2.",
++        "operationId": "admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch",
+         "parameters": [
+           {
+             "in": "path",
+-            "name": "card_ref",
++            "name": "template_id",
+             "required": true,
+             "schema": {
+-              "title": "Card Ref",
++              "format": "uuid",
++              "title": "Template Id",
+               "type": "string"
+             }
+           }
+@@ -25362,7 +26241,7 @@
+           "content": {
+             "application/json": {
+               "schema": {
+-                "$ref": "#/components/schemas/AuthCardReorderRequest"
++                "$ref": "#/components/schemas/DefaultWorkflowHookUpdateRequest"
+               }
+             }
+           },
+@@ -25373,69 +26252,7 @@
+             "content": {
+               "application/json": {
+                 "schema": {
+-                  "$ref": "#/components/schemas/AuthCardAdmin"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Reorder authentication card",
+-        "tags": [
+-          "admin-auth-cards"
+-        ]
+-      }
+-    },
+-    "/api/v1/admin/auth-cards/{card_ref}/test-handshake": {
+-      "post": {
+-        "description": "Execute live reachability and cryptographic probe within an 8.0s timeout.",
+-        "operationId": "test_card_handshake_api_v1_admin_auth_cards__card_ref__test_handshake_post",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "card_ref",
+-            "required": true,
+-            "schema": {
+-              "title": "Card Ref",
+-              "type": "string"
+-            }
+-          }
+-        ],
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HandshakeProbeResult"
++                  "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
+                 }
+               }
+             },
+@@ -25471,9 +26288,9 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Test authentication card handshake",
++        "summary": "Update a default workflow hook template",
+         "tags": [
+-          "admin-auth-cards"
++          "admin-default-workflow-hooks"
+         ]
+       }
+     },
+@@ -43807,6 +44624,72 @@
+         ]
+       }
+     },
++    "/api/v1/projects/{project}/workflow-hooks/sync-defaults": {
++      "post": {
++        "description": "Apply missing default hook templates onto an existing project without overwriting existing hooks.\n\nRequires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.",
++        "operationId": "sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "project",
++            "required": true,
++            "schema": {
++              "title": "Project",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "items": {
++                    "$ref": "#/components/schemas/WorkflowHookResponse"
++                  },
++                  "title": "Response Sync Default Workflow Hooks Api V1 Projects  Project  Workflow Hooks Sync Defaults Post",
++                  "type": "array"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Sync missing default workflow hook templates to project",
++        "tags": [
++          "workflow-hooks"
++        ]
++      }
++    },
+     "/api/v1/repo-bindings/{binding_id}": {
+       "delete": {
+         "description": "Delete repository binding and prune bare mirror from filesystem.",
+@@ -48749,6 +49632,296 @@
+         ]
+       }
+     },
++    "/api/v1/workspaces/{workspace}/default-workflow-hooks": {
++      "get": {
++        "description": "List default workflow hook templates for workspace.",
++        "operationId": "workspace_list_default_hooks_api_v1_workspaces__workspace__default_workflow_hooks_get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "workspace",
++            "required": true,
++            "schema": {
++              "title": "Workspace",
++              "type": "string"
++            }
++          },
++          {
++            "in": "query",
++            "name": "include_system",
++            "required": false,
++            "schema": {
++              "default": true,
++              "title": "Include System",
++              "type": "boolean"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "items": {
++                    "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
++                  },
++                  "title": "Response Workspace List Default Hooks Api V1 Workspaces  Workspace  Default Workflow Hooks Get",
++                  "type": "array"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "List default workflow hook templates for workspace",
++        "tags": [
++          "workspace-default-workflow-hooks"
++        ]
++      },
++      "post": {
++        "description": "Create a default workflow hook template scoped to this workspace.",
++        "operationId": "workspace_create_default_hook_api_v1_workspaces__workspace__default_workflow_hooks_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "workspace",
++            "required": true,
++            "schema": {
++              "title": "Workspace",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/DefaultWorkflowHookCreateRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Create a default workflow hook template for workspace",
++        "tags": [
++          "workspace-default-workflow-hooks"
++        ]
++      }
++    },
++    "/api/v1/workspaces/{workspace}/default-workflow-hooks/{template_id}": {
++      "delete": {
++        "description": "Delete a workspace default workflow hook template.",
++        "operationId": "workspace_delete_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__delete",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "workspace",
++            "required": true,
++            "schema": {
++              "title": "Workspace",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "template_id",
++            "required": true,
++            "schema": {
++              "format": "uuid",
++              "title": "Template Id",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "204": {
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Delete a workspace default workflow hook template",
++        "tags": [
++          "workspace-default-workflow-hooks"
++        ]
++      },
++      "patch": {
++        "description": "Update a workspace default workflow hook template.",
++        "operationId": "workspace_update_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__patch",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "workspace",
++            "required": true,
++            "schema": {
++              "title": "Workspace",
++              "type": "string"
++            }
++          },
++          {
++            "in": "path",
++            "name": "template_id",
++            "required": true,
++            "schema": {
++              "format": "uuid",
++              "title": "Template Id",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/DefaultWorkflowHookUpdateRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/DefaultWorkflowHookResponse"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Update a workspace default workflow hook template",
++        "tags": [
++          "workspace-default-workflow-hooks"
++        ]
++      }
++    },
+     "/oauth/authorize": {
+       "get": {
+         "description": "Render interactive consent screen for authorization code grant with PKCE S256.",
+diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
+index c93fc2de..2fdbd6b2 100644
+--- a/kanban/web/src/api/schema.gen.ts
++++ b/kanban/web/src/api/schema.gen.ts
+@@ -671,6 +671,54 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/admin/default-workflow-hooks": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        /**
++         * List default workflow hook templates
++         * @description List default workflow hook templates. Requires admin role and AAL2.
++         */
++        get: operations["admin_list_default_hooks_api_v1_admin_default_workflow_hooks_get"];
++        put?: never;
++        /**
++         * Create a default workflow hook template
++         * @description Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
++         */
++        post: operations["admin_create_default_hook_api_v1_admin_default_workflow_hooks_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
++    "/api/v1/admin/default-workflow-hooks/{template_id}": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        post?: never;
++        /**
++         * Delete a default workflow hook template
++         * @description Delete a default workflow hook template. Requires appropriate admin role and AAL2.
++         */
++        delete: operations["admin_delete_default_hook_api_v1_admin_default_workflow_hooks__template_id__delete"];
++        options?: never;
++        head?: never;
++        /**
++         * Update a default workflow hook template
++         * @description Update an existing default workflow hook template. Requires appropriate admin role and AAL2.
++         */
++        patch: operations["admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch"];
++        trace?: never;
++    };
+     "/api/v1/admin/destructive:execute": {
+         parameters: {
+             query?: never;
+@@ -5007,6 +5055,28 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/projects/{project}/workflow-hooks/sync-defaults": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        /**
++         * Sync missing default workflow hook templates to project
++         * @description Apply missing default hook templates onto an existing project without overwriting existing hooks.
++         *
++         *     Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
++         */
++        post: operations["sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
+     "/api/v1/repo-bindings/{binding_id}": {
+         parameters: {
+             query?: never;
+@@ -6175,6 +6245,54 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/workspaces/{workspace}/default-workflow-hooks": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        /**
++         * List default workflow hook templates for workspace
++         * @description List default workflow hook templates for workspace.
++         */
++        get: operations["workspace_list_default_hooks_api_v1_workspaces__workspace__default_workflow_hooks_get"];
++        put?: never;
++        /**
++         * Create a default workflow hook template for workspace
++         * @description Create a default workflow hook template scoped to this workspace.
++         */
++        post: operations["workspace_create_default_hook_api_v1_workspaces__workspace__default_workflow_hooks_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
++    "/api/v1/workspaces/{workspace}/default-workflow-hooks/{template_id}": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        post?: never;
++        /**
++         * Delete a workspace default workflow hook template
++         * @description Delete a workspace default workflow hook template.
++         */
++        delete: operations["workspace_delete_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__delete"];
++        options?: never;
++        head?: never;
++        /**
++         * Update a workspace default workflow hook template
++         * @description Update a workspace default workflow hook template.
++         */
++        patch: operations["workspace_update_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__patch"];
++        trace?: never;
++    };
+     "/oauth/authorize": {
+         parameters: {
+             query?: never;
+@@ -8980,6 +9098,189 @@ export interface components {
+             /** Size */
+             size: number;
+         };
++        /**
++         * DefaultWorkflowHookCreateRequest
++         * @description Payload for creating a default workflow hook template.
++         */
++        DefaultWorkflowHookCreateRequest: {
++            /**
++             * Agent
++             * @description Agent definition UUID or slug (e.g. @reality-checker)
++             */
++            agent?: string | null;
++            /**
++             * Agent Definition Id
++             * @description Agent definition UUID
++             */
++            agent_definition_id?: string | null;
++            /**
++             * Agent Slug
++             * @description Agent slug
++             */
++            agent_slug?: string | null;
++            /**
++             * Allowed Mutable Fields
++             * @description Fields this hook is permitted to modify
++             */
++            allowed_mutable_fields?: string[];
++            /**
++             * Failure Policy
++             * @description Failure policy: fail_closed or fail_open_warn
++             * @default fail_closed
++             * @enum {string}
++             */
++            failure_policy: "fail_closed" | "fail_open_warn";
++            /**
++             * From State Name
++             * @description Source state name, or null/'*' for Any State wildcard
++             */
++            from_state_name?: string | null;
++            /**
++             * Hook Kind
++             * @description Hook kind: agent_async, wasm_sync, builtin (or agent_interceptor)
++             * @default agent_async
++             */
++            hook_kind: string;
++            /**
++             * Is Enabled
++             * @description Whether template is enabled
++             * @default true
++             */
++            is_enabled: boolean;
++            /**
++             * Max Rework Attempts
++             * @description Maximum rework attempts (0..20)
++             * @default 3
++             */
++            max_rework_attempts: number;
++            /**
++             * Name
++             * @description Unique template name
++             */
++            name: string;
++            /**
++             * Scope Kind
++             * @description Scope kind: system or workspace
++             * @enum {string}
++             */
++            scope_kind: "system" | "workspace";
++            /**
++             * Sort Rank
++             * @description Sort rank ordering (>= 0)
++             * @default 100
++             */
++            sort_rank: number;
++            /**
++             * Timeout Ms
++             * @description Optional timeout in ms (1000..600000)
++             */
++            timeout_ms?: number | null;
++            /**
++             * To State Name
++             * @description Target state name (e.g. Done)
++             */
++            to_state_name: string;
++            /**
++             * Wasm Module Sha256
++             * @description Hex SHA-256 of approved WASM module
++             */
++            wasm_module_sha256?: string | null;
++            /**
++             * Workspace Id
++             * @description Workspace ID (required for workspace scope, null for system)
++             */
++            workspace_id?: string | null;
++        };
++        /**
++         * DefaultWorkflowHookResponse
++         * @description Serialized representation of a default workflow hook template.
++         */
++        DefaultWorkflowHookResponse: {
++            /** Agent Definition Id */
++            agent_definition_id?: string | null;
++            /** Agent Slug */
++            agent_slug?: string | null;
++            /** Allowed Mutable Fields */
++            allowed_mutable_fields: string[];
++            /**
++             * Created At
++             * Format: date-time
++             */
++            created_at: string;
++            /** Created By */
++            created_by?: string | null;
++            /** Failure Policy */
++            failure_policy: string;
++            /** From State Name */
++            from_state_name?: string | null;
++            /** Hook Kind */
++            hook_kind: string;
++            /**
++             * Id
++             * Format: uuid
++             */
++            id: string;
++            /** Is Enabled */
++            is_enabled: boolean;
++            /** Max Rework Attempts */
++            max_rework_attempts: number;
++            /** Name */
++            name: string;
++            /**
++             * Scope Kind
++             * @enum {string}
++             */
++            scope_kind: "system" | "workspace";
++            /** Sort Rank */
++            sort_rank: number;
++            /** Timeout Ms */
++            timeout_ms?: number | null;
++            /** To State Name */
++            to_state_name: string;
++            /**
++             * Updated At
++             * Format: date-time
++             */
++            updated_at: string;
++            /** Wasm Module Sha256 */
++            wasm_module_sha256?: string | null;
++            /** Workspace Id */
++            workspace_id?: string | null;
++        };
++        /**
++         * DefaultWorkflowHookUpdateRequest
++         * @description Payload for updating an existing default workflow hook template.
++         */
++        DefaultWorkflowHookUpdateRequest: {
++            /** Agent */
++            agent?: string | null;
++            /** Agent Definition Id */
++            agent_definition_id?: string | null;
++            /** Agent Slug */
++            agent_slug?: string | null;
++            /** Allowed Mutable Fields */
++            allowed_mutable_fields?: string[] | null;
++            /** Failure Policy */
++            failure_policy?: ("fail_closed" | "fail_open_warn") | null;
++            /** From State Name */
++            from_state_name?: string | null;
++            /** Hook Kind */
++            hook_kind?: string | null;
++            /** Is Enabled */
++            is_enabled?: boolean | null;
++            /** Max Rework Attempts */
++            max_rework_attempts?: number | null;
++            /** Name */
++            name?: string | null;
++            /** Sort Rank */
++            sort_rank?: number | null;
++            /** Timeout Ms */
++            timeout_ms?: number | null;
++            /** To State Name */
++            to_state_name?: string | null;
++            /** Wasm Module Sha256 */
++            wasm_module_sha256?: string | null;
++        };
+         /**
+          * DestructiveExecuteIn
+          * @description Payload for Stage 2 delete execution.
+@@ -13008,7 +13309,7 @@ export interface components {
+             auto_archive_days?: number | null;
+             /**
+              * Default Gate Timeout Ms
+-             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
++             * @description Updated default workflow gate timeout in milliseconds (1000..600000, or null)
+              */
+             default_gate_timeout_ms?: number | null;
+             /**
+@@ -13056,7 +13357,7 @@ export interface components {
+             capabilities: string[];
+             /**
+              * Default Gate Timeout Ms
+-             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
++             * @description Configured default workflow gate timeout in milliseconds
+              */
+             default_gate_timeout_ms?: number | null;
+             /**
+@@ -16335,6 +16636,10 @@ export interface components {
+             hook_kind: string;
+             /** Id */
+             id: string;
++            /** Inherited From Scope */
++            inherited_from_scope?: ("system" | "workspace") | null;
++            /** Inherited From Template Id */
++            inherited_from_template_id?: string | null;
+             /** Is Enabled */
+             is_enabled: boolean;
+             /** Manifest Sha256 */
+@@ -18402,18 +18707,17 @@ export interface operations {
+             };
+         };
+     };
+-    api_destructive_execute_api_v1_admin_destructive_execute_post: {
++    admin_list_default_hooks_api_v1_admin_default_workflow_hooks_get: {
+         parameters: {
+-            query?: never;
++            query?: {
++                scope_kind?: ("system" | "workspace") | null;
++                workspace_id?: string | null;
++            };
+             header?: never;
+             path?: never;
+             cookie?: never;
+         };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["DestructiveExecuteIn"];
+-            };
+-        };
++        requestBody?: never;
+         responses: {
+             /** @description Successful Response */
+             200: {
+@@ -18421,7 +18725,7 @@ export interface operations {
+                     [name: string]: unknown;
+                 };
+                 content: {
+-                    "application/json": components["schemas"]["DestructiveExecuteOut"];
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"][];
+                 };
+             };
+             /** @description Unauthorized - authentication required */
+@@ -18433,15 +18737,6 @@ export interface operations {
+                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                 };
+             };
+-            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+-            412: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+             /** @description Validation Error */
+             422: {
+                 headers: {
+@@ -18453,7 +18748,7 @@ export interface operations {
+             };
+         };
+     };
+-    api_destructive_request_api_v1_admin_destructive_request_post: {
++    admin_create_default_hook_api_v1_admin_default_workflow_hooks_post: {
+         parameters: {
+             query?: never;
+             header?: never;
+@@ -18462,17 +18757,17 @@ export interface operations {
+         };
+         requestBody: {
+             content: {
+-                "application/json": components["schemas"]["DestructiveRequestIn"];
++                "application/json": components["schemas"]["DefaultWorkflowHookCreateRequest"];
+             };
+         };
+         responses: {
+             /** @description Successful Response */
+-            200: {
++            201: {
+                 headers: {
+                     [name: string]: unknown;
+                 };
+                 content: {
+-                    "application/json": components["schemas"]["DestructiveRequestOut"];
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
+                 };
+             };
+             /** @description Unauthorized - authentication required */
+@@ -18484,15 +18779,6 @@ export interface operations {
+                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                 };
+             };
+-            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+-            412: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+             /** @description Validation Error */
+             422: {
+                 headers: {
+@@ -18504,26 +18790,210 @@ export interface operations {
+             };
+         };
+     };
+-    api_destructive_restore_api_v1_admin_destructive_restore_post: {
++    admin_delete_default_hook_api_v1_admin_default_workflow_hooks__template_id__delete: {
+         parameters: {
+             query?: never;
+             header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["DestructiveRestoreIn"];
++            path: {
++                template_id: string;
+             };
++            cookie?: never;
+         };
++        requestBody?: never;
+         responses: {
+             /** @description Successful Response */
+-            200: {
++            204: {
+                 headers: {
+                     [name: string]: unknown;
+                 };
+-                content: {
+-                    "application/json": components["schemas"]["DestructiveRestoreOut"];
++                content?: never;
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                template_id: string;
++            };
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DefaultWorkflowHookUpdateRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    api_destructive_execute_api_v1_admin_destructive_execute_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DestructiveExecuteIn"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DestructiveExecuteOut"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
++            412: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    api_destructive_request_api_v1_admin_destructive_request_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DestructiveRequestIn"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DestructiveRequestOut"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
++            412: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    api_destructive_restore_api_v1_admin_destructive_restore_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DestructiveRestoreIn"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DestructiveRestoreOut"];
+                 };
+             };
+             /** @description Unauthorized - authentication required */
+@@ -29630,6 +30100,46 @@ export interface operations {
+             };
+         };
+     };
++    sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                project: string;
++            };
++            cookie?: never;
++        };
++        requestBody?: never;
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["WorkflowHookResponse"][];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
+     delete_repo_binding_api_v1_repo_bindings__binding_id__delete: {
+         parameters: {
+             query?: never;
+@@ -32583,6 +33093,176 @@ export interface operations {
+             };
+         };
+     };
++    workspace_list_default_hooks_api_v1_workspaces__workspace__default_workflow_hooks_get: {
++        parameters: {
++            query?: {
++                include_system?: boolean;
++            };
++            header?: never;
++            path: {
++                workspace: string;
++            };
++            cookie?: never;
++        };
++        requestBody?: never;
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"][];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    workspace_create_default_hook_api_v1_workspaces__workspace__default_workflow_hooks_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                workspace: string;
++            };
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DefaultWorkflowHookCreateRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            201: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    workspace_delete_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__delete: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                workspace: string;
++                template_id: string;
++            };
++            cookie?: never;
++        };
++        requestBody?: never;
++        responses: {
++            /** @description Successful Response */
++            204: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content?: never;
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    workspace_update_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__patch: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                workspace: string;
++                template_id: string;
++            };
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["DefaultWorkflowHookUpdateRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
+     oauth_authorize_oauth_authorize_get: {
+         parameters: {
+             query: {
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 39d62883..74790546 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -552,6 +552,23 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
++                    <Link
++                      to="/admin/workflows"
++                      role="menuitem"
++                      data-testid="topbar-admin-workflows-link"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          ⚡
++                        </span>
++                        Default Workflows
++                      </span>
++                    </Link>
++
+                     <Link
+                       to="/admin/agent-runners"
+                       role="menuitem"
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index a9e1c86b..409c63a8 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -71,6 +71,7 @@ import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
+ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
+ import { AboutPage } from '../features/about/AboutPage';
+ import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
++import { DefaultWorkflowHooksStudio } from '../features/workflows/DefaultWorkflowHooksStudio';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { DocsCenterPage } from '../features/docs-center/DocsCenterPage';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+@@ -2242,6 +2243,10 @@ export const appRoutes: RouteObject[] = [
+                 path: 'agents',
+                 element: <AdminAgentsRedirect />,
+               },
++              {
++                path: 'workflows',
++                element: <DefaultWorkflowHooksStudio scopeKind="system" />,
++              },
+               {
+                 path: 'agent-runners',
+                 element: <RunnerStudioPage />,
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+index b4ca1d45..21d29215 100644
+--- a/kanban/web/src/features/admin/AdminStudioSubnav.tsx
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+@@ -9,12 +9,12 @@ import { apiFetch } from '../../api/client';
+ import './AdminStudioSubnav.css';
+ 
+ export interface AdminStudioSubnavProps {
+-  activeTab?: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | undefined;
++  activeTab?: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | 'workflows' | undefined;
+   isServerAdmin?: boolean | undefined;
+ }
+ 
+ interface AdminTabDefinition {
+-  id: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
++  id: 'auth' | 'ai' | 'agents' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics' | 'workflows';
+   testId: string;
+   label: string;
+   path: string;
+@@ -26,6 +26,7 @@ const ADMIN_TABS: AdminTabDefinition[] = [
+   { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️', serverOnly: true },
+   { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠', serverOnly: true },
+   { id: 'agents', testId: 'tab-admin-agents', label: 'Agents', path: '/admin/agents', icon: '🤖', serverOnly: true },
++  { id: 'workflows', testId: 'tab-admin-workflows', label: 'Default Workflows', path: '/admin/workflows', icon: '⚡', serverOnly: true },
+   { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀', serverOnly: true },
+   { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑', serverOnly: true },
+   { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐', serverOnly: true },
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index 5aefd00a..afc023d3 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -23,6 +23,7 @@ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { AiStudioPage } from '../admin-ai/AiStudioPage';
+ import { AgentStudioPage } from '../admin-agents/AgentStudioPage';
++import { DefaultWorkflowHooksStudio } from '../workflows/DefaultWorkflowHooksStudio';
+ import './ProjectSettingsPage.css';
+ import './WorkspaceSettingsPage.css';
+ 
+@@ -63,7 +64,7 @@ export function formatHandle(handle?: string | null): string {
+   return clean ? `@${clean}` : '';
+ }
+ 
+-export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'ai' | 'agents' | 'trash';
++export type WorkspaceTab = 'general' | 'members' | 'groups' | 'roles' | 'ai' | 'agents' | 'workflows' | 'trash';
+ 
+ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
+   if (!hash) return null;
+@@ -74,6 +75,7 @@ export function parseTabFromHash(hash?: string | null): WorkspaceTab | null {
+   if (clean === 'tab-roles' || clean === 'roles') return 'roles';
+   if (clean === 'tab-ai' || clean === 'ai') return 'ai';
+   if (clean === 'tab-agents' || clean === 'agents') return 'agents';
++  if (clean === 'tab-workflows' || clean === 'workflows') return 'workflows';
+   if (clean === 'tab-trash' || clean === 'trash') return 'trash';
+   return null;
+ }
+@@ -925,6 +927,17 @@ export function WorkspaceSettingsPage(): JSX.Element {
+             >
+               Autonomous Agents
+             </button>
++            <button
++              type="button"
++              role="tab"
++              id="tab-workflows"
++              aria-selected={activeTab === 'workflows'}
++              data-testid="tab-workflows"
++              className={`kb-settings-tab ${activeTab === 'workflows' ? 'kb-settings-tab-active' : ''}`}
++              onClick={() => { handleTabChange('workflows'); }}
++            >
++              Workflow Hooks
++            </button>
+           </>
+         )}
+         <button
+@@ -1827,6 +1840,16 @@ export function WorkspaceSettingsPage(): JSX.Element {
+           </div>
+         )}
+ 
++        {activeTab === 'workflows' && (
++          <div data-testid="workspace-workflows-section">
++            <DefaultWorkflowHooksStudio
++              scopeKind="workspace"
++              workspaceId={settings?.workspace_id ?? settings?.id}
++              showSubnav={false}
++            />
++          </div>
++        )}
++
+         {activeTab === 'trash' && (
+           <div className="kb-members-section" data-testid="workspace-trash-studio">
+             <div className="kb-settings-header">
+diff --git a/kanban/web/src/features/workflows/HookPipelineRow.tsx b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+index 155c2bff..d114efce 100644
+--- a/kanban/web/src/features/workflows/HookPipelineRow.tsx
++++ b/kanban/web/src/features/workflows/HookPipelineRow.tsx
+@@ -223,6 +223,19 @@ export function HookPipelineRow({
+           {/* Hook Name & Command Summary */}
+           <span className="hook-name">{hook.name}</span>
+           {commandSummary && <span className="hook-command-summary">{commandSummary}</span>}
++          {Boolean(hook.inherited_from_template_id) && (
++            <span
++              className="hook-inherited-badge"
++              data-testid={`hook-inherited-badge-${hook.id}`}
++              title={
++                hook.inherited_from_scope === 'system'
++                  ? 'Inherited from System Default Template'
++                  : 'Inherited from Workspace Default Template'
++              }
++            >
++              Inherited from Default
++            </span>
++          )}
+         </div>
+ 
+         <div className="hook-pipeline-right">
+diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+index fd8c2d77..3fa46821 100644
+--- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
++++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
+@@ -20,6 +20,7 @@ import {
+   disableWorkflowHook,
+   deleteWorkflowHook,
+   reorderWorkflowHooks,
++  syncDefaultWorkflowHooks,
+   fetchAgentDefinitions,
+   fetchProjectStates,
+   fetchApprovedWasmModules,
+@@ -125,6 +126,10 @@ export function WorkflowStudioPage({
+   const [timeoutSuccess, setTimeoutSuccess] = useState<string | null>(null);
+   const [timeoutError, setTimeoutError] = useState<string | null>(null);
+ 
++  // Sync default workflow hooks state
++  const [isSyncingDefaults, setIsSyncingDefaults] = useState(false);
++  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
++
+   const handleSaveProjectTimeout = async (val: number | null) => {
+     try {
+       setIsSavingTimeout(true);
+@@ -276,6 +281,27 @@ export function WorkflowStudioPage({
+     }
+   };
+ 
++  // Handler to sync default workflow hooks onto this project
++  const handleSyncDefaults = async () => {
++    try {
++      setIsSyncingDefaults(true);
++      setSyncStatusMessage(null);
++      const synced = await syncDefaultWorkflowHooks(projectKey);
++      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
++      setSyncStatusMessage(
++        synced.length > 0
++          ? `Successfully synced ${String(synced.length)} default hook template(s).`
++          : 'All default hook templates are already present on this project.',
++      );
++    } catch (err: unknown) {
++      if (!isAal2StepUpCancelled(err)) {
++        setSyncStatusMessage('Failed to sync default workflow hook templates.');
++      }
++    } finally {
++      setIsSyncingDefaults(false);
++    }
++  };
++
+   return (
+     <div className="workflow-studio" data-testid="workflow-studio-page">
+       {/* Studio Header */}
+@@ -293,6 +319,18 @@ export function WorkflowStudioPage({
+             title="Scripted Workflows & Transition Helpers Documentation"
+             testId="workflow-studio-doc-link"
+           />
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-secondary"
++            data-testid="sync-default-hooks-btn"
++            onClick={() => {
++              void handleSyncDefaults();
++            }}
++            disabled={isSyncingDefaults}
++            aria-label="Sync Default Hooks"
++          >
++            {isSyncingDefaults ? 'Syncing...' : '🔄 Sync Default Hooks'}
++          </button>
+           <button
+             type="button"
+             className="workflow-btn workflow-btn-primary"
+@@ -308,6 +346,26 @@ export function WorkflowStudioPage({
+         </div>
+       </header>
+ 
++      {/* Sync Status Banner */}
++      {syncStatusMessage && (
++        <div
++          className="workflow-alert workflow-alert-info"
++          role="status"
++          data-testid="sync-defaults-status"
++          style={{ marginBottom: '1rem' }}
++        >
++          <span>{syncStatusMessage}</span>
++          <button
++            type="button"
++            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
++            style={{ marginLeft: 'auto' }}
++            onClick={() => { setSyncStatusMessage(null); }}
++          >
++            Dismiss
++          </button>
++        </div>
++      )}
++
+       {/* General Alert */}
+       {generalError && (
+         <div className="workflow-alert workflow-alert-danger" role="alert">
+diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
+index 9a4c10ac..eb1b21a4 100644
+--- a/kanban/web/src/features/workflows/api.ts
++++ b/kanban/web/src/features/workflows/api.ts
+@@ -53,6 +53,8 @@ export interface WorkflowHook {
+   allowed_mutable_fields?: string[] | undefined;
+   last_execution_log?: string | undefined;
+   last_execution_status?: string | undefined;
++  inherited_from_template_id?: string | null | undefined;
++  inherited_from_scope?: 'system' | 'workspace' | null | undefined;
+ }
+ 
+ export interface TransitionRule {
+@@ -547,3 +549,130 @@ export async function fetchApprovedWasmModules(projectKey?: string): Promise<Was
+     return DEFAULT_WASM_MODULES;
+   }
+ }
++
++export type DefaultHookScopeKind = 'system' | 'workspace';
++
++export interface DefaultWorkflowHook {
++  id: string;
++  scope_kind: DefaultHookScopeKind;
++  workspace_id?: string | null;
++  name: string;
++  from_state_name?: string | null;
++  to_state_name: string;
++  hook_kind: string;
++  sort_rank: number;
++  is_enabled: boolean;
++  wasm_module_sha256?: string | null;
++  agent_definition_id?: string | null;
++  agent_slug?: string | null;
++  allowed_mutable_fields: string[];
++  failure_policy: FailurePolicy;
++  timeout_ms?: number | null;
++  max_rework_attempts: number;
++  created_by?: string | null;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface CreateDefaultWorkflowHookPayload {
++  name: string;
++  scope_kind: DefaultHookScopeKind;
++  workspace_id?: string | null;
++  from_state_name?: string | null;
++  to_state_name: string;
++  hook_kind?: string;
++  sort_rank?: number;
++  is_enabled?: boolean;
++  wasm_module_sha256?: string | null;
++  agent?: string | null;
++  agent_definition_id?: string | null;
++  agent_slug?: string | null;
++  allowed_mutable_fields?: string[];
++  failure_policy?: FailurePolicy;
++  timeout_ms?: number | null;
++  max_rework_attempts?: number;
++}
++
++export interface UpdateDefaultWorkflowHookPayload {
++  name?: string;
++  from_state_name?: string | null;
++  to_state_name?: string;
++  hook_kind?: string;
++  sort_rank?: number;
++  is_enabled?: boolean;
++  wasm_module_sha256?: string | null;
++  agent?: string | null;
++  agent_definition_id?: string | null;
++  agent_slug?: string | null;
++  allowed_mutable_fields?: string[];
++  failure_policy?: FailurePolicy;
++  timeout_ms?: number | null;
++  max_rework_attempts?: number;
++}
++
++export async function fetchDefaultWorkflowHooks(
++  scopeKind?: DefaultHookScopeKind,
++  workspaceId?: string,
++): Promise<DefaultWorkflowHook[]> {
++  try {
++    const params = new URLSearchParams();
++    if (scopeKind) params.set('scope_kind', scopeKind);
++    if (workspaceId) params.set('workspace_id', workspaceId);
++    const qs = params.toString();
++    const endpoint = workspaceId
++      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks${scopeKind ? `?include_system=${scopeKind === 'system' ? 'true' : 'false'}` : ''}`
++      : `/api/v1/admin/default-workflow-hooks${qs ? `?${qs}` : ''}`;
++    const data = (await apiFetch('GET', endpoint as never)) as DefaultWorkflowHook[];
++    return Array.isArray(data) ? data : [];
++  } catch {
++    return [];
++  }
++}
++
++export async function createDefaultWorkflowHook(
++  payload: CreateDefaultWorkflowHookPayload,
++  workspaceId?: string,
++): Promise<DefaultWorkflowHook> {
++  const endpoint =
++    payload.scope_kind === 'workspace' && workspaceId
++      ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks`
++      : '/api/v1/admin/default-workflow-hooks';
++  const res = (await apiFetch('POST', endpoint as never, {
++    body: payload,
++  })) as DefaultWorkflowHook;
++  return res;
++}
++
++export async function updateDefaultWorkflowHook(
++  hookId: string,
++  payload: UpdateDefaultWorkflowHookPayload,
++  workspaceId?: string,
++): Promise<DefaultWorkflowHook> {
++  const endpoint = workspaceId
++    ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks/${encodeURIComponent(hookId)}`
++    : `/api/v1/admin/default-workflow-hooks/${encodeURIComponent(hookId)}`;
++  const res = (await apiFetch('PATCH', endpoint as never, {
++    body: payload,
++  })) as DefaultWorkflowHook;
++  return res;
++}
++
++export async function deleteDefaultWorkflowHook(
++  hookId: string,
++  workspaceId?: string,
++): Promise<void> {
++  const endpoint = workspaceId
++    ? `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/default-workflow-hooks/${encodeURIComponent(hookId)}`
++    : `/api/v1/admin/default-workflow-hooks/${encodeURIComponent(hookId)}`;
++  await apiFetch('DELETE', endpoint as never);
++}
++
++export async function syncDefaultWorkflowHooks(
++  projectKey: string,
++): Promise<WorkflowHook[]> {
++  const res = (await apiFetch(
++    'POST',
++    `/api/v1/projects/${encodeURIComponent(projectKey)}/workflow-hooks/sync-defaults` as never,
++  )) as WorkflowHook[];
++  return Array.isArray(res) ? res : [];
++}
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+index 53722255..27322e96 100644
+--- a/kanban/web/src/features/workflows/workflows.css
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -342,6 +342,20 @@
+   border: 1px solid var(--border-subtle);
+ }
+ 
++.hook-inherited-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  font-size: 0.7rem;
++  font-weight: 600;
++  padding: 2px 8px;
++  border-radius: 12px;
++  background-color: rgba(99, 102, 241, 0.12);
++  color: var(--accent-primary, #6366f1);
++  border: 1px solid rgba(99, 102, 241, 0.3);
++  letter-spacing: 0.02em;
++}
++
+ .hook-policy-badge {
+   font-size: 0.75rem;
+   font-weight: 500;
+diff --git a/kanban/workflows/hooks_service.py b/kanban/workflows/hooks_service.py
+index 163535f6..6e5f1108 100644
+--- a/kanban/workflows/hooks_service.py
++++ b/kanban/workflows/hooks_service.py
+@@ -7,7 +7,7 @@ from __future__ import annotations
+ 
+ import logging
+ import uuid
+-from typing import TYPE_CHECKING, Any, Final, Literal
++from typing import TYPE_CHECKING, Any, Final, Literal, cast
+ 
+ from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy import delete, func, select, text
+@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, text
+ from database.models.agent_definition import AgentDefinition
+ from database.models.projects import Project, WorkflowState
+ from database.models.wasm_module import ApprovedWasmModule
+-from database.models.workflow import WorkflowTransitionHook
++from database.models.workflow import DefaultWorkflowHook, WorkflowTransitionHook
+ from kanban.agents.cli_policy import CliPolicyError, assert_runtime_argv
+ from kanban.api.problems import ProblemException, not_found
+ from kanban.services.activity import ActivityEventType, record_activity
+@@ -141,6 +141,8 @@ class WorkflowHookResponse(BaseModel):
+     repo_binding_slug: str | None = None
+     repo_access_mode: str | None = None
+     mcp_access_summary: str | None = None
++    inherited_from_template_id: uuid.UUID | None = None
++    inherited_from_scope: Literal["system", "workspace"] | None = None
+ 
+ 
+ class TransitionRule(BaseModel):
+@@ -383,6 +385,15 @@ class WorkflowHookService:
+         wasm_hex = hook.wasm_module_sha256.hex() if hook.wasm_module_sha256 else None
+         manifest_hex = hook.manifest_sha256.hex()
+ 
++        inherited_scope: Literal["system", "workspace"] | None = None
++        if hook.inherited_from_template_id is not None:
++            scope_stmt = select(DefaultWorkflowHook.scope_kind).where(
++                DefaultWorkflowHook.id == hook.inherited_from_template_id
++            )
++            raw_scope = (await session.execute(scope_stmt)).scalar_one_or_none()
++            if raw_scope in ("system", "workspace"):
++                inherited_scope = cast("Literal['system', 'workspace']", raw_scope)
++
+         return WorkflowHookResponse(
+             id=str(hook.id),
+             name=hook.name,
+@@ -409,6 +420,8 @@ class WorkflowHookService:
+             effective_timeout_ms=effective_timeout_ms,
+             repo_binding_slug=repo_binding_slug,
+             repo_access_mode=repo_access_mode,
++            inherited_from_template_id=hook.inherited_from_template_id,
++            inherited_from_scope=inherited_scope,
+         )
+ 
+     @classmethod
+@@ -1016,3 +1029,32 @@ class WorkflowHookService:
+         for uh in updated_hooks:
+             res.append(await cls.serialize_hook(session, uh))
+         return res
++
++    @classmethod
++    async def materialize_default_workflow_hooks(
++        cls,
++        session: AsyncSession,
++        workspace_id: uuid.UUID,
++        project_id: uuid.UUID,
++        *,
++        skip_existing: bool = True,
++    ) -> list[WorkflowTransitionHook]:
++        """Copy enabled default workflow hook templates into a project (copy-on-create inheritance)."""
++        from kanban.workflows.default_hooks import (  # noqa: PLC0415
++            materialize_default_workflow_hooks as _materialize,
++        )
++
++        return await _materialize(session, workspace_id, project_id, skip_existing=skip_existing)
++
++
++async def materialize_default_workflow_hooks(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    *,
++    skip_existing: bool = True,
++) -> list[WorkflowTransitionHook]:
++    """Materialize enabled default workflow hook templates for a project."""
++    from kanban.workflows.default_hooks import materialize_default_workflow_hooks as _materialize  # noqa: PLC0415
++
++    return await _materialize(session, workspace_id, project_id, skip_existing=skip_existing)

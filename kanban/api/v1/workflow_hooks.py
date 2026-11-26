@@ -197,3 +197,31 @@ async def list_approved_wasm_modules(
         )
         await session.commit()
         return modules
+
+
+@router.post(
+    "/projects/{project}/workflow-hooks/sync-defaults",
+    response_model=list[WorkflowHookResponse],
+    summary="Sync missing default workflow hook templates to project",
+)
+async def sync_default_workflow_hooks(
+    project: str,
+    caller: Caller,
+    session: Session,
+) -> list[WorkflowHookResponse]:
+    """Apply missing default hook templates onto an existing project.
+
+    Does not overwrite existing hooks. Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
+    """
+    async with timing_floor(floor_ms=25.0):
+        project_obj = await get_project_or_404(session, caller, project)
+        await WorkflowHookService.require_admin(session, caller, project_obj.id)
+        WorkflowHookService.require_aal2(caller)
+        created = await WorkflowHookService.materialize_default_workflow_hooks(
+            session,
+            project_obj.workspace_id,
+            project_obj.id,
+            skip_existing=True,
+        )
+        await session.commit()
+        return [await WorkflowHookService.serialize_hook(session, h) for h in created]

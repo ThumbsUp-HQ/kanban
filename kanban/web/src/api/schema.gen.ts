@@ -671,6 +671,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/default-workflow-hooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List default workflow hook templates
+         * @description List default workflow hook templates. Requires admin role and AAL2.
+         */
+        get: operations["admin_list_default_hooks_api_v1_admin_default_workflow_hooks_get"];
+        put?: never;
+        /**
+         * Create a default workflow hook template
+         * @description Create a new default workflow hook template. Requires SERVER_ADMIN for system, WORKSPACE_ADMIN for workspace.
+         */
+        post: operations["admin_create_default_hook_api_v1_admin_default_workflow_hooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/default-workflow-hooks/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a default workflow hook template
+         * @description Delete a default workflow hook template. Requires appropriate admin role and AAL2.
+         */
+        delete: operations["admin_delete_default_hook_api_v1_admin_default_workflow_hooks__template_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a default workflow hook template
+         * @description Update an existing default workflow hook template. Requires appropriate admin role and AAL2.
+         */
+        patch: operations["admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch"];
+        trace?: never;
+    };
     "/api/v1/admin/destructive:execute": {
         parameters: {
             query?: never;
@@ -5007,6 +5055,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project}/workflow-hooks/sync-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync missing default workflow hook templates to project
+         * @description Apply missing default hook templates onto an existing project without overwriting existing hooks.
+         *
+         *     Requires PROJECT_ADMIN or WORKFLOW_EDIT and AAL2.
+         */
+        post: operations["sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repo-bindings/{binding_id}": {
         parameters: {
             query?: never;
@@ -6173,6 +6243,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/default-workflow-hooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List default workflow hook templates for workspace
+         * @description List default workflow hook templates for workspace.
+         */
+        get: operations["workspace_list_default_hooks_api_v1_workspaces__workspace__default_workflow_hooks_get"];
+        put?: never;
+        /**
+         * Create a default workflow hook template for workspace
+         * @description Create a default workflow hook template scoped to this workspace.
+         */
+        post: operations["workspace_create_default_hook_api_v1_workspaces__workspace__default_workflow_hooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace}/default-workflow-hooks/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a workspace default workflow hook template
+         * @description Delete a workspace default workflow hook template.
+         */
+        delete: operations["workspace_delete_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a workspace default workflow hook template
+         * @description Update a workspace default workflow hook template.
+         */
+        patch: operations["workspace_update_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__patch"];
         trace?: never;
     };
     "/oauth/authorize": {
@@ -8979,6 +9097,189 @@ export interface components {
             overflow: number;
             /** Size */
             size: number;
+        };
+        /**
+         * DefaultWorkflowHookCreateRequest
+         * @description Payload for creating a default workflow hook template.
+         */
+        DefaultWorkflowHookCreateRequest: {
+            /**
+             * Agent
+             * @description Agent definition UUID or slug (e.g. @reality-checker)
+             */
+            agent?: string | null;
+            /**
+             * Agent Definition Id
+             * @description Agent definition UUID
+             */
+            agent_definition_id?: string | null;
+            /**
+             * Agent Slug
+             * @description Agent slug
+             */
+            agent_slug?: string | null;
+            /**
+             * Allowed Mutable Fields
+             * @description Fields this hook is permitted to modify
+             */
+            allowed_mutable_fields?: string[];
+            /**
+             * Failure Policy
+             * @description Failure policy: fail_closed or fail_open_warn
+             * @default fail_closed
+             * @enum {string}
+             */
+            failure_policy: "fail_closed" | "fail_open_warn";
+            /**
+             * From State Name
+             * @description Source state name, or null/'*' for Any State wildcard
+             */
+            from_state_name?: string | null;
+            /**
+             * Hook Kind
+             * @description Hook kind: agent_async, wasm_sync, builtin (or agent_interceptor)
+             * @default agent_async
+             */
+            hook_kind: string;
+            /**
+             * Is Enabled
+             * @description Whether template is enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Max Rework Attempts
+             * @description Maximum rework attempts (0..20)
+             * @default 3
+             */
+            max_rework_attempts: number;
+            /**
+             * Name
+             * @description Unique template name
+             */
+            name: string;
+            /**
+             * Scope Kind
+             * @description Scope kind: system or workspace
+             * @enum {string}
+             */
+            scope_kind: "system" | "workspace";
+            /**
+             * Sort Rank
+             * @description Sort rank ordering (>= 0)
+             * @default 100
+             */
+            sort_rank: number;
+            /**
+             * Timeout Ms
+             * @description Optional timeout in ms (1000..600000)
+             */
+            timeout_ms?: number | null;
+            /**
+             * To State Name
+             * @description Target state name (e.g. Done)
+             */
+            to_state_name: string;
+            /**
+             * Wasm Module Sha256
+             * @description Hex SHA-256 of approved WASM module
+             */
+            wasm_module_sha256?: string | null;
+            /**
+             * Workspace Id
+             * @description Workspace ID (required for workspace scope, null for system)
+             */
+            workspace_id?: string | null;
+        };
+        /**
+         * DefaultWorkflowHookResponse
+         * @description Serialized representation of a default workflow hook template.
+         */
+        DefaultWorkflowHookResponse: {
+            /** Agent Definition Id */
+            agent_definition_id?: string | null;
+            /** Agent Slug */
+            agent_slug?: string | null;
+            /** Allowed Mutable Fields */
+            allowed_mutable_fields: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Failure Policy */
+            failure_policy: string;
+            /** From State Name */
+            from_state_name?: string | null;
+            /** Hook Kind */
+            hook_kind: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Max Rework Attempts */
+            max_rework_attempts: number;
+            /** Name */
+            name: string;
+            /**
+             * Scope Kind
+             * @enum {string}
+             */
+            scope_kind: "system" | "workspace";
+            /** Sort Rank */
+            sort_rank: number;
+            /** Timeout Ms */
+            timeout_ms?: number | null;
+            /** To State Name */
+            to_state_name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * DefaultWorkflowHookUpdateRequest
+         * @description Payload for updating an existing default workflow hook template.
+         */
+        DefaultWorkflowHookUpdateRequest: {
+            /** Agent */
+            agent?: string | null;
+            /** Agent Definition Id */
+            agent_definition_id?: string | null;
+            /** Agent Slug */
+            agent_slug?: string | null;
+            /** Allowed Mutable Fields */
+            allowed_mutable_fields?: string[] | null;
+            /** Failure Policy */
+            failure_policy?: ("fail_closed" | "fail_open_warn") | null;
+            /** From State Name */
+            from_state_name?: string | null;
+            /** Hook Kind */
+            hook_kind?: string | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Max Rework Attempts */
+            max_rework_attempts?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Rank */
+            sort_rank?: number | null;
+            /** Timeout Ms */
+            timeout_ms?: number | null;
+            /** To State Name */
+            to_state_name?: string | null;
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
         };
         /**
          * DestructiveExecuteIn
@@ -13008,7 +13309,7 @@ export interface components {
             auto_archive_days?: number | null;
             /**
              * Default Gate Timeout Ms
-             * @description Updated default workflow transition gate timeout in milliseconds (1000..600000, or null to clear)
+             * @description Updated default workflow gate timeout in milliseconds (1000..600000, or null)
              */
             default_gate_timeout_ms?: number | null;
             /**
@@ -13056,7 +13357,7 @@ export interface components {
             capabilities: string[];
             /**
              * Default Gate Timeout Ms
-             * @description Configured default workflow transition gate timeout in milliseconds, if enabled
+             * @description Configured default workflow gate timeout in milliseconds
              */
             default_gate_timeout_ms?: number | null;
             /**
@@ -16335,6 +16636,10 @@ export interface components {
             hook_kind: string;
             /** Id */
             id: string;
+            /** Inherited From Scope */
+            inherited_from_scope?: ("system" | "workspace") | null;
+            /** Inherited From Template Id */
+            inherited_from_template_id?: string | null;
             /** Is Enabled */
             is_enabled: boolean;
             /** Manifest Sha256 */
@@ -18380,6 +18685,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HandshakeProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_default_hooks_api_v1_admin_default_workflow_hooks_get: {
+        parameters: {
+            query?: {
+                scope_kind?: ("system" | "workspace") | null;
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_default_hook_api_v1_admin_default_workflow_hooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultWorkflowHookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_default_hook_api_v1_admin_default_workflow_hooks__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_default_hook_api_v1_admin_default_workflow_hooks__template_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultWorkflowHookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -29630,6 +30100,46 @@ export interface operations {
             };
         };
     };
+    sync_default_workflow_hooks_api_v1_projects__project__workflow_hooks_sync_defaults_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowHookResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_repo_binding_api_v1_repo_bindings__binding_id__delete: {
         parameters: {
             query?: never;
@@ -32561,6 +33071,176 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_list_default_hooks_api_v1_workspaces__workspace__default_workflow_hooks_get: {
+        parameters: {
+            query?: {
+                include_system?: boolean;
+            };
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_create_default_hook_api_v1_workspaces__workspace__default_workflow_hooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultWorkflowHookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_delete_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    workspace_update_default_hook_api_v1_workspaces__workspace__default_workflow_hooks__template_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultWorkflowHookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultWorkflowHookResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */

@@ -43,6 +43,7 @@ from kanban.security.permissions import (
     require_capability,
 )
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+from kanban.workflows.default_hooks import materialize_default_workflow_hooks
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -253,6 +254,7 @@ async def create_project(
                 ),
                 {"ws": caller.workspace_id, "pid": caller.principal_id, "proj": project_id},
             )
+            await materialize_default_workflow_hooks(session, caller.workspace_id, project_id)
     except IntegrityError as exc:
         if _is_unique_violation(exc):
             raise _problem(

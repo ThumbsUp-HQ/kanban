@@ -20,6 +20,7 @@ import {
   disableWorkflowHook,
   deleteWorkflowHook,
   reorderWorkflowHooks,
+  syncDefaultWorkflowHooks,
   fetchAgentDefinitions,
   fetchProjectStates,
   fetchApprovedWasmModules,
@@ -124,6 +125,10 @@ export function WorkflowStudioPage({
   const [isSavingTimeout, setIsSavingTimeout] = useState(false);
   const [timeoutSuccess, setTimeoutSuccess] = useState<string | null>(null);
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
+
+  // Sync default workflow hooks state
+  const [isSyncingDefaults, setIsSyncingDefaults] = useState(false);
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
 
   const handleSaveProjectTimeout = async (val: number | null) => {
     try {
@@ -276,6 +281,27 @@ export function WorkflowStudioPage({
     }
   };
 
+  // Handler to sync default workflow hooks onto this project
+  const handleSyncDefaults = async () => {
+    try {
+      setIsSyncingDefaults(true);
+      setSyncStatusMessage(null);
+      const synced = await syncDefaultWorkflowHooks(projectKey);
+      await queryClient.invalidateQueries({ queryKey: ['workflow-hooks', projectKey] });
+      setSyncStatusMessage(
+        synced.length > 0
+          ? `Successfully synced ${String(synced.length)} default hook template(s).`
+          : 'All default hook templates are already present on this project.',
+      );
+    } catch (err: unknown) {
+      if (!isAal2StepUpCancelled(err)) {
+        setSyncStatusMessage('Failed to sync default workflow hook templates.');
+      }
+    } finally {
+      setIsSyncingDefaults(false);
+    }
+  };
+
   return (
     <div className="workflow-studio" data-testid="workflow-studio-page">
       {/* Studio Header */}
@@ -295,6 +321,18 @@ export function WorkflowStudioPage({
           />
           <button
             type="button"
+            className="workflow-btn workflow-btn-secondary"
+            data-testid="sync-default-hooks-btn"
+            onClick={() => {
+              void handleSyncDefaults();
+            }}
+            disabled={isSyncingDefaults}
+            aria-label="Sync Default Hooks"
+          >
+            {isSyncingDefaults ? 'Syncing...' : '🔄 Sync Default Hooks'}
+          </button>
+          <button
+            type="button"
             className="workflow-btn workflow-btn-primary"
             onClick={() => {
               setEditingHook(null);
@@ -307,6 +345,26 @@ export function WorkflowStudioPage({
           </button>
         </div>
       </header>
+
+      {/* Sync Status Banner */}
+      {syncStatusMessage && (
+        <div
+          className="workflow-alert workflow-alert-info"
+          role="status"
+          data-testid="sync-defaults-status"
+          style={{ marginBottom: '1rem' }}
+        >
+          <span>{syncStatusMessage}</span>
+          <button
+            type="button"
+            className="workflow-btn workflow-btn-secondary workflow-btn-sm"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => { setSyncStatusMessage(null); }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* General Alert */}
       {generalError && (
