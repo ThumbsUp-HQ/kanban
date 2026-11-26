@@ -10,6 +10,7 @@ import { LinkAuditorStudio } from './LinkAuditorStudio';
 import { AdminStudioSubnav } from './AdminStudioSubnav';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './AdminDiagnosticsStudio.css';
 
@@ -435,7 +436,24 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
       <AdminStudioSubnav activeTab="diagnostics" isServerAdmin={user?.is_server_admin} />
 
       {/* Top 4-Card Summary Strip */}
-      <section className="admin-diag-summary-strip" aria-label="System Summary Strip">
+      <section className="admin-diag-summary-section" aria-labelledby="summary-heading">
+        <h2 id="summary-heading" className="admin-diag-panel-title">
+          <span aria-hidden="true">📊</span>
+          System Summary
+          <FieldHelpHint
+            title="System Operational Summary"
+            summary="Real-time operational health telemetry across core transports, runtime environments, configuration, and universal graph links."
+            validValues={[
+              { label: 'OK (<100ms)', description: 'Healthy connection across DB, Redis, and worker pool' },
+              { label: 'DEGRADED', description: 'Elevated latency, replica lag, or fallback channel active' },
+              { label: 'DOWN', description: 'Unreachable service, auth failure, or broker disconnected' },
+            ]}
+            caution="Remediation: Run WS Ping / Refresh Diagnostics, and check container logs & DB/Redis connectivity."
+            docHref="/docs/admin-diagnostics-and-link-inspector-studio"
+            testId="system-summary-help"
+          />
+        </h2>
+        <div className="admin-diag-summary-strip" aria-label="System Summary Strip">
         {/* Card 1: Realtime Transport */}
         <div className="admin-diag-summary-card" data-testid="summary-card-realtime">
           <div className="admin-diag-summary-card-header">
@@ -502,6 +520,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
           <div className="admin-diag-summary-card-footer">
             7-class Link Auditor &amp; Purger embedded
           </div>
+        </div>
         </div>
       </section>
 
@@ -588,6 +607,18 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
           <h2 id="health-heading" className="admin-diag-panel-title">
             <span aria-hidden="true">🏥</span>
             Subsystem Operational Health (7 Subsystems)
+            <FieldHelpHint
+              title="Subsystem Operational Health"
+              summary="Real-time operational health telemetry across core subsystems (Database, Realtime Hub, Job Worker, Sandbox, Agents, Runners, Rate Limiter) with automated failover and RLS enforcement."
+              validValues={[
+                { label: 'OK (<100ms)', description: 'Healthy connection across DB, Redis, and worker pool' },
+                { label: 'DEGRADED', description: 'Elevated latency, replica lag, or fallback channel active' },
+                { label: 'DOWN', description: 'Unreachable service, auth failure, or broker disconnected' },
+              ]}
+              caution="Remediation: Run WS Ping / Refresh Diagnostics, and check container logs & DB/Redis connectivity."
+              docHref="/docs/admin-diagnostics-and-link-inspector-studio"
+              testId="subsystem-health-help"
+            />
           </h2>
           <div className="admin-diag-subsystems-grid">
             {subsystemsList.map((sub) => (

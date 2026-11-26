@@ -198,6 +198,20 @@
   border-bottom-color: var(--accent-primary);
 }
 
+:root[data-theme='dark'] .admin-diag-tab--active,
+[data-theme='dark'] .admin-diag-tab--active,
+:where([data-theme='dark']) .admin-diag-tab--active {
+  color: var(--badge-fg);
+  border-bottom-color: var(--badge-fg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .admin-diag-tab--active {
+    color: var(--badge-fg);
+    border-bottom-color: var(--badge-fg);
+  }
+}
+
 /* Subsystem Health Cards Grid */
 .admin-diag-subsystems-grid {
   display: grid;
@@ -278,6 +292,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.admin-diag-panel-title .field-help-hint {
+  margin-left: 0;
 }
 
 /* Config Table */
