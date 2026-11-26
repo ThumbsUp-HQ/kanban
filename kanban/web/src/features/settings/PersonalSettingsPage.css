@@ -91,10 +91,32 @@
   gap: var(--space-1);
 }
 
+.kb-personal-settings-field > .kb-personal-settings-label,
+.kb-personal-settings-label:has(> .field-help-hint),
+.kb-personal-settings-label:has(.field-help-hint),
 .kb-personal-settings-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--fg-primary);
+}
+
+.kb-personal-settings-label .field-help-hint {
+  margin: 0;
+}
+
+[data-theme='dark'] .kb-personal-settings-label {
+  color: var(--fg-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kb-personal-settings-label {
+    color: var(--fg-primary);
+  }
 }
 
 .kb-personal-settings-input,

@@ -1,0 +1,38 @@
+=== 1. TypeScript Check (tsc --noEmit) ===
+Exit code: 0
+=== 2. ESLint Check (pnpm run lint) ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan497-25187308/kanban/web
+> eslint . --max-warnings 0
+
+Exit code: 0
+=== 3. Build Check (pnpm run build) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan497-25187308/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 766 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-xQ8ab8cV.css            639.77 kB │ gzip:  89.82 kB
+dist/assets/index-B4PnxMYI.js           3,143.62 kB │ gzip: 873.66 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.90s
+Exit code: 0
+=== 4. Dash Style Check (check_no_dashes) ===
+Using CPython 3.12.7
+Creating virtual environment at: .venv
+Installed 121 packages in 137ms
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan497-25187308/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit code: 0
+=== ALL BUILD CHECKS PASSED: exit_code=0 ===
+exit_code=0
