@@ -545,6 +545,20 @@
   color: var(--fg-secondary, #4b5563);
 }
 
+.custom-field-label-row,
+.custom-field-structured-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  width: auto;
+}
+
+.custom-field-label-row .field-help-hint,
+.custom-field-structured-label-row .field-help-hint {
+  margin: 0;
+}
+
 .custom-field-input,
 .custom-field-select {
   width: 100%;
