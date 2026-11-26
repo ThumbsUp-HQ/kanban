@@ -140,12 +140,35 @@
   padding: 4px;
 }
 
-/* Metrics Overview Grid */
+/* Metrics Overview Grid (KAN-526) */
+.link-auditor-metrics-section {
+  margin-bottom: 24px;
+}
+
+.link-auditor-metrics-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.link-auditor-metrics-header .field-help-hint {
+  margin-left: 0;
+}
+
+.link-auditor-metrics-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary, #c9d1d9);
+  margin: 0;
+}
+
 .link-auditor-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 
 .metric-card {

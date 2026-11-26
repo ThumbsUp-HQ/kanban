@@ -8,6 +8,7 @@ import { qk } from '../../api/queryKeys';
 import { NotFoundView } from '../../app/routes';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './LinkAuditorStudio.css';
 
 export type InvalidLinkReason =
@@ -383,33 +384,85 @@ export function LinkAuditorStudio(): JSX.Element {
       )}
 
       {/* Reason Breakdown Overview Cards */}
-      <section className="link-auditor-metrics" aria-label="Integrity Metrics">
-        {(
-          Object.keys(REASON_DESCRIPTIONS) as InvalidLinkReason[]
-        ).map((code) => {
-          const info = REASON_DESCRIPTIONS[code];
-          const count = scanMutation.data?.by_reason[code] ?? 0;
-          const isActive = reasonFilter === code;
-          return (
-            <button
-              key={code}
-              type="button"
-              className={`metric-card${isActive ? ' metric-card--active' : ''}`}
-              onClick={() => {
-                setReasonFilter(isActive ? 'ALL' : code);
-              }}
-              data-testid={`metric-card-${code}`}
-            >
-              <div className="metric-card__header">
-                <span className={`metric-badge ${info.badgeClass}`}>
-                  {info.label}
-                </span>
-                <span className="metric-card__count">{count}</span>
-              </div>
-              <p className="metric-card__desc">{info.description}</p>
-            </button>
-          );
-        })}
+      <section className="link-auditor-metrics-section" aria-label="Integrity Metrics">
+        <div className="link-auditor-metrics-header">
+          <h2 className="link-auditor-metrics-title">Integrity Metrics</h2>
+          <FieldHelpHint
+            title="Integrity Metrics"
+            summary="Link verification detects non-referential integrity failures across the Universal Object Graph. Filter flagged links by invalidity reason to inspect details or run audited purges."
+            defaultValue="ALL (No reason filter active)"
+            validValues={[
+              {
+                label: 'DANGLING_SOURCE',
+                description:
+                  'Source entity does not exist in universal object graph',
+              },
+              {
+                label: 'DANGLING_TARGET',
+                description:
+                  'Target entity does not exist in universal object graph',
+              },
+              {
+                label: 'SOFT_DELETED_ENDPOINT',
+                description:
+                  'Endpoint entity is marked soft-deleted while link remains active',
+              },
+              {
+                label: 'ARCHIVED_POLICY_VIOLATION',
+                description:
+                  'Link references an archived entity in violation of linkage policy',
+              },
+              {
+                label: 'TYPE_MATRIX_VIOLATION',
+                description:
+                  'Link connects object kinds prohibited by the universal type matrix',
+              },
+              {
+                label: 'CROSS_WORKSPACE_LEAK',
+                description:
+                  'Link crosses workspace boundaries without multi-tenant grant',
+              },
+              {
+                label: 'PERMISSION_SEVERED',
+                description:
+                  'Access boundary severed between linked entities',
+              },
+            ]}
+            caution="Automated purges delete invalid links permanently with an immutable audit entry. Manually inspect cross-workspace leaks or severed permissions before purging."
+            example="Click 'Dangling Target' to inspect only links whose target object is missing."
+            docHref="/docs/universal-object-graph-and-link-auditor"
+            testId="integrity-metrics-help"
+            ariaLabel="Help: Integrity Metrics"
+          />
+        </div>
+        <div className="link-auditor-metrics" role="region" aria-label="Metric cards">
+          {(
+            Object.keys(REASON_DESCRIPTIONS) as InvalidLinkReason[]
+          ).map((code) => {
+            const info = REASON_DESCRIPTIONS[code];
+            const count = scanMutation.data?.by_reason[code] ?? 0;
+            const isActive = reasonFilter === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                className={`metric-card${isActive ? ' metric-card--active' : ''}`}
+                onClick={() => {
+                  setReasonFilter(isActive ? 'ALL' : code);
+                }}
+                data-testid={`metric-card-${code}`}
+              >
+                <div className="metric-card__header">
+                  <span className={`metric-badge ${info.badgeClass}`}>
+                    {info.label}
+                  </span>
+                  <span className="metric-card__count">{count}</span>
+                </div>
+                <p className="metric-card__desc">{info.description}</p>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Audit List Controls */}
