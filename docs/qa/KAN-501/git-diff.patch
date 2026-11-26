@@ -1,0 +1,627 @@
+diff --git a/kanban/web/src/features/rbac/RbacPolicyBuilder.css b/kanban/web/src/features/rbac/RbacPolicyBuilder.css
+index d12bbaff..147fadfb 100644
+--- a/kanban/web/src/features/rbac/RbacPolicyBuilder.css
++++ b/kanban/web/src/features/rbac/RbacPolicyBuilder.css
+@@ -13,7 +13,8 @@
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+-  gap: 10px;
++  justify-content: space-between;
++  gap: 16px;
+   font-size: 1.15rem;
+   font-weight: 500;
+   color: var(--text-primary, #0f172a);
+@@ -23,6 +24,49 @@
+   border: 1px solid var(--border-subtle, #e2e8f0);
+ }
+ 
++.rbac-narrative-sentence {
++  display: inline-flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 10px;
++  flex: 1 1 auto;
++  min-width: 0;
++}
++
++.rbac-tier-label {
++  display: inline-flex;
++  align-items: center;
++  gap: 4px;
++  font-size: inherit;
++  font-weight: inherit;
++  color: inherit;
++  cursor: default;
++}
++
++.rbac-tier-control-group {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  vertical-align: middle;
++}
++
++.rbac-tier-control-group .field-help-hint {
++  margin: 0;
++  margin-left: 0;
++}
++
++.rbac-header-actions {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  flex-shrink: 0;
++  margin-left: auto;
++}
++
++.rbac-header-actions .kb-studio-doc-link {
++  white-space: nowrap;
++}
++
+ .rbac-tier-select {
+   padding: 6px 12px;
+   font-size: 1rem;
+@@ -330,6 +374,162 @@
+   .rbac-narrative-header {
+     font-size: 1rem;
+     padding: 14px 18px;
++    gap: 12px;
++  }
++}
++
++@media (max-width: 480px) {
++  .rbac-narrative-header {
++    flex-direction: column;
++    align-items: flex-start;
++    padding: 12px 14px;
++    max-width: 100%;
++    gap: 12px;
++  }
++
++  .rbac-narrative-sentence {
++    width: 100%;
++    max-width: 100%;
++    gap: 8px;
++  }
++
++  .rbac-header-actions {
++    width: 100%;
++    max-width: 100%;
++    margin-left: 0;
++    justify-content: flex-start;
++  }
++
++  .rbac-header-actions .kb-studio-doc-link {
++    min-height: 44px;
++    min-width: 44px;
++    display: inline-flex;
++    align-items: center;
++    box-sizing: border-box;
++  }
++
++  .rbac-tier-control-group .field-help-hint {
++    min-width: 44px;
++    min-height: 44px;
++  }
++}
++
++/* 3-Theme Mode Support: Dark theme and prefers-color-scheme */
++[data-theme='dark'] .rbac-narrative-header {
++  background: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++  color: var(--text-primary, #f9fafb);
++}
++
++[data-theme='dark'] .rbac-tier-select {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-strong, #3f4756);
++  color: var(--text-primary, #f9fafb);
++}
++
++[data-theme='dark'] .rbac-fieldset {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-subtle, #2d333f);
++}
++
++[data-theme='dark'] .rbac-fieldset:disabled {
++  background: var(--bg-secondary, #1f232b);
++}
++
++[data-theme='dark'] .rbac-role-chip {
++  background: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++  color: var(--text-primary, #f9fafb);
++}
++
++[data-theme='dark'] .rbac-select-role {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-strong, #3f4756);
++  color: var(--text-secondary, #9ca3af);
++}
++
++[data-theme='dark'] .rbac-popover-card {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-strong, #3f4756);
++  color: var(--text-primary, #f9fafb);
++}
++
++[data-theme='dark'] .rbac-form-input,
++[data-theme='dark'] .rbac-form-select {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-strong, #3f4756);
++  color: var(--text-primary, #f9fafb);
++}
++
++[data-theme='dark'] .rbac-quick-action-btn {
++  background: var(--bg-surface, #16181d);
++  border-color: var(--border-subtle, #2d333f);
++  color: var(--text-secondary, #9ca3af);
++}
++
++[data-theme='dark'] .rbac-quick-action-btn:hover:not(:disabled) {
++  background: var(--bg-hover, #262b35);
++  color: var(--brand-primary, #60a5fa);
++  border-color: var(--brand-primary, #3b82f6);
++}
++
++@media (prefers-color-scheme: dark) {
++  :root:not([data-theme='light']) .rbac-narrative-header {
++    background: var(--bg-surface-raised, #1f232b);
++    border-color: var(--border-subtle, #2d333f);
++    color: var(--text-primary, #f9fafb);
++  }
++
++  :root:not([data-theme='light']) .rbac-tier-select {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-strong, #3f4756);
++    color: var(--text-primary, #f9fafb);
++  }
++
++  :root:not([data-theme='light']) .rbac-fieldset {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-subtle, #2d333f);
++  }
++
++  :root:not([data-theme='light']) .rbac-fieldset:disabled {
++    background: var(--bg-secondary, #1f232b);
++  }
++
++  :root:not([data-theme='light']) .rbac-role-chip {
++    background: var(--bg-surface-raised, #1f232b);
++    border-color: var(--border-subtle, #2d333f);
++    color: var(--text-primary, #f9fafb);
++  }
++
++  :root:not([data-theme='light']) .rbac-select-role {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-strong, #3f4756);
++    color: var(--text-secondary, #9ca3af);
++  }
++
++  :root:not([data-theme='light']) .rbac-popover-card {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-strong, #3f4756);
++    color: var(--text-primary, #f9fafb);
++  }
++
++  :root:not([data-theme='light']) .rbac-form-input,
++  :root:not([data-theme='light']) .rbac-form-select {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-strong, #3f4756);
++    color: var(--text-primary, #f9fafb);
++  }
++
++  :root:not([data-theme='light']) .rbac-quick-action-btn {
++    background: var(--bg-surface, #16181d);
++    border-color: var(--border-subtle, #2d333f);
++    color: var(--text-secondary, #9ca3af);
++  }
++
++  :root:not([data-theme='light']) .rbac-quick-action-btn:hover:not(:disabled) {
++    background: var(--bg-hover, #262b35);
++    color: var(--brand-primary, #60a5fa);
++    border-color: var(--brand-primary, #3b82f6);
+   }
+ }
+ 
+diff --git a/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx b/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
+index 61300f2d..823028d4 100644
+--- a/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
++++ b/kanban/web/src/features/rbac/RbacPolicyBuilder.tsx
+@@ -12,6 +12,8 @@
+ 
+ import React, { useEffect, useRef, useState, type JSX, type ChangeEvent, type SyntheticEvent } from 'react';
+ import { apiFetch, isAal2StepUpCancelled } from '../../api/client';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import './RbacPolicyBuilder.css';
+ 
+ export interface RbacRole {
+@@ -368,63 +370,104 @@ export function RbacPolicyBuilder({
+     <div className="rbac-builder-container" data-testid="rbac-policy-builder">
+       {/* Narrative Sentence Header */}
+       <header className="rbac-narrative-header" aria-label="Narrative RBAC sentence">
+-        <span>As a</span>
+-        <select
+-          className="rbac-tier-select"
+-          value={roleTier}
+-          data-testid="rbac-tier-select"
+-          onChange={(e) => { setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin'); }
+-          }
+-        >
+-          {isServerAdmin && <option value="system admin">system admin</option>}
+-          <option value="workspace admin">workspace admin</option>
+-          <option value="project admin">project admin</option>
+-        </select>
+-        <span>I want</span>
+-        <div className="rbac-chips-group">
+-          {selectedRoles.map((r) => (
+-            <span key={r.id} className="rbac-role-chip" data-testid={`rbac-selected-role-${r.slug}`}>
+-              <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
+-                <circle cx="6" cy="6" r="5" fill={r.color_hex ?? '#3b82f6'} />
+-              </svg>
+-              <span>{r.name}</span>
+-              <button
+-                type="button"
+-                className="rbac-chip-remove"
+-                aria-label={`Deselect ${r.name}`}
+-                onClick={() => { handleToggleRoleSelection(r.id); }}
+-              >
+-                ×
+-              </button>
+-            </span>
+-          ))}
+-          {unselectedRoles.length > 0 && (
++        <div className="rbac-narrative-sentence">
++          <label className="rbac-tier-label" htmlFor="rbac-tier-select">
++            <span>As a</span>
++          </label>
++          <div className="rbac-tier-control-group">
+             <select
+-              className="rbac-select-role"
+-              data-testid="rbac-select-role-dropdown"
+-              onChange={handleSelectRoleFromDropdown}
+-              value=""
++              id="rbac-tier-select"
++              className="rbac-tier-select"
++              value={roleTier}
++              data-testid="rbac-tier-select"
++              aria-label="Administrative Scope Tier"
++              onChange={(e) => {
++                setRoleTier(e.target.value as 'system admin' | 'workspace admin' | 'project admin');
++              }}
+             >
+-              <option value="" disabled>
+-                + Select role
+-              </option>
+-              {unselectedRoles.map((r) => (
+-                <option key={r.id} value={r.id}>
+-                  {r.name}
+-                </option>
+-              ))}
++              {isServerAdmin && <option value="system admin">system admin</option>}
++              <option value="workspace admin">workspace admin</option>
++              <option value="project admin">project admin</option>
+             </select>
+-          )}
+-          <button
+-            type="button"
+-            className="rbac-create-role-btn"
+-            data-testid="rbac-open-create-role"
+-            onClick={handleOpenPopover}
+-          >
+-            *create new*
+-          </button>
++            <FieldHelpHint
++              title="Administrative Scope Tier"
++              summary="Defines role scope propagation and administrative privilege hierarchy. System Admin permissions apply server-wide, Workspace Admin permissions propagate across all workspace resources, and Project Admin permissions are constrained to individual projects."
++              defaultValue="workspace admin"
++              validValues={[
++                {
++                  label: 'system admin',
++                  description:
++                    'Server-wide administrative scope with full authority over workspaces, system roles, and global configurations.',
++                },
++                {
++                  label: 'workspace admin',
++                  description:
++                    'Workspace-level authority governing projects, member provisioning, groups, and workspace RBAC policies.',
++                },
++                {
++                  label: 'project admin',
++                  description:
++                    'Scoped project-level control over issues, fields, workflows, sprints, and project-specific settings.',
++                },
++              ]}
++              docHref="/docs/role-and-permission-matrix"
++              testId="rbac-tier-help"
++              ariaLabel="Help for Administrative Scope Tier"
++            />
++          </div>
++          <span>I want</span>
++          <div className="rbac-chips-group">
++            {selectedRoles.map((r) => (
++              <span key={r.id} className="rbac-role-chip" data-testid={`rbac-selected-role-${r.slug}`}>
++                <svg className="rbac-chip-dot" viewBox="0 0 12 12" aria-hidden="true">
++                  <circle cx="6" cy="6" r="5" fill={r.color_hex ?? '#3b82f6'} />
++                </svg>
++                <span>{r.name}</span>
++                <button
++                  type="button"
++                  className="rbac-chip-remove"
++                  aria-label={`Deselect ${r.name}`}
++                  onClick={() => { handleToggleRoleSelection(r.id); }}
++                >
++                  ×
++                </button>
++              </span>
++            ))}
++            {unselectedRoles.length > 0 && (
++              <select
++                className="rbac-select-role"
++                data-testid="rbac-select-role-dropdown"
++                onChange={handleSelectRoleFromDropdown}
++                value=""
++              >
++                <option value="" disabled>
++                  + Select role
++                </option>
++                {unselectedRoles.map((r) => (
++                  <option key={r.id} value={r.id}>
++                    {r.name}
++                  </option>
++                ))}
++              </select>
++            )}
++            <button
++              type="button"
++              className="rbac-create-role-btn"
++              data-testid="rbac-open-create-role"
++              onClick={handleOpenPopover}
++            >
++              *create new*
++            </button>
++          </div>
++          <span>to have access to</span>
++        </div>
++        <div className="rbac-header-actions">
++          <StudioDocLink
++            href="/docs/role-and-permission-matrix"
++            title="RBAC Policy Reference"
++            testId="rbac-policy-doc-link"
++          />
+         </div>
+-        <span>to have access to</span>
+       </header>
+ 
+       {errorMsg && (
+diff --git a/kanban/web/src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx b/kanban/web/src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx
+index feed79c2..33cff116 100644
+--- a/kanban/web/src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx
++++ b/kanban/web/src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx
+@@ -2,10 +2,12 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React from 'react';
+-import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import { RbacPolicyBuilder, type RbacRole } from '../RbacPolicyBuilder';
+ import * as clientModule from '../../../api/client';
++import { registerShellPanel, ShellPanelsProvider } from '../../../app/shellPanels';
++import { defaultHintController } from '../../../components/emoji/hintTiming';
+ 
+ const MOCK_ROLES: RbacRole[] = [
+   {
+@@ -426,4 +428,209 @@ describe('RbacPolicyBuilder Component (KAN-83)', () => {
+     fireEvent.change(nameInput, { target: { value: 'QA Lead Architect' } });
+     expect(slugInput.value).toBe('qa-specialist');
+   });
++
++  describe('StudioDocLink and FieldHelpHint Integrations (KAN-501)', () => {
++    beforeEach(() => {
++      defaultHintController.close();
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
++        if (path.endsWith('/api/v1/admin/rbac/roles')) {
++          return Promise.resolve(MOCK_ROLES as never);
++        }
++        return Promise.resolve({ permissions: [] } as never);
++      });
++    });
++
++    afterEach(() => {
++      document.documentElement.removeAttribute('data-theme');
++      defaultHintController.close();
++    });
++
++    it('renders rbac-policy-doc-link with correct href, label, and title in header actions in Light and Dark themes', async () => {
++      for (const theme of ['light', 'dark'] as const) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = render(<RbacPolicyBuilder isServerAdmin={true} />);
++
++        await waitFor(() => {
++          expect(screen.getByTestId('rbac-policy-doc-link')).toBeDefined();
++        });
++
++        const docLink = screen.getByTestId('rbac-policy-doc-link');
++        expect(docLink.getAttribute('href')).toBe('/docs/role-and-permission-matrix');
++        expect(docLink.getAttribute('aria-label')).toBe('RBAC Policy Reference');
++        expect(docLink.textContent).toContain('Documentation ->');
++
++        const headerActions = docLink.closest('.rbac-header-actions');
++        expect(headerActions).not.toBeNull();
++
++        const narrativeHeader = docLink.closest('.rbac-narrative-header');
++        expect(narrativeHeader).not.toBeNull();
++        expect(narrativeHeader?.querySelector('.rbac-tier-select')).not.toBeNull();
++
++        unmount();
++      }
++    });
++
++    it('supports keyboard focus and opens in-app help panel on click via ShellPanelsProvider', async () => {
++      let openedPanelHref: string | undefined;
++      let openedPanelTitle: string | undefined;
++
++      const unregister = registerShellPanel('help', ({ arg }) => {
++        const parsed = arg as { href?: string; title?: string } | undefined;
++        openedPanelHref = parsed?.href;
++        openedPanelTitle = parsed?.title;
++        return <div data-testid="in-app-help-drawer">Help Drawer: {parsed?.href}</div>;
++      });
++
++      try {
++        render(
++          <ShellPanelsProvider>
++            <RbacPolicyBuilder isServerAdmin={true} />
++          </ShellPanelsProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('rbac-policy-doc-link')).toBeDefined();
++        });
++
++        const docLink = screen.getByTestId('rbac-policy-doc-link');
++        docLink.focus();
++        expect(document.activeElement).toBe(docLink);
++
++        fireEvent.click(docLink);
++
++        await waitFor(() => {
++          expect(screen.getByTestId('in-app-help-drawer')).toBeDefined();
++        });
++
++        expect(openedPanelHref).toBe('/docs/role-and-permission-matrix');
++        expect(openedPanelTitle).toBe('RBAC Policy Reference');
++      } finally {
++        unregister();
++      }
++    });
++
++    it('renders rbac-tier-help adjacent to the tier selector with complete ARIA attributes', async () => {
++      render(<RbacPolicyBuilder isServerAdmin={true} />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
++      });
++
++      const hintTrigger = screen.getByTestId('rbac-tier-help');
++      const tierSelect = screen.getByTestId('rbac-tier-select');
++
++      const controlGroup = hintTrigger.closest('.rbac-tier-control-group');
++      expect(controlGroup).not.toBeNull();
++      expect(controlGroup?.contains(tierSelect)).toBe(true);
++
++      expect(hintTrigger.getAttribute('aria-label')).toBe('Help for Administrative Scope Tier');
++      expect(hintTrigger.getAttribute('aria-haspopup')).toBe('dialog');
++      expect(hintTrigger.getAttribute('aria-expanded')).toBe('false');
++    });
++
++    it('opens FieldHelpHint popover on focus, displays title, summary, default, and values, and closes on Escape', async () => {
++      render(<RbacPolicyBuilder isServerAdmin={true} />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
++      });
++
++      const hintTrigger = screen.getByTestId('rbac-tier-help');
++      act(() => {
++        hintTrigger.focus();
++      });
++
++      expect(screen.getByTestId('rbac-tier-help-popover')).toBeDefined();
++      expect(hintTrigger.getAttribute('aria-expanded')).toBe('true');
++
++      const popover = screen.getByTestId('rbac-tier-help-popover');
++      expect(popover.textContent).toContain('Administrative Scope Tier');
++      expect(popover.textContent).toContain(
++        'Defines role scope propagation and administrative privilege hierarchy',
++      );
++      expect(popover.textContent).toContain('Default:');
++      expect(popover.textContent).toContain('workspace admin');
++      expect(popover.textContent).toContain('system admin');
++      expect(popover.textContent).toContain('workspace admin');
++      expect(popover.textContent).toContain('project admin');
++
++      const docLink = screen.getByTestId('rbac-tier-help-doc-link');
++      expect(docLink.getAttribute('href')).toBe('/docs/role-and-permission-matrix');
++      expect(docLink.textContent).toContain('More info ->');
++
++      // Escape closes popover
++      act(() => {
++        fireEvent.keyDown(hintTrigger, { key: 'Escape' });
++      });
++
++      expect(hintTrigger.getAttribute('aria-expanded')).toBe('false');
++      expect(screen.queryByTestId('rbac-tier-help-popover')).toBeNull();
++    });
++
++    it('supports clicking trigger to toggle popover and Tab forward navigation', async () => {
++      render(<RbacPolicyBuilder isServerAdmin={true} />);
++
++      await waitFor(() => {
++        expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
++      });
++
++      const hintTrigger = screen.getByTestId('rbac-tier-help');
++      act(() => {
++        hintTrigger.focus();
++      });
++
++      expect(screen.getByTestId('rbac-tier-help-popover')).toBeDefined();
++
++      // Tab navigation from trigger to doc link inside popover
++      act(() => {
++        fireEvent.keyDown(hintTrigger, { key: 'Tab' });
++      });
++      const docLink = screen.getByTestId('rbac-tier-help-doc-link');
++      expect(document.activeElement).toBe(docLink);
++
++      // Clicking trigger closes popover
++      act(() => {
++        fireEvent.click(hintTrigger);
++      });
++      expect(screen.queryByTestId('rbac-tier-help-popover')).toBeNull();
++    });
++
++    it('opens help drawer when clicking documentation link inside FieldHelpHint popover', async () => {
++      let openedPanelHref: string | undefined;
++
++      const unregister = registerShellPanel('help', ({ arg }) => {
++        const parsed = arg as { href?: string; title?: string } | undefined;
++        openedPanelHref = parsed?.href;
++        return <div data-testid="in-app-help-drawer-from-hint">Hint Drawer: {parsed?.href}</div>;
++      });
++
++      try {
++        render(
++          <ShellPanelsProvider>
++            <RbacPolicyBuilder isServerAdmin={true} />
++          </ShellPanelsProvider>,
++        );
++
++        await waitFor(() => {
++          expect(screen.getByTestId('rbac-tier-help')).toBeDefined();
++        });
++
++        fireEvent.click(screen.getByTestId('rbac-tier-help'));
++
++        await waitFor(() => {
++          expect(screen.getByTestId('rbac-tier-help-doc-link')).toBeDefined();
++        });
++
++        fireEvent.click(screen.getByTestId('rbac-tier-help-doc-link'));
++
++        await waitFor(() => {
++          expect(screen.getByTestId('in-app-help-drawer-from-hint')).toBeDefined();
++        });
++
++        expect(openedPanelHref).toBe('/docs/role-and-permission-matrix');
++      } finally {
++        unregister();
++      }
++    });
++  });
+ });

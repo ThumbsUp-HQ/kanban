@@ -1,0 +1,27 @@
+=== UNIT TEST RESULTS ===
+Command: pnpm --dir kanban/web exec vitest run src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx --coverage --coverage.include="src/features/rbac/RbacPolicyBuilder.tsx"
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan501-99a27f21/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx (14 tests) 3181ms
+   ✓ RbacPolicyBuilder Component (KAN-83) (14)
+     ✓ renders narrative sentence header, fetches per-role permissions fallback, and selects/deselects roles 536ms
+     ✓ opens create new role popover, customizes slug/color/clone, creates role, and handles errors 550ms
+     ✓ supports category bulk permission quick-selectors (Select All, Clear All, Read-Only preset) 887ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  15:54:26
+   Duration  6.07s (tests 60%, environment 29%, import 7%, worker 2%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    97.59 |     100 |     100 |                   
+ ...icyBuilder.tsx |     100 |    97.59 |     100 |     100 | 119,289           
+-------------------|---------|----------|---------|---------|-------------------
+
+exit_code=0
