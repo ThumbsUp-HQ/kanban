@@ -880,6 +880,12 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       // Verify semantic tokens in helper copy
       expect(cssContent).toMatch(/\.kb-plane-field-helper\s*\{[^}]*var\(--kb-color-text-secondary/);
 
+      // Verify field proximity constraints and nowrap label wrapping
+      expect(cssContent).toMatch(/\.kb-plane-field\s*\{[^}]*max-width:\s*450px;/);
+      expect(cssContent).toMatch(/\.kb-plane-input-control\s*\{[^}]*max-width:\s*450px;/);
+      expect(cssContent).toMatch(/\.kb-plane-field-label\s*\{[^}]*flex-wrap:\s*nowrap;/);
+      expect(cssContent).toMatch(/\.kb-plane-field-label\s*>\s*span\s*\{[^}]*flex:\s*1\s*1\s*auto;/);
+
       // Verify 44px min-height for mobile touch accessibility
       expect(cssContent).toContain('min-height: 44px;');
     });

@@ -347,17 +347,29 @@
 
 .kb-plane-field {
   margin-top: 16px;
+  max-width: 450px;
+  width: 100%;
 }
 
 .kb-plane-field-label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 0.825rem;
   font-weight: 600;
   margin-bottom: 6px;
   color: var(--kb-color-text-secondary, var(--fg-secondary));
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.kb-plane-field-label > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.kb-plane-field-label .field-help-hint {
+  flex-shrink: 0;
 }
 
 .kb-plane-field-helper {
@@ -372,7 +384,7 @@
   min-height: 40px;
   height: 40px;
   width: 100%;
-  max-width: 360px;
+  max-width: 450px;
   box-sizing: border-box;
   font-size: 0.875rem;
 }
