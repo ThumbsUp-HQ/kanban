@@ -80,7 +80,7 @@ export function StatePriorityRows({
           State
         </label>
         <div className="prop-row__value">
-          {issue.pending_gate && (
+          {(Boolean(issue.pending_gate) || (issue as { gate_status?: string | null }).gate_status === 'pending') && (
             <GateStatusPill
               status="pending"
               pendingGate={issue.pending_gate}
@@ -89,22 +89,29 @@ export function StatePriorityRows({
               testId="drawer-gate-pending"
             />
           )}
-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'reject' && (
-            <GateStatusPill
-              status="rejected"
-              latestVerdict={issue.latest_gate_verdict}
-              issueKey={issue.key}
-              testId="drawer-gate-vetoed"
-            />
-          )}
-          {!issue.pending_gate && issue.latest_gate_verdict?.decision === 'approve' && (
-            <GateStatusPill
-              status="approved"
-              latestVerdict={issue.latest_gate_verdict}
-              issueKey={issue.key}
-              testId="drawer-gate-approved"
-            />
-          )}
+          {!issue.pending_gate &&
+            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
+            (issue.latest_gate_verdict?.decision === 'reject' ||
+              (issue as { gate_status?: string | null }).gate_status === 'rejected' ||
+              (issue as { gate_status?: string | null }).gate_status === 'vetoed') && (
+              <GateStatusPill
+                status="rejected"
+                latestVerdict={issue.latest_gate_verdict}
+                issueKey={issue.key}
+                testId="drawer-gate-vetoed"
+              />
+            )}
+          {!issue.pending_gate &&
+            (issue as { gate_status?: string | null }).gate_status !== 'pending' &&
+            (issue.latest_gate_verdict?.decision === 'approve' ||
+              (issue as { gate_status?: string | null }).gate_status === 'approved') && (
+              <GateStatusPill
+                status="approved"
+                latestVerdict={issue.latest_gate_verdict}
+                issueKey={issue.key}
+                testId="drawer-gate-approved"
+              />
+            )}
           <select
             id="prop-state-select"
             aria-label="State"

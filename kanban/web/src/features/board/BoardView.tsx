@@ -6,7 +6,7 @@ import { apiFetch } from '../../api/client.ts';
 import type { RealtimeClient } from '../../api/realtime.ts';
 import { useOptimisticMutation } from '../../api/optimistic.ts';
 import { qk } from '../../api/queryKeys.ts';
-import { useRealtimeSubscription } from '../../realtime/index.ts';
+import { useRealtimeSubscription, useRealtimeClient } from '../../realtime/index.ts';
 import * as gates from '../gates/index.ts';
 import { BoardColumn } from './BoardColumn.tsx';
 import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
@@ -67,6 +67,8 @@ export function BoardView({
   monitorFactory = monitorForElements,
 }: BoardViewProps): JSX.Element {
   const queryClient = useQueryClient();
+  const ctxClient = useRealtimeClient();
+  const effectiveRealtimeClient = realtimeClient ?? ctxClient;
   const [localIssues, setLocalIssues] = useState<BoardIssue[] | null>(null);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
@@ -173,7 +175,7 @@ export function BoardView({
   }, [currentUserCapabilities]);
 
   gates.useGateRealtimeSync({
-    client: realtimeClient,
+    client: effectiveRealtimeClient,
     queryClient,
     projectKey,
     onToast: (msg) => {
@@ -188,7 +190,7 @@ export function BoardView({
         const base = prev ?? issues;
         return base.map((item) =>
           item.key === payload.issue_key
-            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload)
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.pending', payload, states)
             : item,
         );
       });
@@ -198,7 +200,7 @@ export function BoardView({
         const base = prev ?? issues;
         return base.map((item) =>
           item.key === payload.issue_key
-            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload)
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.approved', payload, states)
             : item,
         );
       });
@@ -212,7 +214,7 @@ export function BoardView({
         const base = prev ?? issues;
         return base.map((item) =>
           item.key === payload.issue_key
-            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload)
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.rejected', payload, states)
             : item,
         );
       });
@@ -234,7 +236,7 @@ export function BoardView({
         const base = prev ?? issues;
         return base.map((item) =>
           item.key === payload.issue_key
-            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload)
+            ? gates.updateBoardIssueWithGate(item, 'workflow.gate.cancelled', payload, states)
             : item,
         );
       });

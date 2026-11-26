@@ -15,6 +15,8 @@ import { StatePriorityRows } from '../../drawer-rail/StatePriorityRows';
 import { handleGateEvent } from '../../gates/useGateRealtimeSync';
 import { qk } from '../../../api/queryKeys';
 import type { IssueDetail } from '../../drawer/slots';
+import { IssuesWorkspaceRoute } from '../../views/viewRegistry';
+import { RealtimeProvider } from '../../../realtime/context';
 
 const mockStates: BoardWorkflowState[] = [
   { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
@@ -935,5 +937,94 @@ describe('BoardGateLifecycle & Lane Default Integration (KAN-432)', () => {
     );
 
     expect(screen.getByTestId('board-column-st-progress')).toBeDefined();
+  });
+
+  it('mounts IssuesWorkspaceRoute without realtimeClient prop, receives live RealtimeProvider context, holds ⏳🤖 and veto snaps back to In Progress', async () => {
+    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
+    const mockRt = createMockRealtime();
+    const testClient = new QueryClient();
+
+    testClient.setQueryData(['states', 'KAN'], mockStates);
+    testClient.setQueryData(qk.project('KAN'), {
+      id: 'proj-kan',
+      key: 'KAN',
+      name: 'Core Project',
+      states: mockStates,
+    });
+
+    const routeIssues = [
+      {
+        id: 'iss-route-1',
+        key: 'KAN-432-RT',
+        project_key: 'KAN',
+        summary: 'Routed Board Gate Issue',
+        state_id: 'st-progress',
+        state: { id: 'st-progress', name: 'In Progress', group: 'started' },
+        priority: { slug: 'high', label: 'High' },
+        board_rank: '000001',
+      },
+    ];
+
+    act(() => {
+      render(
+        <QueryClientProvider client={testClient}>
+          <RealtimeProvider client={mockRt.client} autoConnect={false} bindInvalidation={false}>
+            <IssuesWorkspaceRoute
+              projectKey="KAN"
+              modulesEnabled={false}
+              initialIssues={routeIssues as never}
+              queryClient={testClient}
+            />
+          </RealtimeProvider>
+        </QueryClientProvider>,
+      );
+    });
+
+    // Initial render in In Progress lane
+    expect(screen.getByTestId('board-card-KAN-432-RT')).toBeDefined();
+    const progressCol = screen.getByTestId('board-column-st-progress');
+    expect(progressCol.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
+
+    // 1. Live WebSocket pending gate event
+    act(() => {
+      mockRt.emit({
+        id: 'evt-pending-route',
+        type: 'workflow.gate.pending',
+        channel: 'project:KAN',
+        payload: {
+          issue_key: 'KAN-432-RT',
+          execution_id: 'exec-route-1',
+          hook_name: 'Security Gatekeeper',
+          from_state_id: 'st-progress',
+          to_state_id: 'st-done',
+        },
+      });
+    });
+
+    expect(screen.getByTestId('gate-pending-KAN-432-RT')).toBeDefined();
+
+    // 2. Live WebSocket veto/rejection event
+    act(() => {
+      mockRt.emit({
+        id: 'evt-rejected-route',
+        type: 'workflow.gate.rejected',
+        channel: 'project:KAN',
+        payload: {
+          issue_key: 'KAN-432-RT',
+          execution_id: 'exec-route-1',
+          hook_name: 'Security Gatekeeper',
+          from_state_id: 'st-progress',
+          to_state_id: 'st-done',
+          reason_preview: 'Automated test suite gate rejected',
+        },
+      });
+    });
+
+    // Card automatically returned/snapped back to In Progress column with veto feedback
+    await waitFor(() => {
+      const col = screen.getByTestId('board-column-st-progress');
+      expect(col.contains(screen.getByTestId('board-card-KAN-432-RT'))).toBe(true);
+      expect(screen.getByTestId('gate-vetoed-KAN-432-RT')).toBeDefined();
+    });
   });
 });

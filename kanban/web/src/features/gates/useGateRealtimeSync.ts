@@ -34,12 +34,58 @@ export function cancelGateTransitionApi(executionId: string): Promise<unknown> {
   });
 }
 
+export interface CachedStateLike {
+  id: string;
+  name?: string | undefined;
+  group?: string | undefined;
+  color_hex?: string | null | undefined;
+}
+
+function resolveSyncedState(
+  issue: BoardIssue,
+  stateId: string,
+  fallbackName?: string,
+  cachedStates?: CachedStateLike[],
+): BoardIssue['state'] {
+  if (cachedStates && cachedStates.length > 0) {
+    const matched = cachedStates.find((s) => s.id === stateId);
+    if (matched) {
+      return {
+        id: matched.id,
+        name: matched.name ?? fallbackName ?? '',
+        group: (matched.group ?? 'started') as NonNullable<BoardIssue['state']>['group'],
+        color_hex: matched.color_hex ?? null,
+      };
+    }
+  }
+  if (issue.state) {
+    return {
+      id: stateId,
+      name: fallbackName ?? (issue.state.id === stateId ? issue.state.name : ''),
+      group: issue.state.id === stateId ? issue.state.group : 'started',
+      color_hex: issue.state.id === stateId ? issue.state.color_hex : null,
+    };
+  }
+  if (fallbackName) {
+    return {
+      id: stateId,
+      name: fallbackName,
+      group: 'started' as NonNullable<BoardIssue['state']>['group'],
+      color_hex: null,
+    };
+  }
+  return undefined;
+}
+
 export function updateBoardIssueWithGate(
   issue: BoardIssue,
   eventType: string,
   p: WorkflowGateEventPayload,
+  cachedStates?: CachedStateLike[],
 ): BoardIssue {
   if (eventType === 'workflow.gate.pending' || eventType === 'gate.pending') {
+    const targetStateId = p.to_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
     const pendingGate: PendingGateInfo = {
       execution_id: p.execution_id,
       hook_name: p.hook_name,
@@ -58,11 +104,14 @@ export function updateBoardIssueWithGate(
       ...issue,
       gate_status: 'pending',
       pending_gate: pendingGate,
-      state_id: p.to_state_id ?? issue.state_id,
+      state_id: targetStateId,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
   if (eventType === 'workflow.gate.approved' || eventType === 'gate.approved') {
+    const targetStateId = p.to_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, targetStateId, p.to_state, cachedStates);
     const verdict: LatestGateVerdict = {
       decision: 'approve',
       hook_name: p.hook_name,
@@ -74,8 +123,9 @@ export function updateBoardIssueWithGate(
       ...issue,
       gate_status: 'approved',
       pending_gate: null,
-      state_id: p.to_state_id ?? issue.state_id,
+      state_id: targetStateId,
       latest_gate_verdict: verdict,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
@@ -90,6 +140,7 @@ export function updateBoardIssueWithGate(
     eventType === 'gate.timed_out'
   ) {
     const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
     const verdict: LatestGateVerdict = {
       decision: 'reject',
       hook_name: p.hook_name,
@@ -104,16 +155,19 @@ export function updateBoardIssueWithGate(
       pending_gate: null,
       state_id: fromStateId,
       latest_gate_verdict: verdict,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
   if (eventType === 'workflow.gate.cancelled' || eventType === 'gate.cancelled') {
     const fromStateId = p.from_state_id ?? issue.pending_gate?.from_state_id ?? issue.state_id;
+    const nextState = resolveSyncedState(issue, fromStateId, p.from_state, cachedStates);
     return {
       ...issue,
       gate_status: null,
       pending_gate: null,
       state_id: fromStateId,
+      ...(nextState ? { state: nextState } : {}),
     };
   }
 
