@@ -198,6 +198,7 @@ HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: done
+data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 5.46}
 ```
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=100)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` under `token_cap=0`.
 
@@ -227,6 +228,7 @@ HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: done
+data: {"status": "budget", "ttft_ms": 0.0, "total_ms": 3.1}
 ```
 *Enforcement Assertion:* Verified `BudgetEnforcer.reserve(estimate_tokens=10)` raises `BudgetExceeded("AI token budget exceeded for period 'monthly'")` when monthly tokens exhausted.
 
@@ -430,6 +432,10 @@ HTTP/1.1 200 OK
 Content-Type: text/event-stream; charset=utf-8
 
 event: completion
+data: {"text": "    session = user.authenticate(password)\\n    return session", "tokens": 2}
+
+event: done
+data: {"status": "ok", "ttft_ms": 7.99, "total_ms": 8.29}
 ```
 
 3.9 Create Project Beta Agent:
@@ -527,10 +533,10 @@ POST /api/v1/admin/agent-runners/enrollment-tokens HTTP/1.1
 Host: 127.0.0.1:18413
 Content-Type: application/json
 
-{"pool_slug":"default","ttl_seconds":600}
+{"pool_slug":"default","ttl_seconds":60}
 
 HTTP/1.1 201 Created
-{"id":"01a215b6-0a95-789a-9f3d-82645658af15","pool_slug":"default","enrollment_token":"[REDACTED:KANBAN_KEY]","expires_at":"2026-11-26T02:46:21.524601Z","created_at":"2026-11-26T02:36:21.524601Z"}
+{"id":"01a215b6-1224-78a0-af8a-70c74cff299e","pool_slug":"default","enrollment_token":"[REDACTED:KANBAN_KEY]","expires_at":"2026-11-26T02:37:23.459815Z","created_at":"2026-11-26T02:36:23.459815Z"}
 ```
 
 4.3 Non-Root CLI Daemon Enrollment Execution:
@@ -575,7 +581,7 @@ HTTP/1.1 200 OK
 4.6 mTLS WebSocket Proof-of-Possession Handshake:
 - Client connected to `/api/v1/agent-runners/ws` with `X-Client-Cert-Pem`.
 - Server issued `ChallengeHelloFrame` with nonce.
-- Client signed `kb-runner-pop-v1:18867b14-e6cc-4746-b54f-68385d96a503:[{"id":"18867b14-e6cc-4746-b54f-68385d96a503","workspace_id":"01a215b5-f727-7e80-b72a-673ad3149d9d","pool_slug":"default","hostname":"worker-kan413.internal.test","client_cert_sha256_hex":"e319a7c110a78697f4c9e3e43ff74e4be3605ab9e62a4bc06bdfae902b9b197a","cert_expires_at":"2026-12-26T02:36:22.348988Z","capabilities":{"os":"linux","python":"3.12.7"},"status":"offline","last_heartbeat_at":"2026-11-26T02:36:23.803750Z","revoked_at":null,"created_at":"2026-11-26T02:36:22.349839Z"}]` (EC P-256 signature).
+- Client signed `kb-runner-pop-v1:18867b14-e6cc-4746-b54f-68385d96a503:<challenge_nonce>:e319a7c110a78697f4c9e3e43ff74e4be3605ab9e62a4bc06bdfae902b9b197a` (EC P-256 signature).
 - Server verified signature and responded with `HelloAckFrame` (ack type: `hello_ack`).
 - Runner sent `HeartbeatFrame` updating `last_heartbeat_at` in database.
 
