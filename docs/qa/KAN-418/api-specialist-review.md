@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1`  
-**Target Commit:** `feat/KAN-418-slice3-mcp-workout`  
+**Target Commit:** `d8c36e5c` (branch `feat/KAN-418-slice3-mcp-workout`, base `1bbc9981`)  
 
 ---
 
@@ -67,12 +67,13 @@ The live workouts were executed against an isolated PostgreSQL container (`kan41
 ## 3. Automated Test Verification & Quality Gates
 
 1. **Backend Test Suite (Pytest)**:
-   - 119 tests passed in 52.44s across `test_device_flow.py`, `test_oauth_coverage.py`, `test_oauth_flow.py`, `test_oauth_unit.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`, `test_feature_comparison_parity.py`, and `test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py`.
-   - Coverage on touched modules: 95% total across 1,689 statements (`admin/mcp_keys.py` 95%, `admin/workload_identities.py` 98%, `mcp_keys.py` 97%, `oauth.py` 95%, `mcp/app.py` 95%).
+   - 119 tests passed in 68.66s across `test_device_flow.py`, `test_oauth_coverage.py`, `test_oauth_flow.py`, `test_oauth_unit.py`, `test_unified_mcp_keys_api.py`, `test_admin_mcp_keys_api.py`, `test_workload_oidc_exchange.py`, `test_workload_jwt_auth.py`, `test_mcp_capability_mask_and_cidr.py`, `test_feature_comparison_parity.py`, and `test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py`.
+   - Coverage on touched modules: 95% total across 1,731 statements (`admin/mcp_keys.py` 95%, `admin/workload_identities.py` 98%, `mcp_keys.py` 97%, `oauth.py` 95%, `mcp/app.py` 95%, `database/models/mcp_api_key.py` 100%).
    - 0 failures, 0 errors, 0 warnings.
 
 2. **Frontend Test Suite (Vitest)**:
-   - 4,106 tests passed across 285 test files in 78.80s.
+   - 108 tests passed across 4 targeted test suites (`ConnectOAuthAppModal`, `DeviceActivatePage`, `OAuthClientGovernanceStudio`, `McpAccessStudio`) in 7.80s.
+   - Branch coverage: **95.56%** with clean V8 coverage table.
    - 0 failures, 0 `act(...)` stderr warnings.
 
 3. **Build & Static Analysis Pipeline**:
@@ -93,7 +94,7 @@ The live workouts were executed against an isolated PostgreSQL container (`kan41
   - `ui-specialist-review.md`: In review (`ui-spec`)
 - Forensic Artifacts:
   - `build-check.txt`: All static tools exit 0 cleanly.
-  - `unit-test-results.txt`: Documents 119 Pytest (95% coverage) and 4,106 Vitest tests.
+  - `unit-test-results.txt`: Documents 119 Pytest (95% coverage) and 108 Vitest tests (95.56% branch coverage).
   - `screenshots/`: 7 zero-mock PNG captures across 5 viewports and live workflow states.
   - `03-live-workout-report.md`: Complete live workout report with secret sanitization.
 
