@@ -1082,7 +1082,9 @@ describe('IssuesWorkspaceRoute', () => {
     expect(screen.getByRole('dialog')).toBeDefined();
 
     fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'New Project' } });
-    fireEvent.change(screen.getByLabelText(/Identifier/i), { target: { value: 'NEWP' } });
+    fireEvent.change(screen.getByLabelText('Project Key', { selector: 'input' }), {
+      target: { value: 'NEWP' },
+    });
     const form = screen.getByRole('dialog').querySelector('form');
     expect(form).toBeTruthy();
     if (form) fireEvent.submit(form);

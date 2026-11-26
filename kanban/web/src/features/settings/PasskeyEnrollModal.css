@@ -2,19 +2,16 @@
 /* Apache-2.0 License. See LICENSE for details. */
 
 :root {
-  --kb-passkey-enroll-bg: var(--bg-surface, #ffffff);
-  --kb-passkey-enroll-border: var(--border-subtle, #e2e8f0);
+  color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
-  --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --kb-passkey-enroll-bg: var(--bg-surface, #16181d);
-    --kb-passkey-enroll-border: var(--border-subtle, #2d333f);
+    color-scheme: dark;
   }
 }
 
@@ -32,8 +29,8 @@
 }
 
 .kb-passkey-enroll-modal {
-  background-color: var(--kb-passkey-enroll-bg, var(--bg-surface));
-  border: 1px solid var(--kb-passkey-enroll-border, var(--border-subtle));
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 520px;

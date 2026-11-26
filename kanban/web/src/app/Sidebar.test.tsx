@@ -299,7 +299,7 @@ describe('Sidebar', () => {
 
     document.cookie = 'csrf_token=test-csrf-token';
     const nameInput = screen.getByLabelText(/Project Name/i);
-    const idInput = screen.getByLabelText(/Identifier/i);
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     act(() => {
       fireEvent.change(nameInput, { target: { value: 'New Project' } });
       fireEvent.change(idInput, { target: { value: 'NEW' } });
@@ -371,7 +371,7 @@ describe('Sidebar', () => {
 
     document.cookie = 'csrf_token=test-csrf-token';
     const nameInput = screen.getByLabelText(/Project Name/i);
-    const idInput = screen.getByLabelText(/Identifier/i);
+    const idInput = screen.getByLabelText('Project Key', { selector: 'input' });
     act(() => {
       fireEvent.change(nameInput, { target: { value: 'Alpha Project' } });
       fireEvent.change(idInput, { target: { value: 'ALPHA' } });
@@ -392,7 +392,7 @@ describe('Sidebar', () => {
     });
     expect(screen.getByTestId('create-project-modal')).toBeDefined();
     const dupNameInput = screen.getByLabelText(/Project Name/i);
-    const dupIdInput = screen.getByLabelText(/Identifier/i);
+    const dupIdInput = screen.getByLabelText('Project Key', { selector: 'input' });
     act(() => {
       fireEvent.change(dupNameInput, { target: { value: 'Alpha Project' } });
       fireEvent.change(dupIdInput, { target: { value: 'ALPHA' } });

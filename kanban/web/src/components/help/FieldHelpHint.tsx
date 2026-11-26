@@ -84,7 +84,11 @@ export function FieldHelpHint({
 
   // Restore focus if dismissed via Escape
   useEffect(() => {
-    if (hintState.restoreFocusId === popupId && triggerRef.current) {
+    if (
+      hintState.restoreFocusId === popupId &&
+      triggerRef.current &&
+      document.activeElement !== triggerRef.current
+    ) {
       suppressNextFocusRef.current = true;
       triggerRef.current.focus();
     }

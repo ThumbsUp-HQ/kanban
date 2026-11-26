@@ -406,16 +406,16 @@ describe('AuthStudioPage (KB-P3-36)', () => {
     fireEvent.click(addBtn);
 
     // Fill form inside drawer
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i), {
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i, { selector: 'input' }), {
       target: { value: 'new-idp' },
     });
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i), {
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' }), {
       target: { value: 'New IDP' },
     });
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i), {
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i, { selector: 'input' }), {
       target: { value: 'https://new.example.com' },
     });
-    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i), {
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(/Client ID/i, { selector: 'input' }), {
       target: { value: 'new-client' },
     });
 
@@ -455,7 +455,7 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       fireEvent.click(oktaEditBtn);
     }
 
-    const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+    const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i, { selector: 'input' });
     expect(nameInput.value).toBe('Okta SSO');
     fireEvent.change(nameInput, { target: { value: 'Renamed Okta SSO' } });
 

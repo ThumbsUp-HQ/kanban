@@ -889,8 +889,8 @@ export function AuthCardEditorDrawer({
 
               {/* Provider Kind */}
               <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-provider-kind">
-                  <span>Provider Kind</span>
+                <div className="auth-editor-label">
+                  <label htmlFor="card-provider-kind">Provider Kind</label>
                   <FieldHelpHint
                     title="Provider Kind"
                     summary="Authentication protocol and provider engine (OIDC, OAuth 2.0, or LDAP/Active Directory)."
@@ -903,7 +903,7 @@ export function AuthCardEditorDrawer({
                     docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
                     testId="card-provider-kind-help"
                   />
-                </label>
+                </div>
                 <select
                   id="card-provider-kind"
                   className="auth-editor-select"
@@ -924,8 +924,8 @@ export function AuthCardEditorDrawer({
 
               {/* Display Name */}
               <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-display-name">
-                  <span>Display Name</span>
+                <div className="auth-editor-label">
+                  <label htmlFor="card-display-name">Display Name</label>
                   <FieldHelpHint
                     title="Display Name"
                     summary="User-facing title shown on the login button and admin cards."
@@ -934,7 +934,7 @@ export function AuthCardEditorDrawer({
                     docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
                     testId="card-display-name-help"
                   />
-                </label>
+                </div>
                 <input
                   id="card-display-name"
                   type="text"
@@ -966,8 +966,8 @@ export function AuthCardEditorDrawer({
 
               {/* Enable Card Toggle */}
               <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-is-enabled">
-                  <span>Enable Card</span>
+                <div className="auth-editor-label">
+                  <label htmlFor="card-is-enabled">Enable Card</label>
                   <FieldHelpHint
                     title="Enable Card"
                     summary="Toggle whether this authentication card is active and visible on the login surface."
@@ -976,7 +976,7 @@ export function AuthCardEditorDrawer({
                     docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
                     testId="card-is-enabled-help"
                   />
-                </label>
+                </div>
                 <input
                   id="card-is-enabled"
                   type="checkbox"
@@ -992,8 +992,8 @@ export function AuthCardEditorDrawer({
               {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
                 <div>
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-issuer-url">
-                      <span>Issuer URL</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-issuer-url">Issuer URL</label>
                   <FieldHelpHint
                         title="Issuer URL"
                         summary="OpenID Connect discovery endpoint base URL (fetches .well-known/openid-configuration)."
@@ -1002,7 +1002,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
                         testId="card-issuer-url-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-issuer-url"
                       type="url"
@@ -1023,15 +1023,15 @@ export function AuthCardEditorDrawer({
                   ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-callback-url">
-                      <span>Authorized Redirect URI (Callback URL)</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-callback-url">Authorized Redirect URI (Callback URL)</label>
                   <FieldHelpHint
                         title="Authorized Redirect URI"
                         summary="Read-only callback URL to register in your identity provider console."
                         docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
                         testId="card-callback-url-help"
                       />
-                    </label>
+                </div>
                     <div className="auth-editor-input-group">
                       <input
                         id="card-callback-url"
@@ -1089,8 +1089,8 @@ export function AuthCardEditorDrawer({
                   </div>
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-client-id">
-                      <span>Client ID</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-client-id">Client ID</label>
                   <FieldHelpHint
                         title="Client ID"
                         summary="OAuth 2.0 client identifier assigned by the identity provider."
@@ -1098,7 +1098,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso"
                         testId="card-client-id-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-client-id"
                       type="text"
@@ -1119,8 +1119,8 @@ export function AuthCardEditorDrawer({
                   ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-secret">
-                      <span>Client Secret</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-secret">Client Secret</label>
                   <FieldHelpHint
                         title="Client Secret"
                         summary="Confidential client secret encrypted at rest using envelope encryption (MASTER_KEK)."
@@ -1128,7 +1128,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
                         testId="card-secret-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-secret"
                       type="text"
@@ -1149,8 +1149,8 @@ export function AuthCardEditorDrawer({
 
                   {isEdit && card?.has_secret ? (
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-replace-secret">
-                        <span>Replace Stored Secret</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-replace-secret">Replace Stored Secret</label>
                   <FieldHelpHint
                           title="Replace Stored Secret"
                           summary="Enable to rotate or overwrite the stored encrypted client secret."
@@ -1158,7 +1158,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
                           testId="card-replace-secret-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-replace-secret"
                         type="checkbox"
@@ -1175,8 +1175,8 @@ export function AuthCardEditorDrawer({
               ) : providerKind === 'LDAP' ? (
                 <div>
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-server-url">
-                      <span>Server URL</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-server-url">Server URL</label>
                   <FieldHelpHint
                         title="Server URL"
                         summary="LDAP directory server connection URI. Must use ldaps:// on port 636 for TLS encryption."
@@ -1185,7 +1185,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
                         testId="card-server-url-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-server-url"
                       type="text"
@@ -1206,8 +1206,8 @@ export function AuthCardEditorDrawer({
                   ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-bind-dn">
-                      <span>Bind DN</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-bind-dn">Bind DN</label>
                   <FieldHelpHint
                         title="Bind DN"
                         summary="Distinguished Name of the service account used to search and bind against directory users."
@@ -1216,7 +1216,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#step-by-step-guide-connecting-active-directory"
                         testId="card-bind-dn-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-bind-dn"
                       type="text"
@@ -1237,8 +1237,8 @@ export function AuthCardEditorDrawer({
                   ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-secret">
-                      <span>Bind DN Password</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-secret">Bind DN Password</label>
                   <FieldHelpHint
                         title="Bind DN Password"
                         summary="Directory service account password encrypted at rest with MASTER_KEK."
@@ -1246,7 +1246,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
                         testId="card-ldap-secret-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-secret"
                       type="text"
@@ -1267,16 +1267,16 @@ export function AuthCardEditorDrawer({
 
                   {isEdit && card?.has_secret ? (
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-replace-secret">
-                        <span>Replace Stored Secret</span>
-                        <FieldHelpHint
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-replace-secret">Replace Stored Secret</label>
+                  <FieldHelpHint
                           title="Replace Stored Secret"
                           summary="Enable to rotate or overwrite the stored encrypted service bind DN password."
                           defaultValue="Unchecked (Preserve existing secret)"
                           docHref="/docs/multi-card-authentication-studio#envelope-encryption-master-kek"
                           testId="card-ldap-replace-secret-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-replace-secret"
                         type="checkbox"
@@ -1291,8 +1291,8 @@ export function AuthCardEditorDrawer({
                   ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-base-dn">
-                      <span>Base DN</span>
+                    <div className="auth-editor-label">
+                  <label htmlFor="card-base-dn">Base DN</label>
                   <FieldHelpHint
                         title="Base DN"
                         summary="Base Distinguished Name search subtree root containing user accounts."
@@ -1301,7 +1301,7 @@ export function AuthCardEditorDrawer({
                         docHref="/docs/multi-card-authentication-studio#step-by-step-guide-connecting-active-directory"
                         testId="card-base-dn-help"
                       />
-                    </label>
+                </div>
                     <input
                       id="card-base-dn"
                       type="text"
@@ -1333,8 +1333,8 @@ export function AuthCardEditorDrawer({
                 hasErrors={hasAdvancedErrors}
               >
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-slug">
-                    <span>Slug Identifier</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-slug">Slug Identifier</label>
                   <FieldHelpHint
                       title="Slug Identifier"
                       summary="Unique URL slug used for OAuth callback endpoints and card references."
@@ -1343,7 +1343,7 @@ export function AuthCardEditorDrawer({
                       docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
                       testId="card-slug-help"
                     />
-                  </label>
+                </div>
                   <input
                     id="card-slug"
                     type="text"
@@ -1368,8 +1368,8 @@ export function AuthCardEditorDrawer({
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-subtext">
-                    <span>Button Subtext</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-subtext">Button Subtext</label>
                   <FieldHelpHint
                       title="Button Subtext"
                       summary="Subtitle displayed directly beneath the login button to guide users."
@@ -1377,7 +1377,7 @@ export function AuthCardEditorDrawer({
                       docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
                       testId="card-subtext-help"
                     />
-                  </label>
+                </div>
                   <input
                     id="card-subtext"
                     type="text"
@@ -1401,8 +1401,8 @@ export function AuthCardEditorDrawer({
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-icon-preset">
-                    <span>Icon Preset</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-icon-preset">Icon Preset</label>
                   <FieldHelpHint
                       title="Icon Preset"
                       summary="Brand or icon preset rendered beside the login button and provider badge."
@@ -1411,7 +1411,7 @@ export function AuthCardEditorDrawer({
                       docHref="/docs/multi-card-authentication-studio#multi-card-login-experience"
                       testId="card-icon-preset-help"
                     />
-                  </label>
+                </div>
                   <div className="auth-editor-input-group">
                     <select
                       id="card-icon-preset"
@@ -1439,12 +1439,12 @@ export function AuthCardEditorDrawer({
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-auto-provision">
-                    <span>Auto-provision Users</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-auto-provision">Auto-provision Users</label>
                   <FieldHelpHint
                     title="Auto-provision Users" summary="Automatically provision local accounts upon first successful authentication if domain policies match." defaultValue="Checked (Enabled)" docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc" testId="card-auto-provision-help"
                   />
-                  </label>
+                </div>
                   <input
                     id="card-auto-provision"
                     type="checkbox"
@@ -1457,8 +1457,8 @@ export function AuthCardEditorDrawer({
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-email-domains">
-                    <span>Allowed Email Domains</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-email-domains">Allowed Email Domains</label>
                   <FieldHelpHint
                       title="Allowed Email Domains"
                       summary="Comma-separated email domain allowlist. Restricts logins to verified corporate domains."
@@ -1466,7 +1466,7 @@ export function AuthCardEditorDrawer({
                       docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
                       testId="card-email-domains-help"
                     />
-                  </label>
+                </div>
                   <input
                     id="card-email-domains"
                     type="text"
@@ -1481,8 +1481,8 @@ export function AuthCardEditorDrawer({
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-access-policy">
-                    <span>Access Policy</span>
+                  <div className="auth-editor-label">
+                  <label htmlFor="card-access-policy">Access Policy</label>
                   <FieldHelpHint
                       title="Access Policy"
                       summary="Default access level assigned to authenticated accounts."
@@ -1494,7 +1494,7 @@ export function AuthCardEditorDrawer({
                       docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities"
                       testId="card-access-policy-help"
                     />
-                  </label>
+                </div>
                   <select
                     id="card-access-policy"
                     className="auth-editor-select"
@@ -1512,12 +1512,12 @@ export function AuthCardEditorDrawer({
                 {accessPolicyMode === 'restricted' ? (
                   <div>
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-admin-allowlist">
-                    <span>Admin Allowlist</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-admin-allowlist">Admin Allowlist</label>
                   <FieldHelpHint
                     title="Admin Allowlist" summary="Comma-separated emails automatically assigned Server Administrator roles upon sign-in." example="admin@corp.example.com, secops@corp.example.com" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-allowlist-help"
                   />
-                  </label>
+                </div>
                       <input
                         id="card-admin-allowlist"
                         type="text"
@@ -1535,12 +1535,12 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-user-allowlist">
-                    <span>User Allowlist</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-user-allowlist">User Allowlist</label>
                   <FieldHelpHint
                     title="User Allowlist" summary="Explicit allowlist of permitted emails when Access Policy is set to restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-allowlist-help"
                   />
-                  </label>
+                </div>
                       <input
                         id="card-user-allowlist"
                         type="text"
@@ -1560,12 +1560,12 @@ export function AuthCardEditorDrawer({
                     {providerKind === 'LDAP' ? (
                       <div>
                         <div className="auth-editor-prop-row">
-                          <label className="auth-editor-label" htmlFor="card-admin-groups">
-                    <span>Admin Groups</span>
+                          <div className="auth-editor-label">
+                  <label htmlFor="card-admin-groups">Admin Groups</label>
                   <FieldHelpHint
                     title="Admin Groups" summary="IdP or directory group claims granting Server Administrator rights upon authentication." example="DevOpsAdmins, SecurityEngineers" docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-admin-groups-help"
                   />
-                  </label>
+                </div>
                           <input
                             id="card-admin-groups"
                             type="text"
@@ -1583,12 +1583,12 @@ export function AuthCardEditorDrawer({
                         </div>
 
                         <div className="auth-editor-prop-row">
-                          <label className="auth-editor-label" htmlFor="card-user-groups">
-                    <span>User Groups</span>
+                          <div className="auth-editor-label">
+                  <label htmlFor="card-user-groups">User Groups</label>
                   <FieldHelpHint
                     title="User Groups" summary="IdP or directory group claims granting standard user access when Access Policy is restricted." docHref="/docs/multi-card-authentication-studio#studio-controls-and-capabilities" testId="card-user-groups-help"
                   />
-                  </label>
+                </div>
                           <input
                             id="card-user-groups"
                             type="text"
@@ -1781,8 +1781,8 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-scopes">
-                        <span>Scopes</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-scopes">Scopes</label>
                   <FieldHelpHint
                           title="Scopes"
                           summary="OAuth 2.0 / OIDC scopes requested during authorization. Comma-separated."
@@ -1791,7 +1791,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#step-by-step-guide-configuring-google-and-keycloak-oidc"
                           testId="card-scopes-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-scopes"
                         type="text"
@@ -1806,15 +1806,15 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-token-auth">
-                    <span>Token Auth Method</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-token-auth">Token Auth Method</label>
                   <FieldHelpHint
                     title="Token Auth Method" summary="Authentication method used to authenticate client against the token endpoint." defaultValue="client_secret_basic" validValues={[
                       { label: 'client_secret_basic', description: 'HTTP Basic authorization header with Client ID and Client Secret.' },
                       { label: 'private_key_jwt', description: 'Asymmetric cryptographic client assertion signed by private key.' },
                     ]} docHref="/docs/multi-card-authentication-studio#openid-connect-and-google-oauth-sso" testId="card-token-auth-help"
                   />
-                  </label>
+                </div>
                       <select
                         id="card-token-auth"
                         className="auth-editor-select"
@@ -1834,12 +1834,12 @@ export function AuthCardEditorDrawer({
                 ) : providerKind === 'LDAP' ? (
                   <div>
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-starttls">
-                    <span>StartTLS</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-starttls">StartTLS</label>
                   <FieldHelpHint
                     title="StartTLS" summary="Enforces TLS upgrade negotiation on port 389 connections." defaultValue="Unchecked (Disabled)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-starttls-help"
                   />
-                  </label>
+                </div>
                       <input
                         id="card-starttls"
                         type="checkbox"
@@ -1854,12 +1854,12 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-user-filter">
-                    <span>User Filter</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-user-filter">User Filter</label>
                   <FieldHelpHint
                     title="User Filter" summary="LDAP search query template to locate the authenticating user ({username} placeholder)." defaultValue="(&(objectClass=user)(sAMAccountName={username}))" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-user-filter-help"
                   />
-                  </label>
+                </div>
                       <input
                         id="card-user-filter"
                         type="text"
@@ -1874,12 +1874,12 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-subject-attr">
-                    <span>Subject Attribute</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-subject-attr">Subject Attribute</label>
                   <FieldHelpHint
                     title="Subject Attribute" summary="Directory attribute containing the immutable unique identifier for the user." defaultValue="objectGUID (Active Directory) or entryUUID (OpenLDAP)" docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration" testId="card-subject-attr-help"
                   />
-                  </label>
+                </div>
                       <input
                         id="card-subject-attr"
                         type="text"
@@ -1894,8 +1894,8 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-email-attr">
-                        <span>Email Attribute</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-email-attr">Email Attribute</label>
                   <FieldHelpHint
                           title="Email Attribute"
                           summary="Directory attribute containing user's primary email address."
@@ -1903,7 +1903,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
                           testId="card-email-attr-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-email-attr"
                         type="text"
@@ -1918,8 +1918,8 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-display-attr">
-                        <span>Full Name Attribute</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-display-attr">Full Name Attribute</label>
                   <FieldHelpHint
                           title="Full Name Attribute"
                           summary="Directory attribute containing user's display name."
@@ -1927,7 +1927,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
                           testId="card-display-attr-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-display-attr"
                         type="text"
@@ -1942,8 +1942,8 @@ export function AuthCardEditorDrawer({
                     </div>
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-spki-pin">
-                        <span>SPKI SHA-256 Pin</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-spki-pin">SPKI SHA-256 Pin</label>
                   <FieldHelpHint
                           title="SPKI SHA-256 Pin"
                           summary="64-character SHA-256 hex digest of the server Subject Public Key Info for certificate pinning."
@@ -1951,7 +1951,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
                           testId="card-spki-pin-help"
                         />
-                      </label>
+                </div>
                       <input
                         id="card-spki-pin"
                         type="text"
@@ -1972,8 +1972,8 @@ export function AuthCardEditorDrawer({
                     ) : null}
 
                     <div className="auth-editor-prop-row">
-                      <label className="auth-editor-label" htmlFor="card-ca-pem">
-                        <span>CA Certificate PEM</span>
+                      <div className="auth-editor-label">
+                  <label htmlFor="card-ca-pem">CA Certificate PEM</label>
                   <FieldHelpHint
                           title="CA Certificate PEM"
                           summary="Custom PEM-encoded root or intermediate Certificate Authority certificate."
@@ -1983,7 +1983,7 @@ export function AuthCardEditorDrawer({
                           docHref="/docs/multi-card-authentication-studio#active-directory-and-ldaps-integration"
                           testId="card-ca-pem-help"
                         />
-                      </label>
+                </div>
                       <textarea
                         id="card-ca-pem"
                         className="auth-editor-textarea"

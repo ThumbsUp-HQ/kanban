@@ -642,16 +642,16 @@ describe('Wave 4 Branch Booster', () => {
         />,
       );
 
-      const slugInput = screen.getByLabelText(/Slug Identifier/i);
+      const slugInput = screen.getByLabelText(/Slug Identifier/i, { selector: 'input' });
       fireEvent.change(slugInput, { target: { value: 'custom-oauth-slug' } });
 
-      const nameInput = screen.getByLabelText(/^Display Name$/i);
+      const nameInput = screen.getByLabelText(/^Display Name$/i, { selector: 'input' });
       fireEvent.change(nameInput, { target: { value: 'Custom SSO Name' } });
 
-      const clientIdInput = screen.getByLabelText(/Client ID/i);
+      const clientIdInput = screen.getByLabelText(/Client ID/i, { selector: 'input' });
       fireEvent.change(clientIdInput, { target: { value: 'client-test-123' } });
 
-      const issuerInput = screen.getByLabelText(/Issuer URL/i);
+      const issuerInput = screen.getByLabelText(/Issuer URL/i, { selector: 'input' });
       fireEvent.change(issuerInput, { target: { value: 'https://accounts.example.com' } });
 
       const submitBtn = screen.getByRole('button', { name: 'Create Card' });

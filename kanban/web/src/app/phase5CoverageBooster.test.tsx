@@ -388,7 +388,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
 
       const nameInput = screen.getByLabelText(/Workspace Name/i);
-      const slugInput = screen.getByLabelText(/Slug/i);
+      const slugInput = screen.getByLabelText(/Slug/i, { selector: 'input' });
 
       fireEvent.change(nameInput, { target: { value: 'My Team' } });
       expect((slugInput as HTMLInputElement).value).toBe('my-team');
@@ -2193,7 +2193,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
       expect(onCloseProj).toHaveBeenCalledTimes(1);
 
       const pName = screen.getByLabelText(/Project Name/i);
-      const pKey = screen.getByLabelText(/Identifier/i);
+      const pKey = screen.getByLabelText('Project Key', { selector: 'input' });
       fireEvent.change(pName, { target: { value: 'Alpha Beta' } });
       fireEvent.change(pKey, { target: { value: '1BAD' } });
       fireEvent.change(pName, { target: { value: 'Alpha Beta Updated' } });
