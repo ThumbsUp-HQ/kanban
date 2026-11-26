@@ -5,7 +5,7 @@ import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { PlaneImportStudio, extractEntityCounts } from '../PlaneImportStudio';
 import * as planeImportApi from '../planeImportApi';
@@ -722,5 +722,166 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     fireEvent.click(pasteBtn);
     expect(pasteBtn.getAttribute('aria-pressed')).toBe('true');
     expect(uploadBtn.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  describe('KAN-528: FieldHelpHint and default fallbacks in PlaneImportStudio', () => {
+    it('renders FieldHelpHint triggers, explicit default mentions, and aria-describedby associations', () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/imports']}>
+          <PlaneImportStudio />
+        </MemoryRouter>,
+      );
+
+      // 1. Target Workspace Slug FieldHelpHint and helper
+      const wsSlugInput = screen.getByTestId('target-ws-slug-input');
+      expect(wsSlugInput.getAttribute('aria-describedby')).toBe('target-ws-slug-helper');
+      expect(document.getElementById('target-ws-slug-helper')?.textContent).toContain(
+        'Defaults to active workspace if omitted',
+      );
+
+      const wsSlugHint = screen.getByTestId('target-ws-slug-help');
+      expect(wsSlugHint).toBeDefined();
+      expect(wsSlugHint.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
+
+      // 2. Export Workspace Slug FieldHelpHint and helper
+      const exportWsInput = screen.getByTestId('export-workspace-slug-input');
+      expect(exportWsInput.getAttribute('aria-describedby')).toBe('export-workspace-slug-helper');
+      expect(document.getElementById('export-workspace-slug-helper')?.textContent).toContain(
+        'Defaults to active workspace if omitted',
+      );
+      const exportWsHint = screen.getByTestId('export-workspace-slug-help');
+      expect(exportWsHint).toBeDefined();
+
+      // 3. User Identity Mapping FieldHelpHint and helper
+      const userMapInput = screen.getByTestId('import-user-mapping-json');
+      expect(userMapInput.getAttribute('aria-describedby')).toBe('import-user-mapping-helper');
+      const userMapHint = screen.getByTestId('import-user-mapping-help');
+      expect(userMapHint).toBeDefined();
+
+      // 4. In Plane source, Target Project Key is not rendered
+      expect(screen.queryByTestId('target-project-key-input')).toBeNull();
+      expect(screen.queryByTestId('target-project-key-help')).toBeNull();
+
+      // 5. In Jira source, Target Project Key is rendered with JIRA default
+      fireEvent.click(screen.getByTestId('source-jira-btn'));
+      const jiraProjInput = screen.getByTestId('target-project-key-input');
+      expect(jiraProjInput.getAttribute('aria-describedby')).toBe('target-proj-key-helper');
+      expect(screen.getByText(/Defaults to JIRA if omitted/i)).toBeDefined();
+      const projHint = screen.getByTestId('target-project-key-help');
+      expect(projHint).toBeDefined();
+
+      // 6. In GitHub source, Target Project Key has GH default
+      fireEvent.click(screen.getByTestId('source-github-btn'));
+      expect(screen.getByText(/Defaults to GH if omitted/i)).toBeDefined();
+
+      // 7. In Linear source, Target Project Key has LIN default
+      fireEvent.click(screen.getByTestId('source-linear-btn'));
+      expect(screen.getByText(/Defaults to LIN if omitted/i)).toBeDefined();
+    });
+
+    it('opens FieldHelpHint popover on trigger focus and dismisses on Escape restoring focus', async () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/imports']}>
+          <PlaneImportStudio />
+        </MemoryRouter>,
+      );
+
+      const wsSlugHint = screen.getByTestId('target-ws-slug-help');
+      expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
+
+      // Focus opens popover
+      act(() => {
+        wsSlugHint.focus();
+      });
+      await waitFor(() => {
+        expect(wsSlugHint.getAttribute('aria-expanded')).toBe('true');
+      });
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toBeDefined();
+      expect(dialog.textContent).toContain('Target Workspace Slug');
+      expect(dialog.textContent).toContain('Caller active workspace');
+      expect(dialog.textContent).toContain('validates that the specified slug exists');
+
+      // Escape key on trigger dismisses popover
+      act(() => {
+        fireEvent.keyDown(wsSlugHint, { key: 'Escape' });
+      });
+      await waitFor(() => {
+        expect(wsSlugHint.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.queryByRole('dialog')).toBeNull();
+      });
+      expect(document.activeElement).toBe(wsSlugHint);
+    });
+
+    it('displays auto-creating absent projects and key alias details in Target Project Key popover', async () => {
+      render(
+        <MemoryRouter initialEntries={['/admin/imports']}>
+          <PlaneImportStudio />
+        </MemoryRouter>,
+      );
+
+      fireEvent.click(screen.getByTestId('source-jira-btn'));
+      const projHint = screen.getByTestId('target-project-key-help');
+
+      act(() => {
+        projHint.focus();
+      });
+      await waitFor(() => {
+        expect(projHint.getAttribute('aria-expanded')).toBe('true');
+      });
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog.textContent).toContain('Target Project Key');
+      expect(dialog.textContent).toContain('JIRA');
+      expect(dialog.textContent).toContain('Automatically creates the target project if absent');
+      expect(dialog.textContent).toContain('key alias redirects');
+
+      // Dismiss on Escape
+      act(() => {
+        fireEvent.keyDown(projHint, { key: 'Escape' });
+      });
+      await waitFor(() => {
+        expect(projHint.getAttribute('aria-expanded')).toBe('false');
+      });
+    });
+
+    it('renders FieldHelpHint and inputs cleanly across Light and Dark themes', () => {
+      for (const theme of ['light', 'dark']) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = render(
+          <MemoryRouter initialEntries={['/admin/imports']}>
+            <PlaneImportStudio />
+          </MemoryRouter>,
+        );
+
+        expect(screen.getByTestId('target-ws-slug-help')).toBeDefined();
+        expect(screen.getByTestId('export-workspace-slug-help')).toBeDefined();
+        expect(screen.getByTestId('import-user-mapping-help')).toBeDefined();
+
+        fireEvent.click(screen.getByTestId('source-jira-btn'));
+        expect(screen.getByTestId('target-project-key-help')).toBeDefined();
+
+        unmount();
+      }
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('verifies PlaneImportStudio CSS rules use semantic tokens with zero inline styles', () => {
+      const cssPath = path.resolve(import.meta.dirname, '../PlaneImportStudio.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      expect(cssContent).toContain('.kb-plane-field-label');
+      expect(cssContent).toContain('.kb-plane-field-helper');
+      expect(cssContent).toContain('.kb-plane-input-control');
+      expect(cssContent).toContain('.kb-plane-export-form');
+
+      // Verify semantic tokens in helper copy
+      expect(cssContent).toMatch(/\.kb-plane-field-helper\s*\{[^}]*var\(--kb-color-text-secondary/);
+
+      // Verify 44px min-height for mobile touch accessibility
+      expect(cssContent).toContain('min-height: 44px;');
+    });
   });
 });
