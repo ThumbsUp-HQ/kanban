@@ -5,9 +5,9 @@
 **Parent Epic:** `KAN-410` (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`)  
 **Upstream Phase Tickets:** `KAN-411` (Audit & Foundation), `KAN-412` (UI Workflows & Drawer Wiring), `KAN-413` (Live Workouts)  
 **Branch:** `docs/KAN-414-slice2-ai-docs` (branched from `main` and merged with KAN-413 commit `ec75529b`)  
-**Target Commit:** `215b9947` (HEAD of `docs/KAN-414-slice2-ai-docs`)  
+**Target Commit:** `5629273e` (HEAD of `docs/KAN-414-slice2-ai-docs`)  
 **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`  
-**Wiki Branch:** `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki` (Commit: `5365cc5`)  
+**Wiki Branch:** `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki` (Commit: `b309499`)  
 **Zero Schema Mutations:** No database migrations added or modified in Phase 4.  
 **Pre-Prod Safety Invariant:** Absolute zero-mutation on protected pre-production (`192.168.1.101` / `k.hackedyour.info`).  
 
@@ -18,8 +18,8 @@
 Ticket `KAN-414` delivers Phase 4 of Slice 2, completing authoritative documentation, wiki synchronization, and client-side help integration for the Multi-Provider AI Engine, Token Budgets, Autonomous Agents, Remote mTLS Runners, and Local `/llms.txt` Onboarding systems.
 
 Every endpoint, parameter, button label, bitmask ceiling, and error response documented in this release was audited directly against source code in:
-- `kanban/api/v1/admin/ai_providers.py` (`/probe-models`, `/test-connection`, `/order`, `/budgets` with `token_cap=0` Hard AI Freeze vs `10_000_000_000` Unlimited Quota)
-- `kanban/api/v1/agent_definitions.py` (`:validate` 4-section trace: Prompt Assembly, Provider Dispatch, Output Parse, State Transition; `timeout_ms <= 300000` 300s ceiling from KAN-430)
+- `kanban/api/v1/admin/ai_providers.py` (`/probe-models`, `/test-connection`, `/order`, `/budgets` under `/api/v1/admin/ai/providers/` and `/api/v1/workspaces/{ws}/ai-providers/` with `token_cap=0` Hard AI Freeze vs `10_000_000_000` Unlimited Quota)
+- `kanban/api/v1/agent_definitions.py` (`:validate` 4-section trace: `=== 1. RENDERED CONTEXT ===`, `=== 2. TOOL TRACE ===`, `=== 3. LATENCY & TOKENS ===`, `=== 4. SCHEMA & POLICY STATUS ===`; `timeout_ms <= 300000` 300s ceiling from KAN-430)
 - `kanban/api/v1/remote_runners.py` (`enrollment-tokens`, `:revoke`, mTLS PoP `kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256}`)
 - `agent/remote_runner/cli.py` (`0o700` state dir, `0o600` `client.key` & `ca.pem`, `0o644` `client.crt`)
 - `kanban/ops/llms_txt.py` (`generate_llms_txt`, `generate_llms_full_txt`, onboarding prompt)
@@ -31,19 +31,19 @@ Every endpoint, parameter, button label, bitmask ceiling, and error response doc
 1. **Multi-Provider AI Architecture & Protocols:**
    - Unified `LLMProvider` interface (`agent/providers/base.py`) supporting Google Gemini (`gemini-2.5-flash`, `gemini-2.5-pro`), OpenAI (`gpt-4o`, `gpt-4o-mini`, compatible endpoints), and Air-Gapped Ollama (`llama3`, `deepseek-r1`, `qwen2.5`).
    - Secure server-side credential storage with zero browser exposure of raw API keys.
-   - Endpoint probe contracts: `POST /api/v1/admin/ai-providers/probe-models` (discovers model catalogs via secure backend proxy) and `POST /api/v1/admin/ai-providers/test-connection` (validates API reachability and latency).
+   - Endpoint probe contracts: `POST /api/v1/admin/ai/providers/probe-models` (discovers model catalogs via secure backend proxy) and `POST /api/v1/admin/ai/providers/test-connection` (validates API reachability and latency).
 2. **Token Budgets & Hard Freeze Boundaries:**
-   - Granular monthly token limits managed via `POST /api/v1/admin/ai-providers/budgets`.
+   - Granular monthly token limits managed via `POST /api/v1/admin/ai/providers/budgets` (or `PUT /api/v1/workspaces/{ws}/ai-providers/budgets`).
    - Exact boundary values: `token_cap=0` triggers **Hard AI Freeze** (all agent operations halt immediately with `TOKEN_BUDGET_EXCEEDED` until reset or incremented); `token_cap=10_000_000_000` represents **Unlimited Quota**.
    - Period resets automatically on the first day of each calendar month.
 3. **Autonomous Agent Definitions & Validation Sandbox:**
    - Agent definitions support Workspace-scoped and Project-scoped execution with configurable trigger events (`on_issue_create`, `on_comment`, `manual_invoke`).
-   - Repository access modes strictly enforced: `none`, `ro_mount` (read-only mount in Linux namespace `CLONE_NEWNS`), and `ephemeral_clone` (isolated tmpfs clone discarded post-job).
+   - Repository access modes strictly enforced: `none`, `ro_vfs_mount` (read-only mount in Linux namespace `CLONE_NEWNS`), and `bare_git_tools` (isolated read-only bare Git inspection tools).
    - Validation endpoint `POST /api/v1/agent-definitions/{id}:validate` executes a dry-run test returning an atomic 4-section trace:
-     1. Prompt Assembly
-     2. Provider Dispatch
-     3. Output Parse
-     4. State Transition
+     1. `=== 1. RENDERED CONTEXT ===`
+     2. `=== 2. TOOL TRACE ===`
+     3. `=== 3. LATENCY & TOKENS ===`
+     4. `=== 4. SCHEMA & POLICY STATUS ===`
    - Strict reasoning ceiling enforced per `KAN-430`: `timeout_ms <= 300000` (300 seconds).
 4. **Remote mTLS Runners Architecture & Cryptographic Security:**
    - Dedicated mTLS port `:8444` terminating mutual TLS handshakes.

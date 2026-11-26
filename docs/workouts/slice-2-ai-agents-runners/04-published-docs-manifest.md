@@ -105,8 +105,8 @@ The following configuration parameters and backend contracts are documented with
 - **`max_tokens`:** Integer between 1 and 128000 (default 4096).
 - **`mtls_cert_pem`:** Optional PEM client certificate for mutual TLS provider connections.
 - **`is_enabled`:** Boolean active toggle (`true` / `false`).
-- **`priority_and_order`:** Dispatch sequence managed via `PUT /api/v1/workspaces/{ws}/ai-providers/order`.
-- **`token_cap_and_budgets`:** Monthly budget quota managed via `PUT /api/v1/workspaces/{ws}/ai-providers/budgets`. `token_cap = 0` enforces Hard AI Freeze (blocks reservations with `BudgetExceeded` and halts Sparkle with status `budget`), `10_000_000_000` enables Unlimited Quota (No Cap), and presets provide 1M, 5M, 25M, and 100M tokens.
+- **`priority_and_order`:** Dispatch sequence managed via `POST /api/v1/admin/ai/providers/order` (or `PUT /api/v1/workspaces/{ws}/ai-providers/order`).
+- **`token_cap_and_budgets`:** Monthly budget quota managed via `POST /api/v1/admin/ai/providers/budgets` (or `PUT /api/v1/workspaces/{ws}/ai-providers/budgets`). `token_cap = 0` enforces Hard AI Freeze (blocks reservations with `BudgetExceeded` and halts Sparkle with status `budget`), `10_000_000_000` enables Unlimited Quota (No Cap), and presets provide 1M, 5M, 25M, and 100M tokens.
 - **`air_gap_mode`:** Workspace-level toggle (`PATCH /api/v1/workspaces/{ws}/settings`). Rejects cloud egress to `openai` and `gemini` with HTTP 409 `AIR_GAP_EGRESS_DENIED`, authorizing only local zero-egress Ollama models.
 
 #### 2. Agent Definitions Studio & Onboarding (14 Settings + Backend Contracts)
@@ -116,12 +116,12 @@ The following configuration parameters and backend contracts are documented with
 - **`provider_kind` & `model_id`:** For `in_app_sdk`, specifies bound provider and model slug.
 - **`cli_binary_allowlist_id` & `cli_args`:** For `cli_pipe`, restricts binary to `agy` or `codex` with arguments passed via `execve`.
 - **`remote_runner_pool_slug`:** For `remote_runner`, designates target worker pool (`default`).
-- **`repo_access_mode`:** `none` (zero filesystem access), `ro_mount` (read-only volume mount for static analysis), `ephemeral_clone` (temporary tmpfs clone).
+- **`repo_access_mode`:** `none` (zero filesystem access), `ro_vfs_mount` (read-only VFS volume mount for static analysis), `bare_git_tools` (read-only bare Git inspection tools).
 - **`mcp_allowed_tools`:** Least-privilege MCP tool allowlist (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`, `add_comment`).
 - **`system_instructions_md`:** UTF-8 Markdown persona instructions sanitized server-side.
 - **`timeout_ms`:** Execution cutoff ceiling (1000 to 300000 ms, default 60000 ms, 300s ceiling).
 - **`project_id` & `rls_isolation`:** PostgreSQL `FORCE ROW LEVEL SECURITY` isolates project-scoped agents. Cross-project access returns HTTP 404 Not Found.
-- **`agent_validation_modal`:** Executed via `POST .../:validate`, returning a 4-section report (1. Rendered Context, 2. Tool Trace, 3. Latency & Tokens, 4. Schema & Policy Status).
+- **`agent_validation_modal`:** Executed via `POST .../:validate`, returning a 4-section report (1. `=== 1. RENDERED CONTEXT ===`, 2. `=== 2. TOOL TRACE ===`, 3. `=== 3. LATENCY & TOKENS ===`, 4. `=== 4. SCHEMA & POLICY STATUS ===`).
 - **`llms_txt_and_onboarding`:** Machine-readable agent capabilities at `/llms.txt`. User preferences stored in `agent_onboarding_prefs` in `/api/v1/users/me/preferences` strictly within the local project folder without modifying global user environments.
 
 #### 3. Remote Runners Studio (10 Settings + Backend Contracts)

@@ -5,8 +5,8 @@
 - **Epic Ticket:** `KAN-410` (`[EPIC][SLICE-2-AI-AGENTS-RUNNERS]`)
 - **Execution Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan414-4c7f6e57`
 - **Git Branch:** `docs/KAN-414-slice2-ai-docs` (merged with KAN-413 commit `ec75529b`)
-- **Target Commit:** `215b9947` (HEAD of `docs/KAN-414-slice2-ai-docs`)
-- **Wiki Branch:** `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki` (Commit: `5365cc5`)
+- **Target Commit:** `5629273e` (HEAD of `docs/KAN-414-slice2-ai-docs`)
+- **Wiki Branch:** `docs/KAN-414-slice2-ai-docs` inside `./thumbs-up-kanban.wiki` (Commit: `b309499`)
 - **Target Surfaces:**
   - AI Providers & Token Caps Studio (`/admin/ai-providers`)
   - Autonomous Agent Definitions Studio (`/admin/agent-definitions`)
@@ -118,11 +118,11 @@ The `docs/qa/KAN-410/screenshots/` directory contains 34 unclipped PNG captures 
 1. **Multi-Provider AI Abstraction & Budget Enforcer:**
    - Pluggable `LLMProvider` abstraction supporting Gemini, OpenAI, and Ollama.
    - Server-side credential isolation (zero browser exposure of raw keys).
-   - Strict token cap semantics: `token_cap=0` triggers immediate Hard AI Freeze (`TOKEN_BUDGET_EXCEEDED`), while `10_000_000_000` indicates Unlimited Quota.
+   - Strict token cap semantics: `token_cap=0` triggers immediate Hard AI Freeze (`TOKEN_BUDGET_EXCEEDED`), while `10_000_000_000` indicates Unlimited Quota. Routes: `POST /api/v1/admin/ai/providers/...` and `PUT /api/v1/workspaces/{ws}/ai-providers/...`.
 2. **Autonomous Agent Security Boundaries:**
    - Multi-trigger support: manual invoke, on issue creation, on comment.
-   - Enforced filesystem boundary modes: `none`, `ro_mount` (`CLONE_NEWNS`), `ephemeral_clone`.
-   - Atomic 4-section dry-run validation trace (`POST /api/v1/agent-definitions/{id}:validate`).
+   - Enforced filesystem boundary modes: `none`, `ro_vfs_mount` (`CLONE_NEWNS`), `bare_git_tools`.
+   - Atomic 4-section dry-run validation trace (`POST /api/v1/agent-definitions/{id}:validate`): `=== 1. RENDERED CONTEXT ===`, `=== 2. TOOL TRACE ===`, `=== 3. LATENCY & TOKENS ===`, `=== 4. SCHEMA & POLICY STATUS ===`.
    - Hard reasoning timeout ceiling: `timeout_ms <= 300000` (300s ceiling per KAN-430).
 3. **Cryptographic Proof-of-Possession Remote mTLS Runners:**
    - Dedicated mutual TLS listener on port `:8444`.
