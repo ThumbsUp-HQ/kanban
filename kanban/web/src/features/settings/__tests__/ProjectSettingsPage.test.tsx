@@ -3976,5 +3976,80 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       });
       expect((patchPayload as Record<string, unknown> | null)?.default_gate_timeout_ms).toBe(60000);
     });
+
+    it('enforces HTML 4.10.4 label-trigger sibling compliance across all FieldHelpHint components', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+        await Promise.resolve();
+        const url = path;
+        if (url.includes('/api/v1/auth/me')) {
+          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
+        }
+        if (url.includes('/api/v1/projects/KAN/states')) {
+          return [
+            { id: 's1', name: 'Backlog', color: '#64748b', sort_order: 1, is_closed: false },
+          ];
+        }
+        if (url.includes('/api/v1/projects/KAN/labels')) {
+          return [
+            { id: 'l1', name: 'bug', color: '#ef4444' },
+          ];
+        }
+        if (url.includes('/api/v1/projects/KAN')) {
+          return {
+            id: 'p1',
+            identifier: 'KAN',
+            name: 'My Project',
+            is_project_admin: true,
+          };
+        }
+        return {};
+      });
+
+      const { container } = renderComponent('KAN');
+
+      // 1. General Tab
+      fireEvent.click(await screen.findByTestId('project-general-advanced-section-toggle'));
+      const generalHints = [
+        'proj-name-help',
+        'proj-desc-help',
+        'proj-modules-help',
+        'proj-skip-seq-help',
+        'proj-auto-archive-help',
+        'proj-default-gate-timeout-help',
+      ];
+      for (const testId of generalHints) {
+        const hintEl = await screen.findByTestId(testId);
+        expect(hintEl).toBeDefined();
+        expect(hintEl.closest('label')).toBeNull();
+        expect(hintEl.closest('.kb-settings-label-row')).not.toBeNull();
+      }
+
+      // 2. Workflow States Tab
+      fireEvent.click(screen.getByTestId('tab-states'));
+      fireEvent.click(await screen.findByTestId('state-advanced-section-toggle'));
+      const stateHints = [
+        'state-sort-order-help',
+        'state-wip-soft-help',
+        'state-wip-hard-help',
+      ];
+      for (const testId of stateHints) {
+        const hintEl = await screen.findByTestId(testId);
+        expect(hintEl).toBeDefined();
+        expect(hintEl.closest('label')).toBeNull();
+        expect(hintEl.closest('.kb-state-label-row')).not.toBeNull();
+      }
+
+      // 3. Labels Tab
+      fireEvent.click(screen.getByTestId('tab-labels'));
+      fireEvent.click(await screen.findByTestId('label-advanced-section-toggle'));
+      const labelHint = await screen.findByTestId('proj-exclusive-group-help');
+      expect(labelHint).toBeDefined();
+      expect(labelHint.closest('label')).toBeNull();
+      expect(labelHint.closest('.kb-settings-label-row')).not.toBeNull();
+
+      // Zero button or interactive elements nested inside any label
+      const nestedButtons = container.querySelectorAll('label button, label .kb-field-help-trigger');
+      expect(nestedButtons.length).toBe(0);
+    });
   });
 });

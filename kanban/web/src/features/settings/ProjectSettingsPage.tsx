@@ -1576,15 +1576,17 @@ export function ProjectSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group kb-form-group-checkbox">
-              <label className="kb-checkbox-label" htmlFor="enable-modules">
-                <input
-                  type="checkbox"
-                  id="enable-modules"
-                  data-testid="project-modules-checkbox"
-                  checked={modulesEnabled}
-                  onChange={(e) => { setModulesEnabled(e.target.checked); }}
-                />
-                <span>Enable Modules for this project</span>
+              <div className="kb-settings-label-row">
+                <label className="kb-checkbox-label" htmlFor="enable-modules">
+                  <input
+                    type="checkbox"
+                    id="enable-modules"
+                    data-testid="project-modules-checkbox"
+                    checked={modulesEnabled}
+                    onChange={(e) => { setModulesEnabled(e.target.checked); }}
+                  />
+                  <span>Enable Modules for this project</span>
+                </label>
                 <FieldHelpHint
                   title="Project Modules"
                   summary="Enables multi-milestone and component bundling across project issues."
@@ -1592,7 +1594,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   docHref="/docs/ticket-screen-and-work-item-features#modules"
                   testId="proj-modules-help"
                 />
-              </label>
+              </div>
             </div>
 
             {/* Default Modules Selector (when modulesEnabled is true) */}
@@ -1639,15 +1641,17 @@ export function ProjectSettingsPage(): JSX.Element {
               defaultOpen={false}
             >
               <div className="kb-form-group kb-form-group-checkbox">
-                <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
-                  <input
-                    type="checkbox"
-                    id="project-skip-loaded-seq"
-                    data-testid="project-skip-loaded-seq-checkbox"
-                    checked={skipLoadedSeq}
-                    onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
-                  />
-                  <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+                <div className="kb-settings-label-row">
+                  <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
+                    <input
+                      type="checkbox"
+                      id="project-skip-loaded-seq"
+                      data-testid="project-skip-loaded-seq-checkbox"
+                      checked={skipLoadedSeq}
+                      onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+                    />
+                    <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+                  </label>
                   <FieldHelpHint
                     title="Agent-Safe Sequence Numbering"
                     summary="Automatically skips culturally or technically ambiguous issue numbers (13, 69, 88, 404, 420, 666, 1337, 1488) in this project."
@@ -1655,7 +1659,7 @@ export function ProjectSettingsPage(): JSX.Element {
                     docHref="/docs/ticket-screen-and-work-item-features"
                     testId="proj-skip-seq-help"
                   />
-                </label>
+                </div>
               </div>
 
               <div className="kb-form-group">
@@ -2491,8 +2495,10 @@ export function ProjectSettingsPage(): JSX.Element {
                 defaultOpen={false}
               >
                 <div className="kb-form-group">
-                  <label htmlFor="label-exclusive-group-input">
-                    Exclusive Group (optional)
+                  <div className="kb-settings-label-row">
+                    <label htmlFor="label-exclusive-group-input">
+                      Exclusive Group (optional)
+                    </label>
                     <FieldHelpHint
                       title="Exclusive Group"
                       summary="Mutual exclusion group tag ensuring only one label in the group can be attached to an issue."
@@ -2500,7 +2506,7 @@ export function ProjectSettingsPage(): JSX.Element {
                       docHref="/docs/ticket-screen-and-work-item-features#labels"
                       testId="proj-exclusive-group-help"
                     />
-                  </label>
+                  </div>
                   <input
                     id="label-exclusive-group-input"
                     type="text"

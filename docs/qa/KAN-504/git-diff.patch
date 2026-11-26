@@ -23,10 +23,10 @@ index 5830fe64..71bdbb93 100644
    'envelope-encryption-master-kek': 'envelope-encryption',
    'restore-procedure': 'runbook-2-restoring-from-an-encrypted-backup-archive',
 diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
-index 4a961e42..aa8ab7fa 100644
+index 4a961e42..18fbe36d 100644
 --- a/kanban/web/src/features/settings/ProjectSettingsPage.css
 +++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
-@@ -228,6 +228,71 @@
+@@ -228,6 +228,76 @@
    flex-wrap: wrap;
  }
  
@@ -70,6 +70,11 @@ index 4a961e42..aa8ab7fa 100644
 +  white-space: nowrap;
 +}
 +
++.kb-settings-label-row .kb-checkbox-label {
++  width: auto;
++  white-space: normal;
++}
++
 +.kb-form-group-spaced {
 +  margin-top: 1rem;
 +}
@@ -98,7 +103,7 @@ index 4a961e42..aa8ab7fa 100644
  .kb-table-scroll-container,
  .kb-members-table-wrapper,
  .kb-group-members-table-wrapper {
-@@ -591,6 +656,17 @@
+@@ -591,6 +661,17 @@
      width: 100%;
      box-sizing: border-box;
    }
@@ -117,7 +122,7 @@ index 4a961e42..aa8ab7fa 100644
  
  .kb-groups-list-sidebar {
 diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-index 25738c3b..e6663df5 100644
+index 25738c3b..101b1111 100644
 --- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 @@ -1529,8 +1529,10 @@ export function ProjectSettingsPage(): JSX.Element {
@@ -164,7 +169,75 @@ index 25738c3b..e6663df5 100644
                <textarea
                  id="proj-desc-input"
                  data-testid="project-desc-input"
-@@ -1655,8 +1659,10 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1572,15 +1576,17 @@ export function ProjectSettingsPage(): JSX.Element {
+             </div>
+ 
+             <div className="kb-form-group kb-form-group-checkbox">
+-              <label className="kb-checkbox-label" htmlFor="enable-modules">
+-                <input
+-                  type="checkbox"
+-                  id="enable-modules"
+-                  data-testid="project-modules-checkbox"
+-                  checked={modulesEnabled}
+-                  onChange={(e) => { setModulesEnabled(e.target.checked); }}
+-                />
+-                <span>Enable Modules for this project</span>
++              <div className="kb-settings-label-row">
++                <label className="kb-checkbox-label" htmlFor="enable-modules">
++                  <input
++                    type="checkbox"
++                    id="enable-modules"
++                    data-testid="project-modules-checkbox"
++                    checked={modulesEnabled}
++                    onChange={(e) => { setModulesEnabled(e.target.checked); }}
++                  />
++                  <span>Enable Modules for this project</span>
++                </label>
+                 <FieldHelpHint
+                   title="Project Modules"
+                   summary="Enables multi-milestone and component bundling across project issues."
+@@ -1588,7 +1594,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                   docHref="/docs/ticket-screen-and-work-item-features#modules"
+                   testId="proj-modules-help"
+                 />
+-              </label>
++              </div>
+             </div>
+ 
+             {/* Default Modules Selector (when modulesEnabled is true) */}
+@@ -1635,15 +1641,17 @@ export function ProjectSettingsPage(): JSX.Element {
+               defaultOpen={false}
+             >
+               <div className="kb-form-group kb-form-group-checkbox">
+-                <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
+-                  <input
+-                    type="checkbox"
+-                    id="project-skip-loaded-seq"
+-                    data-testid="project-skip-loaded-seq-checkbox"
+-                    checked={skipLoadedSeq}
+-                    onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+-                  />
+-                  <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++                <div className="kb-settings-label-row">
++                  <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
++                    <input
++                      type="checkbox"
++                      id="project-skip-loaded-seq"
++                      data-testid="project-skip-loaded-seq-checkbox"
++                      checked={skipLoadedSeq}
++                      onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
++                    />
++                    <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++                  </label>
+                   <FieldHelpHint
+                     title="Agent-Safe Sequence Numbering"
+                     summary="Automatically skips culturally or technically ambiguous issue numbers (13, 69, 88, 404, 420, 666, 1337, 1488) in this project."
+@@ -1651,12 +1659,14 @@ export function ProjectSettingsPage(): JSX.Element {
+                     docHref="/docs/ticket-screen-and-work-item-features"
+                     testId="proj-skip-seq-help"
+                   />
+-                </label>
++                </div>
                </div>
  
                <div className="kb-form-group">
@@ -177,7 +250,7 @@ index 25738c3b..e6663df5 100644
                    <FieldHelpHint
                      title="Auto-Archive Days"
                      summary="Number of days after completion or cancellation before work items are automatically archived from active views."
-@@ -1666,7 +1672,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1666,7 +1676,7 @@ export function ProjectSettingsPage(): JSX.Element {
                      docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
                      testId="proj-auto-archive-help"
                    />
@@ -186,7 +259,7 @@ index 25738c3b..e6663df5 100644
                  <input
                    id="proj-auto-archive-input"
                    data-testid="project-auto-archive-input"
-@@ -1680,9 +1686,11 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1680,9 +1690,11 @@ export function ProjectSettingsPage(): JSX.Element {
                  />
                </div>
  
@@ -201,7 +274,7 @@ index 25738c3b..e6663df5 100644
                    <FieldHelpHint
                      title="Default Workflow Gate Timeout"
                      summary="Execution timeout in milliseconds for all workflow interceptor gates in this project (1000..600000). Leave blank to inherit agent default."
-@@ -1692,12 +1700,12 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1692,12 +1704,12 @@ export function ProjectSettingsPage(): JSX.Element {
                      docHref="/docs/scripted-workflows-and-transition-helpers"
                      testId="proj-default-gate-timeout-help"
                    />
@@ -217,7 +290,7 @@ index 25738c3b..e6663df5 100644
                      type="number"
                      min="1000"
                      max="600000"
-@@ -1718,7 +1726,6 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1718,7 +1730,6 @@ export function ProjectSettingsPage(): JSX.Element {
                        }
                      }}
                      placeholder="Inherit agent default"
@@ -225,7 +298,7 @@ index 25738c3b..e6663df5 100644
                    />
                    <button
                      type="button"
-@@ -1729,7 +1736,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1729,7 +1740,7 @@ export function ProjectSettingsPage(): JSX.Element {
                      Inherit
                    </button>
                  </div>
@@ -234,7 +307,7 @@ index 25738c3b..e6663df5 100644
                    <button
                      type="button"
                      className="kb-btn kb-btn-secondary kb-btn-xs"
-@@ -1876,55 +1883,92 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1876,55 +1887,92 @@ export function ProjectSettingsPage(): JSX.Element {
                  defaultOpen={false}
                >
                  <div className="kb-form-row kb-form-row-advanced">
@@ -376,7 +449,29 @@ index 25738c3b..e6663df5 100644
                  </div>
                  {wipLimitError && (
                    <div className="kb-error-text" role="alert" id="wip-limit-error" data-testid="wip-limit-error">
-@@ -2889,7 +2933,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -2447,8 +2495,10 @@ export function ProjectSettingsPage(): JSX.Element {
+                 defaultOpen={false}
+               >
+                 <div className="kb-form-group">
+-                  <label htmlFor="label-exclusive-group-input">
+-                    Exclusive Group (optional)
++                  <div className="kb-settings-label-row">
++                    <label htmlFor="label-exclusive-group-input">
++                      Exclusive Group (optional)
++                    </label>
+                     <FieldHelpHint
+                       title="Exclusive Group"
+                       summary="Mutual exclusion group tag ensuring only one label in the group can be attached to an issue."
+@@ -2456,7 +2506,7 @@ export function ProjectSettingsPage(): JSX.Element {
+                       docHref="/docs/ticket-screen-and-work-item-features#labels"
+                       testId="proj-exclusive-group-help"
+                     />
+-                  </label>
++                  </div>
+                   <input
+                     id="label-exclusive-group-input"
+                     type="text"
+@@ -2889,7 +2939,7 @@ export function ProjectSettingsPage(): JSX.Element {
          {activeTab === 'ai-agents' && (
            <div className="kb-project-ai-agents-section" data-testid="project-ai-agents-section">
              <AiStudioPage projectId={project?.id} showSubnav={false} />
@@ -386,10 +481,10 @@ index 25738c3b..e6663df5 100644
              </div>
            </div>
 diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-index b30dd21f..fdaf54e0 100644
+index b30dd21f..e6db0644 100644
 --- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-@@ -3827,5 +3827,154 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+@@ -3827,5 +3827,229 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
        fireEvent.change(wipHardInput, { target: { value: '10' } });
        expect((sortInput as HTMLInputElement).value).toBe('25');
      });
@@ -541,6 +636,81 @@ index b30dd21f..fdaf54e0 100644
 +        expect(patchPayload).not.toBeNull();
 +      });
 +      expect((patchPayload as Record<string, unknown> | null)?.default_gate_timeout_ms).toBe(60000);
++    });
++
++    it('enforces HTML 4.10.4 label-trigger sibling compliance across all FieldHelpHint components', async () => {
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
++        await Promise.resolve();
++        const url = path;
++        if (url.includes('/api/v1/auth/me')) {
++          return { id: 'admin-1', is_server_admin: true, is_workspace_admin: true };
++        }
++        if (url.includes('/api/v1/projects/KAN/states')) {
++          return [
++            { id: 's1', name: 'Backlog', color: '#64748b', sort_order: 1, is_closed: false },
++          ];
++        }
++        if (url.includes('/api/v1/projects/KAN/labels')) {
++          return [
++            { id: 'l1', name: 'bug', color: '#ef4444' },
++          ];
++        }
++        if (url.includes('/api/v1/projects/KAN')) {
++          return {
++            id: 'p1',
++            identifier: 'KAN',
++            name: 'My Project',
++            is_project_admin: true,
++          };
++        }
++        return {};
++      });
++
++      const { container } = renderComponent('KAN');
++
++      // 1. General Tab
++      fireEvent.click(await screen.findByTestId('project-general-advanced-section-toggle'));
++      const generalHints = [
++        'proj-name-help',
++        'proj-desc-help',
++        'proj-modules-help',
++        'proj-skip-seq-help',
++        'proj-auto-archive-help',
++        'proj-default-gate-timeout-help',
++      ];
++      for (const testId of generalHints) {
++        const hintEl = await screen.findByTestId(testId);
++        expect(hintEl).toBeDefined();
++        expect(hintEl.closest('label')).toBeNull();
++        expect(hintEl.closest('.kb-settings-label-row')).not.toBeNull();
++      }
++
++      // 2. Workflow States Tab
++      fireEvent.click(screen.getByTestId('tab-states'));
++      fireEvent.click(await screen.findByTestId('state-advanced-section-toggle'));
++      const stateHints = [
++        'state-sort-order-help',
++        'state-wip-soft-help',
++        'state-wip-hard-help',
++      ];
++      for (const testId of stateHints) {
++        const hintEl = await screen.findByTestId(testId);
++        expect(hintEl).toBeDefined();
++        expect(hintEl.closest('label')).toBeNull();
++        expect(hintEl.closest('.kb-state-label-row')).not.toBeNull();
++      }
++
++      // 3. Labels Tab
++      fireEvent.click(screen.getByTestId('tab-labels'));
++      fireEvent.click(await screen.findByTestId('label-advanced-section-toggle'));
++      const labelHint = await screen.findByTestId('proj-exclusive-group-help');
++      expect(labelHint).toBeDefined();
++      expect(labelHint.closest('label')).toBeNull();
++      expect(labelHint.closest('.kb-settings-label-row')).not.toBeNull();
++
++      // Zero button or interactive elements nested inside any label
++      const nestedButtons = container.querySelectorAll('label button, label .kb-field-help-trigger');
++      expect(nestedButtons.length).toBe(0);
 +    });
    });
  });

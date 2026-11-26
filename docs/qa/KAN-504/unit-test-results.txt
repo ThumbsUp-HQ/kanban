@@ -2,30 +2,44 @@
  RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan504-f60b0c3d/kanban/web
       Coverage enabled with v8
 
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 20ms
+Not implemented: navigation to another Document
 stderr | src/features/settings/__tests__/ProjectSettingsPage.test.tsx > ProjectSettingsPage (KANBA-202) > covers all remaining corner cases, null fallbacks, and boundary conditions
 Each child in a list should have a unique "key" prop.
 
 Check the render method of `div`. It was passed a child from RoleLabelPicker. See https://react.dev/link/warning-keys for more information.
 
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (46 tests) 6786ms
-   ✓ ProjectSettingsPage (KANBA-202) (46)
-     ✓ renders project settings page tabs and switches between them 447ms
-     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 308ms
-     ✓ handles error states on workflow states, priorities, labels, and trash restore 458ms
-     ✓ covers fallback error messages when error object has no message property 461ms
-     ✓ supports inline row edit for workflow states and labels (KAN-29 Problem 1) 364ms
-     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 471ms
-     ✓ supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1) 321ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (47 tests) 5557ms
+   ✓ ProjectSettingsPage (KANBA-202) (47)
+     ✓ renders project settings page tabs and switches between them 373ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 369ms
+     ✓ covers fallback error messages when error object has no message property 322ms
+     ✓ supports inline row edit for workflow states and labels (KAN-29 Problem 1) 361ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 406ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (54 tests) 10002ms
+   ✓ DocsCenter & Help System (KAN-16) (54)
+     ✓ DocsCenterPage Component (10)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 365ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (21)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 349ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1838ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 587ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 427ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 1792ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 1747ms
 
- Test Files  1 passed (1)
-      Tests  46 passed (46)
-   Start at  17:46:36
-   Duration  8.94s (tests 80%, environment 11%, import 4%, transform 4%, worker 1%)
+ Test Files  3 passed (3)
+      Tests  108 passed (108)
+   Start at  18:02:36
+   Duration  11.52s (tests 84%, environment 12%, import 3%, worker 1%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.17 |    95.05 |     100 |   99.55 |                   
- ...ttingsPage.tsx |   99.17 |    95.05 |     100 |   99.55 | 546-548           
+All files          |   99.22 |     95.2 |     100 |   99.58 |                   
+ docs-center       |     100 |    97.43 |     100 |     100 |                   
+  docsService.ts   |     100 |    97.43 |     100 |     100 | 57                
+ settings          |   99.17 |    95.05 |     100 |   99.55 |                   
+  ...tingsPage.tsx |   99.17 |    95.05 |     100 |   99.55 | 546-548           
 -------------------|---------|----------|---------|---------|-------------------
