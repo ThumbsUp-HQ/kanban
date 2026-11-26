@@ -6,7 +6,7 @@
 **Status:** **APPROVED**  
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan413-b9640aad`  
-**Target Commit:** `51e20c98` (branch `feat/KAN-413-slice2-ai-workout`, base `1bbc9981`)  
+**Target Commit:** `3868cbb6` (branch `feat/KAN-413-slice2-ai-workout`, base `1bbc9981`)  
 
 ---
 
@@ -48,7 +48,8 @@ The live workouts were executed against an isolated PostgreSQL instance and loca
   - `POST /api/v1/workspaces/{ws}/ai-providers/{id}/probe`
   - `POST /api/v1/workspaces/{ws}/ai-providers/{id}/test-connection`
   - `PUT /api/v1/workspaces/{ws}/ai-providers/order`
-  - `PUT /api/v1/workspaces/{ws}/ai-providers/{id}/budget`
+  - `GET /api/v1/ai-providers/budgets`
+  - `PATCH /api/v1/ai-providers/budgets`
 - **Security Invariants:**
   - Protected by `require_admin_aal2`.
   - Secret zeroization in responses and write-only updates.
@@ -56,12 +57,12 @@ The live workouts were executed against an isolated PostgreSQL instance and loca
 
 ### 2.2 Agent Definitions & Runners Fleet
 - **Endpoints Verified:**
-  - `POST /api/v1/projects/{proj}/agent-definitions`
-  - `POST /api/v1/projects/{proj}/agent-definitions/{id}/validate`
-  - `POST /api/v1/projects/{proj}/stickies/{id}/promote-preview`
-  - `POST /api/v1/projects/{proj}/sparkle/complete`
-  - `POST /api/v1/agent-runners/enrollment-tokens`
-  - `POST /api/v1/agent-runners/{id}/revoke`
+  - `POST /api/v1/admin/agent-definitions`
+  - `POST /api/v1/admin/agent-definitions/{id}:validate`
+  - `POST /api/v1/stickies/{id}/promote-preview`
+  - `POST /api/v1/sparkle/complete`
+  - `POST /api/v1/admin/agent-runners/enrollment-tokens`
+  - `POST /api/v1/admin/agent-runners/{id}:revoke`
   - `ws://.../api/v1/agent-runners/ws`
 - **Security Invariants:**
   - Zero-shell CLI pipe sandboxing with banned flags blocklist.
