@@ -221,7 +221,7 @@ describe('StandaloneStatusPanel', () => {
       </QueryClientProvider>,
     );
 
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     const submitBtn = screen.getByRole('button', {
       name: 'Download Encrypted Backup (.kbbak)',
     });
@@ -308,7 +308,7 @@ describe('StandaloneStatusPanel', () => {
       </QueryClientProvider>,
     );
 
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     const submitBtn = screen.getByRole('button', {
       name: 'Download Encrypted Backup (.kbbak)',
     });
@@ -361,7 +361,7 @@ describe('StandaloneStatusPanel', () => {
     }).closest('form');
     expect(form).not.toBeNull();
     if (!form) return;
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
 
     // 1. Submit directly with short passphrase (<16)
     fireEvent.change(input, { target: { value: 'short' } });
@@ -420,7 +420,7 @@ describe('StandaloneStatusPanel', () => {
     }).closest('form');
     expect(form).not.toBeNull();
     if (!form) return;
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     fireEvent.change(input, { target: { value: '1234567890123456' } });
 
     // Nested detail error
@@ -570,7 +570,7 @@ describe('StandaloneStatusPanel', () => {
     // Verify default 'ext4' fallback
     expect(screen.getByText('/var/lib/kanban/data (ext4)')).toBeDefined();
 
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     const submitBtn = screen.getByRole('button', {
       name: 'Download Encrypted Backup (.kbbak)',
     });
@@ -612,7 +612,7 @@ describe('StandaloneStatusPanel', () => {
     });
 
     // 2. Submit backup with string throw
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     const submitBtn = screen.getByRole('button', {
       name: 'Download Encrypted Backup (.kbbak)',
     });
@@ -644,7 +644,7 @@ describe('StandaloneStatusPanel', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    const input = screen.getByLabelText('Backup Passphrase');
+    const input = screen.getByLabelText('Backup Passphrase', { selector: 'input' });
     fireEvent.change(input, { target: { value: 'passphrase-fallback-502' } });
 
     const focusables = dialog.querySelectorAll<HTMLElement>(
@@ -1059,10 +1059,10 @@ describe('StandaloneStatusPanel', () => {
     fireEvent.click(enableCheckbox);
     expect(enableCheckbox.checked).toBe(true);
 
-    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
+    const intervalInput = screen.getByLabelText('Backup Interval (hours)', { selector: 'input' });
     fireEvent.change(intervalInput, { target: { value: '48' } });
 
-    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
+    const retentionInput = screen.getByLabelText('Keep Latest Snapshots', { selector: 'input' });
     fireEvent.change(retentionInput, { target: { value: '14' } });
 
     // Save
@@ -1701,8 +1701,8 @@ describe('StandaloneStatusPanel', () => {
     }
 
     // Test empty interval and retention fallback branches
-    const intervalInput = screen.getByLabelText('Backup Interval (hours)');
-    const retentionInput = screen.getByLabelText('Keep Latest Snapshots');
+    const intervalInput = screen.getByLabelText('Backup Interval (hours)', { selector: 'input' });
+    const retentionInput = screen.getByLabelText('Keep Latest Snapshots', { selector: 'input' });
     fireEvent.change(intervalInput, { target: { value: '' } });
     fireEvent.change(retentionInput, { target: { value: '' } });
 
@@ -2204,8 +2204,8 @@ describe('ComposeExportTab', () => {
     });
 
     const enableCheckbox = screen.getByLabelText<HTMLInputElement>('Enable Automated Backups');
-    const intervalInput = screen.getByLabelText<HTMLInputElement>('Backup Interval (hours)');
-    const retentionInput = screen.getByLabelText<HTMLInputElement>('Keep Latest Snapshots');
+    const intervalInput = screen.getByLabelText<HTMLInputElement>('Backup Interval (hours)', { selector: 'input' });
+    const retentionInput = screen.getByLabelText<HTMLInputElement>('Keep Latest Snapshots', { selector: 'input' });
 
     act(() => {
       fireEvent.click(enableCheckbox);
@@ -2665,10 +2665,10 @@ describe('ComposeExportTab', () => {
     fireEvent.click(backupsTab);
 
     // Clear schedule input fields to trigger NaN fallback
-    const intervalInput = screen.getByLabelText(/Backup Interval/i);
+    const intervalInput = screen.getByLabelText(/Backup Interval/i, { selector: 'input' });
     fireEvent.change(intervalInput, { target: { value: '' } });
 
-    const retentionInput = screen.getByLabelText(/Keep Latest Snapshots/i);
+    const retentionInput = screen.getByLabelText(/Keep Latest Snapshots/i, { selector: 'input' });
     fireEvent.change(retentionInput, { target: { value: '' } });
 
     // Upload backup and trigger verify error with empty detail fallback
@@ -2845,6 +2845,122 @@ describe('ComposeExportTab', () => {
 
     await waitFor(() => {
       expect(screen.getByText('File corrupted')).toBeDefined();
+    });
+  });
+
+  describe('KAN-530: Standalone Status Panel Backup & Schedule FieldHelpHints', () => {
+    it('renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention', () => {
+      const testClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const adminStatus: SystemStatus = {
+        deployment_mode: 'standalone',
+        is_server_admin: true,
+        persistent_volume: true,
+        air_gap_mode: false,
+        local_llm_endpoint_host: null,
+      };
+
+      render(
+        <QueryClientProvider client={testClient}>
+          <StandaloneStatusPanel
+            onClose={vi.fn()}
+            initialStatus={adminStatus}
+            initialTab="backup"
+          />
+        </QueryClientProvider>,
+      );
+
+      // 1. Backup Passphrase Help Hint
+      const passphraseHelpBtn = screen.getByTestId('backup-passphrase-help');
+      expect(passphraseHelpBtn).toBeDefined();
+      expect(passphraseHelpBtn.getAttribute('aria-label')).toContain('Backup Passphrase');
+
+      act(() => {
+        passphraseHelpBtn.focus();
+      });
+
+      const passphrasePopover = screen.getByTestId('backup-passphrase-help-popover');
+      expect(passphrasePopover).toBeDefined();
+      expect(passphrasePopover.textContent).toContain('AES-256-GCM authenticated encryption');
+      expect(passphrasePopover.textContent).toContain('Argon2id/PBKDF2');
+
+      const passphraseDocLink = screen.getByTestId('backup-passphrase-help-doc-link');
+      expect(passphraseDocLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook');
+
+      // 2. Backup Interval (hours) Help Hint
+      const intervalHelpBtn = screen.getByTestId('schedule-interval-help');
+      expect(intervalHelpBtn).toBeDefined();
+      expect(intervalHelpBtn.getAttribute('aria-label')).toContain('Backup Interval');
+
+      act(() => {
+        intervalHelpBtn.focus();
+      });
+
+      const intervalPopover = screen.getByTestId('schedule-interval-help-popover');
+      expect(intervalPopover).toBeDefined();
+      const intervalDefault = screen.getByTestId('schedule-interval-help-default');
+      expect(intervalDefault.textContent).toContain('24 hours');
+
+      const intervalDocLink = screen.getByTestId('schedule-interval-help-doc-link');
+      expect(intervalDocLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook');
+
+      // 3. Keep Latest Snapshots Help Hint
+      const retentionHelpBtn = screen.getByTestId('schedule-retention-help');
+      expect(retentionHelpBtn).toBeDefined();
+      expect(retentionHelpBtn.getAttribute('aria-label')).toContain('Keep Latest Snapshots');
+
+      act(() => {
+        retentionHelpBtn.focus();
+      });
+
+      const retentionPopover = screen.getByTestId('schedule-retention-help-popover');
+      expect(retentionPopover).toBeDefined();
+      const retentionDefault = screen.getByTestId('schedule-retention-help-default');
+      expect(retentionDefault.textContent).toContain('7 snapshots');
+
+      const retentionDocLink = screen.getByTestId('schedule-retention-help-doc-link');
+      expect(retentionDocLink.getAttribute('href')).toBe('/docs/production-promotion-and-backup-runbook');
+    });
+
+    it('renders backup and schedule FieldHelpHints without regressions in light and dark mode', () => {
+      const testClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const adminStatus: SystemStatus = {
+        deployment_mode: 'standalone',
+        is_server_admin: true,
+        persistent_volume: true,
+        air_gap_mode: false,
+        local_llm_endpoint_host: null,
+      };
+
+      const { container } = render(
+        <QueryClientProvider client={testClient}>
+          <StandaloneStatusPanel
+            onClose={vi.fn()}
+            initialStatus={adminStatus}
+            initialTab="backup"
+          />
+        </QueryClientProvider>,
+      );
+
+      // Light mode verification
+      document.documentElement.setAttribute('data-theme', 'light');
+      expect(container.querySelector('.standalone-panel')).toBeDefined();
+      expect(screen.getByTestId('backup-passphrase-help')).toBeDefined();
+      expect(screen.getByTestId('schedule-interval-help')).toBeDefined();
+      expect(screen.getByTestId('schedule-retention-help')).toBeDefined();
+
+      // Dark mode verification
+      document.documentElement.setAttribute('data-theme', 'dark');
+      expect(container.querySelector('.standalone-panel')).toBeDefined();
+      expect(screen.getByTestId('backup-passphrase-help')).toBeDefined();
+      expect(screen.getByTestId('schedule-interval-help')).toBeDefined();
+      expect(screen.getByTestId('schedule-retention-help')).toBeDefined();
+
+      // Cleanup
+      document.documentElement.removeAttribute('data-theme');
     });
   });
 });
