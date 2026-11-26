@@ -78,6 +78,7 @@ import { CreateProjectModal, type CreatedProject } from '../features/projects/Cr
 import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
+import { FieldHelpHint } from '../components/help/FieldHelpHint';
 import { fetchProjectStates } from '../features/views/viewsApi';
 import { fetchProjectModules } from '../features/drawer-rail/railApi';
 import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
@@ -964,9 +965,10 @@ function ProjectCyclesViewInner({
             </div>
           )}
           <div className="kb-form-row">
-            <label className="kb-form-field">
-              <span className="kb-form-label">Cycle Name</span>
+            <div className="kb-form-field">
+              <label htmlFor="new-cycle-name-input" className="kb-form-label">Cycle Name</label>
               <input
+                id="new-cycle-name-input"
                 type="text"
                 className="kb-form-input"
                 data-testid="new-cycle-name-input"
@@ -975,10 +977,21 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setNewName(e.target.value); }}
                 required
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Start Date</span>
+            </div>
+            <div className="kb-form-field">
+              <div className="kb-form-label-row">
+                <label htmlFor="new-cycle-start-input" className="kb-form-label">Start Date</label>
+                <FieldHelpHint
+                  title="Cycle Dates"
+                  summary="Optional start date for the sprint cycle. Format: YYYY-MM-DD."
+                  defaultValue="Optional"
+                  example="YYYY-MM-DD"
+                  docHref="/docs/scripted-workflows-and-transition-helpers"
+                  testId="cycle-start-date-help-hint"
+                />
+              </div>
               <input
+                id="new-cycle-start-input"
                 type="date"
                 className="kb-form-input"
                 data-testid="new-cycle-start-input"
@@ -986,10 +999,21 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setStartDate(e.target.value); }}
                 title="Start date"
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">End Date</span>
+            </div>
+            <div className="kb-form-field">
+              <div className="kb-form-label-row">
+                <label htmlFor="new-cycle-end-input" className="kb-form-label">End Date</label>
+                <FieldHelpHint
+                  title="Cycle Dates"
+                  summary="Optional end date for the sprint cycle. Format: YYYY-MM-DD."
+                  defaultValue="Optional"
+                  example="YYYY-MM-DD"
+                  docHref="/docs/scripted-workflows-and-transition-helpers"
+                  testId="cycle-end-date-help-hint"
+                />
+              </div>
               <input
+                id="new-cycle-end-input"
                 type="date"
                 className="kb-form-input"
                 data-testid="new-cycle-end-input"
@@ -997,7 +1021,7 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setEndDate(e.target.value); }}
                 title="End date"
               />
-            </label>
+            </div>
             <button
               type="submit"
               className="kb-btn-primary"

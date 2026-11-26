@@ -588,6 +588,26 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle creation rejected');
     });
+
+    // KAN-462: FieldHelpHints on cycle start/end date inputs
+    const startHint = screen.getByTestId('cycle-start-date-help-hint');
+    const endHint = screen.getByTestId('cycle-end-date-help-hint');
+    expect(startHint).toBeDefined();
+    expect(endHint).toBeDefined();
+    // HTML 4.10.4: NEVER nest FieldHelpHint inside label!
+    expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+    // Sibling relationship inside .kb-form-label-row
+    expect(startHint.closest('.kb-form-label-row')).not.toBeNull();
+    expect(endHint.closest('.kb-form-label-row')).not.toBeNull();
+
+    act(() => {
+      startHint.focus();
+    });
+    const popover = screen.getByTestId('cycle-start-date-help-hint-popover');
+    expect(popover).toBeDefined();
+    expect(popover.textContent).toContain('Cycle Dates');
+    expect(popover.textContent).toContain('Optional');
+    expect(popover.textContent).toContain('YYYY-MM-DD');
   });
 
   it('ProjectModulesView displays error banner on failure and renders module description', async () => {
