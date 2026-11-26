@@ -6,7 +6,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd`  
 **Target Branch:** `fix/KAN-432-board-gate-snapback-and-csp`  
-**Target Commit:** `e4eecb2c` (base: `1bbc9981`)  
+**Target Commit:** `a0afd422` (base: `1bbc9981`)  
 
 ---
 
@@ -38,10 +38,10 @@ All defects have been remediated with strict protocol rigor, complete schema par
     * `to_state_id: uuid.UUID | None`
   - When `outcome.gate_hold` is active, `move_issue` populates these fields directly in the HTTP 202 response.
 - **WebSocket Event Traceability (`kanban/workflows/async_gate.py`)**:
-  - `AgentGateDispatcher` and `GateCoordinator` now broadcast `from_state_id` and `to_state_id` alongside human-readable state names in `gate.started`, `gate.completed`, and `gate.failed` WebSocket payloads.
+  - `AgentGateDispatcher` and `GateCoordinator` now broadcast `from_state_id` and `to_state_id` alongside human-readable state names across `workflow.gate.pending`, `workflow.gate.approved`, `workflow.gate.rejected`, and `issue.transition_rejected` WebSocket payloads.
 - **Client Real-Time Synchronization & Snap-Back (`useGateRealtimeSync.ts`, `BoardView.tsx`)**:
   - `BoardView` inspects HTTP 202 responses and attaches active gate indicators (`gate_status === 'pending'`) to the card.
-  - When `useGateRealtimeSync` receives a terminal `gate.completed` event with `decision === 'reject'` (or `veto`), `BoardView` automatically triggers a smooth veto snap-back, returning the card to its original `from_state_id` column while rendering the rejection reason toast.
+  - When `useGateRealtimeSync` receives terminal rejection events (`workflow.gate.rejected` or `issue.transition_rejected` with `decision === 'reject'`), `BoardView` automatically triggers a smooth veto snap-back, returning the card to its original `from_state_id` column while rendering the rejection reason toast.
 
 ### 2.2 Lane New-Item State Default (`QuickCreateIssueModal.tsx`, `viewRegistry.tsx`)
 - Corrected state resolution so the active column's `defaultStateId` is explicitly forwarded to `QuickCreateIssueModal`. Newly created issues immediately materialize in the clicked lane rather than defaulting to Backlog.
@@ -59,8 +59,8 @@ All defects have been remediated with strict protocol rigor, complete schema par
   - 285 tests passed in 41.76s (0 failures, 0 warnings).
   - `kanban/security/headers.py`: **98%** coverage.
 - **Frontend Vitest**:
-  - 59 tests passed across 4 test suites in 2.78s (0 `act(...)` warnings).
-  - Overall branch coverage: **95.85%**.
+  - 60 tests passed across 4 test suites in 2.78s (0 `act(...)` warnings).
+  - Overall branch coverage: **95.87%**.
   - All touched files exceed 95% branch coverage:
     * `BoardColumn.tsx`: **100.00%**
     * `useGateRealtimeSync.ts`: **95.61%**
@@ -68,7 +68,7 @@ All defects have been remediated with strict protocol rigor, complete schema par
 
 ### 3.2 Static Linters, Build & Security
 - **Ruff:** Clean (0 errors).
-- **Mypy:** Clean across 4 source files (0 type errors).
+- **Mypy:** Clean across 1 source file (0 type errors).
 - **TypeScript Typecheck:** Clean (0 errors).
 - **ESLint:** Clean (0 warnings on touched files).
 - **Vite Build:** Clean, completed in 1.25s.
