@@ -534,4 +534,142 @@ describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-
       expect(screen.getByTestId('save-agent-btn')).toBeDefined();
     });
   });
+
+  describe('FieldHelpHint and Explicit Default Values (KAN-453)', () => {
+    it('renders agent-slug-help and agent-mcp-tools-help triggers with accessible labels', () => {
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      const slugHelp = screen.getByTestId('agent-slug-help');
+      expect(slugHelp).toBeDefined();
+      expect(slugHelp.getAttribute('aria-label')).toBe('Help for Agent Slug (Permanent Handle)');
+
+      const mcpHelp = screen.getByTestId('agent-mcp-tools-help');
+      expect(mcpHelp).toBeDefined();
+      expect(mcpHelp.getAttribute('aria-label')).toBe('Help for Allowed MCP Agent Tools');
+
+      const toolsGroup = screen.getByRole('group', { name: /Allowed MCP Agent Tools/i });
+      expect(toolsGroup).toBeDefined();
+      expect(toolsGroup.getAttribute('aria-labelledby')).toBe('agent-mcp-tools-label');
+
+      expect(
+        screen.getByText(
+          'Default: all 4 read-only MCP tools enabled (search_tickets, read_ticket, search_knowledge, read_doc).',
+        ),
+      ).toBeDefined();
+    });
+
+    it('opens agent-slug-help popover displaying summary, default, example, caution, and wiki doc link', () => {
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      const slugHelp = screen.getByTestId('agent-slug-help');
+      fireEvent.focus(slugHelp);
+
+      const popover = screen.getByTestId('agent-slug-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Agent Slug (Permanent Handle)');
+      expect(popover.textContent).toContain(
+        'Immutable lowercase @handle used for @mentions and immutable audit trails.',
+      );
+      expect(popover.textContent).toContain('None (Required on creation)');
+      expect(popover.textContent).toContain('reality-checker');
+      expect(popover.textContent).toContain('Permanent once created; cannot be edited later.');
+
+      const docLink = popover.querySelector('a');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe(
+        '/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio',
+      );
+    });
+
+    it('opens agent-mcp-tools-help popover displaying summary, default, dt/dd valid values, and wiki doc link', () => {
+      render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+
+      const mcpHelp = screen.getByTestId('agent-mcp-tools-help');
+      fireEvent.focus(mcpHelp);
+
+      const popover = screen.getByTestId('agent-mcp-tools-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Allowed MCP Agent Tools');
+      expect(popover.textContent).toContain(
+        'Least-privilege MCP tools this agent is permitted to invoke.',
+      );
+      expect(popover.textContent).toContain(
+        'All 4 read-only tools (search_tickets, read_ticket, search_knowledge, read_doc)',
+      );
+
+      const dtElements = popover.querySelectorAll('dt');
+      const ddElements = popover.querySelectorAll('dd');
+      expect(dtElements.length).toBe(4);
+      expect(ddElements.length).toBe(4);
+      expect(popover.textContent).toContain('search_tickets');
+      expect(popover.textContent).toContain('Search project work items');
+      expect(popover.textContent).toContain('read_ticket');
+      expect(popover.textContent).toContain('Read full issue context');
+      expect(popover.textContent).toContain('search_knowledge');
+      expect(popover.textContent).toContain('Search docs and wiki');
+      expect(popover.textContent).toContain('read_doc');
+      expect(popover.textContent).toContain('Read doc markdown');
+
+      const docLink = popover.querySelector('a');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe(
+        '/docs/multi-provider-ai-engine-and-runners#agent-definitions-studio',
+      );
+    });
+
+    it('renders cleanly without regression under light and dark data-theme attributes', () => {
+      document.documentElement.setAttribute('data-theme', 'light');
+      const { rerender } = render(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+      expect(screen.getByTestId('agent-slug-help')).toBeDefined();
+      expect(screen.getByTestId('agent-mcp-tools-help')).toBeDefined();
+      expect(screen.getByRole('group', { name: /Allowed MCP Agent Tools/i })).toBeDefined();
+
+      document.documentElement.setAttribute('data-theme', 'dark');
+      rerender(
+        <AgentDefinitionEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          agent={null}
+          onSaved={vi.fn()}
+          aiProviders={mockAiProviders}
+        />,
+      );
+      expect(screen.getByTestId('agent-slug-help')).toBeDefined();
+      expect(screen.getByTestId('agent-mcp-tools-help')).toBeDefined();
+      expect(screen.getByRole('group', { name: /Allowed MCP Agent Tools/i })).toBeDefined();
+      document.documentElement.removeAttribute('data-theme');
+    });
+  });
 });

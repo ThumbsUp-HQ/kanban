@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { Link } from 'react-router';
 import { copyToClipboard } from '../../utils/clipboard';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './ConnectOAuthAppModal.css';
 
 export interface ConnectOAuthAppModalProps {
@@ -236,15 +238,22 @@ ${resourceUrl}
           <h2 id="connect-oauth-modal-title" className="kb-connect-oauth-title">
             Connect OAuth Application
           </h2>
-          <button
-            type="button"
-            className="kb-connect-oauth-close"
-            aria-label="Close modal"
-            data-testid="close-connect-oauth-modal-btn"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div className="kb-connect-oauth-header-actions">
+            <StudioDocLink
+              href="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+              title="MCP OAuth 2.1 and PKCE Documentation"
+              testId="connect-oauth-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-connect-oauth-close"
+              aria-label="Close modal"
+              data-testid="close-connect-oauth-modal-btn"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="kb-connect-oauth-body">
@@ -256,6 +265,18 @@ ${resourceUrl}
           <div className="kb-connect-oauth-field">
             <label htmlFor="scope-tier-select" className="kb-connect-oauth-label">
               Target Scope
+              <FieldHelpHint
+                title="Target Scope"
+                summary="Security boundary defining whether OAuth client tokens access all projects across the workspace, a single project, or server-wide resources."
+                validValues={[
+                  { label: 'Workspace', description: 'Access all projects and resources in the active workspace.' },
+                  { label: 'Single Project', description: 'Restricted strictly to the selected project.' },
+                  { label: 'Server (Global)', description: 'Server-wide administrative scope across all workspaces (requires admin role).' },
+                ]}
+                defaultValue="Workspace"
+                docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                testId="target-scope-help"
+              />
             </label>
             <select
               id="scope-tier-select"
@@ -302,6 +323,18 @@ ${resourceUrl}
           <div className="kb-connect-oauth-field">
             <label htmlFor="surface-select" className="kb-connect-oauth-label">
               Target MCP Surface
+              <FieldHelpHint
+                title="Target MCP Surface"
+                summary="The MCP surface endpoint defining available tool namespaces and capability boundaries."
+                validValues={[
+                  { label: '/mcp/agent', description: 'Core autonomous agent tools for issues, comments, transitions, and stickies.' },
+                  { label: '/mcp/docs', description: 'Knowledge base and document querying tools.' },
+                  { label: '/mcp/admin', description: 'Administrative operations, user provisioning, and audit logs (requires admin role).' },
+                ]}
+                defaultValue="/mcp/agent"
+                docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                testId="target-surface-help"
+              />
             </label>
             <select
               id="surface-select"

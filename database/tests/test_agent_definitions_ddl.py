@@ -106,7 +106,7 @@ async def test_ddl_constraints_and_boundaries(db_session: AsyncSession) -> None:
             )
     assert "check constraint" in str(exc_info.value).lower()
 
-    # 5. Timeout 300001 rejected
+    # 5. Timeout 600001 rejected (max allowed is 600000 ms = 10 minutes)
     with pytest.raises(DBAPIError) as exc_info:
         async with db_session.begin_nested():
             await db_session.execute(
@@ -114,7 +114,7 @@ async def test_ddl_constraints_and_boundaries(db_session: AsyncSession) -> None:
                     "INSERT INTO agent_definitions ("
                     "  workspace_id, principal_id, slug, display_name,"
                     "  harness_kind, cli_binary_allowlist_id, timeout_ms"
-                    ") VALUES (:ws_id, :p_id, 't-300001', 'T300001', 'cli_pipe', 'agy', 300001)"
+                    ") VALUES (:ws_id, :p_id, 't-600001', 'T600001', 'cli_pipe', 'agy', 600001)"
                 ),
                 {"ws_id": ws_id, "p_id": principal_id},
             )

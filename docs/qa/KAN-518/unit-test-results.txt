@@ -1,0 +1,33 @@
+$ pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan518-36bbf11c/kanban/web
+
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (21 tests) 502ms
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  15:07:32
+   Duration  1.57s (environment 50%, tests 37%, import 11%, transform 3%, worker 1%)
+
+Exit code: 0
+
+$ pnpm --dir kanban/web exec vitest run src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx --coverage --coverage.include=src/features/settings/ConnectOAuthAppModal.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan518-36bbf11c/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (21 tests) 518ms
+
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  15:07:35
+   Duration  1.71s (environment 47%, tests 36%, import 12%, worker 2%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    96.07 |     100 |     100 |                   
+ ...thAppModal.tsx |     100 |    96.07 |     100 |     100 | 80,89-92,100      
+-------------------|---------|----------|---------|---------|-------------------
+Exit code: 0

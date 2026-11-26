@@ -62,11 +62,13 @@ def resolve_effective_gate_timeout_ms(
     Result is strictly clamped to [1000, 600000] ms (up to 10 minutes).
     """
     selected: int
-    if hook_timeout_ms is not None:
+    if isinstance(hook_timeout_ms, int) and not isinstance(hook_timeout_ms, bool):
         selected = hook_timeout_ms
-    elif project_default_timeout_ms is not None:
+    elif isinstance(project_default_timeout_ms, int) and not isinstance(
+        project_default_timeout_ms, bool
+    ):
         selected = project_default_timeout_ms
-    elif agent_timeout_ms is not None:
+    elif isinstance(agent_timeout_ms, int) and not isinstance(agent_timeout_ms, bool):
         selected = agent_timeout_ms
     else:
         selected = fallback_default_ms
