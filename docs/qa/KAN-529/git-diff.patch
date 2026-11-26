@@ -1,170 +1,16 @@
-diff --git a/kanban/web/src/components/__tests__/AdvancedSection.test.tsx b/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
-index b3a82c76..68acb1db 100644
---- a/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
-+++ b/kanban/web/src/components/__tests__/AdvancedSection.test.tsx
-@@ -4,8 +4,6 @@
- import { describe, it, expect, vi } from 'vitest';
- import { render, screen, fireEvent } from '@testing-library/react';
- import React, { useState } from 'react';
--import * as fs from 'node:fs';
--import * as path from 'node:path';
- import DefaultAdvancedSection, { AdvancedSection } from '../AdvancedSection';
- 
- describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
-@@ -92,76 +90,6 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
-     expect(onToggle).toHaveBeenCalledWith(false);
-   });
- 
--  it('toggles expand/collapse correctly in light theme container', () => {
--    const onToggle = vi.fn();
--    render(
--      <div data-theme="light">
--        <AdvancedSection title="Light Theme Section" onToggle={onToggle}>
--          <div data-testid="light-content">Light Content</div>
--        </AdvancedSection>
--      </div>,
--    );
--
--    const toggle = screen.getByTestId('advanced-section-toggle');
--    const details = screen.getByTestId('advanced-section');
--    const chevron = toggle.querySelector('.kb-advanced-chevron');
--    const content = details.querySelector('.kb-advanced-content');
--
--    expect(toggle.getAttribute('aria-expanded')).toBe('false');
--    expect(details.className).not.toContain('kb-advanced-section--open');
--    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
--
--    // Explicit verification of role="region" and aria-label
--    expect(content?.getAttribute('role')).toBe('region');
--    expect(content?.getAttribute('aria-label')).toBe('Light Theme Section');
--
--    fireEvent.click(toggle);
--    expect(toggle.getAttribute('aria-expanded')).toBe('true');
--    expect(details.className).toContain('kb-advanced-section--open');
--    expect(chevron?.className).toContain('kb-advanced-chevron--open');
--    expect(onToggle).toHaveBeenCalledWith(true);
--
--    fireEvent.click(toggle);
--    expect(toggle.getAttribute('aria-expanded')).toBe('false');
--    expect(details.className).not.toContain('kb-advanced-section--open');
--    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
--  });
--
--  it('toggles expand/collapse correctly in dark theme container', () => {
--    const onToggle = vi.fn();
--    render(
--      <div data-theme="dark">
--        <AdvancedSection title="Dark Theme Section" onToggle={onToggle}>
--          <div data-testid="dark-content">Dark Content</div>
--        </AdvancedSection>
--      </div>,
--    );
--
--    const toggle = screen.getByTestId('advanced-section-toggle');
--    const details = screen.getByTestId('advanced-section');
--    const chevron = toggle.querySelector('.kb-advanced-chevron');
--    const content = details.querySelector('.kb-advanced-content');
--
--    expect(toggle.getAttribute('aria-expanded')).toBe('false');
--    expect(details.className).not.toContain('kb-advanced-section--open');
--    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
--
--    // Explicit verification of role="region" and aria-label
--    expect(content?.getAttribute('role')).toBe('region');
--    expect(content?.getAttribute('aria-label')).toBe('Dark Theme Section');
--
--    fireEvent.keyDown(toggle, { key: 'Enter' });
--    expect(toggle.getAttribute('aria-expanded')).toBe('true');
--    expect(details.className).toContain('kb-advanced-section--open');
--    expect(chevron?.className).toContain('kb-advanced-chevron--open');
--    expect(onToggle).toHaveBeenCalledWith(true);
--
--    fireEvent.keyDown(toggle, { key: ' ' });
--    expect(toggle.getAttribute('aria-expanded')).toBe('false');
--    expect(details.className).not.toContain('kb-advanced-section--open');
--    expect(chevron?.className).not.toContain('kb-advanced-chevron--open');
--  });
--
-   it('renders active overrides badge when activeOverridesCount or activeOverrideCount > 0', () => {
-     const { rerender } = render(
-       <AdvancedSection title="Overrides Test" activeOverridesCount={3}>
-@@ -286,72 +214,4 @@ describe('AdvancedSection Component (KB-ADVANCED-DISCLOSURE / KAN-319)', () => {
-       screen.getByText('Configure CIDR allowlists and proxies'),
-     ).toBeDefined();
-   });
--
--  describe('CSS theme tokens and fallback audit (KAN-445)', () => {
--    const cssPath = path.resolve(__dirname, '../../ui/AdvancedSection.css');
--    const cssContent = fs.readFileSync(cssPath, 'utf8');
--
--    it('contains zero mismatched hardcoded fallback colors', () => {
--      expect(cssContent).not.toContain('#e2e8f0');
--      expect(cssContent).not.toContain('#334155');
--      expect(cssContent).not.toContain('#0f172a');
--      expect(cssContent).not.toContain('#1e293b');
--      expect(cssContent).not.toContain('#f8fafc');
--      expect(cssContent).not.toContain('#f1f5f9');
--    });
--
--    it('uses canonical theme tokens for container, header, chevron, focus ring, and badge', () => {
--      expect(cssContent).toContain('var(--border-subtle, #e5e7eb)');
--      expect(cssContent).toContain('var(--border-subtle, #2d333f)');
--      expect(cssContent).toContain('var(--bg-card-subtle)');
--      expect(cssContent).toContain('var(--border-color-focus)');
--      expect(cssContent).toContain('var(--bg-surface)');
--      expect(cssContent).toContain('var(--focus-ring, #2563eb)');
--      expect(cssContent).toContain('var(--fg-muted)');
--      expect(cssContent).toContain('var(--fg-primary)');
--      expect(cssContent).toContain('var(--fg-secondary)');
--      expect(cssContent).toContain('var(--badge-bg)');
--      expect(cssContent).toContain('var(--badge-fg)');
--      expect(cssContent).toContain('var(--badge-border)');
--    });
--
--    it('standardizes .kb-advanced-content spacing and border', () => {
--      expect(cssContent).toMatch(
--        /\.kb-advanced-content\s*\{[^}]*border-top:\s*1px\s+solid\s+var\(--border-subtle,\s*#e5e7eb\);/,
--      );
--      expect(cssContent).toMatch(
--        /\.kb-advanced-content\s*\{[^}]*padding:\s*var\(--space-4,\s*16px\);/,
--      );
--      expect(cssContent).toMatch(
--        /\.kb-advanced-content\s*\{[^}]*display:\s*flex;/,
--      );
--      expect(cssContent).toMatch(
--        /\.kb-advanced-content\s*\{[^}]*flex-direction:\s*column;/,
--      );
--      expect(cssContent).toMatch(
--        /\.kb-advanced-content\s*\{[^}]*gap:\s*var\(--space-3,\s*12px\);/,
--      );
--      expect(cssContent).toMatch(
--        /:where\(\[data-theme=['"]dark['"]\]\)\s+\.kb-advanced-content\s*\{[^}]*border-top-color:\s*var\(--border-subtle,\s*#2d333f\);/,
--      );
--    });
--
--    it('avoids redundant dark theme re-declarations', () => {
--      // Base rules already handle variables via CSS inheritance
--      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-chevron--open");
--      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-title");
--      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-desc");
--      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-badge");
--      expect(cssContent).not.toContain("[data-theme='dark'] .kb-advanced-section--open");
--    });
--
--    it('guards open state specificity over dark theme border-color', () => {
--      // Must use compound class to ensure higher specificity than dark theme base rule
--      expect(cssContent).toContain('.kb-advanced-section.kb-advanced-section--open');
--      expect(cssContent).toContain(":where([data-theme='dark']) .kb-advanced-section");
--      expect(cssContent).toMatch(
--        /\.kb-advanced-section\.kb-advanced-section--open\s*\{[^}]*border-color:\s*var\(--border-color-focus\);/,
--      );
--    });
--  });
- });
 diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.css b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
-index 03c2ebf5..e95920d2 100644
+index 03c2ebf5..981aceba 100644
 --- a/kanban/web/src/features/admin-imports/PlaneImportStudio.css
 +++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.css
+@@ -35,7 +35,7 @@
+ .kb-plane-section {
+   margin-bottom: var(--section-gap);
+   background-color: var(--kb-color-bg-surface, var(--bg-surface));
+-  border: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  border: 1px solid var(--border-subtle);
+   border-radius: 8px;
+   padding: 24px 32px;
+ }
 @@ -51,6 +51,7 @@
  
  .kb-plane-mode-row {
@@ -173,7 +19,26 @@ index 03c2ebf5..e95920d2 100644
    gap: 12px;
    margin-bottom: 20px;
  }
-@@ -74,12 +75,18 @@
+@@ -59,9 +60,9 @@
+   padding: 8px 16px;
+   min-height: 44px;
+   border-radius: 6px;
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+-  background-color: var(--kb-color-bg-surface-raised, #21262d);
+-  color: var(--kb-color-text-secondary, #8b949e);
++  border: 1px solid var(--border-subtle);
++  background-color: var(--bg-surface-raised);
++  color: var(--fg-secondary);
+   cursor: pointer;
+   font-weight: 500;
+   font-size: 0.875rem;
+@@ -69,42 +70,48 @@
+ }
+ 
+ .kb-plane-mode-btn:hover {
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--fg-primary);
+   background-color: var(--bg-hover);
  }
  
  .kb-plane-mode-active {
@@ -193,9 +58,137 @@ index 03c2ebf5..e95920d2 100644
 +}
 +
  .kb-plane-dropzone {
-   border: 2px dashed var(--kb-color-border-subtle, #30363d);
+-  border: 2px dashed var(--kb-color-border-subtle, #30363d);
++  border: 2px dashed var(--border-subtle);
    border-radius: 8px;
-@@ -206,17 +213,18 @@
+   padding: 36px 20px;
+   text-align: center;
+-  background-color: rgba(110, 118, 129, 0.04);
++  background-color: var(--bg-surface);
+   cursor: pointer;
+   transition: all 0.2s ease;
+ }
+ 
+ .kb-plane-dropzone:hover,
+ .kb-plane-dropzone-active {
+-  border-color: #58a6ff;
+-  background-color: rgba(56, 139, 253, 0.08);
++  border-color: var(--badge-fg);
++  background-color: var(--bg-accent-subtle);
+ }
+ 
+ .kb-plane-dropzone-text {
+   font-size: 0.95rem;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--fg-primary);
+   margin-bottom: 8px;
+ }
+ 
+ .kb-plane-dropzone-hint {
+   font-size: 0.8rem;
+-  color: var(--kb-color-text-secondary, #8b949e);
++  color: var(--fg-secondary);
+ }
+ 
+ .kb-plane-file-input {
+@@ -119,18 +126,18 @@
+   font-family: var(--font-mono);
+   font-size: 0.825rem;
+   padding: 12px;
+-  background-color: var(--kb-color-bg-surface-raised, #0d1117);
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
+   border-radius: 6px;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--fg-primary);
+   resize: vertical;
+   line-height: 1.4;
+ }
+ 
+ .kb-plane-textarea:focus {
+   outline: none;
+-  border-color: #58a6ff;
+-  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
++  border-color: var(--badge-fg);
++  box-shadow: 0 0 0 2px var(--focus-ring);
+ }
+ 
+ .kb-plane-stats-grid {
+@@ -141,8 +148,8 @@
+ }
+ 
+ .kb-plane-stat-card {
+-  background-color: var(--kb-color-bg-surface-raised, #21262d);
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
+   border-radius: 6px;
+   padding: 12px;
+   text-align: center;
+@@ -151,7 +158,7 @@
+ .kb-plane-stat-val {
+   font-size: 1.35rem;
+   font-weight: 700;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--fg-primary);
+   margin-bottom: 4px;
+ }
+ 
+@@ -159,7 +166,7 @@
+   font-size: 0.75rem;
+   text-transform: uppercase;
+   font-weight: 600;
+-  color: var(--kb-color-text-secondary, #8b949e);
++  color: var(--fg-secondary);
+ }
+ 
+ .kb-plane-diff-grid {
+@@ -170,53 +177,54 @@
+ }
+ 
+ .kb-plane-diff-card {
+-  background-color: var(--kb-color-bg-surface-raised, #21262d);
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
+   border-radius: 6px;
+   padding: 16px;
+ }
+ 
+ .kb-plane-diff-card-create {
+-  border-left: 4px solid #3fb950;
++  border-left: 4px solid var(--text-success);
+ }
+ 
+ .kb-plane-diff-card-update {
+-  border-left: 4px solid #58a6ff;
++  border-left: 4px solid var(--badge-fg);
+ }
+ 
+ .kb-plane-diff-card-unchanged {
+-  border-left: 4px solid #8b949e;
++  border-left: 4px solid var(--fg-secondary);
+ }
+ 
+ .kb-plane-diff-card-sequence {
+-  border-left: 4px solid #bc8cff;
++  border-left: 4px solid var(--accent-primary);
+ }
+ 
+ .kb-plane-diff-val {
+   font-size: 1.6rem;
+   font-weight: 700;
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  color: var(--fg-primary);
+   margin-bottom: 4px;
+ }
+ 
+ .kb-plane-diff-label {
+   font-size: 0.8rem;
+   font-weight: 600;
+-  color: var(--kb-color-text-secondary, #8b949e);
++  color: var(--fg-secondary);
  }
  
  .kb-plane-warnings-box {
@@ -248,7 +241,7 @@ index 03c2ebf5..e95920d2 100644
  }
  
  .kb-plane-btn-row {
-@@ -269,23 +277,23 @@
+@@ -269,29 +277,29 @@
  }
  
  .kb-plane-btn-primary {
@@ -280,6 +273,33 @@ index 03c2ebf5..e95920d2 100644
  }
  
  .kb-plane-btn-secondary {
+-  background-color: var(--kb-color-bg-surface-raised, #21262d);
+-  border: 1px solid var(--kb-color-border-subtle, #30363d);
+-  color: var(--kb-color-text-primary, #f0f6fc);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
++  color: var(--fg-primary);
+ }
+ 
+ .kb-plane-btn-secondary:hover:not(:disabled) {
+@@ -306,7 +314,7 @@
+ .kb-plane-progress-wrap {
+   width: 100%;
+   height: 8px;
+-  background-color: var(--kb-color-bg-surface-raised, #21262d);
++  background-color: var(--bg-surface-raised);
+   border-radius: 4px;
+   overflow: hidden;
+   margin: 16px 0;
+@@ -315,7 +323,7 @@
+ .kb-plane-progress-bar {
+   height: 100%;
+   width: 100%;
+-  background: linear-gradient(90deg, #1f6feb, #388bfd, #58a6ff);
++  background: var(--accent-primary);
+   background-size: 200% 100%;
+   animation: kb-plane-pulse 1.5s infinite linear;
+ }
 @@ -330,6 +338,9 @@
  }
  
@@ -290,8 +310,73 @@ index 03c2ebf5..e95920d2 100644
    .kb-plane-import-header {
      flex-direction: column;
      align-items: stretch;
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index 8ff4725d..92bff60a 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -401,11 +401,14 @@ export function PlaneImportStudio(): JSX.Element {
+         className="kb-plane-mode-row"
+         style={{ margin: '1rem 0' }}
+         data-testid="source-selector-bar"
++        role="group"
++        aria-label="Import source"
+       >
+         <button
+           type="button"
+           className={`kb-plane-mode-btn ${source === 'plane' ? 'kb-plane-mode-active' : ''}`}
+           data-testid="source-plane-btn"
++          aria-pressed={source === 'plane'}
+           onClick={() => {
+             setSource('plane');
+             setBundleData(null);
+@@ -418,6 +421,7 @@ export function PlaneImportStudio(): JSX.Element {
+           type="button"
+           className={`kb-plane-mode-btn ${source === 'jira' ? 'kb-plane-mode-active' : ''}`}
+           data-testid="source-jira-btn"
++          aria-pressed={source === 'jira'}
+           onClick={() => {
+             setSource('jira');
+             setBundleData(null);
+@@ -430,6 +434,7 @@ export function PlaneImportStudio(): JSX.Element {
+           type="button"
+           className={`kb-plane-mode-btn ${source === 'github' ? 'kb-plane-mode-active' : ''}`}
+           data-testid="source-github-btn"
++          aria-pressed={source === 'github'}
+           onClick={() => {
+             setSource('github');
+             setBundleData(null);
+@@ -442,6 +447,7 @@ export function PlaneImportStudio(): JSX.Element {
+           type="button"
+           className={`kb-plane-mode-btn ${source === 'linear' ? 'kb-plane-mode-active' : ''}`}
+           data-testid="source-linear-btn"
++          aria-pressed={source === 'linear'}
+           onClick={() => {
+             setSource('linear');
+             setBundleData(null);
+@@ -469,11 +475,12 @@ export function PlaneImportStudio(): JSX.Element {
+             <EmojiHint kind="rawMarkdown" /> Step 1: Select {sourceName} Export Bundle
+           </h2>
+ 
+-          <div className="kb-plane-mode-row">
++          <div className="kb-plane-mode-row" role="group" aria-label="Input mode">
+             <button
+               type="button"
+               className={`kb-plane-mode-btn ${inputMode === 'upload' ? 'kb-plane-mode-active' : ''}`}
+               data-testid="mode-upload-btn"
++              aria-pressed={inputMode === 'upload'}
+               onClick={() => {
+                 setInputMode('upload');
+               }}
+@@ -484,6 +491,7 @@ export function PlaneImportStudio(): JSX.Element {
+               type="button"
+               className={`kb-plane-mode-btn ${inputMode === 'paste' ? 'kb-plane-mode-active' : ''}`}
+               data-testid="mode-paste-btn"
++              aria-pressed={inputMode === 'paste'}
+               onClick={() => {
+                 setInputMode('paste');
+               }}
 diff --git a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
-index c2a4466a..9dc90bbd 100644
+index c2a4466a..a4496250 100644
 --- a/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
 +++ b/kanban/web/src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
 @@ -2,6 +2,8 @@
@@ -303,7 +388,7 @@ index c2a4466a..9dc90bbd 100644
  import { describe, it, expect, vi, beforeEach } from 'vitest';
  import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  import { MemoryRouter } from 'react-router';
-@@ -549,4 +551,111 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
+@@ -549,4 +551,176 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
        expect(screen.queryByRole('alert')).toBeNull();
      });
    });
@@ -371,28 +456,35 @@ index c2a4466a..9dc90bbd 100644
 +      const linearBtn = screen.getByTestId('source-linear-btn');
 +
 +      expect(planeBtn.className).toContain('kb-plane-mode-active');
++      expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
++      expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
 +      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
 +      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
 +
 +      // Switch to Jira
 +      fireEvent.click(jiraBtn);
 +      expect(jiraBtn.className).toContain('kb-plane-mode-active');
++      expect(jiraBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(planeBtn.className).not.toContain('kb-plane-mode-active');
++      expect(planeBtn.getAttribute('aria-pressed')).toBe('false');
 +
 +      // Switch to GitHub Issues
 +      fireEvent.click(githubBtn);
 +      expect(githubBtn.className).toContain('kb-plane-mode-active');
++      expect(githubBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(jiraBtn.className).not.toContain('kb-plane-mode-active');
 +
 +      // Switch to Linear
 +      fireEvent.click(linearBtn);
 +      expect(linearBtn.className).toContain('kb-plane-mode-active');
++      expect(linearBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(githubBtn.className).not.toContain('kb-plane-mode-active');
 +
 +      // Switch back to Plane
 +      fireEvent.click(planeBtn);
 +      expect(planeBtn.className).toContain('kb-plane-mode-active');
++      expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(linearBtn.className).not.toContain('kb-plane-mode-active');
 +
 +      // Test input mode tabs (Upload vs Paste)
@@ -400,373 +492,76 @@ index c2a4466a..9dc90bbd 100644
 +      const pasteModeBtn = screen.getByTestId('mode-paste-btn');
 +
 +      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
++      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
++      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('false');
 +
 +      fireEvent.click(pasteModeBtn);
 +      expect(pasteModeBtn.className).toContain('kb-plane-mode-active');
++      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(uploadModeBtn.className).not.toContain('kb-plane-mode-active');
++      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('false');
 +
 +      fireEvent.click(uploadModeBtn);
 +      expect(uploadModeBtn.className).toContain('kb-plane-mode-active');
++      expect(uploadModeBtn.getAttribute('aria-pressed')).toBe('true');
 +      expect(pasteModeBtn.className).not.toContain('kb-plane-mode-active');
++      expect(pasteModeBtn.getAttribute('aria-pressed')).toBe('false');
 +
 +      unmount();
 +    }
 +    document.documentElement.removeAttribute('data-theme');
 +  });
++
++  it('enforces ARIA group roles, aria-pressed states, and keyboard navigation across tabs (KAN-529)', () => {
++    render(
++      <MemoryRouter initialEntries={['/admin/imports']}>
++        <PlaneImportStudio />
++      </MemoryRouter>,
++    );
++
++    // 1. Source selector bar has role="group" and aria-label="Import source"
++    const sourceBar = screen.getByTestId('source-selector-bar');
++    expect(sourceBar.getAttribute('role')).toBe('group');
++    expect(sourceBar.getAttribute('aria-label')).toBe('Import source');
++
++    const planeBtn = screen.getByTestId('source-plane-btn');
++    const jiraBtn = screen.getByTestId('source-jira-btn');
++    const githubBtn = screen.getByTestId('source-github-btn');
++    const linearBtn = screen.getByTestId('source-linear-btn');
++
++    expect(planeBtn.getAttribute('aria-pressed')).toBe('true');
++    expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
++    expect(githubBtn.getAttribute('aria-pressed')).toBe('false');
++    expect(linearBtn.getAttribute('aria-pressed')).toBe('false');
++
++    // Keyboard focus and activation
++    jiraBtn.focus();
++    expect(document.activeElement).toBe(jiraBtn);
++    fireEvent.click(jiraBtn);
++    expect(jiraBtn.getAttribute('aria-pressed')).toBe('true');
++    expect(planeBtn.getAttribute('aria-pressed')).toBe('false');
++
++    githubBtn.focus();
++    expect(document.activeElement).toBe(githubBtn);
++    fireEvent.click(githubBtn);
++    expect(githubBtn.getAttribute('aria-pressed')).toBe('true');
++    expect(jiraBtn.getAttribute('aria-pressed')).toBe('false');
++
++    // 2. Step 1 mode row has role="group" and aria-label="Input mode"
++    const uploadBtn = screen.getByTestId('mode-upload-btn');
++    const pasteBtn = screen.getByTestId('mode-paste-btn');
++    const modeGroup = uploadBtn.parentElement;
++    expect(modeGroup?.getAttribute('role')).toBe('group');
++    expect(modeGroup?.getAttribute('aria-label')).toBe('Input mode');
++
++    expect(uploadBtn.getAttribute('aria-pressed')).toBe('true');
++    expect(pasteBtn.getAttribute('aria-pressed')).toBe('false');
++
++    pasteBtn.focus();
++    expect(document.activeElement).toBe(pasteBtn);
++    fireEvent.click(pasteBtn);
++    expect(pasteBtn.getAttribute('aria-pressed')).toBe('true');
++    expect(uploadBtn.getAttribute('aria-pressed')).toBe('false');
++  });
  });
-diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-index e25be596..dbebd35d 100644
---- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-+++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.css
-@@ -119,9 +119,9 @@
- .kb-oauth-gov-register-btn {
-   padding: 8px 16px;
-   min-height: 40px;
--  background-color: var(--accent-primary);
--  color: var(--accent-primary-fg);
--  border: 1px solid var(--accent-primary);
-+  background-color: #238636;
-+  color: #ffffff;
-+  border: 1px solid rgba(240, 246, 252, 0.1);
-   border-radius: 6px;
-   font-weight: 500;
-   cursor: pointer;
-@@ -132,9 +132,7 @@
- }
- 
- .kb-oauth-gov-register-btn:hover {
--  background-color: var(--brand-primary-hover);
--  border-color: var(--brand-primary-hover);
--  color: var(--accent-primary-fg);
-+  background-color: #2ea043;
- }
- 
- /* Toolbar & Bulk Controls */
-@@ -213,15 +211,14 @@
- }
- 
- .kb-oauth-filter-pill-active {
--  background-color: var(--accent-primary);
--  color: var(--accent-primary-fg);
--  border-color: var(--accent-primary);
-+  background: #1f6feb;
-+  color: #ffffff;
-+  border-color: #58a6ff;
- }
- 
- .kb-oauth-filter-pill-active:hover {
--  background-color: var(--brand-primary-hover);
--  border-color: var(--brand-primary-hover);
--  color: var(--accent-primary-fg);
-+  background: #388bfd;
-+  color: #ffffff;
- }
- 
- .kb-oauth-gov-toolbar-right {
-@@ -235,9 +232,9 @@
- .kb-oauth-gov-bulk-delete-btn {
-   padding: 4px 12px;
-   min-height: 36px;
--  background-color: var(--danger-bg);
--  border: 1px solid var(--danger-fg);
--  color: var(--danger-fg);
-+  background-color: rgba(248, 81, 73, 0.15);
-+  border: 1px solid rgba(248, 81, 73, 0.4);
-+  color: #f85149;
-   border-radius: 6px;
-   font-size: 0.8rem;
-   font-weight: 600;
-@@ -245,18 +242,17 @@
-   transition: all 0.15s ease-in-out;
- }
- 
--.kb-oauth-gov-bulk-delete-btn:hover:not(:disabled) {
--  background-color: var(--danger-bg);
--  border-color: var(--danger-fg);
--  color: var(--danger-fg);
-+.kb-oauth-gov-bulk-delete-btn:hover {
-+  background-color: rgba(248, 81, 73, 0.25);
-+  border-color: #f85149;
- }
- 
- .kb-oauth-gov-purge-btn {
-   padding: 4px 12px;
-   min-height: 36px;
--  background-color: var(--warn-bg);
--  border: 1px solid var(--border-warning);
--  color: var(--warn-fg);
-+  background-color: var(--kb-color-bg-surface-raised, #21262d);
-+  border: 1px solid var(--border-warning, #d29922);
-+  color: #d29922;
-   border-radius: 6px;
-   font-size: 0.8rem;
-   font-weight: 600;
-@@ -264,10 +260,8 @@
-   transition: all 0.15s ease-in-out;
- }
- 
--.kb-oauth-gov-purge-btn:hover:not(:disabled) {
--  background-color: var(--bg-warning-subtle);
--  border-color: var(--warn-fg);
--  color: var(--warn-fg);
-+.kb-oauth-gov-purge-btn:hover {
-+  background-color: rgba(210, 153, 34, 0.15);
- }
- 
- .kb-oauth-gov-bulk-confirm-bar {
-diff --git a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-index 7c9659c5..be441f09 100644
---- a/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-+++ b/kanban/web/src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx
-@@ -2,8 +2,6 @@
- // Apache-2.0 License. See LICENSE for details.
- 
- import React from 'react';
--import fs from 'node:fs';
--import path from 'node:path';
- import { describe, it, expect, vi, beforeEach } from 'vitest';
- import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
- import { MemoryRouter } from 'react-router';
-@@ -1376,114 +1374,4 @@ describe('OAuthClientGovernanceStudio', () => {
-       );
-     });
-   });
--
--  describe('KAN-523: Purge and Action Button Contrast and Semantic Tokens', () => {
--    it('renders Purge Unused / Revoked Clients button cleanly in light theme', async () => {
--      document.documentElement.removeAttribute('data-theme');
--      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
--
--      render(
--        <MemoryRouter initialEntries={['/admin/oauth']}>
--          <OAuthClientGovernanceStudio />
--        </MemoryRouter>,
--      );
--
--      await waitFor(() => {
--        expect(screen.getByTestId('purge-clients-btn')).toBeDefined();
--      });
--
--      const purgeBtn = screen.getByTestId('purge-clients-btn');
--      expect(purgeBtn.textContent).toContain('Purge Unused / Revoked Clients');
--      expect(purgeBtn.className).toContain('kb-oauth-gov-purge-btn');
--
--      // Assert zero inline hardcoded color overrides
--      expect(purgeBtn.style.backgroundColor).toBe('');
--      expect(purgeBtn.style.borderColor).toBe('');
--      expect(purgeBtn.style.color).toBe('');
--
--      // Click enters confirm state
--      fireEvent.click(purgeBtn);
--      expect(screen.getByTestId('confirm-purge-btn')).toBeDefined();
--    });
--
--    it('renders Purge Unused / Revoked Clients button cleanly in dark theme', async () => {
--      document.documentElement.setAttribute('data-theme', 'dark');
--      vi.spyOn(oauthApi, 'fetchAdminOAuthClients').mockResolvedValue(mockClients);
--
--      try {
--        render(
--          <MemoryRouter initialEntries={['/admin/oauth']}>
--            <OAuthClientGovernanceStudio />
--          </MemoryRouter>,
--        );
--
--        await waitFor(() => {
--          expect(screen.getByTestId('purge-clients-btn')).toBeDefined();
--        });
--
--        const purgeBtn = screen.getByTestId('purge-clients-btn');
--        expect(purgeBtn.textContent).toContain('Purge Unused / Revoked Clients');
--        expect(purgeBtn.className).toContain('kb-oauth-gov-purge-btn');
--        expect(purgeBtn.style.backgroundColor).toBe('');
--        expect(purgeBtn.style.borderColor).toBe('');
--        expect(purgeBtn.style.color).toBe('');
--      } finally {
--        document.documentElement.removeAttribute('data-theme');
--      }
--    });
--
--    it('asserts OAuthClientGovernanceStudio.css removes #d29922 and uses WCAG AA semantic tokens for purge button', () => {
--      const cssPath = path.resolve(import.meta.dirname, '../OAuthClientGovernanceStudio.css');
--      const cssContent = fs.readFileSync(cssPath, 'utf8');
--
--      const purgeRuleMatch = /\.kb-oauth-gov-purge-btn\s*\{[^}]+\}/.exec(cssContent);
--      expect(purgeRuleMatch).not.toBeNull();
--      const purgeRule = purgeRuleMatch?.[0] ?? '';
--
--      // Assert #d29922 is completely removed from the purge button class
--      expect(purgeRule).not.toContain('#d29922');
--
--      // Assert WCAG AA >= 4.5:1 semantic tokens
--      expect(purgeRule).toContain('background-color: var(--warn-bg);');
--      expect(purgeRule).toContain('border: 1px solid var(--border-warning);');
--      expect(purgeRule).toContain('color: var(--warn-fg);');
--
--      // Assert hover state uses semantic warning tokens
--      const hoverMatch = /\.kb-oauth-gov-purge-btn:hover[^{]*\{[^}]+\}/.exec(cssContent);
--      expect(hoverMatch).not.toBeNull();
--      const hoverRule = hoverMatch?.[0] ?? '';
--      expect(hoverRule).toContain('background-color: var(--bg-warning-subtle);');
--      expect(hoverRule).toContain('border-color: var(--warn-fg);');
--      expect(hoverRule).toContain('color: var(--warn-fg);');
--    });
--
--    it('asserts semantic tokens for register, filter pill, and bulk delete buttons', () => {
--      const cssPath = path.resolve(import.meta.dirname, '../OAuthClientGovernanceStudio.css');
--      const cssContent = fs.readFileSync(cssPath, 'utf8');
--
--      // Register button
--      const registerMatch = /\.kb-oauth-gov-register-btn\s*\{[^}]+\}/.exec(cssContent);
--      expect(registerMatch).not.toBeNull();
--      const registerRule = registerMatch?.[0] ?? '';
--      expect(registerRule).toContain('background-color: var(--accent-primary);');
--      expect(registerRule).toContain('color: var(--accent-primary-fg);');
--      expect(registerRule).toContain('border: 1px solid var(--accent-primary);');
--
--      // Filter pill active
--      const filterPillMatch = /\.kb-oauth-filter-pill-active\s*\{[^}]+\}/.exec(cssContent);
--      expect(filterPillMatch).not.toBeNull();
--      const filterPillRule = filterPillMatch?.[0] ?? '';
--      expect(filterPillRule).toContain('background-color: var(--accent-primary);');
--      expect(filterPillRule).toContain('color: var(--accent-primary-fg);');
--      expect(filterPillRule).toContain('border-color: var(--accent-primary);');
--
--      // Bulk delete button
--      const bulkDeleteMatch = /\.kb-oauth-gov-bulk-delete-btn\s*\{[^}]+\}/.exec(cssContent);
--      expect(bulkDeleteMatch).not.toBeNull();
--      const bulkDeleteRule = bulkDeleteMatch?.[0] ?? '';
--      expect(bulkDeleteRule).toContain('background-color: var(--danger-bg);');
--      expect(bulkDeleteRule).toContain('border: 1px solid var(--danger-fg);');
--      expect(bulkDeleteRule).toContain('color: var(--danger-fg);');
--    });
--  });
- });
-diff --git a/kanban/web/src/ui/AdvancedSection.css b/kanban/web/src/ui/AdvancedSection.css
-index f589c4a3..7cc40f3a 100644
---- a/kanban/web/src/ui/AdvancedSection.css
-+++ b/kanban/web/src/ui/AdvancedSection.css
-@@ -3,19 +3,25 @@
- .kb-advanced-section {
-   display: block;
-   margin: 16px 0;
--  border: 1px solid var(--border-subtle, #e5e7eb);
-+  border: 1px solid var(--border-color, #e2e8f0);
-   border-radius: 8px;
--  background-color: var(--bg-card-subtle);
-+  background-color: var(--bg-card-subtle, rgba(248, 250, 252, 0.6));
-   transition: border-color 0.15s ease, background-color 0.15s ease;
- }
- 
--:where([data-theme='dark']) .kb-advanced-section {
--  border-color: var(--border-subtle, #2d333f);
-+[data-theme='dark'] .kb-advanced-section {
-+  border-color: var(--border-color, #334155);
-+  background-color: var(--bg-card-subtle, rgba(15, 23, 42, 0.5));
- }
- 
--.kb-advanced-section.kb-advanced-section--open {
--  border-color: var(--border-color-focus);
--  background-color: var(--bg-surface);
-+.kb-advanced-section--open {
-+  border-color: var(--border-color-focus, #3b82f6);
-+  background-color: var(--bg-card, #ffffff);
-+}
-+
-+[data-theme='dark'] .kb-advanced-section--open {
-+  border-color: var(--border-color-focus, #3b82f6);
-+  background-color: var(--bg-card, #0f172a);
- }
- 
- .kb-advanced-summary {
-@@ -35,7 +41,7 @@
- }
- 
- .kb-advanced-summary:focus-visible {
--  outline: 2px solid var(--focus-ring, #2563eb);
-+  outline: 2px solid var(--focus-ring, #3b82f6);
-   outline-offset: -2px;
-   border-radius: 6px;
- }
-@@ -46,14 +52,18 @@
-   justify-content: center;
-   width: 16px;
-   height: 16px;
--  color: var(--fg-muted);
-+  color: var(--text-muted, #64748b);
-   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-   flex-shrink: 0;
- }
- 
- .kb-advanced-chevron--open {
-   transform: rotate(90deg);
--  color: var(--fg-primary);
-+  color: var(--text-primary, #0f172a);
-+}
-+
-+[data-theme='dark'] .kb-advanced-chevron--open {
-+  color: var(--text-primary, #f8fafc);
- }
- 
- .kb-advanced-header {
-@@ -67,16 +77,24 @@
- .kb-advanced-title {
-   font-size: 0.875rem;
-   font-weight: 600;
--  color: var(--fg-primary);
-+  color: var(--text-primary, #1e293b);
-   letter-spacing: -0.01em;
- }
- 
-+[data-theme='dark'] .kb-advanced-title {
-+  color: var(--text-primary, #f1f5f9);
-+}
-+
- .kb-advanced-desc {
-   font-size: 0.8125rem;
--  color: var(--fg-secondary);
-+  color: var(--text-muted, #64748b);
-   font-weight: 400;
- }
- 
-+[data-theme='dark'] .kb-advanced-desc {
-+  color: var(--text-muted, #94a3b8);
-+}
-+
- .kb-advanced-badge {
-   display: inline-flex;
-   align-items: center;
-@@ -85,19 +103,22 @@
-   font-size: 0.75rem;
-   font-weight: 600;
-   line-height: 1.25;
--  background-color: var(--badge-bg);
--  color: var(--badge-fg);
--  border: 1px solid var(--badge-border);
-+  background-color: var(--badge-bg, rgba(59, 130, 246, 0.12));
-+  color: var(--badge-fg, #2563eb);
-+  border: 1px solid var(--badge-border, rgba(59, 130, 246, 0.3));
-+}
-+
-+[data-theme='dark'] .kb-advanced-badge {
-+  background-color: var(--badge-bg, rgba(96, 165, 250, 0.16));
-+  color: var(--badge-fg, #93c5fd);
-+  border-color: var(--badge-border, rgba(96, 165, 250, 0.35));
- }
- 
- .kb-advanced-content {
--  border-top: 1px solid var(--border-subtle, #e5e7eb);
--  padding: var(--space-4, 16px);
--  display: flex;
--  flex-direction: column;
--  gap: var(--space-3, 12px);
-+  padding: 16px;
-+  border-top: 1px solid var(--border-color, #e2e8f0);
- }
- 
--:where([data-theme='dark']) .kb-advanced-content {
--  border-top-color: var(--border-subtle, #2d333f);
-+[data-theme='dark'] .kb-advanced-content {
-+  border-top-color: var(--border-color, #334155);
- }
