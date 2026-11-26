@@ -565,6 +565,9 @@ describe('YourWorkView', () => {
       expect(cssContent).toContain('@media (max-width: 767px)');
       expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
       expect(cssContent).toContain('.your-work-header-text .kb-studio-doc-link');
+      expect(cssContent).toContain('.your-work-tabs');
+      expect(cssContent).toContain('.your-work-card');
+      expect(cssContent).toContain('var(--badge-fg)');
     });
   });
 });

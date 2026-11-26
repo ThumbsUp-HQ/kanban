@@ -98,8 +98,8 @@
 }
 
 .your-work-tab--active {
-  color: var(--accent-primary, #2563eb);
-  border-bottom-color: var(--accent-primary, #2563eb);
+  color: var(--badge-fg);
+  border-bottom-color: var(--badge-fg);
   font-weight: 600;
 }
 
@@ -117,7 +117,7 @@
 
 .your-work-tab--active .your-work-tab-badge {
   background: var(--bg-hover, #eff6ff);
-  color: var(--accent-primary, #2563eb);
+  color: var(--badge-fg);
 }
 
 .your-work-panel {
@@ -194,7 +194,7 @@
   font-family: var(--font-mono, monospace);
   font-size: 0.875rem;
   font-weight: 700;
-  color: var(--accent-primary, #2563eb);
+  color: var(--badge-fg);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -273,6 +273,55 @@
   .your-work-search-box {
     min-width: 100%;
     width: 100%;
+    min-height: var(--tap-min, 44px);
+    box-sizing: border-box;
+  }
+
+  .your-work-tabs {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .your-work-tab {
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    box-sizing: border-box;
+  }
+
+  .your-work-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2, 8px);
+    padding: var(--space-3, 12px);
+  }
+
+  .your-work-card-left {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    width: 100%;
+  }
+
+  .your-work-summary {
+    white-space: normal;
+    word-break: break-word;
+    width: 100%;
+  }
+
+  .your-work-card-right {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    width: 100%;
+    gap: var(--space-2, 8px);
+  }
+
+  .your-work-peek-btn {
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2, 8px) var(--space-3, 12px);
     box-sizing: border-box;
   }
 }
