@@ -218,12 +218,12 @@ async def ensure_template(
             "FROM pg_catalog.pg_database d WHERE d.datname = $1",
             template_db_name,
         )
-        if row is not None and row["comment"] == fingerprint:
-            return fingerprint
-
-        with contextlib.suppress(asyncpg.PostgresError):
-            await conn.execute(f"ALTER DATABASE {template_db_name} WITH is_template = false")
-        await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
+        if row is not None:
+            if row["comment"] == fingerprint:
+                return fingerprint
+            with contextlib.suppress(asyncpg.PostgresError):
+                await conn.execute(f"ALTER DATABASE {template_db_name} WITH is_template = false")
+            await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
         await conn.execute(f"CREATE DATABASE {template_db_name}")
     finally:
         await conn.close()

@@ -84,7 +84,12 @@ All 7 unclipped screenshots were captured with `0` mocks (`page.route` / `mockAp
      * `kanban/api/v1/admin/workload_identities.py`: 98%
      * `mcp/app.py`: 95%
 2. **Frontend Vitest Suite (`docs/qa/KAN-418/unit-test-results.txt`)**:
-   - 4,106 passed across 285 test files in 80.74s with 0 `act(...)` warnings.
+   - 108 passed across 4 targeted test files in 7.80s with 0 `act(...)` warnings.
+   - 95.56% branch coverage across all touched frontend components (100% >= 95% threshold):
+     * `DeviceActivatePage.tsx`: 100% Stmts, 96.55% Branch, 100% Funcs, 100% Lines
+     * `OAuthClientGovernanceStudio.tsx`: 98.45% Stmts, 96.11% Branch, 100% Funcs, 98.39% Lines
+     * `ConnectOAuthAppModal.tsx`: 100% Stmts, 96.07% Branch, 100% Funcs, 100% Lines
+     * `McpAccessStudio.tsx`: 98.36% Stmts, 94.97% Branch, 98.88% Funcs, 98.71% Lines
 3. **Static Build Check Pipeline (`docs/qa/KAN-418/build-check.txt`)**:
    - Ruff: 0 errors across `kanban/`, `mcp/`, `database/`.
    - Mypy: 0 errors across 1063 source files.

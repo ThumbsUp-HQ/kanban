@@ -71,7 +71,7 @@ index 06887f13..6a9511a9 100644
          ),
          CheckConstraint(
 diff --git a/database/testing/pg_harness.py b/database/testing/pg_harness.py
-index 9f3fcc54..b4b5f207 100644
+index 9f3fcc54..34fd744b 100644
 --- a/database/testing/pg_harness.py
 +++ b/database/testing/pg_harness.py
 @@ -2,6 +2,7 @@
@@ -82,15 +82,23 @@ index 9f3fcc54..b4b5f207 100644
  import hashlib
  import logging
  import os
-@@ -220,6 +221,8 @@ async def ensure_template(
-         if row is not None and row["comment"] == fingerprint:
-             return fingerprint
- 
-+        with contextlib.suppress(asyncpg.PostgresError):
-+            await conn.execute(f"ALTER DATABASE {template_db_name} WITH is_template = false")
-         await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
+@@ -217,10 +218,12 @@ async def ensure_template(
+             "FROM pg_catalog.pg_database d WHERE d.datname = $1",
+             template_db_name,
+         )
+-        if row is not None and row["comment"] == fingerprint:
+-            return fingerprint
+-
+-        await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
++        if row is not None:
++            if row["comment"] == fingerprint:
++                return fingerprint
++            with contextlib.suppress(asyncpg.PostgresError):
++                await conn.execute(f"ALTER DATABASE {template_db_name} WITH is_template = false")
++            await conn.execute(f"DROP DATABASE IF EXISTS {template_db_name} WITH (FORCE)")
          await conn.execute(f"CREATE DATABASE {template_db_name}")
      finally:
+         await conn.close()
 diff --git a/database/tests/migrations/test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py b/database/tests/migrations/test_p6_22_mcp_api_keys_capability_mask_boundary_migration.py
 new file mode 100644
 index 00000000..d306c184
