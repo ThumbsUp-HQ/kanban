@@ -42,7 +42,7 @@ index 8930d46..bd010ba 100644
  ### Dual-Control Principle:
  To satisfy enterprise SOC 2 and ISO 27001 separation of duties, escalating a custom scripted field to workspace-wide or server-wide scope requires dual-control authorization:
 diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
-index e7813ae..0f3041d 100644
+index e7813ae..b6fdb9b 100644
 --- a/Guide-Custom-Fields.md
 +++ b/Guide-Custom-Fields.md
 @@ -10,6 +10,8 @@ This comprehensive guide covers how Custom Fields work, where their values surfa
@@ -72,7 +72,7 @@ index e7813ae..0f3041d 100644
  ### 1. `text`
  Single-line formatted string with optional prefix and monospace font.
  ```json
-@@ -270,8 +276,34 @@ Custom fields can be scoped at three tiers:
+@@ -270,56 +276,70 @@ Custom fields can be scoped at three tiers:
  - **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
  - **`SERVER` Scope:** Global fields available across all workspaces.
  
@@ -107,11 +107,99 @@ index e7813ae..0f3041d 100644
  ---
  
  ## Custom Field Configuration Attributes and Controls
+ 
+-<a id="display-name"></a>
+-### Display Name (`#display-name`)
++### Display Name
+ The human-readable title of the custom field shown on ticket property rails, board cards, and table columns.
+ 
+-<a id="slug"></a>
+-### Field Slug (`#slug`)
++### Slug
+ The unique, URL-safe ASCII identifier used in formulas, API payloads, and query filters.
+ 
+-<a id="flavors"></a>
+-### Field Flavors (`#flavors`)
++### Flavors
+ Determines the underlying calculation mechanism: `scalar`, `formula`, `wasm`, or `nsjail`.
+ 
+-<a id="sandbox-tier"></a>
+-### Execution Sandbox Tier (`#sandbox-tier`)
++### Sandbox Tier
+ Selects between in-process WebAssembly (`wasmtime` Tier A) and containerized Linux namespaces (`nsjail` Tier B). In Standalone mode, `nsjail` is gated.
+ 
+-<a id="credential-mode"></a>
+-### Ephemeral Credential Mode (`#credential-mode`)
++### Credential Mode
+ Specifies whether the field executes with `INVOKING_USER` permissions or elevated `SERVICE_ACCOUNT` credentials.
+ 
+-<a id="target-scope"></a>
+-### Target Scope Tier (`#target-scope`)
++### Target Scope
+ Controls the tenant boundary accessible to the custom field: `PROJECT`, `WORKSPACE`, or `SERVER`.
+ 
+-<a id="output-formats"></a>
+-### Output Formats (`#output-formats`)
++### Output Formats
+ Canonical schema used to format and validate the output: `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, or `json_table`.
+ 
+-<a id="format-metadata"></a>
+-### Format Metadata Configuration (`#format-metadata`)
++### Format Metadata
+ JSON metadata configuring format-specific options such as decimal precision, color tokens, and table column schemas.
+ 
+-<a id="script-source"></a>
+-### Custom Script Source (`#script-source`)
++### Script Source
+ The Python AST expression, compiled WebAssembly module, or sandboxed script implementing the field calculation.
+ 
+-<a id="egress-allowlist"></a>
+-### Network Egress Allowlist (`#egress-allowlist`)
++### Egress Allowlist
+ Explicit list of destination hosts accessible to `nsjail` tier scripts. Network access is disabled by default via `CLONE_NEWNET`.
+ 
+-<a id="aal2-stepup"></a>
+-### Mandatory AAL2 Step-Up (`#aal2-stepup`)
++### AAL2 Stepup
+ Administrative modifications and scope escalations require recent multi-factor authentication (AAL2 verified within 900 seconds).
+ 
+-<a id="approvals"></a>
+-### Dual-Control Cryptographic Approvals (`#approvals`)
++### Approvals
+ Escalating a field to workspace or server scope requires explicit cryptographic signing and approval by an administrator of that target tier.
+diff --git a/Role-and-Permission-Matrix.md b/Role-and-Permission-Matrix.md
+index 8e6db3f..950417a 100644
+--- a/Role-and-Permission-Matrix.md
++++ b/Role-and-Permission-Matrix.md
+@@ -16,8 +16,9 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
+-<a id="system-roles"></a>
+-## The 7 Principal Tiers
++## System Roles
++
++### The 7 Principal Tiers
+ 
+ 1. **Guest (`WORKSPACE_GUEST` / `PROJECT_GUEST`):** Ephemeral or external collaborator. Confined strictly to explicitly shared objects with zero ambient project or workspace visibility.
+ 2. **Viewer (`WORKSPACE_VIEWER` / `PROJECT_VIEWER`):** Read-only stakeholder. Permitted to inspect un-restricted workspace or project assets, but cannot author or modify data.
+@@ -29,8 +30,9 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
+-<a id="workspace-level-roles"></a>
+-## Master Capability Matrix
++## Workspace-Level Roles
++
++### Master Capability Matrix
+ 
+ | Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
+ | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 diff --git a/Scripted-Workflows-and-Transition-Helpers.md b/Scripted-Workflows-and-Transition-Helpers.md
-index 46067f4..76d0d59 100644
+index 46067f4..fafa075 100644
 --- a/Scripted-Workflows-and-Transition-Helpers.md
 +++ b/Scripted-Workflows-and-Transition-Helpers.md
-@@ -13,16 +13,17 @@ In traditional project management tools, workflow rules are either simple notifi
+@@ -13,12 +13,12 @@ In traditional project management tools, workflow rules are either simple notifi
  ```mermaid
  flowchart TD
      Drag["User / Agent moves card: In Progress -> Done"] --> HelperEngine["Transition Helper Engine"]
@@ -129,20 +217,7 @@ index 46067f4..76d0d59 100644
  ```
  
  ---
- 
-+<a id="helper-architecture"></a>
- ## Helper Architecture
- 
- Transition helpers operate across two execution tiers to balance latency and verification depth:
-@@ -30,6 +31,7 @@ Transition helpers operate across two execution tiers to balance latency and ver
- 1. **Tier A (Synchronous Wasm / In-Process):** Fast sub-25ms validators and mutators executing in memory or within sandboxed WebAssembly runtimes. These guarantee instantaneous rejection or field stamping without network round-trips.
- 2. **Tier B (Asynchronous Autonomous Agent Gates):** Non-blocking background gates dispatched to local CLI harnesses (`agy -p`, `codex -p`), in-app SDK runners, or remote bare Git mirrors. These run comprehensive multi-file audits, build verifications, and forensic QA checks before approving the transition.
- 
-+<a id="failure-policies"></a>
- ### Failure Policies
- 
- Every attached transition helper specifies an explicit failure policy to determine behavior when a helper times out, errors, or fails execution:
-@@ -43,13 +45,35 @@ Every attached transition helper specifies an explicit failure policy to determi
+@@ -43,13 +43,35 @@ Every attached transition helper specifies an explicit failure policy to determi
  
  Project Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.
  
@@ -179,7 +254,7 @@ index 46067f4..76d0d59 100644
  ### The Non-Persistent Dry-Run Drawer
  Testing workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:
  - Select an existing ticket fixture or pick a live issue.
-@@ -78,7 +102,7 @@ sequenceDiagram
+@@ -78,7 +100,7 @@ sequenceDiagram
      Drawer-->>Admin: Display green "Transition Allowed: Changes would commit"
  ```
  
@@ -188,7 +263,7 @@ index 46067f4..76d0d59 100644
  
  ---
  
-@@ -89,7 +113,20 @@ Autonomous agents evaluating transition gates often require access to source cod
+@@ -89,7 +111,20 @@ Autonomous agents evaluating transition gates often require access to source cod
  - The volume mount is strictly enforced as read-only (`:ro bare mirror`).
  - Agents can run `git diff`, `git log`, and code analysis against the mirror, but all write attempts fail at the OS kernel boundary.
  
@@ -210,7 +285,7 @@ index 46067f4..76d0d59 100644
  
  ---
  
-@@ -170,3 +207,49 @@ Require completed acceptance criteria and documented unit/QA verification eviden
+@@ -170,3 +205,49 @@ Require completed acceptance criteria and documented unit/QA verification eviden
  
  ![Negative Gate Veto Blocking Saturn Ice Cream Ticket in In Progress](images/67-qa-gate-negative-saturn-ice-cream-vetoed.png)
  
@@ -261,10 +336,10 @@ index 46067f4..76d0d59 100644
 +![Negative Transition Ticket Activity and Rejection Comment on RCD-2](images/rc-ollama-07-negative-comment.png)
 +
 diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
-index 907f8ce..05ad219 100644
+index 907f8ce..7f424d2 100644
 --- a/Studio-Configuration-Reference.md
 +++ b/Studio-Configuration-Reference.md
-@@ -5,80 +5,321 @@ Authoritative technical reference specification for all configuration attributes
+@@ -5,80 +5,320 @@ Authoritative technical reference specification for all configuration attributes
  ---
  
  ## 1. Workspace Studio
@@ -427,8 +502,7 @@ index 907f8ce..05ad219 100644
  
 -## 3. Workflow Transition Studio
 -The Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.
-+<a id="personal-settings"></a>
-+### Personal Settings Studio
++### Personal Settings
 +The Personal Settings Studio (`/settings` or `/profile`) provides comprehensive user identity self-service, including canonical timezone localization, avatar upload with automatic sanitization and cropping, password rotation with server-admin entropy rules, WebAuthn Passkeys, TOTP two-factor authentication, one-time emergency recovery codes, and external OIDC/LDAP identity account linking.
 +
 +![Personal Settings - Desktop Light](images/slice5-personal-settings-desktop-1440x900-light.png)
@@ -629,33 +703,52 @@ index 907f8ce..05ad219 100644
  ---
  
 diff --git a/Ticket-Screen-and-Work-Item-Features.md b/Ticket-Screen-and-Work-Item-Features.md
-index 853e873..7ceee84 100644
+index 853e873..7cb6527 100644
 --- a/Ticket-Screen-and-Work-Item-Features.md
 +++ b/Ticket-Screen-and-Work-Item-Features.md
-@@ -148,6 +148,10 @@ Two-stage deletion safety calculates the ripple impact across child issues, depe
- ### Auto-Archive Policy
+@@ -131,8 +131,7 @@ The activity feed separates human conversation from automated audit logs and AI
+ 
+ ![Activity Stream and Audit History](images/28-activity-stream-audit.png)
+ 
+-<a id="modules"></a>
+-### Sprints, Cycles, and Functional Modules
++### Modules
+ Work items bind directly to sprint cycles and functional modules with real-time velocity roll-ups:
+ 
+ ![Sprint Cycle Planning and Velocity Tracking](images/24-cycles-sprints.png)
+@@ -144,10 +143,12 @@ Two-stage deletion safety calculates the ripple impact across child issues, depe
+ 
+ ![Delete Blast Radius Warning Modal](images/20-delete-blast-radius.png)
+ 
+-<a id="auto-archive"></a>
+-### Auto-Archive Policy
++### Auto-Archive
  Work items completed past the retention threshold are automatically moved to archive storage.
  
-+<a id="labels"></a>
-+### Labels & Tagging
++### Labels
 +Multi-colored semantic labels support both workspace-level and project-level scopes, with optional mutual exclusion groups enforcing single-selection among conflicting categories.
 +
  ---
  
  ## PostgreSQL Issue Copy and Deep Subtree Duplication Procedure
 diff --git a/Zero-Trust-Security-and-Access-Visibility.md b/Zero-Trust-Security-and-Access-Visibility.md
-index 4e4e57b..44aeace 100644
+index 4e4e57b..d1a31a1 100644
 --- a/Zero-Trust-Security-and-Access-Visibility.md
 +++ b/Zero-Trust-Security-and-Access-Visibility.md
-@@ -13,6 +13,7 @@ Key security pillars:
+@@ -13,6 +13,12 @@ Key security pillars:
  
  ---
  
-+<a id="authentication"></a>
++## Authentication
++
++Account authentication enforces minimum entropy requirements (minimum 12 characters for standard users, 14 characters for Server Admins). Authentication cards support local password credentials, WebAuthn Passkeys, TOTP two-factor authentication, LDAPS/Active Directory, and multi-card OIDC/OAuth providers. Sessions are cryptographically sealed with monotonic idle and absolute timeout expirations.
++
++---
++
  ## Universal Access Control Model
  
  👍kanban unifies human users, user groups, and autonomous agent service-principals under a single Universal Object Graph access model.
-@@ -29,7 +30,7 @@ flowchart TD
+@@ -29,7 +35,7 @@ flowchart TD
      
      subgraph AgentOBO["Agent On-Behalf-Of Clamping"]
          Combined --> Intersect{"Intersection (∩)"}
@@ -664,3 +757,203 @@ index 4e4e57b..44aeace 100644
          AgentGrant["Explicit Agent Grant"] --> Intersect
          Intersect --> Effective["Final Effective Agent Permission"]
      end
+diff --git a/images/rc-ollama-01-provider-probe.png b/images/rc-ollama-01-provider-probe.png
+new file mode 100644
+index 0000000..06844b8
+Binary files /dev/null and b/images/rc-ollama-01-provider-probe.png differ
+diff --git a/images/rc-ollama-02-agent-definition.png b/images/rc-ollama-02-agent-definition.png
+new file mode 100644
+index 0000000..b572c2d
+Binary files /dev/null and b/images/rc-ollama-02-agent-definition.png differ
+diff --git a/images/rc-ollama-03-workflow-hook.png b/images/rc-ollama-03-workflow-hook.png
+new file mode 100644
+index 0000000..7ea5b41
+Binary files /dev/null and b/images/rc-ollama-03-workflow-hook.png differ
+diff --git a/images/rc-ollama-04-positive-done.png b/images/rc-ollama-04-positive-done.png
+new file mode 100644
+index 0000000..6f91d95
+Binary files /dev/null and b/images/rc-ollama-04-positive-done.png differ
+diff --git a/images/rc-ollama-05-positive-comment.png b/images/rc-ollama-05-positive-comment.png
+new file mode 100644
+index 0000000..bbd99e7
+Binary files /dev/null and b/images/rc-ollama-05-positive-comment.png differ
+diff --git a/images/rc-ollama-06-negative-blocked.png b/images/rc-ollama-06-negative-blocked.png
+new file mode 100644
+index 0000000..a4f9a96
+Binary files /dev/null and b/images/rc-ollama-06-negative-blocked.png differ
+diff --git a/images/rc-ollama-07-negative-comment.png b/images/rc-ollama-07-negative-comment.png
+new file mode 100644
+index 0000000..c8540ba
+Binary files /dev/null and b/images/rc-ollama-07-negative-comment.png differ
+diff --git a/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png b/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..7e70b67
+Binary files /dev/null and b/images/slice5-custom-fields-editor-tier-a-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png b/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..8f33636
+Binary files /dev/null and b/images/slice5-custom-fields-escalation-dual-control-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png b/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..e1f9df6
+Binary files /dev/null and b/images/slice5-custom-fields-structured-format-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-studio-desktop-1440x900-dark.png b/images/slice5-custom-fields-studio-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..579798a
+Binary files /dev/null and b/images/slice5-custom-fields-studio-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-custom-fields-studio-desktop-1440x900-light.png b/images/slice5-custom-fields-studio-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..727d615
+Binary files /dev/null and b/images/slice5-custom-fields-studio-desktop-1440x900-light.png differ
+diff --git a/images/slice5-custom-fields-studio-mobile-portrait-390x844.png b/images/slice5-custom-fields-studio-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..cfec8d7
+Binary files /dev/null and b/images/slice5-custom-fields-studio-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png b/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..dff469e
+Binary files /dev/null and b/images/slice5-custom-fields-studio-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png b/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..baf68b0
+Binary files /dev/null and b/images/slice5-custom-fields-studio-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-personal-settings-desktop-1440x900-dark.png b/images/slice5-personal-settings-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..a1bcac9
+Binary files /dev/null and b/images/slice5-personal-settings-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-personal-settings-desktop-1440x900-light.png b/images/slice5-personal-settings-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..c7d95d8
+Binary files /dev/null and b/images/slice5-personal-settings-desktop-1440x900-light.png differ
+diff --git a/images/slice5-personal-settings-mobile-portrait-390x844.png b/images/slice5-personal-settings-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..0f20eb1
+Binary files /dev/null and b/images/slice5-personal-settings-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-personal-settings-tablet-landscape-1024x768.png b/images/slice5-personal-settings-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e935d72
+Binary files /dev/null and b/images/slice5-personal-settings-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-personal-settings-tablet-portrait-768x1024.png b/images/slice5-personal-settings-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..ad2373c
+Binary files /dev/null and b/images/slice5-personal-settings-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png b/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..3387cd6
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png b/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..0e304d4
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png b/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..2792003
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png b/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e6643aa
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png b/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..e22e06b
+Binary files /dev/null and b/images/slice5-project-settings-danger-zone-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-priorities-desktop-1440x900-dark.png b/images/slice5-project-settings-priorities-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..5061230
+Binary files /dev/null and b/images/slice5-project-settings-priorities-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-priorities-desktop-1440x900-light.png b/images/slice5-project-settings-priorities-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..c348be7
+Binary files /dev/null and b/images/slice5-project-settings-priorities-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-priorities-mobile-portrait-390x844.png b/images/slice5-project-settings-priorities-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..1a5ca1b
+Binary files /dev/null and b/images/slice5-project-settings-priorities-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png b/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..5146c17
+Binary files /dev/null and b/images/slice5-project-settings-priorities-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png b/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..c4160ca
+Binary files /dev/null and b/images/slice5-project-settings-priorities-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png b/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..d4d1020
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png b/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..00a0c9e
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-desktop-1440x900-light.png differ
+diff --git a/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png b/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..e9d4191
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png b/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..8f22091
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png b/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..08dbef4
+Binary files /dev/null and b/images/slice5-project-settings-wip-limits-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png b/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..07bc994
+Binary files /dev/null and b/images/slice5-workflow-attach-hook-dialog-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png b/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..5682833
+Binary files /dev/null and b/images/slice5-workflow-dry-run-drawer-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png b/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..9e22ade
+Binary files /dev/null and b/images/slice5-workflow-git-repo-bindings-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-studio-desktop-1440x900-dark.png b/images/slice5-workflow-studio-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..3fc3e01
+Binary files /dev/null and b/images/slice5-workflow-studio-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-workflow-studio-desktop-1440x900-light.png b/images/slice5-workflow-studio-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..9bc7124
+Binary files /dev/null and b/images/slice5-workflow-studio-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workflow-studio-mobile-portrait-390x844.png b/images/slice5-workflow-studio-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..ec6b9b5
+Binary files /dev/null and b/images/slice5-workflow-studio-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-workflow-studio-tablet-landscape-1024x768.png b/images/slice5-workflow-studio-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..e3ec4d6
+Binary files /dev/null and b/images/slice5-workflow-studio-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-workflow-studio-tablet-portrait-768x1024.png b/images/slice5-workflow-studio-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..fda0c0b
+Binary files /dev/null and b/images/slice5-workflow-studio-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workspace-settings-general-desktop-1440x900-dark.png b/images/slice5-workspace-settings-general-desktop-1440x900-dark.png
+new file mode 100644
+index 0000000..cd41a36
+Binary files /dev/null and b/images/slice5-workspace-settings-general-desktop-1440x900-dark.png differ
+diff --git a/images/slice5-workspace-settings-general-desktop-1440x900-light.png b/images/slice5-workspace-settings-general-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..54b0b98
+Binary files /dev/null and b/images/slice5-workspace-settings-general-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workspace-settings-general-mobile-portrait-390x844.png b/images/slice5-workspace-settings-general-mobile-portrait-390x844.png
+new file mode 100644
+index 0000000..7878c95
+Binary files /dev/null and b/images/slice5-workspace-settings-general-mobile-portrait-390x844.png differ
+diff --git a/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png b/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png
+new file mode 100644
+index 0000000..64cf723
+Binary files /dev/null and b/images/slice5-workspace-settings-general-tablet-landscape-1024x768.png differ
+diff --git a/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png b/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png
+new file mode 100644
+index 0000000..3f8d36d
+Binary files /dev/null and b/images/slice5-workspace-settings-general-tablet-portrait-768x1024.png differ
+diff --git a/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png b/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..941769d
+Binary files /dev/null and b/images/slice5-workspace-settings-groups-nested-desktop-1440x900-light.png differ
+diff --git a/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png b/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png
+new file mode 100644
+index 0000000..042d4c9
+Binary files /dev/null and b/images/slice5-workspace-settings-trash-retention-desktop-1440x900-light.png differ
