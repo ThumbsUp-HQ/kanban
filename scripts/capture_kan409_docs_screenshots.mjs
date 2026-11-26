@@ -102,12 +102,14 @@ const CHAPTERS = [
     slug: 'role-and-permission-matrix',
     title: 'Role and Permission Matrix',
     hasMermaid: false,
+    scrollToAnchor: 'granular-rbac-policy-builder',
   },
   {
     prefix: '03-studio-config-ref',
     slug: 'studio-configuration-reference',
     title: 'Studio Configuration Reference',
     hasMermaid: false,
+    scrollToAnchor: 'authentication-studio',
   },
 ];
 
@@ -148,13 +150,34 @@ async function main() {
           // Wait for Mermaid rendering if present
           if (chapter.hasMermaid) {
             try {
-              await page.waitForSelector('[data-testid*="mermaid"], svg[id^="mermaid"], .mermaid-block, [data-lang="mermaid"]', { timeout: 8000 });
+              await page.waitForSelector('svg[id^="mermaid"], .kb-mermaid-block, [data-testid*="mermaid"]', { timeout: 8000 });
             } catch {
               console.log('Mermaid block wait timed out or rendered inline.');
             }
           }
 
-          await page.waitForTimeout(300);
+          // If chapter specifies an anchor to focus on, scroll it into view with header offset
+          if (chapter.scrollToAnchor) {
+            try {
+              await page.waitForFunction((anchor) => {
+                return Boolean(document.getElementById(anchor) || document.querySelector(`[id*="${anchor}"]`));
+              }, chapter.scrollToAnchor, { timeout: 8000 });
+
+              await page.evaluate((anchor) => {
+                const target = document.getElementById(anchor) || document.querySelector(`[id*="${anchor}"]`);
+                if (target) {
+                  const rect = target.getBoundingClientRect();
+                  const absoluteTop = window.scrollY + rect.top;
+                  window.scrollTo({ top: Math.max(0, absoluteTop - 40), behavior: 'instant' });
+                }
+              }, chapter.scrollToAnchor);
+              await page.waitForTimeout(300);
+            } catch (scrollErr) {
+              console.log(`Scroll to anchor ${chapter.scrollToAnchor} failed or timed out: ${scrollErr.message}`);
+            }
+          } else {
+            await page.waitForTimeout(300);
+          }
 
           const filename = `${chapter.prefix}-${vp.name}.png`;
           const filePath = path.join(OUT_DIR, filename);
@@ -167,7 +190,7 @@ async function main() {
         }
       }
 
-      // If chapter has Mermaid, capture a focused scroll shot of the Mermaid diagram
+      // If chapter has Mermaid, capture a focused scroll shot of the Mermaid diagram with generous padding
       if (chapter.hasMermaid) {
         const context = await browser.newContext({
           viewport: { width: 1440, height: 900 },
@@ -179,13 +202,29 @@ async function main() {
           await page.goto(`${BASE_URL}/docs/${chapter.slug}`, { waitUntil: 'networkidle', timeout: 30000 });
           await applyTheme(page, 'light');
 
-          const mermaidEl = await page.waitForSelector('[data-testid*="mermaid"], svg[id^="mermaid"], .mermaid-block, [data-lang="mermaid"]', {
+          const mermaidEl = await page.waitForSelector('svg[id^="mermaid"], .kb-mermaid-block, [data-testid*="mermaid"]', {
             timeout: 8000,
           });
 
           if (mermaidEl) {
-            await mermaidEl.scrollIntoViewIfNeeded();
-            await page.waitForTimeout(300);
+            await page.evaluate((el) => {
+              const canvas = document.querySelector('.media-viewport__canvas');
+              if (canvas) {
+                canvas.style.paddingBottom = '60px';
+              }
+              const viewport = document.querySelector('.media-viewport');
+              if (viewport) {
+                viewport.style.maxHeight = '680px';
+              }
+              const rect = el.getBoundingClientRect();
+              const absoluteTop = window.scrollY + rect.top;
+              // Center diagram in viewport with padding above so floating toolbar does not overlap bottom box
+              window.scrollTo({
+                top: Math.max(0, absoluteTop - 40),
+                behavior: 'instant',
+              });
+            }, mermaidEl);
+            await page.waitForTimeout(400);
 
             const filename = `${chapter.prefix}-mermaid-flowchart.png`;
             const filePath = path.join(OUT_DIR, filename);
