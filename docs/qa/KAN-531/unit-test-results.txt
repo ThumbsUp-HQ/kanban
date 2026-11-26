@@ -1,0 +1,40 @@
+$ COVERAGE_INCLUDE="src/features/standalone/StandaloneStatusPanel.tsx" pnpm --dir kanban/web exec vitest run src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx --coverage
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan531-21fbd121/kanban/web
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (46 tests) 9824ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ Case 4: renders exact ephemeral warning and copies docker run command when persistent_volume is false 474ms
+     ✓ tests 2-stage restore flow requiring RESTORE confirmation 388ms
+     ✓ KANBA-208: handles verify and restore failure branches with API errors and file upload 430ms
+     ✓ KANBA-208: handles verify and restore using selectedSnapshotFilename and network exception branches 401ms
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 1501ms
+   ✓ ComposeExportTab (22)
+     ✓ triggers manual backup run and verifies snapshot restoration 508ms
+     ✓ handles backup verification failure and invalid restore confirmation text 400ms
+     ✓ covers restore from uploaded file with passphrase and manifest fallback 365ms
+     ✓ handles restore failure with server error detail and string rejection 518ms
+
+ Test Files  1 passed (1)
+      Tests  46 passed (46)
+   Start at  15:49:55
+   Duration  12.09s (tests 87%, environment 9%, import 2%, transform 1%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.18 |    96.22 |     100 |   99.57 |                   
+ ...tatusPanel.tsx |   99.18 |    96.22 |     100 |   99.57 | 66                
+-------------------|---------|----------|---------|---------|-------------------
+EXIT_CODE: 0
