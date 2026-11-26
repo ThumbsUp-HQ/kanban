@@ -12,6 +12,7 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import { isAal2StepUpCode } from '../../api/problem';
 import { ErrorHelpHint } from '../../components/help/ErrorHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './DeviceActivatePage.css';
 
 const BASE20_CHARS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -256,7 +257,15 @@ export function DeviceActivatePage(): JSX.Element {
       </a>
       <div className="kb-device-activate-card">
         <header className="kb-device-activate-header">
-          <h1 className="kb-device-activate-title">Connect CLI Device</h1>
+          <div className="kb-device-activate-header-top">
+            <h1 className="kb-device-activate-title">Connect CLI Device</h1>
+            <StudioDocLink
+              href="/docs/studio-configuration-reference#rfc-8628-activate-device-flow-and-bulk-purge"
+              title="RFC 8628 Device Flow Documentation"
+              testId="device-activate-doc-link"
+              className="kb-studio-doc-link kb-device-activate-doc-link"
+            />
+          </div>
           <p className="kb-device-activate-subtitle">
             Approve headless CLI or bot access with explicit resource boundaries.
           </p>
