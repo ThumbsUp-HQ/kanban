@@ -803,8 +803,11 @@ describe('LinkAuditorStudio', () => {
       // Verify specific class assignments
       expect(cssContent).toMatch(/\.badge-danger\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-danger\);/s);
       expect(cssContent).toMatch(/\.badge-warning\s*\{[^}]*background-color:\s*var\(--warn-bg\);[^}]*color:\s*var\(--warn-fg\);[^}]*border:\s*1px\s+solid\s+var\(--border-warning\);/s);
-      expect(cssContent).toMatch(/\.badge-critical\s*\{[^}]*background-color:\s*var\(--warn-bg\);[^}]*color:\s*var\(--warn-fg\);[^}]*border:\s*1px\s+solid\s+var\(--warn-fg\);[^}]*font-weight:\s*700;/s);
-      expect(cssContent).toMatch(/\.badge-info\s*\{[^}]*background-color:\s*var\(--badge-bg\);[^}]*color:\s*var\(--badge-fg\);[^}]*border:\s*1px\s+solid\s+var\(--badge-border\);/s);
+      expect(cssContent).toMatch(/\.badge-critical\s*\{[^}]*background-color:\s*var\(--danger-bg\);[^}]*color:\s*var\(--danger-fg\);[^}]*border:\s*1px\s+solid\s+var\(--danger-fg\);[^}]*font-weight:\s*700;/s);
+      expect(cssContent).toMatch(/\.badge-info\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\);[^}]*color:\s*var\(--accent-primary\);[^}]*border:\s*1px\s+solid\s+var\(--border-accent-subtle\);/s);
+      expect(cssContent).toMatch(/:where\(\[data-theme='dark'\]\)\s+\.badge-info\s*\{[^}]*color:\s*var\(--badge-fg\);[^}]*background-color:\s*var\(--badge-bg\);[^}]*border-color:\s*var\(--badge-border\);/s);
+      expect(cssContent).toMatch(/\.link-auditor-btn--scan:hover:not\(:disabled\)\s*\{[^}]*background-color:\s*var\(--brand-primary-hover\);/s);
+      expect(cssContent).toMatch(/\.row--selected\s+td\s*\{[^}]*background-color:\s*var\(--bg-accent-subtle\)/s);
       expect(cssContent).toMatch(/\.status-badge--purged\s*\{[^}]*background-color:\s*var\(--bg-secondary\);[^}]*color:\s*var\(--fg-secondary\);[^}]*border:\s*1px\s+solid\s+var\(--border-subtle\);/s);
       expect(cssContent).toMatch(/\.status-badge--resolved\s*\{[^}]*background-color:\s*var\(--bg-success-subtle\);[^}]*color:\s*var\(--text-success\);[^}]*border:\s*1px\s+solid\s+var\(--border-success\);/s);
       expect(cssContent).toMatch(/\.link-auditor-btn--danger\s*\{[^}]*background-color:\s*var\(--bg-danger\);[^}]*color:\s*var\(--accent-primary-fg\);/s);

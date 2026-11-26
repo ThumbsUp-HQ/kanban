@@ -75,7 +75,7 @@
 }
 
 .link-auditor-btn--scan:hover:not(:disabled) {
-  background-color: #388bfd;
+  background-color: var(--brand-primary-hover);
 }
 
 .link-auditor-btn--scan:disabled {
@@ -221,16 +221,22 @@
 }
 
 .badge-critical {
-  background-color: var(--warn-bg);
-  color: var(--warn-fg);
-  border: 1px solid var(--warn-fg);
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-fg);
   font-weight: 700;
 }
 
 .badge-info {
-  background-color: var(--badge-bg);
+  background-color: var(--bg-accent-subtle);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-accent-subtle);
+}
+
+:where([data-theme='dark']) .badge-info {
   color: var(--badge-fg);
-  border: 1px solid var(--badge-border);
+  background-color: var(--badge-bg);
+  border-color: var(--badge-border);
 }
 
 .status-badge {
@@ -391,7 +397,7 @@
 }
 
 .row--selected td {
-  background-color: rgba(56, 139, 253, 0.08) !important;
+  background-color: var(--bg-accent-subtle) !important;
 }
 
 .empty-row {
