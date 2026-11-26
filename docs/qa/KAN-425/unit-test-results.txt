@@ -1,0 +1,289 @@
+=== SLICE-5 EPIC ROLLUP TEST REPORT: KAN-425 ===
+Timestamp: 2026-11-26T03:10:13Z
+
+=== Backend Pytest Results ===
+Command: PYTHONPATH=. uv run --no-sync python -m pytest kanban/tests/api/test_workspace_settings.py kanban/tests/api/test_project_config.py kanban/tests/api/test_admin_trash_api.py kanban/tests/api/test_user_personal_settings.py kanban/tests/api/test_agent_onboarding_preferences.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_custom_field_approvals_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/workflows/test_workflow_hooks_api.py kanban/tests/workflows/test_dry_run.py kanban/tests/repos/test_repo_bindings_api.py kanban/tests/test_wiki_bundle_sync.py kanban/tests/test_docs_custom_fields_guide.py --cov=kanban --cov-config=scripts/coverage_slice5.ini --cov-report=term-missing
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 128 items
+
+kanban/tests/api/test_workspace_settings.py ..............               [ 10%]
+kanban/tests/api/test_project_config.py ..................               [ 25%]
+kanban/tests/api/test_admin_trash_api.py .......                         [ 30%]
+kanban/tests/api/test_user_personal_settings.py ...........              [ 39%]
+kanban/tests/api/test_agent_onboarding_preferences.py ............       [ 48%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 53%]
+kanban/tests/custom_fields/test_custom_field_approvals_api.py ........   [ 60%]
+kanban/tests/custom_fields/test_execution_api.py ....                    [ 63%]
+kanban/tests/workflows/test_workflow_hooks_api.py .................      [ 76%]
+kanban/tests/workflows/test_dry_run.py .......                           [ 82%]
+kanban/tests/repos/test_repo_bindings_api.py ............                [ 91%]
+kanban/tests/test_wiki_bundle_sync.py .......                            [ 96%]
+kanban/tests/test_docs_custom_fields_guide.py ....                       [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                        Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------
+kanban/api/v1/admin/destructive.py            133      4     26      4    95%   284, 330, 333, 335
+kanban/api/v1/admin/workspace_settings.py     187      2     68      8    96%   238, 244->277, 260, 301->308, 304->308, 317->334, 366->369, 421->488
+kanban/api/v1/custom_field_approvals.py        24      0      0      0   100%
+kanban/api/v1/custom_field_execution.py       104      1     22      5    95%   73->76, 111->127, 161->164, 244->247, 258
+kanban/api/v1/custom_fields.py                 30      0      0      0   100%
+kanban/api/v1/project_config.py                74      0      0      0   100%
+kanban/api/v1/repo_bindings.py                184      6     38      6    95%   154, 294, 353, 365, 421, 439
+kanban/api/v1/user_settings.py                408     15    118     11    95%   136-137, 190-191, 194-195, 222-223, 236->238, 254-257, 294->318, 297->318, 314->318, 370-371, 403->413, 404->413, 406, 408->404, 609->612
+kanban/api/v1/workflow_hooks.py                52      0      0      0   100%
+---------------------------------------------------------------------------------------
+TOTAL                                        1196     28    272     34    96%
+======================= 128 passed in 115.07s (0:01:55) ========================
+
+=== Frontend Vitest Results ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan429-cf10d648/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/personalSettingsApi.test.ts (23 tests) 21ms
+ ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (11 tests) 348ms
+ ✓ src/features/settings/__tests__/AgentOnboardingPromptCard.test.tsx (13 tests) 686ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (16 tests) 767ms
+ ✓ src/features/settings/__tests__/PasskeyEnrollModal.test.tsx (20 tests) 797ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 907ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 938ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx (18 tests) 1304ms
+ ✓ src/features/settings/__tests__/AvatarCropModal.test.tsx (10 tests) 750ms
+   ✓ AvatarCropModal (10)
+     ✓ handles Escape key, close button, cancel button, and backdrop click 310ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (33 tests) 499ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (15 tests) 3076ms
+   ✓ AttachHookDialog (KB-P5-24) (15)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 781ms
+     ✓ successfully creates an agent_interceptor hook with selected mutable fields 371ms
+     ✓ supports Select All and Clear All toggles for allowed_mutable_fields and displays kind subtext descriptions 322ms
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (21 tests) 324ms
+ ✓ src/features/settings/__tests__/AvatarLightboxModal.test.tsx (7 tests) 326ms
+ ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (5 tests) 345ms
+ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 460ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (6 tests) 921ms
+   ✓ DryRunDrawer (KB-P5-24) (6)
+     ✓ runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 482ms
+ ✓ src/features/settings/settingsApi.test.ts (7 tests) 31ms
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx (2 tests) 277ms
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/agentOnboardingPrompt.test.ts (8 tests) 14ms
+ ✓ src/features/settings/__tests__/ColorPresetPicker.test.tsx (7 tests) 213ms
+ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 13ms
+ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 186ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 54ms
+stderr | src/features/settings/__tests__/McpAccessStudioModalScroll.test.tsx > McpAccessStudioModalScroll (KAN-382) > Mint Modal DOM Hierarchy and AdvancedSection Expansion > opens mint modal and enforces .kb-snippet-modal-card and .kb-mcp-mint-form container classes
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to WorkloadFederationSection inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/settings/__tests__/McpAccessStudioModalScroll.test.tsx > McpAccessStudioModalScroll (KAN-382) > Mint Modal DOM Hierarchy and AdvancedSection Expansion > opens mint modal and enforces .kb-snippet-modal-card and .kb-mcp-mint-form container classes
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to McpAccessStudio inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 57ms
+ ✓ src/features/settings/__tests__/McpAccessStudioModalScroll.test.tsx (9 tests) 465ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (42 tests) 6830ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (42)
+     ✓ renders workspace settings page and updates workspace name and slug 881ms
+     ✓ covers handle with leading @, { items } principals object response, and string error on user creation 325ms
+     ✓ supports Groups tab, creating groups, listing members, adding nested groups and cycle rejection (KANBA-210) 396ms
+     ✓ covers group selection, member table rendering (nested group, bare user, agent), member removal, and member addition cyclic rejection 305ms
+     ✓ KAN-14: covers role fallback branches, null display_name/handle member formatting, and group error branches 448ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (16 tests) 2359ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (16)
+     ✓ renders In Review -> Done card with the 3 S14.4 hooks matching wireframe (Mandatory Test Case 1) 327ms
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 437ms
+     ✓ handles edit hook, detach hook, and AAL2 cancellation without error banners 525ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (44 tests) 8818ms
+   ✓ ProjectSettingsPage (KANBA-202) (44)
+     ✓ renders project settings page tabs and switches between them 589ms
+     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 507ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 634ms
+     ✓ covers fallback error messages when error object has no message property 549ms
+     ✓ supports inline row edit for workflow states and labels (KAN-29 Problem 1) 359ms
+     ✓ supports inline row editing of workflow states: start, edit fields, cancel, save, error, soft>hard validation 358ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 656ms
+     ✓ supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1) 326ms
+     ✓ Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369) (6)
+       ✓ Positive case 1: ProjectSettingsPage renders basic settings and collapses WIP limits and numbering policies 302ms
+Not implemented: navigation to another Document
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (26 tests) 4330ms
+   ✓ Unified MCP Studio (KAN-31) (16)
+     ✓ handles AAL2 cancellation on minting and retries without error banners 859ms
+     ✓ handles MFA cancellation on minting without error banners 563ms
+     ✓ handles mint error reporting on generic failure 639ms
+     ✓ covers branch edges: custom project option, fallback project in mint, stale AAL2, and empty allowed_projects 556ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (49 tests) 10176ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ DocMarkdownViewer Component (8)
+       ✓ renders headings with generated anchor IDs and handles anchor navigation 334ms
+     ✓ DocsCenterPage Component (10)
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 663ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 583ms
+       ✓ displays category badge pills in chapter meta bar, sidebar, and search results 305ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 624ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 2809ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 892ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 601ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (47 tests) 5280ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (50 tests) 5391ms
+   ✓ McpAccessStudio & McpConfigSnippetModal (KB-P4-16) (50)
+     ✓ renders scope tiers correctly across all 4 mount routes 392ms
+     ✓ mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3) 306ms
+     ✓ renders visible role="alert" error banner inside mint modal when API fails 339ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 5872ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ renders different hook kinds and failure policies 458ms
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2111ms
+     ✓ TransitionRuleCard edge cases (6)
+       ✓ handles keyboard move up and down with success and error rollbacks 384ms
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 740ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 401ms
+ ✓ src/features/docs-center/DocsCenter.test.tsx (49 tests) 7213ms
+   ✓ DocsCenter & Help System (KAN-16) (49)
+     ✓ DocsCenterPage Component (10)
+       ✓ performs instant search, handles onFocus, empty queries, and navigates on result click 406ms
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 448ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (16)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 491ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1846ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 490ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 393ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (71 tests) 18003ms
+   ✓ PersonalSettingsPage (71)
+     ✓ renders personal settings sections with loaded profile data 544ms
+     ✓ updates display name and timezone 386ms
+     ✓ supports timezone search filter, auto-detect button, and helper copy for passkeys vs security keys 412ms
+     ✓ validates password length and matching confirmation 590ms
+     ✓ renames passkey and displays updated list 386ms
+     ✓ regenerates recovery codes and displays modal 2703ms
+     ✓ toggles password visibility and handles successful password update 746ms
+     ✓ handles password change API error response and dismisses alert 307ms
+     ✓ manages TOTP enrollment and disabling 317ms
+     ✓ cancels passkey rename modal when clicking cancel 1015ms
+     ✓ silently ignores Aal2StepUpCancelledError on password change without error banner 394ms
+     ✓ handles mutation errors for profile update, avatar deletion, and password visibility toggles 716ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 592ms
+     ✓ covers TOTP enroll/confirm/delete errors, passkey rename/delete errors, and avatar upload error 339ms
+     ✓ handles Test Key cancellation and error conditions 357ms
+     ✓ External Identity Linking (KAN-27) (16)
+       ✓ cancels LDAP linking modal via Close button, Cancel button, and Escape key with focus restore 456ms
+
+ Test Files  35 passed (35)
+      Tests  744 passed (744)
+   Start at  22:03:35
+   Duration  22.23s (tests 41%, environment 27%, transform 22%, import 9%, worker 1%)
+
+Environment  jsdom was created 35 times · 56.26s total, 27% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.57 |    96.77 |   99.62 |   99.86 |                   
+ custom-fields     |   99.69 |    96.89 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    97.01 |     100 |     100 | ...,642,1168-1182 
+  ...ieldValue.tsx |   99.17 |    97.39 |     100 |     100 | 36,283,359        
+  ...ilSection.tsx |     100 |     98.3 |     100 |     100 | 60                
+  ...ldsStudio.tsx |     100 |      100 |     100 |     100 |                   
+  ...ovalPanel.tsx |   98.82 |    95.74 |     100 |     100 | 111-123,139,153   
+  ...ionMatrix.tsx |     100 |     92.3 |     100 |     100 | 140,184           
+  ...etGallery.tsx |     100 |    96.87 |     100 |     100 | 51                
+  api.ts           |     100 |    97.91 |     100 |     100 | 253               
+  presets.ts       |     100 |      100 |     100 |     100 |                   
+ docs-center       |    99.6 |    96.44 |     100 |     100 |                   
+  ...ownViewer.tsx |   99.22 |    95.95 |     100 |     100 | ...81,205,291,589 
+  ...enterPage.tsx |     100 |    96.34 |     100 |     100 | 52-55             
+  HelpDrawer.tsx   |     100 |    97.72 |     100 |     100 | 69                
+  docsService.ts   |     100 |    97.14 |     100 |     100 | 46                
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  wikiManifest.ts  |     100 |      100 |     100 |     100 |                   
+ settings          |   99.56 |     96.4 |    99.4 |   99.85 |                   
+  ...romptCard.tsx |     100 |      100 |     100 |     100 |                   
+  ...CropModal.tsx |    98.3 |     96.1 |     100 |    98.8 | 282-288           
+  ...tboxModal.tsx |   99.33 |    98.33 |     100 |     100 | 44                
+  ...setPicker.tsx |     100 |      100 |     100 |     100 |                   
+  ...hAppModal.tsx |     100 |    96.07 |     100 |     100 | 78,87-90,98       
+  ...uditModal.tsx |   98.88 |    97.24 |     100 |     100 | 103,123,132       
+  ...essStudio.tsx |   99.53 |    96.28 |     100 |   99.74 | 536               
+  ...ppetModal.tsx |     100 |    96.36 |     100 |     100 | 45,175            
+  ...iedStudio.tsx |     100 |     95.6 |     100 |     100 | 99-108,112,117    
+  ...rollModal.tsx |   98.92 |    98.59 |     100 |   98.91 | 73                
+  ...tingsPage.tsx |   99.48 |    96.57 |   99.04 |     100 | ...69,391,484,580 
+  ...tingsPage.tsx |   99.57 |    95.05 |     100 |     100 | ...1095,1770,2870 
+  ...tingsPage.tsx |     100 |    96.26 |    96.9 |     100 | ...76-477,685,714 
+  ...dingPrompt.ts |     100 |      100 |     100 |     100 |                   
+  ...ettingsApi.ts |     100 |      100 |     100 |     100 |                   
+  settingsApi.ts   |     100 |      100 |     100 |     100 |                   
+ workflows         |   99.48 |    98.64 |     100 |   99.64 |                   
+  ...ookDialog.tsx |   97.59 |    99.14 |     100 |   97.36 | 131-132           
+  DryRunDrawer.tsx |     100 |    98.38 |     100 |     100 | 188               
+  ...gsSection.tsx |     100 |    97.82 |     100 |     100 | 76,158            
+  ...pelineRow.tsx |   98.57 |    97.72 |     100 |     100 | 58,93             
+  ...nRuleCard.tsx |     100 |      100 |     100 |     100 |                   
+  ...tudioPage.tsx |     100 |    98.63 |     100 |     100 | 294               
+  api.ts           |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+
+=== Playwright Suite Results ===
+Command: E2E_PORT=18429 pnpm --dir kanban/web exec playwright test e2e/qa/kan-429-slice5-docs-screenshots.spec.ts --project=desktop
+Result: 1 passed (50.2s) - Verified 0 horizontal overflow at 390px, 768px, 1024px, 1440px across 5 target chapters + DocsCenter home, non-zero naturalWidth image load for embedded Slice-5 workout images, and unclipped configuration tables for Custom Fields Studio and Workflow Transition Studio. Port 18429 shut down cleanly.
