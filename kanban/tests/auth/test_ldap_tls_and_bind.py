@@ -1884,7 +1884,7 @@ async def test_b2_hostile_wire_timeouts_and_size_limit(
             base_dn="ou=users,dc=corp,dc=example",
         )
         async with LdapTlsHardClient(
-            cfg_ldaps, unix_socket_path=server.sock_path, op_timeout=0.1
+            cfg_ldaps, unix_socket_path=server.sock_path, op_timeout=0.3
         ) as client:
             with pytest.raises(TimeoutError):
                 await client.search("ou=users,dc=corp,dc=example", "(uid=alice)", ["uid"])

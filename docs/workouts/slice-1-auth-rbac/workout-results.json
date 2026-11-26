@@ -1,0 +1,104 @@
+{
+  "workout_1": {
+    "login": {
+      "status_code": 200,
+      "aal_level": 1,
+      "auth_aal": null
+    },
+    "webauthn_passkey": {
+      "options_status": 200,
+      "rp_name": "\ud83d\udc4dkanban",
+      "rp_id": "127.0.0.1",
+      "challenge_len": 43,
+      "register_verify_status": 200,
+      "registered": true,
+      "auth_options_status": 200,
+      "auth_verify_status": 200,
+      "auth_aal": 2
+    },
+    "totp_enrollment": {
+      "setup_status": 200,
+      "confirm_status": 200,
+      "confirmed_aal": 2
+    },
+    "recovery_codes": {
+      "count": 10,
+      "code_sample_format": "P89GW-*****",
+      "stepup_status": 200,
+      "stepup_aal": 2,
+      "regenerated_count": 10
+    },
+    "break_glass_guard": {
+      "disable_status": 409,
+      "error_code": "LOCKOUT_PREVENTED",
+      "layer": "handshake_probe_15m",
+      "detail": "disabling LOCAL_ADMIN requires a verified external SERVER_ADMIN login within 15 minutes"
+    }
+  },
+  "workout_2": {
+    "test_draft_handshake": {
+      "untrusted_ca_ok": false,
+      "starttls_ok": true,
+      "bad_probe_ok": false,
+      "bad_probe_status": "FAILED:LDAPBINDERROR",
+      "good_probe_ok": true,
+      "good_probe_status": "OK",
+      "latency_ms": 2,
+      "create_status": 201
+    },
+    "group_sync": {
+      "ldap_login_status": 200,
+      "principal_id": "01a21595-e619-7cc8-93da-dc52b95d94a0",
+      "group_edge_created": true,
+      "closure_depth": 2
+    },
+    "websudo_replay": {
+      "expired_attempt_status": 403,
+      "expired_detail": "AAL2_STALE",
+      "stepup_status": 200,
+      "replayed_save_status": 200,
+      "replayed_name": "Planet Express LDAPS Enterprise"
+    }
+  },
+  "workout_3": {
+    "verified_login": {
+      "start_status": 302,
+      "callback_status": 302,
+      "email_verified": true
+    },
+    "unverified_block": {
+      "callback_status": 403,
+      "code": "EMAIL_NOT_VERIFIED",
+      "detail": "IdP assertion email must be verified to auto-provision account",
+      "email_verified": false
+    }
+  },
+  "workout_4": {
+    "role_created": "Quality Auditor Lead",
+    "role_slug": "quality-auditor-lead",
+    "permissions": [
+      "issue:comment",
+      "issue:view"
+    ],
+    "allowed_profile_status": 200,
+    "allowed_issue_view_status": 200,
+    "allowed_issue_comment_status": 201,
+    "denied_issue_delete_status": 403,
+    "denied_issue_delete_code": "INSUFFICIENT_CAPABILITY",
+    "denied_role_create_status": 403,
+    "denied_code": "FORBIDDEN",
+    "denied_detail": "Principal does not possess an administrative role."
+  },
+  "screenshots": {
+    "count": 11,
+    "telemetry": {
+      "console_errors_count": 0,
+      "page_errors_count": 0,
+      "server_5xx_count": 0
+    }
+  },
+  "metrics": {
+    "total_duration_seconds": 33.66,
+    "timestamp": "2026-11-26T02:01:47.242930+00:00"
+  }
+}
