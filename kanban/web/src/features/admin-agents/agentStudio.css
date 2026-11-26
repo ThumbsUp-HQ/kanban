@@ -98,6 +98,19 @@
   border-color: #374151;
 }
 
+/* Dark Mode Secondary Buttons (WCAG 2.2 AA Contrast >= 4.5:1) */
+[data-theme='dark'] .kb-btn-secondary {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+[data-theme='dark'] .kb-btn-secondary:hover:not(:disabled) {
+  background-color: #4b5563;
+  border-color: #6b7280;
+  color: #ffffff;
+}
+
 .kb-agent-card:hover {
   border-color: var(--border-strong, #9ca3af);
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
@@ -329,6 +342,81 @@
   background-color: #2563eb;
   border-color: #3b82f6;
   color: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kb-agent-card {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-btn-secondary {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  :root:not([data-theme='light']) .kb-btn-secondary:hover:not(:disabled) {
+    background-color: #4b5563;
+    border-color: #6b7280;
+    color: #ffffff;
+  }
+
+  :root:not([data-theme='light']) .kb-harness-badge--in_app_sdk {
+    background-color: #1e3a8a;
+    color: #bfdbfe;
+    border-color: #1d4ed8;
+  }
+
+  :root:not([data-theme='light']) .kb-harness-badge--cli_pipe {
+    background-color: #4c1d95;
+    color: #ddd6fe;
+    border-color: #6d28d9;
+  }
+
+  :root:not([data-theme='light']) .kb-harness-badge--remote_runner {
+    background-color: #064e3b;
+    color: #a7f3d0;
+    border-color: #047857;
+  }
+
+  :root:not([data-theme='light']) .kb-agent-meta-row code {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  :root:not([data-theme='light']) .kb-agent-card-actions {
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-validation-summary-card {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-verdict-badge--success {
+    background-color: #064e3b;
+    color: #a7f3d0;
+    border-color: #047857;
+  }
+
+  :root:not([data-theme='light']) .kb-verdict-badge--error {
+    background-color: #7f1d1d;
+    color: #fecaca;
+    border-color: #991b1b;
+  }
+
+  :root:not([data-theme='light']) .kb-quickpick-chip {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  :root:not([data-theme='light']) .kb-quickpick-chip--selected {
+    background-color: #2563eb;
+    border-color: #3b82f6;
+    color: #ffffff;
+  }
 }
 
 /* Responsive adjustments */

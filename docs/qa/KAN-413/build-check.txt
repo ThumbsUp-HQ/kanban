@@ -1,0 +1,33 @@
+=== STATIC LINTER / TYPECHECK / BUILD CHECK ===
+Generated at: 2026-11-25T21:46:00Z
+Command: uv run --no-sync ruff check kanban/ agent/ && uv run --no-sync mypy kanban/ agent/ && python3 scripts/check_no_dashes.py --all docs/workouts/slice-2-ai-agents-runners/03-live-workout-report.md docs/qa/KAN-413/workout-report.md && pnpm --dir kanban/web typecheck && pnpm --dir kanban/web lint && pnpm --dir kanban/web build
+
+[1/5] Ruff linter:
+All checks passed!
+
+[2/5] Mypy static type analysis:
+Success: no issues found in 816 source files
+
+[3/5] No-Dashes style invariant check:
+check_no_dashes.py: 0 Unicode em/en-dashes found across checked reports.
+
+[4/5] Web TypeScript typecheck & ESLint:
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+[5/5] Vite Production Build:
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming (667) src/App.csstransforming (764) src/editor/mermaid/mermaidClient.ts✓ 765 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-BkBYF4mU.css            631.09 kB │ gzip:  88.71 kB
+dist/assets/index-Dg6WTE-b.js           2,948.09 kB │ gzip: 816.78 kB
+built in 1.26s
+=== END STATIC BUILD CHECK ===

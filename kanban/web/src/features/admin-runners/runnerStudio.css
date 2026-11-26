@@ -451,6 +451,19 @@
   border-color: #374151;
 }
 
+/* Dark Mode Secondary Buttons (WCAG 2.2 AA Contrast >= 4.5:1) */
+[data-theme='dark'] .kb-btn-secondary {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+[data-theme='dark'] .kb-btn-secondary:hover:not(:disabled) {
+  background-color: #4b5563;
+  border-color: #6b7280;
+  color: #ffffff;
+}
+
 /* Single-Reveal Token Banner */
 .kb-single-reveal-alert {
   background-color: #eff6ff;
@@ -523,5 +536,85 @@
   .kb-modal-card .kb-modal-footer button {
     width: 100%;
     min-height: 40px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kb-modal-card {
+    background-color: #1f2937;
+    color: #f9fafb;
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-modal-card .kb-modal-footer {
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-mtls-notice {
+    background-color: #1e3a8a;
+    border-color: #1d4ed8;
+    color: #dbeafe;
+  }
+
+  :root:not([data-theme='light']) .kb-single-reveal-alert {
+    background-color: #1e3a8a;
+    border-color: #1d4ed8;
+    color: #dbeafe;
+  }
+
+  :root:not([data-theme='light']) .kb-filter-pill {
+    background-color: #1f2937;
+    border-color: #374151;
+    color: #d1d5db;
+  }
+
+  :root:not([data-theme='light']) .kb-filter-pill--active {
+    background-color: #1e3a8a;
+    border-color: #2563eb;
+    color: #bfdbfe;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-card {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-status-badge--active {
+    background-color: #064e3b;
+    color: #a7f3d0;
+    border-color: #047857;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-status-badge--revoked {
+    background-color: #7f1d1d;
+    color: #fecaca;
+    border-color: #991b1b;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-status-badge--offline {
+    background-color: #374151;
+    color: #9ca3af;
+    border-color: #4b5563;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-meta-row code {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  :root:not([data-theme='light']) .kb-runner-card-actions {
+    border-color: #374151;
+  }
+
+  :root:not([data-theme='light']) .kb-btn-secondary {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  :root:not([data-theme='light']) .kb-btn-secondary:hover:not(:disabled) {
+    background-color: #4b5563;
+    border-color: #6b7280;
+    color: #ffffff;
   }
 }

@@ -23,7 +23,7 @@ _PEM_HEADER_CHARS: Final[set[str]] = set(
 
 # Deterministic regular expressions compiled at module load time
 _RE_KANBAN_KEY: Final[re.Pattern[str]] = re.compile(
-    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|eat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
+    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|eat|runner|rnr_enroll)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
 )
 _RE_GITHUB_TOKEN: Final[re.Pattern[str]] = re.compile(
     r"\b(?:(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b"
