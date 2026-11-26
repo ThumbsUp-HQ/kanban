@@ -14,7 +14,7 @@
 This packet delivers passive forensic verification proof for ticket **KAN-418 (Phase 3: Live MCP Scoped Keys, Gemini/Claude OAuth PKCE, Device Flow & Workload OIDC Workout)**.
 
 - **Strict Non-Destructive Invariant:** 100% of live workouts and automated tests were executed against isolated local processes and containers (`127.0.0.1:18418` for Kanban + mounted MCP server, `127.0.0.1:18083` for local HTTPS OIDC JWKS issuer companion, and PostgreSQL socket `/tmp/kb-pgsock-kan418`). The protected pre-production instance (`k.hackedyour.info` / `192.168.1.101` / `inferrence1`) was NEVER modified or treated as a destructive test bed. Only read_ticket and non-destructive handoff comments via MCP were performed against it.
-- **Strict Quality Invariants:** Zero linter warnings, safe typing (Mypy 1063 source files clean, TypeScript 0 errors), zero act(...) warnings, `>=95%` unit test coverage on all touched backend and frontend modules, and zero Unicode em-dash or en-dash characters.
+- **Strict Quality Invariants:** Zero linter warnings, safe typing (Mypy 808 source files clean, TypeScript 0 errors), zero act(...) warnings, `>=95%` unit test coverage on all touched backend and frontend modules, and zero Unicode em-dash or en-dash characters.
 - **Zero-Mock Screenshot Evidence:** All 7 Playwright screenshots in `docs/qa/KAN-418/screenshots/` and `docs/workouts/slice-3-mcp-oauth/screenshots/` were captured against live running backend services with `0` `page.route` or `mockApi` interception, across all 5 viewports and live workflow states.
 - **No Masked Failures:** Zero deleted or commented failing tests. Forward Alembic migration `p6_22_mcp_api_keys_capability_mask_boundary` cleanly enables `capability_mask: 0` for deny-all MCP keys.
 
@@ -36,14 +36,14 @@ This packet delivers passive forensic verification proof for ticket **KAN-418 (P
    - Verified out-of-CIDR `/32` requests fail immediately (HTTP 403 Forbidden).
    - Validated 2-stage destructive lifecycle confirmation on `/mcp/admin`: Stage 1 `request_delete` for target `KAN-5` returned confirmation token and phrase `TRASH ISSUE KAN-5`; Stage 2 `execute_delete` executed deletion returning status `executed`.
 2. **OAuth 2.1 DCR + PKCE S256 + 1,200-Character Gemini State (`scripts/run_kan418_live_workout.py`)**:
-   - Executed RFC 9728 discovery -> RFC 7591 Dynamic Client Registration (`/api/v1/oauth/register`) -> `/oauth/authorize` + consent -> `/api/v1/oauth/token` PKCE S256 exchange.
+   - Executed RFC 9728 discovery -> RFC 7591 Dynamic Client Registration (`/oauth/register`) -> `/oauth/authorize` + consent -> `/oauth/token` PKCE S256 exchange.
    - Tested 1,200-character Gemini-style state string.
    - Verified state length boundary: 4096 characters accepted (200 OK), 4097 characters rejected (400 Bad Request).
    - Verified confidential client authentication (`client_secret_post` and `client_secret_basic`, 200 OK).
    - Verified suspended and revoked OAuth clients fail immediately (400 Bad Request).
    - Seeded 525 stale DCR client rows alongside an active client with active refresh token; validated pagination and executed single-transaction bulk unused DCR purge in `OAuthClientGovernanceStudio`, hard-deleting 1052 stale rows while cleanly preserving the active client.
 3. **RFC 8628 /activate Device Authorization Flow (`scripts/run_kan418_live_workout.py`, `scripts/capture_kan418_screenshots.mjs`)**:
-   - Requested device code via `/api/v1/oauth/device/code`.
+   - Requested device code via `/oauth/device/authorize`.
    - Opened `/activate` in zero-mock Playwright: validated Base20 auto-hyphenation `XXXX-XXXX`, vowel/digit ambiguity warning, and user authorization prompt.
    - Exchanged device code for access token (200 OK).
 4. **RFC 8693 Workload Identity OIDC JWT Exchange (`scripts/oidc_jwks_companion.py`, `scripts/run_kan418_live_workout.py`)**:
@@ -68,7 +68,7 @@ All 7 unclipped screenshots were captured with `0` mocks (`page.route` / `mockAp
 4. `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png`: 768x1024 Tablet Portrait showing OAuth Client Governance bulk purge action.
 5. `05-mobile-portrait-390x844-device-activate-page.png`: 390x844 Mobile Portrait showing `/activate` Device Flow with Base20 hyphenation.
 6. `06-desktop-1440x900-light-mcp-config-snippet-modal.png`: 1440x900 Light mode showing copyable MCP configuration snippets.
-7. `07-desktop-1440x900-dark-oauth-governance-paginated-500.png`: 1440x900 Dark mode showing 525 DCR clients paginated without clipping.
+7. `07-desktop-1440x900-dark-oauth-governance-paginated-500.png`: 1440x900 Dark mode showing 528 DCR clients paginated without clipping.
 
 ---
 
@@ -97,7 +97,7 @@ All 7 unclipped screenshots were captured with `0` mocks (`page.route` / `mockAp
    - Dash Checker: `check_no_dashes.py --all` exit code 0, 0 violations.
    - TypeScript: `pnpm --dir kanban/web typecheck` clean (tsc -b --noEmit exit 0).
    - ESLint: `pnpm --dir kanban/web lint` clean (eslint . --max-warnings 0 exit 0).
-   - Vite Build: `pnpm --dir kanban/web build` clean in 1.30s (built in 1.30s exit 0).
+   - Vite Build: `pnpm --dir kanban/web build` clean in 1.25s (built in 1.25s exit 0).
 
 ---
 

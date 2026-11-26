@@ -1,26 +1,21 @@
 === RUFF CHECK ===
 All checks passed!
-Ruff exit: 0
+Ruff Check exit: 0
 === MYPY CHECK ===
 Success: no issues found in 808 source files
-Mypy exit: 0
+Mypy Check exit: 0
 === CHECK NO DASHES ===
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-No dashes exit: 0
+Check No Dashes exit: 0
 === PNPM TYPECHECK ===
-
 > @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1/kanban/web
 > tsc -b --noEmit
-
-Typecheck exit: 0
+Pnpm Typecheck exit: 0
 === PNPM LINT ===
-
 > @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1/kanban/web
 > eslint . --max-warnings 0
-
-Lint exit: 0
+Pnpm Lint exit: 0
 === PNPM BUILD ===
-
 > @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan418-c8c06fe1/kanban/web
 > tsc -b && vite build
 
@@ -31,13 +26,13 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.50 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-DL4oPHQb.css            623.53 kB │ gzip:  88.00 kB
-dist/assets/index-nuYhyzN4.js           2,948.11 kB │ gzip: 816.79 kB
+dist/assets/index-DQDeMZMJ.css            623.58 kB │ gzip:  88.01 kB
+dist/assets/index-Co2qmrBg.js           2,948.11 kB │ gzip: 816.79 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.20s
-Build exit: 0
+✓ built in 1.25s
+Pnpm Build exit: 0

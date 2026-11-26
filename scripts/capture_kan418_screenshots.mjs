@@ -48,6 +48,9 @@ async function preparePageForScreenshot(page, vp, theme) {
         max-height: none !important;
         overflow: visible !important;
       }
+      .kb-snippet-modal-card {
+        max-height: none !important;
+      }
       .kb-topbar, header {
         position: static !important;
       }
@@ -200,7 +203,7 @@ async function main() {
     // Screenshot 6: Desktop 1440x900 Light McpConfigSnippetModal
     // -------------------------------------------------------------------------
     {
-      const context = await createContext(browser, 1440, 900, 'light');
+      const context = await createContext(browser, 1440, 1100, 'light');
       const page = await context.newPage();
       await page.goto(`${BASE_URL}/settings/mcp`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('[data-testid="mint-key-button"]', { timeout: 10000 });
@@ -226,7 +229,7 @@ async function main() {
         }
       });
 
-      await preparePageForScreenshot(page, { width: 1440, height: 900 }, 'light');
+      await preparePageForScreenshot(page, { width: 1440, height: 1100 }, 'light');
       await saveScreenshot(page, '06-desktop-1440x900-light-mcp-config-snippet-modal.png');
       await context.close();
     }

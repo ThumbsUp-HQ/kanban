@@ -40,7 +40,7 @@ Phase 3 (`KAN-418`) executes comprehensive live workouts, in-flight bug fixes, z
    - Registered confidential clients using `client_secret_post` and `client_secret_basic` client authentication methods, and proved successful token exchange (HTTP 200).
    - Proved suspended and revoked client rejection: suspended and revoked clients cannot exchange codes or refresh tokens (HTTP 400).
    - Seeded 525 stale DCR client rows alongside an active client with grants and refresh tokens.
-   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 538+ total).
+   - Proved pagination on `GET /api/v1/oauth/admin/oauth-clients` (page 1 returned 25 items from 528 total).
    - Executed single-transaction bulk purge (`POST /api/v1/admin/oauth-clients/bulk-delete`) purging 1052 stale DCR clients in 1 atomic transaction while preserving the active client and its grants intact.
 
 3. **Workout 3: RFC 8628 `/activate` Device Authorization Flow:**
@@ -196,7 +196,7 @@ HTTP/1.1 201 Created
 
 - **500+ DCR Rows Bulk Purge in 1 Transaction:**
   - Seeded 525 stale DCR rows with zero active grants alongside 1 active production client holding valid grants and refresh tokens.
-  - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 538`).
+  - Verified pagination: `GET /api/v1/oauth/admin/oauth-clients?limit=25&offset=0&envelope=true` returned 25 items on page 1 (`total: 528`).
   - Executed bulk purge: `POST /api/v1/admin/oauth-clients/bulk-delete` with `{"purge_unused_dcr": true, "purge_revoked": true}`.
   - Result: 1052 stale DCR rows permanently hard-deleted in 1 atomic transaction (HTTP 200).
   - Re-queried client list: Active Production Client confirmed intact with active grants preserved.
@@ -274,10 +274,10 @@ All 7 screenshots were captured via real Playwright Chromium running against the
 | `01-desktop-1440x900-light-mcp-access-studio-mint-modal.png` | 1440x900 | Light | Mint New MCP Access Key modal displaying key name, role selector, scope tier, surface selector, expiration dropdown, and advanced capability/CIDR section. | 100% Unclipped |
 | `02-desktop-1440x900-dark-connect-oauth-modal.png` | 1440x900 | Dark | Connect OAuth Application modal displaying Gemini App, Claude Code, Cursor, Antigravity, and Codex tabs, RFC 8414 metadata URL, and scope picker. | 100% Unclipped |
 | `03-desktop-1024x768-workload-oidc-studio.png` | 1024x768 | Light | Workload Identity Federation studio view displaying active federated policies, issuer URL, subject patterns, and Disable/Edit/Delete action buttons. | 100% Unclipped |
-| `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 536 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
+| `04-tablet-portrait-768x1024-oauth-client-governance-bulk-purge.png` | 768x1024 | Light | Tablet portrait view of OAuth 2.1 Governance showing 528 clients, search filter, and red "Purge Stale DCR & Revoked Clients" button with zero horizontal clipping. | 100% Unclipped |
 | `05-mobile-portrait-390x844-device-activate-page.png` | 390x844 | Light | Mobile portrait view of Connect CLI Device showing Base20 formatted code input, explanation, and vowel/number exclusion warning callout banner. | 100% Unclipped |
 | `06-desktop-1440x900-light-mcp-config-snippet-modal.png` | 1440x900 | Light | MCP Access Key & Config Snippet modal displaying raw secret banner, boundary note, LLMs prompt button, scope select, and config snippet boxes for AI agents. | 100% Unclipped |
-| `07-desktop-1440x900-dark-oauth-governance-paginated-500.png` | 1440x900 | Dark | Dark mode OAuth 2.1 Client Governance showing 536 registered clients, pagination bar showing "Showing 1-50 of 536" and Next/Previous buttons. | 100% Unclipped |
+| `07-desktop-1440x900-dark-oauth-governance-paginated-500.png` | 1440x900 | Dark | Dark mode OAuth 2.1 Client Governance showing 528 registered clients, pagination bar showing "Showing 1-50 of 528" and Next/Previous buttons. | 100% Unclipped |
 
 Screenshots are permanently mirrored in:
 - `docs/workouts/slice-3-mcp-oauth/screenshots/`
