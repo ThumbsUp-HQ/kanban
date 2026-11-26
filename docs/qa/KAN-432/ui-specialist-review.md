@@ -7,7 +7,7 @@
 **Date:** 2026-11-25  
 **Worktree Base:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan432-ce28b9dd`  
 **Target Branch:** `fix/KAN-432-board-gate-snapback-and-csp`  
-**Target Commit:** `e4eecb2c`  
+**Target Commit:** `a0afd422`  
 
 ---
 
@@ -17,7 +17,7 @@ This UI Specialist Review audits the Round 2 re-tested zero-mock visual artifact
 
 All 7 re-captured visual artifacts across 5 standard responsive viewports (`1440x900` light/dark desktop, `1024x768` small desktop, `768x1024` tablet portrait, `390x844` mobile portrait) and key interactive states were inspected directly via `read_file` binary image analysis against a real running FastAPI/PostgreSQL server on `127.0.0.1:18432` with zero network mocks and active security headers. The visual evidence proves that the user experience on the Kanban Board and Issue Detail view is fluid, unclipped, and fully compliant with 👍kanban UX standards.
 
-Automated test metrics verify 59/59 Vitest tests passed in 2.78s with 0 `act(...)` warnings and 95.85% branch coverage across touched files (`BoardColumn` 100%, `BoardView` 95.18%, `useGateRealtimeSync` 95.61%), and 285/285 Pytest tests passed in 41.76s with 98% coverage on `kanban.security.headers`.
+Automated test metrics verify 60/60 Vitest tests passed in 2.85s with 0 `act(...)` warnings and 95.85% branch coverage across touched files (`BoardColumn` 100%, `BoardView` 95.18%, `useGateRealtimeSync` 95.61%), and 285/285 Pytest tests passed in 41.76s with 98% coverage on `kanban.security.headers`.
 
 Key findings:
 1. **Zero-Mock Real Server Evidence**: Screenshots now accurately reflect genuine issues across Backlog, In Progress, and Done with distinct priorities (`High`, `Urgent`, `Medium`, `None`) and real agent interceptor hooks.
