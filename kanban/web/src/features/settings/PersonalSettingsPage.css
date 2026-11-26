@@ -422,11 +422,22 @@
   gap: var(--space-3);
 }
 
+.kb-personal-settings-header-content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .kb-personal-settings-header-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+  white-space: nowrap;
+}
+
+.kb-personal-settings-header-actions .kb-studio-doc-link {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .kb-table-scroll-container {
