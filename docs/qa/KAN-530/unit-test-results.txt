@@ -1,0 +1,67 @@
+$ pnpm --dir kanban/web exec vitest run src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan530-9dfa0ba8/kanban/web
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+stderr | src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx > ComposeExportTab > KAN-530: Standalone Status Panel Backup & Schedule FieldHelpHints > renders all 3 FieldHelpHint popovers for Backup Passphrase, Interval, and Retention
+An update to StandaloneStatusPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to StandaloneStatusPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx > ComposeExportTab > KAN-530: Standalone Status Panel Backup & Schedule FieldHelpHints > renders backup and schedule FieldHelpHints without regressions in light and dark mode
+An update to StandaloneStatusPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to StandaloneStatusPanel inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/standalone/__tests__/StandaloneStatusPanel.test.tsx (42 tests) 3067ms
+   ✓ StandaloneStatusPanel (24)
+     ✓ KANBA-208: covers edge branches including non-admin backup tab, verify/restore errors, run-now success, and malformed json error 455ms
+
+ Test Files  1 passed (1)
+      Tests  42 passed (42)
+   Start at  14:49:42
+   Duration  4.35s (tests 74%, environment 21%, import 4%, transform 1%)
+
+Exit code: 0
