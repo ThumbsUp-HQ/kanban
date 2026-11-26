@@ -15,8 +15,21 @@
   flex-wrap: wrap;
 }
 
+.your-work-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.your-work-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
 .your-work-title {
-  margin: 0 0 var(--space-2, 8px) 0;
+  margin: 0;
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--fg-primary, #0f172a);
@@ -233,4 +246,33 @@
   background: var(--bg-hover, #f8fafc);
   color: var(--fg-primary, #0f172a);
   border-color: var(--border-subtle, #cbd5e1);
+}
+
+@media (max-width: 767px) {
+  .your-work-view {
+    padding: var(--space-4, 16px) var(--space-3, 12px);
+  }
+
+  .your-work-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3, 12px);
+  }
+
+  .your-work-title-row {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
+
+  .your-work-header-text .kb-studio-doc-link {
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .your-work-search-box {
+    min-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
 }

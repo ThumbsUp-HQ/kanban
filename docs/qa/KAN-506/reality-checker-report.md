@@ -30,7 +30,7 @@
 ## Integration Testing Results
 
 - **Unit Tests & Coverage (`unit-test-results.txt`):**
-  - `cssTokensAudit.test.ts` (7 passed), `DeleteAuditModal.test.tsx` (14 passed), `DocsCenter.test.tsx` (55 passed) — 76/76 passed.
+  - `cssTokensAudit.test.ts` (7 passed), `DeleteAuditModal.test.tsx` (14 passed), `DocsCenter.test.tsx` (55 passed) - 76/76 passed.
   - V8 Coverage: `99.42%` Stmts / `95.65%` Branch / `100%` Funcs / `100%` Lines.
 - **Build, Lint & Integrity Checks (`build-check.txt`):**
   - `tsc -b --noEmit`, `eslint . --max-warnings 0`, `vite build`, `check_docs_taxonomy.py` (`0 violations`), and `check_no_dashes.py --all` all `exit_code=0`.

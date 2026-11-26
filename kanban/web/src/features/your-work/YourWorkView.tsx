@@ -11,6 +11,7 @@ import { apiFetch } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { StateBadge } from '../../components/state/StateBadge';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { useSessionGuard } from '../auth/useSessionGuard';
 import type { IssueItem } from '../views/viewsApi';
 import type { TopbarUser } from '../../app/Topbar';
@@ -221,7 +222,14 @@ export function YourWorkViewInner(): JSX.Element {
     <section data-testid="your-work-view" className="your-work-view">
       <header className="your-work-header">
         <div className="your-work-header-text">
-          <h1 className="your-work-title">Your work</h1>
+          <div className="your-work-title-row">
+            <h1 className="your-work-title">Your work</h1>
+            <StudioDocLink
+              href="/docs/user-tasks-and-qa-matrix"
+              label="Your Work Guide ->"
+              testId="your-work-doc-link"
+            />
+          </div>
           <p className="your-work-subtitle">
             Live RLS-filtered work items assigned to you, created by you, and subscribed across your workspace.
           </p>
