@@ -1,0 +1,383 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan480-481-0d01d4ce/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 16ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/views/QuickCreateIssueModal.test.tsx (28 tests) 1392ms
+
+ Test Files  2 passed (2)
+      Tests  35 passed (35)
+   Start at  20:09:11
+   Duration  5.15s (tests 47%, environment 44%, import 5%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    1.06 |     0.99 |    1.07 |    1.08 |                   
+ build             |       0 |        0 |       0 |       0 |                   
+  precompress.ts   |       0 |        0 |       0 |       0 | 7-124             
+  sbom.ts          |       0 |        0 |       0 |       0 | 22-216            
+ e2e/support       |       0 |        0 |       0 |       0 |                   
+  annotate.ts      |       0 |        0 |       0 |       0 | 22-256            
+  csp.ts           |       0 |      100 |     100 |       0 | 6                 
+  gateAuditor.ts   |       0 |        0 |       0 |       0 | 10-990            
+  mockApi.ts       |       0 |        0 |       0 |       0 | 52-184            
+  styleProbe.ts    |       0 |        0 |       0 |       0 | 14-113            
+  test.ts          |       0 |        0 |       0 |       0 | 24-166            
+ src               |       0 |        0 |       0 |       0 |                   
+  App.tsx          |       0 |        0 |       0 |       0 | 16-106            
+  vite-env.d.ts    |       0 |        0 |       0 |       0 |                   
+ src/api           |    2.03 |        0 |       0 |    2.05 |                   
+  ...imeStatus.tsx |    12.5 |        0 |       0 |   13.04 | 17-18,30-41,54-70 
+  client.ts        |       0 |        0 |       0 |       0 | 15-475            
+  optimistic.ts    |       0 |        0 |       0 |       0 | 27-45             
+  problem.ts       |       0 |        0 |       0 |       0 | 9-125             
+  queryClient.ts   |       0 |        0 |       0 |       0 | 9-13              
+  queryKeys.ts     |    4.76 |      100 |       0 |    4.76 | 6-27              
+  realtime.ts      |    2.63 |        0 |       0 |    2.64 | 70-537,544-737    
+ src/app           |     1.1 |     0.25 |    1.45 |    1.16 |                   
+  AppShell.tsx     |       0 |        0 |       0 |       0 | 46-443            
+  Breadcrumb.tsx   |       0 |        0 |       0 |       0 | 33-43             
+  ...ndPalette.tsx |       0 |        0 |       0 |       0 | 52-718            
+  HeaderPills.tsx  |       0 |        0 |       0 |       0 | 38-199            
+  ...tSwitcher.tsx |       0 |        0 |       0 |       0 | 24-192            
+  ...uteContext.ts |       0 |      100 |       0 |       0 | 14-23             
+  ...heetModal.tsx |       0 |        0 |       0 |       0 | 20-116            
+  Sidebar.tsx      |       0 |        0 |       0 |       0 | 69-1206           
+  Topbar.tsx       |       0 |        0 |       0 |       0 | 41-686            
+  documentTitle.ts |       0 |        0 |       0 |       0 | 6-66              
+  routes.tsx       |       0 |        0 |       0 |       0 | 90-2344           
+  shellPanels.tsx  |   69.23 |       50 |      75 |   69.23 | ...-79,85,100-104 
+  shortcuts.ts     |       0 |        0 |       0 |       0 | 18-155            
+  ...stemStatus.ts |       0 |        0 |       0 |       0 | 15-73             
+ src/components    |       0 |        0 |       0 |       0 |                   
+  ...edSection.tsx |       0 |        0 |       0 |       0 |                   
+ ...ts/attachments |       0 |        0 |       0 |       0 |                   
+  ...hmentCard.tsx |       0 |        0 |       0 |       0 | 19-94             
+ ...mponents/emoji |       0 |        0 |       0 |       0 |                   
+  EmojiHint.tsx    |       0 |        0 |       0 |       0 | 53-357            
+  HintPortal.tsx   |       0 |        0 |       0 |       0 | 4-43              
+  emojiRegistry.ts |       0 |      100 |     100 |       0 | 36-184            
+  hintTiming.ts    |       0 |        0 |       0 |       0 | 6-250             
+  positionHint.ts  |       0 |        0 |       0 |       0 | 32-65             
+ ...mponents/error |       0 |        0 |       0 |       0 |                   
+  ...rrorModal.tsx |       0 |        0 |       0 |       0 | 30-283            
+ ...omponents/help |    1.79 |     3.37 |    3.12 |    1.81 |                   
+  ...rHelpHint.tsx |       0 |        0 |       0 |       0 | 35-198            
+  ...dHelpHint.tsx |       0 |        0 |       0 |       0 | 55-400            
+  ...ioDocLink.tsx |     100 |    72.72 |     100 |     100 | 26-38             
+  ...ModalHost.tsx |       0 |        0 |       0 |       0 | 17-202            
+  ...elpCatalog.ts |       0 |        0 |       0 |       0 | 15-353            
+ ...mponents/icons |       0 |        0 |       0 |       0 |                   
+  KanbanIcons.tsx  |       0 |        0 |       0 |       0 | 20-1755           
+ ...nents/markdown |       0 |      100 |       0 |       0 |                   
+  MermaidBlock.tsx |       0 |      100 |       0 |       0 | 13                
+ ...mponents/state |       0 |        0 |       0 |       0 |                   
+  StateBadge.tsx   |       0 |        0 |       0 |       0 | 14-117            
+ ...ents/workspace |       0 |        0 |       0 |       0 |                   
+  ...paceBadge.tsx |       0 |        0 |       0 |       0 | 18-73             
+ src/dev           |       0 |        0 |       0 |       0 |                   
+  ...ionsStory.tsx |       0 |        0 |       0 |       0 | 13-79             
+  DrawerStory.tsx  |       0 |      100 |       0 |       0 | 6                 
+  EditorStory.tsx  |       0 |        0 |       0 |       0 | 10-172            
+  EmojiStory.tsx   |       0 |        0 |       0 |       0 | 14-108            
+  IconStory.tsx    |       0 |        0 |       0 |       0 | 12-107            
+  MediaStory.tsx   |       0 |        0 |       0 |       0 | 12-46             
+  RailStory.tsx    |       0 |        0 |       0 |       0 | 10-49             
+  ...timeStory.tsx |       0 |      100 |       0 |       0 | 9-25              
+  ...kiesStory.tsx |       0 |        0 |       0 |       0 | 13-107            
+  TokenStory.tsx   |       0 |        0 |       0 |       0 | 5-230             
+ src/editor        |       0 |        0 |       0 |       0 |                   
+  ...ownEditor.tsx |       0 |        0 |       0 |       0 | 41-721            
+  ...aceFactory.ts |       0 |        0 |       0 |       0 | 41-273            
+  parseMarkdown.ts |       0 |        0 |       0 |       0 | 14-381            
+  schema.ts        |       0 |        0 |       0 |       0 | 17-541            
+  ...zeMarkdown.ts |       0 |        0 |       0 |       0 | 15-265            
+  ...licePlugin.ts |       0 |        0 |       0 |       0 | 9-92              
+ ...itor/clipboard |       0 |        0 |       0 |       0 |                   
+  ...PastePill.tsx |       0 |        0 |       0 |       0 | 25-140            
+  ...nvertPaste.ts |       0 |        0 |       0 |       0 | 27-350            
+  ...nDomPruner.ts |       0 |        0 |       0 |       0 | 8-306             
+  ...pperBypass.ts |       0 |        0 |       0 |       0 | 15-156            
+  ...ownDensity.ts |       0 |        0 |       0 |       0 | 22-90             
+  trustedTypes.ts  |       0 |        0 |       0 |       0 | 13-67             
+ src/editor/media  |       0 |        0 |       0 |       0 |                   
+  ...aLightbox.tsx |       0 |        0 |       0 |       0 | 41-112            
+  ...NodeViews.tsx |       0 |        0 |       0 |       0 | 22-187            
+  ...aViewport.tsx |       0 |        0 |       0 |       0 | 34-389            
+  ...rlResolver.ts |       0 |        0 |       0 |       0 | 39-157            
+  panZoomMath.ts   |       0 |        0 |       0 |       0 | 7-99              
+  safeSvg.ts       |       0 |        0 |       0 |       0 | 9-401             
+ ...editor/mermaid |       0 |        0 |       0 |       0 |                   
+  ...BlockView.tsx |       0 |        0 |       0 |       0 | 35-417            
+  elkWorkerShim.ts |       0 |        0 |       0 |       0 | 19-63             
+  ...aid.worker.ts |       0 |        0 |       0 |       0 | 37-175            
+  mermaidClient.ts |       0 |        0 |       0 |       0 | 23-309            
+  ...idFirewall.ts |       0 |        0 |       0 |       0 | 8-293             
+  mermaidTheme.ts  |       0 |        0 |       0 |       0 | 15-55             
+ ...editor/sparkle |       0 |        0 |       0 |       0 |                   
+  ...tionPlugin.ts |       0 |        0 |       0 |       0 | 56-663            
+  ...layPortal.tsx |       0 |        0 |       0 |       0 | 40-140            
+  ...MenuMatrix.ts |       0 |        0 |       0 |       0 | 24-161            
+  index.ts         |       0 |      100 |     100 |       0 | 5                 
+  sparkleClient.ts |       0 |        0 |       0 |       0 | 49-297            
+  ...kleMachine.ts |       0 |        0 |       0 |       0 | 60-240            
+ ...features/about |       0 |        0 |       0 |       0 |                   
+  AboutPage.tsx    |       0 |        0 |       0 |       0 | 22-522            
+  aboutApi.ts      |       0 |      100 |       0 |       0 | 53-58             
+ ...eatures/access |       0 |        0 |       0 |       0 |                   
+  ...orPopover.tsx |       0 |        0 |       0 |       0 | 36-483            
+  ...chControl.tsx |       0 |        0 |       0 |       0 | 28-118            
+  ...cessModal.tsx |       0 |        0 |       0 |       0 | 38-513            
+  ...Inspector.tsx |       0 |        0 |       0 |       0 | 15-122            
+ ...tures/activity |       0 |        0 |       0 |       0 |                   
+  ...yEventRow.tsx |       0 |        0 |       0 |       0 | 19-304            
+  ...tySection.tsx |       0 |        0 |       0 |       0 | 40-320            
+  CommentCard.tsx  |       0 |        0 |       0 |       0 | 37-302            
+  ...tComposer.tsx |       0 |        0 |       0 |       0 | 34-840            
+  ...hmentCard.tsx |       0 |        0 |       0 |       0 |                   
+  ...wnPreview.tsx |       0 |        0 |       0 |       0 | 15-365            
+  activityApi.ts   |       0 |        0 |       0 |       0 | 9-376             
+ ...features/admin |       0 |        0 |       0 |       0 |                   
+  ...icsStudio.tsx |       0 |        0 |       0 |       0 | 198-852           
+  ...LinksPage.tsx |       0 |        0 |       0 |       0 |                   
+  ...dioSubnav.tsx |       0 |        0 |       0 |       0 | 25-260            
+  ...torStudio.tsx |       0 |        0 |       0 |       0 | 79-869            
+ ...s/admin-agents |       0 |        0 |       0 |       0 |                   
+  ...torDrawer.tsx |       0 |        0 |       0 |       0 | 37-717            
+  ...tudioPage.tsx |       0 |        0 |       0 |       0 | 31-312            
+  ...tionModal.tsx |       0 |        0 |       0 |       0 | 24-139            
+  ...nitionsApi.ts |       0 |        0 |       0 |       0 | 75-120            
+  cliPolicy.ts     |       0 |        0 |       0 |       0 | 4-74              
+ ...tures/admin-ai |       0 |        0 |       0 |       0 |                   
+  ...dgetModal.tsx |       0 |        0 |       0 |       0 | 33-414            
+  ...torDrawer.tsx |       0 |        0 |       0 |       0 | 38-1214           
+  AiStudioPage.tsx |       0 |        0 |       0 |       0 | 40-588            
+  aiAdminApi.ts    |       0 |        0 |       0 |       0 | 63-249            
+ ...res/admin-auth |       0 |        0 |       0 |       0 |                   
+  ...torDrawer.tsx |       0 |        0 |       0 |       0 | 48-2031           
+  AuthCardRow.tsx  |       0 |        0 |       0 |       0 | 42-188            
+  ...tudioPage.tsx |       0 |        0 |       0 |       0 | 44-1366           
+  ...tedBanner.tsx |       0 |        0 |       0 |       0 | 11-89             
+  adminAuthApi.ts  |       0 |        0 |       0 |       0 | 141-391           
+  cardRank.ts      |       0 |        0 |       0 |       0 | 8-74              
+ .../admin-imports |       0 |        0 |       0 |       0 |                   
+  ...ortStudio.tsx |       0 |        0 |       0 |       0 | 32-982            
+  ...eImportApi.ts |       0 |        0 |       0 |       0 | 40-100            
+ .../admin-runners |       0 |        0 |       0 |       0 |                   
+  ...okenModal.tsx |       0 |        0 |       0 |       0 | 24-267            
+  ...tudioPage.tsx |       0 |        0 |       0 |       0 | 19-343            
+  ...rsAdminApi.ts |       0 |        0 |       0 |       0 | 37-58             
+ ...ures/analytics |       0 |        0 |       0 |       0 |                   
+  ...yticsPage.tsx |       0 |        0 |       0 |       0 | 27-281            
+ ...alytics/charts |       0 |        0 |       0 |       0 |                   
+  ...gWipChart.tsx |       0 |        0 |       0 |       0 | 20-253            
+  CfdAreaChart.tsx |       0 |        0 |       0 |       0 | 17-235            
+  ...downChart.tsx |       0 |        0 |       0 |       0 | 22-232            
+  ...tterChart.tsx |       0 |        0 |       0 |       0 | 22-265            
+  ...ecastCard.tsx |       0 |        0 |       0 |       0 | 18-51             
+ src/features/auth |       0 |        0 |       0 |       0 |                   
+  ...ardButton.tsx |       0 |        0 |       0 |       0 | 7-50              
+  AuthContext.tsx  |       0 |        0 |       0 |       0 | 45-170            
+  ...LoginForm.tsx |       0 |        0 |       0 |       0 | 23-111            
+  ...isclosure.tsx |       0 |        0 |       0 |       0 | 18-131            
+  LoginPage.tsx    |       0 |        0 |       0 |       0 | 32-322            
+  ...actorStep.tsx |       0 |        0 |       0 |       0 | 36-347            
+  ...ClaimPage.tsx |       0 |        0 |       0 |       0 | 23-806            
+  authApi.ts       |       0 |        0 |       0 |       0 | 55-346            
+  ...ssionGuard.ts |       0 |        0 |       0 |       0 | 43-233            
+  webauthn.ts      |       0 |        0 |       0 |       0 | 11-201            
+ ...features/board |       0 |        0 |       0 |       0 |                   
+  BoardCard.tsx    |       0 |        0 |       0 |       0 | 39-505            
+  BoardColumn.tsx  |       0 |        0 |       0 |       0 | 31-298            
+  BoardView.tsx    |       0 |        0 |       0 |       0 | 45-633            
+  ...rideModal.tsx |       0 |        0 |       0 |       0 | 16-85             
+  boardApi.ts      |       0 |        0 |       0 |       0 | 83-341            
+  ...tionalRank.ts |       0 |        0 |       0 |       0 | 8-108             
+ ...tures/calendar |       0 |        0 |       0 |       0 |                   
+  CalendarView.tsx |       0 |        0 |       0 |       0 | 28-571            
+  calendarGrid.ts  |       0 |        0 |       0 |       0 | 21-155            
+ .../custom-fields |       0 |        0 |       0 |       0 |                   
+  ...ionEditor.tsx |       0 |        0 |       0 |       0 | 43-1789           
+  ...ieldValue.tsx |       0 |        0 |       0 |       0 | 15-377            
+  ...ilSection.tsx |       0 |        0 |       0 |       0 | 27-285            
+  ...ldsStudio.tsx |       0 |        0 |       0 |       0 | 14                
+  ...ovalPanel.tsx |       0 |        0 |       0 |       0 | 34-489            
+  ...ionMatrix.tsx |       0 |        0 |       0 |       0 | 18-180            
+  ...etGallery.tsx |       0 |        0 |       0 |       0 | 31-189            
+  api.ts           |       0 |        0 |       0 |       0 | 125-412           
+  presets.ts       |       0 |      100 |     100 |       0 | 30-36             
+ src/features/docs |       0 |        0 |       0 |       0 |                   
+  ...ramViewer.tsx |       0 |        0 |       0 |       0 | 50-472            
+  DocsTreeNav.tsx  |       0 |        0 |       0 |       0 | 48-572            
+  ...spaceView.tsx |       0 |        0 |       0 |       0 | 27-239            
+  ...sionsRail.tsx |       0 |        0 |       0 |       0 | 40-741            
+  ...ditorPane.tsx |       0 |        0 |       0 |       0 | 58-466            
+  ...ueToolbar.tsx |       0 |        0 |       0 |       0 | 34-309            
+  docsApi.ts       |       0 |        0 |       0 |       0 | 9-317             
+ ...es/docs-center |       0 |        0 |       0 |       0 |                   
+  ...ownViewer.tsx |       0 |        0 |       0 |       0 | 22-644            
+  ...enterPage.tsx |       0 |        0 |       0 |       0 | 34-595            
+  HelpDrawer.tsx   |       0 |        0 |       0 |       0 | 35-332            
+  docsService.ts   |       0 |        0 |       0 |       0 | 28-174            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  wikiManifest.ts  |       0 |        0 |       0 |       0 | 33-3688           
+ ...eatures/drafts |   43.47 |       45 |   16.66 |   46.34 |                   
+  draftsStore.ts   |   43.47 |       45 |   16.66 |   46.34 | ...3,58-66,97-133 
+ ...eatures/drawer |    0.84 |      0.2 |    1.56 |    0.87 |                   
+  AccessPill.tsx   |       0 |        0 |       0 |       0 | 23-90             
+  ...entEditor.tsx |       0 |      100 |       0 |       0 | 15                
+  IssueHeader.tsx  |       0 |        0 |       0 |       0 | 23-240            
+  IssueKeyLink.tsx |       0 |        0 |       0 |       0 | 10-45             
+  IssueSurface.tsx |       0 |        0 |       0 |       0 | 62-2466           
+  SummaryField.tsx |       0 |        0 |       0 |       0 | 27-214            
+  permissions.ts   |       0 |        0 |       0 |       0 | 27-75             
+  slotRegistry.ts  |       0 |      100 |     100 |       0 | 8                 
+  slots.tsx        |       0 |      100 |       0 |       0 | 100-103           
+  useFocusTrap.ts  |   26.66 |      7.4 |      60 |   26.66 | 23-60             
+  ...rfaceRoute.ts |       0 |        0 |       0 |       0 | 4-126             
+ ...drawer-actions |       0 |        0 |       0 |       0 |                   
+  ...diusModal.tsx |       0 |        0 |       0 |       0 | 32-155            
+  ...rflowMenu.tsx |       0 |        0 |       0 |       0 | 32-239            
+  ...aphAction.tsx |       0 |        0 |       0 |       0 | 32-340            
+  ...opyDialog.tsx |       0 |        0 |       0 |       0 | 24-179            
+  ...ibeAction.tsx |       0 |        0 |       0 |       0 | 27-172            
+  actionsApi.ts    |       0 |        0 |       0 |       0 | 15-233            
+ ...es/drawer-rail |       0 |        0 |       0 |       0 |                   
+  AssigneesRow.tsx |       0 |        0 |       0 |       0 | 19-264            
+  CreatedByRow.tsx |       0 |        0 |       0 |       0 | 13-168            
+  ...dulesRows.tsx |       0 |        0 |       0 |       0 | 26-174            
+  ...abelsRows.tsx |       0 |        0 |       0 |       0 | 15-356            
+  ...rtiesRail.tsx |       0 |        0 |       0 |       0 | 46-274            
+  ...orityRows.tsx |       0 |        0 |       0 |       0 | 18-159            
+  railApi.ts       |       0 |        0 |       0 |       0 | 85-247            
+ ...features/gates |       0 |        0 |       0 |       0 |                   
+  ...tivityRow.tsx |       0 |        0 |       0 |       0 | 15-211            
+  ...tatusPill.tsx |       0 |        0 |       0 |       0 | 15-249            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  types.ts         |       0 |        0 |       0 |       0 |                   
+  ...kAnimation.ts |       0 |        0 |       0 |       0 | 6-129             
+  ...altimeSync.ts |       0 |        0 |       0 |       0 | 32-515            
+ src/features/help |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+ ...eatures/issues |       0 |        0 |       0 |       0 |                   
+  ...eekDrawer.tsx |       0 |        0 |       0 |       0 | 14-23             
+ src/features/list |       0 |        0 |       0 |       0 |                   
+  ListRow.tsx      |       0 |        0 |       0 |       0 | 22-282            
+  ListView.tsx     |       0 |        0 |       0 |       0 | 52-579            
+ ...atures/modules |       0 |      100 |       0 |       0 |                   
+  ModulesView.tsx  |       0 |      100 |       0 |       0 | 8                 
+ .../notifications |       0 |        0 |       0 |       0 |                   
+  ...tionsBell.tsx |       0 |        0 |       0 |       0 | 40-378            
+ ...features/oauth |       0 |        0 |       0 |       0 |                   
+  ...ivatePage.tsx |       0 |        0 |       0 |       0 | 18-449            
+  ...nceStudio.tsx |       0 |        0 |       0 |       0 | 29-1513           
+  oauthApi.ts      |       0 |        0 |       0 |       0 | 30-182            
+ ...tures/projects |       0 |        0 |       0 |       0 |                   
+  ...jectModal.tsx |       0 |        0 |       0 |       0 | 32-394            
+ src/features/rbac |       0 |        0 |       0 |       0 |                   
+  ...cyBuilder.tsx |       0 |        0 |       0 |       0 | 40-749            
+  ...belPicker.tsx |       0 |        0 |       0 |       0 | 54-272            
+ ...atures/reports |       0 |        0 |       0 |       0 |                   
+  ...portModal.tsx |       0 |        0 |       0 |       0 | 35-455            
+  ...udioModal.tsx |       0 |        0 |       0 |       0 | 26-255            
+  reportsApi.ts    |       0 |        0 |       0 |       0 | 53-249            
+ ...tures/settings |       0 |        0 |       0 |       0 |                   
+  ...romptCard.tsx |       0 |        0 |       0 |       0 | 28-330            
+  ...CropModal.tsx |       0 |        0 |       0 |       0 | 15-388            
+  ...tboxModal.tsx |       0 |        0 |       0 |       0 | 14-338            
+  ...setPicker.tsx |       0 |        0 |       0 |       0 | 18-198            
+  ...hAppModal.tsx |       0 |        0 |       0 |       0 | 27-503            
+  ...uditModal.tsx |       0 |        0 |       0 |       0 | 78-406            
+  ...essStudio.tsx |       0 |        0 |       0 |       0 | 36-1706           
+  ...ppetModal.tsx |       0 |        0 |       0 |       0 | 27-368            
+  ...iedStudio.tsx |       0 |        0 |       0 |       0 | 69-663            
+  ...rollModal.tsx |       0 |        0 |       0 |       0 | 37-359            
+  ...tingsPage.tsx |       0 |        0 |       0 |       0 | 52-1632           
+  ...tingsPage.tsx |       0 |        0 |       0 |       0 | 120-3108          
+  ...tingsPage.tsx |       0 |        0 |       0 |       0 | 62-2081           
+  ...dingPrompt.ts |       0 |        0 |       0 |       0 | 15-79             
+  ...ettingsApi.ts |       0 |        0 |       0 |       0 | 82-309            
+  settingsApi.ts   |       0 |        0 |       0 |       0 | 65-161            
+ ...res/standalone |       0 |        0 |       0 |       0 |                   
+  ...ExportTab.tsx |       0 |        0 |       0 |       0 | 28-191            
+  ...atusPanel.tsx |       0 |        0 |       0 |       0 | 27-1021           
+ ...tures/stickies |       0 |        0 |       0 |       0 |                   
+  ...rviewView.tsx |       0 |        0 |       0 |       0 | 27-135            
+  ...tickyStub.tsx |       0 |        0 |       0 |       0 | 27-56             
+  StickiesGrid.tsx |       0 |        0 |       0 |       0 | 61-212            
+  StickyCard.tsx   |       0 |        0 |       0 |       0 | 73-464            
+  ...viewModal.tsx |       0 |        0 |       0 |       0 | 26-217            
+  ...ionBanner.tsx |       0 |        0 |       0 |       0 | 24-27             
+  ...ckiesView.tsx |       0 |        0 |       0 |       0 | 24-142            
+  stickiesApi.ts   |       0 |        0 |       0 |       0 | 42-358            
+  ...yHeuristic.ts |       0 |        0 |       0 |       0 | 22-236            
+ ...eatures/system |       0 |      100 |       0 |       0 |                   
+  ...stemStatus.ts |       0 |      100 |       0 |       0 | 14-18             
+ ...features/table |       0 |        0 |       0 |       0 |                   
+  ...figurator.tsx |       0 |        0 |       0 |       0 | 27-144            
+  TableView.tsx    |       0 |        0 |       0 |       0 | 71-883            
+  tableColumns.ts  |       0 |        0 |       0 |       0 | 29-276            
+ ...tures/timeline |       0 |        0 |       0 |       0 |                   
+  ...vgOverlay.tsx |       0 |        0 |       0 |       0 | 21-70             
+  TimelineView.tsx |       0 |        0 |       0 |       0 | 85-793            
+  ...leMutation.ts |       0 |        0 |       0 |       0 | 36-230            
+  ...neGeometry.ts |       0 |        0 |       0 |       0 | 9-215             
+ ...features/views |    6.08 |     5.81 |    6.88 |    6.25 |                   
+  BoardView.tsx    |       0 |        0 |       0 |       0 |                   
+  ...ActionBar.tsx |       0 |        0 |       0 |       0 | 34-208            
+  ...portModal.tsx |       0 |        0 |       0 |       0 | 69-642            
+  ...isplayBar.tsx |       0 |        0 |       0 |       0 | 99-877            
+  ...igatorBar.tsx |       0 |        0 |       0 |       0 | 34-909            
+  ListView.tsx     |       0 |        0 |       0 |       0 |                   
+  ...ViewsView.tsx |       0 |        0 |       0 |       0 | 40-197            
+  ...ssueModal.tsx |    94.5 |    88.55 |   97.67 |   95.28 | ...35,238,251,254 
+  ...ldPopover.tsx |       0 |        0 |       0 |       0 | 42-225            
+  ...ViewModal.tsx |       0 |        0 |       0 |       0 | 49-221            
+  ...erPopover.tsx |       0 |        0 |       0 |       0 | 36-362            
+  ...BoardGrid.tsx |       0 |        0 |       0 |       0 | 50-558            
+  ...erPopover.tsx |       0 |        0 |       0 |       0 | 43-187            
+  fixtures.ts      |       0 |      100 |     100 |       0 | 3-26              
+  ...lterCookie.ts |       0 |        0 |       0 |       0 | 20-985            
+  ...cateParser.ts |       0 |        0 |       0 |       0 | 24-717            
+  ...eyboardMap.ts |       0 |        0 |       0 |       0 | 32-344            
+  ...DragSensor.ts |       0 |        0 |       0 |       0 | 46-137            
+  viewRegistry.tsx |       0 |        0 |       0 |       0 | 86-1680           
+  viewsApi.ts      |       0 |        0 |       0 |       0 | 150-697           
+ ...ures/workflows |       0 |        0 |       0 |       0 |                   
+  ...ookDialog.tsx |       0 |        0 |       0 |       0 | 43-687            
+  ...oksStudio.tsx |       0 |        0 |       0 |       0 | 34-878            
+  DryRunDrawer.tsx |       0 |        0 |       0 |       0 | 23-429            
+  ...gsSection.tsx |       0 |        0 |       0 |       0 | 35-485            
+  ...pelineRow.tsx |       0 |        0 |       0 |       0 | 45-345            
+  ...nRuleCard.tsx |       0 |        0 |       0 |       0 | 44-213            
+  ...tudioPage.tsx |       0 |        0 |       0 |       0 | 46-573            
+  api.ts           |       0 |        0 |       0 |       0 | 12-678            
+ ...res/workspaces |       0 |        0 |       0 |       0 |                   
+  ...paceModal.tsx |       0 |        0 |       0 |       0 | 25-274            
+ ...ures/your-work |       0 |        0 |       0 |       0 |                   
+  YourWorkView.tsx |       0 |        0 |       0 |       0 | 37-413            
+ src/realtime      |    1.26 |        0 |       0 |    1.36 |                   
+  context.tsx      |    1.26 |        0 |       0 |    1.36 | 42-214            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+ ...jects/settings |       0 |        0 |       0 |       0 |                   
+  ...om-fields.tsx |       0 |        0 |       0 |       0 | 11-111            
+ src/styles        |       0 |        0 |       0 |       0 |                   
+  breakpoints.ts   |       0 |        0 |       0 |       0 | 12-62             
+ src/theme         |       0 |        0 |       0 |       0 |                   
+  ...eProvider.tsx |       0 |        0 |       0 |       0 | 12-121            
+ src/ui            |    87.5 |    73.52 |      80 |    87.5 |                   
+  ...edSection.tsx |    87.5 |    73.52 |      80 |    87.5 | 74-76             
+ src/utils         |       5 |     8.75 |   15.78 |    5.03 |                   
+  clipboard.ts     |       0 |        0 |       0 |       0 | 17-120            
+  logger.ts        |       0 |        0 |       0 |       0 | 8-88              
+  safeJson.ts      |      80 |       80 |     100 |      80 | 16                
+  uuid.ts          |    6.25 |     9.67 |      50 |    6.38 | 26-129            
+-------------------|---------|----------|---------|---------|-------------------
+ERROR: Coverage for lines (1.08%) does not meet global threshold (95%)
+ERROR: Coverage for functions (1.07%) does not meet global threshold (95%)
+ERROR: Coverage for statements (1.06%) does not meet global threshold (95%)
+ERROR: Coverage for branches (0.99%) does not meet global threshold (95%)

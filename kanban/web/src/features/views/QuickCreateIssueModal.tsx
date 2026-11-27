@@ -3,6 +3,8 @@ import type { IssueItem } from './viewsApi';
 import { saveDraft } from '../drafts/draftsStore';
 import { useFocusTrap } from '../drawer/useFocusTrap';
 import { AdvancedSection } from '../../ui/AdvancedSection';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import './filterBulk.css';
 
 export interface QuickCreateIssueModalProps {
@@ -103,8 +105,11 @@ export function QuickCreateIssueModal({
     }
   }, [isOpen]);
 
-  // Enforce cyclic focus trap while open
-  useFocusTrap(isOpen, modalContainerRef);
+  const shellPanels = useOptionalShellPanels();
+  const isHelpDrawerOpen = shellPanels?.activePanel?.id === 'help';
+
+  // Enforce cyclic focus trap while open, yielding when HelpDrawer is active above modal
+  useFocusTrap(isOpen && !isHelpDrawerOpen, modalContainerRef);
 
   const handleClose = useCallback((): void => {
     const opener = openerRef.current;
@@ -163,6 +168,10 @@ export function QuickCreateIssueModal({
 
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        // Yield keyboard escape when HelpDrawer or its backdrop is open above modal (KAN-480)
+        if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         setPostCreateData(null);
@@ -175,6 +184,19 @@ export function QuickCreateIssueModal({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, handleClose]);
+
+  const handleOverlayClick = (
+    e: React.MouseEvent<HTMLDivElement>,
+    onDismiss: () => void,
+  ): void => {
+    if (e.target === e.currentTarget) {
+      // Yield backdrop close when HelpDrawer or its backdrop is open above modal (KAN-480)
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+        return;
+      }
+      onDismiss();
+    }
+  };
 
   // Sync programmatic .value and native input/change events for automation / DevTools fill()
   useEffect(() => {
@@ -395,6 +417,9 @@ export function QuickCreateIssueModal({
         aria-modal="true"
         aria-labelledby="quick-create-post-title"
         data-testid="quick-create-post-dialog"
+        onClick={(e) => {
+          handleOverlayClick(e, handleDone);
+        }}
       >
         <div className="quick-create-modal quick-create-modal--post">
           <div className="quick-create-header">
@@ -465,20 +490,32 @@ export function QuickCreateIssueModal({
       aria-modal="true"
       aria-labelledby="quick-create-title"
       data-testid="quick-create-modal"
+      onClick={(e) => {
+        handleOverlayClick(e, handleClose);
+      }}
     >
       <div className="quick-create-modal">
         <div className="quick-create-header">
           <h2 id="quick-create-title" className="quick-create-title">
             Create work item in {projectKey}
           </h2>
-          <button
-            type="button"
-            className="filter-chip-remove"
-            onClick={handleClose}
-            aria-label="Close modal"
-          >
-            ×
-          </button>
+          <div className="quick-create-header-actions">
+            <StudioDocLink
+              href="/docs/ticket-screen-and-work-item-features#quick-create-work-item-modal-c"
+              title="Quick-Create Documentation"
+              label="Quick-Create Guide ->"
+              testId="quick-create-doc-link"
+            />
+            <button
+              type="button"
+              className="filter-chip-remove"
+              onClick={handleClose}
+              aria-label="Close modal"
+              data-testid="quick-create-close-btn"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <form
@@ -548,13 +585,13 @@ export function QuickCreateIssueModal({
                 {states && states.length > 0 ? (
                   states.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}
+                      {s.name}{s.is_default ? ' (Default)' : ''}
                     </option>
                   ))
                 ) : (
                   <>
                     <option value="state-backlog">Backlog</option>
-                    <option value="state-todo">Todo</option>
+                    <option value="state-todo">Todo (Default)</option>
                     <option value="state-in-progress">In Progress</option>
                     <option value="state-in-review">In Review</option>
                     <option value="state-done">Done</option>
@@ -581,7 +618,7 @@ export function QuickCreateIssueModal({
               >
                 <option value="urgent">🔥 Urgent</option>
                 <option value="high">⚡ High</option>
-                <option value="medium">🔹 Medium</option>
+                <option value="medium">🔹 Medium (Default)</option>
                 <option value="low">🔽 Low</option>
                 <option value="none">➖ None</option>
               </select>

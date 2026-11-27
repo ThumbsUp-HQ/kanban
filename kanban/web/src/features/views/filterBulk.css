@@ -704,6 +704,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3, 12px);
+}
+
+.quick-create-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.quick-create-modal .filter-chip-remove {
+  width: 28px;
+  height: 28px;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .quick-create-title {
@@ -831,6 +845,22 @@
   opacity: 0.9;
 }
 
+.quick-create-draft-row {
+  display: flex;
+  align-items: center;
+}
+
+.quick-create-draft-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
 /* ==========================================================================
    Responsive Adaptations (Mobile <= 767px)
    ========================================================================== */
@@ -859,6 +889,28 @@
   .quick-create-select {
     font-size: 16px;
     min-height: 44px;
+  }
+
+  .quick-create-modal .filter-chip-remove {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .quick-create-row-fields {
+    flex-direction: column;
+  }
+
+  .quick-create-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
+
+  .quick-create-btn-cancel,
+  .quick-create-btn-submit,
+  .quick-create-draft-label {
+    min-height: var(--tap-min, 44px);
   }
 
   .swimlane-board-grid {

@@ -877,6 +877,11 @@ export function IssuesWorkspaceRoute({
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: [BoardWorkflowState, ...BoardWorkflowState[]] = useMemo(() => {
     if (projectStates.length > 0) {
+      const hasExplicitDefault = projectStates.some((s) => s.is_default === true);
+      const defaultCandidateIndex = hasExplicitDefault
+        ? -1
+        : projectStates.findIndex((s) => normalizeStateKey(s.name) === 'todo' || s.group === 'unstarted');
+
       return projectStates.map((s, idx) => {
         const sAny = s as {
           wip_hard_limit?: number | null;
@@ -886,6 +891,9 @@ export function IssuesWorkspaceRoute({
         };
         const wipHard = sAny.wip_hard_limit ?? sAny.wip_hard ?? (s.id === 'state-in-review' ? 3 : undefined);
         const wipSoft = sAny.wip_soft_limit ?? sAny.wip_soft ?? (s.id === 'state-in-progress' ? 3 : undefined);
+        const isDefault =
+          s.is_default === true ||
+          (!hasExplicitDefault && (idx === defaultCandidateIndex || (defaultCandidateIndex === -1 && idx === 0)));
         return {
           id: s.id,
           name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
@@ -894,6 +902,7 @@ export function IssuesWorkspaceRoute({
             : 'unstarted') as BoardWorkflowState['group'],
           sort_order: s.sort_order ?? idx + 1,
           color_hex: s.color_hex ?? null,
+          ...(isDefault ? { is_default: true } : (s.is_default === false ? { is_default: false } : {})),
           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
         };
@@ -901,7 +910,7 @@ export function IssuesWorkspaceRoute({
     }
     return [
       { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
-      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
+      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2, is_default: true },
       { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
       { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
       { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
