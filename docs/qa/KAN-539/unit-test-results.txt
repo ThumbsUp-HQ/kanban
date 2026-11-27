@@ -1,0 +1,127 @@
+$ npx vitest run src/features/workflows src/__tests__/cssTokensAudit.test.ts --reporter=verbose
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan539-c4e3527b/kanban/web
+
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx > TransitionRuleCard Edge Reordering Branches > covers all early return branches for keyboard moves and drop reordering 54ms
+ ✓ src/features/workflows/TransitionRuleCardEdge.test.tsx > TransitionRuleCard Edge Reordering Branches > covers keyboard move and drop reorder failure branches with Error and non-Error 80ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > renders empty state when no repo bindings exist 76ms
+ ✓ src/features/workflows/__tests__/CleanRoomGateCopy.test.tsx > AttachHookDialog clean-room gate copy (KAN-539) > shows no-gate info note on terminal transition and explainer for agent hook 114ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > does not render when isOpen is false 24ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > renders repository list with status badges and details 49ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > hides admin action buttons when isUserAdmin is false 15ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Refresh Mirror button and triggers refreshRepoBinding 26ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Refresh Mirror error with AAL2 interception 26ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > runs dry-run against sample ticket missing docs/qa/, rendering rejected validator and skipped_async agent hooks with copyable CLI command (Mandatory Test Case 4) 270ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > does not render when isOpen is false 27ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Refresh Mirror error without AAL2 displaying alert 27ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Remove button when user confirms 22ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > does nothing when Remove button confirmation is cancelled 14ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Remove error with AAL2 interception 26ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles Remove error displaying alert message 25ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > switches between sample ticket and existing issue modes 80ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > validates empty issue key in issue mode 30ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > renders prominent simulation top banner and handles runner failure gracefully 21ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > renders diff table for sample mode field updates and handles error and allowed steps with sub-millisecond durations 44ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 401ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > handles non-Error thrown during dry-run runner execution gracefully 20ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > StudioDocLink and FieldHelpHint Integrations (KAN-510) > renders StudioDocLink in dry-run header with correct href, title, and label in Light and Dark themes 13ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > StudioDocLink and FieldHelpHint Integrations (KAN-510) > supports keyboard focus and opens in-app help panel via ShellPanelsProvider on click 12ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > StudioDocLink and FieldHelpHint Integrations (KAN-510) > renders FieldHelpHint for Issue Key explaining simulated execution vs ephemeral synthetic payload 20ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx > DryRunDrawer (KB-P5-24) > StudioDocLink and FieldHelpHint Integrations (KAN-510) > dismisses FieldHelpHint popover on Escape key and restores focus to trigger without closing drawer 17ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > opens modal, validates slug and URL, and submits successfully 209ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles createRepoBinding error with AAL2 intercept 35ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles createRepoBinding generic failure displaying form error 39ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > closes modal when Cancel button is clicked 23ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles empty url and defaultRef fallback to main 39ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > submits with non-pat credential without requiring patToken 29ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > validates required fields and prevents from_state === to_state 116ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > handles non-Error string rejection in refresh, delete, and create 62ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > renders SSRF restriction callout and masked PAT input with data-1p-ignore and zero password inputs 14ms
+ ✓ src/features/workflows/__tests__/GitRepoBindingsSection.test.tsx > GitRepoBindingsSection > renders FieldHelpHint for Default Branch and Access Mode as sibling controls with accessible dialogs 40ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > successfully creates an agent_interceptor hook with selected mutable fields 183ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > populates editingHook data when editing an existing hook 52ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > handles save errors and displays error alert 62ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > renders Configure Agent Definitions link pointing to /admin/agents when no agents exist (KAN-60) 29ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > supports Select All and Clear All toggles for allowed_mutable_fields and displays kind subtext descriptions 77ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > renders raw execution logs when editing a hook with prior run logs 13ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > covers agent definition selection across CLI, SDK, and Remote runner pools 50ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > covers saving agent hook when agent has no timeout_ms and non-Error save rejection 75ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > supports selecting wildcard all states for from_state 11ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > covers fallback wasm latency budget and provider_kind fallback when model_id is unset 41ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > renders system default hooks list with template details and badges 91ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > api.ts coverage > exercises fetchWorkflowHooks all branches 8ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > api.ts coverage > exercises mutations and auxiliary fetch functions 5ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > renders empty notice when no templates are configured 21ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > auto-selects single agent and permits immediate submission without 422 (KAN-431) 64ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > auto-syncs agent state when agentDefinitions load asynchronously in single-agent workspace (KAN-431) 93ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > renders different hook kinds and failure policies 249ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises pragmatic drag and drop hooks and callbacks 9ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises cli_pipe fallback allowlist and is-dragging style class 8ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises copy SHA success 31ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > renders In Review -> Done card with the 3 S14.4 hooks matching wireframe (Mandatory Test Case 1) 174ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > opens create modal, enforces client-side timeout validation, and creates template 190ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > opens edit dialog, modifies template, and updates successfully 41ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > toggles template status on checkbox click 16ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > deletes template after user confirmation 17ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > supports setting per-hook timeout override up to 600,000 ms with quick presets (KAN-437) 141ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > validates client-side [1000, 600000] range and increments activeOverridesCount on hook timeout (KAN-437) 130ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > renders FieldHelpHint for From State, To State, and Hook Name as adjacent siblings (KAN-509) 28ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx > AttachHookDialog (KB-P5-24) > verifies accessibility and theme parity across light and dark modes (KAN-509) 37ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 249ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > renders uniform Not found or no access for non-admin user with 0 write calls (Mandatory Test Case 5) 9ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > safely escapes hostile hook names and rejection reasons without script injection (Mandatory Test Case 5) 25ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > HookPipelineRow displays Inherited from Default badge and allows Detach 39ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > WorkflowStudioPage provides Sync Default Hooks button that invokes API 28ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > handles edit round-trip for agent_async and wasm_sync preserving exact hook kinds 32ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > renders danger alert with role=alert when syncDefaultWorkflowHooks fails 24ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > silently ignores Aal2StepUpCancelledError on hook detach (Mandatory Test Case 5) 74ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > silently ignores Aal2StepUpCancelledError on hook toggle (KAN-393) 50ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > renders empty state CTA when transition has 0 hooks (Mandatory Test Case 6) 23ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > switches hook kind to wasm_validator and submits wasm_module_sha256 29ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > switches hook kind to builtin and submits selected builtin sha 38ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > renders error alert banner and suppresses empty notice when fetchDefaultWorkflowHooks fails 20ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > covers edit flows across agent_async, wasm_sync, and builtin templates plus Escape and error branches 204ms
+ ✓ src/features/workflows/__tests__/DefaultWorkflowHooksStudio.test.tsx > DefaultWorkflowHooksStudio & Inherited Hook Controls (KAN-438) > covers default workflow hooks API client functions across system and workspace scopes 3ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > rolls back optimistic order and shows alert on 422 REORDER_SET_MISMATCH (Mandatory Test Case 6) 73ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > reads ?to_state= and ?attach=1 on mount to auto-open AttachHookDialog 46ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > renders project empty state when rules array is empty 15ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > handles edit hook, detach hook, and AAL2 cancellation without error banners 143ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > renders rules with from_state === null, handles non-AAL2 error on toggle, and resolves route projectKey param 33ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369) > Positive case 2: AttachHookDialog renders hook trigger and action with advanced execution policies collapsed 44ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369) > Positive case 3: CustomFieldDefinitionEditor collapses raw JSON format metadata behind Advanced mode 42ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > HookPipelineRow Metadata & Timeout (KAN-431) > omits kanban-main when repo_binding_slug is null and displays 180s real agent timeout 17ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > HookPipelineRow Metadata & Timeout (KAN-431) > resolves agent timeout from agents query when hook timeout_ms is absent and omits repo badge when access mode is none 17ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > HookPipelineRow Metadata & Timeout (KAN-431) > supports configuring and saving project default gate timeout with presets (KAN-437) 17ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx > WorkflowStudioPage (KB-P5-24, S14.4) > HookPipelineRow Metadata & Timeout (KAN-431) > validates client-side [1000, 600000] range and rejects out-of-range project timeout with alert (KAN-437) 13ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises copy SHA timeout reset, repeat click, and unmount cleanup 2074ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > HookPipelineRow variations > exercises copy SHA clipboard rejection catch branch 12ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > handles keyboard move down and drop reorder 52ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > exercises drop reorder success and failure rollbacks 15ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > handles non-Error rejection and drop error catch in TransitionRuleCard 78ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > renders null from_state rule card and empty hooks list 3ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > updates effectiveHooks when rule.hooks length changes from external update 13ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > TransitionRuleCard edge cases > handles keyboard move up and down with success and error rollbacks 97ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 328ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises detaching a hook and AAL2 onCancel / onSessionExpired 43ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises onAddHook from card and non-AAL2 error handling in studio 206ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises Aal2StepUpCancelledError on hook toggle 29ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises Aal2StepUpCancelledError on hook enable 19ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises enabling a disabled hook and AAL2 challenge on update with session expiration 92ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > exercises projectQuery capabilities success, failure, and non-admin states 51ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > renders general error alert when rules query fails and handles reorder AAL2 challenge 69ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > renders empty studio state when rules array is empty 13ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > WorkflowStudioPage interactive actions > renders NotFoundView when role=member query param is present 3ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > AttachHookDialog extra branches > cancels dialog and handles remote runner options 43ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > AttachHookDialog extra branches > exercises mutator submission, mutable field toggle off, and select onChange handlers 110ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > AttachHookDialog extra branches > handles empty to_state and non-Error save failure 99ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > AttachHookDialog extra branches > validates identical from_state and to_state and renders fallback option labels 54ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > DryRunDrawer additional coverage > renders error step results and handles form updates 32ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx > Workflow Studio Coverage Booster > DryRunDrawer additional coverage > handles non-Error rejection and CLI command copy success 30ms
+
+ Test Files  8 passed (8)
+      Tests  115 passed (115)
+   Start at  10:00:20
+   Duration  6.26s (tests 43%, environment 33%, import 16%, transform 7%)
+
+EXIT_CODE: 0
+

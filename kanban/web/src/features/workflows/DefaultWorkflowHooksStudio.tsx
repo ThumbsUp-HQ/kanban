@@ -345,6 +345,9 @@ export function DefaultWorkflowHooksStudio({
               ? 'Define system-wide default workflow hook templates inherited automatically by all new projects across workspaces. Removable at the project level.'
               : 'Define workspace-level workflow hook templates inherited by newly created projects in this workspace, overriding system-wide templates.'}
           </p>
+          <p className="workflow-project-timeout-description" data-testid="default-studio-gate-explainer">
+            A transition agent hook acts as an automatic clean-room approval gate (Transition, then Clean-Room Agent, then completion): it records its review comment on the ticket and returns pass or fail to the calling agent. Terminal transitions without a gate complete without review.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <StudioDocLink

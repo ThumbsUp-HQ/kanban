@@ -1211,3 +1211,11 @@ Every ticket executed on this repository enforces five non-bypassable gates:
 5. **Phase 4 - Three-Surface Intent MCP Server (`mcp/`):** `/mcp/agent` (8 tools), `/mcp/docs` (6 tools), `/mcp/admin` (12 tools + 2-stage `destructive_lifecycle`), OAuth 2.1 + PKCE, `EntityResolver`, and `InlineSafeDumper` YAML.
 6. **Phase 5 - Multi-Provider AI, `<150ms` `✨` Sparkle, Custom Scripted Fields & Scripted/CLI Transition Helpers (`agent/` + `kanban/`):** `OpenAI`/`Ollama`/`Gemini` adapters, Sparkle right-click engine, Tier A `Wasmtime` + Tier B `nsjail`, `${context} | agy -p` / `codex exec -s read-only -` & remote `WSS` workflow gates, and `kanban-agent validate-*` local CLI testbench.
 7. **Phase 6 - Cutover Import from `https://kanban.hackedyour.info/kanban/`:** Lossless `KANBA-*` migration, Link Auditor zero-invalid check, and full self-hosted dogfooding.
+
+### Low-Context Transition Gate Flow (KAN-539)
+
+Flow: `read_ticket`, then `begin_work`, then `transition_ticket(KEY, "Done")` or `complete_work(identifier | identifiers)`.
+
+Architecture: Transition -> Clean-Room Agent Gate -> Done. When a transition agent is attached, the server runs it in a clean room and returns `{passed, comment}` synchronously. The gate records its review comment on the ticket, so callers need no self-attestation boilerplate. `complete_work` accepts a single identifier or a batch list and returns one `{passed, comment}` per ticket.
+
+Self-guiding error codes: `LEASE_STALE` (call `begin_work` again), `GATE_REJECTED` (read the comment, fix, retry), `GATE_TIMEOUT` (retry the same call), `CAPABILITY_MISSING` (token lacks the required scope).
