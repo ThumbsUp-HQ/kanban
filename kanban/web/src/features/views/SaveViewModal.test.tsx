@@ -193,4 +193,275 @@ describe('SaveViewModal (KANBA-221)', () => {
       expect(defaultProps.onSaved).toHaveBeenCalled();
     });
   });
+
+  describe('KAN-482: StudioDocLink, FieldHelpHint, Escape/Backdrop Yielding, and Touch Invariants', () => {
+    it('renders StudioDocLink in kb-save-view-header with required props', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const header = screen.getByRole('dialog').querySelector('.kb-save-view-header');
+      expect(header).toBeDefined();
+
+      const docLink = screen.getByTestId('save-view-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/enterprise-whitespace-and-kanban-board#saved-views',
+      );
+      expect(docLink.textContent).toContain('Saved Views Guide ->');
+      expect(header?.contains(docLink)).toBe(true);
+    });
+
+    it('renders FieldHelpHint as a sibling to label in kb-save-view-shared-row (HTML 4.10.4)', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const sharedRow = screen.getByRole('dialog').querySelector('.kb-save-view-shared-row');
+      expect(sharedRow).toBeDefined();
+
+      const label = sharedRow?.querySelector('.kb-save-view-checkbox-label');
+      expect(label).toBeDefined();
+      expect(label?.textContent).toContain('Share view with workspace collaborators');
+
+      const helpHint = screen.getByTestId('save-view-shared-help');
+      expect(helpHint).toBeDefined();
+
+      // STRICT HTML 4.10.4: FieldHelpHint must be sibling, never nested inside <label>
+      expect(label?.contains(helpHint)).toBe(false);
+      expect(sharedRow?.contains(helpHint)).toBe(true);
+      expect(label).not.toBeNull();
+      if (label && sharedRow) {
+        expect(sharedRow.contains(label)).toBe(true);
+      }
+    });
+
+    it('displays FieldHelpHint details on focus/click including default value and doc link', async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const trigger = screen.getByTestId('save-view-shared-help');
+      fireEvent.click(trigger);
+
+      const popover = await screen.findByTestId('save-view-shared-help-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('View Visibility');
+      expect(popover.textContent).toContain('Default:');
+      expect(popover.textContent).toContain('Off (Private to you)');
+      expect(popover.textContent).toContain('Off');
+      expect(popover.textContent).toContain('On');
+
+      const docLink = screen.getByTestId('save-view-shared-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/enterprise-whitespace-and-kanban-board#saved-views',
+      );
+    });
+
+    it('handles Escape key to close modal when no popovers or help drawer are open', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('yields Escape key without closing modal when kb-help-drawer is open', () => {
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(drawer);
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <SaveViewModal {...defaultProps} />
+          </QueryClientProvider>,
+        );
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(defaultProps.onClose).not.toHaveBeenCalled();
+      } finally {
+        drawer.remove();
+      }
+    });
+
+    it('yields Escape key without closing modal when field-help-hint-popover is open', () => {
+      const popover = document.createElement('div');
+      popover.className = 'field-help-hint-popover';
+      document.body.appendChild(popover);
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <SaveViewModal {...defaultProps} />
+          </QueryClientProvider>,
+        );
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(defaultProps.onClose).not.toHaveBeenCalled();
+      } finally {
+        popover.remove();
+      }
+    });
+
+    it('yields backdrop click without closing modal when kb-help-drawer is open', () => {
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(drawer);
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <SaveViewModal {...defaultProps} />
+          </QueryClientProvider>,
+        );
+
+        const backdrop = screen.getByTestId('save-view-modal-backdrop');
+        fireEvent.click(backdrop);
+        expect(defaultProps.onClose).not.toHaveBeenCalled();
+      } finally {
+        drawer.remove();
+      }
+    });
+
+    it('yields backdrop click without closing modal when field-help-hint-popover is open', () => {
+      const popover = document.createElement('div');
+      popover.className = 'field-help-hint-popover';
+      document.body.appendChild(popover);
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <SaveViewModal {...defaultProps} />
+          </QueryClientProvider>,
+        );
+
+        const backdrop = screen.getByTestId('save-view-modal-backdrop');
+        fireEvent.click(backdrop);
+        expect(defaultProps.onClose).not.toHaveBeenCalled();
+      } finally {
+        popover.remove();
+      }
+    });
+
+    it('does not close modal when clicking inside modal dialog content', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const dialog = screen.getByTestId('save-view-modal');
+      fireEvent.click(dialog);
+      expect(defaultProps.onClose).not.toHaveBeenCalled();
+    });
+
+    it('resets form fields and error when modal transitions from closed to open', () => {
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} isOpen={false} />
+        </QueryClientProvider>,
+      );
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} isOpen={true} />
+        </QueryClientProvider>,
+      );
+
+      const nameInput = screen.getByTestId('save-view-name-input');
+      expect(nameInput).toHaveProperty('value', '');
+      const sharedCheck = screen.getByTestId('save-view-shared-checkbox');
+      expect(sharedCheck).toHaveProperty('checked', false);
+    });
+
+    it('clears error on name input typing and handles string error in mutation', async () => {
+      const apiFetchMock = vi.mocked(clientModule.apiFetch);
+      apiFetchMock.mockRejectedValueOnce('Non-error string failure');
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const form = screen.getByRole('dialog').querySelector('form');
+      if (form) fireEvent.submit(form);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe('View name is required');
+
+      // Typing clears error
+      const nameInput = screen.getByTestId('save-view-name-input');
+      fireEvent.change(nameInput, { target: { value: 'Valid Name' } });
+      expect(screen.queryByRole('alert')).toBeNull();
+
+      // Submit again to trigger non-error rejection
+      if (form) fireEvent.submit(form);
+      const alert2 = await screen.findByRole('alert');
+      expect(alert2.textContent).toBe('Failed to save view');
+    });
+
+    it('handles none grouping and empty search query in mutation payload', async () => {
+      const apiFetchMock = vi.mocked(clientModule.apiFetch);
+      apiFetchMock.mockResolvedValueOnce({ id: 'view-none' });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal
+            {...defaultProps}
+            groupBy="none"
+            subGroupBy="none"
+            activeFilters={{ ...defaultProps.activeFilters, searchQuery: null }}
+          />
+        </QueryClientProvider>,
+      );
+
+      const nameInput = screen.getByTestId('save-view-name-input');
+      fireEvent.change(nameInput, { target: { value: 'Plain Board' } });
+
+      const form = screen.getByRole('dialog').querySelector('form');
+      if (form) fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(apiFetchMock).toHaveBeenCalledWith(
+          'POST',
+          '/api/v1/projects/KAN/views',
+          {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            body: expect.objectContaining({
+              name: 'Plain Board',
+              group_by: null,
+              sub_group_by: null,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+              filters: expect.objectContaining({
+                search_query: null,
+              }),
+            }),
+          },
+        );
+      });
+    });
+
+    it('verifies close button glyph is ✕ and accessible label is Close', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SaveViewModal {...defaultProps} />
+        </QueryClientProvider>,
+      );
+
+      const closeBtn = screen.getByRole('button', { name: 'Close' });
+      expect(closeBtn).toBeDefined();
+      expect(closeBtn.textContent.trim()).toBe('✕');
+    });
+  });
 });
