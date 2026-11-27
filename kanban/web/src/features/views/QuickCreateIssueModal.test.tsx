@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
 import { getDrafts } from '../drafts/draftsStore';
 import type { IssueItem } from './viewsApi';
+import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
 
 describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
   beforeEach(() => {
@@ -442,8 +443,10 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
     expect(createBtn.textContent).toBe('Creating...');
 
     // Resolve create
-    resolveCreate({ key: 'KAN-55', summary: 'In-flight locking test' });
-    await pendingPromise;
+    await act(async () => {
+      resolveCreate({ key: 'KAN-55', summary: 'In-flight locking test' });
+      await pendingPromise;
+    });
 
     expect(await screen.findByText('KAN-55')).toBeDefined();
   });
@@ -681,6 +684,345 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
       expect(screen.getByText('✍️ Draft Saved')).toBeDefined();
       fireEvent.click(screen.getByTestId('post-create-view-btn'));
       expect(handleClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('StudioDocLink Header Integration and Escape/Backdrop Handling (KAN-480)', () => {
+    it('renders StudioDocLink in quick-create-header-actions with required props and never nested in button or label', () => {
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      const docLink = screen.getByTestId('quick-create-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#quick-create-work-item-modal-c'
+      );
+      expect(docLink.getAttribute('aria-label')).toBe('Quick-Create Documentation');
+      expect(docLink.textContent).toContain('Quick-Create Guide ->');
+
+      // Verify StudioDocLink is in .quick-create-header-actions
+      const headerActions = docLink.closest('.quick-create-header-actions');
+      expect(headerActions).not.toBeNull();
+
+      // Ensure NEVER nested inside <button> or <label>
+      expect(docLink.closest('button')).toBeNull();
+      expect(docLink.closest('label')).toBeNull();
+    });
+
+    it('opens in-app help panel when StudioDocLink is clicked inside ShellPanelsProvider without dismissing modal', async () => {
+      const unregister = registerShellPanel('help', ({ arg }) => (
+        <div data-testid="in-app-help-drawer" className="kb-help-drawer">
+          Help for {(arg as { href?: string } | undefined)?.href}
+        </div>
+      ));
+
+      try {
+        const handleClose = vi.fn();
+        render(
+          <ShellPanelsProvider>
+            <QuickCreateIssueModal
+              isOpen={true}
+              onClose={handleClose}
+              onCreate={vi.fn()}
+              projectKey="KAN"
+            />
+          </ShellPanelsProvider>
+        );
+
+        const docLink = screen.getByTestId('quick-create-doc-link');
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-drawer')).toBeDefined();
+        });
+
+        const drawer = screen.getByTestId('in-app-help-drawer');
+        expect(drawer.textContent).toContain(
+          '/docs/ticket-screen-and-work-item-features#quick-create-work-item-modal-c'
+        );
+        expect(handleClose).not.toHaveBeenCalled();
+      } finally {
+        unregister();
+      }
+    });
+
+    it('yields Escape key press when .kb-help-drawer or .kb-help-drawer-backdrop is present in the DOM', () => {
+      const handleClose = vi.fn();
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={handleClose}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      // Simulate help drawer open
+      const dummyDrawer = document.createElement('div');
+      dummyDrawer.className = 'kb-help-drawer';
+      document.body.appendChild(dummyDrawer);
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(handleClose).not.toHaveBeenCalled();
+
+      // Remove drawer, add backdrop
+      document.body.removeChild(dummyDrawer);
+      const dummyBackdrop = document.createElement('div');
+      dummyBackdrop.className = 'kb-help-drawer-backdrop';
+      document.body.appendChild(dummyBackdrop);
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(handleClose).not.toHaveBeenCalled();
+
+      // Remove backdrop, now Escape closes modal
+      document.body.removeChild(dummyBackdrop);
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('yields backdrop overlay click when .kb-help-drawer or .kb-help-drawer-backdrop is present in DOM', () => {
+      const handleClose = vi.fn();
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={handleClose}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      const overlay = screen.getByTestId('quick-create-modal');
+
+      // Add dummy help drawer
+      const dummyDrawer = document.createElement('div');
+      dummyDrawer.className = 'kb-help-drawer';
+      document.body.appendChild(dummyDrawer);
+
+      // Click on overlay directly (target === currentTarget)
+      fireEvent.click(overlay);
+      expect(handleClose).not.toHaveBeenCalled();
+
+      // Clean up drawer
+      document.body.removeChild(dummyDrawer);
+
+      // Clicking inside modal content (target !== currentTarget) does not close
+      const modalBox = overlay.querySelector('.quick-create-modal');
+      if (!modalBox) throw new Error('Modal box not found');
+      fireEvent.click(modalBox);
+      expect(handleClose).not.toHaveBeenCalled();
+
+      // Clicking on overlay directly when drawer is closed dismisses modal
+      fireEvent.click(overlay);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('yields backdrop overlay click on post-creation dialog when .kb-help-drawer is present', () => {
+      const handleClose = vi.fn();
+      const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-101', summary: 'Done task' });
+
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={handleClose}
+          onCreate={handleCreate}
+          projectKey="KAN"
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Done task' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      const postOverlay = screen.getByTestId('quick-create-post-dialog');
+
+      // Add dummy drawer
+      const dummyDrawer = document.createElement('div');
+      dummyDrawer.className = 'kb-help-drawer';
+      document.body.appendChild(dummyDrawer);
+
+      fireEvent.click(postOverlay);
+      expect(handleClose).not.toHaveBeenCalled();
+
+      document.body.removeChild(dummyDrawer);
+
+      // Click post overlay directly closes modal
+      fireEvent.click(postOverlay);
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores focus to opener on unmount when open, and handles native input events', () => {
+      const openerButton = document.createElement('button');
+      openerButton.textContent = 'Open Quick Create';
+      document.body.appendChild(openerButton);
+      openerButton.focus();
+
+      const { unmount } = render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      // Trigger native input and change events on inputs to verify event listener attachments
+      const summaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
+      const descInput = screen.getByLabelText<HTMLTextAreaElement>(/description/i);
+      fireEvent.input(summaryInput, { target: { value: 'Direct onInput summary' } });
+      fireEvent.input(descInput, { target: { value: 'Direct onInput description' } });
+      summaryInput.value = 'Native summary';
+      act(() => {
+        summaryInput.dispatchEvent(new Event('input'));
+        summaryInput.dispatchEvent(new Event('change'));
+      });
+      descInput.value = 'Native description';
+      act(() => {
+        descInput.dispatchEvent(new Event('input'));
+        descInput.dispatchEvent(new Event('change'));
+      });
+
+      unmount();
+      expect(document.activeElement).toBe(openerButton);
+      document.body.removeChild(openerButton);
+    });
+
+    it('covers state mappings (in-review, done), defaultStateId prop updates, and handleCreateAnother field clears', () => {
+      const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-300' });
+      const { rerender } = render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          defaultStateId="state-in-review"
+        />
+      );
+
+      // Verify defaultStateId sync update
+      rerender(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          defaultStateId="state-done"
+        />
+      );
+
+      const summaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
+      const descInput = screen.getByLabelText<HTMLTextAreaElement>(/description/i);
+      fireEvent.change(summaryInput, { target: { value: 'Task with desc' } });
+      fireEvent.change(descInput, { target: { value: 'Detailed description' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      expect(handleCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'Task with desc',
+          description_markdown: 'Detailed description',
+          state: expect.objectContaining({
+            id: 'state-done',
+            name: 'Done',
+            group: 'completed',
+          }) as unknown as Record<string, unknown>,
+        })
+      );
+
+      // Click Create Another to verify clearing summary and description refs
+      fireEvent.click(screen.getByTestId('post-create-another-btn'));
+      const newSummaryInput = screen.getByLabelText<HTMLInputElement>(/summary/i);
+      const newDescInput = screen.getByLabelText<HTMLTextAreaElement>(/description/i);
+      expect(newSummaryInput.value).toBe('');
+      expect(newDescInput.value).toBe('');
+
+      // Test fallback state mapping for in-review without states prop
+      fireEvent.change(newSummaryInput, { target: { value: 'Review Task' } });
+      fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: 'state-in-review' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      expect(handleCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'Review Task',
+          state: expect.objectContaining({
+            id: 'state-in-review',
+            name: 'In Review',
+            group: 'started',
+          }) as unknown as Record<string, unknown>,
+        })
+      );
+    });
+
+    it('covers matchedState without group and null color_hex fallback', () => {
+      const handleCreate = vi.fn();
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          states={[{ id: 'st-nogroup', name: 'No Group State' }]}
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'No group item' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      expect(handleCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'No group item',
+          state: {
+            id: 'st-nogroup',
+            name: 'No Group State',
+            group: 'unstarted',
+            color_hex: null,
+          },
+        })
+      );
+    });
+
+    it('deactivates useFocusTrap when HelpDrawer is open in ShellPanelsProvider so focus is not stolen', async () => {
+      const unregister = registerShellPanel('help', () => (
+        <div data-testid="in-app-help-drawer" className="kb-help-drawer">
+          <button type="button" data-testid="drawer-action-btn">Help Action</button>
+        </div>
+      ));
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <QuickCreateIssueModal
+              isOpen={true}
+              onClose={vi.fn()}
+              onCreate={vi.fn()}
+              projectKey="KAN"
+            />
+          </ShellPanelsProvider>
+        );
+
+        // Click StudioDocLink to open HelpDrawer
+        const docLink = screen.getByTestId('quick-create-doc-link');
+        fireEvent.click(docLink);
+
+        await waitFor(() => {
+          expect(screen.getByTestId('in-app-help-drawer')).toBeDefined();
+        });
+
+        const drawerBtn = screen.getByTestId('drawer-action-btn');
+        drawerBtn.focus();
+        expect(document.activeElement).toBe(drawerBtn);
+
+        // Press Tab key while inside drawer: focus trap does NOT preventDefault or steal focus
+        const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        document.dispatchEvent(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(false);
+      } finally {
+        unregister();
+      }
     });
   });
 });

@@ -704,6 +704,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3, 12px);
+}
+
+.quick-create-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.quick-create-modal .filter-chip-remove {
+  width: 28px;
+  height: 28px;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .quick-create-title {
@@ -859,6 +873,18 @@
   .quick-create-select {
     font-size: 16px;
     min-height: 44px;
+  }
+
+  .quick-create-modal .filter-chip-remove {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .quick-create-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
   }
 
   .swimlane-board-grid {
