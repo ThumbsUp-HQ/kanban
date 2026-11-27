@@ -7,6 +7,7 @@ import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { copyToClipboard } from '../../utils/clipboard';
 import { patchIssue } from '../drawer-rail/railApi';
 import type { StateSummary } from '../views/viewsApi';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './IssueHeader.css';
 
 export interface IssueHeaderProps {
@@ -252,6 +253,11 @@ export function IssueHeader({
       />
 
       <div className="issue-header__slots">
+        <StudioDocLink
+          href="/docs/ticket-screen-and-work-item-features#the-960px-ticket-peek-drawer-peek"
+          label="Ticket Guide ->"
+          testId="issue-header-doc-link"
+        />
         {SubscribeSlot && <SubscribeSlot issue={issue} />}
         {LinkSlot && <LinkSlot issue={issue} />}
         {OverflowSlot && (

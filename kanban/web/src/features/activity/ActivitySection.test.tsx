@@ -1,12 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ActivitySection } from './ActivitySection';
 import type { IssueDetail } from '../drawer/slots';
 import type { ActivityResponse, CommentList } from './activityApi';
 import * as activityApi from './activityApi';
+import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
 
 vi.mock('./activityApi', async () => {
   const actual = await vi.importActual<typeof import('./activityApi')>('./activityApi');
@@ -395,6 +398,239 @@ describe('ActivitySection', () => {
       document.cookie = 'kb_csrf=; Max-Age=0; Path=/';
       activityApi.resetActivityCsrfCache();
       fetchSpy.mockRestore();
+    });
+  });
+
+  describe('StudioDocLink and Shift-Left Invariants (KAN-493)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    it('renders StudioDocLink in activity-section__title-row with correct href, label, and testId in Light and Dark themes', async () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const Wrapper = createWrapper();
+        const { unmount } = render(<ActivitySection issue={mockIssue} currentUserId="u1" />, {
+          wrapper: Wrapper,
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId('activity-section-doc-link')).toBeDefined();
+        });
+
+        const docLink = screen.getByTestId('activity-section-doc-link');
+        expect(docLink.getAttribute('href')).toBe(
+          '/docs/ticket-screen-and-work-item-features#activity-stream-and-audit-ledger',
+        );
+        expect(docLink.getAttribute('aria-label')).toBe('Audit Ledger ->');
+        expect(docLink.textContent).toContain('Audit Ledger ->');
+
+        const titleRow = docLink.closest('.activity-section__title-row');
+        expect(titleRow).not.toBeNull();
+        expect(titleRow?.querySelector('.activity-section__title')?.textContent).toBe('Activity');
+
+        const header = docLink.closest('.activity-section__header');
+        expect(header).not.toBeNull();
+
+        unmount();
+      }
+    });
+
+    it('satisfies HTML 4.10.4: StudioDocLink is NOT nested inside <button> or <label>', async () => {
+      const Wrapper = createWrapper();
+      const { container } = render(<ActivitySection issue={mockIssue} currentUserId="u1" />, {
+        wrapper: Wrapper,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('activity-section-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('activity-section-doc-link');
+      expect(docLink.closest('button')).toBeNull();
+      expect(docLink.closest('label')).toBeNull();
+
+      const invalidButtons = container.querySelectorAll(
+        'button a, button button, label a, label button',
+      );
+      expect(invalidButtons.length).toBe(0);
+    });
+
+    it('opens HelpDrawer via ShellPanelsProvider when StudioDocLink is clicked', async () => {
+      const DummyHelpDrawer = ({ arg }: { arg?: unknown }) => {
+        const data = arg as { href?: string; title?: string } | undefined;
+        return (
+          <div data-testid="dummy-help-drawer" data-href={data?.href} data-title={data?.title}>
+            Help Drawer for {data?.title} ({data?.href})
+          </div>
+        );
+      };
+      const unregister = registerShellPanel('help', DummyHelpDrawer);
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <ShellPanelsProvider>
+              <ActivitySection issue={mockIssue} currentUserId="u1" />
+            </ShellPanelsProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const docLink = await screen.findByTestId('activity-section-doc-link');
+      fireEvent.click(docLink);
+
+      await waitFor(() => {
+        const drawer = screen.getByTestId('dummy-help-drawer');
+        expect(drawer).toBeDefined();
+        expect(drawer.getAttribute('data-href')).toBe(
+          '/docs/ticket-screen-and-work-item-features#activity-stream-and-audit-ledger',
+        );
+        expect(drawer.getAttribute('data-title')).toBe('Audit Ledger ->');
+      });
+
+      unregister();
+    });
+
+    it('supports keyboard navigation via ArrowLeft and tab focus on StudioDocLink', async () => {
+      const Wrapper = createWrapper();
+      render(<ActivitySection issue={mockIssue} currentUserId="u1" />, { wrapper: Wrapper });
+
+      const allTab = await screen.findByRole('tab', { name: 'All' });
+      allTab.focus();
+
+      // Home on index 0 does not change index
+      fireEvent.keyDown(allTab, { key: 'Home' });
+      expect(allTab.getAttribute('aria-selected')).toBe('true');
+
+      // Unrelated key (e.g. Escape) does not change index
+      fireEvent.keyDown(allTab, { key: 'Escape' });
+      expect(allTab.getAttribute('aria-selected')).toBe('true');
+
+      // ArrowLeft wraps around to Gates tab (index 3)
+      fireEvent.keyDown(allTab, { key: 'ArrowLeft' });
+      const gatesTab = screen.getByRole('tab', { name: /^Agent and workflow gates/ });
+      expect(gatesTab.getAttribute('aria-selected')).toBe('true');
+
+      // End on index 3 does not change index
+      fireEvent.keyDown(gatesTab, { key: 'End' });
+      expect(gatesTab.getAttribute('aria-selected')).toBe('true');
+
+      // ArrowLeft moves to History tab (index 2)
+      fireEvent.keyDown(gatesTab, { key: 'ArrowLeft' });
+      const historyTab = screen.getByRole('tab', { name: 'History' });
+      expect(historyTab.getAttribute('aria-selected')).toBe('true');
+
+      // Focus on doc link
+      const docLink = screen.getByTestId('activity-section-doc-link');
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
+    });
+
+    it('covers handleJumpToComment when activeTab is history and all', async () => {
+      const activityData: ActivityResponse = {
+        items: [
+          {
+            id: 'act-gate-jump',
+            category: 'AGENT_GATE',
+            event_type: 'GATE_VETOED',
+            actor: { type: 'AGENT', display_name: 'sec-gate' },
+            payload: {
+              hook_name: 'sec-auditor',
+              audit_comment_id: 'c-jump-target',
+            },
+            created_at: '2026-11-12T10:05:00Z',
+          },
+        ],
+        next_cursor: null,
+        counts: { all: 1, comments: 0, history: 0, gates: 1 },
+      };
+      mockFetchActivity.mockResolvedValue(activityData);
+
+      const Wrapper = createWrapper();
+      render(<ActivitySection issue={mockIssue} currentUserId="u1" />, { wrapper: Wrapper });
+
+      // In All tab, jump to comment
+      const jumpBtnAll = await screen.findByRole('button', { name: 'View audit details' });
+      fireEvent.click(jumpBtnAll);
+
+      // Now switch to gates tab and then jump to comment
+      const gatesTab = screen.getByRole('tab', { name: /^Agent and workflow gates/ });
+      fireEvent.click(gatesTab);
+      const jumpBtnGates = await screen.findByRole('button', { name: 'View audit details' });
+      fireEvent.click(jumpBtnGates);
+    });
+
+    it('renders history items with category="HISTORY" in History tab and jumps to comment if target element exists', async () => {
+      const mockCommentEl = document.createElement('div');
+      mockCommentEl.id = 'comment-c-audit-777';
+      const scrollIntoViewMock = vi.fn();
+      mockCommentEl.scrollIntoView = scrollIntoViewMock;
+      document.body.appendChild(mockCommentEl);
+
+      const activityWithHistoryAndGate: ActivityResponse = {
+        items: [
+          {
+            id: 'act-hist-77',
+            category: 'HISTORY',
+            event_type: 'FIELD_UPDATED',
+            actor: { handle: 'charlie' },
+            payload: { field: 'state', from_value: 'Backlog', to_value: 'In Progress' },
+            created_at: '2026-11-12T10:00:00Z',
+          },
+          {
+            id: 'act-gate-77',
+            category: 'AGENT_GATE',
+            event_type: 'GATE_VETOED',
+            actor: { type: 'AGENT', display_name: 'sec-gate' },
+            payload: {
+              hook_name: 'sec-auditor',
+              reason: 'Policy violation',
+              audit_comment_id: 'c-audit-777',
+            },
+            created_at: '2026-11-12T10:05:00Z',
+          },
+        ],
+        next_cursor: null,
+        counts: { all: 2, comments: 0, history: 1, gates: 1 },
+      };
+      mockFetchActivity.mockResolvedValue(activityWithHistoryAndGate);
+
+      const Wrapper = createWrapper();
+      render(<ActivitySection issue={mockIssue} currentUserId="u1" />, { wrapper: Wrapper });
+
+      // Click history tab and verify history row is rendered
+      const historyTab = await screen.findByRole('tab', { name: 'History' });
+      fireEvent.click(historyTab);
+
+      const histRow = await screen.findByTestId('history-row');
+      expect(histRow).toBeDefined();
+
+      // Click gates tab and click jump to comment button
+      const gatesTab = screen.getByRole('tab', { name: /^Agent and workflow gates/ });
+      fireEvent.click(gatesTab);
+
+      const jumpBtn = await screen.findByRole('button', { name: 'View audit details' });
+      fireEvent.click(jumpBtn);
+
+      await waitFor(() => {
+        expect(scrollIntoViewMock).toHaveBeenCalled();
+      });
+
+      document.body.removeChild(mockCommentEl);
+    });
+
+    it('verifies activity.css contains mobile touch targets and title-row flex wrap rules', () => {
+      const cssPath = path.resolve(__dirname, 'activity.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+      expect(cssContent).toContain('.activity-section__title-row');
+      expect(cssContent).toContain('flex-wrap: wrap');
+      expect(cssContent).toContain('min-height: var(--tap-min, 44px)');
     });
   });
 });

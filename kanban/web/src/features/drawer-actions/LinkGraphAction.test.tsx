@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
 import { LinkGraphAction } from './LinkGraphAction';
 import * as actionsApi from './actionsApi';
 import * as RealtimeStatusModule from '../../api/RealtimeStatus';
@@ -111,8 +112,8 @@ describe('LinkGraphAction (KB-P3-43, S7.2 8m)', () => {
     });
 
     // Zero link hrefs to restricted targets
-    const links = screen.queryAllByRole('link');
-    expect(links.length).toBe(0);
+    const restrictedLinks = screen.queryAllByRole('link').filter((l) => l.getAttribute('data-testid') !== 'link-graph-doc-link');
+    expect(restrictedLinks.length).toBe(0);
   });
 
   it('renders FLAGGED_INVALID link with brokenLink emoji hint (🕸️⚠️)', async () => {
@@ -554,5 +555,220 @@ describe('LinkGraphAction (KB-P3-43, S7.2 8m)', () => {
     Object.assign(navigator, { clipboard: null });
     fireEvent.keyDown(window, { key: 'c', ctrlKey: true, shiftKey: true });
     Object.assign(navigator, { clipboard: originalClipboard });
+  });
+
+  describe('StudioDocLink Header Integration and HelpDrawer Invariants (KAN-492)', () => {
+    it('renders StudioDocLink in popover header with required attributes and styling', () => {
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockResolvedValue({
+        url: 'https://kanban.example/KAN-142',
+        markdown: '[KAN-142](https://kanban.example/KAN-142)',
+      });
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({ outbound: [], inbound: [] });
+
+      renderComponent();
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+
+      const popover = screen.getByTestId('link-graph-popover');
+      expect(popover).toBeDefined();
+
+      const docLink = screen.getByTestId('link-graph-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.tagName.toLowerCase()).toBe('a');
+      expect(docLink.getAttribute('href')).toBe('/docs/universal-object-graph-and-link-auditor');
+      expect(docLink.getAttribute('aria-label')).toBe('Object Graph Guide ->');
+      expect(docLink.textContent).toContain('Object Graph Guide ->');
+
+      // Verify header structure and title
+      const header = popover.querySelector('.link-graph-header');
+      expect(header).toBeDefined();
+      expect(header?.textContent).toContain('Object Graph');
+      expect(header?.contains(docLink)).toBe(true);
+    });
+
+    it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider without closing popover', async () => {
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockResolvedValue({
+        url: 'https://kanban.example/KAN-142',
+        markdown: '[KAN-142](https://kanban.example/KAN-142)',
+      });
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({ outbound: [], inbound: [] });
+
+      const DummyHelpDrawer = ({ arg }: { arg?: unknown }) => {
+        const data = arg as { href?: string; title?: string } | undefined;
+        return (
+          <div className="kb-help-drawer" data-testid="dummy-help-drawer" data-href={data?.href} data-title={data?.title}>
+            Help Content for {data?.title} ({data?.href})
+          </div>
+        );
+      };
+      const unregister = registerShellPanel('help', DummyHelpDrawer);
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ShellPanelsProvider>
+            <LinkGraphAction issue={mockIssue} />
+          </ShellPanelsProvider>
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+
+      const docLink = screen.getByTestId('link-graph-doc-link');
+      fireEvent.click(docLink);
+
+      // Verify HelpDrawer opened
+      await waitFor(() => {
+        expect(screen.getByTestId('dummy-help-drawer')).toBeDefined();
+      });
+      const drawer = screen.getByTestId('dummy-help-drawer');
+      expect(drawer.getAttribute('data-href')).toBe('/docs/universal-object-graph-and-link-auditor');
+      expect(drawer.getAttribute('data-title')).toBe('Object Graph Guide ->');
+
+      // Verify popover remains open
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+
+      unregister();
+    });
+
+    it('coordinates Escape and outside click events when HelpDrawer is active', () => {
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockResolvedValue({
+        url: 'https://kanban.example/KAN-142',
+        markdown: '[KAN-142](https://kanban.example/KAN-142)',
+      });
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({ outbound: [], inbound: [] });
+
+      renderComponent();
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+
+      // Create dummy help drawer and backdrop elements in document
+      const backdrop = document.createElement('div');
+      backdrop.className = 'kb-help-drawer-backdrop';
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(backdrop);
+      document.body.appendChild(drawer);
+
+      // Press Escape while HelpDrawer is active - popover must yield and remain open
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+
+      // Click inside drawer or backdrop - popover must yield and remain open
+      fireEvent.mouseDown(drawer);
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+      fireEvent.mouseDown(backdrop);
+      expect(screen.getByTestId('link-graph-popover')).toBeDefined();
+
+      // Remove HelpDrawer from DOM
+      document.body.removeChild(drawer);
+      document.body.removeChild(backdrop);
+
+      // Now Escape closes the popover
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByTestId('link-graph-popover')).toBeNull();
+    });
+
+    it('handles read-only issue capabilities without edit or delete controls', async () => {
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockResolvedValue({
+        url: 'https://kanban.example/KAN-142',
+        markdown: '[KAN-142](https://kanban.example/KAN-142)',
+      });
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({
+        outbound: [
+          {
+            id: 'link-readonly-1',
+            link_type: 'BLOCKS',
+            link_state: 'ACTIVE',
+            target: { id: 'obj-ro', type: 'issue', key: 'KAN-999', title: 'Target' },
+          },
+        ],
+        inbound: [],
+      });
+
+      const readOnlyIssue: IssueDetail = {
+        ...mockIssue,
+        capabilities: ['VIEW'],
+      };
+
+      renderComponent(readOnlyIssue);
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+
+      await screen.findByText('KAN-999');
+      // Add link form is not rendered
+      expect(screen.queryByTestId('add-link-submit-btn')).toBeNull();
+      // Delete link button is not rendered
+      expect(screen.queryByTestId('delete-link-link-readonly-1')).toBeNull();
+    });
+
+    it('covers error handling fallbacks and clipboard catch in actions', async () => {
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockResolvedValue({
+        url: '',
+        markdown: '',
+      });
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({ outbound: [], inbound: [] });
+      vi.spyOn(actionsApi, 'createObjectLink').mockRejectedValue({ status: 500 });
+
+      const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard blocked'));
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      });
+
+      renderComponent();
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+
+      // Test copy URL when canonical url is empty
+      fireEvent.click(screen.getByTestId('copy-canonical-url-btn'));
+
+      // Test clipboard error catch in keyboard shortcut
+      fireEvent.keyDown(window, { key: 'c', ctrlKey: true, shiftKey: true });
+
+      // Test add link with generic error fallback
+      fireEvent.change(screen.getByTestId('link-target-input'), { target: { value: 'KAN-99' } });
+      fireEvent.click(screen.getByTestId('add-link-submit-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('Failed to add link');
+      });
+    });
+
+    it('covers null activeElement and undefined canonical markdown copy', () => {
+      let pendingResolve: ((val: actionsApi.CanonicalUrlResponse) => void) | null = null;
+      vi.spyOn(actionsApi, 'fetchCanonicalUrl').mockReturnValue(
+        new Promise<actionsApi.CanonicalUrlResponse>((resolve) => {
+          pendingResolve = resolve;
+        }),
+      );
+      vi.spyOn(actionsApi, 'fetchObjectLinks').mockResolvedValue({ outbound: [], inbound: [] });
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
+
+      renderComponent();
+
+      // Test activeElement being null
+      const origActiveElement =
+        Object.getOwnPropertyDescriptor(Document.prototype, 'activeElement') ??
+        Object.getOwnPropertyDescriptor(document, 'activeElement');
+      Object.defineProperty(document, 'activeElement', {
+        value: null,
+        configurable: true,
+      });
+      fireEvent.keyDown(window, { key: 'c', ctrlKey: true, shiftKey: true });
+      if (origActiveElement) {
+        Object.defineProperty(document, 'activeElement', origActiveElement);
+      }
+
+      // Open popover while canonical is still undefined
+      fireEvent.click(screen.getByTestId('link-graph-trigger'));
+      fireEvent.click(screen.getByTestId('copy-markdown-btn'));
+      expect(writeTextMock).toHaveBeenCalledWith('[KAN-142]()');
+      expect(pendingResolve).toBeTypeOf('function');
+    });
   });
 });

@@ -45,7 +45,7 @@
 
 .drawer-action-btn--active {
   background: var(--bg-hover);
-  color: var(--accent-primary);
+  color: var(--badge-fg);
   border-color: var(--accent-primary);
 }
 
@@ -140,6 +140,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
+}
+
+.link-graph-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.link-graph-header__title {
+  margin: 0;
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
 }
 
 .link-actions-row {
@@ -401,6 +417,12 @@
   color: var(--fg-primary);
 }
 
+.modal-close-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 6px);
+}
+
 .copy-preview-title {
   font-size: var(--text-sm, 13px);
   font-family: var(--font-mono, monospace);
@@ -449,6 +471,12 @@
   font-size: var(--text-xs, 12px);
   color: var(--fg-secondary);
   margin: 0;
+}
+
+.soft-trash-notice-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
 }
 
 .soft-trash-notice {
@@ -524,15 +552,15 @@
   padding: 0 var(--space-3, 12px);
   font-size: var(--text-sm, 13px);
   font-weight: 500;
-  color: #ffffff;
-  background: var(--danger-fg);
+  color: var(--accent-primary-fg);
+  background: var(--bg-danger);
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #be123c;
+  background: var(--bg-danger-hover);
 }
 
 .btn-danger:disabled {
@@ -563,10 +591,35 @@
     padding: 24px;
   }
 
+  .modal-close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
   .btn-secondary,
   .btn-primary,
   .btn-danger {
     min-height: 44px;
     padding: 0 var(--space-4, 16px);
+  }
+
+  .link-graph-popover {
+    position: fixed;
+    left: var(--space-4, 16px);
+    right: var(--space-4, 16px);
+    top: 96px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+  }
+
+  .link-graph-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
   }
 }

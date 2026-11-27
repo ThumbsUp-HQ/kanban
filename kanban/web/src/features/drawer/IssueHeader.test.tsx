@@ -7,6 +7,7 @@ import { IssueHeader } from './IssueHeader';
 import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
 import * as clipboardUtils from '../../utils/clipboard';
 import * as railApi from '../drawer-rail/railApi';
+import { ShellPanelsProvider, useShellPanels, registerShellPanel } from '../../app/shellPanels';
 
 const baseIssue: IssueDetail = {
   key: 'KAN-142',
@@ -441,6 +442,242 @@ describe('IssueHeader', () => {
       await waitFor(() => {
         expect(screen.getByTestId('header-state-error').textContent).toBe('State transition failed');
       });
+    });
+  });
+
+  describe('StudioDocLink Header Integration and Shift-Left Invariants (KAN-489)', () => {
+    it('renders StudioDocLink in IssueHeader action items row with exact href and label', () => {
+      const { Wrapper } = createWrapper();
+      render(
+        <Wrapper>
+          <IssueHeader
+            issue={baseIssue}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+          />
+        </Wrapper>,
+      );
+
+      const docLink = screen.getByTestId('issue-header-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#the-960px-ticket-peek-drawer-peek',
+      );
+      expect(docLink.textContent).toContain('Ticket Guide ->');
+      expect(docLink.closest('.issue-header__slots')).not.toBeNull();
+    });
+
+    it('verifies StudioDocLink is never nested inside a button or label', () => {
+      const { Wrapper } = createWrapper();
+      render(
+        <Wrapper>
+          <IssueHeader
+            issue={baseIssue}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+          />
+        </Wrapper>,
+      );
+
+      const docLink = screen.getByTestId('issue-header-doc-link');
+      expect(docLink.closest('button')).toBeNull();
+      expect(docLink.closest('label')).toBeNull();
+    });
+
+    it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider without breaking header state', () => {
+      const unregister = registerShellPanel('help', () => <div data-testid="mock-help-drawer" />);
+      const { queryClient } = createWrapper();
+
+      function PanelStateWatcher() {
+        const { activePanel } = useShellPanels();
+        return (
+          <div>
+            <div data-testid="help-panel-id">{activePanel?.id ?? 'none'}</div>
+            <div data-testid="help-panel-arg">{JSON.stringify(activePanel?.arg ?? {})}</div>
+          </div>
+        );
+      }
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <IssueHeader
+                  issue={baseIssue}
+                  mode="drawer"
+                  onClose={vi.fn()}
+                  toggleFullScreen={vi.fn()}
+                />
+                <PanelStateWatcher />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </QueryClientProvider>,
+        );
+
+        const docLink = screen.getByTestId('issue-header-doc-link');
+        const idElem = screen.getByTestId('help-panel-id');
+        expect(idElem.textContent).toBe('none');
+
+        act(() => {
+          fireEvent.click(docLink);
+        });
+
+        expect(idElem.textContent).toBe('help');
+        const argElem = screen.getByTestId('help-panel-arg');
+        expect(JSON.parse(argElem.textContent || '{}')).toEqual({
+          href: '/docs/ticket-screen-and-work-item-features#the-960px-ticket-peek-drawer-peek',
+          title: 'Ticket Guide ->',
+        });
+      } finally {
+        unregister();
+      }
+    });
+
+    it('covers all state list and capability branches for 100% branch coverage', () => {
+      const { Wrapper } = createWrapper();
+
+      // Branch 1: projectStates provided and issue.state is already in list
+      const existingState = { id: 's1', name: 'In Progress', group: 'started' as const };
+      const issueWithExistingState: IssueDetail = {
+        ...baseIssue,
+        state: existingState,
+      };
+      const { unmount: unmount1 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueWithExistingState}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+            projectStates={[existingState]}
+          />
+        </Wrapper>,
+      );
+      unmount1();
+
+      // Branch 2: projectStates provided but issue.state has no id (falls back to state-current)
+      const issueWithNoIdState: IssueDetail = {
+        ...baseIssue,
+        state: { name: 'Custom Name', group: 'unstarted' },
+      };
+      const { unmount: unmount2 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueWithNoIdState}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+            projectStates={[existingState]}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByText('Custom Name')).toBeDefined();
+      unmount2();
+
+      // Branch 3: projectStates omitted and issue.state is already in defaultStates
+      const issueWithDefaultState: IssueDetail = {
+        ...baseIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      };
+      const { unmount: unmount3 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueWithDefaultState}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+          />
+        </Wrapper>,
+      );
+      unmount3();
+
+      // Branch 4: projectStates omitted and issue.state has no id (falls back to state-current)
+      const issueWithDefaultOmittedNoId: IssueDetail = {
+        ...baseIssue,
+        state: { name: 'Untracked Stage', group: 'backlog' },
+      };
+      const { unmount: unmount4 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueWithDefaultOmittedNoId}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByText('Untracked Stage')).toBeDefined();
+      unmount4();
+
+      // Branch 5: canTransition is false and issue.state is undefined/null
+      const issueWithNoState: IssueDetail = {
+        ...baseIssue,
+        state: undefined,
+      };
+      const { unmount: unmount5 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueWithNoState}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+            currentUserCapabilities={['VIEW']}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByTestId('header-state-badge')).toBeDefined();
+      unmount5();
+
+      // Branch 6: currentUserCapabilities omitted, issue.capabilities omitted -> defaults to ['EDIT', 'TRANSITION']
+      const issueNoCaps: IssueDetail = {
+        ...baseIssue,
+        capabilities: undefined,
+      };
+      const { unmount: unmount6 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={issueNoCaps}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByTestId('header-state-select')).toBeDefined();
+      unmount6();
+
+      // Branch 7: canTransition enabled via ADMIN capability
+      const { unmount: unmount7 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={baseIssue}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+            currentUserCapabilities={['ADMIN']}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByTestId('header-state-select')).toBeDefined();
+      unmount7();
+
+      // Branch 8: canTransition enabled via EDIT capability
+      const { unmount: unmount8 } = render(
+        <Wrapper>
+          <IssueHeader
+            issue={baseIssue}
+            mode="drawer"
+            onClose={vi.fn()}
+            toggleFullScreen={vi.fn()}
+            currentUserCapabilities={['EDIT']}
+          />
+        </Wrapper>,
+      );
+      expect(screen.getByTestId('header-state-select')).toBeDefined();
+      unmount8();
     });
   });
 });

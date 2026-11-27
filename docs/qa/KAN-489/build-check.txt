@@ -1,0 +1,35 @@
+=== tsc -b --noEmit ===
+
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+EXIT_CODE: 0
+
+=== eslint . --max-warnings 0 ===
+EXIT_CODE: 0
+
+=== vite build ===
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 767 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-C7aEn8Qh.css            677.28 kB │ gzip:  94.68 kB
+dist/assets/index-qiNjSJju.js           3,212.48 kB │ gzip: 890.15 kB
+
+✓ built in 1.65s
+EXIT_CODE: 0
+
+=== check_docs_taxonomy.py ===
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+EXIT_CODE: 0
+
+=== check_no_dashes.py --all ===
+EXIT_CODE: 0

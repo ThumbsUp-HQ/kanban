@@ -252,8 +252,13 @@ describe('DeleteBlastRadiusModal (KB-P3-43, S7.2 8q)', () => {
     fireEvent.click(cancelBtn);
     expect(onClose).toHaveBeenCalledTimes(3);
 
+    const closeBtn = screen.getByRole('button', { name: 'Close dialog' });
+    expect(closeBtn.textContent.trim()).toBe('✕');
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalledTimes(4);
+
     fireEvent.keyDown(document, { key: 'ArrowDown' });
-    expect(onClose).toHaveBeenCalledTimes(3);
+    expect(onClose).toHaveBeenCalledTimes(4);
   });
 
   it('handles 412 without updated preview, string error fallback, and isPending state', async () => {
@@ -427,5 +432,174 @@ describe('DeleteBlastRadiusModal (KB-P3-43, S7.2 8q)', () => {
     renderComponent({ open: true, onClose });
 
     expect(screen.getByText('Calculating blast radius...')).toBeDefined();
+  });
+
+  describe('KAN-491 FieldHelpHint and close button standardization', () => {
+    it('standardizes close button glyph to ✕ and closes on click', () => {
+      vi.spyOn(actionsApi, 'fetchDeletePreview').mockResolvedValue({
+        issue_key: 'KAN-142',
+        sub_issues_unparented: 0,
+        inbound_links_flagged: 0,
+        outbound_links: 0,
+        comments: 0,
+        attachments: 0,
+        summary_text: '',
+        blast_hash: 'hash-0',
+        retention_days: 30,
+      });
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const closeBtn = screen.getByRole('button', { name: 'Close dialog' });
+      expect(closeBtn.textContent.trim()).toBe('✕');
+      expect(closeBtn.textContent.trim()).not.toBe('×');
+      fireEvent.click(closeBtn);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders FieldHelpHint on soft-trash notice and opens popover with correct details', async () => {
+      vi.spyOn(actionsApi, 'fetchDeletePreview').mockResolvedValue({
+        issue_key: 'KAN-142',
+        sub_issues_unparented: 0,
+        inbound_links_flagged: 0,
+        outbound_links: 0,
+        comments: 0,
+        attachments: 0,
+        summary_text: '',
+        blast_hash: 'hash-0',
+        retention_days: 30,
+      });
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const hintTrigger = screen.getByTestId('soft-trash-help-hint');
+      expect(hintTrigger).toBeDefined();
+      expect(hintTrigger.getAttribute('aria-label')).toBe(
+        'Learn about soft-trash retention and permanent cryptographic purge',
+      );
+
+      fireEvent.click(hintTrigger);
+
+      await waitFor(() => {
+        expect(screen.getByText('Soft-Trash Retention & Purge Policy')).toBeDefined();
+        expect(
+          screen.getByText(/Items moved to trash remain restorable by workspace administrators during the 30-day retention window/i),
+        ).toBeDefined();
+        expect(screen.getByText(/After 30 days, the item and all associated object links undergo a permanent cryptographic purge/i)).toBeDefined();
+      });
+
+      const docLink = screen.getByRole('link', { name: /more info/i });
+      expect(docLink.getAttribute('href')).toBe('/docs/universal-object-graph-and-link-auditor');
+    });
+
+    it('enforces HTML 4.10.4: zero FieldHelpHint nested inside label or button', () => {
+      vi.spyOn(actionsApi, 'fetchDeletePreview').mockResolvedValue({
+        issue_key: 'KAN-142',
+        sub_issues_unparented: 0,
+        inbound_links_flagged: 0,
+        outbound_links: 0,
+        comments: 0,
+        attachments: 0,
+        summary_text: '',
+        blast_hash: 'hash-0',
+        retention_days: 30,
+      });
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const invalidNestedHints = document.querySelectorAll(
+        'label button.field-help-hint, button button.field-help-hint',
+      );
+      expect(invalidNestedHints.length).toBe(0);
+    });
+
+    it('verifies static source AST invariants: zero inline style={{}} props in DeleteBlastRadiusModal.tsx', async () => {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const source = fs.readFileSync(path.resolve(__dirname, 'DeleteBlastRadiusModal.tsx'), 'utf8');
+
+      // Zero inline style props
+      expect(source).not.toMatch(/style\s*=\s*\{\{/);
+      // Zero FieldHelpHint inside label
+      expect(source).not.toMatch(/<label[^>]*>[\s\S]*?<FieldHelpHint/);
+      // Proper glyph
+      expect(source).toContain('✕');
+      expect(source).not.toMatch(/<button[^>]*class(?:Name)?="modal-close-btn"[^>]*>\s*×\s*<\/button>/);
+
+      // Verify canonical tokens for .btn-danger in drawerActions.css (WCAG AA Dark Mode contrast)
+      const cssSource = fs.readFileSync(path.resolve(__dirname, 'drawerActions.css'), 'utf8');
+      expect(cssSource).toContain('color: var(--accent-primary-fg);');
+      expect(cssSource).toContain('background: var(--bg-danger);');
+      expect(cssSource).toContain('background: var(--bg-danger-hover);');
+      expect(cssSource).not.toMatch(/\.btn-danger\s*\{[^}]*#ffffff/);
+      expect(cssSource).not.toMatch(/\.btn-danger\s*\{[^}]*var\(--danger-fg\)/);
+    });
+
+    it('covers all branch fallbacks for deletion and error handling', async () => {
+      // 1. activeBlast without retention_days
+      vi.spyOn(actionsApi, 'fetchDeletePreview').mockResolvedValue({
+        issue_key: 'KAN-142',
+        sub_issues_unparented: 0,
+        inbound_links_flagged: 0,
+        outbound_links: 0,
+        comments: 0,
+        attachments: 0,
+        summary_text: '',
+        blast_hash: 'hash-no-retention',
+      } as unknown as actionsApi.BlastRadiusResponse);
+
+      const deleteSpy = vi.spyOn(actionsApi, 'deleteIssue').mockResolvedValue({
+        issue_key: 'KAN-142',
+        deleted_at: '2026-11-12T00:00:00Z',
+        purge_after: '2026-12-12T00:00:00Z',
+      });
+      const announceSpy = vi.spyOn(RealtimeStatusModule, 'announce');
+      const onClose = vi.fn();
+
+      const { unmount } = renderComponent({ open: true, onClose });
+
+      const deleteBtn = await screen.findByTestId('confirm-delete-btn');
+      fireEvent.click(deleteBtn);
+
+      await waitFor(() => {
+        expect(announceSpy).toHaveBeenCalledWith('KAN-142 moved to trash (restorable for 30 days)');
+      });
+      unmount();
+
+      // 2. Non-object error fallback (string error)
+      vi.spyOn(actionsApi, 'fetchDeletePreview').mockResolvedValue({
+        issue_key: 'KAN-142',
+        sub_issues_unparented: 0,
+        inbound_links_flagged: 0,
+        outbound_links: 0,
+        comments: 0,
+        attachments: 0,
+        summary_text: '',
+        blast_hash: 'hash-str-err',
+        retention_days: 30,
+      });
+      deleteSpy.mockRejectedValueOnce('raw string rejection');
+      const { unmount: unmount2 } = renderComponent({ open: true, onClose });
+
+      const deleteBtn2 = await screen.findByTestId('confirm-delete-btn');
+      fireEvent.click(deleteBtn2);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('delete-general-error').textContent).toBe('Failed to delete issue');
+      });
+      unmount2();
+
+      // 3. Object error with neither detail nor message
+      deleteSpy.mockRejectedValueOnce({ status: 500 });
+      const { unmount: unmount3 } = renderComponent({ open: true, onClose });
+
+      const deleteBtn3 = await screen.findByTestId('confirm-delete-btn');
+      fireEvent.click(deleteBtn3);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('delete-general-error').textContent).toBe('Failed to delete issue');
+      });
+      unmount3();
+    });
   });
 });
