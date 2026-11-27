@@ -129,7 +129,7 @@ async def test_resolve_workspace_and_admin_paths() -> None:
     assert await full._resolve_workspace_and_admin() == (ws, pid)  # noqa: SLF001
     none_sf = GateWorkerRunner(session_factory=None)
     assert await none_sf._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001
-    looked_up = GateWorkerRunner(session_factory=_engine_factory(ws, pid))  # type: ignore[arg-type]
+    looked_up = GateWorkerRunner(session_factory=_engine_factory(ws, pid))
     assert await looked_up._resolve_workspace_and_admin() == (ws, pid)  # noqa: SLF001
-    broken = GateWorkerRunner(session_factory=_engine_factory(ws, pid, fail=True))  # type: ignore[arg-type]
+    broken = GateWorkerRunner(session_factory=_engine_factory(ws, pid, fail=True))
     assert await broken._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001

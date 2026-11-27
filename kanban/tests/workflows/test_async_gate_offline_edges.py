@@ -53,7 +53,7 @@ async def test_record_decision_execution_not_found() -> None:
 async def test_record_failure_guards() -> None:
     """record_failure validates its identifiers and invocation lookup."""
     with pytest.raises(ValueError, match="session must be provided"):
-        await GateCoordinator.record_failure(None)  # type: ignore[arg-type]
+        await GateCoordinator.record_failure(None)
     sess = AsyncMock()
     sess.get.return_value = None
     with pytest.raises(ProblemException) as ei:

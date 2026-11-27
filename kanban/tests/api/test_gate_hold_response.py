@@ -35,7 +35,7 @@ async def test_no_wait_returns_202_hold() -> None:
     """Without wait the hold is returned immediately."""
     resp = await iw._gate_hold_response(_Sess(), dict(HOLD), wait=False, wait_timeout_ms=1)  # type: ignore[arg-type]
     assert resp.status_code == 202
-    assert json.loads(resp.body) == HOLD
+    assert json.loads(bytes(resp.body)) == HOLD
 
 
 async def test_wait_returns_verdict_and_ends_txn(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +51,7 @@ async def test_wait_returns_verdict_and_ends_txn(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(iw, "wait_for_gate_execution", fake_wait)
     resp = await iw._gate_hold_response(sess, dict(HOLD), wait=True, wait_timeout_ms=10**9)  # type: ignore[arg-type]
-    body = json.loads(resp.body)
+    body = json.loads(bytes(resp.body))
     assert resp.status_code == 200
     assert body["passed"] is True
     assert body["gate"]["status"] == "approved"
@@ -68,7 +68,7 @@ async def test_wait_timeout_stays_202(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(iw, "wait_for_gate_execution", fake_wait)
     resp = await iw._gate_hold_response(_Sess(), dict(HOLD), wait=True, wait_timeout_ms=5)  # type: ignore[arg-type]
     assert resp.status_code == 202
-    assert json.loads(resp.body)["gate"]["error_code"] == "GATE_TIMEOUT"
+    assert json.loads(bytes(resp.body))["gate"]["error_code"] == "GATE_TIMEOUT"
 
 
 def test_gate_wait_dependency() -> None:
