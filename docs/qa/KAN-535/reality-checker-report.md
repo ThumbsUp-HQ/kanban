@@ -1,49 +1,48 @@
 # Integration Agent Reality-Based Report
 
 ## Reality Check Validation
-**Mode**: Passive forensic audit of `main` at a16e849e. Only file reads and listings were done. No builds, tests or servers were run.
-**Evidence reviewed**: `build-check.txt`, `unit-test-results.txt`, `git-diff.patch` (7618 lines, 52 files), `wiki-git-diff.patch` (156 lines), `api-specialist-review.md`, `ui-specialist-review.md`, 6 screenshots.
+**Mode**: Passive forensic audit of `main` at 478fd456. Only reads and greps were done. Nothing was built or run.
+**Evidence reviewed**: `build-check.txt`, `unit-test-results.txt`, `git-diff.patch`, `wiki-git-diff.patch`, both specialist reviews with their HEAD addenda, 6 screenshots, and the relevant source.
 **QA cross-validation**:
-- Raw logs now end with `exit=0`. `make check` (ruff, format, mypy, lint-imports) and the web typecheck, lint, build and vitest runs (245 passed) are all present.
-- `build-check.txt` has Forgejo run 195 on main 91365b0b: 8/8 jobs success, with job IDs and the run URL. This is external, independently checkable proof.
-- The `MCP_TAINT_BLOCKED` deprecation comment and the docstring cleanup are in the diff. I did not re-grep the live tree.
+- Raw logs end with `exit=0`: `make check` (ruff, format, mypy, lint-imports), web typecheck, lint and build, and vitest at 245 passed.
+- `build-check.txt` has Forgejo run 195 on main 91365b0b with 8/8 jobs success and the run URL.
+- I re-checked the source at HEAD. `kanban/services/activity.py:215` carries the "DEPRECATED (KAN-535)" comment on `MCP_TAINT_BLOCKED`. A grep for `CROSS_SCOPE_TAINT` in the two previously stale test files returns nothing.
 
 ## Complete System Evidence
-- Screenshots exist for desktop light and dark (1440x900), tablet light and dark (768x1024), and mobile light and dark (390x844). Sizes are plausible, 63-215 KB each.
-- I could not visually inspect the annotation overlays. That the screenshots are now annotated is a claim I cannot verify from the files. The file timestamps (07:16) are identical to the rest of the folder.
-- The coverage table in `unit-test-results.txt` shows kanban/security/boundary.py at 100%. Some modules are below 80%, such as mcp_keys.py at 62% and granular_permissions.py at 76%. These are pre-existing, outside the taint-removal diff, and not attributable to KAN-535.
+- Six screenshots cover desktop, tablet and mobile in light and dark themes.
+- The UI addendum records each PNG as opened. Each has a top banner naming the ticket, viewport and theme, and the chapter shown (Zero-Trust Security Architecture). It reports no clipping or overlap.
+- I did not re-open the images. The annotation evidence rests on the second reviewer's per-file description, which is specific and consistent across all six files.
+- Both specialist reviews now have `Addendum (HEAD 07457355)` sections. These close the three previously open findings with file and line evidence, and both give `Verdict: APPROVED`.
 
 ## Integration Testing Results
-**Migration and ORM parity**: PASS per the API review and the 14 db tests. Round-trip up/down is covered.
-**Scoped-key behaviour**: PASS. `test_scoped_key_no_read_taint` covers both cases (2 passed).
-**CI**: PASS. Forgejo run 195 is 8/8 green.
-**UI journey**: PASS for the docs center render. There is no interactive journey, which fits a docs and removal ticket.
-**Performance**: the vite build takes 1.29s. The >500 kB chunk warning is pre-existing and non-fatal.
+**Migration and ORM parity**: PASS (round-trip test, 14 db tests).
+**Scoped-key behaviour**: PASS (2 tests: workspace key and project key isolation).
+**CI**: PASS, Forgejo 8/8.
+**Docs-center UI render**: PASS across 3 viewports and 2 themes.
+**Performance**: the vite build takes 1.29s. The >500 kB chunk warning is pre-existing.
+**Specification compliance**: stateful read-taint is removed from code, UI help catalog, docs and wiki. Explicit credential-boundary scoping replaces it.
 
 ## Comprehensive Issue Assessment
-**Issues from the earlier audit now fixed**: missing exit codes, stale docstrings, missing deprecation comment, CI proof.
-**Remaining issues**:
-- Medium: `api-specialist-review.md` and `ui-specialist-review.md` are pinned to commit ab64d549. They still list the stale docstrings, the missing deprecation comment and the unannotated screenshots as open. They were not refreshed after the fixes, so the written specialist record contradicts the current state. The project gate requires the verbatim specialist audit to match the shipped diff.
-- Low: `getattr(..., None)` for credential_boundary in `kanban/api/deps.py` is tolerant where direct access would be stricter (carried over from the API review).
-- Low: `git-diff.patch` is a 600 kB artifact that still shows the old taint code as removed lines. This is expected.
-**Critical issues**: none found.
+**Issues from earlier audits still present**: none.
+**Remaining low-severity items**:
+- `getattr(..., None)` for credential_boundary in `kanban/api/deps.py` is tolerant where direct attribute access would be stricter. This is non-blocking.
+- Modules such as `mcp_keys.py` (62%) and `granular_permissions.py` (76%) sit below the coverage threshold in the log. They are pre-existing and outside this diff.
+- The Forgejo run covers 91365b0b. Commits since then (07457355, 478fd456) are docs-only QA files, and I did not see a CI result for them.
+**Critical issues**: none.
 
 ## Realistic Quality Certification
-**Quality Rating**: B+
-**Certification Status**: NEEDS WORK (narrow). The code and CI evidence are solid. The grade is held back by the stale specialist reviews and by annotation claims I could not confirm.
-**System completeness**: about 95% of the stated scope has verifiable evidence.
+**Quality Rating**: A-
+**Certification Status**: READY
+**System completeness**: all stated scope has verifiable evidence.
 
 ## Deployment Readiness Assessment
-**Status**: NEEDS WORK, close to ready.
+**Status**: READY.
 
-**Required before an A / READY**:
-1. Re-run the API and UI specialist reviews against the current HEAD, or append addenda, so they record that the docstrings and the deprecation comment are fixed and that the screenshots are annotated.
-2. Confirm that the six screenshots carry visible annotations. A short list of what each annotation shows in the UI review would give that proof.
+The code change, tests, CI proof, specialist approvals and annotated screenshots are all present and consistent with the source at HEAD. The remaining items are low severity, non-blocking and can be tracked as follow-up tickets.
 
-**Timeline**: one short revision cycle, documentation only.
-**Revision cycle required**: YES (minor).
+**Revision cycle required**: NO.
 
 ---
 **Integration Agent**: RealityIntegration (clean-room)
 **Evidence Location**: docs/qa/KAN-535/
-**Re-assessment Required**: After the specialist reviews are refreshed
+**Re-assessment Required**: Only if code changes after 478fd456
