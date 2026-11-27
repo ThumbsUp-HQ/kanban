@@ -1129,7 +1129,7 @@ describe('AdminDiagnosticsStudio Component', () => {
 
       const headerActions = document.querySelector('.admin-diag-header-actions');
       expect(headerActions).not.toBeNull();
-      const children = Array.from(headerActions!.children);
+      const children = Array.from(headerActions?.children ?? []);
       expect(children.length).toBe(4);
       expect(children[0]?.getAttribute('data-testid')).toBe('ws-probe-badge');
       expect(children[1]?.getAttribute('data-testid')).toBe('run-ws-ping-btn');

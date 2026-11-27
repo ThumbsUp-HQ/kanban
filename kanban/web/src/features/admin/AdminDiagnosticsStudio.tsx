@@ -503,7 +503,7 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
             <span className="admin-diag-badge admin-diag-badge--ok">Sanitized</span>
           </div>
           <div className="admin-diag-summary-card-body">
-            {diag?.config?.length ?? 0} Settings
+            {diag?.config.length ?? 0} Settings
           </div>
           <div className="admin-diag-summary-card-footer">
             Zero secret leakage | CSP connect-src strict

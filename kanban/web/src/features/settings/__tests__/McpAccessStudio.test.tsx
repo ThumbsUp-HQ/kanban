@@ -2845,7 +2845,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
       const headerActions = document.querySelector('.kb-mcp-header-actions');
       expect(headerActions).not.toBeNull();
-      const children = Array.from(headerActions!.children);
+      const children = Array.from(headerActions?.children ?? []);
       expect(children.length).toBe(2);
       expect(children[0]?.getAttribute('data-testid')).toBe('mint-key-button');
       expect(children[1]?.getAttribute('data-testid')).toBe('mcp-studio-doc-link');

@@ -1791,7 +1791,7 @@ describe('OAuthClientGovernanceStudio', () => {
 
       const headerActions = document.querySelector('.kb-oauth-header-actions');
       expect(headerActions).not.toBeNull();
-      const children = Array.from(headerActions!.children);
+      const children = Array.from(headerActions?.children ?? []);
       expect(children.length).toBe(2);
       expect(children[0]?.getAttribute('data-testid')).toBe('refresh-clients-btn');
       expect(children[1]?.getAttribute('data-testid')).toBe('oauth-studio-doc-link');
