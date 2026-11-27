@@ -9,6 +9,8 @@ import { apiFetch } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import type { ViewLayout } from './viewRegistry';
 import type { ActiveFilters } from './FilterDisplayBar';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './SaveViewModal.css';
 
 export interface SaveViewModalFilterState {
@@ -75,6 +77,28 @@ export function SaveViewModal({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        if (
+          document.querySelector('.kb-help-drawer') ||
+          document.querySelector('.field-help-hint-popover')
+        ) {
+          return;
+        }
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -128,6 +152,12 @@ export function SaveViewModal({
       data-testid="save-view-modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
+          if (
+            document.querySelector('.kb-help-drawer') ||
+            document.querySelector('.field-help-hint-popover')
+          ) {
+            return;
+          }
           onClose();
         }
       }}
@@ -143,14 +173,21 @@ export function SaveViewModal({
           <h2 id="save-view-title" className="kb-save-view-heading">
             Save as view
           </h2>
-          <button
-            type="button"
-            className="kb-save-view-close-btn"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div className="kb-save-view-header-actions">
+            <StudioDocLink
+              href="/docs/enterprise-whitespace-and-kanban-board#saved-views"
+              label="Saved Views Guide ->"
+              testId="save-view-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-save-view-close-btn"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </header>
 
         <form onSubmit={handleSubmit} className="kb-save-view-form">
@@ -214,15 +251,28 @@ export function SaveViewModal({
               </div>
             </div>
 
-            <label className="kb-save-view-checkbox-label">
-              <input
-                type="checkbox"
-                checked={isShared}
-                onChange={(e) => { setIsShared(e.target.checked); }}
-                data-testid="save-view-shared-checkbox"
+            <div className="kb-save-view-shared-row">
+              <label className="kb-save-view-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={isShared}
+                  onChange={(e) => { setIsShared(e.target.checked); }}
+                  data-testid="save-view-shared-checkbox"
+                />
+                <span>Share view with workspace collaborators</span>
+              </label>
+              <FieldHelpHint
+                title="View Visibility"
+                summary="Controls whether this view preset is private to your user account or shared with all workspace collaborators."
+                validValues={[
+                  { label: 'Off', description: 'Private view visible and accessible only to you.' },
+                  { label: 'On', description: 'Shared view accessible to all collaborators in the workspace.' },
+                ]}
+                defaultValue="Off (Private to you)"
+                docHref="/docs/enterprise-whitespace-and-kanban-board#saved-views"
+                testId="save-view-shared-help"
               />
-              <span>Share view with workspace collaborators</span>
-            </label>
+            </div>
           </div>
 
           <footer className="kb-save-view-footer">

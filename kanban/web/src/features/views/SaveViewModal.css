@@ -39,6 +39,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2, 8px);
   padding: var(--space-4, 16px) var(--space-5, 20px);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
 }
@@ -50,13 +51,31 @@
   color: var(--fg-primary, #0f172a);
 }
 
+.kb-save-view-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
 .kb-save-view-close-btn {
   background: none;
   border: none;
   color: var(--fg-muted, #64748b);
-  font-size: 1rem;
+  font-size: 1.125rem;
   cursor: pointer;
-  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: var(--radius-md, 6px);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.kb-save-view-close-btn:hover {
+  color: var(--fg-primary, #0f172a);
+  background-color: var(--bg-hover, #f8fafc);
 }
 
 .kb-save-view-body {
@@ -141,13 +160,21 @@
   color: var(--fg-secondary, #334155);
 }
 
-.kb-save-view-checkbox-label {
+.kb-save-view-shared-row {
   display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-height: 44px;
+}
+
+.kb-save-view-checkbox-label {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2, 8px);
   font-size: 0.875rem;
   color: var(--fg-primary, #1e293b);
   cursor: pointer;
+  min-height: 44px;
 }
 
 .kb-save-view-footer {
@@ -163,13 +190,23 @@
 }
 
 .kb-save-view-cancel-btn {
-  background: none;
+  background: transparent;
   border: 1px solid var(--border-subtle, #cbd5e1);
   border-radius: var(--radius-md, 6px);
-  padding: var(--space-1, 6px) var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  min-height: 44px;
   font-size: 0.875rem;
   color: var(--fg-secondary, #475569);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.kb-save-view-cancel-btn:hover {
+  background: var(--bg-hover, #f8fafc);
+  color: var(--fg-primary, #0f172a);
 }
 
 .kb-save-view-submit-btn {
@@ -177,13 +214,48 @@
   color: #ffffff;
   border: none;
   border-radius: var(--radius-md, 6px);
-  padding: var(--space-1, 6px) var(--space-4, 16px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  min-height: 44px;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 120ms ease;
 }
 
 .kb-save-view-submit-btn:hover {
   opacity: 0.9;
+}
+
+@media (max-width: 480px) {
+  .kb-save-view-backdrop {
+    padding: var(--space-2, 8px);
+  }
+
+  .kb-save-view-dialog {
+    max-width: 100%;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    margin: 0;
+  }
+
+  .kb-save-view-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+
+  .kb-save-view-header-actions {
+    margin-left: auto;
+  }
+
+  .kb-save-view-body {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+
+  .kb-save-view-footer {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
 }
