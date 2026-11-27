@@ -7,8 +7,9 @@
  * 3. 3-tier governance error decoding and minimum 12-char password enforcement.
  */
 
-import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
+import React, { useState, useEffect, useRef, type JSX, type SyntheticEvent } from 'react';
 import { getCsrfToken } from '../../api/client';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import type { ActiveFilters } from './FilterDisplayBar';
 import './CsvImportExportModal.css';
 
@@ -91,6 +92,38 @@ export function CsvImportExportModal({
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Escape key handler (KAN-483)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      // Yield Escape close when HelpDrawer is open above modal (KAN-483)
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (e.target === e.currentTarget) {
+      // Yield backdrop close when HelpDrawer is open above modal (KAN-483)
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+        return;
+      }
+      onClose();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -293,21 +326,29 @@ export function CsvImportExportModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="csv-modal-title"
+      onClick={handleBackdropClick}
     >
       <div className="kb-csv-modal-dialog">
         <div className="kb-csv-modal-header">
           <h2 id="csv-modal-title" className="kb-csv-modal-heading">
             Issue CSV Import &amp; Export
           </h2>
-          <button
-            type="button"
-            className="kb-csv-modal-close-btn"
-            data-testid="csv-modal-close-btn"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            x
-          </button>
+          <div className="kb-csv-modal-header-actions">
+            <StudioDocLink
+              href="/docs/ticket-screen-and-work-item-features#csv-and-zip-import-and-export"
+              label="CSV & ZIP Guide ->"
+              testId="csv-modal-doc-link"
+            />
+            <button
+              type="button"
+              className="kb-csv-modal-close-btn"
+              data-testid="csv-modal-close-btn"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="kb-csv-modal-tabs" role="tablist">

@@ -304,4 +304,97 @@ describe('CsvImportExportModal (KAN-316)', () => {
     expect(zipCallBody.format).toBe('zip_csv');
     expect(zipCallBody.zip_password).toBe('secure-password-123');
   });
+
+  describe('KAN-483: StudioDocLink, close glyph, and dismiss yield invariants', () => {
+    it('renders StudioDocLink in .kb-csv-modal-header-actions with required props', () => {
+      render(<CsvImportExportModal {...defaultProps} />);
+
+      const docLink = screen.getByTestId('csv-modal-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#csv-and-zip-import-and-export',
+      );
+      expect(docLink.textContent).toContain('CSV & ZIP Guide ->');
+
+      const headerActions = docLink.closest('.kb-csv-modal-header-actions');
+      expect(headerActions).not.toBeNull();
+      const closeBtn = headerActions?.querySelector('[data-testid="csv-modal-close-btn"]');
+      expect(closeBtn).not.toBeNull();
+      expect(closeBtn?.textContent).toBe('✕');
+    });
+
+    it('enforces HTML 4.10.4 zero forbidden nesting for StudioDocLink and buttons', () => {
+      const { container } = render(<CsvImportExportModal {...defaultProps} />);
+      const invalidNestings = container.querySelectorAll(
+        'label button, button button, label a.kb-studio-doc-link, button a.kb-studio-doc-link',
+      );
+      expect(invalidNestings.length).toBe(0);
+    });
+
+    it('calls onClose when close button is clicked', () => {
+      const onCloseMock = vi.fn();
+      render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+
+      const closeBtn = screen.getByTestId('csv-modal-close-btn');
+      fireEvent.click(closeBtn);
+      expect(onCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('dismisses modal on Escape key when HelpDrawer is NOT open', () => {
+      const onCloseMock = vi.fn();
+      render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('yields Escape key dismissal when HelpDrawer is open', () => {
+      const onCloseMock = vi.fn();
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(drawer);
+
+      try {
+        render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onCloseMock).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeChild(drawer);
+      }
+    });
+
+    it('dismisses modal on backdrop click when HelpDrawer is NOT open', () => {
+      const onCloseMock = vi.fn();
+      render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+
+      const backdrop = screen.getByTestId('csv-import-export-modal');
+      fireEvent.click(backdrop);
+      expect(onCloseMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('yields backdrop click dismissal when HelpDrawer is open', () => {
+      const onCloseMock = vi.fn();
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(drawer);
+
+      try {
+        render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+        const backdrop = screen.getByTestId('csv-import-export-modal');
+        fireEvent.click(backdrop);
+        expect(onCloseMock).not.toHaveBeenCalled();
+      } finally {
+        document.body.removeChild(drawer);
+      }
+    });
+
+    it('does not dismiss when clicking inside the modal dialog', () => {
+      const onCloseMock = vi.fn();
+      render(<CsvImportExportModal {...defaultProps} onClose={onCloseMock} />);
+
+      const dialog = screen.getByText('Issue CSV Import & Export');
+      fireEvent.click(dialog);
+      expect(onCloseMock).not.toHaveBeenCalled();
+    });
+  });
 });
