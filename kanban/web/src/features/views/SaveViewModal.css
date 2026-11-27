@@ -236,6 +236,8 @@
 
   .kb-save-view-dialog {
     max-width: 100%;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
     margin: 0;
   }
 
@@ -243,6 +245,10 @@
     flex-wrap: wrap;
     gap: var(--space-2, 8px);
     padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+
+  .kb-save-view-header-actions {
+    margin-left: auto;
   }
 
   .kb-save-view-body {

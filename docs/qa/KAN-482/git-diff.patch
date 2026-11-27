@@ -1,5 +1,5 @@
 diff --git a/kanban/web/src/features/views/SaveViewModal.css b/kanban/web/src/features/views/SaveViewModal.css
-index 85b0edec..5474161e 100644
+index 85b0edec..c05e8827 100644
 --- a/kanban/web/src/features/views/SaveViewModal.css
 +++ b/kanban/web/src/features/views/SaveViewModal.css
 @@ -39,6 +39,7 @@
@@ -93,7 +93,7 @@ index 85b0edec..5474161e 100644
  }
  
  .kb-save-view-submit-btn {
-@@ -177,13 +214,42 @@
+@@ -177,13 +214,48 @@
    color: #ffffff;
    border: none;
    border-radius: var(--radius-md, 6px);
@@ -120,6 +120,8 @@ index 85b0edec..5474161e 100644
 +
 +  .kb-save-view-dialog {
 +    max-width: 100%;
++    max-height: calc(100dvh - 32px);
++    overflow-y: auto;
 +    margin: 0;
 +  }
 +
@@ -127,6 +129,10 @@ index 85b0edec..5474161e 100644
 +    flex-wrap: wrap;
 +    gap: var(--space-2, 8px);
 +    padding: var(--space-3, 12px) var(--space-4, 16px);
++  }
++
++  .kb-save-view-header-actions {
++    margin-left: auto;
 +  }
 +
 +  .kb-save-view-body {
