@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { qk } from '../../api/queryKeys';
 import { announce } from '../../api/RealtimeStatus';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import type { IssueDetail } from '../drawer/slots';
 import {
   deleteIssue,
@@ -165,7 +166,7 @@ export function DeleteBlastRadiusModal({
             aria-label="Close dialog"
             onClick={handleClose}
           >
-            ×
+            ✕
           </button>
         </div>
 
@@ -205,9 +206,19 @@ export function DeleteBlastRadiusModal({
           )}
         </div>
 
-        <p className="soft-trash-notice" data-testid="soft-trash-retention-notice">
-          Moved to trash for {retentionDays} days before permanent audited purge.
-        </p>
+        <div className="soft-trash-notice-row">
+          <p className="soft-trash-notice" data-testid="soft-trash-retention-notice">
+            Moved to trash for {retentionDays} days before permanent audited purge.
+          </p>
+          <FieldHelpHint
+            title="Soft-Trash Retention & Purge Policy"
+            summary={`Items moved to trash remain restorable by workspace administrators during the ${String(retentionDays)}-day retention window. After ${String(retentionDays)} days, the item and all associated object links undergo a permanent cryptographic purge.`}
+            defaultValue={`${String(retentionDays)} days`}
+            docHref="/docs/universal-object-graph-and-link-auditor"
+            testId="soft-trash-help-hint"
+            ariaLabel="Learn about soft-trash retention and permanent cryptographic purge"
+          />
+        </div>
 
         <div className="modal-actions">
           <button
