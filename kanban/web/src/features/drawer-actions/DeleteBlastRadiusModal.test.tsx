@@ -483,9 +483,9 @@ describe('DeleteBlastRadiusModal (KB-P3-43, S7.2 8q)', () => {
       await waitFor(() => {
         expect(screen.getByText('Soft-Trash Retention & Purge Policy')).toBeDefined();
         expect(
-          screen.getByText(/Items moved to trash remain restorable by workspace administrators/i),
+          screen.getByText(/Items moved to trash remain restorable by workspace administrators during the 30-day retention window/i),
         ).toBeDefined();
-        expect(screen.getByText(/permanent cryptographic purge/i)).toBeDefined();
+        expect(screen.getByText(/After 30 days, the item and all associated object links undergo a permanent cryptographic purge/i)).toBeDefined();
       });
 
       const docLink = screen.getByRole('link', { name: /more info/i });
@@ -525,6 +525,14 @@ describe('DeleteBlastRadiusModal (KB-P3-43, S7.2 8q)', () => {
       // Proper glyph
       expect(source).toContain('✕');
       expect(source).not.toMatch(/<button[^>]*class(?:Name)?="modal-close-btn"[^>]*>\s*×\s*<\/button>/);
+
+      // Verify canonical tokens for .btn-danger in drawerActions.css (WCAG AA Dark Mode contrast)
+      const cssSource = fs.readFileSync(path.resolve(__dirname, 'drawerActions.css'), 'utf8');
+      expect(cssSource).toContain('color: var(--accent-primary-fg);');
+      expect(cssSource).toContain('background: var(--bg-danger);');
+      expect(cssSource).toContain('background: var(--bg-danger-hover);');
+      expect(cssSource).not.toMatch(/\.btn-danger\s*\{[^}]*#ffffff/);
+      expect(cssSource).not.toMatch(/\.btn-danger\s*\{[^}]*var\(--danger-fg\)/);
     });
 
     it('covers all branch fallbacks for deletion and error handling', async () => {

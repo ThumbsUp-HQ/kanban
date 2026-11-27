@@ -536,15 +536,15 @@
   padding: 0 var(--space-3, 12px);
   font-size: var(--text-sm, 13px);
   font-weight: 500;
-  color: #ffffff;
-  background: var(--danger-fg);
+  color: var(--accent-primary-fg);
+  background: var(--bg-danger);
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #be123c;
+  background: var(--bg-danger-hover);
 }
 
 .btn-danger:disabled {

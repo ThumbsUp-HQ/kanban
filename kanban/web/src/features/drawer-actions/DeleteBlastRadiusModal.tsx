@@ -212,7 +212,7 @@ export function DeleteBlastRadiusModal({
           </p>
           <FieldHelpHint
             title="Soft-Trash Retention & Purge Policy"
-            summary="Items moved to trash remain restorable by workspace administrators during the 30-day retention window. After 30 days, the item and all associated object links undergo a permanent cryptographic purge."
+            summary={`Items moved to trash remain restorable by workspace administrators during the ${String(retentionDays)}-day retention window. After ${String(retentionDays)} days, the item and all associated object links undergo a permanent cryptographic purge.`}
             defaultValue={`${String(retentionDays)} days`}
             docHref="/docs/universal-object-graph-and-link-auditor"
             testId="soft-trash-help-hint"
