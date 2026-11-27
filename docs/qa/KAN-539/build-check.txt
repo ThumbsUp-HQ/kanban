@@ -2,13 +2,10 @@ $ npx tsc -b --noEmit
 EXIT_CODE: 0
 
 $ npx eslint --max-warnings 0 src/features/workflows
+EXIT_CODE: 0
 
-/home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan539-c4e3527b/kanban/web/src/features/workflows/__tests__/CleanRoomGateCopy.test.tsx
-  13:18  error  Forbidden non-null assertion  @typescript-eslint/no-non-null-assertion
-
-✖ 1 problem (1 error, 0 warnings)
-
-EXIT_CODE: 1
+$ npx tsc -b --noEmit
+EXIT_CODE: 0
 
 $ npx vite build
 vite v8.3.8 building client environment for production...

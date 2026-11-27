@@ -10,7 +10,7 @@ import { DEFAULT_PROJECT_STATES } from '../api';
 
 describe('AttachHookDialog clean-room gate copy (KAN-539)', () => {
   it('shows no-gate info note on terminal transition and explainer for agent hook', () => {
-    const last = DEFAULT_PROJECT_STATES[DEFAULT_PROJECT_STATES.length - 1]!.name;
+    const last = DEFAULT_PROJECT_STATES.at(-1)?.name ?? 'Done';
     render(
       <MemoryRouter>
         <AttachHookDialog
