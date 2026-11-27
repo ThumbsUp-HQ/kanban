@@ -12,6 +12,7 @@ import React, {
 import { useOptimisticMutation } from '../../api/optimistic';
 import { apiFetch, getCsrfToken } from '../../api/client';
 import { qk } from '../../api/queryKeys';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import type { AccessManifest } from './types';
 
 export interface AgentKillSwitchControlProps {
@@ -89,9 +90,19 @@ export function AgentKillSwitchControl({
         role="region"
         aria-labelledby={titleId}
       >
-        <span id={titleId} className="access-inspector__kill-switch-prompt">
-          Revoke all active agent grants on {targetLabel}?
-        </span>
+        <div className="access-inspector__kill-switch-prompt-row">
+          <span id={titleId} className="access-inspector__kill-switch-prompt">
+            Revoke all active agent grants on {targetLabel}?
+          </span>
+          <FieldHelpHint
+            title="Agent Kill Switch Confirmation"
+            ariaLabel="Agent revocation confirmation security guide"
+            summary="Immediately revokes all active agent tokens and session grants on this object. Revocation is non-reversible without explicit administrator re-grant and is recorded in the immutable security audit ledger."
+            defaultValue="Active grants retained until explicit revocation"
+            docHref="/docs/zero-trust-security-and-access-visibility"
+            testId="hint-agent-kill-switch-confirm"
+          />
+        </div>
         <div className="access-inspector__kill-switch-actions">
           <button
             type="button"
@@ -116,15 +127,25 @@ export function AgentKillSwitchControl({
   }
 
   return (
-    <button
-      type="button"
-      ref={killSwitchButtonRef}
-      className="access-inspector__kill-switch-btn"
-      onClick={handleOpenConfirm}
-      disabled={agentsCount === 0 || mutation.isPending}
-      aria-label="Kill Switch"
-    >
-      [ Kill Switch ]
-    </button>
+    <div className="access-inspector__kill-switch-wrapper">
+      <button
+        type="button"
+        ref={killSwitchButtonRef}
+        className="access-inspector__kill-switch-btn"
+        onClick={handleOpenConfirm}
+        disabled={agentsCount === 0 || mutation.isPending}
+        aria-label="Kill Switch"
+      >
+        [ Kill Switch ]
+      </button>
+      <FieldHelpHint
+        title="Agent Kill Switch"
+        ariaLabel="Agent revocation security guide"
+        summary="Immediately revokes all active agent tokens and session grants on this object. Revocation is non-reversible without explicit administrator re-grant and is recorded in the immutable security audit ledger."
+        defaultValue="Active grants retained until explicit revocation"
+        docHref="/docs/zero-trust-security-and-access-visibility"
+        testId="hint-agent-kill-switch"
+      />
+    </div>
   );
 }
