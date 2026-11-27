@@ -1,0 +1,24 @@
+
+> @kanban/web@0.1.0 test
+> vitest run src/features/views/IssueNavigatorBar.test.tsx src/features/views/StateFilterPopover.test.tsx --coverage --coverage.include=**/features/views/StateFilterPopover.tsx --coverage.include=**/features/views/IssueNavigatorBar.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan477-478-563bd71a/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/views/StateFilterPopover.test.tsx (7 tests) 265ms
+ ✓ src/features/views/IssueNavigatorBar.test.tsx (20 tests) 601ms
+
+ Test Files  2 passed (2)
+      Tests  27 passed (27)
+   Start at  20:24:57
+   Duration  1.83s (environment 49%, tests 33%, import 12%, worker 3%, transform 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.66 |    96.32 |     100 |     100 |                   
+ ...vigatorBar.tsx |     100 |    96.73 |     100 |     100 | 105,123,225-229   
+ ...terPopover.tsx |   99.09 |    95.45 |     100 |     100 | 115,223-230,239   
+-------------------|---------|----------|---------|---------|-------------------

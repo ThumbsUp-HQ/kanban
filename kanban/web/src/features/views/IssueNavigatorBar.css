@@ -52,12 +52,23 @@
 }
 
 .navigator-search-btn,
+.navigator-mode-wrap,
 .navigator-mode-group,
 .navigator-header-mode-group,
 .navigator-csv-actions,
 .state-filter-popover-wrap,
 .navigator-state-trigger {
   flex-shrink: 0;
+}
+
+.navigator-mode-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.navigator-hidden-btn {
+  display: none !important;
 }
 
 .navigator-query-input {
@@ -343,7 +354,7 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: 40;
-  width: 288px;
+  width: 280px;
   max-width: calc(100vw - 32px);
   background: var(--bg-surface, #1e2025);
   border: 1px solid var(--border-strong, #4b5263);
@@ -367,8 +378,11 @@
 }
 
 .state-filter-preset-btn {
-  flex: 1 1 0;
-  height: 26px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 6px;
+  white-space: nowrap;
   background: transparent;
   color: var(--fg-secondary, #cbd5e1);
   border: none;
@@ -424,7 +438,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);
-  max-height: 280px;
+  max-height: 200px;
   overflow-y: auto;
 }
 
@@ -542,13 +556,21 @@
 
 /* Responsive touch targets on mobile portrait (<= 767px) and bounded height on landscape (<= 540px) */
 @media (max-width: 767px) {
+  .state-filter-preset-btn,
+  .navigator-state-trigger,
   .state-filter-option {
-    min-height: 40px;
+    min-height: 44px;
+    height: auto;
+  }
+
+  .state-filter-option {
     padding: 6px 10px;
   }
 
-  .navigator-state-trigger {
-    min-height: 36px;
+  .state-filter-search-input {
+    min-height: 44px;
+    height: 44px;
+    font-size: 16px;
   }
 }
 

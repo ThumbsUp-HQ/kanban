@@ -317,7 +317,7 @@ export function StateFilterPopover({
                 handleSelectPreset('actionable');
               }}
             >
-              Actionable
+              Actionable (Default)
             </button>
             <button
               type="button"
