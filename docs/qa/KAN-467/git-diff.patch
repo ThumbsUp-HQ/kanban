@@ -1,0 +1,208 @@
+diff --git a/kanban/web/src/features/reports/ReportExportModal.tsx b/kanban/web/src/features/reports/ReportExportModal.tsx
+index 4dd9609d..90c28075 100644
+--- a/kanban/web/src/features/reports/ReportExportModal.tsx
++++ b/kanban/web/src/features/reports/ReportExportModal.tsx
+@@ -281,7 +281,7 @@ export function ReportExportModal({
+               >
+                 {templates.map((t) => (
+                   <option key={t.slug} value={t.slug}>
+-                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}
++                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}{t.slug === 'security-assessment-report' ? ' (Default)' : ''}
+                   </option>
+                 ))}
+               </select>
+@@ -289,8 +289,13 @@ export function ReportExportModal({
+ 
+             {/* Format Pill Selector */}
+             <div className="reports-form-group">
+-              <label className="reports-label">Export Format</label>
+-              <div className="reports-format-pills" data-testid="report-format-pills">
++              <span id="report-export-format-label" className="reports-label">Export Format</span>
++              <div
++                className="reports-format-pills"
++                data-testid="report-format-pills"
++                role="group"
++                aria-labelledby="report-export-format-label"
++              >
+                 {SUPPORTED_FORMATS.map((fmt) => {
+                   const isActive = selectedFormat === fmt;
+                   return (
+@@ -302,7 +307,7 @@ export function ReportExportModal({
+                       aria-pressed={isActive}
+                       onClick={() => { setSelectedFormat(fmt); }}
+                     >
+-                      {fmt}
++                      {fmt === 'PDF' ? 'PDF (Default)' : fmt}
+                     </button>
+                   );
+                 })}
+@@ -312,7 +317,7 @@ export function ReportExportModal({
+             {/* Dynamic Template Parameters */}
+             {parametersSchema.length > 0 && (
+               <div className="reports-form-group">
+-                <label className="reports-label">Template Parameters</label>
++                <span className="reports-label">Template Parameters</span>
+                 <div className="reports-parameters-grid">
+                   {parametersSchema.map((param) => (
+                     <div key={param.name} className="reports-form-group">
+@@ -373,6 +378,7 @@ export function ReportExportModal({
+                   <input
+                     type="password"
+                     data-testid="reports-zip-password-input"
++                    aria-label="Archive Password"
+                     className="reports-input"
+                     placeholder="Enter encryption passphrase (min 4 characters)"
+                     value={zipPassword}
+diff --git a/kanban/web/src/features/reports/reports.css b/kanban/web/src/features/reports/reports.css
+index fa1e2c9e..3e5668a0 100644
+--- a/kanban/web/src/features/reports/reports.css
++++ b/kanban/web/src/features/reports/reports.css
+@@ -463,3 +463,16 @@
+     justify-content: center;
+   }
+ }
++
++@media (max-width: 768px), (pointer: coarse) {
++  .reports-format-pill,
++  .reports-btn,
++  .reports-select {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .reports-modal-close-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++  }
++}
+diff --git a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+index 343d7111..d1c8376d 100644
+--- a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
++++ b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+@@ -820,4 +820,127 @@ describe('ReportExportModal', () => {
+       expect(textarea.value).toBe('');
+     });
+   });
++
++  describe('KAN-467: Default value indicators for formats and templates', () => {
++    it('labels PDF format pill as PDF (Default) and leaves other formats unmodified', async () => {
++      render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
++      });
++
++      const pdfPill = screen.getByTestId('report-format-pill-pdf');
++      expect(pdfPill.textContent).toBe('PDF (Default)');
++      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
++
++      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
++      expect(xlsxPill.textContent).toBe('XLSX');
++      expect(xlsxPill.getAttribute('aria-pressed')).toBe('false');
++
++      const csvPill = screen.getByTestId('report-format-pill-csv');
++      expect(csvPill.textContent).toBe('CSV');
++
++      const docxPill = screen.getByTestId('report-format-pill-docx');
++      expect(docxPill.textContent).toBe('DOCX');
++    });
++
++    it('appends (Default) to security-assessment-report option in template select', async () => {
++      render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-template-select')).toBeDefined();
++      });
++
++      const select = screen.getByTestId<HTMLSelectElement>('report-template-select');
++      const options = Array.from(select.querySelectorAll('option'));
++
++      const defaultOpt = options.find((opt) => opt.value === 'security-assessment-report');
++      expect(defaultOpt).toBeDefined();
++      expect(defaultOpt?.textContent).toContain('(Default)');
++      expect(defaultOpt?.textContent).toBe('Security Assessment Report (Built-in) (Default)');
++
++      const sprintOpt = options.find((opt) => opt.value === 'sprint-release-notes');
++      expect(sprintOpt).toBeDefined();
++      expect(sprintOpt?.textContent).not.toContain('(Default)');
++      expect(sprintOpt?.textContent).toBe('Sprint & Release Notes Report (Custom)');
++    });
++
++    it('clicking PDF (Default) format pill keeps PDF format active and updates submit button', async () => {
++      render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
++      });
++
++      const pdfPill = screen.getByTestId('report-format-pill-pdf');
++      const submitBtn = screen.getByTestId('reports-export-submit-btn');
++
++      // Click XLSX first, then click back to PDF
++      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
++      fireEvent.click(xlsxPill);
++      expect(submitBtn.textContent).toContain('Download XLSX');
++
++      fireEvent.click(pdfPill);
++      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
++      expect(submitBtn.textContent).toContain('Download PDF');
++    });
++
++    it('satisfies HTML 4.10.4 label semantics for format group, parameters, and archive password', async () => {
++      const { container } = render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-format-pills')).toBeDefined();
++      });
++
++      // Format pills container has role="group" and aria-labelledby
++      const formatPills = screen.getByTestId('report-format-pills');
++      expect(formatPills.getAttribute('role')).toBe('group');
++      expect(formatPills.getAttribute('aria-labelledby')).toBe('report-export-format-label');
++
++      const formatLabel = container.querySelector('#report-export-format-label');
++      expect(formatLabel).not.toBeNull();
++      expect(formatLabel?.tagName.toLowerCase()).toBe('span');
++      expect(formatLabel?.textContent).toBe('Export Format');
++
++      // Template parameters label is a span
++      const paramLabels = Array.from(container.querySelectorAll('span.reports-label'));
++      const templateParamsSpan = paramLabels.find((el) => el.textContent === 'Template Parameters');
++      expect(templateParamsSpan).toBeDefined();
++
++      // Check encryption toggle and password aria-label
++      const encryptToggle = screen.getByTestId('reports-zip-toggle');
++      fireEvent.click(encryptToggle);
++
++      const passwordInput = screen.getByTestId('reports-zip-password-input');
++      expect(passwordInput.getAttribute('aria-label')).toBe('Archive Password');
++    });
++  });
+ });

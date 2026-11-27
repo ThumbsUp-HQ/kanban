@@ -19,6 +19,8 @@ import {
   generateReport,
   type ReportTemplate,
 } from './reportsApi';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { ReportTemplateStudioModal } from './ReportTemplateStudioModal';
 import './reports.css';
 
@@ -239,15 +241,22 @@ export function ReportExportModal({
             <h2 id="report-export-title" className="reports-modal-title">
               <span>📄</span> Export Report
             </h2>
-            <button
-              type="button"
-              className="reports-modal-close-btn"
-              data-testid="report-export-close-btn"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <div className="reports-modal-header-actions">
+              <StudioDocLink
+                href="/docs/studio-configuration-reference"
+                label="Reports Documentation ->"
+                testId="report-export-doc-link"
+              />
+              <button
+                type="button"
+                className="reports-modal-close-btn"
+                data-testid="report-export-close-btn"
+                onClick={onClose}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <div className="reports-modal-body">
@@ -272,7 +281,7 @@ export function ReportExportModal({
               >
                 {templates.map((t) => (
                   <option key={t.slug} value={t.slug}>
-                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}
+                    {t.name} {t.is_builtin ? '(Built-in)' : '(Custom)'}{t.slug === 'security-assessment-report' ? ' (Default)' : ''}
                   </option>
                 ))}
               </select>
@@ -280,8 +289,13 @@ export function ReportExportModal({
 
             {/* Format Pill Selector */}
             <div className="reports-form-group">
-              <label className="reports-label">Export Format</label>
-              <div className="reports-format-pills" data-testid="report-format-pills">
+              <span id="report-export-format-label" className="reports-label">Export Format</span>
+              <div
+                className="reports-format-pills"
+                data-testid="report-format-pills"
+                role="group"
+                aria-labelledby="report-export-format-label"
+              >
                 {SUPPORTED_FORMATS.map((fmt) => {
                   const isActive = selectedFormat === fmt;
                   return (
@@ -293,7 +307,7 @@ export function ReportExportModal({
                       aria-pressed={isActive}
                       onClick={() => { setSelectedFormat(fmt); }}
                     >
-                      {fmt}
+                      {fmt === 'PDF' ? 'PDF (Default)' : fmt}
                     </button>
                   );
                 })}
@@ -303,7 +317,7 @@ export function ReportExportModal({
             {/* Dynamic Template Parameters */}
             {parametersSchema.length > 0 && (
               <div className="reports-form-group">
-                <label className="reports-label">Template Parameters</label>
+                <span className="reports-label">Template Parameters</span>
                 <div className="reports-parameters-grid">
                   {parametersSchema.map((param) => (
                     <div key={param.name} className="reports-form-group">
@@ -336,24 +350,35 @@ export function ReportExportModal({
 
             {/* AES-256 ZIP Password Toggle */}
             <div className="reports-encryption-box">
-              <label className="reports-checkbox-row">
-                <input
-                  type="checkbox"
-                  data-testid="reports-zip-toggle"
-                  className="reports-checkbox"
-                  checked={isZipEncrypted}
-                  onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
+              <div className="reports-checkbox-row-wrapper">
+                <label className="reports-checkbox-row" htmlFor="reports-zip-toggle">
+                  <input
+                    id="reports-zip-toggle"
+                    type="checkbox"
+                    data-testid="reports-zip-toggle"
+                    className="reports-checkbox"
+                    checked={isZipEncrypted}
+                    onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
+                  />
+                  <span className="reports-checkbox-label">
+                    🔒 Encrypt report in AES-256 password-protected ZIP archive
+                  </span>
+                </label>
+                <FieldHelpHint
+                  title="Report Encryption"
+                  summary="Encrypts generated report artifacts inside an AES-256 password-protected ZIP archive."
+                  defaultValue="Disabled"
+                  docHref="/docs/studio-configuration-reference"
+                  testId="report-encryption-help-hint"
                 />
-                <span className="reports-checkbox-label">
-                  🔒 Encrypt report in AES-256 password-protected ZIP archive
-                </span>
-              </label>
+              </div>
 
               {isZipEncrypted && (
                 <div className="reports-form-group">
                   <input
                     type="password"
                     data-testid="reports-zip-password-input"
+                    aria-label="Archive Password"
                     className="reports-input"
                     placeholder="Enter encryption passphrase (min 4 characters)"
                     value={zipPassword}
