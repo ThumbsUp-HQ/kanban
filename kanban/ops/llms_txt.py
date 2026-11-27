@@ -289,6 +289,19 @@ Access 👍kanban programmatically via Model Context Protocol (MCP) or REST APIs
 - Authentication: OAuth 2.1 with PKCE (S256) or scoped personal API tokens (kb_pat_* / kb_agt_*).
 - Level of Detail (LOD) Tiers: summary (strict 1,000-token cap), standard, and full.
 
+### 1b. Low-Context Agent Workflow
+
+read_ticket -> begin_work -> transition_ticket(KEY, "Done") or complete_work(identifier | identifiers)
+
+- Transition -> Clean-Room Agent Gate -> Done. When a transition agent is attached, the server runs it in a clean room and returns {passed, comment} synchronously.
+- The gate records its review comment on the ticket. Do not write self-attestation boilerplate.
+- complete_work accepts one identifier or a batch list; each ticket gets its own {passed, comment}.
+- Self-guiding error codes:
+  - LEASE_STALE: your begin_work lease expired; call begin_work again, then retry.
+  - GATE_REJECTED: the gate returned passed=false; read the comment, fix the work, retry.
+  - GATE_TIMEOUT: the gate did not answer in time; retry the same call.
+  - CAPABILITY_MISSING: your token lacks the required scope; ask an admin to grant it.
+
 ### 2. How to Create & Approach Tickets (kanban-ticket Rules)
 
 When authoring or executing tickets:

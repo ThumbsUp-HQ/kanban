@@ -333,6 +333,17 @@ function AttachHookDialogInner({
               </div>
             </div>
 
+            {hookKind === 'agent_interceptor' && (
+              <p className="workflow-gate-explainer" data-testid="clean-room-gate-explainer">
+                Clean-room approval gate: Transition, then Clean-Room Agent, then Done. The agent reviews the ticket automatically, records its review comment on the ticket, and returns pass or fail directly to the calling agent.
+              </p>
+            )}
+            {hookKind !== 'agent_interceptor' && toState === (states[states.length - 1]?.name ?? 'Done') && (
+              <p className="workflow-gate-explainer" data-testid="no-gate-info-note">
+                No transition gate is enabled for this terminal transition. Tickets move to {toState} without an automatic review. Choose Agent Transition Helper to add a clean-room approval gate.
+              </p>
+            )}
+
             {/* Top-Level Agent Definition Selector (Promoted out of Advanced Accordion for agent_interceptor) */}
             {hookKind === 'agent_interceptor' && (
               agentDefinitions.length === 0 ? (

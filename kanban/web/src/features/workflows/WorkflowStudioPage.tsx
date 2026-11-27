@@ -396,6 +396,9 @@ export function WorkflowStudioPage({
                 {projectDefaultTimeout !== null ? `${String(projectDefaultTimeout)} ms` : 'Agent Default'}
               </span>
             </h2>
+            <p className="workflow-project-timeout-description" data-testid="studio-gate-explainer">
+              An attached transition agent acts as an automatic clean-room approval gate (Transition, then Clean-Room Agent, then completion). It records its review comment on the ticket and returns pass or fail to the calling agent. A terminal transition with no gate enabled simply completes without review.
+            </p>
             <p className="workflow-project-timeout-description">
               Inherited timeout for all workflow interceptor gates in this project unless overridden by a hook. Max 10 minutes (600,000 ms).
             </p>

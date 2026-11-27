@@ -461,3 +461,11 @@ A forensic comparison between `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` Section 11
    - Add `lod` (`summary` | `standard` | `full`) to `manage_principals_and_groups` and `manage_access_policies` to allow lean listing of users and permissions.
 7. **Blueprint Templates via Progressive Disclosure:**
    - Enhance `architect_project(action="help")` to return standard starter blueprints (e.g., Scrum, Kanban, Security-Audit) that autonomous agents can apply directly.
+
+### Low-Context Transition Gate Flow (KAN-539)
+
+Flow: `read_ticket`, then `begin_work`, then `transition_ticket(KEY, "Done")` or `complete_work(identifier | identifiers)`.
+
+Architecture: Transition -> Clean-Room Agent Gate -> Done. When a transition agent is attached, the server runs it in a clean room and returns `{passed, comment}` synchronously. The gate records its review comment on the ticket, so callers need no self-attestation boilerplate. `complete_work` accepts a single identifier or a batch list and returns one `{passed, comment}` per ticket.
+
+Self-guiding error codes: `LEASE_STALE` (call `begin_work` again), `GATE_REJECTED` (read the comment, fix, retry), `GATE_TIMEOUT` (retry the same call), `CAPABILITY_MISSING` (token lacks the required scope).
