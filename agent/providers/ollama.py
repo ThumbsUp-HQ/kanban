@@ -64,6 +64,9 @@ _IPV4_VERSION: int = 4
 _IPV6_VERSION: int = 6
 
 
+_HTTP_BAD_REQUEST = 400
+
+
 class OllamaSettings(BaseModel):
     """Configuration settings for Ollama provider with CIDR and timeout controls."""
 
@@ -354,7 +357,7 @@ class OllamaProvider(LLMProvider):
             msg = f"Ollama HTTP request failed: {err}"
             raise ProviderProtocolError(msg) from err
 
-    async def generate_structured(
+    async def generate_structured(  # noqa: C901, PLR0915
         self,
         req: StructuredRequest[T],
     ) -> StructuredResponse[T]:
@@ -368,10 +371,11 @@ class OllamaProvider(LLMProvider):
         messages.append({"role": "user", "content": req.prompt})
 
         schema = dereference_json_schema(req.response_model.model_json_schema())
-        payload = {
+        payload: dict[str, Any] = {
             "model": req.model,
             "messages": messages,
             "format": schema,
+            "think": False,
             "options": {
                 "temperature": req.temperature,
                 "num_predict": req.max_output_tokens,
@@ -383,21 +387,37 @@ class OllamaProvider(LLMProvider):
         t0 = time.perf_counter()
         req_timeout = req.ttft_deadline_ms / 1000.0 if req.ttft_deadline_ms is not None else None
         try:
-            response = await self._client.post(
-                url,
-                json=payload,
-                headers=headers,
-                extensions=extensions,
-                timeout=req_timeout,
-            )
-            latency_ms = (time.perf_counter() - t0) * 1000.0
-            self._handle_error_response(response)
-
-            try:
-                data = response.json()
-            except Exception as err:
-                msg = f"Ollama returned malformed JSON payload: {err}"
-                raise ProviderProtocolError(msg) from err
+            budget = req.max_output_tokens
+            retried_length = False
+            while True:
+                response = await self._client.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    extensions=extensions,
+                    timeout=req_timeout,
+                )
+                if response.status_code == _HTTP_BAD_REQUEST and "think" in payload:
+                    del payload["think"]
+                    continue
+                latency_ms = (time.perf_counter() - t0) * 1000.0
+                self._handle_error_response(response)
+                try:
+                    data = response.json()
+                except Exception as err:
+                    msg = f"Ollama returned malformed JSON payload: {err}"
+                    raise ProviderProtocolError(msg) from err
+                m = data.get("message", {})
+                if (
+                    data.get("done_reason") == "length"
+                    and not str(m.get("content", "")).strip()
+                    and not retried_length
+                ):
+                    retried_length = True
+                    budget *= 2
+                    payload["options"]["num_predict"] = budget
+                    continue
+                break
 
             msg_obj = data.get("message", {})
             content_str = str(msg_obj.get("content", ""))
@@ -410,7 +430,8 @@ class OllamaProvider(LLMProvider):
                 if done_reason == "length":
                     msg = (
                         f"Ollama structured output truncated: done_reason=length "
-                        f"(truncated at num_predict={req.max_output_tokens}): {content_str!r}"
+                        f"(truncated at num_predict={budget}, "
+                        f"thinking_chars={len(str(msg_obj.get('thinking', '')))}): {content_str!r}"
                     )
                     raise ProviderSchemaError(msg) from err
                 msg = f"Ollama message content is not valid JSON: {content_str!r}"

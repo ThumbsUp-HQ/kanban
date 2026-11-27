@@ -390,14 +390,14 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
     result = parse_verdict_output(raw_output, ctx)
     assert result.decision.decision == "approve"
     assert len(captured_requests) == 1
-    assert captured_requests[0].max_output_tokens == 4096
+    assert captured_requests[0].max_output_tokens == 8192
     assert harness.last_report is not None
     assert harness.last_report.prompt_tokens == 100
     assert harness.last_report.completion_tokens == 50
 
 
 async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
-    """Verify InAppSdkHarness.run() passes max_output_tokens == 4096 (>= 4096) on StructuredRequest."""
+    """Verify InAppSdkHarness.run() passes max_output_tokens == 8192 (>= 4096) on StructuredRequest."""
     from agent.harnesses.in_app_sdk import (
         DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
         TransitionVerdictPayload,
@@ -436,7 +436,7 @@ async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
     await harness.run(ctx, agent_def)
     assert len(captured) == 1
     assert captured[0].max_output_tokens == DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS
-    assert captured[0].max_output_tokens == 4096
+    assert captured[0].max_output_tokens == 8192
     assert captured[0].max_output_tokens >= 4096
 
 

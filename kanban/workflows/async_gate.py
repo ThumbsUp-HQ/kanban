@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import logging
@@ -38,7 +39,8 @@ from kanban.workflows.gate_types import (
 from kanban.workflows.mutations import apply_field_updates, validate_field_updates
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
+    from contextlib import AbstractAsyncContextManager
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1412,3 +1414,80 @@ class GateCoordinator:
                     created_by_id=creator_id,
                 )
                 session.add(new_link)
+
+
+_TERMINAL_GATE_STATUSES: Final[frozenset[str]] = frozenset(
+    {"approved", "rejected", "timed_out", "cancelled", "error", "failed"}
+)
+
+
+def _gate_result_from_row(
+    execution_id: uuid.UUID, status: str, verdict: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Map a terminal execution row to the structured MCP gate result."""
+    verdict = verdict or {}
+    comment = str(verdict.get("reason") or verdict.get("reason_preview") or "")
+    findings = verdict.get("cited_files") or []
+    if status in ("approved", "rejected"):
+        return {
+            "passed": status == "approved",
+            "status": status,
+            "verdict": verdict.get("decision", status),
+            "comment": comment,
+            "findings": list(findings),
+            "execution_id": str(execution_id),
+        }
+    return {
+        "passed": False,
+        "status": "failed",
+        "verdict": verdict.get("decision", status),
+        "comment": comment,
+        "findings": list(findings),
+        "error_code": verdict.get("code") or "GATE_FAILED",
+        "execution_id": str(execution_id),
+    }
+
+
+async def wait_for_gate_execution(
+    session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+    execution_id: uuid.UUID | str,
+    *,
+    timeout_ms: int,
+    poll_interval_s: float = 0.25,
+) -> dict[str, Any]:
+    """Await a dispatched gate without holding a DB transaction during sleeps.
+
+    Each poll opens a short session that is closed before sleeping. On deadline
+    returns GATE_TIMEOUT without cancelling the background gate.
+    """
+    exec_uuid = uuid.UUID(str(execution_id))
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(timeout_ms, 0) / 1000.0
+    while True:
+        async with session_factory() as session:
+            row = (
+                await session.execute(
+                    select(
+                        WorkflowTransitionExecution.status,
+                        WorkflowTransitionExecution.verdict_json,
+                    ).where(WorkflowTransitionExecution.id == exec_uuid)
+                )
+            ).first()
+        if row is None:
+            return {
+                "passed": False,
+                "status": "failed",
+                "error_code": "EXECUTION_NOT_FOUND",
+                "execution_id": str(exec_uuid),
+            }
+        if row[0] in _TERMINAL_GATE_STATUSES:
+            return _gate_result_from_row(exec_uuid, row[0], row[1])
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return {
+                "passed": False,
+                "status": "timeout",
+                "error_code": "GATE_TIMEOUT",
+                "execution_id": str(exec_uuid),
+            }
+        await asyncio.sleep(min(poll_interval_s, remaining))

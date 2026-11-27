@@ -1,0 +1,245 @@
+diff --git a/agent/harnesses/in_app_sdk.py b/agent/harnesses/in_app_sdk.py
+index 5a7d17f4..1adad83b 100644
+--- a/agent/harnesses/in_app_sdk.py
++++ b/agent/harnesses/in_app_sdk.py
+@@ -43,7 +43,7 @@ __all__ = [
+ MAX_TURNS_LIMIT: Final[int] = 8
+ MAX_TOOL_CALLS_LIMIT: Final[int] = 20
+ DEFAULT_ESTIMATE_TOKENS: Final[int] = 1024
+-DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS: Final[int] = 4096
++DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS: Final[int] = 8192
+ CODE_TOOL_LOOP_LIMIT_EXCEEDED: Final[str] = "TOOL_LOOP_LIMIT_EXCEEDED"
+ FATAL_POLICY_CODES: Final[frozenset[str]] = frozenset(
+     {"TOOL_NOT_PERMITTED", "MCP_CALL_CAP_EXCEEDED", "TOOL_LOOP_LIMIT_EXCEEDED"}
+diff --git a/agent/providers/ollama.py b/agent/providers/ollama.py
+index da085f66..e9964ca7 100644
+--- a/agent/providers/ollama.py
++++ b/agent/providers/ollama.py
+@@ -64,6 +64,9 @@ _IPV4_VERSION: int = 4
+ _IPV6_VERSION: int = 6
+ 
+ 
++_HTTP_BAD_REQUEST = 400
++
++
+ class OllamaSettings(BaseModel):
+     """Configuration settings for Ollama provider with CIDR and timeout controls."""
+ 
+@@ -354,7 +357,7 @@ class OllamaProvider(LLMProvider):
+             msg = f"Ollama HTTP request failed: {err}"
+             raise ProviderProtocolError(msg) from err
+ 
+-    async def generate_structured(
++    async def generate_structured(  # noqa: C901, PLR0915
+         self,
+         req: StructuredRequest[T],
+     ) -> StructuredResponse[T]:
+@@ -368,10 +371,11 @@ class OllamaProvider(LLMProvider):
+         messages.append({"role": "user", "content": req.prompt})
+ 
+         schema = dereference_json_schema(req.response_model.model_json_schema())
+-        payload = {
++        payload: dict[str, Any] = {
+             "model": req.model,
+             "messages": messages,
+             "format": schema,
++            "think": False,
+             "options": {
+                 "temperature": req.temperature,
+                 "num_predict": req.max_output_tokens,
+@@ -383,21 +387,37 @@ class OllamaProvider(LLMProvider):
+         t0 = time.perf_counter()
+         req_timeout = req.ttft_deadline_ms / 1000.0 if req.ttft_deadline_ms is not None else None
+         try:
+-            response = await self._client.post(
+-                url,
+-                json=payload,
+-                headers=headers,
+-                extensions=extensions,
+-                timeout=req_timeout,
+-            )
+-            latency_ms = (time.perf_counter() - t0) * 1000.0
+-            self._handle_error_response(response)
+-
+-            try:
+-                data = response.json()
+-            except Exception as err:
+-                msg = f"Ollama returned malformed JSON payload: {err}"
+-                raise ProviderProtocolError(msg) from err
++            budget = req.max_output_tokens
++            retried_length = False
++            while True:
++                response = await self._client.post(
++                    url,
++                    json=payload,
++                    headers=headers,
++                    extensions=extensions,
++                    timeout=req_timeout,
++                )
++                if response.status_code == _HTTP_BAD_REQUEST and "think" in payload:
++                    del payload["think"]
++                    continue
++                latency_ms = (time.perf_counter() - t0) * 1000.0
++                self._handle_error_response(response)
++                try:
++                    data = response.json()
++                except Exception as err:
++                    msg = f"Ollama returned malformed JSON payload: {err}"
++                    raise ProviderProtocolError(msg) from err
++                m = data.get("message", {})
++                if (
++                    data.get("done_reason") == "length"
++                    and not str(m.get("content", "")).strip()
++                    and not retried_length
++                ):
++                    retried_length = True
++                    budget *= 2
++                    payload["options"]["num_predict"] = budget
++                    continue
++                break
+ 
+             msg_obj = data.get("message", {})
+             content_str = str(msg_obj.get("content", ""))
+@@ -410,7 +430,8 @@ class OllamaProvider(LLMProvider):
+                 if done_reason == "length":
+                     msg = (
+                         f"Ollama structured output truncated: done_reason=length "
+-                        f"(truncated at num_predict={req.max_output_tokens}): {content_str!r}"
++                        f"(truncated at num_predict={budget}, "
++                        f"thinking_chars={len(str(msg_obj.get('thinking', '')))}): {content_str!r}"
+                     )
+                     raise ProviderSchemaError(msg) from err
+                 msg = f"Ollama message content is not valid JSON: {content_str!r}"
+diff --git a/agent/tests/harnesses/test_in_app_sdk.py b/agent/tests/harnesses/test_in_app_sdk.py
+index 6f484997..030d8762 100644
+--- a/agent/tests/harnesses/test_in_app_sdk.py
++++ b/agent/tests/harnesses/test_in_app_sdk.py
+@@ -390,14 +390,14 @@ async def test_in_app_sdk_generic_provider_and_arg_redaction() -> None:
+     result = parse_verdict_output(raw_output, ctx)
+     assert result.decision.decision == "approve"
+     assert len(captured_requests) == 1
+-    assert captured_requests[0].max_output_tokens == 4096
++    assert captured_requests[0].max_output_tokens == 8192
+     assert harness.last_report is not None
+     assert harness.last_report.prompt_tokens == 100
+     assert harness.last_report.completion_tokens == 50
+ 
+ 
+ async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
+-    """Verify InAppSdkHarness.run() passes max_output_tokens == 4096 (>= 4096) on StructuredRequest."""
++    """Verify InAppSdkHarness.run() passes max_output_tokens == 8192 (>= 4096) on StructuredRequest."""
+     from agent.harnesses.in_app_sdk import (
+         DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
+         TransitionVerdictPayload,
+@@ -436,7 +436,7 @@ async def test_in_app_sdk_passes_default_structured_max_output_tokens() -> None:
+     await harness.run(ctx, agent_def)
+     assert len(captured) == 1
+     assert captured[0].max_output_tokens == DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS
+-    assert captured[0].max_output_tokens == 4096
++    assert captured[0].max_output_tokens == 8192
+     assert captured[0].max_output_tokens >= 4096
+ 
+ 
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index d8b78cd5..f9730666 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -4,6 +4,7 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import datetime as dt
+ import hashlib
+ import logging
+@@ -38,7 +39,8 @@ from kanban.workflows.gate_types import (
+ from kanban.workflows.mutations import apply_field_updates, validate_field_updates
+ 
+ if TYPE_CHECKING:
+-    from collections.abc import Sequence
++    from collections.abc import Callable, Sequence
++    from contextlib import AbstractAsyncContextManager
+ 
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -1412,3 +1414,80 @@ class GateCoordinator:
+                     created_by_id=creator_id,
+                 )
+                 session.add(new_link)
++
++
++_TERMINAL_GATE_STATUSES: Final[frozenset[str]] = frozenset(
++    {"approved", "rejected", "timed_out", "cancelled", "error", "failed"}
++)
++
++
++def _gate_result_from_row(
++    execution_id: uuid.UUID, status: str, verdict: dict[str, Any] | None
++) -> dict[str, Any]:
++    """Map a terminal execution row to the structured MCP gate result."""
++    verdict = verdict or {}
++    comment = str(verdict.get("reason") or verdict.get("reason_preview") or "")
++    findings = verdict.get("cited_files") or []
++    if status in ("approved", "rejected"):
++        return {
++            "passed": status == "approved",
++            "status": status,
++            "verdict": verdict.get("decision", status),
++            "comment": comment,
++            "findings": list(findings),
++            "execution_id": str(execution_id),
++        }
++    return {
++        "passed": False,
++        "status": "failed",
++        "verdict": verdict.get("decision", status),
++        "comment": comment,
++        "findings": list(findings),
++        "error_code": verdict.get("code") or "GATE_FAILED",
++        "execution_id": str(execution_id),
++    }
++
++
++async def wait_for_gate_execution(
++    session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
++    execution_id: uuid.UUID | str,
++    *,
++    timeout_ms: int,
++    poll_interval_s: float = 0.25,
++) -> dict[str, Any]:
++    """Await a dispatched gate without holding a DB transaction during sleeps.
++
++    Each poll opens a short session that is closed before sleeping. On deadline
++    returns GATE_TIMEOUT without cancelling the background gate.
++    """
++    exec_uuid = uuid.UUID(str(execution_id))
++    loop = asyncio.get_running_loop()
++    deadline = loop.time() + max(timeout_ms, 0) / 1000.0
++    while True:
++        async with session_factory() as session:
++            row = (
++                await session.execute(
++                    select(
++                        WorkflowTransitionExecution.status,
++                        WorkflowTransitionExecution.verdict_json,
++                    ).where(WorkflowTransitionExecution.id == exec_uuid)
++                )
++            ).first()
++        if row is None:
++            return {
++                "passed": False,
++                "status": "failed",
++                "error_code": "EXECUTION_NOT_FOUND",
++                "execution_id": str(exec_uuid),
++            }
++        if row[0] in _TERMINAL_GATE_STATUSES:
++            return _gate_result_from_row(exec_uuid, row[0], row[1])
++        remaining = deadline - loop.time()
++        if remaining <= 0:
++            return {
++                "passed": False,
++                "status": "timeout",
++                "error_code": "GATE_TIMEOUT",
++                "execution_id": str(exec_uuid),
++            }
++        await asyncio.sleep(min(poll_interval_s, remaining))
