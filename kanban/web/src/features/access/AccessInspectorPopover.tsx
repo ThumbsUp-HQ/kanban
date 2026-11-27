@@ -16,6 +16,7 @@ import { qk } from '../../api/queryKeys';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { positionHint } from '../../components/emoji/positionHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
 import { ManageAccessModal } from './ManageAccessModal';
 import { useFocusTrap } from '../drawer/useFocusTrap';
@@ -130,7 +131,9 @@ export function AccessInspectorPopover({
     };
   }, []);
 
-  useFocusTrap(true, dialogRef);
+  const panels = useOptionalShellPanels();
+  const isHelpOpen = panels?.activePanel?.id === 'help';
+  useFocusTrap(!manageModalOpen && !isHelpOpen, dialogRef);
 
   const handleClose = (): void => {
     const opener = openerRef.current;

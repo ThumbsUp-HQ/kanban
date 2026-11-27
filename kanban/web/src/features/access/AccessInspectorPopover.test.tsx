@@ -770,5 +770,46 @@ describe('AccessInspectorPopover', () => {
       unmount();
       btn.remove();
     });
+
+    it('does not steal Tab or Shift+Tab focus back to popover when HelpDrawer is open', () => {
+      renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          onClose={vi.fn()}
+        />,
+        kan142Data,
+      );
+
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      const drawerBtn = document.createElement('button');
+      drawerBtn.textContent = 'Help Drawer Close';
+      drawer.appendChild(drawerBtn);
+      document.body.appendChild(drawer);
+
+      drawerBtn.focus();
+      expect(document.activeElement).toBe(drawerBtn);
+
+      const tabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      const tabPrevented = !document.dispatchEvent(tabEvent);
+      expect(tabPrevented).toBe(false); // Does not steal or prevent Tab
+      expect(document.activeElement).toBe(drawerBtn);
+
+      const shiftTabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const shiftTabPrevented = !document.dispatchEvent(shiftTabEvent);
+      expect(shiftTabPrevented).toBe(false); // Does not steal or prevent Shift+Tab
+      expect(document.activeElement).toBe(drawerBtn);
+
+      drawer.remove();
+    });
   });
 });
