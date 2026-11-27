@@ -1,7 +1,8 @@
 All checks passed!
 ruff exit 0
-1 file reformatted, 166 files left unchanged
-Success: no issues found in 2 source files
-mypy exit 0
+168 files already formatted
+agent/gates/runner.py:351: error: Incompatible types in assignment (expression has type "list[dict[str, Any]]", target has type "str")  [assignment]
+Found 1 error in 1 file (checked 3 source files)
+mypy exit 1
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan538-afd23024/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 dashes exit 0
