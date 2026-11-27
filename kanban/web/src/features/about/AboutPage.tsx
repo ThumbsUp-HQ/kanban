@@ -14,6 +14,7 @@ import {
 } from './aboutApi';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { buildAgentOnboardingPrompt } from '../settings/agentOnboardingPrompt';
 import './AboutPage.css';
 
@@ -383,7 +384,20 @@ export function AboutPage(): JSX.Element {
         {/* SBOM Filter Controls */}
         <div className="kb-about-table-controls">
           <div className="kb-about-table-search">
+            <div className="kb-about-search-label-row">
+              <label htmlFor="sbom-search-input" className="kb-about-search-label">
+                Search Components & Licenses
+              </label>
+              <FieldHelpHint
+                title="Search Components & Licenses"
+                summary="Filtering matches both package names and SPDX license identifiers (e.g., &quot;MIT&quot;, &quot;Apache-2.0&quot;)."
+                defaultValue="All Ecosystems"
+                docHref="/docs/system-topology-and-multi-container-architecture"
+                testId="sbom-search-help-hint"
+              />
+            </div>
             <input
+              id="sbom-search-input"
               type="text"
               placeholder="Search components or licenses..."
               value={searchQuery}
