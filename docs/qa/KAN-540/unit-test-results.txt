@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan540-b51b0bfa
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 30 items
+
+kanban/tests/security/test_push_protection.py ......................     [ 73%]
+kanban/tests/security/test_importer_push_protection.py ........          [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+kanban/security/push_protection.py     217      8    124      6    95%   132, 147, 207, 262-264, 495->493, 616-621
+--------------------------------------------------------------------------------
+TOTAL                                  217      8    124      6    95%
+============================== 30 passed in 0.90s ==============================
+exit 0

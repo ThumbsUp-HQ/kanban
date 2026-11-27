@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from kanban.api.problems import ProblemException
@@ -173,3 +175,41 @@ def test_scan_text_allow_markers_false() -> None:
 def test_redact_text_findings_empty() -> None:
     """Verify redact_text_findings returns original text when findings is empty."""
     assert redact_text_findings("clean text", []) == "clean text"
+
+
+_TOK40 = "q7Zk2Xv9LmP4rTb8Wc3Yd6Nf1Hs5JgA0eUiOxRz"
+
+
+def _scan_strict(text: str) -> list[Any]:
+    """Scan without allowlist markers."""
+    return scan_text_for_secrets(text, allow_markers=False)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "docs/qa/KAN-443/screenshots/tablet-768x1024",
+        "docs/qa/KAN-443/screenshots/desktop-dark-1440x900.png",
+        "docs/qa/KAN-535/unit-test-results.txt",
+        "kanban/web/src/features/views/QuickCreateIssueModal.tsx",
+    ],
+)
+def test_kan540_relative_paths_not_flagged(text: str) -> None:
+    """Short human path segments never trip the entropy rule."""
+    assert _scan_strict(text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"docs/qa/{_TOK40}",
+        f"docs/qa/../../secret/{_TOK40}",
+        f"a/b=c/{_TOK40}",
+        _TOK40[:32],
+        "docs/AKIAIOSFODNN7EXAMPLQ/x",
+        "docs/ghp_aB3dE5gH7jK9mN1pQ3sT5vX7zA9cE1gH3jK5",
+    ],
+)
+def test_kan540_secrets_in_paths_still_flagged(text: str) -> None:
+    """Secrets hidden in or beside paths are still detected."""
+    assert _scan_strict(text)

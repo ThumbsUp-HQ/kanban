@@ -208,6 +208,26 @@ def is_exempt_token(token: str) -> bool:
     return token.lower() in _EXEMPT_WORDS
 
 
+_RE_PATH_SEGMENT: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def _is_relative_path_token(token: str) -> bool:
+    """Return True for normalized relative path tokens (no traversal or secret punctuation)."""
+    if "/" not in token or any(c in token for c in "@=+") or ".." in token:
+        return False
+    parts = token.split("/")
+    return len(parts) >= 2 and all(_RE_PATH_SEGMENT.fullmatch(p) for p in parts)  # noqa: PLR2004
+
+
+def _is_high_entropy_secret(token: str) -> bool:
+    """Shannon entropy rule on a single token: long, high entropy, letters and digits."""
+    if len(token) < _MIN_CANDIDATE_TOKEN_LENGTH or is_exempt_token(token):
+        return False
+    if calculate_shannon_entropy(token) < _MIN_SHANNON_ENTROPY:
+        return False
+    return any(c.isdigit() for c in token) and any(c.isalpha() for c in token)
+
+
 def _get_line_number(text: str, index: int) -> int:
     """Compute 1-based line number for a character offset."""
     return text.count("\n", 0, index) + 1
@@ -494,24 +514,22 @@ def scan_text_for_secrets(  # noqa: C901, PLR0912, PLR0915
     # Check words that are not already covered by specific signatures
     for match in _RE_CANDIDATE_TOKEN.finditer(text):
         token = match.group(0)
-        if len(token) >= _MIN_CANDIDATE_TOKEN_LENGTH and not is_exempt_token(token):
-            entropy = calculate_shannon_entropy(token)
-            if entropy >= _MIN_SHANNON_ENTROPY:
-                # Require mixed character classes (e.g. letters and numbers or symbols)
-                has_digit = any(c.isdigit() for c in token)
-                has_alpha = any(c.isalpha() for c in token)
-                if has_digit and has_alpha:
-                    candidates.append(
-                        SecretFinding(
-                            rule_id="SHANNON_ENTROPY_SECRET",
-                            kind=SecretKind.HIGH_ENTROPY_SECRET,
-                            start=match.start(),
-                            end=match.end(),
-                            line=_get_line_number(text, match.start()),
-                            fingerprint=mask_fingerprint(token),
-                            secret_value=token,
-                        )
-                    )
+        if _is_relative_path_token(token):
+            hit = any(_is_high_entropy_secret(seg) for seg in token.split("/"))
+        else:
+            hit = _is_high_entropy_secret(token)
+        if hit:
+            candidates.append(
+                SecretFinding(
+                    rule_id="SHANNON_ENTROPY_SECRET",
+                    kind=SecretKind.HIGH_ENTROPY_SECRET,
+                    start=match.start(),
+                    end=match.end(),
+                    line=_get_line_number(text, match.start()),
+                    fingerprint=mask_fingerprint(token),
+                    secret_value=token,
+                )
+            )
 
     if not candidates:
         return []
