@@ -768,4 +768,57 @@ describe('ManageAccessModal', () => {
       expect(screen.queryByTestId('principal-option-usr-alice')).toBeNull();
     });
   });
+
+  it('yields Tab / Shift+Tab keyboard focus trap when focus or active panel is inside HelpDrawer or field-help-hint-popover', () => {
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ManageAccessModal
+          objectId="obj-123"
+          isOpen={true}
+          onClose={vi.fn()}
+          manifest={mockManifest}
+        />
+      </QueryClientProvider>,
+    );
+
+    // 1. Simulate focus inside .kb-help-drawer
+    const helpDrawer = document.createElement('div');
+    helpDrawer.className = 'kb-help-drawer';
+    const drawerBtn = document.createElement('button');
+    helpDrawer.appendChild(drawerBtn);
+    document.body.appendChild(helpDrawer);
+    drawerBtn.focus();
+
+    const tabEvent = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(tabEvent);
+    expect(tabEvent.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(drawerBtn);
+
+    document.body.removeChild(helpDrawer);
+
+    // 2. Simulate focus inside .field-help-hint-popover
+    const popover = document.createElement('div');
+    popover.className = 'field-help-hint-popover';
+    const popoverBtn = document.createElement('button');
+    popover.appendChild(popoverBtn);
+    document.body.appendChild(popover);
+    popoverBtn.focus();
+
+    const shiftTabEvent = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(shiftTabEvent);
+    expect(shiftTabEvent.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(popoverBtn);
+
+    document.body.removeChild(popover);
+    unmount();
+  });
 });

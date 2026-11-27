@@ -1,5 +1,49 @@
+diff --git a/kanban/web/src/dev/DrawerStory.tsx b/kanban/web/src/dev/DrawerStory.tsx
+index 277af75c..4d5a0c92 100644
+--- a/kanban/web/src/dev/DrawerStory.tsx
++++ b/kanban/web/src/dev/DrawerStory.tsx
+@@ -1,12 +1,25 @@
+-import React, { type JSX } from 'react';
++import React, { useState, type JSX } from 'react';
+ import { IssueKeyLink } from '../features/drawer/IssueKeyLink';
++import { ManageAccessModal } from '../features/access/ManageAccessModal';
+ import './DrawerStory.css';
+ 
+ export function DrawerStory(): JSX.Element {
++  const [manageAccessOpen, setManageAccessOpen] = useState(
++    typeof window !== 'undefined' &&
++      new URLSearchParams(window.location.search).get('modal') === 'access',
++  );
++
+   return (
+     <main id="kb-main" tabIndex={-1} data-testid="drawer-story" className="drawer-story">
+       <h1>Ticket Drawer Story</h1>
+       <p>Test fixture links for drawer verification across viewports.</p>
++      <button
++        type="button"
++        data-testid="open-manage-access-btn"
++        onClick={() => { setManageAccessOpen(true); }}
++      >
++        Open Manage Access Modal
++      </button>
+       <ul className="drawer-story__list">
+         <li className="drawer-story__item">
+           <IssueKeyLink
+@@ -36,6 +49,12 @@ export function DrawerStory(): JSX.Element {
+           </IssueKeyLink>
+         </li>
+       </ul>
++      <ManageAccessModal
++        objectId="c0000000-0000-0000-0000-000000000142"
++        canonicalKey="KAN-142"
++        isOpen={manageAccessOpen}
++        onClose={() => { setManageAccessOpen(false); }}
++      />
+     </main>
+   );
+ }
 diff --git a/kanban/web/src/features/access/ManageAccessModal.css b/kanban/web/src/features/access/ManageAccessModal.css
-index f76ceca9..abff53a1 100644
+index f76ceca9..417b014d 100644
 --- a/kanban/web/src/features/access/ManageAccessModal.css
 +++ b/kanban/web/src/features/access/ManageAccessModal.css
 @@ -50,6 +50,13 @@
@@ -91,7 +135,7 @@ index f76ceca9..abff53a1 100644
  }
  
  .manage-access-alert {
-@@ -347,13 +373,44 @@
+@@ -347,13 +373,49 @@
  }
  
  .manage-access-alert--success {
@@ -113,6 +157,11 @@ index f76ceca9..abff53a1 100644
 +}
 +
 +@media (max-width: 767px), (pointer: coarse) {
++  .manage-access-modal__header {
++    flex-wrap: wrap;
++    gap: var(--space-2, 8px);
++  }
++
 +  .manage-access-chip,
 +  .manage-access-preset-btn,
 +  .manage-access-btn,
@@ -143,10 +192,10 @@ index f76ceca9..abff53a1 100644
 +  }
  }
 diff --git a/kanban/web/src/features/access/ManageAccessModal.test.tsx b/kanban/web/src/features/access/ManageAccessModal.test.tsx
-index 535c2e91..b89afb25 100644
+index 535c2e91..9cc3da26 100644
 --- a/kanban/web/src/features/access/ManageAccessModal.test.tsx
 +++ b/kanban/web/src/features/access/ManageAccessModal.test.tsx
-@@ -624,4 +624,148 @@ describe('ManageAccessModal', () => {
+@@ -624,4 +624,201 @@ describe('ManageAccessModal', () => {
      expect(screen.getByText('No Handle User')).toBeDefined();
      expect(screen.getByText('Anonymous Deny Entry')).toBeDefined();
    });
@@ -294,22 +343,83 @@ index 535c2e91..b89afb25 100644
 +      expect(screen.queryByTestId('principal-option-usr-alice')).toBeNull();
 +    });
 +  });
++
++  it('yields Tab / Shift+Tab keyboard focus trap when focus or active panel is inside HelpDrawer or field-help-hint-popover', () => {
++    const { unmount } = render(
++      <QueryClientProvider client={queryClient}>
++        <ManageAccessModal
++          objectId="obj-123"
++          isOpen={true}
++          onClose={vi.fn()}
++          manifest={mockManifest}
++        />
++      </QueryClientProvider>,
++    );
++
++    // 1. Simulate focus inside .kb-help-drawer
++    const helpDrawer = document.createElement('div');
++    helpDrawer.className = 'kb-help-drawer';
++    const drawerBtn = document.createElement('button');
++    helpDrawer.appendChild(drawerBtn);
++    document.body.appendChild(helpDrawer);
++    drawerBtn.focus();
++
++    const tabEvent = new KeyboardEvent('keydown', {
++      key: 'Tab',
++      bubbles: true,
++      cancelable: true,
++    });
++    document.dispatchEvent(tabEvent);
++    expect(tabEvent.defaultPrevented).toBe(false);
++    expect(document.activeElement).toBe(drawerBtn);
++
++    document.body.removeChild(helpDrawer);
++
++    // 2. Simulate focus inside .field-help-hint-popover
++    const popover = document.createElement('div');
++    popover.className = 'field-help-hint-popover';
++    const popoverBtn = document.createElement('button');
++    popover.appendChild(popoverBtn);
++    document.body.appendChild(popover);
++    popoverBtn.focus();
++
++    const shiftTabEvent = new KeyboardEvent('keydown', {
++      key: 'Tab',
++      shiftKey: true,
++      bubbles: true,
++      cancelable: true,
++    });
++    document.dispatchEvent(shiftTabEvent);
++    expect(shiftTabEvent.defaultPrevented).toBe(false);
++    expect(document.activeElement).toBe(popoverBtn);
++
++    document.body.removeChild(popover);
++    unmount();
++  });
  });
 diff --git a/kanban/web/src/features/access/ManageAccessModal.tsx b/kanban/web/src/features/access/ManageAccessModal.tsx
-index 3dc2bb40..b588f2a8 100644
+index 3dc2bb40..f719f36b 100644
 --- a/kanban/web/src/features/access/ManageAccessModal.tsx
 +++ b/kanban/web/src/features/access/ManageAccessModal.tsx
-@@ -16,6 +16,8 @@ import { apiFetch, getCsrfToken } from '../../api/client';
+@@ -15,7 +15,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ import { apiFetch, getCsrfToken } from '../../api/client';
  import { qk } from '../../api/queryKeys';
  import { useFocusTrap } from '../drawer/useFocusTrap';
++import { useOptionalShellPanels } from '../../app/shellPanels';
  import { AgentKillSwitchControl } from './AgentKillSwitchControl';
 +import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 +import { StudioDocLink } from '../../components/help/StudioDocLink';
  import type { AccessManifest } from './types';
  import './ManageAccessModal.css';
  
-@@ -74,12 +76,22 @@ export function ManageAccessModal({
-   useFocusTrap(isOpen, modalRef);
+@@ -71,15 +74,27 @@ export function ManageAccessModal({
+     text: string;
+   } | null>(null);
+ 
+-  useFocusTrap(isOpen, modalRef);
++  const panels = useOptionalShellPanels();
++  const isHelpOpen = panels?.activePanel?.id === 'help';
++  useFocusTrap(isOpen && !isHelpOpen, modalRef);
  
    const handleClose = (): void => {
 +    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
@@ -331,7 +441,7 @@ index 3dc2bb40..b588f2a8 100644
    // Query eligible workspace principals
    const principalsQuery = useQuery<PrincipalResult[]>({
      queryKey: ['access-principals', objectId, searchQuery, typeFilter],
-@@ -163,6 +175,9 @@ export function ManageAccessModal({
+@@ -163,6 +178,9 @@ export function ManageAccessModal({
    }
  
    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
@@ -341,7 +451,7 @@ index 3dc2bb40..b588f2a8 100644
      if (e.key === 'Escape') {
        e.stopPropagation();
        e.preventDefault();
-@@ -194,6 +209,7 @@ export function ManageAccessModal({
+@@ -194,6 +212,7 @@ export function ManageAccessModal({
    };
  
    const handleSaveRule = (): void => {
@@ -349,7 +459,7 @@ index 3dc2bb40..b588f2a8 100644
      if (!selectedPrincipal) {
        return;
      }
-@@ -228,7 +244,12 @@ export function ManageAccessModal({
+@@ -228,7 +247,12 @@ export function ManageAccessModal({
  
    return (
      <>
@@ -363,7 +473,7 @@ index 3dc2bb40..b588f2a8 100644
        <div
          ref={modalRef}
          className="manage-access-modal"
-@@ -243,14 +264,21 @@ export function ManageAccessModal({
+@@ -243,14 +267,21 @@ export function ManageAccessModal({
            <h2 id={titleId} className="manage-access-modal__title">
              <span aria-hidden="true">🛡️</span> Manage Access for {objectLabel}
            </h2>
@@ -393,7 +503,7 @@ index 3dc2bb40..b588f2a8 100644
          </header>
  
          <div className="manage-access-modal__body">
-@@ -356,16 +384,29 @@ export function ManageAccessModal({
+@@ -356,16 +387,29 @@ export function ManageAccessModal({
                      />
                      ALLOW (Grant Access)
                    </label>
@@ -432,7 +542,7 @@ index 3dc2bb40..b588f2a8 100644
                  </div>
  
                  <div className="manage-access-presets">
-@@ -468,7 +509,7 @@ export function ManageAccessModal({
+@@ -468,7 +512,7 @@ export function ManageAccessModal({
                        <td>
                          <button
                            type="button"
@@ -441,7 +551,7 @@ index 3dc2bb40..b588f2a8 100644
                            onClick={() => { handleRevoke(u.principal_id, 'ALLOW'); }}
                            disabled={revokeMutation.isPending}
                            data-testid={`revoke-btn-${u.principal_id}`}
-@@ -487,7 +528,7 @@ export function ManageAccessModal({
+@@ -487,7 +531,7 @@ export function ManageAccessModal({
                        <td>
                          <button
                            type="button"
@@ -450,7 +560,7 @@ index 3dc2bb40..b588f2a8 100644
                            onClick={() => { handleRevoke(g.principal_id, 'ALLOW'); }}
                            disabled={revokeMutation.isPending}
                            data-testid={`revoke-btn-${g.principal_id}`}
-@@ -507,7 +548,7 @@ export function ManageAccessModal({
+@@ -507,7 +551,7 @@ export function ManageAccessModal({
                          {Boolean(d.principal_id) && (
                            <button
                              type="button"
@@ -459,3 +569,17 @@ index 3dc2bb40..b588f2a8 100644
                              onClick={() => {
                                if (d.principal_id) {
                                  handleRevoke(d.principal_id, 'DENY');
+diff --git a/kanban/web/src/features/drawer/useFocusTrap.ts b/kanban/web/src/features/drawer/useFocusTrap.ts
+index 7804ec75..e3734f8e 100644
+--- a/kanban/web/src/features/drawer/useFocusTrap.ts
++++ b/kanban/web/src/features/drawer/useFocusTrap.ts
+@@ -23,6 +23,9 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
+       if (e.key !== 'Tab') {
+         return;
+       }
++      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover')) {
++        return;
++      }
+       const container = containerRef.current;
+       if (!container) {
+         return;

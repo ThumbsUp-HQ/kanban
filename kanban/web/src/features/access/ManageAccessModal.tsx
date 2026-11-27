@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, getCsrfToken } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { useFocusTrap } from '../drawer/useFocusTrap';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
@@ -73,7 +74,9 @@ export function ManageAccessModal({
     text: string;
   } | null>(null);
 
-  useFocusTrap(isOpen, modalRef);
+  const panels = useOptionalShellPanels();
+  const isHelpOpen = panels?.activePanel?.id === 'help';
+  useFocusTrap(isOpen && !isHelpOpen, modalRef);
 
   const handleClose = (): void => {
     if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {

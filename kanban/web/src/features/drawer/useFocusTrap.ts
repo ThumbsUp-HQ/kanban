@@ -23,6 +23,9 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
       if (e.key !== 'Tab') {
         return;
       }
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover')) {
+        return;
+      }
       const container = containerRef.current;
       if (!container) {
         return;
