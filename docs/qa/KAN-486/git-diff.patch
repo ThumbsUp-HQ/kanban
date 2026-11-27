@@ -1,0 +1,505 @@
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.css b/kanban/web/src/features/access/AccessInspectorPopover.css
+index 92cea975..6011f3c7 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.css
++++ b/kanban/web/src/features/access/AccessInspectorPopover.css
+@@ -41,6 +41,26 @@
+     border-radius: 16px 16px 0 0 !important;
+     transform: none !important;
+   }
++
++  .access-inspector__header {
++    padding: 12px 16px;
++    gap: 8px;
++    flex-wrap: wrap;
++  }
++
++  .access-inspector__header-actions {
++    gap: 8px;
++    flex-wrap: wrap;
++  }
++
++  .access-inspector__header-actions .access-inspector__close-btn {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++  }
++
++  .access-inspector__header-actions .access-inspector__btn {
++    min-height: var(--tap-min, 44px);
++  }
+ }
+ 
+ .access-inspector__header {
+@@ -52,6 +72,7 @@
+   background-color: var(--bg-surface, #ffffff);
+   gap: 12px;
+   flex-shrink: 0;
++  flex-wrap: wrap;
+ }
+ 
+ .access-inspector__title {
+@@ -70,6 +91,7 @@
+   display: flex;
+   align-items: center;
+   gap: 8px;
++  flex-wrap: wrap;
+ }
+ 
+ .access-inspector__close-btn {
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.test.tsx b/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
+index 7f8b02f5..bea12162 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
++++ b/kanban/web/src/features/access/AccessInspectorPopover.test.tsx
+@@ -1,8 +1,9 @@
+-import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import React from 'react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AccessInspectorPopover } from './AccessInspectorPopover';
++import { ShellPanelsProvider, registerShellPanel, useShellPanels } from '../../app/shellPanels';
+ import kan142Data from '../../../e2e/fixtures/access-inspector-kan-142.json';
+ import redactedData from '../../../e2e/fixtures/access-inspector-redacted.json';
+ 
+@@ -592,4 +593,223 @@ describe('AccessInspectorPopover', () => {
+     );
+     expect(screen.getByText(/1 External Collaborator - outside your visibility boundary/i)).toBeDefined();
+   });
++
++  describe('StudioDocLink & HelpDrawer Yielding (KAN-486)', () => {
++    afterEach(() => {
++      document.documentElement.removeAttribute('data-theme');
++      const existing = document.querySelectorAll('.kb-help-drawer, .kb-help-drawer-backdrop');
++      existing.forEach((el) => {
++        el.remove();
++      });
++    });
++
++    it('renders StudioDocLink in header-actions pointing to access model docs with correct props', () => {
++      renderWithClient(
++        <AccessInspectorPopover
++          objectId={TEST_OBJECT_ID}
++          onClose={vi.fn()}
++        />,
++        kan142Data,
++      );
++
++      const link = screen.getByTestId('access-inspector-doc-link');
++      expect(link).toBeDefined();
++      expect(link.getAttribute('href')).toBe(
++        '/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation',
++      );
++      expect(link.textContent).toContain('Access Model ->');
++
++      const headerActions = link.closest('.access-inspector__header-actions');
++      expect(headerActions).not.toBeNull();
++
++      // HTML 4.10.4: Not nested inside a button or label
++      expect(link.closest('button')).toBeNull();
++      expect(link.closest('label')).toBeNull();
++    });
++
++    it('yields Escape keydown and outside-click when .kb-help-drawer is present in DOM', () => {
++      const handleClose = vi.fn();
++      renderWithClient(
++        <AccessInspectorPopover
++          objectId={TEST_OBJECT_ID}
++          onClose={handleClose}
++        />,
++        kan142Data,
++      );
++
++      const drawer = document.createElement('div');
++      drawer.className = 'kb-help-drawer';
++      document.body.appendChild(drawer);
++
++      const dialog = screen.getByRole('dialog');
++      fireEvent.keyDown(dialog, { key: 'Escape' });
++      expect(handleClose).not.toHaveBeenCalled();
++
++      const backdrop = document.querySelector('.access-inspector-backdrop');
++      expect(backdrop).not.toBeNull();
++      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
++      fireEvent.click(backdrop!);
++      expect(handleClose).not.toHaveBeenCalled();
++
++      drawer.remove();
++
++      // Now with drawer removed, Escape and backdrop click close the popover
++      fireEvent.keyDown(dialog, { key: 'Escape' });
++      expect(handleClose).toHaveBeenCalledTimes(1);
++
++      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
++      fireEvent.click(backdrop!);
++      expect(handleClose).toHaveBeenCalledTimes(2);
++    });
++
++    it('yields Escape keydown and outside-click when .kb-help-drawer-backdrop is present in DOM', () => {
++      const handleClose = vi.fn();
++      renderWithClient(
++        <AccessInspectorPopover
++          objectId={TEST_OBJECT_ID}
++          onClose={handleClose}
++        />,
++        kan142Data,
++      );
++
++      const drawerBackdrop = document.createElement('div');
++      drawerBackdrop.className = 'kb-help-drawer-backdrop';
++      document.body.appendChild(drawerBackdrop);
++
++      const dialog = screen.getByRole('dialog');
++      fireEvent.keyDown(dialog, { key: 'Escape' });
++      expect(handleClose).not.toHaveBeenCalled();
++
++      const backdrop = document.querySelector('.access-inspector-backdrop');
++      expect(backdrop).not.toBeNull();
++      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
++      fireEvent.click(backdrop!);
++      expect(handleClose).not.toHaveBeenCalled();
++
++      drawerBackdrop.remove();
++
++      fireEvent.keyDown(dialog, { key: 'Escape' });
++      expect(handleClose).toHaveBeenCalledTimes(1);
++    });
++
++    it('renders in Light and Dark themes seamlessly without style errors', () => {
++      for (const theme of ['light', 'dark'] as const) {
++        document.documentElement.setAttribute('data-theme', theme);
++        const { unmount } = renderWithClient(
++          <AccessInspectorPopover
++            objectId={TEST_OBJECT_ID}
++            onClose={vi.fn()}
++          />,
++          kan142Data,
++        );
++
++        const link = screen.getByTestId('access-inspector-doc-link');
++        expect(link).toBeDefined();
++        unmount();
++      }
++    });
++
++    it('opens HelpDrawer with ShellPanelsProvider when StudioDocLink is clicked', async () => {
++      const unregister = registerShellPanel('help', () => <div data-testid="mock-help" />);
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++      queryClient.setQueryData(['access', TEST_OBJECT_ID], kan142Data);
++
++      function PanelWatcher() {
++        const { activePanel } = useShellPanels();
++        return (
++          <div data-testid="active-panel-info">
++            {activePanel?.id ?? 'none'}: {JSON.stringify(activePanel?.arg ?? {})}
++          </div>
++        );
++      }
++
++      try {
++        render(
++          <QueryClientProvider client={queryClient}>
++            <ShellPanelsProvider>
++              <AccessInspectorPopover
++                objectId={TEST_OBJECT_ID}
++                onClose={vi.fn()}
++              />
++              <PanelWatcher />
++            </ShellPanelsProvider>
++          </QueryClientProvider>,
++        );
++
++        const link = screen.getByTestId('access-inspector-doc-link');
++        fireEvent.click(link);
++
++        await waitFor(() => {
++          const watcher = screen.getByTestId('active-panel-info');
++          expect(watcher.textContent).toContain('help');
++          expect(watcher.textContent).toContain(
++            '/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation',
++          );
++        });
++      } finally {
++        unregister();
++      }
++    });
++
++    it('covers openerRef fallback when focused before mount', () => {
++      const btn = document.createElement('button');
++      document.body.appendChild(btn);
++      btn.focus();
++
++      const { unmount } = renderWithClient(
++        <AccessInspectorPopover
++          objectId={TEST_OBJECT_ID}
++          anchorEl={null}
++          onClose={vi.fn()}
++        />,
++        kan142Data,
++      );
++
++      unmount();
++      btn.remove();
++    });
++
++    it('does not steal Tab or Shift+Tab focus back to popover when HelpDrawer is open', () => {
++      renderWithClient(
++        <AccessInspectorPopover
++          objectId={TEST_OBJECT_ID}
++          onClose={vi.fn()}
++        />,
++        kan142Data,
++      );
++
++      const drawer = document.createElement('div');
++      drawer.className = 'kb-help-drawer';
++      const drawerBtn = document.createElement('button');
++      drawerBtn.textContent = 'Help Drawer Close';
++      drawer.appendChild(drawerBtn);
++      document.body.appendChild(drawer);
++
++      drawerBtn.focus();
++      expect(document.activeElement).toBe(drawerBtn);
++
++      const tabEvent = new KeyboardEvent('keydown', {
++        key: 'Tab',
++        bubbles: true,
++        cancelable: true,
++      });
++      const tabPrevented = !document.dispatchEvent(tabEvent);
++      expect(tabPrevented).toBe(false); // Does not steal or prevent Tab
++      expect(document.activeElement).toBe(drawerBtn);
++
++      const shiftTabEvent = new KeyboardEvent('keydown', {
++        key: 'Tab',
++        shiftKey: true,
++        bubbles: true,
++        cancelable: true,
++      });
++      const shiftTabPrevented = !document.dispatchEvent(shiftTabEvent);
++      expect(shiftTabPrevented).toBe(false); // Does not steal or prevent Shift+Tab
++      expect(document.activeElement).toBe(drawerBtn);
++
++      drawer.remove();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.tsx b/kanban/web/src/features/access/AccessInspectorPopover.tsx
+index 4534daca..8551a413 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.tsx
++++ b/kanban/web/src/features/access/AccessInspectorPopover.tsx
+@@ -15,6 +15,8 @@ import { useQuery } from '@tanstack/react-query';
+ import { qk } from '../../api/queryKeys';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { positionHint } from '../../components/emoji/positionHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { useOptionalShellPanels } from '../../app/shellPanels';
+ import { AgentKillSwitchControl } from './AgentKillSwitchControl';
+ import { ManageAccessModal } from './ManageAccessModal';
+ import { useFocusTrap } from '../drawer/useFocusTrap';
+@@ -129,7 +131,9 @@ export function AccessInspectorPopover({
+     };
+   }, []);
+ 
+-  useFocusTrap(true, dialogRef);
++  const panels = useOptionalShellPanels();
++  const isHelpOpen = panels?.activePanel?.id === 'help';
++  useFocusTrap(!manageModalOpen && !isHelpOpen, dialogRef);
+ 
+   const handleClose = (): void => {
+     const opener = openerRef.current;
+@@ -190,12 +194,22 @@ export function AccessInspectorPopover({
+ 
+   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+     if (e.key === 'Escape') {
++      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
++        return;
++      }
+       e.stopPropagation();
+       e.preventDefault();
+       handleClose();
+     }
+   };
+ 
++  const handleBackdropClick = (): void => {
++    if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
++      return;
++    }
++    handleClose();
++  };
++
+   const handleManageAccess = (): void => {
+     setManageModalOpen(true);
+     window.dispatchEvent(
+@@ -243,7 +257,7 @@ export function AccessInspectorPopover({
+     <>
+       <div
+         className="access-inspector-backdrop"
+-        onClick={handleClose}
++        onClick={handleBackdropClick}
+         aria-hidden="true"
+       />
+       <div
+@@ -261,6 +275,11 @@ export function AccessInspectorPopover({
+             <span className="mono">{canonicalKey}</span>
+           </h2>
+           <div className="access-inspector__header-actions">
++            <StudioDocLink
++              href="/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation"
++              label="Access Model ->"
++              testId="access-inspector-doc-link"
++            />
+             {canManage && (
+               <button
+                 type="button"
+diff --git a/kanban/web/src/features/drawer/useFocusTrap.test.ts b/kanban/web/src/features/drawer/useFocusTrap.test.ts
+index c457ebf7..14d3feef 100644
+--- a/kanban/web/src/features/drawer/useFocusTrap.test.ts
++++ b/kanban/web/src/features/drawer/useFocusTrap.test.ts
+@@ -74,4 +74,113 @@ describe('useFocusTrap', () => {
+     unmount();
+     document.body.removeChild(container);
+   });
++
++  it('yields Tab keydown when .kb-help-drawer or .field-help-hint-popover is present', () => {
++    const container = document.createElement('div');
++    document.body.appendChild(container);
++
++    const btn1 = document.createElement('button');
++    const btn2 = document.createElement('button');
++    container.appendChild(btn1);
++    container.appendChild(btn2);
++
++    const drawer = document.createElement('div');
++    drawer.className = 'kb-help-drawer';
++    document.body.appendChild(drawer);
++
++    const { unmount } = renderHook(() => {
++      const ref = useRef<HTMLElement | null>(container);
++      useFocusTrap(true, ref);
++    });
++
++    btn2.focus();
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    const tabPrevented = !document.dispatchEvent(tabEvent);
++
++    expect(tabPrevented).toBe(false); // Yielded, not prevented
++
++    unmount();
++    drawer.remove();
++    container.remove();
++  });
++
++  it('covers null containerRef and non-Tab keys', () => {
++    const { unmount } = renderHook(() => {
++      const ref = useRef<HTMLElement | null>(null);
++      useFocusTrap(true, ref);
++    });
++
++    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
++    expect(!document.dispatchEvent(enterEvent)).toBe(false);
++
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    expect(!document.dispatchEvent(tabEvent)).toBe(false);
++
++    unmount();
++  });
++
++  it('prevents default and focuses container when no focusable elements exist', () => {
++    const container = document.createElement('div');
++    container.tabIndex = -1;
++    document.body.appendChild(container);
++
++    const { unmount } = renderHook(() => {
++      const ref = useRef<HTMLElement | null>(container);
++      useFocusTrap(true, ref);
++    });
++
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    const prevented = !document.dispatchEvent(tabEvent);
++    expect(prevented).toBe(true);
++    expect(document.activeElement).toBe(container);
++
++    unmount();
++    container.remove();
++  });
++
++  it('traps Tab and Shift+Tab when focus is outside the container', () => {
++    const container = document.createElement('div');
++    document.body.appendChild(container);
++    const btn1 = document.createElement('button');
++    const btn2 = document.createElement('button');
++    container.appendChild(btn1);
++    container.appendChild(btn2);
++
++    const outsideBtn = document.createElement('button');
++    document.body.appendChild(outsideBtn);
++    outsideBtn.focus();
++
++    const { unmount } = renderHook(() => {
++      const ref = useRef<HTMLElement | null>(container);
++      useFocusTrap(true, ref);
++    });
++
++    // Tab while outside -> focuses first element
++    const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    const tabPrevented = !document.dispatchEvent(tabEvent);
++    expect(tabPrevented).toBe(true);
++    expect(document.activeElement).toBe(btn1);
++
++    // Focus outside again
++    outsideBtn.focus();
++    // Shift+Tab while outside -> focuses last element
++    const shiftTabEvent = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
++    const shiftTabPrevented = !document.dispatchEvent(shiftTabEvent);
++    expect(shiftTabPrevented).toBe(true);
++    expect(document.activeElement).toBe(btn2);
++
++    // Tab from first element (btn1) when inside -> not prevented, naturally moves
++    btn1.focus();
++    const naturalTab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
++    expect(!document.dispatchEvent(naturalTab)).toBe(false);
++
++    // Shift+Tab from last element (btn2) when inside -> not prevented, naturally moves
++    btn2.focus();
++    const naturalShiftTab = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
++    expect(!document.dispatchEvent(naturalShiftTab)).toBe(false);
++
++    unmount();
++    container.remove();
++    outsideBtn.remove();
++  });
+ });
+diff --git a/kanban/web/src/features/drawer/useFocusTrap.ts b/kanban/web/src/features/drawer/useFocusTrap.ts
+index 7804ec75..39e5087a 100644
+--- a/kanban/web/src/features/drawer/useFocusTrap.ts
++++ b/kanban/web/src/features/drawer/useFocusTrap.ts
+@@ -23,6 +23,9 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
+       if (e.key !== 'Tab') {
+         return;
+       }
++      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover')) {
++        return;
++      }
+       const container = containerRef.current;
+       if (!container) {
+         return;
+@@ -36,16 +39,12 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
+           (el.offsetParent !== null || el.getClientRects().length > 0 || el.tabIndex >= 0),
+       );
+ 
+-      if (focusables.length === 0) {
+-        e.preventDefault();
+-        container.focus();
+-        return;
+-      }
+-
+       const first = focusables[0];
+       const last = focusables[focusables.length - 1];
+ 
+       if (!first || !last) {
++        e.preventDefault();
++        container.focus();
+         return;
+       }
+ 

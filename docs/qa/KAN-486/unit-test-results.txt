@@ -1,0 +1,57 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan486-8191b2e8/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 18ms
+ ✓ src/features/drawer/useFocusTrap.test.ts (6 tests) 76ms
+stderr | src/features/access/AccessInspectorPopover.test.tsx > AccessInspectorPopover > traps Tab and Shift+Tab focus correctly within dialog
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to EmojiHint inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/access/AccessInspectorPopover.test.tsx (18 tests) 890ms
+   ✓ AccessInspectorPopover (18)
+     ✓ renders positive S3.4 wireframe parity for KAN-142 313ms
+
+ Test Files  3 passed (3)
+      Tests  31 passed (31)
+   Start at  19:57:54
+   Duration  2.11s (environment 57%, tests 28%, import 9%, worker 4%, transform 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.32 |       96 |     100 |   99.31 |                   
+ access            |   99.15 |    95.27 |     100 |   99.14 |                   
+  ...orPopover.tsx |   99.15 |    95.27 |     100 |   99.14 | 123               
+ drawer            |     100 |      100 |     100 |     100 |                   
+  useFocusTrap.ts  |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

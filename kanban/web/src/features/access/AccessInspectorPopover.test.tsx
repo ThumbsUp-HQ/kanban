@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccessInspectorPopover } from './AccessInspectorPopover';
+import { ShellPanelsProvider, registerShellPanel, useShellPanels } from '../../app/shellPanels';
 import kan142Data from '../../../e2e/fixtures/access-inspector-kan-142.json';
 import redactedData from '../../../e2e/fixtures/access-inspector-redacted.json';
 
@@ -591,5 +592,224 @@ describe('AccessInspectorPopover', () => {
       singleRedacted,
     );
     expect(screen.getByText(/1 External Collaborator - outside your visibility boundary/i)).toBeDefined();
+  });
+
+  describe('StudioDocLink & HelpDrawer Yielding (KAN-486)', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+      const existing = document.querySelectorAll('.kb-help-drawer, .kb-help-drawer-backdrop');
+      existing.forEach((el) => {
+        el.remove();
+      });
+    });
+
+    it('renders StudioDocLink in header-actions pointing to access model docs with correct props', () => {
+      renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          onClose={vi.fn()}
+        />,
+        kan142Data,
+      );
+
+      const link = screen.getByTestId('access-inspector-doc-link');
+      expect(link).toBeDefined();
+      expect(link.getAttribute('href')).toBe(
+        '/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation',
+      );
+      expect(link.textContent).toContain('Access Model ->');
+
+      const headerActions = link.closest('.access-inspector__header-actions');
+      expect(headerActions).not.toBeNull();
+
+      // HTML 4.10.4: Not nested inside a button or label
+      expect(link.closest('button')).toBeNull();
+      expect(link.closest('label')).toBeNull();
+    });
+
+    it('yields Escape keydown and outside-click when .kb-help-drawer is present in DOM', () => {
+      const handleClose = vi.fn();
+      renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          onClose={handleClose}
+        />,
+        kan142Data,
+      );
+
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      document.body.appendChild(drawer);
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(handleClose).not.toHaveBeenCalled();
+
+      const backdrop = document.querySelector('.access-inspector-backdrop');
+      expect(backdrop).not.toBeNull();
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      fireEvent.click(backdrop!);
+      expect(handleClose).not.toHaveBeenCalled();
+
+      drawer.remove();
+
+      // Now with drawer removed, Escape and backdrop click close the popover
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(handleClose).toHaveBeenCalledTimes(1);
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      fireEvent.click(backdrop!);
+      expect(handleClose).toHaveBeenCalledTimes(2);
+    });
+
+    it('yields Escape keydown and outside-click when .kb-help-drawer-backdrop is present in DOM', () => {
+      const handleClose = vi.fn();
+      renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          onClose={handleClose}
+        />,
+        kan142Data,
+      );
+
+      const drawerBackdrop = document.createElement('div');
+      drawerBackdrop.className = 'kb-help-drawer-backdrop';
+      document.body.appendChild(drawerBackdrop);
+
+      const dialog = screen.getByRole('dialog');
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(handleClose).not.toHaveBeenCalled();
+
+      const backdrop = document.querySelector('.access-inspector-backdrop');
+      expect(backdrop).not.toBeNull();
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      fireEvent.click(backdrop!);
+      expect(handleClose).not.toHaveBeenCalled();
+
+      drawerBackdrop.remove();
+
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders in Light and Dark themes seamlessly without style errors', () => {
+      for (const theme of ['light', 'dark'] as const) {
+        document.documentElement.setAttribute('data-theme', theme);
+        const { unmount } = renderWithClient(
+          <AccessInspectorPopover
+            objectId={TEST_OBJECT_ID}
+            onClose={vi.fn()}
+          />,
+          kan142Data,
+        );
+
+        const link = screen.getByTestId('access-inspector-doc-link');
+        expect(link).toBeDefined();
+        unmount();
+      }
+    });
+
+    it('opens HelpDrawer with ShellPanelsProvider when StudioDocLink is clicked', async () => {
+      const unregister = registerShellPanel('help', () => <div data-testid="mock-help" />);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      queryClient.setQueryData(['access', TEST_OBJECT_ID], kan142Data);
+
+      function PanelWatcher() {
+        const { activePanel } = useShellPanels();
+        return (
+          <div data-testid="active-panel-info">
+            {activePanel?.id ?? 'none'}: {JSON.stringify(activePanel?.arg ?? {})}
+          </div>
+        );
+      }
+
+      try {
+        render(
+          <QueryClientProvider client={queryClient}>
+            <ShellPanelsProvider>
+              <AccessInspectorPopover
+                objectId={TEST_OBJECT_ID}
+                onClose={vi.fn()}
+              />
+              <PanelWatcher />
+            </ShellPanelsProvider>
+          </QueryClientProvider>,
+        );
+
+        const link = screen.getByTestId('access-inspector-doc-link');
+        fireEvent.click(link);
+
+        await waitFor(() => {
+          const watcher = screen.getByTestId('active-panel-info');
+          expect(watcher.textContent).toContain('help');
+          expect(watcher.textContent).toContain(
+            '/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation',
+          );
+        });
+      } finally {
+        unregister();
+      }
+    });
+
+    it('covers openerRef fallback when focused before mount', () => {
+      const btn = document.createElement('button');
+      document.body.appendChild(btn);
+      btn.focus();
+
+      const { unmount } = renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          anchorEl={null}
+          onClose={vi.fn()}
+        />,
+        kan142Data,
+      );
+
+      unmount();
+      btn.remove();
+    });
+
+    it('does not steal Tab or Shift+Tab focus back to popover when HelpDrawer is open', () => {
+      renderWithClient(
+        <AccessInspectorPopover
+          objectId={TEST_OBJECT_ID}
+          onClose={vi.fn()}
+        />,
+        kan142Data,
+      );
+
+      const drawer = document.createElement('div');
+      drawer.className = 'kb-help-drawer';
+      const drawerBtn = document.createElement('button');
+      drawerBtn.textContent = 'Help Drawer Close';
+      drawer.appendChild(drawerBtn);
+      document.body.appendChild(drawer);
+
+      drawerBtn.focus();
+      expect(document.activeElement).toBe(drawerBtn);
+
+      const tabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        bubbles: true,
+        cancelable: true,
+      });
+      const tabPrevented = !document.dispatchEvent(tabEvent);
+      expect(tabPrevented).toBe(false); // Does not steal or prevent Tab
+      expect(document.activeElement).toBe(drawerBtn);
+
+      const shiftTabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      const shiftTabPrevented = !document.dispatchEvent(shiftTabEvent);
+      expect(shiftTabPrevented).toBe(false); // Does not steal or prevent Shift+Tab
+      expect(document.activeElement).toBe(drawerBtn);
+
+      drawer.remove();
+    });
   });
 });

@@ -23,6 +23,9 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
       if (e.key !== 'Tab') {
         return;
       }
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover')) {
+        return;
+      }
       const container = containerRef.current;
       if (!container) {
         return;
@@ -36,16 +39,12 @@ export function useFocusTrap(active: boolean, containerRef: RefObject<HTMLElemen
           (el.offsetParent !== null || el.getClientRects().length > 0 || el.tabIndex >= 0),
       );
 
-      if (focusables.length === 0) {
-        e.preventDefault();
-        container.focus();
-        return;
-      }
-
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
 
       if (!first || !last) {
+        e.preventDefault();
+        container.focus();
         return;
       }
 

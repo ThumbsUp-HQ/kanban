@@ -15,6 +15,8 @@ import { useQuery } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { positionHint } from '../../components/emoji/positionHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
 import { ManageAccessModal } from './ManageAccessModal';
 import { useFocusTrap } from '../drawer/useFocusTrap';
@@ -129,7 +131,9 @@ export function AccessInspectorPopover({
     };
   }, []);
 
-  useFocusTrap(true, dialogRef);
+  const panels = useOptionalShellPanels();
+  const isHelpOpen = panels?.activePanel?.id === 'help';
+  useFocusTrap(!manageModalOpen && !isHelpOpen, dialogRef);
 
   const handleClose = (): void => {
     const opener = openerRef.current;
@@ -190,10 +194,20 @@ export function AccessInspectorPopover({
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Escape') {
+      if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
       handleClose();
     }
+  };
+
+  const handleBackdropClick = (): void => {
+    if (document.querySelector('.kb-help-drawer, .kb-help-drawer-backdrop')) {
+      return;
+    }
+    handleClose();
   };
 
   const handleManageAccess = (): void => {
@@ -243,7 +257,7 @@ export function AccessInspectorPopover({
     <>
       <div
         className="access-inspector-backdrop"
-        onClick={handleClose}
+        onClick={handleBackdropClick}
         aria-hidden="true"
       />
       <div
@@ -261,6 +275,11 @@ export function AccessInspectorPopover({
             <span className="mono">{canonicalKey}</span>
           </h2>
           <div className="access-inspector__header-actions">
+            <StudioDocLink
+              href="/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation"
+              label="Access Model ->"
+              testId="access-inspector-doc-link"
+            />
             {canManage && (
               <button
                 type="button"

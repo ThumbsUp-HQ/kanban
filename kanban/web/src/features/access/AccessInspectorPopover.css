@@ -42,6 +42,22 @@
     transform: none !important;
   }
 
+  .access-inspector__header {
+    padding: 12px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .access-inspector__header-actions {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .access-inspector__header-actions .access-inspector__close-btn {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+  }
+
   .access-inspector__btn {
     min-height: var(--tap-min, 44px);
   }
@@ -73,6 +89,7 @@
   background-color: var(--bg-surface, #ffffff);
   gap: 12px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .access-inspector__title {
@@ -91,6 +108,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .access-inspector__close-btn {
