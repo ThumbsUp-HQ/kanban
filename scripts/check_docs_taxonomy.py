@@ -159,8 +159,8 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
     chapter_anchors: dict[str, set[str]] = {}
     for md_file in wiki_dir.glob("*.md"):
         slug = md_file.stem.lower()
-        content = md_file.read_text(encoding="utf-8")
-        chapter_anchors[slug] = extract_wiki_anchors(content)
+        file_content = md_file.read_text(encoding="utf-8")
+        chapter_anchors[slug] = extract_wiki_anchors(file_content)
 
     # Standard aliases from manifest
     slug_aliases = {
@@ -206,91 +206,66 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
             chapter_anchors[alias] = chapter_anchors[target]
 
     # Ensure known section aliases exist in chapter anchors
-    if "multi-card-authentication-studio" in chapter_anchors:
-        chapter_anchors["multi-card-authentication-studio"].update(
-            {
-                "initial-setup",
-                "local-admin-break-glass",
-                "break-glass",
-                "passkeys",
-                "envelope-encryption-master-kek",
-            }
-        )
-    if "studio-configuration-reference" in chapter_anchors:
-        chapter_anchors["studio-configuration-reference"].update(
-            {
-                "workspaces",
-                "projects",
-                "avatars",
-                "user-avatars",
-                "profile-media",
-                "avatar-crop",
-                "avatar-lightbox",
-                "user-avatars-profile-media",
-                "workflow-states",
-            }
-        )
-    if "production-promotion-and-backup-runbook" in chapter_anchors:
-        chapter_anchors["production-promotion-and-backup-runbook"].update(
-            {
-                "restore-procedure",
-            }
-        )
-    if "multi-provider-ai-engine-and-runners" in chapter_anchors:
-        chapter_anchors["multi-provider-ai-engine-and-runners"].update(
-            {
-                "agent-onboarding",
-            }
-        )
-    if "scripted-workflows-and-transition-helpers" in chapter_anchors:
-        chapter_anchors["scripted-workflows-and-transition-helpers"].update(
-            {
-                "dry-run-simulation",
-            }
-        )
-    if "universal-object-graph-and-link-auditor" in chapter_anchors:
-        chapter_anchors["universal-object-graph-and-link-auditor"].update(
-            {
-                "state-deletion",
-            }
-        )
-    if "admin-custom-scripted-fields-and-sandbox" in chapter_anchors:
-        chapter_anchors["admin-custom-scripted-fields-and-sandbox"].update(
-            {
-                "admin-escalation-and-sandbox-approvals",
-                "escalation-approvals",
-                "admin-escalation",
-            }
-        )
-    if "enterprise-whitespace-and-kanban-board" in chapter_anchors:
-        chapter_anchors["enterprise-whitespace-and-kanban-board"].update(
-            {
-                "palette",
-                "color-presets",
-                "saved-views",
-                "saved-views-and-custom-presets",
-                "table-view-and-column-customization",
-            }
-        )
-    if "ticket-screen-and-work-item-features" in chapter_anchors:
-        chapter_anchors["ticket-screen-and-work-item-features"].update(
-            {
-                "csv-and-zip-import-and-export",
-                "csv-and-password-protected-zip-aes-256-import-and-export",
-                "search-and-filtering",
-                "quick-create-work-item-modal-c",
-                "the-960px-ticket-peek-drawer-peek",
-                "duplication-and-copying",
-                "activity-stream-and-audit-ledger",
-            }
-        )
-    if "zero-trust-security-and-access-visibility" in chapter_anchors:
-        chapter_anchors["zero-trust-security-and-access-visibility"].update(
-            {
-                "effective-resource-access-era-evaluation",
-                "universal-access-control-model",
-            }
-        )
+    known_section_aliases: dict[str, set[str]] = {
+        "multi-card-authentication-studio": {
+            "initial-setup",
+            "local-admin-break-glass",
+            "break-glass",
+            "passkeys",
+            "envelope-encryption-master-kek",
+        },
+        "studio-configuration-reference": {
+            "workspaces",
+            "projects",
+            "avatars",
+            "user-avatars",
+            "profile-media",
+            "avatar-crop",
+            "avatar-lightbox",
+            "user-avatars-profile-media",
+            "workflow-states",
+        },
+        "production-promotion-and-backup-runbook": {
+            "restore-procedure",
+        },
+        "multi-provider-ai-engine-and-runners": {
+            "agent-onboarding",
+        },
+        "scripted-workflows-and-transition-helpers": {
+            "dry-run-simulation",
+        },
+        "universal-object-graph-and-link-auditor": {
+            "state-deletion",
+        },
+        "admin-custom-scripted-fields-and-sandbox": {
+            "admin-escalation-and-sandbox-approvals",
+            "escalation-approvals",
+            "admin-escalation",
+        },
+        "enterprise-whitespace-and-kanban-board": {
+            "palette",
+            "color-presets",
+            "saved-views",
+            "saved-views-and-custom-presets",
+            "table-view-and-column-customization",
+        },
+        "ticket-screen-and-work-item-features": {
+            "csv-and-zip-import-and-export",
+            "csv-and-password-protected-zip-aes-256-import-and-export",
+            "search-and-filtering",
+            "quick-create-work-item-modal-c",
+            "the-960px-ticket-peek-drawer-peek",
+            "duplication-and-copying",
+            "activity-stream-and-audit-ledger",
+        },
+        "zero-trust-security-and-access-visibility": {
+            "effective-resource-access-era-evaluation",
+            "universal-access-control-model",
+        },
+    }
+    for chapter, aliases in known_section_aliases.items():
+        if chapter in chapter_anchors:
+            chapter_anchors[chapter].update(aliases)
 
     return chapter_anchors
 
