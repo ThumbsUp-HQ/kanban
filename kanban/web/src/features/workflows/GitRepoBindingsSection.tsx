@@ -4,6 +4,8 @@
 import React, { useState, type JSX } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAal2StepUpCancelled } from '../../api/client';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import './workflows.css';
 import {
   fetchRepoBindings,
   createRepoBinding,
@@ -306,7 +308,7 @@ export function GitRepoBindingsSection({
                 </div>
 
                 {b.last_fetch_error && (
-                  <div className="workflow-alert workflow-alert-danger" style={{ marginTop: '6px', fontSize: '0.75rem', padding: '6px 10px' }}>
+                  <div className="workflow-alert workflow-alert-danger repo-fetch-error-alert">
                     {b.last_fetch_error}
                   </div>
                 )}
@@ -390,9 +392,18 @@ export function GitRepoBindingsSection({
 
                 {/* Default Ref */}
                 <div className="workflow-form-group">
-                  <label htmlFor="repo-ref-input" className="workflow-form-label">
-                    Default Branch / Ref
-                  </label>
+                  <div className="workflow-form-label-row">
+                    <label htmlFor="repo-ref-input" className="workflow-form-label">
+                      Default Branch / Ref
+                    </label>
+                    <FieldHelpHint
+                      title="Default Branch / Ref"
+                      summary="Default git branch checked out by autonomous agent runners during scripted transitions."
+                      defaultValue="main"
+                      testId="repo-ref-help"
+                      docHref="/docs/scripted-workflows-and-transition-helpers#read-only-bare-git-repository-bindings"
+                    />
+                  </div>
                   <input
                     id="repo-ref-input"
                     type="text"
@@ -405,9 +416,30 @@ export function GitRepoBindingsSection({
 
                 {/* Access Mode */}
                 <div className="workflow-form-group">
-                  <label htmlFor="repo-access-select" className="workflow-form-label">
-                    Access Mode
-                  </label>
+                  <div className="workflow-form-label-row">
+                    <label htmlFor="repo-access-select" className="workflow-form-label">
+                      Access Mode
+                    </label>
+                    <FieldHelpHint
+                      title="Access Mode"
+                      summary="Filesystem mounting and tooling isolation boundary granted to agent transition runners."
+                      validValues={[
+                        {
+                          label: ':ro VFS',
+                          description:
+                            'Materializes a detached, immutable snapshot of the git commit in a read-only VFS mount. Prevents repository tampering while enabling fast file-tree inspection.',
+                        },
+                        {
+                          label: 'Bare Tools',
+                          description:
+                            'Provides direct access to bare git porcelain and plumbing commands without mounting a materialized working tree.',
+                        },
+                      ]}
+                      defaultValue=":ro VFS"
+                      testId="repo-access-help"
+                      docHref="/docs/scripted-workflows-and-transition-helpers#read-only-bare-git-repository-bindings"
+                    />
+                  </div>
                   <select
                     id="repo-access-select"
                     className="workflow-form-control"

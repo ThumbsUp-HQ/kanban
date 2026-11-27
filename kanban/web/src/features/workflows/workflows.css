@@ -632,6 +632,17 @@
   color: var(--fg-primary);
 }
 
+.workflow-form-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.workflow-form-label-row .field-help-hint {
+  margin: 0;
+  margin-left: 0;
+}
+
 .workflow-form-control {
   font-family: var(--font-sans);
   font-size: 0.875rem;
@@ -1199,6 +1210,12 @@
   background-color: var(--danger-bg);
   color: var(--danger-fg);
   border: 1px solid var(--danger-fg);
+}
+
+.repo-fetch-error-alert {
+  margin-top: var(--space-2, 8px);
+  font-size: var(--text-xs, 0.75rem);
+  padding: 6px 10px;
 }
 
 /* Workflow Transition Helper Radiogroup and Subtext */

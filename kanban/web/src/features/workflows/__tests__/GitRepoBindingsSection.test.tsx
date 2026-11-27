@@ -242,8 +242,8 @@ describe('GitRepoBindingsSection', () => {
 
     const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
     const urlInput = screen.getByLabelText(/Remote Git URL/i);
-    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i);
-    const accessSelect = screen.getByLabelText(/Access Mode/i);
+    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i, { selector: 'input' });
+    const accessSelect = screen.getByLabelText(/Access Mode/i, { selector: 'select' });
     const credSelect = screen.getByLabelText(/Authentication Credential/i);
 
     // Test invalid slug validation
@@ -363,7 +363,7 @@ describe('GitRepoBindingsSection', () => {
 
     const slugInput = screen.getByLabelText(/Repository Identifier \/ Slug/i);
     const urlInput = screen.getByLabelText(/Remote Git URL/i);
-    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i);
+    const refInput = screen.getByLabelText(/Default Branch \/ Ref/i, { selector: 'input' });
 
     // Enter valid URL then empty it
     fireEvent.change(urlInput, { target: { value: 'https://github.com/temp/url.git' } });
@@ -469,5 +469,61 @@ describe('GitRepoBindingsSection', () => {
     // Verify ZERO password inputs
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     expect(passwordInputs.length).toBe(0);
+  });
+
+  it('renders FieldHelpHint for Default Branch and Access Mode as sibling controls with accessible dialogs', async () => {
+    vi.spyOn(api, 'fetchRepoBindings').mockResolvedValue(mockBindings);
+
+    renderSection();
+
+    fireEvent.click(screen.getByText('+ Bind Git Repository'));
+
+    // 1. Verify existence of both FieldHelpHint triggers
+    const refHelpBtn = screen.getByTestId('repo-ref-help');
+    const accessHelpBtn = screen.getByTestId('repo-access-help');
+    expect(refHelpBtn).toBeDefined();
+    expect(accessHelpBtn).toBeDefined();
+
+    // 2. Invariant verification: neither button is nested inside a <label>
+    expect(refHelpBtn.closest('label')).toBeNull();
+    expect(accessHelpBtn.closest('label')).toBeNull();
+
+    // Verify parent has class workflow-form-label-row
+    const refLabelRow = refHelpBtn.closest('.workflow-form-label-row');
+    const accessLabelRow = accessHelpBtn.closest('.workflow-form-label-row');
+    expect(refLabelRow).not.toBeNull();
+    expect(accessLabelRow).not.toBeNull();
+
+    // Sibling label check
+    const refLabel = refLabelRow?.querySelector('label[for="repo-ref-input"]');
+    const accessLabel = accessLabelRow?.querySelector('label[for="repo-access-select"]');
+    expect(refLabel).not.toBeNull();
+    expect(accessLabel).not.toBeNull();
+
+    // 3. ARIA attributes
+    expect(refHelpBtn.getAttribute('aria-label')).toBe('Help for Default Branch / Ref');
+    expect(refHelpBtn.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(accessHelpBtn.getAttribute('aria-label')).toBe('Help for Access Mode');
+    expect(accessHelpBtn.getAttribute('aria-haspopup')).toBe('dialog');
+
+    // 4. Open Default Branch / Ref popover
+    fireEvent.click(refHelpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Default git branch checked out by autonomous agent runners during scripted transitions.')).toBeDefined();
+    });
+    expect(screen.getByTestId('repo-ref-help-default')).toBeDefined();
+    expect(screen.getByText('main')).toBeDefined();
+
+    // Close or switch to Access Mode popover
+    fireEvent.click(accessHelpBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Filesystem mounting and tooling isolation boundary granted to agent transition runners.')).toBeDefined();
+    });
+    expect(screen.getByTestId('repo-access-help-default')).toBeDefined();
+    expect(screen.getAllByText(':ro VFS').length).toBe(2);
+    expect(screen.getByText('Bare Tools')).toBeDefined();
+    expect(screen.getByText(/Materializes a detached, immutable snapshot/i)).toBeDefined();
   });
 });
