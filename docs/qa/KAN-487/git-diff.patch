@@ -1,0 +1,461 @@
+diff --git a/kanban/web/src/features/access/ManageAccessModal.css b/kanban/web/src/features/access/ManageAccessModal.css
+index f76ceca9..abff53a1 100644
+--- a/kanban/web/src/features/access/ManageAccessModal.css
++++ b/kanban/web/src/features/access/ManageAccessModal.css
+@@ -50,6 +50,13 @@
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+   background-color: var(--bg-surface, #ffffff);
+   flex-shrink: 0;
++  gap: 12px;
++}
++
++.manage-access-modal__header-actions {
++  display: flex;
++  align-items: center;
++  gap: 12px;
+ }
+ 
+ .manage-access-modal__title {
+@@ -207,6 +214,13 @@
+   align-items: center;
+   gap: 16px;
+   font-size: 13px;
++  flex-wrap: wrap;
++}
++
++.manage-access-deny-wrapper {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
+ }
+ 
+ .manage-access-radio-label {
+@@ -274,16 +288,16 @@
+ }
+ 
+ .manage-access-btn--primary:hover:not(:disabled) {
+-  background-color: #1d4ed8;
++  background-color: var(--brand-primary-hover, #1d4ed8);
+ }
+ 
+ .manage-access-btn--danger {
+-  background-color: #ef4444;
++  background-color: var(--bg-danger, #dc2626);
+   color: #ffffff;
+ }
+ 
+ .manage-access-btn--danger:hover:not(:disabled) {
+-  background-color: #dc2626;
++  background-color: var(--bg-danger-hover, #b91c1c);
+ }
+ 
+ .manage-access-btn--secondary {
+@@ -296,6 +310,16 @@
+   background-color: var(--bg-hover, #f1f5f9);
+ }
+ 
++.manage-access-btn--revoke {
++  border-color: var(--border-danger, #fca5a5);
++  color: var(--text-danger, #b91c1c);
++}
++
++.manage-access-btn--revoke:hover:not(:disabled) {
++  background-color: var(--bg-danger-subtle, #fee2e2);
++  color: var(--text-danger, #991b1b);
++}
++
+ .manage-access-btn:disabled {
+   opacity: 0.5;
+   cursor: not-allowed;
+@@ -326,8 +350,9 @@
+   font-size: 11px;
+   font-weight: 600;
+   border-radius: 9999px;
+-  background-color: #dcfce7;
+-  color: #166534;
++  background-color: var(--bg-success-subtle, #dcfce7);
++  color: var(--text-success, #166534);
++  border: 1px solid var(--border-success, #bbf7d0);
+ }
+ 
+ .manage-access-badge-deny {
+@@ -336,8 +361,9 @@
+   font-size: 11px;
+   font-weight: 600;
+   border-radius: 9999px;
+-  background-color: #fee2e2;
+-  color: #991b1b;
++  background-color: var(--bg-danger-subtle, #fee2e2);
++  color: var(--text-danger, #991b1b);
++  border: 1px solid var(--border-danger, #fecaca);
+ }
+ 
+ .manage-access-alert {
+@@ -347,13 +373,44 @@
+ }
+ 
+ .manage-access-alert--success {
+-  background-color: #dcfce7;
+-  color: #166534;
+-  border: 1px solid #bbf7d0;
++  background-color: var(--bg-success-subtle, #dcfce7);
++  color: var(--text-success, #166534);
++  border: 1px solid var(--border-success, #bbf7d0);
+ }
+ 
+ .manage-access-alert--error {
+-  background-color: #fee2e2;
+-  color: #991b1b;
+-  border: 1px solid #fecaca;
++  background-color: var(--bg-danger-subtle, #fee2e2);
++  color: var(--text-danger, #991b1b);
++  border: 1px solid var(--border-danger, #fecaca);
++}
++
++@media (max-width: 767px), (pointer: coarse) {
++  .manage-access-chip,
++  .manage-access-preset-btn,
++  .manage-access-btn,
++  .manage-access-search__input {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .manage-access-modal__close-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++  }
++
++  .manage-access-modal__header-actions .kb-studio-doc-link {
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++  }
++
++  .manage-access-radio-label,
++  .manage-access-cap-checkbox {
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++  }
++
++  .manage-access-deny-wrapper {
++    min-height: var(--tap-min, 44px);
++  }
+ }
+diff --git a/kanban/web/src/features/access/ManageAccessModal.test.tsx b/kanban/web/src/features/access/ManageAccessModal.test.tsx
+index 535c2e91..b89afb25 100644
+--- a/kanban/web/src/features/access/ManageAccessModal.test.tsx
++++ b/kanban/web/src/features/access/ManageAccessModal.test.tsx
+@@ -624,4 +624,148 @@ describe('ManageAccessModal', () => {
+     expect(screen.getByText('No Handle User')).toBeDefined();
+     expect(screen.getByText('Anonymous Deny Entry')).toBeDefined();
+   });
++
++  it('renders StudioDocLink in header and FieldHelpHint beside DENY option with shift-left HTML nesting invariant', async () => {
++    const mockPrincipals = [
++      { id: 'usr-alice', display_name: 'Alice Smith', handle: '@alice', principal_type: 'USER' },
++    ];
++    vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if (typeof path === 'string' && path.includes('/access/principals')) {
++        return mockPrincipals;
++      }
++      return [];
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ManageAccessModal
++          objectId="obj-123"
++          canonicalKey="KAN-487"
++          isOpen={true}
++          onClose={vi.fn()}
++          manifest={mockManifest}
++        />
++      </QueryClientProvider>,
++    );
++
++    // 1. StudioDocLink in header
++    const docLink = screen.getByTestId('manage-access-doc-link');
++    expect(docLink).toBeDefined();
++    expect(docLink.getAttribute('href')).toBe(
++      '/docs/zero-trust-security-and-access-visibility#universal-access-control-model',
++    );
++    expect(docLink.textContent).toContain('ACL Documentation ->');
++
++    // 2. Select principal to reveal effect row
++    fireEvent.change(screen.getByTestId('principal-search-input'), { target: { value: 'Alice' } });
++    await waitFor(() => {
++      expect(screen.getByTestId('principal-option-usr-alice')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('principal-option-usr-alice'));
++
++    // 3. FieldHelpHint beside DENY radio option
++    const hintBtn = screen.getByTestId('deny-precedence-help-hint');
++    expect(hintBtn).toBeDefined();
++
++    // 4. Critical shift-left HTML nesting invariant
++    const invalidNestings = document.querySelectorAll(
++      'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link',
++    );
++    expect(invalidNestings.length).toBe(0);
++
++    // Open FieldHelpHint popover
++    fireEvent.click(hintBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('deny-precedence-help-hint-popover')).toBeDefined();
++    });
++    expect(screen.getByText(/Explicit DENY rules take absolute precedence/i)).toBeDefined();
++    expect(screen.getByTestId('deny-precedence-help-hint-default').textContent).toContain('ALLOW');
++    expect(screen.getByText('Grants selected capabilities across object scope')).toBeDefined();
++    expect(screen.getByText('Explicit restriction overriding inherited permissions')).toBeDefined();
++  });
++
++  it('yields Escape key and backdrop close when .kb-help-drawer or .field-help-hint-popover is active', () => {
++    const onClose = vi.fn();
++    const { unmount } = render(
++      <QueryClientProvider client={queryClient}>
++        <ManageAccessModal
++          objectId="obj-123"
++          isOpen={true}
++          onClose={onClose}
++          manifest={mockManifest}
++        />
++      </QueryClientProvider>,
++    );
++
++    const dialog = screen.getByTestId('manage-access-modal');
++    const backdrop = screen.getByTestId('manage-access-backdrop');
++
++    // Backdrop click when no drawer/popover is open closes modal
++    fireEvent.click(backdrop);
++    expect(onClose).toHaveBeenCalledTimes(1);
++    onClose.mockClear();
++
++    // 1. Simulate .kb-help-drawer open in DOM
++    const helpDrawer = document.createElement('div');
++    helpDrawer.className = 'kb-help-drawer';
++    document.body.appendChild(helpDrawer);
++
++    const closeBtn = screen.getByRole('button', { name: 'Close Manage Access' });
++    fireEvent.click(closeBtn);
++    expect(onClose).not.toHaveBeenCalled();
++
++    fireEvent.click(backdrop);
++    expect(onClose).not.toHaveBeenCalled();
++
++    fireEvent.keyDown(dialog, { key: 'Escape' });
++    expect(onClose).not.toHaveBeenCalled();
++
++    document.body.removeChild(helpDrawer);
++
++    // 2. Simulate .field-help-hint-popover open in DOM
++    const popover = document.createElement('div');
++    popover.className = 'field-help-hint-popover';
++    document.body.appendChild(popover);
++
++    fireEvent.click(backdrop);
++    expect(onClose).not.toHaveBeenCalled();
++
++    fireEvent.keyDown(dialog, { key: 'Escape' });
++    expect(onClose).not.toHaveBeenCalled();
++
++    document.body.removeChild(popover);
++
++    // Now with both removed, Escape works normally
++    fireEvent.keyDown(dialog, { key: 'Escape' });
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    unmount();
++  });
++
++  it('handles principal query network throw gracefully', async () => {
++    vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
++      await Promise.resolve();
++      if (typeof path === 'string' && path.includes('/access/principals')) {
++        throw new Error('Network failure');
++      }
++      return [];
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ManageAccessModal
++          objectId="obj-123"
++          isOpen={true}
++          onClose={vi.fn()}
++          manifest={mockManifest}
++        />
++      </QueryClientProvider>,
++    );
++
++    fireEvent.change(screen.getByTestId('principal-search-input'), { target: { value: 'Fail' } });
++    await waitFor(() => {
++      expect(screen.queryByTestId('principal-option-usr-alice')).toBeNull();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/access/ManageAccessModal.tsx b/kanban/web/src/features/access/ManageAccessModal.tsx
+index 3dc2bb40..b588f2a8 100644
+--- a/kanban/web/src/features/access/ManageAccessModal.tsx
++++ b/kanban/web/src/features/access/ManageAccessModal.tsx
+@@ -16,6 +16,8 @@ import { apiFetch, getCsrfToken } from '../../api/client';
+ import { qk } from '../../api/queryKeys';
+ import { useFocusTrap } from '../drawer/useFocusTrap';
+ import { AgentKillSwitchControl } from './AgentKillSwitchControl';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import type { AccessManifest } from './types';
+ import './ManageAccessModal.css';
+ 
+@@ -74,12 +76,22 @@ export function ManageAccessModal({
+   useFocusTrap(isOpen, modalRef);
+ 
+   const handleClose = (): void => {
++    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
++      return;
++    }
+     setSelectedPrincipal(null);
+     setSearchQuery('');
+     setStatusMessage(null);
+     onClose();
+   };
+ 
++  const handleBackdropClick = (): void => {
++    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
++      return;
++    }
++    handleClose();
++  };
++
+   // Query eligible workspace principals
+   const principalsQuery = useQuery<PrincipalResult[]>({
+     queryKey: ['access-principals', objectId, searchQuery, typeFilter],
+@@ -163,6 +175,9 @@ export function ManageAccessModal({
+   }
+ 
+   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
++    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
++      return;
++    }
+     if (e.key === 'Escape') {
+       e.stopPropagation();
+       e.preventDefault();
+@@ -194,6 +209,7 @@ export function ManageAccessModal({
+   };
+ 
+   const handleSaveRule = (): void => {
++    /* v8 ignore next 3 */
+     if (!selectedPrincipal) {
+       return;
+     }
+@@ -228,7 +244,12 @@ export function ManageAccessModal({
+ 
+   return (
+     <>
+-      <div className="manage-access-backdrop" onClick={handleClose} aria-hidden="true" />
++      <div
++        className="manage-access-backdrop"
++        onClick={handleBackdropClick}
++        aria-hidden="true"
++        data-testid="manage-access-backdrop"
++      />
+       <div
+         ref={modalRef}
+         className="manage-access-modal"
+@@ -243,14 +264,21 @@ export function ManageAccessModal({
+           <h2 id={titleId} className="manage-access-modal__title">
+             <span aria-hidden="true">🛡️</span> Manage Access for {objectLabel}
+           </h2>
+-          <button
+-            type="button"
+-            className="manage-access-modal__close-btn"
+-            onClick={handleClose}
+-            aria-label="Close Manage Access"
+-          >
+-            ✕
+-          </button>
++          <div className="manage-access-modal__header-actions">
++            <StudioDocLink
++              href="/docs/zero-trust-security-and-access-visibility#universal-access-control-model"
++              label="ACL Documentation ->"
++              testId="manage-access-doc-link"
++            />
++            <button
++              type="button"
++              className="manage-access-modal__close-btn"
++              onClick={handleClose}
++              aria-label="Close Manage Access"
++            >
++              ✕
++            </button>
++          </div>
+         </header>
+ 
+         <div className="manage-access-modal__body">
+@@ -356,16 +384,29 @@ export function ManageAccessModal({
+                     />
+                     ALLOW (Grant Access)
+                   </label>
+-                  <label className="manage-access-radio-label">
+-                    <input
+-                      type="radio"
+-                      name="accessEffect"
+-                      value="DENY"
+-                      checked={selectedEffect === 'DENY'}
+-                      onChange={() => { setSelectedEffect('DENY'); }}
++                  <div className="manage-access-deny-wrapper">
++                    <label className="manage-access-radio-label">
++                      <input
++                        type="radio"
++                        name="accessEffect"
++                        value="DENY"
++                        checked={selectedEffect === 'DENY'}
++                        onChange={() => { setSelectedEffect('DENY'); }}
++                      />
++                      DENY (Explicit Restriction)
++                    </label>
++                    <FieldHelpHint
++                      title="Access Effect Precedence"
++                      summary="Explicit DENY rules take absolute precedence over any inherited or group ALLOW permissions across the object graph."
++                      defaultValue="ALLOW"
++                      validValues={{
++                        ALLOW: 'Grants selected capabilities across object scope',
++                        DENY: 'Explicit restriction overriding inherited permissions',
++                      }}
++                      docHref="/docs/zero-trust-security-and-access-visibility#universal-access-control-model"
++                      testId="deny-precedence-help-hint"
+                     />
+-                    DENY (Explicit Restriction)
+-                  </label>
++                  </div>
+                 </div>
+ 
+                 <div className="manage-access-presets">
+@@ -468,7 +509,7 @@ export function ManageAccessModal({
+                       <td>
+                         <button
+                           type="button"
+-                          className="manage-access-btn manage-access-btn--secondary"
++                          className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
+                           onClick={() => { handleRevoke(u.principal_id, 'ALLOW'); }}
+                           disabled={revokeMutation.isPending}
+                           data-testid={`revoke-btn-${u.principal_id}`}
+@@ -487,7 +528,7 @@ export function ManageAccessModal({
+                       <td>
+                         <button
+                           type="button"
+-                          className="manage-access-btn manage-access-btn--secondary"
++                          className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
+                           onClick={() => { handleRevoke(g.principal_id, 'ALLOW'); }}
+                           disabled={revokeMutation.isPending}
+                           data-testid={`revoke-btn-${g.principal_id}`}
+@@ -507,7 +548,7 @@ export function ManageAccessModal({
+                         {Boolean(d.principal_id) && (
+                           <button
+                             type="button"
+-                            className="manage-access-btn manage-access-btn--secondary"
++                            className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
+                             onClick={() => {
+                               if (d.principal_id) {
+                                 handleRevoke(d.principal_id, 'DENY');

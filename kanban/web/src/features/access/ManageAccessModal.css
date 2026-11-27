@@ -50,6 +50,13 @@
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
   background-color: var(--bg-surface, #ffffff);
   flex-shrink: 0;
+  gap: 12px;
+}
+
+.manage-access-modal__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .manage-access-modal__title {
@@ -207,6 +214,13 @@
   align-items: center;
   gap: 16px;
   font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.manage-access-deny-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .manage-access-radio-label {
@@ -274,16 +288,16 @@
 }
 
 .manage-access-btn--primary:hover:not(:disabled) {
-  background-color: #1d4ed8;
+  background-color: var(--brand-primary-hover, #1d4ed8);
 }
 
 .manage-access-btn--danger {
-  background-color: #ef4444;
+  background-color: var(--bg-danger, #dc2626);
   color: #ffffff;
 }
 
 .manage-access-btn--danger:hover:not(:disabled) {
-  background-color: #dc2626;
+  background-color: var(--bg-danger-hover, #b91c1c);
 }
 
 .manage-access-btn--secondary {
@@ -294,6 +308,16 @@
 
 .manage-access-btn--secondary:hover:not(:disabled) {
   background-color: var(--bg-hover, #f1f5f9);
+}
+
+.manage-access-btn--revoke {
+  border-color: var(--border-danger, #fca5a5);
+  color: var(--text-danger, #b91c1c);
+}
+
+.manage-access-btn--revoke:hover:not(:disabled) {
+  background-color: var(--bg-danger-subtle, #fee2e2);
+  color: var(--text-danger, #991b1b);
 }
 
 .manage-access-btn:disabled {
@@ -326,8 +350,9 @@
   font-size: 11px;
   font-weight: 600;
   border-radius: 9999px;
-  background-color: #dcfce7;
-  color: #166534;
+  background-color: var(--bg-success-subtle, #dcfce7);
+  color: var(--text-success, #166534);
+  border: 1px solid var(--border-success, #bbf7d0);
 }
 
 .manage-access-badge-deny {
@@ -336,8 +361,9 @@
   font-size: 11px;
   font-weight: 600;
   border-radius: 9999px;
-  background-color: #fee2e2;
-  color: #991b1b;
+  background-color: var(--bg-danger-subtle, #fee2e2);
+  color: var(--text-danger, #991b1b);
+  border: 1px solid var(--border-danger, #fecaca);
 }
 
 .manage-access-alert {
@@ -347,13 +373,44 @@
 }
 
 .manage-access-alert--success {
-  background-color: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
+  background-color: var(--bg-success-subtle, #dcfce7);
+  color: var(--text-success, #166534);
+  border: 1px solid var(--border-success, #bbf7d0);
 }
 
 .manage-access-alert--error {
-  background-color: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  background-color: var(--bg-danger-subtle, #fee2e2);
+  color: var(--text-danger, #991b1b);
+  border: 1px solid var(--border-danger, #fecaca);
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .manage-access-chip,
+  .manage-access-preset-btn,
+  .manage-access-btn,
+  .manage-access-search__input {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .manage-access-modal__close-btn {
+    min-height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
+  }
+
+  .manage-access-modal__header-actions .kb-studio-doc-link {
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .manage-access-radio-label,
+  .manage-access-cap-checkbox {
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .manage-access-deny-wrapper {
+    min-height: var(--tap-min, 44px);
+  }
 }

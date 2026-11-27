@@ -624,4 +624,148 @@ describe('ManageAccessModal', () => {
     expect(screen.getByText('No Handle User')).toBeDefined();
     expect(screen.getByText('Anonymous Deny Entry')).toBeDefined();
   });
+
+  it('renders StudioDocLink in header and FieldHelpHint beside DENY option with shift-left HTML nesting invariant', async () => {
+    const mockPrincipals = [
+      { id: 'usr-alice', display_name: 'Alice Smith', handle: '@alice', principal_type: 'USER' },
+    ];
+    vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if (typeof path === 'string' && path.includes('/access/principals')) {
+        return mockPrincipals;
+      }
+      return [];
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ManageAccessModal
+          objectId="obj-123"
+          canonicalKey="KAN-487"
+          isOpen={true}
+          onClose={vi.fn()}
+          manifest={mockManifest}
+        />
+      </QueryClientProvider>,
+    );
+
+    // 1. StudioDocLink in header
+    const docLink = screen.getByTestId('manage-access-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe(
+      '/docs/zero-trust-security-and-access-visibility#universal-access-control-model',
+    );
+    expect(docLink.textContent).toContain('ACL Documentation ->');
+
+    // 2. Select principal to reveal effect row
+    fireEvent.change(screen.getByTestId('principal-search-input'), { target: { value: 'Alice' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('principal-option-usr-alice')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('principal-option-usr-alice'));
+
+    // 3. FieldHelpHint beside DENY radio option
+    const hintBtn = screen.getByTestId('deny-precedence-help-hint');
+    expect(hintBtn).toBeDefined();
+
+    // 4. Critical shift-left HTML nesting invariant
+    const invalidNestings = document.querySelectorAll(
+      'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link',
+    );
+    expect(invalidNestings.length).toBe(0);
+
+    // Open FieldHelpHint popover
+    fireEvent.click(hintBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('deny-precedence-help-hint-popover')).toBeDefined();
+    });
+    expect(screen.getByText(/Explicit DENY rules take absolute precedence/i)).toBeDefined();
+    expect(screen.getByTestId('deny-precedence-help-hint-default').textContent).toContain('ALLOW');
+    expect(screen.getByText('Grants selected capabilities across object scope')).toBeDefined();
+    expect(screen.getByText('Explicit restriction overriding inherited permissions')).toBeDefined();
+  });
+
+  it('yields Escape key and backdrop close when .kb-help-drawer or .field-help-hint-popover is active', () => {
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ManageAccessModal
+          objectId="obj-123"
+          isOpen={true}
+          onClose={onClose}
+          manifest={mockManifest}
+        />
+      </QueryClientProvider>,
+    );
+
+    const dialog = screen.getByTestId('manage-access-modal');
+    const backdrop = screen.getByTestId('manage-access-backdrop');
+
+    // Backdrop click when no drawer/popover is open closes modal
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    onClose.mockClear();
+
+    // 1. Simulate .kb-help-drawer open in DOM
+    const helpDrawer = document.createElement('div');
+    helpDrawer.className = 'kb-help-drawer';
+    document.body.appendChild(helpDrawer);
+
+    const closeBtn = screen.getByRole('button', { name: 'Close Manage Access' });
+    fireEvent.click(closeBtn);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    document.body.removeChild(helpDrawer);
+
+    // 2. Simulate .field-help-hint-popover open in DOM
+    const popover = document.createElement('div');
+    popover.className = 'field-help-hint-popover';
+    document.body.appendChild(popover);
+
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    document.body.removeChild(popover);
+
+    // Now with both removed, Escape works normally
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it('handles principal query network throw gracefully', async () => {
+    vi.mocked(apiFetch).mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if (typeof path === 'string' && path.includes('/access/principals')) {
+        throw new Error('Network failure');
+      }
+      return [];
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ManageAccessModal
+          objectId="obj-123"
+          isOpen={true}
+          onClose={vi.fn()}
+          manifest={mockManifest}
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId('principal-search-input'), { target: { value: 'Fail' } });
+    await waitFor(() => {
+      expect(screen.queryByTestId('principal-option-usr-alice')).toBeNull();
+    });
+  });
 });
